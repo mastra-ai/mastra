@@ -1,41 +1,45 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 
 import { DEFAULT_INTAKE_CONFIG, IntakeStorage, resolveIntakeLabelRoute } from './base.js';
 
-async function makeStorage(): Promise<IntakeStorage> {
-  const backend = new LibSQLFactoryStorage({ id: 'intake-test', url: ':memory:' });
+async function makeStorage(url: string = ':memory:'): Promise<IntakeStorage> {
+  const backend = new LibSQLFactoryStorage({ id: 'intake-test', url });
   const domain = backend.registerDomain(new IntakeStorage());
   await backend.init();
+  onTestFinished(() => backend.close());
   return domain;
 }
 
 describe('IntakeStorage', () => {
   it('returns a fresh empty config for every caller', async () => {
     const storage = await makeStorage();
-    const first = await storage.getConfig({ orgId: 'org1', userId: 'user1' });
+    const first = await storage.getConfig({ orgId: 'org1' });
     first.github = { enabled: false, sourceIds: null };
-    const second = await storage.getConfig({ orgId: 'org1', userId: 'user1' });
+    const second = await storage.getConfig({ orgId: 'org1' });
 
     expect(second).toEqual(DEFAULT_INTAKE_CONFIG);
     expect(second).not.toBe(DEFAULT_INTAKE_CONFIG);
   });
 
-  it('round-trips dynamic integration selections per org and user', async () => {
+  it('round-trips dynamic integration selections per org', async () => {
     const storage = await makeStorage();
     const config = {
       github: { enabled: true, sourceIds: ['repo-1'] },
       linear: { enabled: false, sourceIds: null },
     };
 
-    await storage.saveConfig({ orgId: 'org1', userId: 'user1', config });
-    expect(await storage.getConfig({ orgId: 'org1', userId: 'user1' })).toEqual(config);
-    expect(await storage.getConfig({ orgId: 'org1', userId: 'user2' })).toEqual(DEFAULT_INTAKE_CONFIG);
-    expect(await storage.getConfig({ orgId: 'org2', userId: 'user1' })).toEqual(DEFAULT_INTAKE_CONFIG);
+    await storage.saveConfig({ orgId: 'org1', config });
+    expect(await storage.getConfig({ orgId: 'org1' })).toEqual(config);
+    expect(await storage.getConfig({ orgId: 'org2' })).toEqual(DEFAULT_INTAKE_CONFIG);
 
     const updated = { ...config, linear: { enabled: true, sourceIds: ['team-1'] } };
-    await storage.saveConfig({ orgId: 'org1', userId: 'user1', config: updated });
-    expect(await storage.getConfig({ orgId: 'org1', userId: 'user1' })).toEqual(updated);
+    await storage.saveConfig({ orgId: 'org1', config: updated });
+    expect(await storage.getConfig({ orgId: 'org1' })).toEqual(updated);
   });
 
   it('converges concurrent first saves onto one row', async () => {
@@ -44,11 +48,78 @@ describe('IntakeStorage', () => {
     const b = { gitlab: { enabled: true, sourceIds: ['b'] } };
 
     await Promise.all([
-      storage.saveConfig({ orgId: 'org1', userId: 'user1', config: a }),
-      storage.saveConfig({ orgId: 'org1', userId: 'user1', config: b }),
+      storage.saveConfig({ orgId: 'org1', config: a }),
+      storage.saveConfig({ orgId: 'org1', config: b }),
     ]);
 
-    expect([a, b]).toContainEqual(await storage.getConfig({ orgId: 'org1', userId: 'user1' }));
+    expect([a, b]).toContainEqual(await storage.getConfig({ orgId: 'org1' }));
+  });
+
+  describe('legacy per-member selections', () => {
+    // File-backed so a per-member deployment can write rows, close, and a later boot folds them.
+    function tempDatabaseUrl(): string {
+      const dir = mkdtempSync(join(tmpdir(), 'intake-fold-'));
+      onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+      return `file:${join(dir, 'intake.db')}`;
+    }
+
+    async function seedLegacyRows(url: string, rows: Array<{ orgId: string; userId: string; config: unknown }>) {
+      const backend = new LibSQLFactoryStorage({ id: 'intake-test-legacy', url });
+      backend.registerDomain(new IntakeStorage());
+      await backend.init();
+      const now = new Date();
+      try {
+        for (const row of rows) {
+          await backend.ops.insertOne('intake_settings', {
+            org_id: row.orgId,
+            user_id: row.userId,
+            config: row.config,
+            created_at: now,
+            updated_at: now,
+          });
+        }
+      } finally {
+        await backend.close();
+      }
+    }
+
+    it('folds what members were syncing into one shared selection at boot, ignoring switched-off picks', async () => {
+      const url = tempDatabaseUrl();
+      await seedLegacyRows(url, [
+        { orgId: 'org1', userId: 'alice', config: { github: { enabled: true, sourceIds: ['acme/app'] } } },
+        {
+          orgId: 'org1',
+          userId: 'bob',
+          config: {
+            github: { enabled: false, sourceIds: ['acme/site'] },
+            linear: { enabled: true, sourceIds: ['proj-1'] },
+          },
+        },
+        { orgId: 'org2', userId: 'alice', config: { github: { enabled: false, sourceIds: null } } },
+      ]);
+
+      const storage = await makeStorage(url);
+
+      expect(await storage.getConfig({ orgId: 'org1' })).toEqual({
+        github: { enabled: true, sourceIds: ['acme/app'] },
+        linear: { enabled: true, sourceIds: ['proj-1'] },
+      });
+      expect(await storage.getConfig({ orgId: 'org2' })).toEqual({ github: { enabled: false, sourceIds: null } });
+    });
+
+    it('does not overwrite a shared selection saved after the fold', async () => {
+      const url = tempDatabaseUrl();
+      await seedLegacyRows(url, [
+        { orgId: 'org1', userId: 'alice', config: { github: { enabled: true, sourceIds: ['acme/app'] } } },
+      ]);
+
+      const firstBoot = await makeStorage(url);
+      const shared = { github: { enabled: false, sourceIds: null } };
+      await firstBoot.saveConfig({ orgId: 'org1', config: shared });
+
+      const secondBoot = await makeStorage(url);
+      expect(await secondBoot.getConfig({ orgId: 'org1' })).toEqual(shared);
+    });
   });
 
   describe('source bindings', () => {

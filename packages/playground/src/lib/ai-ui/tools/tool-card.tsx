@@ -19,6 +19,7 @@ import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
 import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { SubmitPlanTool } from './submit-plan-tool';
+import { ToolResultMedia } from './tool-result-media';
 import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result';
 import { useMcpAppTools } from '@/domains/mcps/hooks';
 import { WorkflowRunProvider } from '@/domains/workflows';
@@ -34,9 +35,12 @@ export interface ToolCardProps {
   toolName: string;
   input: any;
   output: any;
+  modelOutput?: unknown;
   toolCallId: string;
   /** Part state: v5 `output-available`/`output-error`/`input-available`, or v4 `result`/`call`. */
   state?: string;
+  /** Error message when `state` is `output-error`. */
+  errorText?: string;
   metadata?: MessageMetadata;
   /** `data`-typed parts from the parent message, for badges that read live streaming metadata. */
   dataParts?: ReadonlyArray<DataMessagePart>;
@@ -60,8 +64,10 @@ export const ToolCardInner = ({
   toolName,
   input,
   output,
+  modelOutput,
   toolCallId,
   state,
+  errorText,
   metadata,
   dataParts,
   readOnly = false,
@@ -156,6 +162,8 @@ export const ToolCardInner = ({
           suspendPayload={suspendedToolMetadata?.suspendPayload}
           toolCalled={toolCalled}
           isComplete={isSettledState(state)}
+          status={status}
+          errorText={errorText}
         />
       );
     case 'workflow':
@@ -231,7 +239,7 @@ export const ToolCardInner = ({
       <ToolBadge
         toolName={toolName}
         args={input}
-        result={output}
+        result={output ?? errorText}
         toolOutput={output?.toolOutput || []}
         metadata={metadata}
         toolCallId={toolCallId}
@@ -241,6 +249,7 @@ export const ToolCardInner = ({
         toolCalled={toolCalled}
         status={status}
       />
+      <ToolResultMedia modelOutput={modelOutput} />
       {mcpAppInfo && output !== undefined && (
         <McpAppToolResult
           appInfo={mcpAppInfo}

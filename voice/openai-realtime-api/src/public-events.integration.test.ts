@@ -189,3 +189,69 @@ describe('public realtime input events', () => {
     expect(writing).toHaveBeenCalledTimes(4);
   });
 });
+
+describe('session hooks', () => {
+  it('re-emits every server event under the openAIRealtime prefix', async () => {
+    const { voice, server } = await setup();
+    const callback = vi.fn();
+    voice.on('openAIRealtime:rate_limits.updated', callback);
+    const peer = await connect(voice, server);
+    const frame = { type: 'rate_limits.updated', rate_limits: [] };
+    await sendFrames(voice, peer, [frame]);
+    expect(callback).toHaveBeenCalledExactlyOnceWith(frame);
+  });
+
+  it('emits open and close and marks the session closed when the peer disconnects', async () => {
+    const { voice, server } = await setup();
+    const opened = vi.fn();
+    const closed = vi.fn();
+    voice.on('open', opened);
+    voice.on('close', closed);
+    const peer = await connect(voice, server);
+    expect(opened).toHaveBeenCalledTimes(1);
+    peer.close(1011, 'going away');
+    await vi.waitFor(() => expect(closed).toHaveBeenCalledExactlyOnceWith({ code: 1011, reason: 'going away' }));
+    expect((voice as any).state).toBe('close');
+  });
+
+  it('delivers sendEvent payloads queued before the session is created', async () => {
+    const { voice, server } = await setup();
+    const item = { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Hello' }] };
+    const received = new Promise(resolve =>
+      server.on('connection', socket =>
+        socket.on('message', raw => {
+          const event = JSON.parse(raw.toString());
+          if (event.type === 'conversation.item.create') resolve(event);
+        }),
+      ),
+    );
+    voice.sendEvent('conversation.item.create', { item });
+    await connect(voice, server);
+    await expect(received).resolves.toEqual({ type: 'conversation.item.create', item });
+  });
+
+  it('queues sendEvent payloads sent after the socket opens but before session.created', async () => {
+    const server = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+    servers.push(server);
+    await once(server, 'listening');
+    const received: string[] = [];
+    server.on('connection', socket => {
+      socket.on('message', raw => {
+        const event = JSON.parse(raw.toString());
+        if (event.type === 'conversation.item.create') received.push(event.item.content[0].text);
+      });
+      setTimeout(() => socket.send(JSON.stringify({ type: 'session.created', session: {} })), 50);
+    });
+    const voice = new OpenAIRealtimeVoice({
+      apiKey: 'local-test-only',
+      url: `ws://127.0.0.1:${(server.address() as AddressInfo).port}`,
+      connectTimeoutMs: 2000,
+    });
+    voices.push(voice);
+    const item = (text: string) => ({ type: 'message', role: 'user', content: [{ type: 'input_text', text }] });
+    voice.sendEvent('conversation.item.create', { item: item('first') });
+    voice.on('open', () => voice.sendEvent('conversation.item.create', { item: item('second') }));
+    await voice.connect();
+    await vi.waitFor(() => expect(received).toEqual(['first', 'second']));
+  });
+});
