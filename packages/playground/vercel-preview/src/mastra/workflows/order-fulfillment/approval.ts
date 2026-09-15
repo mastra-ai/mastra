@@ -16,7 +16,7 @@ export const requestApproval = createStep({
   inputSchema: checkedOrderSchema,
   outputSchema: approvedOrderSchema,
   suspendSchema: z.object({ customer: z.string(), totalUnits: z.number(), message: z.string() }),
-  resumeSchema: z.object({ approved: z.boolean().default(true) }),
+  resumeSchema: z.object({ approved: z.boolean() }),
   execute: async ({ inputData, resumeData, suspend }) => {
     if (!resumeData) {
       return suspend({
