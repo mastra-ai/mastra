@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { clampDelayMs, getRetryAfterMs } from './retry-after';
 
 const NOW = Date.parse('2026-09-15T12:00:00.000Z');
+const EARLY_NOW = 1_000_000;
 
 function errorWithHeaders(responseHeaders: Record<string, string>, cause?: unknown) {
   return { responseHeaders, cause };
@@ -30,14 +31,14 @@ describe('getRetryAfterMs', () => {
   });
 
   it.each(['-3', '+3', '1.5', '-0.5', '1e3', '2027.'])('ignores malformed numeric Retry-After value %s', value => {
-    expect(getRetryAfterMs(errorWithHeaders({ 'retry-after': value }), NOW)).toBeUndefined();
+    expect(getRetryAfterMs(errorWithHeaders({ 'retry-after': value }), EARLY_NOW)).toBeUndefined();
   });
 
   it('continues through the cause chain after a malformed header', () => {
     const inner = errorWithHeaders({ 'retry-after': '5' });
     const outer = errorWithHeaders({ 'retry-after': '-3' }, inner);
 
-    expect(getRetryAfterMs(outer, NOW)).toBe(5_000);
+    expect(getRetryAfterMs(outer, EARLY_NOW)).toBe(5_000);
   });
 
   it('continues through the cause chain when no header is present', () => {
