@@ -1,3 +1,4 @@
+import type { MastraClient } from '../src/client.js';
 import type {
   Body,
   ClientRequest,
@@ -212,6 +213,18 @@ type _AgentBuilderStart = Expect<
 >;
 type _AgentBuilderResume = Expect<
   Equal<ReturnType<AgentBuilder['resume']>, Promise<RouteResponse<'POST /agent-builder/:actionId/resume'>>>
+>;
+type _ClientLogTransports = Expect<
+  Equal<ReturnType<MastraClient['listLogTransports']>, Promise<RouteResponse<'GET /logs/transports'>>>
+>;
+type _ClientMcpResources = Expect<
+  Equal<ReturnType<MastraClient['getMcpServerResources']>, Promise<RouteResponse<'GET /mcp/:serverId/resources'>>>
+>;
+type _ClientMcpResourceRead = Expect<
+  Equal<ReturnType<MastraClient['readMcpServerResource']>, Promise<RouteResponse<'POST /mcp/:serverId/resources/read'>>>
+>;
+type _ClientMemoryThreadDelete = Expect<
+  Equal<ReturnType<MastraClient['deleteThread']>, Promise<RouteResponse<'DELETE /memory/threads/:threadId'>>>
 >;
 type _StoredScorer = Expect<
   Equal<StoredScorerResponse['id'], RouteResponse<'GET /stored/scorers/:storedScorerId'>['id']>

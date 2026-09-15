@@ -1,14 +1,7 @@
-import type { Body, PathParams, QueryParams, RouteKey, RouteResponse, Simplify } from '../route-types.generated.js';
+import type { Body, PathParams, QueryParams, RouteKey, Simplify } from '../route-types.generated.js';
+import type { SerializedRouteResponse } from '../types';
 
-type Serialized<T> = T extends Date
-  ? string
-  : T extends readonly (infer U)[]
-    ? Serialized<U>[]
-    : T extends object
-      ? { [K in keyof T]: Serialized<T[K]> }
-      : T;
-
-type Response<Route extends RouteKey> = Serialized<RouteResponse<Route>>;
+type Response<Route extends RouteKey> = SerializedRouteResponse<Route>;
 type Query<Route extends RouteKey> = QueryParams<Route>;
 
 type ListArgs<T extends object> = Simplify<
@@ -38,6 +31,8 @@ export type SpanRecord = ListTracesResponse['spans'][number];
 export type PaginationInfo = NonNullable<ListTracesResponse['pagination']>;
 export type ScoreTracesRequest = Body<'POST /observability/traces/score'>;
 export type ScoreTracesResponse = Response<'POST /observability/traces/score'>;
+export type DeleteTracesRequest = Body<'POST /observability/traces/delete'>;
+export type DeleteTracesResponse = Response<'POST /observability/traces/delete'>;
 export type ListScoresResponse = Response<'GET /observability/traces/:traceId/:spanId/scores'>;
 export type Trajectory = Response<'GET /observability/traces/:traceId/trajectory'>;
 export type ListLogsArgs = ListArgs<Query<'GET /observability/logs'>>;

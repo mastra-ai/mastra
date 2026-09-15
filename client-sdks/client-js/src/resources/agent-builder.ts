@@ -1,6 +1,6 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { Body, PathParams, QueryParams, RouteResponse } from '../route-types.generated.js';
-import type { ClientOptions, ListWorkflowRunsParams } from '../types';
+import type { ClientOptions, ListWorkflowRunsParams, SerializedRouteResponse } from '../types';
 import { parseClientRequestContext } from '../utils';
 import { createRecordSeparatorJsonTransform } from '../utils/stream-transforms';
 import { BaseResource } from './base';
@@ -90,7 +90,7 @@ export class AgentBuilder extends BaseResource {
    */
   async createRun(
     params?: QueryParams<'POST /agent-builder/:actionId/create-run'>,
-  ): Promise<RouteResponse<'POST /agent-builder/:actionId/create-run'>> {
+  ): Promise<SerializedRouteResponse<'POST /agent-builder/:actionId/create-run'>> {
     const searchParams = new URLSearchParams();
 
     if (!!params?.runId) {
@@ -132,7 +132,7 @@ export class AgentBuilder extends BaseResource {
   async startActionRun(
     params: AgentBuilderActionRequest,
     runId: string,
-  ): Promise<RouteResponse<'POST /agent-builder/:actionId/start'>> {
+  ): Promise<SerializedRouteResponse<'POST /agent-builder/:actionId/start'>> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', runId);
 
@@ -153,7 +153,7 @@ export class AgentBuilder extends BaseResource {
   async resume(
     params: AgentBuilderResumeRequest,
     runId: string,
-  ): Promise<RouteResponse<'POST /agent-builder/:actionId/resume'>> {
+  ): Promise<SerializedRouteResponse<'POST /agent-builder/:actionId/resume'>> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', runId);
 
@@ -325,7 +325,7 @@ export class AgentBuilder extends BaseResource {
       fields?: string[];
       withNestedWorkflows?: boolean;
     },
-  ): Promise<RouteResponse<'GET /agent-builder/:actionId/runs/:runId'>> {
+  ): Promise<SerializedRouteResponse<'GET /agent-builder/:actionId/runs/:runId'>> {
     const searchParams = new URLSearchParams();
 
     if (options?.fields && options.fields.length > 0) {
@@ -347,7 +347,7 @@ export class AgentBuilder extends BaseResource {
    * Gets details about this agent builder action.
    * This calls `/agent-builder/:actionId`.
    */
-  async details(): Promise<RouteResponse<'GET /agent-builder/:actionId'>> {
+  async details(): Promise<SerializedRouteResponse<'GET /agent-builder/:actionId'>> {
     return this.request(`/agent-builder/${this.actionId}`);
   }
 
@@ -396,7 +396,7 @@ export class AgentBuilder extends BaseResource {
    */
   async cancelRun(
     runId: PathParams<'POST /agent-builder/:actionId/runs/:runId/cancel'>['runId'],
-  ): Promise<RouteResponse<'POST /agent-builder/:actionId/runs/:runId/cancel'>> {
+  ): Promise<SerializedRouteResponse<'POST /agent-builder/:actionId/runs/:runId/cancel'>> {
     const url = `/agent-builder/${this.actionId}/runs/${runId}/cancel`;
     return this.request(url, {
       method: 'POST',

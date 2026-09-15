@@ -53,6 +53,8 @@ import type {
   PaginationInfo,
   ScoreTracesRequest,
   ScoreTracesResponse,
+  DeleteTracesRequest,
+  DeleteTracesResponse,
   ListScoresResponse,
   Trajectory,
   ListLogsArgs,
@@ -108,7 +110,7 @@ import type {
   GetTagsArgs,
   GetTagsResponse,
 } from './resources/observability-route-types.js';
-import type { PathParams, QueryParams, RouteResponse } from './route-types.generated.js';
+import type { Body, PathParams, QueryParams, RouteResponse } from './route-types.generated.js';
 import type {
   ListFeedbackResponse,
   ClientOptions,
@@ -442,11 +444,11 @@ export class MastraClient extends BaseResource {
   }
 
   public deleteThread(
-    threadId: string,
+    threadId: PathParams<'DELETE /memory/threads/:threadId'>['threadId'],
     opts:
       | { agentId: string; networkId?: never; requestContext?: RequestContext | Record<string, any> }
       | { networkId: string; agentId?: never; requestContext?: RequestContext | Record<string, any> },
-  ): Promise<{ success: boolean; message: string }> {
+  ): Promise<RouteResponse<'DELETE /memory/threads/:threadId'>> {
     if (!opts || !!opts.agentId === !!opts.networkId) {
       throw new Error(
         'MastraClient.deleteThread() requires exactly one of agentId or networkId. ' +
@@ -773,7 +775,7 @@ export class MastraClient extends BaseResource {
    * List of all log transports
    * @returns Promise containing list of log transports
    */
-  public listLogTransports(): Promise<{ transports: string[] }> {
+  public listLogTransports(): Promise<RouteResponse<'GET /logs/transports'>> {
     return this.request('/logs/transports');
   }
 
@@ -851,15 +853,9 @@ export class MastraClient extends BaseResource {
    * @param serverId - The ID of the MCP server.
    * @returns Promise containing the list of resources.
    */
-  public getMcpServerResources(serverId: string): Promise<{
-    resources: Array<{
-      uri: string;
-      name: string;
-      description?: string;
-      mimeType?: string;
-      _meta?: Record<string, unknown>;
-    }>;
-  }> {
+  public getMcpServerResources(
+    serverId: PathParams<'GET /mcp/:serverId/resources'>['serverId'],
+  ): Promise<RouteResponse<'GET /mcp/:serverId/resources'>> {
     return this.request(`/mcp/${encodeURIComponent(serverId)}/resources`);
   }
 
@@ -871,9 +867,9 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing the resource content.
    */
   public readMcpServerResource(
-    serverId: string,
-    uri: string,
-  ): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }> {
+    serverId: PathParams<'POST /mcp/:serverId/resources/read'>['serverId'],
+    uri: Body<'POST /mcp/:serverId/resources/read'>['uri'],
+  ): Promise<RouteResponse<'POST /mcp/:serverId/resources/read'>> {
     return this.request(`/mcp/${encodeURIComponent(serverId)}/resources/read`, {
       method: 'POST',
       body: { uri },
@@ -1172,15 +1168,12 @@ export class MastraClient extends BaseResource {
    * are untouched. On ClickHouse-backed stores, reads may briefly return
    * deleted rows until the delete is fully applied.
    */
-  deleteTraces(params: { traceIds: string[] }): Promise<{ success: true }> {
+  deleteTraces(params: DeleteTracesRequest): Promise<DeleteTracesResponse> {
     return this.observability.deleteTraces(params);
   }
 
   /** Scores one or more traces using a specified scorer (fire-and-forget). */
-  score(params: {
-    scorerName: string;
-    targets: Array<{ traceId: string; spanId?: string }>;
-  }): Promise<{ status: string; message: string }> {
+  score(params: ScoreTracesRequest): Promise<ScoreTracesResponse> {
     return this.observability.score(params);
   }
 
@@ -2568,7 +2561,9 @@ export class MastraClient extends BaseResource {
   /**
    * Deletes a schedule.
    */
-  public deleteSchedule(scheduleId: string): Promise<{ message: string }> {
+  public deleteSchedule(
+    scheduleId: PathParams<'DELETE /schedules/:scheduleId'>['scheduleId'],
+  ): Promise<RouteResponse<'DELETE /schedules/:scheduleId'>> {
     return this.request(`/schedules/${encodeURIComponent(scheduleId)}`, {
       method: 'DELETE',
     });
