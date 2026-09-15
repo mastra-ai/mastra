@@ -38,12 +38,21 @@ interface MutableResult {
   toolResults: RunMCResult['toolResults'];
   error?: RunMCResult['error'];
   threadId?: string;
+  activeAssistantMessageId?: string;
 }
 
 function aggregate(event: AgentControllerEvent, acc: MutableResult): void {
   switch (event.type) {
+    case 'message_start':
+      if (event.message.role === 'assistant') acc.activeAssistantMessageId = event.message.id;
+      break;
     case 'message_update':
-      if (event.event.type === 'text-delta') acc.text += event.event.delta;
+      if (event.event.type === 'text-delta' && event.id === acc.activeAssistantMessageId) {
+        acc.text += event.event.delta;
+      }
+      break;
+    case 'message_end':
+      if (event.id === acc.activeAssistantMessageId) acc.activeAssistantMessageId = undefined;
       break;
     case 'tool_start':
       acc.toolCalls.push({ id: event.toolCallId, name: event.toolName, args: event.args });
