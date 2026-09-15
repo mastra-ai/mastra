@@ -16,9 +16,28 @@ describe('AgentSystemPrompt', () => {
 
       fireEvent.click(screen.getByRole('tab', { name: 'Source' }));
 
-      const source = await screen.findByRole('textbox');
-      expect(Array.from(source.querySelectorAll('.cm-line'), line => line.textContent).join('\n')).toBe(instructions);
-      expect(source.getAttribute('contenteditable')).toBe('false');
+      const source = await screen.findByRole('region', { name: 'System prompt source' });
+      expect(source.textContent).toBe(instructions);
+      expect(screen.queryByRole('textbox')).toBeNull();
+    });
+
+    it('keeps whitespace intact when switching wrapping and reading modes', () => {
+      const indentedInstructions = 'Keep this exact.\n\n      - Six spaces\n\t- A tab\n';
+      render(
+        <TooltipProvider>
+          <AgentSystemPrompt instructions={indentedInstructions} />
+        </TooltipProvider>,
+      );
+
+      expect(screen.queryByRole('button', { name: 'Wrap lines' })).toBeNull();
+      fireEvent.click(screen.getByRole('tab', { name: 'Source' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Wrap lines', pressed: true }));
+      expect(screen.getByRole('region', { name: 'System prompt source' }).textContent).toBe(indentedInstructions);
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Read' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Source' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Wrap lines', pressed: false }));
+      expect(screen.getByRole('region', { name: 'System prompt source' }).textContent).toBe(indentedInstructions);
     });
 
     it('renders formatted instructions in the reading view', () => {
