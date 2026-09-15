@@ -18,6 +18,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/core/schema';
 import type { ChunkType, FullOutput, JSONValue, LanguageModelUsage, ProviderMetadata } from '@mastra/core/stream';
 import { ChunkFrom, MastraModelOutput } from '@mastra/core/stream';
+
 type MastraModelOutputOptions<OUTPUT = undefined> = ConstructorParameters<
   typeof MastraModelOutput<OUTPUT>
 >[0]['options'];
@@ -38,6 +39,7 @@ export type V3Usage = {
   outputTokens: {
     total: number | undefined;
     text?: number;
+    reasoning?: number;
   };
 };
 
@@ -46,7 +48,7 @@ export type SDKModelGenerateResult = {
   finishReason: { unified: 'stop'; raw: 'stop' };
   usage: V3Usage;
   response: {
-    id: string;
+    id?: string;
     modelId: string;
     timestamp: Date;
   };
@@ -88,7 +90,7 @@ export function createCompletedMastraStream({
   runId: string;
   prompt: string;
   text: string;
-  responseId: string;
+  responseId?: string;
   modelId: string;
   usage: LanguageModelUsage;
   providerMetadata?: ProviderMetadata;
@@ -168,12 +170,14 @@ export function toFullOutput<OUTPUT>({
   runId,
   provider,
   result,
+  includeResponseText = false,
   options,
 }: {
   messages: MessageListInput;
   runId: string;
   provider: string;
   result: SDKModelGenerateResult;
+  includeResponseText?: boolean;
   options?: Partial<MastraModelOutputOptions<OUTPUT>>;
 }): Promise<FullOutput<OUTPUT>> {
   const text = result.content.map(part => part.text).join('');
@@ -195,7 +199,7 @@ export function toFullOutput<OUTPUT>({
     modelId: result.response.modelId,
     provider,
     stream,
-    responseText: text,
+    responseText: includeResponseText ? text : undefined,
     options,
   }).getFullOutput();
 }
@@ -626,7 +630,7 @@ export function enqueueStartChunks(
     runId: string;
     prompt: string;
     textId: string;
-    responseId: string;
+    responseId?: string;
     modelId: string;
     providerMetadata?: ProviderMetadata;
   },
@@ -650,7 +654,7 @@ export function enqueueStartChunks(
     runId,
     from: ChunkFrom.AGENT,
     payload: {
-      id: responseId,
+      ...(responseId ? { id: responseId } : {}),
       modelId,
       timestamp: new Date().toISOString(),
     },
@@ -701,7 +705,7 @@ export function enqueueFinishChunks(
     prompt: string;
     textId: string;
     text: string;
-    responseId: string;
+    responseId?: string;
     modelId: string;
     usage: LanguageModelUsage;
     providerMetadata?: ProviderMetadata;
@@ -711,7 +715,7 @@ export function enqueueFinishChunks(
 ): void {
   const timestamp = new Date();
   const response = {
-    id: responseId,
+    ...(responseId ? { id: responseId } : {}),
     modelId,
     timestamp,
   };
@@ -745,7 +749,7 @@ export function enqueueFinishChunks(
     runId,
     from: ChunkFrom.AGENT,
     payload: {
-      id: responseId,
+      ...(responseId ? { id: responseId } : {}),
       providerMetadata,
       totalUsage: usage,
       response,
@@ -796,6 +800,7 @@ export function toLanguageModelUsage(usage: V3Usage): LanguageModelUsage {
     totalTokens: inputTokens + outputTokens,
     cachedInputTokens: usage.inputTokens.cacheRead,
     cacheCreationInputTokens: usage.inputTokens.cacheWrite,
+    reasoningTokens: usage.outputTokens.reasoning,
     raw: usage,
   };
 }
@@ -879,12 +884,23 @@ export function withStructuredOutputPrompt<OUTPUT>(
 
 export function getStructuredOutputSchema<OUTPUT>(
   structuredOutput?: PublicStructuredOutputOptions<OUTPUT>,
+  options?: { format?: 'openai' | 'raw' },
 ): Record<string, unknown> | undefined {
   if (!structuredOutput?.schema) {
     return undefined;
   }
 
-  return standardSchemaToJSONSchema(toStandardSchema(structuredOutput.schema)) as Record<string, unknown>;
+  const schema = standardSchemaToJSONSchema(toStandardSchema(structuredOutput.schema)) as Record<string, unknown>;
+  if (options?.format === 'raw') {
+    return schema;
+  }
+
+  return {
+    type: 'json_schema',
+    name: 'mastra_output',
+    strict: false,
+    schema,
+  };
 }
 
 export async function getStructuredOutput<OUTPUT>(
@@ -949,4 +965,34 @@ export function sumDefined(...values: Array<number | undefined>): number | undef
   }
 
   return defined.reduce((sum, value) => sum + value, 0);
+}
+
+/** Returns an object value as a string-keyed record, excluding arrays. */
+export function toRecord(value: unknown): Record<string, unknown> | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+/** Returns true for non-null objects, including arrays. */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object';
+}
+
+/** Reads a string property from an unknown record without coercion. */
+export function getString(record: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = record?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+/** Reads a number property from an unknown value without coercion. */
+export function getNumber(value: unknown): number | undefined {
+  return typeof value === 'number' ? value : undefined;
+}
+
+/** Reads a property from an unknown value as a string-keyed record entry. */
+export function getObjectValue(value: unknown, key: string): unknown {
+  return toRecord(value)?.[key];
 }

@@ -20,9 +20,6 @@ jobs:
     outputs:
       has_code: ${{ steps.filter.outputs.has_code }}
       has_examples: ${{ steps.filter.outputs.has_examples }}
-      has_agents_inputs: ${{ steps.filter.outputs.has_agents_inputs }}
-      has_peerdeps_inputs: ${{ steps.filter.outputs.has_peerdeps_inputs }}
-      has_readme_inputs: ${{ steps.filter.outputs.has_readme_inputs }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -50,48 +47,6 @@ jobs:
           else
             echo "has_examples=false" >> $GITHUB_OUTPUT
           fi
-
-          printf '%s\n' "$ALL" > /tmp/changed-files.txt
-          node --input-type=module -e '
-            import fs from "node:fs";
-            import { qualityAssuranceInputs } from "./.github/scripts/ci-routing.cjs";
-            import { discoverPackages } from "./.github/scripts/check-package-readmes.mjs";
-            const changedFiles = fs.readFileSync("/tmp/changed-files.txt", "utf8").split(/\r?\n/).filter(Boolean);
-            const packageReadmePaths = discoverPackages(process.cwd()).map(pkg => `${pkg.relativeDirectory}/README.md`);
-            const { hasAgentsInputs, hasPeerdepsInputs, hasReadmeInputs, agentsReasons, peerdepsReasons, readmeReasons } = qualityAssuranceInputs(changedFiles, packageReadmePaths);
-            const formatReasons = reasons => reasons.length === 0 ? "no relevant changed paths" : reasons.map(path => `\`${path}\``).join(", ");
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_agents_inputs=${hasAgentsInputs}\nhas_peerdeps_inputs=${hasPeerdepsInputs}\nhas_readme_inputs=${hasReadmeInputs}\n`);
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Quality assurance routing\n\n- AGENTS validation: \`${hasAgentsInputs}\` — ${formatReasons(agentsReasons)}\n- Peer dependency validation: \`${hasPeerdepsInputs}\` — ${formatReasons(peerdepsReasons)}\n- README validation: \`${hasReadmeInputs}\` — ${formatReasons(readmeReasons)}\n`);
-          '
-
-  changeset-check:
-    name: Validate changeset packages
-    runs-on: starsling-ubuntu-24.04-2
-    timeout-minutes: 10
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        with:
-          # Changesets resolves the merge-base with main.
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
-
-      - name: Test changeset package validator
-        run: node --test .github/scripts/check-changeset-packages.test.mjs
-
-      # Check all pending changesets, including on changeset-only PRs.
-      - name: Reject unknown or ignored changeset packages
-        run: node .github/scripts/check-changeset-packages.mjs
-
-      # actions/checkout fetches main as origin/main, not a local main branch.
-      - name: Validate changeset release plan
-        run: pnpm changeset-cli status --since origin/main
 
   lint:
     name: Lint
@@ -185,7 +140,7 @@ jobs:
     needs: changes
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 10
-    if: needs.changes.outputs.has_agents_inputs == 'true' && github.repository == 'mastra-ai/mastra'
+    if: github.repository == 'mastra-ai/mastra'
     permissions:
       contents: read
       pull-requests: read
@@ -203,37 +158,12 @@ jobs:
       - name: Run AGENTS.md validator
         run: node .github/scripts/validate-agents-md.mjs
 
-  readme-check:
-    name: Validate package READMEs
-    needs: changes
-    runs-on: starsling-ubuntu-24.04
-    timeout-minutes: 10
-    if: needs.changes.outputs.has_readme_inputs == 'true' && github.repository == 'mastra-ai/mastra'
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 20
-        with:
-          persist-credentials: false
-
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
-        with:
-          package-manager-cache: false
-          install-dependencies: false
-
-      - name: Run README validator
-        run: node .github/scripts/check-package-readmes.mjs
-
   peerdeps-check:
     name: Validate peer dependencies
-    needs: changes
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 30
-    if: ${{ needs.changes.outputs.has_peerdeps_inputs == 'true' && github.repository == 'mastra-ai/mastra' }}
+    # Run on main repository or for trusted bot PRs
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
     permissions:
       contents: read
       pull-requests: read
@@ -268,7 +198,7 @@ jobs:
         run: node ./scripts/validate-peerdeps.mjs
 
       - name: Check @mastra/core import floor
-        run: pnpm check:core-imports
+        run: pnpm --filter ./packages/server check:core-imports
 
       - name: Check for git changes
         run: |

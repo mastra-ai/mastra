@@ -1,12 +1,13 @@
 {
-  "name": "@mastra/cursor",
-  "version": "0.3.1",
-  "description": "Cursor SDK package for Mastra",
+  "name": "@mastra/opencode-sdk",
+  "version": "0.1.0",
+  "description": "OpenCode SDK package for Mastra",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": {
@@ -34,11 +35,11 @@
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@cursor/sdk": "^1.0.24",
     "@internal/agent-sdk-base": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@opencode-ai/sdk": "^1.18.18",
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
@@ -52,14 +53,14 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "agent-sdks/cursor"
+    "directory": "agent-sdks/opencode"
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "peerDependencies": {
-    "@cursor/sdk": "^1.0.13",
-    "@mastra/core": ">=1.34.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.34.0-0 <2.0.0-0",
+    "@opencode-ai/sdk": "^1.18.18"
   },
   "engines": {
     "node": ">=22.13.0"

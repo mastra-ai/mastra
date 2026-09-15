@@ -7,6 +7,7 @@ export default defineConfig({
   fixedExtension: false,
   nodeProtocol: 'strip',
   deps: {
+    alwaysBundle: ['@internal/agent-sdk-base'],
     neverBundle: ['@openai/agents'],
   },
   clean: true,
@@ -14,6 +15,6 @@ export default defineConfig({
   treeshake: true,
   sourcemap: true,
   onSuccess: async () => {
-    await generateTypes(process.cwd());
+    await generateTypes(process.cwd(), new Set(['@internal/agent-sdk-base']));
   },
 });
