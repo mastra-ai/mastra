@@ -83,6 +83,17 @@ kill -KILL -"$pgid" 2>/dev/null
 # Fallback for images without setsid: the leader is not a group leader, so also
 # signal it directly.
 kill -KILL "$pgid" 2>/dev/null
+# Verify the group is actually gone before reporting success. kill -0 probes
+# for the group's existence without sending a signal; once every member has
+# been reaped it fails, so we poll briefly. If the group survives (e.g. an
+# unkillable process), exit nonzero so kill() reports failure instead of
+# falsely claiming the tree was terminated.
+j=0
+while kill -0 -"$pgid" 2>/dev/null; do
+  j=$((j + 1))
+  [ "$j" -ge 40 ] && exit 1
+  sleep 0.05
+done
 exit 0
 `;
 
@@ -417,9 +428,17 @@ export class DockerProcessManager extends SandboxProcessManager {
         if (handle.exitCode === undefined) {
           handle._killed = true;
           handle._timedOut = true;
-          handle.kill().catch(() => {});
-          // Ensure stream is destroyed even if kill() fails (e.g., PID not found)
-          handle._destroyStream();
+          // Await kill() so the process tree is actually terminated before the
+          // stream is torn down. Destroying the stream first would resolve
+          // wait() with exit 137 while the targets are still running — the exact
+          // bug this fix addresses. Only force-destroy the stream if kill()
+          // fails to make progress, as a last resort to unblock wait().
+          handle
+            .kill()
+            .then(killed => {
+              if (!killed) handle._destroyStream();
+            })
+            .catch(() => handle._destroyStream());
         }
       }, timeoutMs);
       // Clear timer when process exits naturally
