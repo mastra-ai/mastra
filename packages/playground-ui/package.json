@@ -144,7 +144,7 @@
     "test:mutate": "stryker run --mutate",
     "typecheck": "tsc",
     "lint": "node scripts/check-color-usage.mjs --check && oxlint . && eslint .",
-    "lint:colors": "node scripts/check-color-usage.mjs",
+    "lint:colors": "node scripts/check-color-usage.mjs --check",
     "lint:fix": "oxlint --fix . && eslint --fix .",
     "build:publish": "pnpm build && yalc push",
     "preview": "vite preview",

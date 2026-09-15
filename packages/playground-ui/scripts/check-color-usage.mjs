@@ -176,8 +176,11 @@ const scanFile = (repositoryRoot, file) => {
   if (!approvedFoundationFiles.has(file)) {
     findMatches(
       content,
-      new RegExp(`\\b${colorUtilityPattern}-(${foundationTokenPattern})(?:\\/[0-9.]+)?\\b`, 'g'),
-      match => match[1],
+      new RegExp(
+        `\\b${colorUtilityPattern}-(?:(${foundationTokenPattern})|\\(\\s*--(${foundationTokenPattern})\\s*\\))(?:\\/[0-9.]+)?(?=$|[^\\w-])`,
+        'g',
+      ),
+      match => match[1] ?? match[2],
       token => add(token, 'tailwind', 'foundation'),
     );
     findMatches(

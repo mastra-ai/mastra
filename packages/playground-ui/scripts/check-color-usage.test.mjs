@@ -87,7 +87,7 @@ test('rejects new, increased, removed, and direct foundation usage', () => {
   track(repository, 'src/Button/button.tsx', "const value = 'bg-surface2';");
   const baseline = buildReport({ repositoryRoot: repository, roots: ['src'] });
 
-  track(repository, 'src/Button/button.tsx', "const value = 'bg-surface2 hover:bg-surface2 bg-gray-1';");
+  track(repository, 'src/Button/button.tsx', "const value = 'bg-surface2 hover:bg-surface2 bg-(--gray-1)';");
   const current = buildReport({ repositoryRoot: repository, roots: ['src'] });
   const failures = compareReports(baseline, current);
 
