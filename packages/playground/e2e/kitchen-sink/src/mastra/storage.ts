@@ -9,5 +9,7 @@ export async function initE2EStorage() {
   await storage.init();
 
   const workflowStore = await storage.getStore('workflows');
-  await workflowStore?.init?.();
+  const workflowDefinitionsStore = await storage.getStore('workflowDefinitions');
+
+  await Promise.all([workflowStore?.init?.(), workflowDefinitionsStore?.init?.()]);
 }
