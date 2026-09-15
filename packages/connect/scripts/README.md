@@ -77,9 +77,14 @@ Generated action implementations are adapted from `NangoHQ/integration-templates
 
 Resend and incident.io are generated from the contribution branches under review in NangoHQ/integration-templates PRs [#667](https://github.com/NangoHQ/integration-templates/pull/667) and [#668](https://github.com/NangoHQ/integration-templates/pull/668):
 
+The two contributions live on separate branches of the fork, so each provider is regenerated with its own branch head pinned in `templates-config.ts`. Each provider's manifest records the SHA it was generated from.
+
 ```sh
+# templateSha = head of feat/resend-actions
 pnpm --filter @mastra/connect sync-templates
 pnpm --filter @mastra/connect add-provider resend --yes
+# templateSha = head of feat/incident-io-actions
+pnpm --filter @mastra/connect sync-templates
 pnpm --filter @mastra/connect add-provider incident-io --yes
 ```
 
