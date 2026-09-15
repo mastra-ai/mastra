@@ -3,6 +3,7 @@ import { MCPServerBase } from '@mastra/core/mcp';
 import type { MCPServerHTTPOptions, MCPToolExecutionResultV2 } from '@mastra/core/mcp';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
+import { standardSchemaToJSONSchema } from '@mastra/core/schema';
 import { createTool } from '@mastra/core/tools';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { InternalCoreTool, MCPToolExecutionContext } from '@mastra/core/tools';
@@ -112,7 +113,7 @@ class Fixture extends MCPServerBase {
       return {
         status: 'suspended',
         suspendPayload: suspension.payload,
-        resumeSchema: resumeSchema ? z.toJSONSchema(resumeSchema as z.ZodType) : undefined,
+        resumeSchema: resumeSchema ? standardSchemaToJSONSchema(resumeSchema, { io: 'input' }) : undefined,
       };
     }
     return { status: 'completed', output };
