@@ -21,7 +21,7 @@ import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { COPILOT_HEADERS, fetchCopilotModels, getGitHubCopilotBaseUrl } from '../auth/providers/github-copilot.js';
 import type { CopilotModelEntry, GitHubCopilotCredentials } from '../auth/providers/github-copilot.js';
 import { AuthStorage } from '../auth/storage.js';
-import type { CredentialStore } from '../auth/types.js';
+import type { CredentialStore, OAuthCredential } from '../auth/types.js';
 
 const COPILOT_PROVIDER_ID = 'github-copilot';
 
@@ -119,6 +119,8 @@ export function buildGitHubCopilotOAuthFetch(
   opts: { authStorage?: CredentialStore; rewriteUrl?: boolean } = {},
 ): typeof fetch {
   return (async (url: string | URL | Request, init?: Parameters<typeof fetch>[1]) => {
+    const { headers: initHeaders, ...requestInit } = init ?? {};
+    const request = new Request(url, requestInit);
     const storage = opts.authStorage ?? getAuthStorage();
     storage.reload();
 
@@ -127,46 +129,36 @@ export function buildGitHubCopilotOAuthFetch(
       throw new ProviderAuthRequiredError('Not logged in to GitHub Copilot.');
     }
 
-    // getApiKey() refreshes the Copilot bearer if it has expired.
-    const accessToken = await storage.getApiKey(COPILOT_PROVIDER_ID);
-    if (!accessToken) {
+    let accessToken: string | undefined;
+    let activeCred: OAuthCredential | undefined;
+    if (storage.getOAuthCredential) {
+      activeCred = await storage.getOAuthCredential(COPILOT_PROVIDER_ID);
+      accessToken = activeCred?.access;
+    } else {
+      accessToken = await storage.getApiKey(COPILOT_PROVIDER_ID);
+      storage.reload();
+      const reloaded = storage.get(COPILOT_PROVIDER_ID);
+      activeCred = reloaded?.type === 'oauth' ? { ...reloaded, access: accessToken ?? reloaded.access } : undefined;
+    }
+    if (!accessToken || !activeCred) {
       throw new ProviderAuthRequiredError('Failed to refresh the GitHub Copilot token.');
     }
-    storage.reload();
-    // Re-read after the reload: a refresh-failure rotation inside getApiKey
-    // may have activated a different account, and the enterprise URL must
-    // follow it.
-    const activeCred = storage.get(COPILOT_PROVIDER_ID);
-    const enterpriseUrl = (activeCred as GitHubCopilotCredentials | undefined)?.enterpriseUrl;
+    const enterpriseUrl = (activeCred as GitHubCopilotCredentials).enterpriseUrl;
 
     let parsedBody: unknown;
-    if (typeof init?.body === 'string') {
-      try {
-        parsedBody = JSON.parse(init.body);
-      } catch {
-        parsedBody = undefined;
-      }
+    try {
+      const body = await request.clone().text();
+      parsedBody = body ? JSON.parse(body) : undefined;
+    } catch {
+      parsedBody = undefined;
     }
     const isAgent = detectIsAgent(parsedBody);
     const isVision = detectIsVision(parsedBody);
 
-    // Preserve non-auth headers from caller.
-    const headers = new Headers();
-    if (init?.headers) {
-      const source =
-        init.headers instanceof Headers
-          ? init.headers
-          : Array.isArray(init.headers)
-            ? new Headers(init.headers as Array<[string, string]>)
-            : new Headers(init.headers as Record<string, string>);
-      source.forEach((value, key) => {
-        const lower = key.toLowerCase();
-        if (lower !== 'authorization' && lower !== 'x-api-key') {
-          headers.set(key, value);
-        }
-      });
-    }
-
+    const headers = new Headers(url instanceof Request ? url.headers : undefined);
+    if (initHeaders) new Headers(initHeaders).forEach((value, key) => headers.set(key, value));
+    headers.delete('authorization');
+    headers.delete('x-api-key');
     headers.set('Authorization', `Bearer ${accessToken}`);
     headers.set('x-initiator', isAgent ? 'agent' : 'user');
     headers.set('Openai-Intent', 'conversation-edits');
@@ -181,16 +173,18 @@ export function buildGitHubCopilotOAuthFetch(
     }
 
     const finalUrl =
-      opts.rewriteUrl !== false
-        ? rewriteToCopilotBase(url, accessToken, enterpriseUrl)
-        : url instanceof URL
-          ? url
-          : typeof url === 'string'
-            ? new URL(url)
-            : new URL((url as Request).url);
+      opts.rewriteUrl !== false ? rewriteToCopilotBase(request, accessToken, enterpriseUrl) : new URL(request.url);
 
+    const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body;
+    const finalRequest = new Request(finalUrl, {
+      method: request.method,
+      headers,
+      body,
+      signal: request.signal,
+      ...(body ? ({ duplex: 'half' } as RequestInit) : {}),
+    });
     try {
-      return await fetch(finalUrl, { ...init, headers });
+      return await fetch(finalRequest);
     } catch (error) {
       if (error && typeof error === 'object') {
         Object.assign(error as Record<string, unknown>, {

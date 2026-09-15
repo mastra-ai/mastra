@@ -163,7 +163,9 @@ type TokenResponseJson = {
 
 function tokenResponseToResult(json: TokenResponseJson, logPrefix: string): TokenResult {
   if (!json.access_token || !json.refresh_token) {
-    console.error(`[openai-codex] ${logPrefix} response missing fields:`, json);
+    console.error(
+      `[openai-codex] ${logPrefix} response missing required fields (access_token=${Boolean(json.access_token)}, refresh_token=${Boolean(json.refresh_token)})`,
+    );
     return { type: 'failed' };
   }
 
@@ -190,8 +192,7 @@ async function exchangeAuthorizationCode(code: string, verifier: string, redirec
   });
 
   if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    console.error('[openai-codex] code->token failed:', response.status, text);
+    console.error('[openai-codex] code->token failed:', response.status);
     return { type: 'failed' };
   }
 
@@ -211,14 +212,13 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenResult> {
     });
 
     if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      console.error('[openai-codex] Token refresh failed:', response.status, text);
+      console.error('[openai-codex] Token refresh failed:', response.status);
       return { type: 'failed' };
     }
 
     return tokenResponseToResult((await response.json()) as TokenResponseJson, 'Token refresh');
-  } catch (error) {
-    console.error('[openai-codex] Token refresh error:', error);
+  } catch {
+    console.error('[openai-codex] Token refresh request failed');
     return { type: 'failed' };
   }
 }

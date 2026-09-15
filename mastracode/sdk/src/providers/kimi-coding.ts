@@ -3,7 +3,7 @@ import type { MastraModelConfig } from '@mastra/core/llm';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { getKimiCodingDeviceHeaders, isKimiCodingDeviceId } from '../auth/providers/kimi-coding.js';
 import { AuthStorage } from '../auth/storage.js';
-import type { CredentialStore } from '../auth/types.js';
+import type { CredentialStore, OAuthCredential } from '../auth/types.js';
 
 const PROVIDER_ID = 'kimi-for-coding';
 // Pi's provider root is https://api.kimi.com/coding. The AI SDK expects the
@@ -34,14 +34,19 @@ export function buildKimiCodingOAuthFetch(options: { credentialStore?: Credentia
     if (!isKimiCodingDeviceId(credential.deviceId)) {
       throw new ProviderAuthRequiredError('Kimi For Coding credentials are invalid. Please reconnect the account.');
     }
-    const token = await store.getApiKey(PROVIDER_ID);
+    let token: string | undefined;
+    let activeCredential: OAuthCredential | undefined = credential;
+    if (store.getOAuthCredential) {
+      activeCredential = await store.getOAuthCredential(PROVIDER_ID);
+      token = activeCredential?.access;
+    } else {
+      token = await store.getApiKey(PROVIDER_ID);
+      store.reload();
+      const reloaded = store.get(PROVIDER_ID);
+      activeCredential = reloaded?.type === 'oauth' ? { ...reloaded, access: token ?? reloaded.access } : undefined;
+    }
     if (!token) throw new ProviderAuthRequiredError('Failed to refresh the Kimi For Coding token.');
-    // Re-read the credential after the token resolves: a refresh-failure
-    // rotation inside getApiKey may have activated a different account, and
-    // the device headers must match the token actually in use.
-    store.reload();
-    const activeCredential = store.get(PROVIDER_ID);
-    if (!activeCredential || activeCredential.type !== 'oauth' || !isKimiCodingDeviceId(activeCredential.deviceId)) {
+    if (!activeCredential || !isKimiCodingDeviceId(activeCredential.deviceId)) {
       throw new ProviderAuthRequiredError('Kimi For Coding credentials are invalid. Please reconnect the account.');
     }
     const deviceHeaders = getKimiCodingDeviceHeaders(activeCredential.deviceId);

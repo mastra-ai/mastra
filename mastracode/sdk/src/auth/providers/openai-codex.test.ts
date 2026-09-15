@@ -201,6 +201,24 @@ describe('OpenAI Codex OAuth account id extraction', () => {
 
     vi.unstubAllGlobals();
   });
+
+  it('does not log tokens when a refresh response is missing fields', async () => {
+    const accessToken = 'access-must-not-be-logged';
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ access_token: accessToken, expires_in: 3600 }), { status: 200 }),
+      );
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubGlobal('fetch', fetchMock);
+    const { refreshOpenAICodexToken } = await import('./openai-codex.js');
+
+    await expect(refreshOpenAICodexToken('refresh-old')).rejects.toThrow('Failed to refresh OpenAI Codex token');
+    expect(consoleError.mock.calls.flat().join(' ')).not.toContain(accessToken);
+
+    consoleError.mockRestore();
+    vi.unstubAllGlobals();
+  });
 });
 
 describe('OpenAI Codex device OAuth', () => {

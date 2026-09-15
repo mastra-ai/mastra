@@ -205,6 +205,7 @@ export class AuthStorage {
    * Set credential for a provider.
    */
   set(provider: string, credential: AuthCredential): void {
+    this.reload();
     this.data[provider] = credential;
     this.save();
   }
@@ -213,6 +214,7 @@ export class AuthStorage {
    * Remove credential for a provider.
    */
   remove(provider: string): void {
+    this.reload();
     delete this.data[provider];
     this.save();
   }
@@ -635,79 +637,55 @@ export class AuthStorage {
   }
 
   /**
-   * Get API key for a provider, auto-refreshing OAuth tokens if needed.
-   * On refresh failure of the active account, rotates through the provider's
-   * remaining registered accounts before giving up (restoring the original).
+   * Get a ready-to-use OAuth credential snapshot, auto-refreshing if needed.
+   * A failed refresh leaves the active account unchanged and returns undefined;
+   * the account-rotation processor owns switching so it can persist a visible
+   * account-switch notice with the request that triggered the change.
    */
+  async getOAuthCredential(providerId: string): Promise<OAuthCredential | undefined> {
+    const cred = this.data[providerId];
+    if (cred?.type !== 'oauth') return undefined;
+
+    const provider = getOAuthProvider(providerId);
+    if (!provider) return undefined;
+
+    if (Date.now() < cred.expires) return { ...cred };
+
+    // Share one refresh when concurrent requests observe the same expired
+    // token, keyed to the observed active account instance.
+    const activeEntry = this.getActiveAccount(providerId);
+    const refreshKey = activeEntry ? `${providerId}:${activeEntry.id}` : providerId;
+    const pendingRefresh = this.refreshPromises.get(refreshKey);
+    if (pendingRefresh) {
+      const creds = await pendingRefresh;
+      return creds ? { type: 'oauth', ...creds } : undefined;
+    }
+
+    const refresh = (async (): Promise<OAuthCredentials | undefined> => {
+      try {
+        const fresh = await provider.refreshToken(cred);
+        this.persistRefreshedCredential(providerId, activeEntry?.id, fresh);
+        return fresh;
+      } catch {
+        return undefined;
+      }
+    })();
+    this.refreshPromises.set(refreshKey, refresh);
+    try {
+      const creds = await refresh;
+      return creds ? { type: 'oauth', ...creds } : undefined;
+    } finally {
+      this.refreshPromises.delete(refreshKey);
+    }
+  }
+
+  /** Get API key for a provider, refreshing OAuth tokens if needed. */
   async getApiKey(providerId: string): Promise<string | undefined> {
     const cred = this.data[providerId];
+    if (cred?.type === 'api_key') return cred.key;
 
-    if (cred?.type === 'api_key') {
-      return cred.key;
-    }
-
-    if (cred?.type === 'oauth') {
-      const provider = getOAuthProvider(providerId);
-      if (!provider) {
-        return undefined;
-      }
-
-      if (Date.now() < cred.expires) {
-        return provider.getApiKey(cred);
-      }
-
-      // Share one refresh when concurrent requests observe the same expired
-      // token. The promise covers the whole outcome including a rotation
-      // walk, keyed to the observed active account instance.
-      const activeEntry = this.getActiveAccount(providerId);
-      const refreshKey = activeEntry ? `${providerId}:${activeEntry.id}` : providerId;
-      const pendingRefresh = this.refreshPromises.get(refreshKey);
-      if (pendingRefresh) {
-        const creds = await pendingRefresh;
-        return creds ? provider.getApiKey(creds) : undefined;
-      }
-
-      const refresh = (async (): Promise<OAuthCredentials | undefined> => {
-        try {
-          const fresh = await provider.refreshToken(cred);
-          this.persistRefreshedCredential(providerId, activeEntry?.id, fresh);
-          return fresh;
-        } catch {
-          // Refresh failed. Rotate through the pool: try each remaining
-          // account — refreshing an expired sibling first — and only fail
-          // when every instance has, restoring the originally active account
-          // (the credential is kept, nothing deleted — same as the
-          // single-account behavior).
-        }
-        const pool = this.listAccounts(providerId);
-        if (activeEntry && pool.length > 1) {
-          for (const candidate of pool) {
-            if (candidate.id === activeEntry.id) continue;
-            const activated = this.activateAccount(providerId, candidate.id);
-            if (!activated) continue;
-            const slotCred = this.get(providerId);
-            if (slotCred?.type !== 'oauth') continue;
-            let creds: OAuthCredentials = slotCred;
-            if (Date.now() >= creds.expires) {
-              const refreshed = await this.refreshInstance(providerId, candidate.id, creds);
-              if (!refreshed) continue;
-              creds = refreshed;
-            }
-            return creds;
-          }
-          this.activateAccount(providerId, activeEntry.id);
-        }
-        return undefined;
-      })();
-      this.refreshPromises.set(refreshKey, refresh);
-      try {
-        const creds = await refresh;
-        return creds ? provider.getApiKey(creds) : undefined;
-      } finally {
-        this.refreshPromises.delete(refreshKey);
-      }
-    }
-
-    return undefined;
+    const oauth = await this.getOAuthCredential(providerId);
+    const provider = oauth ? getOAuthProvider(providerId) : undefined;
+    return oauth && provider ? provider.getApiKey(oauth) : undefined;
   }
 }

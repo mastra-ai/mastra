@@ -110,8 +110,7 @@ export function getGitHubCopilotBaseUrl(token?: string, enterpriseDomain?: strin
 async function fetchJson(url: string, init: RequestInit, signal?: AbortSignal): Promise<unknown> {
   const response = await fetch(url, signal ? { ...init, signal } : init);
   if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`${response.status} ${response.statusText}: ${text}`);
+    throw new Error(`${response.status} ${response.statusText}`.trim());
   }
   return response.json();
 }
