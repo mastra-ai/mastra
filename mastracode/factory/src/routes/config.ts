@@ -547,7 +547,11 @@ async function canWriteThinkingDefaults(c: Context, auth: RouteAuth): Promise<bo
   await auth.ensureUser(c);
   const tenant = auth.tenant(c);
   if (!tenant) return false;
-  return auth.isOrganizationAdmin(c, tenantOrgId(tenant));
+  try {
+    return (await auth.isDeploymentOperator?.(c)) === true;
+  } catch {
+    return false;
+  }
 }
 
 /** Reject a thinking-defaults write when the caller lacks permission. */
@@ -556,8 +560,8 @@ async function denyThinkingDefaultsWrite(c: Context, auth: RouteAuth): Promise<R
   await auth.ensureUser(c);
   const tenant = auth.tenant(c);
   if (!tenant) return c.json({ error: 'unauthorized' }, 401);
-  if (!(await auth.isOrganizationAdmin(c, tenantOrgId(tenant)))) {
-    return c.json({ error: 'Only organization admins can change thinking defaults' }, 403);
+  if (!(await canWriteThinkingDefaults(c, auth))) {
+    return c.json({ error: 'Only deployment operators can change thinking defaults' }, 403);
   }
   return undefined;
 }
@@ -1194,7 +1198,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       // falls back to when a session carries no explicit override — including
       // automated (rule-driven) Factory runs nobody opens interactively. The
       // settings file is deployment-wide rather than org-scoped, so writes in
-      // tenant mode require an organization admin.
+      // tenant mode require an explicitly configured deployment operator.
 
       registerApiRoute('/web/config/thinking', {
         method: 'GET',

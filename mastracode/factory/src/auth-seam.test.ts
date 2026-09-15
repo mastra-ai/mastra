@@ -105,6 +105,60 @@ describe('active provider resolution', () => {
   });
 });
 
+describe('deployment operator authorization', () => {
+  function buildOperatorApp(provider: IMastraAuthProvider | undefined, operatorIds?: readonly string[]) {
+    const auth = createFactoryRouteAuth(provider, operatorIds);
+    const app = new Hono();
+    app.get('/', async c => c.json({ allowed: await auth.isDeploymentOperator?.(c) }));
+    return app;
+  }
+
+  it.each([
+    { ids: undefined, allowed: false },
+    { ids: [], allowed: false },
+    { ids: ['someone_else'], allowed: false },
+    { ids: ['user_fake'], allowed: true },
+  ])('checks trusted user IDs with allowlist $ids', async ({ ids, allowed }) => {
+    const app = buildOperatorApp(fakeProvider(), ids);
+    const res = await app.request('/', { headers: { Authorization: 'Bearer test' } });
+    expect(await res.json()).toEqual({ allowed });
+  });
+
+  it('supports the WorkOS identity shape', async () => {
+    const provider = fakeProvider({
+      authenticateToken: async () => ({ workosId: 'operator', organizationId: 'org_fake' }),
+    });
+    const res = await buildOperatorApp(provider, ['operator']).request('/', {
+      headers: { Authorization: 'Bearer test' },
+    });
+    expect(await res.json()).toEqual({ allowed: true });
+  });
+
+  it('does not accept a claimed operator ID from request headers', async () => {
+    const res = await buildOperatorApp(fakeProvider(), ['operator']).request('/', {
+      headers: { Authorization: 'Bearer test', 'x-user-id': 'operator', 'x-deployment-operator': 'true' },
+    });
+    expect(await res.json()).toEqual({ allowed: false });
+  });
+
+  it('denies unauthenticated callers and disabled providers', async () => {
+    const provider = fakeProvider({ authenticateToken: async () => null });
+    for (const activeProvider of [provider, undefined]) {
+      const res = await buildOperatorApp(activeProvider, ['user_fake']).request('/');
+      expect(await res.json()).toEqual({ allowed: false });
+    }
+  });
+
+  it('snapshots the server allowlist at construction', async () => {
+    const ids: string[] = [];
+    const app = buildOperatorApp(fakeProvider(), ids);
+    ids.push('user_fake');
+    expect(await (await app.request('/', { headers: { Authorization: 'Bearer test' } })).json()).toEqual({
+      allowed: false,
+    });
+  });
+});
+
 describe('Factory route auth organization selection', () => {
   function buildRouteApp(provider: IMastraAuthProvider) {
     const app = new Hono();
