@@ -7,9 +7,9 @@
  * (per the pattern documented in `observability/mastra/src/features.ts`).
  *
  * Detection runs once at module load. Callers consume the result through the
- * sync `isModelInferenceEnabled()` accessor, which conservatively returns
- * `false` until detection settles — long enough only to cover the microtask
- * window before any spans are emitted in practice.
+ * sync `isModelInferenceEnabled()` accessor; `SpanConverter.convertSpan` awaits
+ * `whenObservabilityFeaturesLoaded()` first so conversions never observe the
+ * unresolved state.
  */
 
 import { coreFeatures } from '@mastra/core/features';
@@ -37,6 +37,15 @@ function loadObservabilityFeatures(): Promise<void> {
 // Kick off detection at module load so the cached value is ready by the time
 // the first span is emitted.
 void loadObservabilityFeatures();
+
+/**
+ * Resolves once feature detection has settled. `SpanConverter.convertSpan`
+ * awaits this so the very first span is classified with the same result as
+ * every later one.
+ */
+export function whenObservabilityFeaturesLoaded(): Promise<void> {
+  return loadObservabilityFeatures();
+}
 
 /**
  * Returns true when both packages report the `model-inference-span` feature,
