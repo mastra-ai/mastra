@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Txt } from '../components/Txt/Txt';
 
 const meta: Meta = {
-  title: 'Foundations/Color foundations',
+  title: 'Tiger Team/Foundations/Color',
   parameters: {
     layout: 'padded',
     docs: {
