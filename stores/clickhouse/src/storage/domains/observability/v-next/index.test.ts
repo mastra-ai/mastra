@@ -4531,6 +4531,21 @@ LIMIT 1`,
           resourceId: 'resource-1',
         });
 
+        // The guard's query plan must select the skip index, not just tolerate it.
+        const explainResult = await client.query({
+          query: `EXPLAIN indexes = 1
+            SELECT 1 AS found FROM ${TABLE_DELETION_REQUESTS} FINAL
+            WHERE signal = 'feedback'
+              AND predicateType = 'itemIds'
+              AND has(predicateValues, {feedbackId:String})
+              AND (organizationId = '' OR organizationId = {organizationId:String})
+              AND (resourceId = '' OR resourceId = {resourceId:String})
+            LIMIT 1`,
+          query_params: { feedbackId: 'index-feedback-deleted', organizationId: 'org-1', resourceId: 'resource-1' },
+          format: 'TabSeparatedRaw',
+        });
+        expect(await explainResult.text()).toContain('Name: idx_predicateValues');
+
         await expect(
           storage.updateFeedbackReviewStatus({ feedbackId: 'index-feedback-deleted', reviewStatus: 'reviewed' }),
         ).rejects.toThrow('Feedback record not found');
