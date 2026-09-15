@@ -1233,6 +1233,23 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     this.#isTerminal = isTerminal;
   }
 
+  /**
+   * The claim a new row may carry: the requested key, unless the row is born
+   * finished, in which case there is nothing to own and holding the key would
+   * only block the next project from filing the record.
+   */
+  #claimForNewRow(input: CreateWorkItemInput, stages: WorkItemStage[]): string | null {
+    if (!input.claimKey) return null;
+    const shape = { board: input.board ?? null, externalSource: input.externalSource ?? null, stages } as WorkItemRow;
+    return this.#isTerminal(shape) ? null : input.claimKey;
+  }
+
+  /** The claim an existing unclaimed row adopts from `input`, if it is not finished after `patch`. */
+  #claimToAdopt(current: WorkItemDbRow, patch: Partial<WorkItemDbRow>, input: CreateWorkItemInput): string | null {
+    if (!input.claimKey || current.claim_key !== null) return null;
+    return this.#isTerminal(toWorkItem({ ...current, ...patch })) ? null : input.claimKey;
+  }
+
   /** Drop the org-wide claim from a patch that moves the card into a terminal phase. */
   #releaseClaimIfFinished(current: WorkItemDbRow, patch: Partial<WorkItemDbRow>): Partial<WorkItemDbRow> {
     if (patch.stages === undefined || current.claim_key === null) return patch;
@@ -2897,7 +2914,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           row = await ops.updateAtomic<WorkItemDbRow>('work_items', { id: row.id }, current => {
             // Stamp only the starting role — `applyUpdate` merges sessions, so
             // other roles keep their own session and `startedBy` (#22254).
-            return applyUpdate({ current, userId: input.userId, input: { sessions: { [input.role]: input.session } } });
+            const next = applyUpdate({
+              current,
+              userId: input.userId,
+              input: { sessions: { [input.role]: input.session } },
+            });
+            const adopt = this.#claimToAdopt(current, next, create);
+            return adopt ? { ...next, claim_key: adopt } : next;
           });
           item = toRow(row!);
         } else {
@@ -2919,6 +2942,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             board: create.board ?? null,
             external_source: create.externalSource ?? null,
             source_key: externalSourceKey(create.externalSource),
+            claim_key: this.#claimForNewRow(create, create.stages ?? []),
             parent_work_item_id: create.parentWorkItemId ?? null,
             title: create.title,
             stages: create.stages ?? [],
@@ -2996,6 +3020,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         return await prepare();
       } catch (error) {
         if (!(error instanceof UniqueViolationError)) throw error;
+        // A claim another project holds is a refusal, not a race to retry.
+        const claimKey = input.workItem.input.claimKey;
+        const claimant = claimKey
+          ? await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: input.orgId, claim_key: claimKey })
+          : null;
+        if (claimant && claimant.factory_project_id !== input.factoryProjectId) {
+          throw new WorkItemClaimConflictError(toWorkItem(claimant));
+        }
         lastError = error;
       }
     }
@@ -3080,7 +3112,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       });
       if (!existing) return null;
       if (reuseMode === 'preserve') {
-        const item = toWorkItem(existing);
+        const adopt = this.#claimToAdopt(existing, {}, input);
+        const row = adopt
+          ? await ops.updateAtomic<WorkItemDbRow>(
+              'work_items',
+              { org_id: orgId, factory_project_id: factoryProjectId, source_key: key },
+              current => (current.claim_key === null ? { claim_key: adopt } : null),
+            )
+          : null;
+        const item = toWorkItem(row ?? existing);
         return { created: false, item, previous: priorState(existing) };
       }
 
@@ -3106,11 +3146,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               patch.parentWorkItemId,
             );
           }
-          return {
+          const next: Partial<WorkItemDbRow> = {
             board: reuseMode === 'non-stage' ? current.board : (input.board ?? current.board ?? null),
             external_source: input.externalSource ?? null,
             ...applyUpdate({ current, userId, input: patch }),
           };
+          const adopt = this.#claimToAdopt(current, next, input);
+          return adopt ? { ...next, claim_key: adopt } : next;
         },
       );
       return updated ? { item: toWorkItem(updated), created: false, previous } : null;
@@ -3132,7 +3174,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       board: input.board ?? null,
       external_source: input.externalSource ?? null,
       source_key: key,
-      claim_key: input.claimKey ?? null,
+      claim_key: this.#claimForNewRow(input, stages),
       parent_work_item_id: input.parentWorkItemId ?? null,
       title: input.title,
       stages,
