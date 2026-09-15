@@ -25,6 +25,7 @@ export interface LangfuseObservationQuery {
   limit: number;
   cursor?: string;
   traceId?: string;
+  isRootObservation?: boolean;
   fromStartTime?: string;
   toStartTime?: string;
   expandMetadata?: string;
@@ -93,6 +94,7 @@ export class LangfuseClient {
     url.searchParams.set('limit', String(query.limit));
     setQuery(url, 'cursor', query.cursor);
     setQuery(url, 'traceId', query.traceId);
+    setQuery(url, 'isRootObservation', query.isRootObservation);
     setQuery(url, 'fromStartTime', query.fromStartTime);
     setQuery(url, 'toStartTime', query.toStartTime);
     setQuery(url, 'expandMetadata', query.expandMetadata);
@@ -230,8 +232,8 @@ function normalizeBaseUrl(value: string): string {
   return url.origin;
 }
 
-function setQuery(url: URL, key: string, value: string | undefined): void {
-  if (value !== undefined) url.searchParams.set(key, value);
+function setQuery(url: URL, key: string, value: string | boolean | undefined): void {
+  if (value !== undefined) url.searchParams.set(key, String(value));
 }
 
 function isRetryableStatus(status: number): boolean {
