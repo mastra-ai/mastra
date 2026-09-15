@@ -186,6 +186,7 @@ export const stateSchema = z.object({
       fromPackId: z.string(),
       toPackId: z.string(),
       toModelId: z.string(),
+      threadId: z.string().optional(),
       reason: z.enum(['pool-exhausted', 'persistent-outage']),
       at: z.string(),
     })

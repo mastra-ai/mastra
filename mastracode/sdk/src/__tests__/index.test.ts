@@ -89,12 +89,18 @@ const controllerGetCurrentThreadIdMock = vi.fn();
 const controllerListThreadsMock = vi.fn();
 const controllerSetStateMock = vi.fn();
 const controllerSetThreadSettingMock = vi.fn();
+const controllerSetThreadSettingOnMock = vi.fn();
+const controllerEmitMock = vi.fn();
+let createdSessionMock: any;
 const createMcpManagerMock = vi.fn();
 const hookManagerConstructorMock = vi.fn();
 const getStorageConfigMock = vi.fn(() => ({ type: 'memory' }));
 const getResourceIdOverrideMock = vi.fn(() => undefined);
 const getDynamicWorkspaceMock = vi.fn();
 let controllerStateMock: Record<string, unknown> = { cavemanObservations: false };
+let controllerThreadMetadataMock: Record<string, unknown> | undefined;
+let controllerModeMock = 'build';
+let controllerModelMock = 'anthropic/claude-opus-4-6';
 
 function createMockSettings() {
   return {
@@ -181,9 +187,10 @@ vi.mock('@mastra/core/agent-controller', () => ({
       return vi.fn();
     }
     async createSession() {
-      return {
+      createdSessionMock = {
         subscribe: (eventHandler: unknown) => controllerSubscribeMock(eventHandler),
         identity: {
+          getId: () => 'session-1',
           getOwnerId: () => 'owner-1',
           getResourceId: () => 'project-resource',
         },
@@ -194,12 +201,17 @@ vi.mock('@mastra/core/agent-controller', () => ({
             resourceId: 'project-resource',
             createdAt: new Date(),
             updatedAt: new Date(),
+            metadata: controllerThreadMetadataMock,
           }),
           list: (options: unknown) => controllerListThreadsMock(options),
           setSetting: (setting: unknown) => controllerSetThreadSettingMock(setting),
+          setSettingOn: (setting: unknown) => controllerSetThreadSettingOnMock(setting),
         },
-        mode: { get: () => 'build' },
-        model: { get: () => 'anthropic/claude-opus-4-6' },
+        mode: { get: () => controllerModeMock },
+        model: { get: () => controllerModelMock },
+        subagents: { model: { get: () => undefined } },
+        getWorkspace: () => undefined,
+        emit: (event: unknown) => controllerEmitMock(event),
         state: {
           get: () => controllerStateMock,
           set: (state: unknown) => controllerSetStateMock(state),
@@ -210,9 +222,19 @@ vi.mock('@mastra/core/agent-controller', () => ({
           },
         },
       };
+      return createdSessionMock;
+    }
+    async getSessionByResource() {
+      return createdSessionMock;
     }
     getState() {
       return controllerStateMock;
+    }
+    listModes() {
+      return [
+        { id: 'build', default: true, defaultModelId: 'anthropic/claude-opus-4-6' },
+        { id: 'plan', defaultModelId: 'openai/gpt-5.6-sol' },
+      ];
     }
     setState(state: unknown) {
       return controllerSetStateMock(state);
@@ -323,6 +345,7 @@ vi.mock('../onboarding/settings.js', () => ({
   resolveOmModel: vi.fn(() => ''),
   resolveOmRoleModel: vi.fn(() => ''),
   saveSettings: vi.fn(),
+  THREAD_ACTIVE_MODEL_PACK_ID_KEY: 'activeModelPackId',
   toCustomProviderModelId: vi.fn(),
 }));
 
@@ -452,6 +475,10 @@ describe('createMastraCode', () => {
     controllerSetStateMock.mockResolvedValue(undefined);
     controllerSetThreadSettingMock.mockReset();
     controllerSetThreadSettingMock.mockResolvedValue(undefined);
+    controllerSetThreadSettingOnMock.mockReset();
+    controllerSetThreadSettingOnMock.mockResolvedValue(undefined);
+    controllerEmitMock.mockReset();
+    createdSessionMock = undefined;
     createMcpManagerMock.mockReset();
     hookManagerConstructorMock.mockReset();
     getStorageConfigMock.mockReset();
@@ -469,6 +496,9 @@ describe('createMastraCode', () => {
       contextFiles: [],
     });
     controllerStateMock = { cavemanObservations: false };
+    controllerThreadMetadataMock = undefined;
+    controllerModeMock = 'build';
+    controllerModelMock = 'anthropic/claude-opus-4-6';
     loadSettingsMock.mockReset();
     loadSettingsMock.mockReturnValue(createMockSettings());
     agentConstructorMock.mockReset();
@@ -1079,7 +1109,7 @@ describe('createMastraCode', () => {
     const agentConfig = agentConstructorMock.mock.calls
       .map(call => call[0] as { errorProcessors?: Array<{ id?: string }>; maxProcessorRetries?: number } | undefined)
       .find(config => config?.errorProcessors?.some(processor => processor.id === 'stream-error-retry-processor'));
-    expect(agentConfig?.maxProcessorRetries).toBe(10);
+    expect(agentConfig?.maxProcessorRetries).toBe(1024);
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
       'provider-history-compat',
       'stream-error-retry-processor',
@@ -1434,6 +1464,62 @@ describe('createMastraCode', () => {
     );
     const hasGithub = agentConfigs.some(config => config?.signals?.some(signal => signal.id === 'github-signals'));
     expect(hasGithub).toBe(false);
+  });
+
+  it('binds deferred-notification model, state, and fallback persistence to the target thread', async () => {
+    controllerGetCurrentThreadIdMock.mockReturnValue('active-thread');
+    controllerModeMock = 'plan';
+    controllerModelMock = 'openai/gpt-5.6-sol';
+    controllerStateMock = { activeModelPackId: 'openai', yolo: false, sandboxAllowedPaths: ['/active-only'] };
+    controllerThreadMetadataMock = {
+      modeModelId_build: 'anthropic/claude-fable-5-1',
+      activeModelPackId: 'anthropic',
+      subagentModelId_explore: 'openai/gpt-5.6-mini',
+      yolo: true,
+    };
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode();
+    const codeAgentConfig = agentConstructorMock.mock.calls
+      .map(call => call[0] as Record<string, any>)
+      .find(config => config.notifications);
+    const decide = codeAgentConfig?.notifications?.deliveryPolicy?.decide;
+    expect(decide).toBeTypeOf('function');
+
+    const decision = await decide({
+      record: {
+        priority: 'medium',
+        source: 'github',
+        resourceId: 'project-resource',
+        threadId: 'notification-thread',
+      },
+      threadState: 'idle',
+      now: new Date('2026-09-15T00:00:00.000Z'),
+    });
+    const controllerContext = decision.streamOptions.requestContext.get('controller');
+
+    expect(controllerContext.session.modeId).toBe('build');
+    expect(controllerContext.session.modelId).toBe('anthropic/claude-fable-5-1');
+    expect(controllerContext.getState()).toMatchObject({
+      activeModelPackId: 'anthropic',
+      yolo: false,
+      sandboxAllowedPaths: [],
+    });
+    expect(controllerContext.getSubagentModelId({ agentType: 'explore' })).toBe('openai/gpt-5.6-mini');
+    expect(decision.streamOptions.requireToolApproval).toBe(true);
+    controllerSetStateMock.mockClear();
+
+    await controllerContext.setThreadSetting({ key: 'mastracodePendingPackFallback', value: { toPackId: 'openai' } });
+    await controllerContext.setState({ mastracodePendingPackFallback: { toPackId: 'openai' } });
+    controllerContext.emitEvent({ type: 'info', message: 'Switched model pack' });
+
+    expect(controllerSetThreadSettingOnMock).toHaveBeenCalledWith({
+      threadId: 'notification-thread',
+      key: 'mastracodePendingPackFallback',
+      value: { toPackId: 'openai' },
+    });
+    expect(controllerContext.getState()).toMatchObject({ mastracodePendingPackFallback: { toPackId: 'openai' } });
+    expect(controllerSetStateMock).not.toHaveBeenCalled();
+    expect(controllerEmitMock).not.toHaveBeenCalled();
   });
 
   it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {

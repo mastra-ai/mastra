@@ -1016,6 +1016,76 @@ describe('syncInitialThreadState', () => {
     expect(stateSet).toHaveBeenCalledWith({ mastracodePendingPackFallback: pending });
   });
 
+  it('clears stale pending fallback state when the target thread has no durable marker', async () => {
+    const stateSet = vi.fn(async () => {});
+    const state = {
+      session: {
+        state: {
+          get: () => ({ mastracodePendingPackFallback: { fromPackId: 'anthropic', toPackId: 'openai' } }),
+          set: stateSet,
+        },
+        thread: {
+          getId: vi.fn(() => 'thread-2'),
+          list: vi.fn().mockResolvedValue([{ id: 'thread-2', title: 'Other thread', metadata: {} }]),
+        },
+      },
+      goalManager: {
+        loadFromThread: vi.fn().mockResolvedValue(undefined),
+        getGoal: vi.fn(() => null),
+        loadFromThreadMetadata: vi.fn(),
+      },
+      options: { appName: 'Mastra Code' },
+      ui: { terminal: { setTitle: vi.fn() } },
+    } as unknown as TUIState;
+
+    await syncInitialThreadState(state);
+
+    expect(stateSet).toHaveBeenCalledWith({ mastracodePendingPackFallback: null });
+  });
+
+  it('does not apply hydration when the active thread changes during the thread lookup', async () => {
+    let currentThreadId = 'thread-1';
+    let resolveThreads!: (threads: Array<{ id: string; title: string; metadata: Record<string, unknown> }>) => void;
+    const threads = new Promise<Array<{ id: string; title: string; metadata: Record<string, unknown> }>>(resolve => {
+      resolveThreads = resolve;
+    });
+    const stateSet = vi.fn(async () => {});
+    const state = {
+      session: {
+        state: { get: () => ({}), set: stateSet },
+        thread: {
+          getId: vi.fn(() => currentThreadId),
+          list: vi.fn(() => threads),
+        },
+      },
+      goalManager: {
+        loadFromThread: vi.fn(),
+        getGoal: vi.fn(() => null),
+        loadFromThreadMetadata: vi.fn(),
+      },
+      options: { appName: 'Mastra Code' },
+      ui: { terminal: { setTitle: vi.fn() } },
+      currentThreadTitle: 'Current thread',
+      fallbackStatus: { usingPack: 'OpenAI', failedPack: 'Anthropic' },
+    } as unknown as TUIState;
+
+    const hydration = syncInitialThreadState(state);
+    currentThreadId = 'thread-2';
+    resolveThreads([
+      {
+        id: 'thread-1',
+        title: 'Stale thread',
+        metadata: { mastracodeFallbackStatus: { usingPack: 'Anthropic', failedPack: 'Kimi' } },
+      },
+    ]);
+    await hydration;
+
+    expect(state.currentThreadTitle).toBe('Current thread');
+    expect(state.fallbackStatus).toEqual({ usingPack: 'OpenAI', failedPack: 'Anthropic' });
+    expect(stateSet).not.toHaveBeenCalled();
+    expect(state.goalManager.loadFromThread).not.toHaveBeenCalled();
+  });
+
   it('does not re-hydrate from legacy metadata when the durable objective load succeeds', async () => {
     const persistedGoal = {
       id: 'goal-1',

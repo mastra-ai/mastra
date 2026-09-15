@@ -122,6 +122,8 @@ export interface PendingPackFallback {
   toPackId: string;
   /** Landed pack's model for the mode the cascade is serving. */
   toModelId: string;
+  /** Originating thread. Absent only on pending hops written by older clients. */
+  threadId?: string;
   reason: 'pool-exhausted' | 'persistent-outage';
   at: string;
 }
@@ -252,27 +254,40 @@ function providerFromHost(hostname: string): string | undefined {
  * model id. Unknown → undefined (caller treats as never-rotate).
  */
 export function providerFromError(error: unknown): string | undefined {
+  const causeChain: object[] = [];
   let current: unknown = error;
   for (let depth = 0; current && depth < MAX_CAUSE_DEPTH; depth++) {
     if (typeof current !== 'object') break;
-    const url =
-      (current as { url?: unknown }).url ??
-      (current as { requestURL?: unknown }).requestURL ??
-      (current as { requestUrl?: unknown }).requestUrl;
-    if (typeof url === 'string') {
+    causeChain.push(current);
+    current = (current as { cause?: unknown }).cause;
+  }
+
+  // A request URL identifies the provider that actually handled the failed
+  // call. Check every supported URL field throughout the cause chain before
+  // falling back to router model metadata, which may describe the original
+  // session model rather than the active cascade entry.
+  for (const item of causeChain) {
+    const urls = [
+      (item as { url?: unknown }).url,
+      (item as { requestURL?: unknown }).requestURL,
+      (item as { requestUrl?: unknown }).requestUrl,
+    ];
+    for (const url of urls) {
+      if (typeof url !== 'string') continue;
       try {
         const providerId = providerFromHost(new URL(url).hostname);
         if (providerId) return providerId;
       } catch {
-        // Not a parseable URL — keep walking.
+        // Not a parseable URL — try the other fields and causes.
       }
     }
-    const modelId = (current as { modelId?: unknown }).modelId;
-    if (typeof modelId === 'string') {
-      const providerId = providerFromModelId(modelId);
-      if (providerId) return providerId;
-    }
-    current = (current as { cause?: unknown }).cause;
+  }
+
+  for (const item of causeChain) {
+    const modelId = (item as { modelId?: unknown }).modelId;
+    if (typeof modelId !== 'string') continue;
+    const providerId = providerFromModelId(modelId);
+    if (providerId) return providerId;
   }
   return undefined;
 }
@@ -620,16 +635,19 @@ export class AccountRotationProcessor implements Processor {
     const controller = args.requestContext?.get('controller') as
       | {
           session?: { modeId?: unknown };
+          threadId?: unknown;
           setState?: (updates: Record<string, unknown>) => Promise<void>;
           setThreadSetting?: (setting: { key: string; value: unknown }) => Promise<void>;
           emitEvent?: (event: { type: 'info'; message: string }) => void;
         }
       | undefined;
     const at = new Date().toISOString();
+    const threadId = typeof controller?.threadId === 'string' ? controller.threadId : undefined;
     const pending = {
       fromPackId: from.packId,
       toPackId: to.packId,
       toModelId,
+      ...(threadId ? { threadId } : {}),
       reason,
       at,
     } satisfies PendingPackFallback;
@@ -637,15 +655,19 @@ export class AccountRotationProcessor implements Processor {
     // only after applying every model/pack write, so a crash or immediate
     // retrigger resumes on the landed fallback instead of the failed pack.
     await controller?.setThreadSetting?.({ key: PACK_FALLBACK_STATE_KEY, value: pending });
+    const data: PackFallbackPartData = { from, to, reason, at };
     try {
-      await controller?.setState?.({ [PACK_FALLBACK_STATE_KEY]: pending });
+      // Persist the transcript notice before notifying live state listeners.
+      // Session events do not await async handlers, so reversing these writes
+      // can apply a pack hop that never receives its required transcript part.
+      await args.writer?.custom({ type: PACK_FALLBACK_PART_TYPE, data });
     } catch (error) {
       await controller?.setThreadSetting?.({ key: PACK_FALLBACK_STATE_KEY, value: undefined });
       throw error;
     }
-
-    const data: PackFallbackPartData = { from, to, reason, at };
-    await args.writer?.custom({ type: PACK_FALLBACK_PART_TYPE, data });
+    // Keep the durable marker if live state persistence fails: the transcript
+    // already records the hop and thread hydration can safely resume it.
+    await controller?.setState?.({ [PACK_FALLBACK_STATE_KEY]: pending });
     // Live visibility: data parts never ride controller message events, so
     // emit the same line as an info event (see emitAccountSwitchPart).
     controller?.emitEvent?.({ type: 'info', message: packFallbackNoticeText(data) });
