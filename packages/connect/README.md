@@ -34,7 +34,7 @@ The resolver discovers active project connections. Where multiple connections ma
 
 ### Generated HTTP providers
 
-Resend and incident.io use checked-in tools generated from their provider contracts. Tool inputs preserve provider field names. Mutations put their JSON request payload under `body`.
+Resend and incident.io use checked-in tools generated from their provider contracts. Tool inputs preserve provider field names. Mutations put their JSON request payload under `body`. The one exception is `resend_create_contact_import`, whose `body` fields are sent as a multipart form upload with the CSV text in `body.file`.
 
 ```json
 {
