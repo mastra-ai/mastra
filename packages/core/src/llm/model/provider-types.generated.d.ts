@@ -362,7 +362,6 @@ export type ProviderModelsMap = {
     'claw-medium',
     'cohere/command-r-plus-08-2024',
     'command-a-reasoning-08-2025',
-    'deepclaude',
     'deepcogito/cogito-v1-preview-qwen-32B',
     'deepseek-ai/DeepSeek-R1-0528',
     'deepseek-ai/DeepSeek-V3.1',
