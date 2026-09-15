@@ -54,12 +54,13 @@ const darkAliases = {
   border: 'gray-alpha-2',
   ring: 'gray-8',
   'sidebar-accent': 'gray-alpha-1',
-  selected: 'gray-alpha-2',
+  selected: 'gray-alpha-1',
 } as const;
 
 const lightAliases = {
   ...darkAliases,
   border: 'gray-alpha-3',
+  selected: 'gray-alpha-2',
 } as const;
 
 const parseVariables = (css: string) => {
