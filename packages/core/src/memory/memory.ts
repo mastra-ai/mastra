@@ -29,6 +29,12 @@ import type {
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   StorageCopyThreadOutput,
+  BranchThreadInput,
+  BranchThreadOutput,
+  GetThreadBranchInput,
+  ListThreadBranchesInput,
+  ListThreadBranchesOutput,
+  ThreadBranchHistoryOutput,
 } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
@@ -43,6 +49,7 @@ import {
 import { checkThreadFGA } from './thread-fga';
 import type { CheckThreadFGAOptions } from './thread-fga';
 
+import { assertNoReservedThreadBranchMetadata, createThreadBranchError } from './branching';
 import type {
   SharedMemoryConfig,
   StorageThreadType,
@@ -127,6 +134,11 @@ export { filterSystemReminderMessages, isSystemReminderMessage } from './system-
  * - Handles memory processors to manipulate messages before they are sent to the LLM
  */
 export abstract class MastraMemory extends MastraBase {
+  /** Whether this memory implementation supports shared-history thread branching. */
+  get supportsThreadBranching(): boolean {
+    return false;
+  }
+
   /**
    * Unique identifier for the memory instance.
    * If not provided, defaults to a static name 'default-memory'.
@@ -647,6 +659,8 @@ https://mastra.ai/en/docs/memory/overview`,
     memoryConfig?: MemoryConfigInternal;
     saveThread?: boolean;
   }): Promise<StorageThreadType> {
+    assertNoReservedThreadBranchMetadata(metadata);
+
     const thread: StorageThreadType = {
       id:
         threadId ||
@@ -1220,6 +1234,34 @@ https://mastra.ai/en/docs/memory/overview`,
     messageIds: MessageDeleteInput,
     observabilityContext?: Partial<ObservabilityContext>,
   ): Promise<void>;
+
+  async branchThread(_input: BranchThreadInput): Promise<BranchThreadOutput> {
+    throw createThreadBranchError(
+      'BRANCHING_UNSUPPORTED',
+      `Thread branching is not supported by this memory implementation (${this.constructor.name}).`,
+    );
+  }
+
+  async getParentThread(_input: GetThreadBranchInput): Promise<StorageThreadType | null> {
+    throw createThreadBranchError(
+      'BRANCHING_UNSUPPORTED',
+      `Thread branching is not supported by this memory implementation (${this.constructor.name}).`,
+    );
+  }
+
+  async listBranches(_input: ListThreadBranchesInput): Promise<ListThreadBranchesOutput> {
+    throw createThreadBranchError(
+      'BRANCHING_UNSUPPORTED',
+      `Thread branching is not supported by this memory implementation (${this.constructor.name}).`,
+    );
+  }
+
+  async getBranchHistory(_input: GetThreadBranchInput): Promise<ThreadBranchHistoryOutput> {
+    throw createThreadBranchError(
+      'BRANCHING_UNSUPPORTED',
+      `Thread branching is not supported by this memory implementation (${this.constructor.name}).`,
+    );
+  }
 
   /**
    * Clones a thread with all its messages to a new thread
