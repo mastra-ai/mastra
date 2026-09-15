@@ -15,7 +15,7 @@ import { MessageRow } from '../../messages/message-row';
 import { AgentBadge } from '../badges/agent-badge';
 import { ToolCard, ToolCardInner } from '../tool-card';
 import type { ToolCardProps } from '../tool-card';
-import { failedParentMessages, partialChildMessages } from './fixtures/failed-delegation';
+import { failedParentMessages, partialChildMessages, resumedChildMessages } from './fixtures/failed-delegation';
 import { WorkflowRunContext, WorkflowRunProvider } from '@/domains/workflows';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { server } from '@/test/msw-server';
@@ -464,6 +464,29 @@ describe('ToolCard dispatch', () => {
       expect(await screen.findByText('Partial enrichment recovered from memory')).not.toBeNull();
       expect(requests).toEqual(['parent-thread:sup', 'child-thread:head']);
       expect(screen.getByRole('img', { name: 'Failed' })).not.toBeNull();
+      expect(screen.getByTestId('agent-error').textContent).toBe('[Agent:sup] - Failed agent tool execution for head');
+    });
+  });
+
+  describe('when a failed delegation resumes into another stored assistant message', () => {
+    it('restores the ordered child transcript and failure after remounting', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/messages`, ({ params }) =>
+          HttpResponse.json(params.threadId === 'parent-thread' ? failedParentMessages : resumedChildMessages),
+        ),
+      );
+      const first = render(<ReloadedDelegation />, { wrapper: Providers });
+      expect(await screen.findByText('RESUMED PARTIAL: approved lookup completed.')).not.toBeNull();
+      first.unmount();
+      render(<ReloadedDelegation />, { wrapper: Providers });
+      const resumedText = await screen.findByText('RESUMED PARTIAL: approved lookup completed.');
+      const repeatedText = screen.getAllByText('Checking the lookup');
+      expect(repeatedText).toHaveLength(2);
+      const lookup = screen.getByRole('button', { name: /approvedLookup/i });
+      expect(repeatedText[0].compareDocumentPosition(lookup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(lookup.compareDocumentPosition(repeatedText[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(repeatedText[1].compareDocumentPosition(resumedText) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.queryByText('Resume the approved lookup')).toBeNull();
       expect(screen.getByTestId('agent-error').textContent).toBe('[Agent:sup] - Failed agent tool execution for head');
     });
   });

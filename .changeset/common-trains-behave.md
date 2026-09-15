@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Fixed failed sub-agent delegations looking successful in Studio chat. Agent cards now show a failure indicator and the error message, and stay expanded on failure unless the user manually collapsed them.
+Fixed failed sub-agent delegations looking successful in Studio chat. Agent cards now show a failure indicator and the error message, and stay expanded on failure unless the user manually collapsed them. Reloading restores all saved child assistant messages, including partial output produced after resuming a delegation.
