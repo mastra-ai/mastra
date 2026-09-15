@@ -221,6 +221,28 @@ describe('AgentPlaygroundEvaluate', () => {
     });
   });
 
+  describe('when only a workflow-targeted dataset is unattached', () => {
+    it('hides the Attach action so the dataset cannot be mislabeled as an agent dataset', async () => {
+      setupHandlers();
+      server.use(
+        http.get('*/api/datasets', () =>
+          HttpResponse.json({
+            datasets: [
+              ...datasets,
+              { ...makeDataset('ds-wf', 'Workflow Dataset'), targetType: 'workflow', targetIds: ['my-workflow'] },
+            ],
+            pagination: { total: 4, page: 0, perPage: 100, hasMore: false },
+          }),
+        ),
+      );
+      renderWithProviders(<Harness />, { router: true });
+      fireEvent.click(screen.getByRole('tab', { name: 'Datasets' }));
+      await screen.findByText('Dataset One');
+
+      expect(screen.queryByRole('button', { name: 'Attach' })).toBeNull();
+    });
+  });
+
   describe('when the datasets tab renders rows', () => {
     it('applies a roving tabindex across dataset rows', async () => {
       await renderDatasetsTab();

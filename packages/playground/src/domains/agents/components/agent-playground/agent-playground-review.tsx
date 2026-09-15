@@ -731,11 +731,19 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
             <div className="flex h-full items-center justify-center">
               <EmptyState
                 iconSlot={<CircleSlashIcon />}
-                titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review yet'}
+                titleSlot={
+                  activeTagFilter
+                    ? 'No reviews match the current filters'
+                    : showCompleted
+                      ? 'No completed reviews yet'
+                      : 'No items to review yet'
+                }
                 descriptionSlot={
-                  showCompleted
-                    ? 'Items you mark as complete will appear here.'
-                    : 'Send experiment results to review from the Experiments tab to triage and tag them here.'
+                  activeTagFilter
+                    ? 'Clear the tag filter to see the rest of the queue.'
+                    : showCompleted
+                      ? 'Items you mark as complete will appear here.'
+                      : 'Send experiment results to review from the Experiments tab to triage and tag them here.'
                 }
                 actionSlot={
                   <Button

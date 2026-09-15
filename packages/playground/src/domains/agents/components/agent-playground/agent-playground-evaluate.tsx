@@ -177,10 +177,17 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
     return ids.includes(agentId);
   });
 
+  // Only agent-targeted or untyped datasets can be attached; workflow datasets would end up mislabeled.
   const unattachedDatasets = allDatasets.filter(ds => {
+    if (ds.targetType && ds.targetType !== 'agent') return false;
     const ids = parseIdList(ds.targetIds);
     return !ids.includes(agentId);
   });
+
+  const closeAttachDialog = () => {
+    setShowAttachDialog(false);
+    setAttachDatasetId('');
+  };
 
   const datasetExperimentMap = (experiments || []).reduce<Record<string, AgentExperiment>>((acc, exp) => {
     const current = acc[exp.datasetId];
@@ -790,13 +797,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
           )}
 
         {/* Attach Existing Dataset Dialog */}
-        <Dialog
-          open={showAttachDialog}
-          onOpenChange={open => {
-            setShowAttachDialog(open);
-            if (!open) setAttachDatasetId('');
-          }}
-        >
+        <Dialog open={showAttachDialog} onOpenChange={open => (open ? setShowAttachDialog(true) : closeAttachDialog())}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Attach Existing Dataset</DialogTitle>
@@ -817,7 +818,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
               />
             </DialogBody>
             <DialogFooter>
-              <Button onClick={() => setShowAttachDialog(false)}>Cancel</Button>
+              <Button onClick={closeAttachDialog}>Cancel</Button>
               <Button
                 variant="primary"
                 icon={<Paperclip />}
@@ -833,8 +834,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
                       targetIds: [...parseIdList(ds.targetIds), agentId],
                     });
                     toast.success(`Dataset "${ds.name}" attached`);
-                    setShowAttachDialog(false);
-                    setAttachDatasetId('');
+                    closeAttachDialog();
                   } catch {
                     toast.error('Failed to attach dataset');
                   }
