@@ -2,7 +2,7 @@
 '@mastra/dsql': minor
 ---
 
-Added configurable age-based pruning for observability spans.
+Added configurable age-based pruning for observability spans. Requires `@mastra/core` 1.68 or newer.
 
 ```typescript
 import { DSQLStore } from '@mastra/dsql'
