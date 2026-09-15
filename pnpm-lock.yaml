@@ -211,7 +211,7 @@ overrides:
   which-typed-array: npm:@socketregistry/which-typed-array@^1
   yocto-spinner: npm:@socketregistry/yocto-spinner@^1
 
-packageExtensionsChecksum: sha256-pu63kFH/Y1URbA7UvB6TmgMprwa8XlmczsWFUBJ81jc=
+packageExtensionsChecksum: sha256-lzRu8ZrzsrcOJRWyKlaqPvGae4XgeXpevqwQ7NzLBZQ=
 
 patchedDependencies:
   '@ai-sdk/provider-utils@3.0.31': b013703c9b8c0bd8727a10737e7c1a1b587587f8595b7fa390d61cc07f8dcbd1
@@ -8451,6 +8451,49 @@ importers:
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
+      eslint:
+        specifier: ^10.7.0
+        version: 10.7.0(jiti@2.7.0)(supports-color@10.2.2)
+      tsdown:
+        specifier: 0.22.9
+        version: 0.22.9(@volar/typescript@2.4.23(typescript@7.0.2))(oxc-resolver@11.20.0)(tsx@4.23.1)(typescript@7.0.2)
+      tsx:
+        specifier: 'catalog:'
+        version: 4.23.1
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0)(supports-color@10.2.2))(msw@2.14.6(@types/node@22.19.15)(typescript@7.0.2))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
+
+  stores/weaviate:
+    dependencies:
+      weaviate-client:
+        specifier: ^3.14.0
+        version: 3.14.0
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
+      '@internal/storage-test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../packages/_types-builder
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@types/node':
+        specifier: 22.19.15
+        version: 22.19.15
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.1.10(vitest@4.1.10)
+      '@vitest/ui':
+        specifier: 'catalog:'
+        version: 4.1.10(vitest@4.1.10)
       eslint:
         specifier: ^10.7.0
         version: 10.7.0(jiti@2.7.0)(supports-color@10.2.2)
@@ -26101,6 +26144,11 @@ packages:
   grapheme-splitter@1.0.4:
     resolution: {integrity: sha512-bzh50DW9kTPM00T8y4o8vQg89Di9oLJVLW/KaOGIXJWP/iqCN6WKYkbNOF04vFLJhwcpYUh9ydh/+5vpOqV4YQ==}
 
+  graphql-request@7.4.0:
+    resolution: {integrity: sha512-xfr+zFb/QYbs4l4ty0dltqiXIp07U6sl+tOKAb0t50/EnQek6CVVBLjETXi+FghElytvgaAWtIOt3EV7zLzIAQ==}
+    peerDependencies:
+      graphql: 14 - 16
+
   graphql@16.14.0:
     resolution: {integrity: sha512-BBvQ/406p+4CZbTpCbVPSxfzrZrbnuWSP1ELYgyS6B+hNeKzgrdB4JczCa5VZUBQrDa9hUngm0KnexY6pJRN5Q==}
     engines: {node: ^12.22.0 || ^14.16.0 || ^16.0.0 || >=17.0.0}
@@ -28284,8 +28332,14 @@ packages:
     resolution: {integrity: sha512-IWjIExdVYlmwXuzHdY/Q3lXCv1gbqoAXPazQhy2w4Xgtgha3H0OOujEESVPQcFUFMWm+pAk2gKnb57g8S41JZg==}
     engines: {node: '>= 20.0.0'}
 
+  nice-grpc-client-middleware-retry@3.1.16:
+    resolution: {integrity: sha512-8EbOCUZZ1Uq1pCfTD8dB2zMU1AYrilRvm9al5VSUi444eqhPhxElnI7iqP6ZY/ixb1NGsvMpfbU5FW/3L7DdFw==}
+
   nice-grpc-common@2.0.3:
     resolution: {integrity: sha512-MEhnD3JMah0mgyivpb9hpRDbOBuXBxI/TVO+OK1h6rC97WM42HsPMR+zzRNQ0C5BqYJTw1nyWiQRD0DucO+pjQ==}
+
+  nice-grpc-common@2.0.4:
+    resolution: {integrity: sha512-gOEXlD6ShXZMZ8k+49wm/bA2j1+3IKbEFV9WYREJcvZV4kM5L1KkILYTX9VYBzZF2OuYCe1wp8c82bQkvR0fHw==}
 
   nice-grpc@2.1.16:
     resolution: {integrity: sha512-Cl3Pn00212Hl8/U6bpgMxmhZj5lyv3nWoJov4cd3FjWarktrMHP4DNvSjCnDwkMWYx4W1tyscEia4JX6Y4GVCQ==}
@@ -30598,6 +30652,7 @@ packages:
   rolldown@1.2.0:
     resolution: {integrity: sha512-u7tgm5l4Yw1iTqUL4EcYOAt7fFvCgQMLeidrnD4GALlC6aOznCjezYajgxeyKw27u0Q5N7fwgCzjVyPIWzwuBA==}
     engines: {node: ^20.19.0 || >=22.12.0}
+    hasBin: true
 
   rollup-plugin-esbuild@6.2.1:
     resolution: {integrity: sha512-jTNOMGoMRhs0JuueJrJqbW8tOwxumaWYq+V5i+PD+8ecSCVkuX27tGW7BXqDgoULQ55rO7IdNxPcnsWtshz3AA==}
@@ -32184,6 +32239,10 @@ packages:
     resolution: {integrity: sha512-9ezox2roIft6ExBVTVqibSd5dc5/47Sw/uY6b4SjQUT2TzQ0tltNquWA46y4xPQmdZYqvnio22SgWd41M86+jw==}
     hasBin: true
 
+  uuid@14.0.2:
+    resolution: {integrity: sha512-xZe/16rV4aa+HGSOCiY2YeLT1OybRLrrkL/Rqaq7p7GMVXjFh+6wN4oMYgjFmnSnhY8t6Xpdl2l9qmnHYuMHwQ==}
+    hasBin: true
+
   uuidv7@0.6.3:
     resolution: {integrity: sha512-zV3eW2NlXTsun/aJ7AixxZjH/byQcH/r3J99MI0dDEkU2cJIBJxhEWUHDTpOaLPRNhebPZoeHuykYREkI9HafA==}
 
@@ -32528,6 +32587,10 @@ packages:
   weapon-regex@2.0.4:
     resolution: {integrity: sha512-ubuhY5Lo4phWcMsJqe8j62m9uhsuo/VpfK5XsSgYGRGDSt10hwVwOBTriPRd0dac+KYbGNXOrfXjM6xCp2NUKg==}
 
+  weaviate-client@3.14.0:
+    resolution: {integrity: sha512-A6oiawEPpmJBDIHXIr/bDMg7ss6zylwE7KEn5Vl4B52uhX+lU5ddiYSHDtDKXDIyjTR2sDLvZ3S1bOs2AFvVkw==}
+    engines: {node: '>=22.0.0'}
+
   web-namespaces@2.0.1:
     resolution: {integrity: sha512-bKr1DkiNa2krS7qxNtdrtHAmzuYGFQLiQ13TsorsdT6ULTkPLKuu5+GsFpDlg6JFjUTwX2DyhMPG2be8uPrqsQ==}
 
@@ -32679,6 +32742,7 @@ packages:
   which@2.0.2:
     resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
     engines: {node: '>= 8'}
+    hasBin: true
 
   which@4.0.0:
     resolution: {integrity: sha512-GlaYyEb07DPxYCKhKzplCWBJtvxZcZMrL+4UkrTSJHHPyZU4mYYTv3qaOe77H7EODLSSopAUFAc6W8U4yqvscg==}
@@ -47652,6 +47716,10 @@ snapshots:
     dependencies:
       acorn: 8.17.0
 
+  acorn-import-attributes@1.9.5(acorn@8.18.0):
+    dependencies:
+      acorn: 8.18.0
+
   acorn-import-phases@1.0.4(acorn@8.18.0):
     dependencies:
       acorn: 8.18.0
@@ -50264,7 +50332,7 @@ snapshots:
   esast-util-from-js@2.0.1:
     dependencies:
       '@types/estree-jsx': 1.0.5
-      acorn: 8.17.0
+      acorn: 8.18.0
       esast-util-from-estree: 2.0.0
       vfile-message: 4.0.3
 
@@ -50629,8 +50697,8 @@ snapshots:
 
   espree@11.2.0:
     dependencies:
-      acorn: 8.17.0
-      acorn-jsx: 5.3.2(acorn@8.17.0)
+      acorn: 8.18.0
+      acorn-jsx: 5.3.2(acorn@8.18.0)
       eslint-visitor-keys: 5.0.1
 
   esprima@4.0.1: {}
@@ -51688,6 +51756,11 @@ snapshots:
 
   grapheme-splitter@1.0.4: {}
 
+  graphql-request@7.4.0(graphql@16.14.0):
+    dependencies:
+      '@graphql-typed-document-node/core': 3.2.0(graphql@16.14.0)
+      graphql: 16.14.0
+
   graphql@16.14.0: {}
 
   gray-matter@4.0.3(patch_hash=058d8be9f17b95a6f86e58debce82671ee3f258e44883a9da932cf16a717ebb8):
@@ -52286,8 +52359,8 @@ snapshots:
 
   import-in-the-middle@1.15.0:
     dependencies:
-      acorn: 8.17.0
-      acorn-import-attributes: 1.9.5(acorn@8.17.0)
+      acorn: 8.18.0
+      acorn-import-attributes: 1.9.5(acorn@8.18.0)
       cjs-module-lexer: 1.4.3
       module-details-from-path: 1.0.4
 
@@ -54499,7 +54572,16 @@ snapshots:
 
   nexus-rpc@0.0.2: {}
 
+  nice-grpc-client-middleware-retry@3.1.16:
+    dependencies:
+      abort-controller-x: 0.5.0
+      nice-grpc-common: 2.0.4
+
   nice-grpc-common@2.0.3:
+    dependencies:
+      ts-error: 1.0.6
+
+  nice-grpc-common@2.0.4:
     dependencies:
       ts-error: 1.0.6
 
@@ -55567,7 +55649,7 @@ snapshots:
       on-exit-leak-free: 2.1.2
       pino-abstract-transport: 2.0.0
       pino-std-serializers: 7.1.0
-      process-warning: 5.0.0
+      process-warning: 5.1.0
       quick-format-unescaped: 4.0.4
       real-require: 0.2.0
       safe-stable-stringify: 2.5.0
@@ -59237,7 +59319,7 @@ snapshots:
 
   unplugin@1.16.1:
     dependencies:
-      acorn: 8.17.0
+      acorn: 8.18.0
       webpack-virtual-modules: 0.6.2
 
   unplugin@2.3.11:
@@ -59371,6 +59453,8 @@ snapshots:
   uuid@11.1.1: {}
 
   uuid@13.0.1: {}
+
+  uuid@14.0.2: {}
 
   uuidv7@0.6.3: {}
 
@@ -59898,6 +59982,19 @@ snapshots:
       defaults: 1.0.4
 
   weapon-regex@2.0.4: {}
+
+  weaviate-client@3.14.0:
+    dependencies:
+      '@datastructures-js/deque': 1.0.8
+      abort-controller-x: 0.5.0
+      graphql: 16.14.0
+      graphql-request: 7.4.0(graphql@16.14.0)
+      long: 5.3.2
+      nice-grpc: 2.1.16
+      nice-grpc-client-middleware-retry: 3.1.16
+      nice-grpc-common: 2.0.3
+      protobufjs: 7.6.5
+      uuid: 14.0.2
 
   web-namespaces@2.0.1: {}
 

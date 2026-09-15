@@ -273,6 +273,34 @@ After generating embeddings, you need to store them in a database that supports 
     ```
   </TabItem>
 
+  <TabItem value="weaviate" label="Weaviate">
+    ```ts title="vector-store.ts"
+    import { WeaviateVector } from '@mastra/weaviate'
+
+    const store = new WeaviateVector({
+      id: 'weaviate-vector',
+      httpHost: process.env.WEAVIATE_HOST,
+      httpPort: 443,
+      httpSecure: true,
+      grpcHost: process.env.WEAVIATE_GRPC_HOST,
+      grpcPort: 443,
+      grpcSecure: true,
+      apiKey: process.env.WEAVIATE_API_KEY,
+    })
+
+    await store.createIndex({
+      indexName: 'myCollection',
+      dimension: 1536,
+    })
+
+    await store.upsert({
+      indexName: 'myCollection',
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    })
+    ```
+  </TabItem>
+
   <TabItem value="cloudflare" label="Cloudflare">
     ```ts title="vector-store.ts"
     import { CloudflareVector } from '@mastra/vectorize'
@@ -548,6 +576,15 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Can be case-sensitive
     - Example: `MyNamespace123` is valid
     - Example: `_namespace` isn't valid (starts with underscore)
+  </TabItem>
+
+  <TabItem value="weaviate" label="Weaviate">
+    Index names map to Weaviate collections, which:
+
+    - Are capitalized by Weaviate (the first letter is upper-cased)
+    - Should contain only alphanumeric characters and underscores
+    - Preserve the original Mastra index name in the collection description, so `listIndexes()` and `describeIndex()` return the name you supplied
+    - Example: `my_collection` is stored as `My_collection` and returned as `my_collection`
   </TabItem>
 
   <TabItem value="cloudflare" label="Cloudflare">
