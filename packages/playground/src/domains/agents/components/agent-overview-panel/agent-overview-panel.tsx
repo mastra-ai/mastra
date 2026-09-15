@@ -40,7 +40,7 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
     >
       <div className="border-border1 flex h-10 min-h-10 items-center border-b px-4">
         <Txt as="h2" variant="header-md" className="text-neutral6 font-semibold">
-          Overview
+          Config
         </Txt>
       </div>
 
