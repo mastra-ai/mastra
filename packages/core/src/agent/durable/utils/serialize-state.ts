@@ -69,7 +69,8 @@ export function serializeModelConfig(model: MastraLanguageModel): SerializableMo
     modelId: model.modelId,
     specificationVersion: model.specificationVersion,
     // Store the original config string for runtime resolution (e.g., 'openai/gpt-4o')
-    originalConfig: `${model.provider}/${model.modelId}`,
+    originalConfig:
+      'routerId' in model && typeof model.routerId === 'string' ? model.routerId : `${model.provider}/${model.modelId}`,
     // Note: We don't serialize model settings here - they come from execution options
   };
 }
@@ -82,10 +83,7 @@ export function serializeModelListEntry(entry: AgentModelManagerConfig): Seriali
   return {
     id: entry.id,
     config: {
-      provider: model.provider,
-      modelId: model.modelId,
-      specificationVersion: model.specificationVersion,
-      originalConfig: `${model.provider}/${model.modelId}`,
+      ...serializeModelConfig(model),
       providerOptions: entry.providerOptions,
     },
     maxRetries: entry.maxRetries,

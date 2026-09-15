@@ -326,6 +326,28 @@ unsubscribe()
 
 ## Methods
 
+### Edited conversations
+
+#### `editMessage(options)`
+
+Create an edited copy of a saved conversation and submit the replacement through a new session. The original thread, later messages, and tool effects remain unchanged. Attachments on the edited message are retained.
+
+```typescript
+const newThreadId = crypto.randomUUID()
+const thread = await controller.editMessage({
+  resourceId: 'user-1',
+  sourceThreadId: 'original-thread',
+  messageId: 'message-to-edit',
+  content: 'The corrected message',
+  newThreadId,
+  newSessionScope: newThreadId,
+})
+```
+
+The source must belong to `resourceId`, and the selected message must be user-authored. Supply an unused thread ID and session scope. The command copies only the earlier stored messages and starts a fresh thread summary. Resource-scoped memory remains shared, as with a new conversation.
+
+The command waits for signal acceptance, not completion of the answer. Read and subscribe to the returned thread using the new scope. If submission fails after the copy was saved, that copy remains available and the original remains intact. Reusing a target is rejected to avoid submitting another run.
+
 ### Sessions
 
 #### `createSession(options)`
