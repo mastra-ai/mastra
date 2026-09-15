@@ -5,53 +5,166 @@ description: How to build Mastra frontend interfaces with the @mastra/playground
 
 # Building Frontend Interfaces
 
-Every Mastra application UI is assembled from the `@mastra/playground-ui` design system. Building a screen is composition work: pick existing components, arrange them with layout utilities, and let the design system provide the look. Writing colors, font sizes, shadows, or radii by hand means you have left the happy path. Changing the design system itself (tokens, `ds/` components, variants) is a separate, explicitly-approved task. For Tailwind v4 mechanics (renames, dynamic utilities, CSS-first APIs), read the `tailwind-v4` skill.
+<context>
+Mastra application UI is composed from `@mastra/playground-ui`. The design system owns how elements look; product code owns how they are arranged. Consistency comes from reusing the same component, typography role, and semantic color for the same job instead of making each screen internally tasteful.
+</context>
 
-## The boundary: look vs layout
+<workflow>
 
-- **Look** — colors, typography, radius, shadows, borders, internal padding — belongs to the design system. Consumers never restyle it.
-- **Layout** — positioning, flex/grid placement, `gap-*`, margins, size constraints (`w-*`, `max-w-*`, `min-h-*`, `shrink-0`) — belongs to the consumer, through Tailwind utilities on your own wrappers and, when needed, directly on DS components.
+## 1. Identify the owner
 
-`className` on a DS component is fine for layout (`<DialogContent className="max-w-100">`) and forbidden for look (`<Button className="bg-red-500 text-xs">`). If a component's look doesn't fit, use its variants and props; if none fit, escalate for a new variant instead of overriding.
+Classify the change before editing:
 
-## Find what exists — never guess, never rebuild
+- **Product composition:** a page or domain surface needs existing components arranged around product data. Stay outside `src/ds/` and do not change visual tokens.
+- **Design-system work:** a shared component, variant, or token is missing. Change `src/ds/` or `theme.css` only when that system change was explicitly requested.
 
-- **Components**: browse `packages/playground-ui/src/ds/components/` (primitives) and `src/domains/` (feature components). Check the exports and existing usage before building anything new.
-- **Tokens**: read the `@theme` block in `packages/playground-ui/theme.css`. The namespace tells you the generated utility: `--color-x` → `bg-x`/`text-x`/`border-x`, `--spacing-x` → `p-x`/`gap-x`/`h-x`, `--text-x` → `text-x`, `--shadow-x` → `shadow-x`, `--radius-x` → `rounded-x`. Token names drift — confirm them in the file, never use them from memory.
+If a product task appears to require design-system work, stop and name the missing component or variant. Do not hide the gap with local styling.
 
-## Choosing a class value
+## 2. Find the precedent
 
-Pick the highest rung that fits; each step down needs a reason:
+1. Search `packages/playground-ui/src/ds/components/` for the element.
+2. Search `src/domains/` and repository call sites for how it is composed.
+3. Open its Storybook story and the relevant foundation story.
+4. Start from the closest real usage. Do not recreate a component from its visual description.
 
-1. **DS component or variant** — the look you need probably already exists.
-2. **Generated theme utility** from `theme.css`.
-3. **Dynamic v4 utility** when the value maps to the spacing scale (`min-w-100`, `size-6`, `grid-cols-15`).
-4. **Local CSS custom property** consumed via shorthand, for runtime values scoped to one component (`bg-(--row-bg)`, `text-(color:--agent-color-fg)`).
-5. **Square-bracket arbitrary value** only for a justified one-off (`max-h-[calc(100dvh-3rem)]`).
+## 3. Choose the component
 
-## Theme contract
+Use this order:
 
-- `theme.css` variables are API: adding one generates utilities for every consumer. Never modify `theme.css` or `packages/playground-ui/src/ds/tokens/*.ts` without explicit approval. To request a token: document the use case, explain why a local CSS custom property is not enough, and wait for the design team.
-- Runtime-only or single-component values get a plain CSS custom property (which generates no utility) consumed via `bg-(--var)` — not a new `@theme` token.
-- When JavaScript needs a theme value, read the CSS variable (`var(--color-surface4)`, `getComputedStyle`) — never `resolveConfig` or JS token imports for styling.
+1. An existing domain component that owns the complete interaction.
+2. An existing DS component and its documented variant.
+3. A composition of DS primitives.
+4. A new shared variant, but only after confirming no existing variant represents the role.
 
-## Wiring
+A consumer MAY set layout through `className`: placement, grid or flex behavior, gaps, margins, width constraints, height constraints, and shrinking. A consumer MUST NOT use `className` to change color, typography, border treatment, radius, shadow, or a component's internal padding.
 
-- `packages/playground-ui/src/index.css` imports Tailwind and `theme.css`, and declares the dark variant: `@custom-variant dark (&:is(.dark *))`.
-- The palette defaults to dark in `:root`; `html.light` flips the semantic variables. Theming is automatic through semantic tokens — never write `dark:` color overrides on semantic tokens; reserve `dark:` for rare structural differences.
-- Build conditional or merged class strings with `cn()` — exported from `@mastra/playground-ui` for consumers, `src/lib/utils.ts` inside the package. Its `twMerge` is extended with the DS scales (`src/lib/tw-merge-config.ts`), so DS utilities like `text-ui-md` merge correctly; importing `twMerge` from `tailwind-merge` directly mis-merges them.
-- Code inside `packages/playground-ui` outside `ds/` (for example `src/domains/`) is itself a consumer of the `ds/` primitives — all of these rules apply there too.
+Allowed because it changes layout:
 
-## Review smells
+```tsx
+<DialogContent className="max-w-100" />
+```
 
-- Look overrides on DS components: `bg-*`, text color or size, border color, `rounded-*`, `shadow-*`, or padding via `className`
-- A new component that duplicates an existing `ds/` or `domains/` component
-- `bg-[#hex]`, `text-[15px]`, `p-[13px]` — a token or scale value exists
-- Token names that don't exist in `theme.css` (guessed from memory)
-- `bg-[var(--x)]` — use `bg-(--x)`
-- `min-w-[400px]` and friends that divide cleanly by 4px — use the scale (`min-w-100`)
-- Template-literal class fragments (`` `bg-${tone}-500` ``) — map props to complete strings
-- A new `--color-*` or `--animate-*` token added for one component's local state
-- `dark:` color overrides on semantic tokens — the palette already flips via `html.light`
-- `twMerge` imported from `tailwind-merge` or manual string concatenation instead of `cn()`
-- Decorative animation without `motion-safe:`/`motion-reduce:`
+Forbidden because it replaces the component's look:
+
+```tsx
+<Button className="bg-red-500 text-xs" />
+```
+
+## 4. Choose typography by role
+
+Do not start with a font size. Identify what the text does:
+
+| Content role                 | Token       |
+| ---------------------------- | ----------- |
+| Dense metadata or badge text | `ui-xs`     |
+| Secondary copy or caption    | `ui-sm`     |
+| Form field label             | `ui-smd`    |
+| Default body or control text | `ui-md`     |
+| Emphasized body text         | `ui-lg`     |
+| Panel heading                | `ui-md`     |
+| Section heading              | `header-sm` |
+| Page heading                 | `header-md` |
+| Hero heading                 | `header-xl` |
+
+Then choose the interface:
+
+1. If a DS component owns the text, pass it content and let it own typography.
+2. For standalone product copy, use an existing `Txt` variant that matches the role.
+3. Inside a low-level primitive, use `text-ui-*` or `text-header-*` directly.
+4. If no role matches, identify the missing role before requesting a token or `Txt` variant.
+
+`Txt` is a convenience component that consumes the typography foundation. It is not a separate type scale. Its `title` and `caption` variants also apply semantic weight or color, so use them only when those complete roles match.
+
+Each `text-ui-*` and `text-header-*` utility includes its paired line-height. Consumer code MUST NOT add `leading-*`. Code MUST NOT use Tailwind's default text sizes or arbitrary pixel font sizes.
+
+Review `Foundations/Updated/Typography` before changing typography tokens, `Txt`, or role assignments.
+
+## 5. Map surface hierarchy, then choose color
+
+Draw the nesting before selecting a surface token:
+
+```text
+Application shell
+├── Sidebar or outer chrome: background-1
+└── Main canvas: background-2
+    ├── Content placed directly on the canvas: background-2
+    └── Contained structural panel: background-3
+        └── Content inside the panel: background-3
+```
+
+Background numbers describe containment, not brightness or elevation. Follow these rules:
+
+- Sibling surfaces at the same depth use the same background role.
+- Text, controls, and ordinary content inherit their containing surface. They do not create another layer.
+- Add a panel layer only when the container creates a structural region, such as a docked inspector. Do not wrap sections in panels for decoration.
+- A card is a component recipe, not automatically `background-3`. Use its existing variant; cards may blend with the canvas until hover or selection.
+- A panel nested inside another panel does not automatically require a fourth shade. Keep the owning component's surface unless the design system defines another structural role.
+- Sidebars embedded inside a panel belong to that component's documented variant; they are not automatically `background-1`.
+- Dialogs, popovers, menus, and tooltips use their DS component surface. Do not infer their token from app-shell depth.
+- Use spacing to separate sections first. Add a border when adjacent surfaces still need a boundary; do not add both a new background and a border by default.
+
+Factory demonstrates this hierarchy with the current semantic tokens:
+
+- `AppShell` uses `surface1` for the outer frame; the desktop sidebar inherits it.
+- The mobile `MainSidebar` drawer owns `surface2` because it is an overlay variant, not the desktop shell.
+- The main content frame and header use `surface2`.
+- Docked workspace and supervisor panels use `surface3`.
+- Work-item cards keep their component recipe (`neutral6/5`, then `surface3` on hover) instead of treating every card as a panel.
+
+This is a conceptual match, not foundation wiring. Factory still consumes the legacy semantic tokens until an approved migration maps them to the new foundations.
+
+Then identify whether the task is consuming or defining the system.
+
+### Product and component work
+
+1. Name the role: shell surface, canvas surface, structural panel, component card, text, border, status, or accent.
+2. Find the matching semantic `--color-*` token in `theme.css` and confirm an existing usage.
+3. Use the generated semantic utility, such as `bg-surface2`, `text-neutral4`, or `border-border1`.
+4. If no semantic role exists, report the missing role. Do not substitute a raw foundation because it looks close.
+
+Current product code MUST preserve its owning component's semantic surface token until the foundation-to-semantic migration is approved. The hierarchy above is the target model, not permission to use raw `background-*` properties in consumers.
+
+### Foundation work
+
+- `background-1`, `background-2`, and `background-3` encode the shell, canvas, and structural panel layers shown above.
+- `gray-1` through `gray-10` encode contrast from subtle to strong, not lightness. Their tonal direction reverses by theme.
+- `gray-alpha-*` follows the same strength scale, using white overlays in dark mode and black overlays in light mode.
+- These are plain CSS properties. They do not generate Tailwind utilities and MUST NOT replace existing semantic tokens outside an approved migration.
+
+A new semantic alias names a job, such as `sidebar-background`, not an appearance such as `dark-gray`. Review `Foundations/Updated/Color` before changing foundations or aliases.
+
+## 6. Choose a class value
+
+For layout or an approved DS implementation, use the first option that fits:
+
+1. Existing component prop or variant.
+2. Generated `@theme` utility.
+3. Tailwind v4 spacing or sizing utility.
+4. Local CSS property for a runtime value scoped to one component.
+5. Arbitrary value only when the value cannot be represented by the system.
+
+Keep class strings complete and statically detectable. Use `cn()` for conditional classes. Load the `tailwind-v4` skill for Tailwind mechanics.
+
+## 7. Verify the system, not one screenshot
+
+1. Compare the result with the closest existing product surface.
+2. Check light and dark themes using the same semantic tokens. Do not add component-level `dark:` color fixes for token behavior.
+3. Check mobile, tablet, and desktop widths.
+4. Exercise keyboard and focus behavior for interactive changes.
+5. Run the narrow typecheck, lint, and test commands required by the package.
+6. For a UI handoff, show the affected states and themes in screenshots.
+
+</workflow>
+
+<quality-checklist>
+
+- The change reuses the nearest component and composition precedent.
+- Every text style was chosen from a content role, not a desired pixel size.
+- `Txt` is used as a component interface, not treated as the foundation itself.
+- Shell, canvas, and structural panels follow the nesting map; cards keep their component-owned recipes.
+- Every color was chosen by semantic role; raw foundations remain inside approved system work.
+- Consumer classes affect layout only.
+- The same semantic tokens work in both themes without local overrides.
+- The relevant product states, themes, and viewport widths were verified.
+
+</quality-checklist>

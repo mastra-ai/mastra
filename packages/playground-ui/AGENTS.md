@@ -1,30 +1,36 @@
-Build from root: pnpm build:playground-ui
-Test from root: pnpm --filter ./packages/playground-ui test
-Typecheck: pnpm --filter ./packages/playground-ui typecheck (standalone `tsc`)
+# Playground UI
 
-`build` is `vite build` only; vite-plugin-dts emits declarations and gates type
-errors via the `afterDiagnostic` hook in vite.config.ts. Use the `typecheck`
-script for an explicit `tsc` gate (CI runs turbo `typecheck`). The package's own
-build is ~8s; a slow `build:playground-ui` is the cold turbo cache rebuilding
-upstream deps (`^build`), not this package.
+<commands>
 
-PRIMARY testing strategy: Vitest + MSW + typed @mastra/client-js fixtures.
-This is the #1 way to validate changes here — ABOVE Playwright E2E.
-Use the `playground-msw-tests` skill for business hooks, data components,
-gating, and React Query flows.
+- Build: `pnpm build:playground-ui`
+- Test: `pnpm --filter ./packages/playground-ui test`
+- Typecheck: `pnpm --filter ./packages/playground-ui typecheck`
 
-Rules:
+</commands>
 
-- Drive the real @mastra/client-js + React Query stack; only mock the network.
-- Never `vi.mock` our own data hooks, services, or auth gating.
-- Fixtures live in nearby `__tests__/fixtures/` folders and MUST be typed with
-  response types re-exported from @mastra/client-js.
+<rules>
 
-Use Playwright E2E (`e2e-tests-studio` skill) only when MSW cannot model the
-journey. Run e2e-frontend-validation before merging frontend changes when
-applicable.
+- Load `mastra-frontend` before every UI change and follow its decision flows.
+- Test data flows with Vitest, MSW, typed `@mastra/client-js` fixtures, and the real React Query stack. Mock only the network. Use Playwright only when MSW cannot model the journey.
+- Consumer `className` MUST NOT override a DS component's look. Do not add `asChild`; use Base UI's `render` prop.
 
-Include mobile, tablet, and desktop screenshots when handing off UI changes.
-Preserve design-system consistency and existing component APIs where possible.
-Typography: use DS tokens only (`Txt` variants, or `text-ui-*` / `text-header-*` classes). No `text-xs/sm/base/lg/xl/…` and no arbitrary `text-[Npx]`; lint enforces this.
-No new `asChild`; prefer Base UI's native `render` prop.
+## Typography
+
+- `text-ui-*` and `text-header-*` are the foundation. `Txt` is a convenience component that consumes them, not another scale. Prefer an existing `Txt` variant for product copy; primitives MAY use the utilities directly.
+- Do not use Tailwind's default text sizes or arbitrary pixel sizes. Lint enforces this. A text token already supplies its paired line-height, so consumer code MUST NOT add `leading-*`.
+- Heading roles: hero `header-xl`, page `header-md`, section `header-sm`, panel `ui-md`.
+
+## Color
+
+- Plain `:root` variables are raw foundations; only `@theme` variables generate utilities.
+- Background numbers encode nesting: sidebar `background-1`, canvas `background-2`, panel `background-3`.
+- Gray numbers encode contrast from subtle `1` to strong `10`; tonal direction reverses by theme. Alpha grays use white in dark mode and black in light mode.
+- Components MUST use semantic colors when available. Raw foundations MUST NOT replace existing tokens outside an approved migration.
+
+</rules>
+
+<verification>
+
+Review the matching `Foundations/Updated` story before changing either system. Verify light and dark at mobile, tablet, and desktop widths. Run narrow tests before E2E; include handoff screenshots.
+
+</verification>
