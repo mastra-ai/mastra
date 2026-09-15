@@ -3,8 +3,8 @@
  * It is in a separate file to avoid including local-pkg in runtime code.
  */
 
-import { statSync } from 'node:fs';
-import { dirname, resolve, sep } from 'node:path';
+import { realpathSync, statSync } from 'node:fs';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readJSON } from 'fs-extra/esm';
 import { getPackageInfo } from 'local-pkg';
@@ -20,43 +20,66 @@ import { getPackageName } from './utils';
  * (only ENOENT) and local-pkg then logs the raw error to the console. Using the file's directory
  * as the base avoids this while resolving identically.
  */
-function toParentDirectoryUrl(parentPath: string): string {
-  let fsPath = resolve(parentPath.startsWith('file://') ? fileURLToPath(parentPath) : parentPath);
+function toParentDirectory(parentPath: string): string {
+  const fsPath = resolve(parentPath.startsWith('file://') ? fileURLToPath(parentPath) : parentPath);
 
   try {
     if (statSync(fsPath).isFile()) {
-      fsPath = dirname(fsPath);
+      return dirname(fsPath);
     }
   } catch {
     // non-existent paths are used as-is
   }
 
-  // Keep the trailing separator. Without it, URL resolution treats the directory name as a file
-  // and starts package lookup from its parent directory.
-  return pathToFileURL(`${fsPath}${sep}`).href;
+  return fsPath;
+}
+
+/**
+ * Find the package directory in the closest `node_modules` directory.
+ *
+ * Resolving `<packageName>/package.json` can be blocked by a package's exports map. Walking the
+ * `node_modules` tree instead follows Node's bare-import lookup and lets us read package metadata
+ * directly from disk.
+ */
+function findPackageInNodeModules(packageName: string, parentDirectory: string): string | null {
+  let directory = parentDirectory;
+
+  while (true) {
+    const candidate = join(directory, 'node_modules', ...packageName.split('/'));
+    try {
+      if (statSync(join(candidate, 'package.json')).isFile()) {
+        return realpathSync(candidate);
+      }
+    } catch {
+      // keep looking in the parent directory
+    }
+
+    const parent = dirname(directory);
+    if (parent === directory) {
+      return null;
+    }
+    directory = parent;
+  }
 }
 
 /**
  * Get package root path
  */
 export async function getPackageRootPath(packageName: string, parentPath?: string): Promise<string | null> {
-  let rootPath: string | null;
-
-  try {
-    let options: { paths?: string[] } | undefined = undefined;
-    if (parentPath) {
-      options = {
-        paths: [toParentDirectoryUrl(parentPath)],
-      };
-    }
-
-    const pkg = await getPackageInfo(packageName, options);
-    rootPath = pkg?.rootPath ?? null;
-  } catch {
-    rootPath = null;
+  const parentDirectory = parentPath ? toParentDirectory(parentPath) : process.cwd();
+  const rootPath = findPackageInNodeModules(packageName, parentDirectory);
+  if (rootPath) {
+    return rootPath;
   }
 
-  return rootPath;
+  try {
+    // Keep the trailing separator so URL resolution starts inside the directory, not its parent.
+    const parentDirectoryUrl = pathToFileURL(`${parentDirectory}${sep}`).href;
+    const pkg = await getPackageInfo(packageName, { paths: [parentDirectoryUrl] });
+    return pkg?.rootPath ?? null;
+  } catch {
+    return null;
+  }
 }
 
 async function readPackageMetadata(

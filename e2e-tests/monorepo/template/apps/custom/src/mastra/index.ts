@@ -9,6 +9,7 @@ import { shutdownDrainRoute } from '@/api/route/shutdown-drain';
 import { shutdownDrainWorkflowRoute } from '@/api/route/shutdown-drain-workflow';
 import { shutdownDrainWorkflow } from '@/workflows/shutdown-drain';
 import { transitiveWorkspaceRoute } from '@/api/route/transitive-workspace';
+import { protobufWktRoute } from '@/api/route/protobuf-wkt';
 import { myAgent } from '@inner/hello-world/agent';
 import 'nodemailer';
 
@@ -25,10 +26,11 @@ export const mastra = new Mastra({
       shutdownDrainRoute,
       shutdownDrainWorkflowRoute,
       transitiveWorkspaceRoute,
+      protobufWktRoute,
     ],
   },
   bundler: {
-    externals: ['bcrypt'],
+    externals: ['bcrypt', '@bufbuild/protobuf'],
   },
   logger: new ConsoleLogger({ level: 'info' }),
 });

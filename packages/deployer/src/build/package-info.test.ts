@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getPackageMetadata, getPackageRootPath } from './package-info';
@@ -62,6 +62,62 @@ describe('getPackageRootPath', () => {
 
     await expect(getPackageRootPath('plain-pkg', appEntry)).resolves.toBe(installedDir);
     await expect(getPackageMetadata('plain-pkg', appEntry)).resolves.toMatchObject({ version: '9.0.0' });
+  });
+
+  it('resolves the package root when exports hide package.json', async () => {
+    const tempRoot = join(process.cwd(), '.tmp');
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, 'exports-gated-'));
+    tempDirs.push(tempDir);
+
+    const appDir = join(tempDir, 'app');
+    const packageDir = join(appDir, 'node_modules', '@bufbuild', 'protobuf');
+    await mkdir(join(packageDir, 'dist', 'esm', 'wkt'), { recursive: true });
+    await writeFile(
+      join(packageDir, 'package.json'),
+      JSON.stringify({
+        name: '@bufbuild/protobuf',
+        version: '2.13.0',
+        type: 'module',
+        exports: {
+          '.': './dist/esm/index.js',
+          './wkt': './dist/esm/wkt/index.js',
+        },
+      }),
+    );
+    await writeFile(join(packageDir, 'dist', 'esm', 'package.json'), JSON.stringify({ type: 'module' }));
+    await writeFile(join(packageDir, 'dist', 'esm', 'index.js'), 'export {};');
+    await writeFile(join(packageDir, 'dist', 'esm', 'wkt', 'index.js'), 'export {};');
+    const appEntry = join(appDir, 'index.js');
+    await writeFile(appEntry, `import('@bufbuild/protobuf/wkt');`);
+
+    await expect(getPackageRootPath('@bufbuild/protobuf', appEntry)).resolves.toBe(packageDir);
+    await expect(getPackageMetadata('@bufbuild/protobuf', appEntry)).resolves.toMatchObject({ version: '2.13.0' });
+  });
+
+  it('resolves symlinked packages to their real package root', async () => {
+    const tempRoot = join(process.cwd(), '.tmp');
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, 'symlinked-package-'));
+    tempDirs.push(tempDir);
+
+    const appDir = join(tempDir, 'app');
+    const packageDir = join(tempDir, '.pnpm', 'linked-pkg@3.0.0', 'node_modules', 'linked-pkg');
+    const linkedDir = join(appDir, 'node_modules', 'linked-pkg');
+    await mkdir(packageDir, { recursive: true });
+    await mkdir(join(appDir, 'node_modules'), { recursive: true });
+    await writeFile(join(packageDir, 'package.json'), JSON.stringify({ name: 'linked-pkg', version: '3.0.0' }));
+    await writeFile(join(packageDir, 'index.js'), 'export {};');
+    await symlink(packageDir, linkedDir, process.platform === 'win32' ? 'junction' : 'dir');
+    const appEntry = join(appDir, 'index.js');
+    await writeFile(appEntry, `import 'linked-pkg';`);
+
+    const realPackageDir = await realpath(packageDir);
+    await expect(getPackageRootPath('linked-pkg', appEntry)).resolves.toBe(realPackageDir);
+    await expect(getPackageMetadata('linked-pkg', appEntry)).resolves.toMatchObject({
+      rootPath: realPackageDir,
+      version: '3.0.0',
+    });
   });
 
   it('returns an absolute path when parentPath is not absolute', async () => {

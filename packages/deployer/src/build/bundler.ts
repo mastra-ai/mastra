@@ -76,6 +76,7 @@ export async function getInputOptions(
     workspaceRoot = undefined,
     enableEsmShim = true,
     externalsPreset = false,
+    externalPackages = [],
   }: {
     sourcemap?: boolean;
     minify?: boolean;
@@ -84,12 +85,14 @@ export async function getInputOptions(
     projectRoot: string;
     enableEsmShim?: boolean;
     externalsPreset?: boolean;
+    externalPackages?: string[];
   },
 ): Promise<InputOptions> {
   const nodeResolvePlugin = nodeResolve(getNodeResolveOptions(platform));
 
-  const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies.keys());
-  const externals = externalsPreset ? [] : Array.from(externalsCopy);
+  const externalDependencies = Array.from(analyzedBundleInfo.externalDependencies.keys());
+  const externals = externalsPreset ? [] : externalDependencies;
+  const subpathExternals = externalsPreset ? externalPackages : externals;
 
   return {
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
@@ -98,7 +101,7 @@ export async function getInputOptions(
     external: externals,
     plugins: [
       protocolExternalResolver(),
-      subpathExternalsResolver(externals),
+      subpathExternalsResolver(subpathExternals),
       {
         name: 'alias-optimized-deps',
         resolveId(id: string) {
