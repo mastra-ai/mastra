@@ -88,7 +88,7 @@ export default defineConfig({
       files: ['**/*.ts?(x)'],
       rules: {
         'import/consistent-type-specifier-style': ['error', 'prefer-top-level'],
-        'typescript/no-unused-vars': [
+        'eslint/no-unused-vars': [
           'error',
           {
             args: 'after-used',
