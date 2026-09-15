@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { MastraDBMessage } from '../agent/message-list';
-import { persistGeneratedMessages } from './internal';
+import { persistGeneratedMessages, persistMessagesWithThreadCreation } from './internal';
 import { MockMemory } from './mock';
 
 const message = (id: string): MastraDBMessage => ({
@@ -19,9 +19,23 @@ describe('persistGeneratedMessages', () => {
     const memory = new MockMemory();
     const save = vi.spyOn(memory, 'saveMessages').mockResolvedValue({ messages: [message('one')] });
 
-    await persistGeneratedMessages(memory, { messages: [message('one')] }, []);
+    await persistGeneratedMessages(
+      memory,
+      {
+        messages: [message('one')],
+        thread: {
+          id: 'thread',
+          resourceId: 'resource',
+          title: '',
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      },
+      [],
+    );
 
-    expect(save).toHaveBeenCalledOnce();
+    expect(save).toHaveBeenCalledWith({ messages: [message('one')] });
   });
 
   it.each([
@@ -54,6 +68,28 @@ describe('persistGeneratedMessages', () => {
     await persistGeneratedMessages(memory, { messages: [message('one')] }, ['one']);
 
     expect(memory.calls).toEqual([['one']]);
+  });
+
+  it('dispatches an empty generated-ID set when atomic thread creation is requested', async () => {
+    const hook = vi.fn(async input => ({ messages: input.messages }));
+    const saveMessages = vi.fn();
+    const memory = {
+      saveMessages,
+      __mastraPersistGeneratedMessages: hook,
+    } as unknown as MockMemory;
+    const thread = {
+      id: 'thread',
+      resourceId: 'resource',
+      title: '',
+      metadata: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    await persistMessagesWithThreadCreation(memory, { messages: [message('one')], thread }, []);
+
+    expect(hook).toHaveBeenCalledWith({ messages: [message('one')], thread }, []);
+    expect(saveMessages).not.toHaveBeenCalled();
   });
 
   it('dispatches to a string-named hook on a memory object from another module instance', async () => {

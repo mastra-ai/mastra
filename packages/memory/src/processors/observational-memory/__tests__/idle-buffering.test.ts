@@ -333,7 +333,9 @@ describe('turn.end() idle buffering', () => {
     await turn.end();
 
     expect(mockOM.persistMessages).toHaveBeenCalledTimes(1);
-    expect(mockOM.persistMessages).toHaveBeenCalledWith([...unsavedInput, ...unsavedOutput], threadId, resourceId);
+    expect(mockOM.persistMessages).toHaveBeenCalledWith([...unsavedInput, ...unsavedOutput], threadId, resourceId, [
+      'unsaved-2',
+    ]);
     expect(mockOM.buffer).toHaveBeenCalledTimes(1);
   });
 

@@ -1,8 +1,9 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { MASTRA_THREAD_BRANCH_METADATA_KEY, getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
+import { createThreadBranchError, getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ThreadOMMetadata } from '@mastra/core/memory';
 import type { ProviderMetadata } from '@mastra/core/stream';
 
+import { parseThreadBranchMetadata } from '../../../branching/lineage';
 import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
 import {
   applyExtractorHooks,
@@ -16,7 +17,12 @@ import {
   createObservationStartMarker,
   createThreadUpdateMarker,
 } from '../markers';
-import { getLastObservedMessageCursor, sortThreadsByOldestMessage } from '../message-utils';
+import {
+  getBufferedChunks,
+  getDurableObservedMessageIds,
+  getLastObservedMessageCursor,
+  sortThreadsByOldestMessage,
+} from '../message-utils';
 import { buildMessageRange } from '../observational-memory';
 import { formatMessagesForObserver } from '../observer-agent';
 import { getMaxThreshold } from '../thresholds';
@@ -87,10 +93,13 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       filter: { resourceId: this.resourceId },
       perPage: false,
     });
+    const branchMetadataByThread = new Map(
+      resourceThreads.map(thread => [thread.id, parseThreadBranchMetadata(thread)]),
+    );
     const branchOwned = record.threadId !== null;
     const allThreads = branchOwned
       ? resourceThreads.filter(thread => thread.id === currentThreadId)
-      : resourceThreads.filter(thread => !thread.metadata?.[MASTRA_THREAD_BRANCH_METADATA_KEY]);
+      : resourceThreads.filter(thread => !branchMetadataByThread.get(thread.id));
     const threadMetadataMap = new Map<string, { lastObservedAt?: string }>();
 
     for (const thread of allThreads) {
@@ -101,22 +110,35 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       }
     }
 
-    for (const thread of allThreads) {
-      const threadLastObservedAt = threadMetadataMap.get(thread.id)?.lastObservedAt;
-      const startDate = threadLastObservedAt ? new Date(new Date(threadLastObservedAt).getTime() + 1) : undefined;
-      const query = {
-        threadId: thread.id,
+    if (branchOwned) {
+      if (!this.deps.memory) {
+        throw createThreadBranchError(
+          'BRANCHING_UNSUPPORTED',
+          'Resource-scoped observation requires branch-aware Memory for shared history.',
+        );
+      }
+      const result = await this.deps.memory.recall({
+        threadId: currentThreadId,
         resourceId: this.resourceId,
-        perPage: false as const,
-        orderBy: { field: 'createdAt' as const, direction: 'ASC' as const },
-        filter: startDate ? { dateRange: { start: startDate } } : undefined,
-      };
-      const result =
-        branchOwned && this.deps.memory ? await this.deps.memory.recall(query) : await this.storage.listMessages(query);
-
+        perPage: false,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
       const messages = result.messages.filter(msg => msg.role !== 'system');
-      if (messages.length > 0) {
-        this.messagesByThread.set(thread.id, messages);
+      if (messages.length > 0) this.messagesByThread.set(currentThreadId, messages);
+    } else {
+      for (const thread of allThreads) {
+        const threadLastObservedAt = threadMetadataMap.get(thread.id)?.lastObservedAt;
+        const startDate = threadLastObservedAt ? new Date(threadLastObservedAt) : undefined;
+        const result = await this.storage.listMessages({
+          threadId: thread.id,
+          resourceId: this.resourceId,
+          perPage: false,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+          filter: startDate ? { dateRange: { start: startDate } } : undefined,
+        });
+
+        const messages = result.messages.filter(msg => msg.role !== 'system');
+        if (messages.length > 0) this.messagesByThread.set(thread.id, messages);
       }
     }
 
@@ -134,8 +156,15 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       this.messagesByThread.set(currentThreadId, Array.from(messageMap.values()));
     }
 
+    const observedMessageIds = new Set([
+      ...this.deps.observedMessageIds,
+      ...(Array.isArray(record.observedMessageIds) ? record.observedMessageIds : []),
+      ...getDurableObservedMessageIds(record),
+      ...(Array.isArray(record.bufferedMessageIds) ? record.bufferedMessageIds : []),
+      ...getBufferedChunks(record).flatMap(chunk => chunk.messageIds ?? []),
+    ]);
     for (const [tid, msgs] of this.messagesByThread) {
-      const filtered = msgs.filter(m => !this.deps.observedMessageIds.has(m.id));
+      const filtered = msgs.filter(m => !observedMessageIds.has(m.id));
       if (filtered.length > 0) {
         this.messagesByThread.set(tid, filtered);
       } else {
