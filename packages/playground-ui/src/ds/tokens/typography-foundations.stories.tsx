@@ -3,13 +3,13 @@ import { Txt } from '../components/Txt/Txt';
 import { FontSizes, LineHeights } from './fonts';
 
 const meta: Meta = {
-  title: 'Foundations/Typography foundations',
+  title: 'Tiger Team/Foundations/Typography',
   parameters: {
     layout: 'padded',
     docs: {
       description: {
         component:
-          'The Mastra typography scale pairs every font size with its line height. Product copy uses Txt variants, and headings follow one hierarchy across surfaces.',
+          'The foundation pairs every font size with its line height. Txt is a convenience component that consumes this scale, not a separate typography system.',
       },
     },
   },
@@ -98,7 +98,7 @@ export const TypographyFoundations: Story = {
           Typography foundations
         </Txt>
         <Txt variant="ui-md" className="text-neutral4">
-          Each token owns its font size and line height. Choose a semantic level, then keep the pair intact.
+          Ten tokens define font size and line height. Txt consumes this scale; it does not define another one.
         </Txt>
       </header>
 
@@ -124,13 +124,19 @@ export const TypographyFoundations: Story = {
         </div>
       </section>
 
-      <footer className="flex flex-col gap-2 border-t border-border1 pt-4 sm:flex-row sm:items-center sm:justify-between">
-        <Txt variant="ui-sm" className="text-neutral3">
-          Use Txt variants for product copy. Do not add a separate leading utility.
-        </Txt>
-        <Txt variant="ui-sm" font="mono" className="shrink-0 text-neutral3">
-          10 paired tokens
-        </Txt>
+      <footer className="grid gap-3 border-t border-border1 pt-4 sm:grid-cols-2">
+        <div className="flex flex-col gap-1">
+          <Txt variant="ui-xs" font="mono" className="text-neutral3 uppercase">
+            Foundation
+          </Txt>
+          <Txt variant="ui-sm">text-ui-* and text-header-* pair size with leading.</Txt>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Txt variant="ui-xs" font="mono" className="text-neutral3 uppercase">
+            Component API
+          </Txt>
+          <Txt variant="ui-sm">Txt applies a foundation token through its variant prop.</Txt>
+        </div>
       </footer>
     </div>
   ),
