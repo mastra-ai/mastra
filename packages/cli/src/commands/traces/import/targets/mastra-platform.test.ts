@@ -165,6 +165,32 @@ describe('MastraPlatformTraceTarget', () => {
     expect(sleep).toHaveBeenCalledWith(2500, undefined);
   });
 
+  it('reserves distinct upload slots for concurrent batches', async () => {
+    const fetch = vi.fn(async () => acknowledgement());
+    const pendingSleeps: Array<() => void> = [];
+    const sleep = vi.fn(
+      async () =>
+        new Promise<void>(resolve => {
+          pendingSleeps.push(resolve);
+        }),
+    );
+    const target = new MastraPlatformTraceTarget(
+      { accessToken: 'secret-token', projectId: 'project_1' },
+      { fetch, sleep, now: () => 1_000 },
+    );
+
+    const uploads = [target.upload(batch()), target.upload(batch()), target.upload(batch())];
+    await vi.waitFor(() => expect(sleep).toHaveBeenCalledTimes(2));
+
+    expect(sleep.mock.calls).toEqual([
+      [10, undefined],
+      [20, undefined],
+    ]);
+    for (const resolve of pendingSleeps) resolve();
+    await Promise.all(uploads);
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
   it('retries a network failure with the unchanged deterministic payload', async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()

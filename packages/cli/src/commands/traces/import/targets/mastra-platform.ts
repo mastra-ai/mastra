@@ -150,12 +150,13 @@ export class MastraPlatformTraceTarget implements TraceImportTarget {
   }
 
   private async waitForUploadSlot(spanCount: number, signal?: AbortSignal): Promise<void> {
-    const waitMilliseconds = Math.max(0, this.nextUploadAt - this.now());
-    if (waitMilliseconds > 0) await this.sleep(waitMilliseconds, signal);
-
-    const startedAt = this.now();
+    const currentTime = this.now();
+    const uploadAt = Math.max(this.nextUploadAt, currentTime);
     const batchInterval = Math.ceil((spanCount * 1000) / this.spansPerSecond);
-    this.nextUploadAt = Math.max(this.nextUploadAt, startedAt) + batchInterval;
+    this.nextUploadAt = uploadAt + batchInterval;
+
+    const waitMilliseconds = uploadAt - currentTime;
+    if (waitMilliseconds > 0) await this.sleep(waitMilliseconds, signal);
   }
 }
 
