@@ -309,20 +309,9 @@ const sidebars = {
           },
           items: [
             {
-              type: 'category',
-              label: 'Tools & MCP',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'connections/mcp',
-                  label: 'MCP',
-                },
-                {
-                  type: 'doc',
-                  id: 'connections/connect-mcp-client',
-                  label: 'Connect your MCP client to Mastra (draft)',
-                },
-              ],
+              type: 'doc',
+              id: 'connections/mcp',
+              label: 'MCP',
             },
             {
               type: 'doc',
