@@ -5,6 +5,7 @@ const calendar = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeSty
 
 export function MessageTimestamp({ value }: { value: Date | string }) {
   const time = new Date(value);
+  if (Number.isNaN(time.getTime())) return null;
 
   return (
     <MessageMetadata>
