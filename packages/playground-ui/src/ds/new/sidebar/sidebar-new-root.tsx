@@ -1,3 +1,4 @@
+import '../../../../new-theme.css';
 import type { MainSidebarRootProps } from '@/ds/components/MainSidebar/main-sidebar-root';
 import { MainSidebarRoot } from '@/ds/components/MainSidebar/main-sidebar-root';
 import { cn } from '@/lib/utils';

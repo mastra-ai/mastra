@@ -1,14 +1,9 @@
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { compile } from 'tailwindcss';
 import { describe, expect, it } from 'vitest';
 import { BorderColors, Colors } from './ds/tokens/colors';
 
-// Guards the @mastra/playground-ui/theme.css contract: it must ship as RAW,
-// uncompiled CSS (with the `@theme {}` directive intact) so a consumer's own
-// Tailwind v4 compiler can read the tokens and generate the design-system
-// utilities. If it were compiled (e.g. pointed at dist/style.css), the @theme
-// directive would be stripped and consumers could no longer generate utilities.
 const pkgRoot = resolve(__dirname, '..');
 const pkg = JSON.parse(readFileSync(resolve(pkgRoot, 'package.json'), 'utf8'));
 
@@ -137,18 +132,14 @@ describe('theme.css export', () => {
   const newThemeCss = readFileSync(resolve(pkgRoot, 'new-theme.css'), 'utf8');
   const productionCss = readFileSync(resolve(pkgRoot, 'src/index.css'), 'utf8');
   const storybookCss = readFileSync(resolve(pkgRoot, '.storybook/tailwind.css'), 'utf8');
-  const sidebarThemeCss = readFileSync(resolve(pkgRoot, 'src/ds/new/sidebar/sidebar-new-theme.css'), 'utf8');
-  const sidebarEntry = readFileSync(resolve(pkgRoot, 'src/ds/new/sidebar/index.ts'), 'utf8');
 
   it('ships raw (uncompiled) with the @theme directive intact', () => {
     expect(themeCss).toMatch(/@theme\s*\{/);
     expect(themeCss).toMatch(/:root\s*\{/);
-    expect(newThemeCss).toMatch(/@theme\s*\{/);
+    expect(newThemeCss).toMatch(/@theme inline\s*\{/);
     expect(newThemeCss).toMatch(/:root\s*\{/);
-    // A compiled Tailwind stylesheet opens with the version banner — this must not.
     expect(themeCss).not.toMatch(/^\/\*!\s*tailwindcss/);
     expect(newThemeCss).not.toMatch(/^\/\*!\s*tailwindcss/);
-    // Token definitions only — no generated utility classes.
     expect(themeCss).not.toMatch(/\.bg-surface1\b/);
     expect(newThemeCss).not.toMatch(/\.bg-background\b/);
   });
@@ -275,8 +266,13 @@ describe('theme.css export', () => {
     }
   });
 
-  it('compiles utilities for every semantic token', async () => {
-    const compiler = await compile(`${newThemeCss}\n@tailwind utilities;`);
+  it('compiles utilities that resolve semantic tokens on the styled element', async () => {
+    const compiler = await compile(newThemeCss, {
+      loadStylesheet: async id => {
+        const path = resolve(pkgRoot, 'node_modules', id);
+        return { path, base: dirname(path), content: readFileSync(path, 'utf8') };
+      },
+    });
     const candidates = semanticTokens.flatMap(token => [
       `bg-${token}`,
       `text-${token}`,
@@ -286,7 +282,14 @@ describe('theme.css export', () => {
     const output = compiler.build(candidates);
 
     for (const token of semanticTokens) {
-      expect(output).toContain(`var(--${token})`);
+      for (const [prefix, property] of [
+        ['bg', 'background-color'],
+        ['text', 'color'],
+        ['border', 'border-color'],
+        ['ring', '--tw-ring-color'],
+      ]) {
+        expect(output).toMatch(new RegExp(`\\.${prefix}-${token} \\{\\s*${property}: var\\(--${token}\\)`));
+      }
     }
   });
 
@@ -318,18 +321,9 @@ describe('theme.css export', () => {
     }
   });
 
-  it('lets SidebarNew opt into the semantic layer', () => {
-    expect(sidebarEntry).toContain("import './sidebar-new-theme.css';");
-    expect(sidebarThemeCss).toContain("@import '../../../../new-theme.css';");
-    expect(sidebarThemeCss).toContain('source(none)');
-    expect(sidebarThemeCss).toContain('@source inline(');
-    expect(sidebarThemeCss).toContain('--neutral3: var(--muted-foreground);');
-    expect(sidebarThemeCss).toContain('--sidebar-nav-active: var(--selected);');
-  });
-
   it('ships the semantic layer as an opt-in raw stylesheet', () => {
     expect(themeCss).not.toContain("@import './new-theme.css';");
-    expect(productionCss).not.toContain("@import '../new-theme.css';");
+    expect(productionCss).not.toContain('new-theme.css');
     expect(storybookCss).toContain("@import '../new-theme.css';");
     expect(pkg.exports['./theme.css']).toBe('./theme.css');
     expect(pkg.exports['./theme.css']).not.toContain('dist');

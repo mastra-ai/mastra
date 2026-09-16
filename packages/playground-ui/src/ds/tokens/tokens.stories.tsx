@@ -6,6 +6,7 @@ import { Colors, BorderColors } from './colors';
 import { FontSizes, LineHeights } from './fonts';
 import { Shadows, Glows } from './shadows';
 import { Spacings } from './spacings';
+import { cn } from '@/lib/utils';
 
 const meta: Meta = {
   title: 'Foundations/Tokens',
@@ -139,51 +140,38 @@ const semanticEntries: [string, string][] = [
 const semanticBorderEntries: [string, string][] = [['border', BorderColors.border]];
 
 const SurfacePreview = ({ semantic }: { semantic: boolean }) => {
-  const tokens = semantic
-    ? { sidebar: 'sidebar', canvas: 'background', card: 'card', muted: 'muted', popover: 'popover' }
-    : { sidebar: 'surface1', canvas: 'surface2', card: 'surface3', muted: 'surface4', popover: 'surface3' };
-
   return (
     <div
-      className="grid min-h-80 grid-cols-[9rem_1fr] overflow-hidden rounded-lg border"
-      style={{
-        color: semantic ? 'var(--foreground)' : 'var(--neutral6)',
-        borderColor: semantic ? 'var(--border)' : 'var(--border1)',
-      }}
+      className={cn(
+        'grid min-h-80 grid-cols-[9rem_1fr] overflow-hidden rounded-lg border',
+        semantic ? 'text-foreground border-border' : 'border-border1 text-neutral6',
+      )}
     >
-      <div className="p-4" style={{ background: `var(--${tokens.sidebar})` }}>
+      <div className={cn('p-4', semantic ? 'bg-sidebar' : 'bg-surface1')}>
         <Txt variant="ui-sm">Sidebar</Txt>
         <div className="mt-4 space-y-2">
-          <div
-            className="h-6 rounded"
-            style={{ background: semantic ? 'var(--sidebar-accent)' : 'var(--sidebar-nav-hover)' }}
-          />
-          <div
-            className="h-6 rounded"
-            style={{ background: semantic ? 'var(--selected)' : 'var(--sidebar-nav-active)' }}
-          />
+          <div className={cn('h-6 rounded', semantic ? 'bg-sidebar-accent' : 'bg-sidebar-nav-hover')} />
+          <div className={cn('h-6 rounded', semantic ? 'bg-selected' : 'bg-sidebar-nav-active')} />
         </div>
       </div>
-      <div className="relative p-4" style={{ background: `var(--${tokens.canvas})` }}>
+      <div className={cn('relative p-4', semantic ? 'bg-background' : 'bg-surface2')}>
         <Txt variant="ui-sm">Main canvas</Txt>
         <div
-          className="mt-4 rounded-lg border p-4"
-          style={{
-            background: `var(--${tokens.card})`,
-            borderColor: semantic ? 'var(--border)' : 'var(--border1)',
-          }}
+          className={cn(
+            'mt-4 rounded-lg border p-4',
+            semantic ? 'bg-card border-border' : 'border-border1 bg-surface3',
+          )}
         >
           <Txt variant="ui-sm">Card</Txt>
-          <div className="mt-3 rounded-md p-3" style={{ background: `var(--${tokens.muted})` }}>
+          <div className={cn('mt-3 rounded-md p-3', semantic ? 'bg-muted' : 'bg-surface4')}>
             <Txt variant="ui-sm">Muted region</Txt>
           </div>
         </div>
         <div
-          className="absolute right-6 bottom-6 w-36 rounded-md border p-3 shadow-lg"
-          style={{
-            background: `var(--${tokens.popover})`,
-            borderColor: semantic ? 'var(--border)' : 'var(--border1)',
-          }}
+          className={cn(
+            'absolute right-6 bottom-6 w-36 rounded-md border p-3 shadow-lg',
+            semantic ? 'bg-popover border-border' : 'border-border1 bg-surface3',
+          )}
         >
           <Txt variant="ui-sm">Popover</Txt>
         </div>
