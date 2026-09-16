@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory.js';
 import { GitLabApiClient, GitLabApiError } from './api.js';
 import type { GitLabDiscussionPosition, GitLabMergeRequest, GitLabNote } from './api.js';
-import { buildGitLabVersionControl, tokenUrl } from './version-control.js';
+import { buildGitLabVersionControl } from './version-control.js';
 
 const CONNECTION = { type: 'oauth' as const, accessToken: 'glpat-secret' };
 const POSITION: GitLabDiscussionPosition = {
@@ -144,9 +144,6 @@ describe('buildGitLabVersionControl', () => {
       type: 'oauth',
       accessToken: 'glpat-secret',
     });
-    expect(tokenUrl('gitlab.example.com', 'acme/app', 'glpat-secret@value')).toBe(
-      'https://oauth2:glpat-secret%40value@gitlab.example.com/acme/app.git',
-    );
   });
 
   it('does not expose a Platform connection selector as a repository credential', async () => {

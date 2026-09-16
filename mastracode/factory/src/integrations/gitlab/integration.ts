@@ -389,34 +389,48 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   }
 }
 
+export type GitLabAccessTokenType = 'personal' | 'group';
+
 export interface GitLabIntegrationConfig {
-  accessToken: string;
+  accessToken?: string;
+  /** Defaults to `personal`; both token types authenticate identically but have different resource reach. */
+  accessTokenType?: GitLabAccessTokenType;
   baseUrl?: string;
   webhookSecret?: string;
   fetchImpl?: typeof fetch;
 }
 
+const DIRECT_CONNECTION_TOKEN = 'gitlab-direct-access-token';
+
 export class GitLabIntegration extends GitLabIntegrationBase {
   readonly #accessToken: string;
+  readonly #accessTokenType: GitLabAccessTokenType;
   readonly #baseUrl: string;
   readonly #webhookSecret: string | undefined;
   readonly #context: GitLabConnectionContext;
 
-  constructor(config: GitLabIntegrationConfig) {
+  constructor(config: GitLabIntegrationConfig = {}) {
     super();
-    this.#accessToken = config.accessToken.trim();
-    this.#baseUrl = (config.baseUrl ?? 'https://gitlab.com').replace(/\/+$/, '');
-    this.#webhookSecret = config.webhookSecret?.trim() || undefined;
+    const accessToken = config.accessToken?.trim() || process.env.GITLAB_ACCESS_TOKEN?.trim();
+    if (!accessToken) {
+      throw new Error('GitLabIntegration: missing required GITLAB_ACCESS_TOKEN.');
+    }
+    this.#accessToken = accessToken;
+    this.#accessTokenType = parseAccessTokenType(
+      config.accessTokenType ?? process.env.GITLAB_ACCESS_TOKEN_TYPE?.trim(),
+    );
+    this.#baseUrl = (config.baseUrl ?? process.env.GITLAB_BASE_URL?.trim() ?? 'https://gitlab.com').replace(/\/+$/, '');
+    this.#webhookSecret = config.webhookSecret?.trim() || process.env.GITLAB_WEBHOOK_SECRET?.trim() || undefined;
     const api = new GitLabApiClient({
       baseUrl: this.#baseUrl,
       accessToken: this.#accessToken,
-      fetchImpl: config.fetchImpl,
+      ...(config.fetchImpl ? { fetchImpl: config.fetchImpl } : {}),
     });
     this.#context = {
       id: DIRECT_CONNECTION_ID,
       label: new URL(this.#baseUrl).host,
       api,
-      connection: { type: 'oauth', accessToken: this.#accessToken },
+      connection: { type: 'oauth', accessToken: DIRECT_CONNECTION_TOKEN },
       host: new URL(this.#baseUrl).host,
       repositoryAccessToken: this.#accessToken,
     };
@@ -431,7 +445,7 @@ export class GitLabIntegration extends GitLabIntegrationBase {
   }
 
   authFailureMessage(): string {
-    return 'GitLab rejected the configured access token. Check the GitLab token.';
+    return `GitLab rejected the configured ${this.#accessTokenType} access token. Check the token and its scopes.`;
   }
 
   protected async activeContexts(): Promise<GitLabConnectionContext[]> {
@@ -449,10 +463,17 @@ export class GitLabIntegration extends GitLabIntegrationBase {
     return {
       configured: true,
       mode: 'direct',
+      accessTokenType: this.#accessTokenType,
       endpointHost: new URL(this.#baseUrl).host,
       webhookConfigured: Boolean(this.#webhookSecret),
     };
   }
+}
+
+function parseAccessTokenType(value: string | undefined): GitLabAccessTokenType {
+  const normalized = value?.trim().toLowerCase() || 'personal';
+  if (normalized === 'personal' || normalized === 'group') return normalized;
+  throw new Error("GitLabIntegration: GITLAB_ACCESS_TOKEN_TYPE must be 'personal' or 'group'.");
 }
 
 export function encodeSourceId(reference: GitLabSourceReference): string {

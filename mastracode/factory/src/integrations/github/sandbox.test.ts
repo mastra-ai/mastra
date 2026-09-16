@@ -367,6 +367,27 @@ describe('materializeRepo', () => {
 describe('checkoutSessionBranch', () => {
   const opts = { branch: 'factory/pr-1', baseBranch: 'main', token: 'tok-secret', repoFullName: 'octocat/hello' };
 
+  it('installs a tokenless environment credential helper for GitLab pushes', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'factory/pr-1\n', stderr: '' };
+      return OK;
+    });
+
+    await checkoutSessionBranch(sandbox, '/workspace/repo', {
+      ...opts,
+      token: 'glpat-secret',
+      repoFullName: 'acme/platform/app',
+      cloneUrl: 'https://gitlab.example.com/acme/platform/app.git',
+      authUsername: 'oauth2',
+    });
+
+    const helper = sandbox.calls.find(call => call.includes('config credential.helper'));
+    expect(helper).toContain('MASTRA_SOURCE_CONTROL_USERNAME');
+    expect(helper).toContain('MASTRA_SOURCE_CONTROL_TOKEN');
+    expect(helper).not.toContain('glpat-secret');
+    expect(helper).not.toContain('gh auth git-credential');
+  });
+
   it('keeps the current branch when uncommitted work blocks the switch', async () => {
     // The session's agent switched branches itself (e.g. `gh pr checkout`)
     // and left uncommitted edits; git refuses to switch back over them.

@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { fakeRouteAuth } from '../../routes/test-utils.js';
-import { PlatformApiClient } from '../platform/api-client.js';
 import { PlatformGitLabIntegration } from '../platform/gitlab/integration.js';
 import {
   decodeIssueReference,
@@ -45,7 +44,12 @@ function issue(projectId = 10, iid = 42, path = 'mastra/platform') {
 }
 
 function direct(fetchImpl: typeof fetch): GitLabIntegration {
-  return new GitLabIntegration({ baseUrl: 'https://gitlab.com', accessToken: 'group-token', fetchImpl });
+  return new GitLabIntegration({
+    baseUrl: 'https://gitlab.com',
+    accessToken: 'group-token',
+    accessTokenType: 'group',
+    fetchImpl,
+  });
 }
 
 const platformConnections = [
@@ -54,13 +58,16 @@ const platformConnections = [
   { id: 'a1b_jira', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' },
 ] as const;
 
-function platform(): PlatformGitLabIntegration {
+function platform(connectionId = 'a1b_mastra'): PlatformGitLabIntegration {
   return new PlatformGitLabIntegration({
-    client: new PlatformApiClient({ baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' }),
+    clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+    connectionId,
   });
 }
-
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
 
 describe('GitLabIntegration', () => {
   it('exposes webhook configuration and the unauthenticated webhook route without leaking the secret', () => {
@@ -77,6 +84,47 @@ describe('GitLabIntegration', () => {
     ]);
     expect(gitlab.diagnostics()).toMatchObject({ webhookConfigured: true });
     expect(JSON.stringify(gitlab.diagnostics())).not.toContain('webhook-secret');
+  });
+
+  it.each(['personal', 'group'] as const)('supports a direct %s access token without exposing it', async accessTokenType => {
+    const accessToken = `glpat-${accessTokenType}-secret`;
+    const gitlab = new GitLabIntegration({ accessToken, accessTokenType });
+    const reference = encodeIssueReference({
+      connectionId: 'direct',
+      projectId: '10',
+      projectPath: 'mastra/platform',
+      issueIid: 42,
+    });
+
+    const resolved = await gitlab.intake.resolveIntakeDispatch?.({
+      orgId: 'org-1',
+      externalSource: { type: 'issue', externalId: reference },
+    });
+
+    expect(gitlab.diagnostics()).toMatchObject({ mode: 'direct', accessTokenType });
+    expect(resolved?.connection).toEqual({ type: 'oauth', accessToken: 'gitlab-direct-access-token' });
+    expect(JSON.stringify({ diagnostics: gitlab.diagnostics(), resolved })).not.toContain(accessToken);
+  });
+
+  it('reads direct token settings from the environment and validates the token type', () => {
+    vi.stubEnv('GITLAB_ACCESS_TOKEN', 'glpat-env-secret');
+    vi.stubEnv('GITLAB_ACCESS_TOKEN_TYPE', 'group');
+    vi.stubEnv('GITLAB_BASE_URL', 'https://gitlab.acme.test/');
+    vi.stubEnv('GITLAB_WEBHOOK_SECRET', 'hook-secret');
+
+    expect(new GitLabIntegration().diagnostics()).toMatchObject({
+      accessTokenType: 'group',
+      endpointHost: 'gitlab.acme.test',
+      webhookConfigured: true,
+    });
+
+    vi.stubEnv('GITLAB_ACCESS_TOKEN_TYPE', 'project');
+    expect(() => new GitLabIntegration()).toThrow(/GITLAB_ACCESS_TOKEN_TYPE/);
+  });
+
+  it('requires a direct access token', () => {
+    vi.stubEnv('GITLAB_ACCESS_TOKEN', '');
+    expect(() => new GitLabIntegration()).toThrow(/GITLAB_ACCESS_TOKEN/);
   });
 
   it('uses a direct group token and exposes projects as intake sources', async () => {
@@ -167,53 +215,52 @@ describe('PlatformGitLabIntegration', () => {
       '/web/gitlab/projects',
       '/web/gitlab/webhook',
     ]);
-    expect(gitlab.diagnostics()).toMatchObject({ mode: 'platform', webhookConfigured: false });
+    expect(gitlab.diagnostics()).toMatchObject({
+      mode: 'platform',
+      connectionConfigured: true,
+      webhookConfigured: false,
+    });
   });
 
-  it('lists projects from every active GitLab connection through integrations v2', async () => {
+  it('lists projects only from the explicitly configured Platform connection', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
       if (url.endsWith('/v2/connections')) return json({ connections: platformConnections });
       if (url.includes('a1b_mastra/proxy')) return json([project(10, 'mastra/platform')]);
-      if (url.includes('a1b_acme/proxy')) return json([project(20, 'acme/app')]);
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
 
     const sources = await platform().intake.listSources({ orgId: 'org-1', userId: 'user-1' });
 
-    expect(sources.map(source => source.name)).toEqual(['mastra/platform', 'acme/app']);
+    expect(sources.map(source => source.name)).toEqual(['mastra/platform']);
     expect(decodeSourceId(sources[0]!.id)?.connectionId).toBe('a1b_mastra');
-    expect(decodeSourceId(sources[1]!.id)?.connectionId).toBe('a1b_acme');
-    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/proxy/'))).toHaveLength(2);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/proxy/'))).toHaveLength(1);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('a1b_acme/proxy'))).toBe(false);
   });
 
-  it('keeps issue pagination and persisted references scoped to their connection', async () => {
+  it('keeps issue references scoped to the configured connection', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
       if (url.endsWith('/v2/connections')) return json({ connections: platformConnections });
       if (url.includes('a1b_mastra/proxy')) return json([issue(10, 42, 'mastra/platform')]);
-      if (url.includes('a1b_acme/proxy')) return json([issue(20, 7, 'acme/app')]);
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    const gitlab = platform();
-    const sources = [
-      encodeSourceId({ connectionId: 'a1b_mastra', projectId: '10', projectPath: 'mastra/platform' }),
-      encodeSourceId({ connectionId: 'a1b_acme', projectId: '20', projectPath: 'acme/app' }),
-    ];
-
-    const first = await gitlab.intake.listItems({ orgId: 'org-1', userId: 'user-1', sourceIds: sources });
-    const second = await gitlab.intake.listItems({
-      orgId: 'org-1',
-      userId: 'user-1',
-      sourceIds: sources,
-      cursor: first.nextCursor ?? undefined,
+    const sourceId = encodeSourceId({
+      connectionId: 'a1b_mastra',
+      projectId: '10',
+      projectPath: 'mastra/platform',
     });
 
-    expect(first.items[0]?.title).toBe('mastra/platform#42: Fix intake sync');
-    expect(second.items[0]?.title).toBe('acme/app#7: Fix intake sync');
-    expect(decodeIssueReference(first.items[0]!.source.externalId)).toEqual({
+    const page = await platform().intake.listItems({
+      orgId: 'org-1',
+      userId: 'user-1',
+      sourceIds: [sourceId],
+    });
+
+    expect(page.items[0]?.title).toBe('mastra/platform#42: Fix intake sync');
+    expect(decodeIssueReference(page.items[0]!.source.externalId)).toEqual({
       connectionId: 'a1b_mastra',
       projectId: '10',
       projectPath: 'mastra/platform',
@@ -221,25 +268,42 @@ describe('PlatformGitLabIntegration', () => {
     });
   });
 
-  it('resolves persisted issue references to a platform connection marker', async () => {
+  it('resolves persisted issue references to an opaque Platform connection marker', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(json({ connections: platformConnections }));
     vi.stubGlobal('fetch', fetchMock);
     const reference = encodeIssueReference({
-      connectionId: 'a1b_acme',
-      projectId: '20',
-      projectPath: 'acme/app',
-      issueIid: 7,
+      connectionId: 'a1b_mastra',
+      projectId: '10',
+      projectPath: 'mastra/platform',
+      issueIid: 42,
     });
 
-    await expect(
-      platform().intake.resolveIntakeDispatch?.({
-        orgId: 'org-1',
-        externalSource: { type: 'issue', externalId: reference },
-      }),
-    ).resolves.toEqual({
-      connection: { type: 'oauth', accessToken: 'gitlab-connection:a1b_acme' },
-      sourceId: encodeSourceId({ connectionId: 'a1b_acme', projectId: '20', projectPath: 'acme/app' }),
-      issueId: '7',
+    const resolved = await platform().intake.resolveIntakeDispatch?.({
+      orgId: 'org-1',
+      externalSource: { type: 'issue', externalId: reference },
     });
+    expect(resolved).toEqual({
+      connection: { type: 'oauth', accessToken: 'gitlab-connection:a1b_mastra' },
+      sourceId: encodeSourceId({ connectionId: 'a1b_mastra', projectId: '10', projectPath: 'mastra/platform' }),
+      issueId: '42',
+    });
+    expect(JSON.stringify(resolved)).not.toContain('platform-token');
+  });
+
+  it('uses MASTRA_GITLAB_CONNECTION_ID and requires it when omitted', () => {
+    vi.stubEnv('MASTRA_GITLAB_CONNECTION_ID', 'a1b_mastra');
+    expect(
+      new PlatformGitLabIntegration({
+        clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      }).diagnostics(),
+    ).toMatchObject({ connectionConfigured: true });
+
+    vi.stubEnv('MASTRA_GITLAB_CONNECTION_ID', '');
+    expect(
+      () =>
+        new PlatformGitLabIntegration({
+          clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+        }),
+    ).toThrow(/MASTRA_GITLAB_CONNECTION_ID/);
   });
 });

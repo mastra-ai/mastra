@@ -422,7 +422,7 @@ describe('IntakeSection', () => {
           },
         ]),
       );
-      expect(await screen.findByText('GitLab routing updated')).toBeInTheDocument();
+      expect((await screen.findAllByText('GitLab routing updated')).length).toBeGreaterThan(0);
     });
 
     it('keeps healthy projects available when another Platform connection needs reauthorization', async () => {
