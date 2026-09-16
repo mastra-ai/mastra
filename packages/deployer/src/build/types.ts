@@ -35,6 +35,13 @@ export interface BundlerOptions {
   enableEsmShim: boolean;
   externals: boolean | string[];
   dynamicPackages?: string[];
+  /**
+   * User's original externals array preserved when the CLI converts
+   * `externals: ['@org/pkg']` to `externals: true` + `dynamicPackages`.
+   * These entries are merged into the analysis-phase mergedExternals so that
+   * workspace packages the user explicitly asked to externalize stay external.
+   */
+  userExternals?: string[];
 }
 
 /**

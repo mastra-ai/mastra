@@ -160,7 +160,27 @@ describe('BuildBundler', () => {
       expect(options).toEqual({
         externals: true,
         dynamicPackages: ['existing-package', 'dynamic-package', '@duckdb/node-bindings'],
+        userExternals: ['@duckdb/node-bindings', 'existing-package'],
       });
+    });
+
+    it('preserves workspace externals when converting array to preset', async () => {
+      const { Bundler } = await import('@mastra/deployer/bundler');
+      vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
+        externals: ['@repro/database'],
+      });
+      const { BuildBundler } = await import('./BuildBundler');
+      const bundler = new BuildBundler();
+
+      const options = await (bundler as any).getUserBundlerOptions('/entry.ts', '/output');
+
+      expect(options).toMatchObject({
+        externals: true,
+        userExternals: ['@repro/database'],
+      });
+      // The workspace package should also be in dynamicPackages so it's
+      // installed as a runtime dependency alongside being externalized.
+      expect(options.dynamicPackages).toContain('@repro/database');
     });
 
     it.each([true, false])('preserves explicit externals %s in a custom bundler config', async externals => {

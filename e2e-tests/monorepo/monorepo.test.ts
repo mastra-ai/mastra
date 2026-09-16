@@ -567,6 +567,21 @@ export const environmentRoute = registerApiRoute('/environment', {
       );
     });
 
+    it('should preserve workspace externals as runtime dependencies instead of bundling them', async () => {
+      const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      const outputFiles = await readdir(outputDir);
+      const output = (
+        await Promise.all(
+          outputFiles.filter(file => file.endsWith('.mjs')).map(file => readFile(join(outputDir, file), 'utf-8')),
+        )
+      ).join('\n');
+      const packageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
+
+      expect(packageJson.dependencies?.['@inner/inner-tools']).toBeTruthy();
+      expect(output).not.toContain('generate-password');
+      expect(output).not.toContain('Password hashing utility from nested path');
+    });
+
     it('should emit a worker runtime entry with a readiness endpoint', async () => {
       const workerEntryPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'worker.mjs');
       const workerEntry = await readFile(workerEntryPath, 'utf-8');

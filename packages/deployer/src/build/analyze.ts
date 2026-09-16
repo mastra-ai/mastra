@@ -391,7 +391,7 @@ export async function analyzeBundle(
     projectRoot: string;
     platform: BundlerPlatform;
     isDev?: boolean;
-    bundlerOptions?: Pick<BundlerOptions, 'externals' | 'enableSourcemap' | 'dynamicPackages'> | null;
+    bundlerOptions?: Pick<BundlerOptions, 'externals' | 'enableSourcemap' | 'dynamicPackages' | 'userExternals'> | null;
   },
   logger: IMastraLogger,
 ) {
@@ -413,7 +413,10 @@ export async function analyzeBundle(
 
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: mastraEntry });
 
-  const { externalsPreset, mergedExternals } = normalizeExternals(bundlerOptions?.externals);
+  const { externalsPreset, mergedExternals } = normalizeExternals(
+    bundlerOptions?.externals,
+    bundlerOptions?.userExternals,
+  );
   const userDynamicPackages = bundlerOptions?.dynamicPackages ?? [];
 
   let index = 0;

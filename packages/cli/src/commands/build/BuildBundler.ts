@@ -33,8 +33,9 @@ export class BuildBundler extends Bundler {
     return {
       ...bundlerOptions,
       externals: true,
+      ...(configuredExternals.length > 0 ? { userExternals: configuredExternals } : {}),
       ...(dynamicPackages.length > 0 ? { dynamicPackages } : {}),
-    };
+    } as NonNullable<Config['bundler']> & { userExternals?: string[] };
   }
 
   getEnvFiles(): Promise<string[]> {
