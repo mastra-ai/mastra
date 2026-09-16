@@ -329,22 +329,28 @@ export class MCPServer extends MCPServerBase {
     }
   }
 
+  /**
+   * Input-request forms are a restricted flat-object subset of JSON Schema, so
+   * the dialect declaration is left off the requested schema.
+   */
   private formSchema(resumeSchema: unknown): Record<string, unknown> {
     const schema = isStandardSchemaWithJSON(resumeSchema)
       ? resumeSchema
       : toStandardSchema(resumeSchema as Parameters<typeof toStandardSchema>[0]);
-    return this.jsonSchema(schema, { io: 'input' }) ?? { type: 'object', properties: {} };
+    const { $schema: _dialect, ...form } = this.jsonSchema(schema, { io: 'input' }) ?? {};
+    return Object.keys(form).length ? form : { type: 'object', properties: {} };
   }
 
+  /**
+   * Converts a tool schema to JSON Schema 2020-12, the dialect MCP 2026-07-28
+   * assumes when none is declared. The dialect declaration is kept so validators
+   * that dispatch on `$schema` pick the same draft on both sides.
+   */
   private jsonSchema(schema: unknown, options?: { io: 'input' | 'output' }): Record<string, unknown> | undefined {
     if (!schema) return undefined;
-    const json = isStandardSchemaWithJSON(schema)
-      ? (standardSchemaToJSONSchema(schema, options) as Record<string, unknown>)
+    return isStandardSchemaWithJSON(schema)
+      ? (standardSchemaToJSONSchema(schema, { ...options, target: 'draft-2020-12' }) as Record<string, unknown>)
       : ((schema as { jsonSchema?: Record<string, unknown> }).jsonSchema ?? (schema as Record<string, unknown>));
-    // The SDK default validator only supports the 2020-12 dialect; the dialect
-    // declaration is stripped before the schema is advertised.
-    const { $schema: _dialect, ...rest } = json;
-    return rest;
   }
 
   private addTools(tools: ToolsInput): void {
@@ -400,14 +406,26 @@ export class MCPServer extends MCPServerBase {
     return this.formSchema(original.resumeSchema);
   }
 
+  /**
+   * Prefers the tool's own schema over the converted core tool's, which has
+   * already been lowered to draft-07, so 2020-12 shapes survive advertisement.
+   */
+  private advertisedSchema(name: string, field: 'inputSchema' | 'outputSchema', converted: unknown) {
+    const original = this.originalTools[name];
+    const own = original && field in original ? (original as Record<string, unknown>)[field] : undefined;
+    return this.jsonSchema(isStandardSchemaWithJSON(own) ? own : converted, {
+      io: field === 'inputSchema' ? 'input' : 'output',
+    });
+  }
+
   private toolInfo(name: string, tool: InternalCoreTool): ToolInfo {
     return {
       name,
       description: tool.description,
       inputSchema: this.hasInputSchema(name)
-        ? (this.jsonSchema(tool.parameters) ?? EMPTY_OBJECT_SCHEMA)
+        ? (this.advertisedSchema(name, 'inputSchema', tool.parameters) ?? EMPTY_OBJECT_SCHEMA)
         : EMPTY_OBJECT_SCHEMA,
-      outputSchema: this.jsonSchema(tool.outputSchema),
+      outputSchema: this.advertisedSchema(name, 'outputSchema', tool.outputSchema),
       toolType: tool.mcp?.toolType,
       _meta: withMastraToolStrictMeta(tool.mcp?._meta, tool.strict),
     };
@@ -659,8 +677,13 @@ export class MCPServer extends MCPServerBase {
     });
     if (suspension) {
       const { payload, resumeSchema } = suspension as { payload: unknown; resumeSchema?: string };
-      const fromBuilder = resumeSchema ? this.jsonSchema(JSON.parse(resumeSchema)) : undefined;
-      return { status: 'suspended', suspendPayload: payload, resumeSchema: fromBuilder ?? this.resumeSchemaOf(name) };
+      // The core builder serializes the resume schema as draft-07 JSON; forms carry no dialect.
+      const { $schema: _dialect, ...fromBuilder } = resumeSchema ? JSON.parse(resumeSchema) : {};
+      return {
+        status: 'suspended',
+        suspendPayload: payload,
+        resumeSchema: this.resumeSchemaOf(name) ?? (resumeSchema ? fromBuilder : undefined),
+      };
     }
     return { status: 'completed', output };
   }

@@ -64,6 +64,20 @@ const makeTools = () => ({
       return 'progressed';
     },
   }),
+  nullTool: createTool({
+    id: 'nullTool',
+    description: 'Returns a null structured result',
+    inputSchema: z.object({}),
+    outputSchema: z.null(),
+    execute: async () => null,
+  }),
+  tupleTool: createTool({
+    id: 'tupleTool',
+    description: 'Returns a tuple, which only JSON Schema 2020-12 can describe with prefixItems',
+    inputSchema: z.object({}),
+    outputSchema: z.tuple([z.string(), z.number()]),
+    execute: async () => ['pair', 2] as [string, number],
+  }),
 });
 
 describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
@@ -99,8 +113,10 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
         'authTool',
         'echoTool',
         'loggingTool',
+        'nullTool',
         'progressTool',
         'structuredTool',
+        'tupleTool',
       ]);
       expect(tools.ttlMs).toBe(60_000);
       expect(tools.cacheScope).toBe('private');
@@ -116,6 +132,31 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
     const response = await rawRequest(served.url, { method: 'server/discover' });
     expect(response.status).toBe(200);
     expect(response.headers.has('mcp-session-id')).toBe(false);
+  });
+
+  it('advertises JSON Schema 2020-12 and preserves null and tuple structured results', async () => {
+    const client = await connectModern(served.url);
+    try {
+      const tools = (await client.listTools()).tools;
+      const tuple = tools.find(tool => tool.name === 'tupleTool')?.outputSchema as Record<string, unknown>;
+      expect(tuple.$schema).toBe('https://json-schema.org/draft/2020-12/schema');
+      expect(tuple).toMatchObject({ type: 'array', prefixItems: [{ type: 'string' }, { type: 'number' }] });
+      expect(tuple).not.toHaveProperty('additionalItems');
+      const input = tools.find(tool => tool.name === 'tupleTool')?.inputSchema as Record<string, unknown>;
+      expect(input.$schema).toBe('https://json-schema.org/draft/2020-12/schema');
+
+      // The SDK client validates structuredContent against the advertised schema, so a
+      // 2020-12 tuple round-trips only when both sides agree on the dialect.
+      const tupleResult = await client.callTool({ name: 'tupleTool', arguments: {} });
+      expect(tupleResult.structuredContent).toEqual(['pair', 2]);
+
+      const nullResult = await client.callTool({ name: 'nullTool', arguments: {} });
+      expect(nullResult.isError).not.toBe(true);
+      expect(nullResult.structuredContent).toBeNull();
+      expect(textOf(nullResult)).toBe('null');
+    } finally {
+      await client.close();
+    }
   });
 
   it('advertises only supported capabilities', async () => {
