@@ -1,0 +1,136 @@
+import { timingSafeEqual } from 'node:crypto';
+import type { Context } from 'hono';
+
+export const SUPPORTED_GITLAB_WEBHOOK_EVENTS = new Set([
+  'Issue Hook',
+  'Note Hook',
+  'Merge Request Hook',
+  'Push Hook',
+]);
+
+export interface ParsedGitLabWebhook {
+  event: string;
+  payload: Record<string, unknown>;
+}
+
+export interface GitLabWebhookMetadata {
+  event: string;
+  projectId?: number;
+  projectPath?: string;
+  issueIid?: number;
+  mergeRequestIid?: number;
+  noteableType?: string;
+  sender?: string;
+}
+
+export type GitLabWebhookResult =
+  | { status: 202; body: { ok: true; ignored?: true } }
+  | { status: 400; body: { error: 'bad_request'; message: string } }
+  | { status: 401; body: { error: 'unauthorized'; message: string } };
+
+export interface GitLabWebhookHandlerOptions {
+  webhookSecret?: string;
+  ingestFactoryEvent?: (event: ParsedGitLabWebhook) => Promise<unknown>;
+}
+
+function normalizeHeader(value: string | undefined | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export function verifyGitLabToken(receivedToken: string, secret: string): boolean {
+  const received = Buffer.from(receivedToken, 'utf8');
+  const expected = Buffer.from(secret, 'utf8');
+  return received.length === expected.length && timingSafeEqual(received, expected);
+}
+
+export async function parseGitLabWebhook(
+  c: Context,
+  secret: string | undefined,
+): Promise<ParsedGitLabWebhook | GitLabWebhookResult> {
+  if (!secret) {
+    return { status: 401, body: { error: 'unauthorized', message: 'GitLab webhook secret is not configured' } };
+  }
+
+  const event = normalizeHeader(c.req.header('x-gitlab-event'));
+  const token = normalizeHeader(c.req.header('x-gitlab-token'));
+  if (!event) return { status: 400, body: { error: 'bad_request', message: 'Missing x-gitlab-event header' } };
+  if (!token) return { status: 401, body: { error: 'unauthorized', message: 'Missing x-gitlab-token header' } };
+  if (!verifyGitLabToken(token, secret)) {
+    return { status: 401, body: { error: 'unauthorized', message: 'Invalid GitLab webhook token' } };
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(await c.req.text());
+  } catch {
+    return { status: 400, body: { error: 'bad_request', message: 'Malformed JSON payload' } };
+  }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return { status: 400, body: { error: 'bad_request', message: 'Payload must be a JSON object' } };
+  }
+  return { event, payload: payload as Record<string, unknown> };
+}
+
+function getObject(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+function getString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function getNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+export function normalizeGitLabWebhookMetadata(parsed: ParsedGitLabWebhook): GitLabWebhookMetadata {
+  const project = getObject(parsed.payload.project);
+  const attributes = getObject(parsed.payload.object_attributes);
+  const issue = getObject(parsed.payload.issue);
+  const mergeRequest = getObject(parsed.payload.merge_request);
+  const user = getObject(parsed.payload.user);
+  const objectIid = getNumber(attributes?.iid);
+  const noteableType = getString(attributes?.noteable_type);
+  return {
+    event: parsed.event,
+    projectId: getNumber(project?.id),
+    projectPath: getString(project?.path_with_namespace),
+    issueIid:
+      parsed.event === 'Issue Hook'
+        ? objectIid
+        : noteableType === 'Issue'
+          ? getNumber(issue?.iid) ?? objectIid
+          : undefined,
+    mergeRequestIid:
+      parsed.event === 'Merge Request Hook'
+        ? objectIid
+        : noteableType === 'MergeRequest'
+          ? getNumber(mergeRequest?.iid) ?? objectIid
+          : undefined,
+    noteableType,
+    sender: getString(parsed.payload.user_username) ?? getString(user?.username) ?? getString(user?.name),
+  };
+}
+
+export async function handleGitLabWebhook(
+  c: Context,
+  options: GitLabWebhookHandlerOptions,
+): Promise<GitLabWebhookResult> {
+  const parsed = await parseGitLabWebhook(c, options.webhookSecret);
+  if ('status' in parsed) return parsed;
+  if (!SUPPORTED_GITLAB_WEBHOOK_EVENTS.has(parsed.event)) {
+    return { status: 202, body: { ok: true, ignored: true } };
+  }
+
+  // FUTURE: dispatch normalized GitLab events into session-signal subscriptions once GitLab owns that machinery.
+  if (options.ingestFactoryEvent) {
+    try {
+      await options.ingestFactoryEvent(parsed);
+    } catch {
+      // Webhook delivery is best-effort; acknowledge verified events so GitLab does not retry indefinitely.
+    }
+  }
+  return { status: 202, body: { ok: true } };
+}
