@@ -131,6 +131,19 @@ describe('AppSidebar — More menu', () => {
       expect(screen.queryByRole('link', { name: /^processors$/i })).toBeNull();
       expect(screen.queryByRole('link', { name: /^workspaces$/i })).toBeNull();
     });
+
+    it('keeps the promoted item in registry order, with More last', async () => {
+      server.use(...baseHandlers(), mcpServersHandler(oneMcpServer), workspacesHandler(noWorkspaces));
+
+      renderSidebar();
+
+      await screen.findByRole('link', { name: /^mcp servers$/i });
+      const primitives = screen.getByRole('link', { name: /^agents$/i }).closest('ul');
+      expect(primitives).not.toBeNull();
+      const labels = Array.from(primitives?.querySelectorAll(':scope > li') ?? []).map(li => li.textContent?.trim());
+      // Prompts is CMS-gated and hidden in this scaffold.
+      expect(labels).toEqual(['Agents', 'Workflows', 'MCP Servers', 'Request Context', 'More']);
+    });
   });
 
   describe('when the server has workspaces', () => {

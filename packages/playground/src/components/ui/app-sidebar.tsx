@@ -115,19 +115,32 @@ export function AppSidebar() {
     </MainSidebar.NavLink>
   );
 
-  const renderFoldArea = (siblings: NavItem[]) => {
+  // Rows keep registry order (promoted items slot into their usual place). "More" is a flat
+  // placeholder at the end: clicking it swaps the row for the folded items at the same level.
+  // While server data is resolving, foldable rows are replaced by a single skeleton row.
+  const renderFoldableSection = (items: NavItem[]) => {
     if (foldable.isResolving) {
       return (
-        <li aria-busy="true" data-testid="nav-more-skeleton" className="px-2 py-0.5">
-          <Skeleton className="h-7 w-full" />
-        </li>
+        <>
+          {items.filter(item => !item.foldable).map(item => renderNavItem(item, items))}
+          {/* Mirrors the nav row box (h-7, px-3, size-4 icon + label with gap-2) so it doesn't jump on resolve. */}
+          <li
+            aria-busy="true"
+            data-testid="nav-more-skeleton"
+            className={isCollapsed ? 'flex h-7 items-center justify-center' : 'flex h-7 items-center gap-2 px-3'}
+          >
+            <Skeleton className="size-4 shrink-0 rounded-sm" />
+            {!isCollapsed && <Skeleton className="h-3 w-20" />}
+          </li>
+        </>
       );
     }
 
-    // "More" is a flat placeholder: clicking it swaps the row for the folded items at the same level.
     return (
       <>
-        {foldable.promoted.map(item => renderNavItem(item, siblings))}
+        {items
+          .filter(item => !item.foldable || foldable.promoted.includes(item))
+          .map(item => renderNavItem(item, items))}
         {foldable.folded.length > 0 && !isMoreOpen && (
           <MainSidebar.NavLink
             state={state}
@@ -140,7 +153,7 @@ export function AppSidebar() {
             }
           />
         )}
-        {isMoreOpen && foldable.folded.map(item => renderNavItem(item, siblings))}
+        {isMoreOpen && foldable.folded.map(item => renderNavItem(item, items))}
       </>
     );
   };
@@ -254,8 +267,9 @@ export function AppSidebar() {
                 </MainSidebar.NavHeader>
               ) : null}
               <MainSidebar.NavList>
-                {filtered.filter(item => !item.foldable).map(item => renderNavItem(item, filtered))}
-                {filtered.some(item => item.foldable) && renderFoldArea(filtered)}
+                {filtered.some(item => item.foldable)
+                  ? renderFoldableSection(filtered)
+                  : filtered.map(item => renderNavItem(item, filtered))}
               </MainSidebar.NavList>
             </MainSidebar.NavSection>
           );

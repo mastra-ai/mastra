@@ -91,6 +91,13 @@ export const mainNav: NavSection[] = [
         isOnMastraPlatform: true,
       },
       {
+        name: 'Tools',
+        url: '/tools',
+        Icon: ToolsIcon,
+        isOnMastraPlatform: true,
+        foldable: true,
+      },
+      {
         name: 'Processors',
         url: '/processors',
         Icon: ProcessorIcon,
@@ -101,13 +108,6 @@ export const mainNav: NavSection[] = [
         name: 'MCP Servers',
         url: '/mcps',
         Icon: McpServerIcon,
-        isOnMastraPlatform: true,
-        foldable: true,
-      },
-      {
-        name: 'Tools',
-        url: '/tools',
-        Icon: ToolsIcon,
         isOnMastraPlatform: true,
         foldable: true,
       },
