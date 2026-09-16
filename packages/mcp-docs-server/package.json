@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-docs-server",
-  "version": "1.2.26-alpha.14",
+  "version": "1.2.27-alpha.3",
   "description": "MCP server for accessing Mastra.ai documentation, changelogs, and news.",
   "type": "module",
   "main": "dist/index.js",
@@ -51,7 +51,7 @@
     "@wong2/mcp-cli": "^2.0.0",
     "cross-env": "^10.1.0",
     "eslint": "^10.7.0",
-    "hono": "^4.12.8",
+    "hono": "^4.13.7",
     "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",

@@ -35,6 +35,7 @@ import type {
   RemoveOptions,
   CopyOptions,
 } from './filesystem';
+import { isTextFile, normalizeTextExtension } from './fs-utils';
 
 /**
  * Lifecycle hook that fires during filesystem state transitions.
@@ -51,6 +52,19 @@ export interface MastraFilesystemOptions {
   onInit?: FilesystemLifecycleHook;
   /** Called before the filesystem is destroyed */
   onDestroy?: FilesystemLifecycleHook;
+  /**
+   * Additional file extensions to treat as text, extending (not replacing) the
+   * built-in set. Affects which files tools like `grep` will search.
+   *
+   * Values are normalized to lowercase and dot-prefixed, so `'sas'`, `'.sas'`,
+   * and `'.SAS'` are equivalent.
+   *
+   * @example
+   * ```typescript
+   * new LocalFilesystem({ basePath: '.', textExtensions: ['.sas', '.log'] })
+   * ```
+   */
+  textExtensions?: string[];
 }
 
 /**
@@ -115,11 +129,23 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
   private readonly _onInit?: FilesystemLifecycleHook;
   private readonly _onDestroy?: FilesystemLifecycleHook;
 
+  /** Additional (normalized) text extensions configured for this filesystem */
+  protected readonly _textExtensions: ReadonlySet<string>;
+
   constructor(options: { name: string } & MastraFilesystemOptions) {
     super({ name: options.name, component: RegisteredLogger.WORKSPACE });
 
     this._onInit = options.onInit;
     this._onDestroy = options.onDestroy;
+    this._textExtensions = new Set((options.textExtensions ?? []).map(normalizeTextExtension));
+  }
+
+  /**
+   * Check if a file should be treated as text, honoring any `textExtensions`
+   * configured on this filesystem in addition to the built-in set.
+   */
+  isTextFile(filename: string): boolean {
+    return isTextFile(filename, this._textExtensions);
   }
 
   // ---------------------------------------------------------------------------

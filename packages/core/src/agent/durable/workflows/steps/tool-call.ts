@@ -814,6 +814,17 @@ export function createDurableToolCallStep() {
         delete (cleanedArgs as any)._background;
       }
 
+      // Parity with the regular loop (tool-call-step.ts): stamp the caller's
+      // thread/resource identity onto agent-tool args so the sub-agent wrapper
+      // derives `${resourceId}-${agentName}` instead of falling back to the
+      // parent agent's id (issue #23903). Always overwrite — LLM-hallucinated
+      // ids must not leak into sub-agents. In the durable world the scope
+      // context doesn't exist; serialized workflow state is its equivalent.
+      if (toolName?.startsWith('agent-') && 'prompt' in cleanedArgs) {
+        cleanedArgs.threadId = state?.threadId;
+        cleanedArgs.resourceId = state?.resourceId;
+      }
+
       // The model authors the optional `suspendedToolRunId` arg, and some models emit
       // sentinel strings like "null" for it. Drop sentinels so the back-fill below can
       // restore the framework-persisted id from the suspend payload (#23739). The

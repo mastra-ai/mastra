@@ -7,6 +7,8 @@ import type {
   ListTracesArgs,
   ListTracesResponse,
   ListTracesLightResponse,
+  QueryThreadsInput,
+  QueryThreadsResult,
   TraceQueryRequest,
   TraceQueryTraceResponse,
   ListBranchesArgs,
@@ -122,6 +124,10 @@ export interface LegacyGetTracesResponse {
 }
 
 export type ListScoresBySpanParams = SpanIds & PaginationArgs;
+
+export type QueryTracesInput = Omit<TraceQueryRequest, 'group'> & { group?: never };
+export type QueryTraceThreadsInput = QueryThreadsInput;
+export type QueryTraceThreadsResult = QueryThreadsResult;
 
 // ============================================================================
 // Observability Resource
@@ -240,8 +246,18 @@ export class Observability extends BaseResource {
    * @param params - Advanced trace query, including its required time range
    * @returns Matching lightweight traces
    */
-  queryTraces(params: Omit<TraceQueryRequest, 'group'>): Promise<TraceQueryTraceResponse> {
+  queryTraces(params: QueryTracesInput): Promise<TraceQueryTraceResponse> {
     return this.request('/observability/traces/query', { method: 'POST', body: params });
+  }
+
+  /**
+   * Queries thread identities using eligible-trace and cross-trace predicates.
+   *
+   * @param params - Thread query with its eligible trace selection
+   * @returns Matching thread identities
+   */
+  queryTraceThreads(params: QueryTraceThreadsInput): Promise<QueryTraceThreadsResult> {
+    return this.request('/observability/threads/query', { method: 'POST', body: params });
   }
 
   /**
