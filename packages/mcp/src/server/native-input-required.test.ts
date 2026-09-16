@@ -1,126 +1,83 @@
-import { createMCPTool } from '@mastra/core/mcp';
-import type { MCPRequestContextV2 } from '@mastra/core/mcp';
-import { LOG_LEVEL_META_KEY, ProtocolError } from '@modelcontextprotocol/client';
+import { createTool } from '@mastra/core/tools';
+import { LOG_LEVEL_META_KEY } from '@modelcontextprotocol/client';
 import type { Client } from '@modelcontextprotocol/client';
-import { createRequestStateCodec, inputRequired } from '@modelcontextprotocol/server';
+import { createRequestStateCodec } from '@modelcontextprotocol/server';
 import type { AuthInfo, ElicitResult, InputRequiredResult } from '@modelcontextprotocol/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { connectModern, serveHTTP, textOf } from './__tests__/harness';
 import type { ServedHTTP } from './__tests__/harness';
 import { MCPServer } from './server';
-import type { MCPServerConfig } from './types';
+import type { MCPServerConfig } from './server';
 
 vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
 
-/**
- * Application-owned continuation state. Every round names its phase explicitly;
- * the framework never replays earlier stages, and the tool re-checks the
- * principal each round because a signature is not authorization.
- */
-type BookingState =
-  | { phase: 'address'; opKey: string; principal: string }
-  | { phase: 'confirm'; opKey: string; principal: string; address: string };
-
 const SECRET = 's'.repeat(32);
-const codec = createRequestStateCodec<BookingState>({ key: SECRET });
-
-const addressRequest = inputRequired.elicit({
-  message: 'Delivery address?',
-  requestedSchema: { type: 'object', properties: { address: { type: 'string' } }, required: ['address'] },
-});
-const noteRequest = inputRequired.elicit({
-  message: 'Delivery note?',
-  requestedSchema: { type: 'object', properties: { note: { type: 'string' } }, required: ['note'] },
-});
-const confirmRequest = inputRequired.elicit({
-  message: 'Confirm booking?',
-  requestedSchema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] },
-});
 
 interface Journal {
-  bookings: Map<string, { address: string; note?: string }>;
+  bookings: Map<string, { address: string }>;
   writes: number;
-  rounds: Array<{ phase: string; responseKeys: string[] }>;
+  rounds: Array<{ phase: string; resumeKeys: string[] }>;
 }
 
 const newJournal = (): Journal => ({ bookings: new Map(), writes: 0, rounds: [] });
 
-function principalOf(request: MCPRequestContextV2, requestContext: { get(key: string): unknown }): string {
-  return (requestContext.get('authInfo') as AuthInfo | undefined)?.clientId ?? 'anonymous';
-}
-
+/**
+ * A tool that suspends twice before writing once. Every suspension names its
+ * phase; the framework hands the payload back untouched and never replays an
+ * earlier round.
+ */
 function makeServer(journal: Journal, config: Partial<MCPServerConfig> = {}) {
-  const bookDelivery = createMCPTool({
+  const bookDelivery = createTool({
     id: 'bookDelivery',
     description: 'Books a delivery after collecting an address and a confirmation',
     inputSchema: z.object({ opKey: z.string() }),
     outputSchema: z.object({ status: z.string(), address: z.string().optional(), writes: z.number() }),
-    execute: async ({ opKey }, { request, requestContext }) => {
-      const principal = principalOf(request, requestContext);
-      const state = request.requestState as BookingState | undefined;
-      const responses = request.inputResponses ?? {};
-      journal.rounds.push({ phase: state?.phase ?? 'start', responseKeys: Object.keys(responses) });
+    suspendSchema: z.object({
+      phase: z.enum(['address', 'confirm']),
+      message: z.string(),
+      address: z.string().optional(),
+    }),
+    resumeSchema: z.object({ address: z.string().optional(), ok: z.boolean().optional() }),
+    execute: async ({ opKey }, context) => {
+      const phase = context.suspendPayload?.phase ?? 'start';
+      journal.rounds.push({ phase, resumeKeys: Object.keys(context.resumeData ?? {}) });
 
-      if (!state) {
-        await request.log('info', { message: `start ${opKey}` });
-        return {
-          kind: 'input_required',
-          result: inputRequired({
-            inputRequests: { address: addressRequest, note: noteRequest },
-            requestState: await codec.mint({ phase: 'address', opKey, principal }),
-          }),
-        };
+      if (!context.resumeData) {
+        await context.mcp?.log?.('info', `start ${opKey}`);
+        await context.suspend?.({ phase: 'address', message: 'Delivery address?' });
+        return;
       }
-      if (state.principal !== principal) throw new Error('Continuation belongs to a different principal');
-      if (state.opKey !== opKey) throw new Error('Continuation belongs to a different operation');
-
-      if (state.phase === 'address') {
-        const address = responses.address;
-        if (!address) throw new Error('Missing response for "address"');
-        if (address.action !== 'accept')
-          return { kind: 'completed', value: { status: 'declined', writes: journal.writes } };
-        await request.log('info', { message: `address ${opKey}` });
-        return {
-          kind: 'input_required',
-          result: inputRequired({
-            inputRequests: { confirm: confirmRequest },
-            requestState: await codec.mint({
-              phase: 'confirm',
-              opKey,
-              principal,
-              address: (address.content as { address: string }).address,
-            }),
-          }),
-        };
+      if (phase === 'address') {
+        if (!context.resumeData.address) throw new Error('Missing address');
+        await context.mcp?.log?.('info', `address ${opKey}`);
+        await context.suspend?.({ phase: 'confirm', message: 'Confirm booking?', address: context.resumeData.address });
+        return;
       }
-
-      const confirm = responses.confirm;
-      if (!confirm) throw new Error('Missing response for "confirm"');
-      if (confirm.action !== 'accept' || !(confirm.content as { ok: boolean }).ok) {
-        return { kind: 'completed', value: { status: 'cancelled', writes: journal.writes } };
-      }
+      if (!context.resumeData.ok) return { status: 'not confirmed', writes: journal.writes };
+      const address = context.suspendPayload!.address!;
       // Domain-owned idempotency: the operation key, not the round, decides whether to write.
-      if (!journal.bookings.has(state.opKey)) {
-        journal.bookings.set(state.opKey, { address: state.address });
+      if (!journal.bookings.has(opKey)) {
+        journal.bookings.set(opKey, { address });
         journal.writes += 1;
       }
-      return { kind: 'completed', value: { status: 'booked', address: state.address, writes: journal.writes } };
+      return { status: 'booked', address, writes: journal.writes };
     },
   });
 
-  const slowTool = createMCPTool({
+  const slowTool = createTool({
     id: 'slowTool',
     description: 'Waits until cancelled',
     inputSchema: z.object({}),
     outputSchema: z.string(),
-    execute: async (_input, { request }) => {
+    execute: async (_input, context) => {
+      const signal = context.mcp!.extra.signal;
       await new Promise<void>(resolve => {
-        request.signal.addEventListener('abort', () => resolve(), { once: true });
+        signal.addEventListener('abort', () => resolve(), { once: true });
         setTimeout(resolve, 5_000).unref();
       });
-      journal.rounds.push({ phase: request.signal.aborted ? 'aborted' : 'timed-out', responseKeys: [] });
-      return { kind: 'completed', value: request.signal.aborted ? 'aborted' : 'timed-out' };
+      journal.rounds.push({ phase: signal.aborted ? 'aborted' : 'timed-out', resumeKeys: [] });
+      return signal.aborted ? 'aborted' : 'timed-out';
     },
   });
 
@@ -128,46 +85,23 @@ function makeServer(journal: Journal, config: Partial<MCPServerConfig> = {}) {
     name: 'Native Input Server',
     version: '1.0.0',
     tools: { bookDelivery, slowTool },
-    requestState: { verify: codec.verify },
+    requestState: { key: SECRET },
     resources: {
       listResources: async () => [{ uri: 'ticket://1', name: 'Ticket' }],
-      getResourceContent: async ({ uri, request }) => {
-        const confirm = request.inputResponses?.confirm;
-        if (confirm?.action === 'accept')
-          return { text: `ticket ${uri} for ${(confirm.content as { who: string }).who}` };
-        return {
-          kind: 'input_required',
-          result: inputRequired({
-            inputRequests: {
-              confirm: inputRequired.elicit({
-                message: 'Who is reading?',
-                requestedSchema: { type: 'object', properties: { who: { type: 'string' } }, required: ['who'] },
-              }),
-            },
-          }),
-        };
+      resumeSchema: z.object({ who: z.string() }),
+      getResourceContent: async ({ uri, suspend, resumeData }) => {
+        if (!resumeData) return suspend({ message: 'Who is reading?' });
+        return { text: `ticket ${uri} for ${(resumeData as { who: string }).who}` };
       },
     },
     prompts: {
       listPrompts: async () => [{ name: 'brief' }],
-      getPromptMessages: async ({ request }) => {
-        const topic = request.inputResponses?.topic;
-        if (topic?.action === 'accept') {
-          return [
-            { role: 'user', content: { type: 'text', text: `brief on ${(topic.content as { topic: string }).topic}` } },
-          ];
-        }
-        return {
-          kind: 'input_required',
-          result: inputRequired({
-            inputRequests: {
-              topic: inputRequired.elicit({
-                message: 'Topic?',
-                requestedSchema: { type: 'object', properties: { topic: { type: 'string' } }, required: ['topic'] },
-              }),
-            },
-          }),
-        };
+      resumeSchema: z.object({ topic: z.string() }),
+      getPromptMessages: async ({ suspend, resumeData }) => {
+        if (!resumeData) return suspend({ message: 'Topic?' });
+        return [
+          { role: 'user', content: { type: 'text', text: `brief on ${(resumeData as { topic: string }).topic}` } },
+        ];
       },
     },
     ...config,
@@ -181,18 +115,26 @@ type Round = InputRequiredResult;
 const asRound = (value: unknown): Round => {
   const round = value as Round;
   expect(round.resultType).toBe('input_required');
+  expect(Object.keys(round.inputRequests!)).toEqual(['input']);
   return round;
 };
+const messageOf = (round: Round) => (round.inputRequests!.input!.params as { message: string }).message;
 
 async function callRound(
   client: Client,
   name: string,
   args: Record<string, unknown>,
-  continuation?: { inputResponses?: Record<string, ElicitResult>; requestState?: string },
+  continuation?: { answer?: ElicitResult; requestState?: string },
   meta?: Record<string, unknown>,
 ) {
   return client.callTool(
-    { name, arguments: args, ...continuation, ...(meta ? { _meta: meta } : {}) },
+    {
+      name,
+      arguments: args,
+      ...(continuation?.answer ? { inputResponses: { input: continuation.answer } } : {}),
+      ...(continuation?.requestState ? { requestState: continuation.requestState } : {}),
+      ...(meta ? { _meta: meta } : {}),
+    },
     { allowInputRequired: true },
   );
 }
@@ -200,7 +142,7 @@ async function callRound(
 const manual = { inputRequired: { autoFulfill: false }, capabilities: { elicitation: { form: {} } } } as const;
 const clientAuth = (clientId: string): AuthInfo => ({ token: `${clientId}-token`, clientId, scopes: [] });
 
-describe('native input_required continuation', () => {
+describe('input_required continuation through suspend/resume', () => {
   let journal: Journal;
   let server: MCPServer;
   let served: ServedHTTP;
@@ -221,12 +163,22 @@ describe('native input_required continuation', () => {
     journal.rounds.length = 0;
   });
 
-  it('runs two keyed rounds with named phases, per-round responses and one counted write', async () => {
+  it('runs two rounds with named phases, the resumeSchema form and one counted write', async () => {
     const client = await connectModern(served.url, manual);
     try {
       const first = asRound(await callRound(client, 'bookDelivery', { opKey: 'op-1' }));
-      expect(Object.keys(first.inputRequests!)).toEqual(['address', 'note']);
-      expect(first.inputRequests!.address).toEqual(addressRequest);
+      expect(first.inputRequests!.input).toEqual({
+        method: 'elicitation/create',
+        params: {
+          mode: 'form',
+          message: 'Delivery address?',
+          requestedSchema: {
+            type: 'object',
+            properties: { address: { type: 'string' }, ok: { type: 'boolean' } },
+            additionalProperties: false,
+          },
+        },
+      });
       expect(typeof first.requestState).toBe('string');
 
       const second = asRound(
@@ -234,29 +186,23 @@ describe('native input_required continuation', () => {
           client,
           'bookDelivery',
           { opKey: 'op-1' },
-          {
-            inputResponses: { address: accept({ address: '1 Main St' }), note: accept({ note: 'ring twice' }) },
-            requestState: first.requestState,
-          },
+          { answer: accept({ address: '1 Main St' }), requestState: first.requestState },
         ),
       );
-      expect(Object.keys(second.inputRequests!)).toEqual(['confirm']);
+      expect(messageOf(second)).toBe('Confirm booking?');
       expect(second.requestState).not.toBe(first.requestState);
 
       const done = await callRound(
         client,
         'bookDelivery',
         { opKey: 'op-1' },
-        {
-          inputResponses: { confirm: accept({ ok: true }) },
-          requestState: second.requestState,
-        },
+        { answer: accept({ ok: true }), requestState: second.requestState },
       );
       expect(done.structuredContent).toEqual({ status: 'booked', address: '1 Main St', writes: 1 });
       expect(journal.rounds).toEqual([
-        { phase: 'start', responseKeys: [] },
-        { phase: 'address', responseKeys: ['address', 'note'] },
-        { phase: 'confirm', responseKeys: ['confirm'] },
+        { phase: 'start', resumeKeys: [] },
+        { phase: 'address', resumeKeys: ['address'] },
+        { phase: 'confirm', resumeKeys: ['ok'] },
       ]);
 
       // Replaying the final round is idempotent through the domain operation key.
@@ -264,10 +210,7 @@ describe('native input_required continuation', () => {
         client,
         'bookDelivery',
         { opKey: 'op-1' },
-        {
-          inputResponses: { confirm: accept({ ok: true }) },
-          requestState: second.requestState,
-        },
+        { answer: accept({ ok: true }), requestState: second.requestState },
       );
       expect(again.structuredContent).toEqual({ status: 'booked', address: '1 Main St', writes: 1 });
       expect(journal.writes).toBe(1);
@@ -279,7 +222,6 @@ describe('native input_required continuation', () => {
   it('completes the same flow through the SDK auto-fulfilment driver without any server push', async () => {
     const answers: Record<string, ElicitResult> = {
       'Delivery address?': accept({ address: '2 Side St' }),
-      'Delivery note?': accept({ note: 'leave at door' }),
       'Confirm booking?': accept({ ok: true }),
     };
     const client = await connectModern(served.url, { capabilities: { elicitation: { form: {} } } });
@@ -291,13 +233,13 @@ describe('native input_required continuation', () => {
     try {
       const result = await client.callTool({ name: 'bookDelivery', arguments: { opKey: 'op-auto' } });
       expect(result.structuredContent).toEqual({ status: 'booked', address: '2 Side St', writes: 1 });
-      expect(seen).toEqual(['Delivery address?', 'Delivery note?', 'Confirm booking?']);
+      expect(seen).toEqual(['Delivery address?', 'Confirm booking?']);
     } finally {
       await client.close();
     }
   });
 
-  it('honours declines and cancellations without writing', async () => {
+  it('ends the request on decline or cancel without running the handler', async () => {
     const client = await connectModern(served.url, manual);
     try {
       const first = asRound(await callRound(client, 'bookDelivery', { opKey: 'op-decline' }));
@@ -305,85 +247,66 @@ describe('native input_required continuation', () => {
         client,
         'bookDelivery',
         { opKey: 'op-decline' },
-        {
-          inputResponses: { address: decline, note: decline },
-          requestState: first.requestState,
-        },
+        { answer: decline, requestState: first.requestState },
       );
-      expect(declined.structuredContent).toEqual({ status: 'declined', writes: 0 });
+      expect(declined.isError).toBe(true);
+      expect(textOf(declined)).toBe("Tool 'bookDelivery' was declined");
 
       const again = asRound(await callRound(client, 'bookDelivery', { opKey: 'op-cancel' }));
-      const second = asRound(
-        await callRound(
-          client,
-          'bookDelivery',
-          { opKey: 'op-cancel' },
-          {
-            inputResponses: { address: accept({ address: '3 Back St' }), note: decline },
-            requestState: again.requestState,
-          },
-        ),
-      );
       const cancelled = await callRound(
         client,
         'bookDelivery',
         { opKey: 'op-cancel' },
-        {
-          inputResponses: { confirm: { action: 'cancel' } },
-          requestState: second.requestState,
-        },
+        { answer: { action: 'cancel' }, requestState: again.requestState },
       );
-      expect(cancelled.structuredContent).toEqual({ status: 'cancelled', writes: 0 });
+      expect(cancelled.isError).toBe(true);
+      expect(textOf(cancelled)).toBe("Tool 'bookDelivery' was cancelled");
+
+      // The answer of the previous round is not replayed: the tool never ran again.
+      expect(journal.rounds).toEqual([
+        { phase: 'start', resumeKeys: [] },
+        { phase: 'start', resumeKeys: [] },
+      ]);
       expect(journal.writes).toBe(0);
     } finally {
       await client.close();
     }
   });
 
-  it('rejects malformed, mismatched and missing responses', async () => {
+  it('rejects malformed, mismatched and missing answers', async () => {
     const client = await connectModern(served.url, manual);
     try {
       const first = asRound(await callRound(client, 'bookDelivery', { opKey: 'op-bad' }));
+
+      // An answer that does not match the resumeSchema never reaches the tool.
+      const invalid = await callRound(
+        client,
+        'bookDelivery',
+        { opKey: 'op-bad' },
+        { answer: accept({ address: 42 }), requestState: first.requestState },
+      );
+      expect(invalid.isError).toBe(true);
+      expect(textOf(invalid)).toContain('address');
+
+      // A request state without an answer is a malformed continuation.
+      await expect(
+        callRound(client, 'bookDelivery', { opKey: 'op-bad' }, { requestState: first.requestState }),
+      ).rejects.toMatchObject({ code: -32602, message: 'Missing input response "input"' });
+
+      // A request state issued for other arguments cannot answer this call.
       await expect(
         callRound(
           client,
           'bookDelivery',
-          { opKey: 'op-bad' },
-          {
-            inputResponses: { address: { garbage: true } as unknown as ElicitResult },
-            requestState: first.requestState,
-          },
+          { opKey: 'op-other' },
+          { answer: accept({ address: 'x' }), requestState: first.requestState },
         ),
-      ).rejects.toThrow(new ProtocolError(-32602, 'Unsupported input response for "address"'));
-
-      const mismatched = await callRound(
-        client,
-        'bookDelivery',
-        { opKey: 'op-bad' },
-        {
-          inputResponses: { confirm: accept({ ok: true }) },
-          requestState: first.requestState,
-        },
-      );
-      expect(mismatched.isError).toBe(true);
-      // Handler failures are reported as a structured error envelope, not raw text.
-      expect(JSON.parse(textOf(mismatched))).toMatchObject({
-        code: 'TOOL_EXECUTION_FAILED',
-        message: 'Missing response for "address"',
-        details: { toolName: 'bookDelivery' },
+      ).rejects.toMatchObject({
+        code: -32602,
+        message: 'requestState does not belong to tools/call "bookDelivery" with these arguments',
       });
 
-      const otherOperation = await callRound(
-        client,
-        'bookDelivery',
-        { opKey: 'op-other' },
-        {
-          inputResponses: { address: accept({ address: 'x' }) },
-          requestState: first.requestState,
-        },
-      );
-      expect(otherOperation.isError).toBe(true);
-      expect(textOf(otherOperation)).toContain('different operation');
+      expect(journal.rounds).toEqual([{ phase: 'start', resumeKeys: [] }]);
       expect(journal.writes).toBe(0);
     } finally {
       await client.close();
@@ -398,41 +321,27 @@ describe('native input_required continuation', () => {
       const tampered = `${first.requestState!.slice(0, -4)}AAAA`;
       for (const requestState of [tampered, 'not-a-state']) {
         await expect(
-          callRound(
-            client,
-            'bookDelivery',
-            { opKey: 'op-state' },
-            {
-              inputResponses: { address: accept({ address: 'x' }) },
-              requestState,
-            },
-          ),
+          callRound(client, 'bookDelivery', { opKey: 'op-state' }, { answer: accept({ address: 'x' }), requestState }),
         ).rejects.toMatchObject({ code: -32602, message: 'Invalid or expired requestState' });
       }
-      const foreign = createRequestStateCodec<BookingState>({ key: 'o'.repeat(32) });
+      const foreign = createRequestStateCodec({ key: 'o'.repeat(32) });
       await expect(
         callRound(
           client,
           'bookDelivery',
           { opKey: 'op-state' },
-          {
-            inputResponses: { address: accept({ address: 'x' }) },
-            requestState: await foreign.mint({ phase: 'address', opKey: 'op-state', principal: 'client-a' }),
-          },
+          { answer: accept({ address: 'x' }), requestState: await foreign.mint({ phase: 'address' }) },
         ),
       ).rejects.toMatchObject({ code: -32602, message: 'Invalid or expired requestState' });
-      const expiring = createRequestStateCodec<BookingState>({ key: SECRET, ttlSeconds: 1 });
-      const expired = await expiring.mint({ phase: 'address', opKey: 'op-state', principal: 'client-a' });
+      const expiring = createRequestStateCodec({ key: SECRET, ttlSeconds: 1 });
+      const expired = await expiring.mint({ phase: 'address' });
       await new Promise(resolve => setTimeout(resolve, 2_100));
       await expect(
         callRound(
           client,
           'bookDelivery',
           { opKey: 'op-state' },
-          {
-            inputResponses: { address: accept({ address: 'x' }) },
-            requestState: expired,
-          },
+          { answer: accept({ address: 'x' }), requestState: expired },
         ),
       ).rejects.toMatchObject({ code: -32602, message: 'Invalid or expired requestState' });
       expect(journal.rounds).toHaveLength(rounds);
@@ -441,35 +350,29 @@ describe('native input_required continuation', () => {
     }
   });
 
-  it('re-authorizes every round and refuses continuation by a different principal', async () => {
+  it('re-authorizes every round and refuses continuation by a different caller', async () => {
     const clientA = await connectModern(served.url, manual);
     // The transport identity is derived per request; the header selects the test principal.
     const clientB = await connectModern(served.url, manual, { 'x-test-client': 'client-b' });
     try {
       const first = asRound(await callRound(clientA, 'bookDelivery', { opKey: 'op-principal' }));
-      const stolen = await callRound(
-        clientB,
-        'bookDelivery',
-        { opKey: 'op-principal' },
-        {
-          inputResponses: { address: accept({ address: 'x' }) },
-          requestState: first.requestState,
-        },
-      );
-      expect(stolen.isError).toBe(true);
-      expect(textOf(stolen)).toContain('different principal');
+      await expect(
+        callRound(
+          clientB,
+          'bookDelivery',
+          { opKey: 'op-principal' },
+          { answer: accept({ address: 'x' }), requestState: first.requestState },
+        ),
+      ).rejects.toMatchObject({ code: -32602, message: 'requestState was issued to a different caller' });
       const own = asRound(
         await callRound(
           clientA,
           'bookDelivery',
           { opKey: 'op-principal' },
-          {
-            inputResponses: { address: accept({ address: 'x' }) },
-            requestState: first.requestState,
-          },
+          { answer: accept({ address: 'x' }), requestState: first.requestState },
         ),
       );
-      expect(Object.keys(own.inputRequests!)).toEqual(['confirm']);
+      expect(messageOf(own)).toBe('Confirm booking?');
       expect(journal.writes).toBe(0);
     } finally {
       await clientA.close();
@@ -477,9 +380,9 @@ describe('native input_required continuation', () => {
     }
   });
 
-  it('continues a round on a different server instance sharing the codec', async () => {
+  it('continues a round on a different server instance sharing the key', async () => {
     const otherJournal = newJournal();
-    const other = await serveHTTP(makeServer(otherJournal), { auth: clientAuth('client-a') });
+    const other = await serveHTTP(makeServer(otherJournal), { auth: () => clientAuth('client-a') });
     try {
       const clientA = await connectModern(served.url, manual);
       const clientB = await connectModern(other.url, manual);
@@ -490,24 +393,45 @@ describe('native input_required continuation', () => {
             clientB,
             'bookDelivery',
             { opKey: 'op-cross' },
-            {
-              inputResponses: { address: accept({ address: '4 Cross St' }) },
-              requestState: first.requestState,
-            },
+            { answer: accept({ address: '4 Cross St' }), requestState: first.requestState },
           ),
         );
         const done = await callRound(
           clientB,
           'bookDelivery',
           { opKey: 'op-cross' },
-          {
-            inputResponses: { confirm: accept({ ok: true }) },
-            requestState: second.requestState,
-          },
+          { answer: accept({ ok: true }), requestState: second.requestState },
         );
         expect(done.structuredContent).toEqual({ status: 'booked', address: '4 Cross St', writes: 1 });
         expect(journal.writes).toBe(0);
         expect(otherJournal.writes).toBe(1);
+      } finally {
+        await clientA.close();
+        await clientB.close();
+      }
+    } finally {
+      await other.close();
+    }
+  });
+
+  it('refuses continuation from a server without a shared key', async () => {
+    const otherJournal = newJournal();
+    const other = await serveHTTP(makeServer(otherJournal, { requestState: undefined }), {
+      auth: () => clientAuth('client-a'),
+    });
+    try {
+      const clientA = await connectModern(served.url, manual);
+      const clientB = await connectModern(other.url, manual);
+      try {
+        const first = asRound(await callRound(clientA, 'bookDelivery', { opKey: 'op-unkeyed' }));
+        await expect(
+          callRound(
+            clientB,
+            'bookDelivery',
+            { opKey: 'op-unkeyed' },
+            { answer: accept({ address: 'x' }), requestState: first.requestState },
+          ),
+        ).rejects.toMatchObject({ code: -32602, message: 'Invalid or expired requestState' });
       } finally {
         await clientA.close();
         await clientB.close();
@@ -525,7 +449,7 @@ describe('native input_required continuation', () => {
       await new Promise(resolve => setTimeout(resolve, 200));
       controller.abort();
       await expect(call).rejects.toThrow();
-      await vi.waitFor(() => expect(journal.rounds).toEqual([{ phase: 'aborted', responseKeys: [] }]), 5_000);
+      await vi.waitFor(() => expect(journal.rounds).toEqual([{ phase: 'aborted', resumeKeys: [] }]), 5_000);
     } finally {
       await client.close();
     }
@@ -543,15 +467,13 @@ describe('native input_required continuation', () => {
       );
       expect(logs).toEqual([{ message: 'start op-log' }]);
       logs.length = 0;
+      // The next round did not opt in: its log line is not delivered.
       asRound(
         await callRound(
           client,
           'bookDelivery',
           { opKey: 'op-log' },
-          {
-            inputResponses: { address: accept({ address: 'x' }) },
-            requestState: first.requestState,
-          },
+          { answer: accept({ address: 'x' }), requestState: first.requestState },
         ),
       );
       expect(logs).toEqual([]);
@@ -560,21 +482,35 @@ describe('native input_required continuation', () => {
     }
   });
 
-  it('supports native continuation for resources/read and prompts/get', async () => {
+  it('suspends and resumes resources/read and prompts/get the same way', async () => {
     const client = await connectModern(served.url, manual);
     try {
       const resourceRound = asRound(await client.readResource({ uri: 'ticket://1' }, { allowInputRequired: true }));
-      expect(Object.keys(resourceRound.inputRequests!)).toEqual(['confirm']);
+      expect(messageOf(resourceRound)).toBe('Who is reading?');
       const resource = await client.readResource(
-        { uri: 'ticket://1', inputResponses: { confirm: accept({ who: 'Ada' }) } },
+        {
+          uri: 'ticket://1',
+          inputResponses: { input: accept({ who: 'Ada' }) },
+          requestState: resourceRound.requestState,
+        },
         { allowInputRequired: true },
       );
       expect(resource.contents[0]).toMatchObject({ uri: 'ticket://1', text: 'ticket ticket://1 for Ada' });
+      await expect(
+        client.readResource(
+          {
+            uri: 'ticket://1',
+            inputResponses: { input: accept({ who: 1 }) },
+            requestState: resourceRound.requestState,
+          },
+          { allowInputRequired: true },
+        ),
+      ).rejects.toMatchObject({ code: -32602, message: expect.stringContaining('resumeSchema') });
 
       const promptRound = asRound(await client.getPrompt({ name: 'brief' }, { allowInputRequired: true }));
-      expect(Object.keys(promptRound.inputRequests!)).toEqual(['topic']);
+      expect(messageOf(promptRound)).toBe('Topic?');
       const prompt = await client.getPrompt(
-        { name: 'brief', inputResponses: { topic: accept({ topic: 'MCP' }) } },
+        { name: 'brief', inputResponses: { input: accept({ topic: 'MCP' }) }, requestState: promptRound.requestState },
         { allowInputRequired: true },
       );
       expect(prompt.messages[0]?.content).toEqual({ type: 'text', text: 'brief on MCP' });
@@ -601,5 +537,19 @@ describe('native input_required continuation', () => {
       await noHandler.close();
     }
     expect(journal.writes).toBe(0);
+  });
+
+  it('refuses to register a tool whose resumeSchema cannot be presented as a form', () => {
+    const nested = createTool({
+      id: 'nested',
+      description: 'Suspends into a nested answer',
+      inputSchema: z.object({}),
+      suspendSchema: z.object({}),
+      resumeSchema: z.object({ address: z.object({ street: z.string() }) }),
+      execute: async () => 'never',
+    });
+    expect(() => new MCPServer({ name: 'bad', version: '1.0.0', tools: { nested } })).toThrow(
+      /resumeSchema of tool 'nested' cannot be presented as an input request/,
+    );
   });
 });

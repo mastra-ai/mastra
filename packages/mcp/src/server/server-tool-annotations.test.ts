@@ -1,8 +1,7 @@
 /**
  * MCP tool annotations and `_meta` are advertised on tools/list for both
- * business tools (`mcp.annotations` / `mcp._meta`) and native tools.
+ * `mcp.annotations` / `mcp._meta`, including UI metadata normalization.
  */
-import { createMCPTool } from '@mastra/core/mcp';
 import { createTool } from '@mastra/core/tools';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
@@ -37,14 +36,13 @@ describe('MCPServer Tool Annotations (Issue #9859)', () => {
           mcp: { annotations, _meta: { customField: 'custom-value', version: '1.0.0' } },
           execute: async ({ query }) => ({ result: `Processed: ${query}` }),
         }),
-        nativeTool: createMCPTool({
-          id: 'native-tool',
-          description: 'A native tool with annotations',
+        uiTool: createTool({
+          id: 'ui-tool',
+          description: 'A tool with UI metadata',
           inputSchema: z.object({}),
           outputSchema: z.string(),
-          annotations,
-          _meta: { ui: { resourceUri: 'ui://widget' } },
-          execute: async () => ({ kind: 'completed', value: 'ok' }),
+          mcp: { annotations, _meta: { ui: { resourceUri: 'ui://widget' } } },
+          execute: async () => 'ok',
         }),
       },
     });
@@ -67,8 +65,8 @@ describe('MCPServer Tool Annotations (Issue #9859)', () => {
     expect(tool._meta).toEqual({ customField: 'custom-value', version: '1.0.0', mastra: { strict: true } });
   });
 
-  it('exposes annotations and normalized UI _meta of native tools', () => {
-    const tool = tools.find(t => t.name === 'nativeTool')!;
+  it('normalizes UI _meta so older hosts find the flat key', () => {
+    const tool = tools.find(t => t.name === 'uiTool')!;
     expect(tool.annotations).toEqual(annotations);
     expect(tool._meta).toEqual({
       ui: { resourceUri: 'ui://widget' },

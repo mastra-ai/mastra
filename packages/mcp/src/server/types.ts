@@ -1,15 +1,15 @@
-import type { MCPRequestContextV2, MCPToolOutcomeV2 } from '@mastra/core/mcp';
+import type { MCPServerConfig as CoreMCPServerConfig } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { StandardSchemaWithJSON } from '@mastra/core/schema';
+import type { MCPServerContext } from '@mastra/core/tools';
 import type { McpUiResourceMeta } from '@modelcontextprotocol/ext-apps';
 import type {
-  AuthInfo,
   CacheHint,
   InputRequiredResult,
   Prompt,
   PromptMessage,
   Resource,
   ResourceTemplateType,
-  ServerContext,
 } from '@modelcontextprotocol/server';
 
 /** The only protocol revision `@mastra/mcp` serves. */
@@ -28,59 +28,79 @@ export type MCPServerCacheableMethod =
 export type MCPServerCacheHints = Partial<Record<MCPServerCacheableMethod, CacheHint>>;
 
 /**
+ * Protocol context handed to resource and prompt callbacks: the same object tools
+ * receive as `context.mcp.extra` (cancellation signal, request id, `_meta`, auth).
+ */
+export type MCPRequestHandlerExtra = MCPServerContext;
+
+/**
  * Request-scoped context handed to resource and prompt callbacks.
  *
- * `request` carries the protocol facilities of the current round (cancellation,
- * metadata, per-request logging and progress, input responses and echoed state);
- * `requestContext` carries the trusted application context (`authInfo`, mapped `user`).
+ * `extra` carries the protocol facilities of the current request and
+ * `requestContext` the trusted application context (`authInfo`, mapped `user`).
+ * `suspend`, `resumeData` and `suspendPayload` are the same continuation vocabulary
+ * tools use: calling `suspend(payload)` ends the request as `input_required`; the
+ * continuation re-enters with the client's answer in `resumeData` and the payload it
+ * suspended with in `suspendPayload`.
  */
-export interface MCPServerRequest {
-  request: MCPRequestContextV2;
+export interface MCPServerRequest<TSuspend = unknown, TResume = unknown> {
+  extra: MCPRequestHandlerExtra;
   requestContext: RequestContext;
+  suspend: (payload: TSuspend) => Promise<void>;
+  resumeData?: TResume;
+  suspendPayload?: TSuspend;
 }
-
-/** A native continuation returned by a resource or prompt callback. */
-export type MCPInputRequired = Extract<MCPToolOutcomeV2<never>, { kind: 'input_required' }>;
 
 /** Content for an MCP resource, either text or binary (base64-encoded). */
 export type MCPServerResourceContent = { text?: string } | { blob?: string };
 
 export type MCPServerResourceContentCallback = (
   params: { uri: string } & MCPServerRequest,
-) => Promise<MCPServerResourceContent | MCPServerResourceContent[] | MCPInputRequired>;
+) => Promise<MCPServerResourceContent | MCPServerResourceContent[] | void>;
 
 /** Configuration for MCP server resource handling. */
 export type MCPServerResources = {
-  listResources: (params: MCPServerRequest) => Promise<Resource[]>;
+  listResources: (params: { extra: MCPRequestHandlerExtra; requestContext: RequestContext }) => Promise<Resource[]>;
   getResourceContent: MCPServerResourceContentCallback;
-  resourceTemplates?: (params: MCPServerRequest) => Promise<ResourceTemplateType[]>;
+  resourceTemplates?: (params: {
+    extra: MCPRequestHandlerExtra;
+    requestContext: RequestContext;
+  }) => Promise<ResourceTemplateType[]>;
+  /**
+   * Shape of the answer a suspended `getResourceContent` expects. Required for
+   * `suspend` to be usable; it must describe a flat object of primitives because it
+   * becomes the form the client fills in.
+   */
+  resumeSchema?: StandardSchemaWithJSON;
 };
 
 export type MCPServerPromptMessagesCallback = (
   params: { name: string; args?: Record<string, unknown> } & MCPServerRequest,
-) => Promise<PromptMessage[] | MCPInputRequired>;
+) => Promise<PromptMessage[] | void>;
 
 /** Configuration for MCP server prompt handling. */
 export type MCPServerPrompts = {
-  listPrompts: (params: MCPServerRequest) => Promise<Prompt[]>;
+  listPrompts: (params: { extra: MCPRequestHandlerExtra; requestContext: RequestContext }) => Promise<Prompt[]>;
   getPromptMessages?: MCPServerPromptMessagesCallback;
+  /** Shape of the answer a suspended `getPromptMessages` expects; see `MCPServerResources.resumeSchema`. */
+  resumeSchema?: StandardSchemaWithJSON;
 };
 
 /**
- * Maps transport authentication into the application user used by Mastra FGA.
- * Runs on every request and every continuation round; nothing is cached across rounds.
+ * Integrity protection for continuation state. `requestState` round-trips through
+ * the client on every `input_required` round: the server signs it with `key` so a
+ * tampered, expired or foreign envelope is rejected before any handler runs.
+ *
+ * Every instance that may answer a continuation must share the same key (set it from
+ * the environment in multi-instance and serverless deployments). Without a key the
+ * server generates one per process and continuations only succeed on that process.
  */
-export type MCPAuthInfoToUserMapperV2<TUser = unknown> = (args: {
-  authInfo: AuthInfo;
-  requestContext: RequestContext;
-}) => TUser | null | undefined | Promise<TUser | null | undefined>;
-
-/**
- * Integrity hook for echoed `requestState`. Runs inside the SDK before any handler
- * sees the request; a rejection answers the round with `-32602`. Build one with
- * `createRequestStateCodec` from `@modelcontextprotocol/server` and pass its `verify`.
- */
-export type MCPRequestStateVerifier = (state: string, ctx: ServerContext) => unknown | Promise<unknown>;
+export interface MCPServerRequestStateOptions {
+  /** HMAC key, at least 32 bytes. */
+  key?: string | Uint8Array;
+  /** How long a suspended round stays answerable. Defaults to 600 seconds. */
+  ttlSeconds?: number;
+}
 
 /** Request-security options accepted by `startHTTP`. */
 export interface MCPServerHTTPRequestOptions {
@@ -88,6 +108,8 @@ export interface MCPServerHTTPRequestOptions {
   allowedHosts?: string[];
   allowedOrigins?: string[];
 }
+
+export type MCPAuthInfoToUserMapper = NonNullable<CoreMCPServerConfig['mapAuthInfoToUser']>;
 
 export type { Prompt, PromptMessage, Resource, ResourceTemplateType as ResourceTemplate, InputRequiredResult };
 

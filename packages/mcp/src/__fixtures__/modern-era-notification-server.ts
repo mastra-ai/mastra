@@ -1,4 +1,3 @@
-import { createMCPTool } from '@mastra/core/mcp';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod/v4';
 import { MCPServer } from '../server/server';
@@ -15,33 +14,20 @@ const triggerToolListChanged = createTool({
   },
 });
 
-const askName = createMCPTool({
+const askName = createTool({
   id: 'askName',
   description: 'Asks for a name before greeting',
   inputSchema: z.object({}),
   outputSchema: z.string(),
-  execute: async (_input, { request }) => {
-    const answer = request.inputResponses?.name;
-    if (answer?.action === 'accept') {
-      await request.log('info', { message: 'greeting' });
-      return { kind: 'completed', value: `hello ${(answer.content as { name: string }).name}` };
+  suspendSchema: z.object({ message: z.string() }),
+  resumeSchema: z.object({ name: z.string() }),
+  execute: async (_input, context) => {
+    if (!context.resumeData) {
+      await context.suspend?.({ message: 'Your name?' });
+      return;
     }
-    return {
-      kind: 'input_required',
-      result: {
-        resultType: 'input_required',
-        inputRequests: {
-          name: {
-            method: 'elicitation/create',
-            params: {
-              mode: 'form',
-              message: 'Your name?',
-              requestedSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
-            },
-          },
-        },
-      },
-    };
+    await context.mcp?.log?.('info', 'greeting');
+    return `hello ${context.resumeData.name}`;
   },
 });
 
@@ -49,6 +35,7 @@ server = new MCPServer({
   name: 'Modern Era Notification Server',
   version: '1.0.0',
   tools: { triggerToolListChanged, askName },
+  requestState: { key: 'fixture-key-fixture-key-fixture-key-1234' },
 });
 
 await server.startStdio();

@@ -101,7 +101,7 @@ describe('MCPServer dynamic tools + tools/list_changed', () => {
     expect(mastra.listTools()['sync-tool-id']).toBeUndefined();
     await standalone.toolActions.add({ syncToolKey: syncTool });
     expect(mastra.listTools()['sync-tool-id']).toBe(syncTool);
-    expect(standalone.tools().syncToolKey).toBe(syncTool);
+    expect(standalone.tools()).toHaveProperty('syncToolKey');
 
     // MCP-side removal is by record key; the registry entry keyed by tool.id goes too.
     await standalone.toolActions.remove(['syncToolKey']);

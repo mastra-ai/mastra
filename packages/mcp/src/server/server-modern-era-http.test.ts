@@ -1,4 +1,3 @@
-import { createMCPTool } from '@mastra/core/mcp';
 import { createTool } from '@mastra/core/tools';
 import {
   Client,
@@ -43,26 +42,26 @@ const makeTools = () => ({
       return `${auth?.clientId ?? 'anonymous'}/${user?.id ?? 'none'}`;
     },
   }),
-  loggingTool: createMCPTool({
+  loggingTool: createTool({
     id: 'loggingTool',
     description: 'Emits info and error logs, then reports whether it ran',
     inputSchema: z.object({ tag: z.string().default('log') }),
     outputSchema: z.string(),
-    execute: async ({ tag }, { request }) => {
-      await request.log('info', { message: `info ${tag}` });
-      await request.log('error', { message: `error ${tag}` });
-      return { kind: 'completed', value: `logged ${tag}` };
+    execute: async ({ tag }, { mcp }) => {
+      await mcp!.log!('info', `info ${tag}`);
+      await mcp!.log!('error', `error ${tag}`);
+      return `logged ${tag}`;
     },
   }),
-  progressTool: createMCPTool({
+  progressTool: createTool({
     id: 'progressTool',
     description: 'Reports progress',
     inputSchema: z.object({}),
     outputSchema: z.string(),
-    execute: async (_input, { request }) => {
-      await request.progress(1, 2, 'half');
-      await request.progress(2, 2, 'done');
-      return { kind: 'completed', value: 'progressed' };
+    execute: async (_input, { mcp }) => {
+      await mcp!.progress!({ progress: 1, total: 2, message: 'half' });
+      await mcp!.progress!({ progress: 2, total: 2, message: 'done' });
+      return 'progressed';
     },
   }),
 });
@@ -369,9 +368,12 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
       );
     });
 
-    it('exposes no legacy transport entry points or options', () => {
-      expect(server).not.toHaveProperty('startSSE');
-      expect(server).not.toHaveProperty('startHonoSSE');
+    it('exposes no legacy transport entry points or options', async () => {
+      // The 1.x entry points stay callable on the base class but are not served here.
+      await expect(server.startSSE({} as never)).rejects.toThrow(/removed in MCP 2026-07-28\); use startHTTP instead/);
+      await expect(server.startHonoSSE({} as never)).rejects.toThrow(
+        /removed in MCP 2026-07-28\); use startHTTP instead/,
+      );
       expect(server).not.toHaveProperty('handleServerlessRequest');
       expect(server).not.toHaveProperty('elicitation');
       expect(server).not.toHaveProperty('sendLoggingMessage');

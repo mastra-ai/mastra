@@ -2,7 +2,6 @@
  * @license Mastra Enterprise License - see ee/LICENSE
  */
 import { FGADeniedError, MastraFGAPermissions } from '@mastra/core/auth/ee';
-import { createMCPTool } from '@mastra/core/mcp';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import type { AuthInfo } from '@modelcontextprotocol/server';
@@ -16,7 +15,7 @@ vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
 
 /**
  * FGA authorization on MCP tool listing and execution. With an FGA provider on the
- * Mastra instance every tools/list, tools/call (native and business, on every
+ * Mastra instance every tools/list, tools/call (on every
  * continuation round) and REST execution is checked; without a user it fails closed.
  */
 function mockMastra(fga?: unknown) {
@@ -64,12 +63,12 @@ function makeServer(config: Partial<MCPServerConfig> = {}) {
         outputSchema: z.object({ output: z.string() }),
         execute,
       }),
-      native: createMCPTool({
+      native: createTool({
         id: 'native',
-        description: 'A native tool',
+        description: 'A second tool',
         inputSchema: z.object({}),
         outputSchema: z.string(),
-        execute: async () => ({ kind: 'completed', value: 'native ran' }),
+        execute: async () => 'native ran',
       }),
     },
     ...config,

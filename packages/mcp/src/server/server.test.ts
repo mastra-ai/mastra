@@ -128,10 +128,8 @@ describe('MCPServer', () => {
       });
 
       const requestContext = new RequestContext();
-      const result = (await server.executeTool('ask_helper', { message: 'Hello' }, { requestContext })) as {
-        text: string;
-      };
-      expect(result.text).toBe('generated');
+      const result = await server.executeTool('ask_helper', { message: 'Hello' }, { requestContext });
+      expect(result).toMatchObject({ status: 'completed', output: { text: 'generated' } });
       expect(generate).toHaveBeenCalledWith('Hello', expect.objectContaining({ requestContext }));
     });
 
@@ -163,9 +161,8 @@ describe('MCPServer', () => {
         toolType: 'workflow',
         inputSchema: { type: 'object', properties: { n: { type: 'number' } } },
       });
-      const result = (await server.executeTool('run_doubler', { n: 21 })) as { status: string; result: unknown };
-      expect(result.status).toBe('success');
-      expect(result.result).toEqual({ doubled: 42 });
+      const result = await server.executeTool('run_doubler', { n: 21 });
+      expect(result).toMatchObject({ status: 'completed', output: { status: 'success', result: { doubled: 42 } } });
     });
 
     it('requires descriptions and lets explicit tools win name collisions', () => {
@@ -189,7 +186,7 @@ describe('MCPServer', () => {
         tools: { ask_a: explicit },
         agents: { a: createMockAgent('A', 'Described') },
       });
-      expect(server.tools().ask_a).toBe(explicit);
+      expect(server.tools().ask_a!.description).toBe('Explicit');
     });
   });
 

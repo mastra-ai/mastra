@@ -1,24 +1,33 @@
-import { MCPServerBaseV2 } from '@mastra/core/mcp';
-import type { MCPToolInfoV2, ServerDetailInfo, ServerInfo } from '@mastra/core/mcp';
-import type { RequestContext } from '@mastra/core/request-context';
+import type { ToolsInput } from '@mastra/core/agent';
+import { MCPServerBase } from '@mastra/core/mcp';
+import type { MCPToolExecutionResultV2, MCPToolType, ServerDetailInfo, ServerInfo } from '@mastra/core/mcp';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/core/schema';
 import { noopObserve } from '@mastra/core/tools';
 
 import type { InternalMastraMCPClient } from './client';
 
+type ToolInfo = {
+  name: string;
+  description?: string;
+  inputSchema: unknown;
+  outputSchema?: unknown;
+  toolType?: MCPToolType;
+  _meta?: Record<string, unknown>;
+};
 
 /**
- * Wraps a single MCPClient server connection as an `MCPServerBaseV2` so external
+ * Wraps a single MCPClient server connection as an `MCPServerBase` so external
  * (non-Mastra) MCP servers connected through MCPClient can be registered in Mastra's
  * `mcpServers` config and appear in Studio alongside local MCPServer instances.
  *
  * Tool and resource operations are delegated lazily to the underlying connection.
  * The proxy has no transport of its own: it is not served over stdio or HTTP.
  */
-export class MCPClientServerProxy extends MCPServerBaseV2 {
+export class MCPClientServerProxy extends MCPServerBase {
+  override readonly mcpVersion = 2 as const;
   private clientGetter: () => Promise<InternalMastraMCPClient>;
   private cachedClient: InternalMastraMCPClient | null = null;
-  private cachedToolList: { tools: MCPToolInfoV2[] } | null = null;
+  private cachedToolList: { tools: ToolInfo[] } | null = null;
 
   constructor(
     config: { name: string; version?: string; id?: string; description?: string },
@@ -32,6 +41,11 @@ export class MCPClientServerProxy extends MCPServerBaseV2 {
       tools: {},
     });
     this.clientGetter = clientGetter;
+  }
+
+  /** The remote catalogue is fetched lazily; nothing is converted locally. */
+  convertTools(_tools: ToolsInput) {
+    return {};
   }
 
   private async getClient(): Promise<InternalMastraMCPClient> {
@@ -48,14 +62,13 @@ export class MCPClientServerProxy extends MCPServerBaseV2 {
     return (schema as { jsonSchema?: unknown } | undefined)?.jsonSchema ?? schema;
   }
 
-  private async fetchToolList(): Promise<{ tools: MCPToolInfoV2[] }> {
+  private async fetchToolList(): Promise<{ tools: ToolInfo[] }> {
     if (this.cachedToolList) return this.cachedToolList;
     const client = await this.getClient();
     const tools = await client.tools();
     this.cachedToolList = {
       tools: Object.entries(tools).map(([toolName, tool]) => ({
-        id: toolName,
-        name: tool.id || toolName,
+        name: toolName,
         description: tool.description,
         inputSchema: this.convertSchema(tool.inputSchema),
         outputSchema: this.convertSchema(tool.outputSchema),
@@ -66,22 +79,22 @@ export class MCPClientServerProxy extends MCPServerBaseV2 {
     return this.cachedToolList;
   }
 
-  public getToolListInfo(): { tools: MCPToolInfoV2[] } | Promise<{ tools: MCPToolInfoV2[] }> {
+  public getToolListInfo(): { tools: ToolInfo[] } | Promise<{ tools: ToolInfo[] }> {
     if (this.cachedToolList) return this.cachedToolList;
     return this.fetchToolList();
   }
 
-  public getToolInfo(toolId: string): MCPToolInfoV2 | undefined | Promise<MCPToolInfoV2 | undefined> {
-    const find = (list: { tools: MCPToolInfoV2[] }) => list.tools.find(t => t.id === toolId || t.name === toolId);
+  public getToolInfo(toolId: string): ToolInfo | undefined | Promise<ToolInfo | undefined> {
+    const find = (list: { tools: ToolInfo[] }) => list.tools.find(t => t.name === toolId);
     if (this.cachedToolList) return find(this.cachedToolList);
     return this.fetchToolList().then(find);
   }
 
-  public override async executeTool(
+  public async executeTool(
     toolId: string,
     input: unknown,
-    context?: { requestContext?: RequestContext; abortSignal?: AbortSignal },
-  ): Promise<unknown> {
+    context: Parameters<MCPServerBase['executeTool']>[2] = {},
+  ): Promise<MCPToolExecutionResultV2> {
     const client = await this.getClient();
     const tools = await client.tools();
     const tool = tools[toolId];
@@ -91,11 +104,8 @@ export class MCPClientServerProxy extends MCPServerBaseV2 {
     if (!tool.execute) {
       throw new Error(`Tool '${toolId}' on remote MCP server '${this.name}' has no execute method`);
     }
-    return tool.execute(input, {
-      requestContext: context?.requestContext,
-      abortSignal: context?.abortSignal,
-      observe: noopObserve,
-    });
+    const output = await tool.execute(input, { requestContext: context.requestContext, observe: noopObserve });
+    return { status: 'completed', output };
   }
 
   public async listResources(): Promise<{

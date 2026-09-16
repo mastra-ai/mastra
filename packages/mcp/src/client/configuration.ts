@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Stream } from 'node:stream';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { MCPServerBaseV2 } from '@mastra/core/mcp';
+import type { MCPServerBase } from '@mastra/core/mcp';
 import type { Tool } from '@mastra/core/tools';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/client';
 import type {
@@ -1368,7 +1368,7 @@ To fix this you have three different options:
   }
 
   /**
-   * Creates `MCPServerBaseV2` proxy objects for each server connection in this
+   * Creates `MCPServerBase` proxy objects for each server connection in this
    * MCPClient. The returned record can be spread directly into Mastra's
    * `mcpServers` config so that external (non-Mastra) servers appear in Studio
    * alongside local MCPServer instances.
@@ -1390,8 +1390,8 @@ To fix this you have three different options:
    * });
    * ```
    */
-  public toMCPServerProxies(): Record<string, MCPServerBaseV2> {
-    const proxies: Record<string, MCPServerBaseV2> = {};
+  public toMCPServerProxies(): Record<string, MCPServerBase> {
+    const proxies: Record<string, MCPServerBase> = {};
     for (const serverName of Object.keys(this.serverConfigs)) {
       proxies[serverName] = new MCPClientServerProxy({ name: serverName, id: serverName }, () =>
         this.getConnectedClientForServer(serverName),

@@ -1,5 +1,5 @@
+import type { ToolsInput } from '@mastra/core/agent';
 import type { IMastraLogger } from '@mastra/core/logger';
-import type { MCPServerToolsV2 } from '@mastra/core/mcp';
 import type { ServerNotifier } from '@modelcontextprotocol/server';
 
 interface ActionDependencies {
@@ -12,12 +12,12 @@ interface ActionDependencies {
 export class ServerToolActions {
   constructor(
     private readonly deps: ActionDependencies & {
-      addTools: (tools: MCPServerToolsV2) => void;
+      addTools: (tools: ToolsInput) => void;
       removeTools: (toolIds: string[]) => string[];
     },
   ) {}
 
-  async add(tools: MCPServerToolsV2): Promise<void> {
+  async add(tools: ToolsInput): Promise<void> {
     this.deps.addTools(tools);
     await this.notifyListChanged();
   }
