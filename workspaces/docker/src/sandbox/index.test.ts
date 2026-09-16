@@ -631,6 +631,23 @@ describe('DockerSandbox', () => {
       expect(sandbox.status).toBe('running');
     });
 
+    it('adopts the reconnected container working directory when none was given', async () => {
+      mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'existing-container-id',
+        State: { Status: 'running', Running: true },
+        Config: { WorkingDir: '/workspace/repo' },
+      });
+
+      const sandbox = new DockerSandbox({ id: 'existing-sandbox' });
+      await sandbox._start();
+      expect(sandbox.workingDirectory).toBe('/workspace/repo');
+
+      const explicit = new DockerSandbox({ id: 'existing-sandbox', workingDirectory: '/custom' });
+      await explicit._start();
+      expect(explicit.workingDirectory).toBe('/custom');
+    });
+
     it('should warn when requested hardening options differ on reconnect', async () => {
       mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
       mockContainer.inspect.mockResolvedValue({

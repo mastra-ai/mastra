@@ -34,7 +34,7 @@ import { DockerTemplate } from './template';
 
 const execFileAsync = promisify(execFile);
 
-/** Env var the build's clone reads the credential from (see `gitAuthFlag` in `repoCloneCommand`). */
+/** Env var the build's clone reads the credential from (see `cloneFull`). */
 const BUILD_TOKEN_ENV = 'GH_TOKEN';
 const DEFAULT_BASE_IMAGE = 'node:22-slim';
 const DEFAULT_WORKING_DIRECTORY = '/workspace';
@@ -121,7 +121,7 @@ async function resolveRepoTemplate(
   options: DockerRepoTemplateOptions,
   workingDirectory: string,
 ): Promise<DockerTemplate> {
-  const access = await options.getRepositoryAccess!().catch(() => undefined);
+  const access = await options.getRepositoryAccess!();
   const cloneUrl = access?.cloneUrl;
   if (!cloneUrl) {
     throw new Error('Repo template has no clone URL: repository access returned none.');
@@ -218,13 +218,19 @@ export async function resolveHead(
 ): Promise<string | undefined> {
   if (ref && SHA_PATTERN.test(ref)) return ref.toLowerCase();
   try {
-    const authArgs = token
-      ? ['-c', `http.extraheader=AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`]
-      : [];
+    // The credential goes through GIT_CONFIG_* (git >= 2.31) rather than `-c`
+    // so it never appears in the process argv, which other local users can read.
+    const authEnv = token
+      ? {
+          GIT_CONFIG_COUNT: '1',
+          GIT_CONFIG_KEY_0: 'http.extraheader',
+          GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`,
+        }
+      : {};
     // `--` keeps even a hostile URL from being read as an option.
-    const { stdout } = await execFileAsync('git', [...authArgs, 'ls-remote', '--', cloneUrl, ref ?? 'HEAD'], {
+    const { stdout } = await execFileAsync('git', ['ls-remote', '--', cloneUrl, ref ?? 'HEAD'], {
       timeout: 10_000,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      env: { ...process.env, ...authEnv, GIT_TERMINAL_PROMPT: '0' },
     });
     // Prefer the peeled tag object (`refs/tags/x^{}`) when present.
     const lines = stdout
@@ -240,6 +246,7 @@ export async function resolveHead(
 }
 
 function cloneFull({ cloneUrl, destination, tokenEnv }: { cloneUrl: string; destination: string; tokenEnv?: string }) {
+  // Mirrors `repoCloneCommand` from @internal/workspace, minus the shallow flags.
   const auth = tokenEnv
     ? `-c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$${tokenEnv}" | base64 -w0)" `
     : '';

@@ -107,6 +107,7 @@ export class DockerTemplate {
   readonly #secrets: DockerTemplateSecrets | undefined;
   #docker: Docker | undefined;
   #built = false;
+  #inFlight: Promise<DockerTemplateBuildResult> | undefined;
 
   constructor(options: DockerTemplateOptions = {}, state?: DockerTemplateState) {
     this.#baseImage = state ? state.baseImage : validateString(options.baseImage ?? 'node:22-slim', 'baseImage');
@@ -255,6 +256,17 @@ export class DockerTemplate {
    * `options.secrets`, the template's `secrets` option, or `process.env`.
    */
   async build(options: DockerTemplateBuildOptions = {}): Promise<DockerTemplateBuildResult> {
+    // Many sandboxes starting concurrently from one template must share a
+    // single `docker build` rather than racing to build the same tag.
+    if (!this.#inFlight) {
+      this.#inFlight = this.#build(options).finally(() => {
+        this.#inFlight = undefined;
+      });
+    }
+    return this.#inFlight;
+  }
+
+  async #build(options: DockerTemplateBuildOptions): Promise<DockerTemplateBuildResult> {
     const docker = this.#getDocker();
     const tag = this.templateId;
 

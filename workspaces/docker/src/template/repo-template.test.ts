@@ -5,7 +5,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SETUP_MARKER_PATH } from '@internal/workspace';
@@ -97,6 +97,15 @@ describe('createDockerRepoTemplate', () => {
     await expect(resolver()).rejects.toThrow(/Invalid cloneUrl/);
   });
 
+  it('propagates getRepositoryAccess failures instead of masking them', async () => {
+    const resolver = createDockerRepoTemplate({
+      getRepositoryAccess: async () => {
+        throw new Error('token exchange failed');
+      },
+    })!;
+    await expect(resolver()).rejects.toThrow(/token exchange failed/);
+  });
+
   it('throws when access resolves to no clone URL', async () => {
     const resolver = createDockerRepoTemplate({ getRepositoryAccess: async () => undefined })!;
     await expect(resolver()).rejects.toThrow(/no clone URL/);
@@ -134,6 +143,30 @@ describe('createDockerRepoTemplate', () => {
       await expect(resolveHead(bare, 'v1', undefined)).resolves.toBe(headSha);
       await expect(resolveHead(bare, 'nope', undefined)).resolves.toBeUndefined();
       await expect(resolveHead(join(dir, 'missing.git'), undefined, undefined)).resolves.toBeUndefined();
+    });
+
+    it('passes the token to ls-remote through GIT_CONFIG_* env, never argv', async () => {
+      const binDir = join(dir, 'bin');
+      mkdirSync(binDir, { recursive: true });
+      const log = join(dir, 'git.log');
+      writeFileSync(
+        join(binDir, 'git'),
+        `#!/bin/sh\nprintf 'ARGV=%s\\n' "$*" >> '${log}'\nprintf 'CFG=%s\\n' "$GIT_CONFIG_VALUE_0" >> '${log}'\nprintf '${headSha}\\tHEAD\\n'\n`,
+        { mode: 0o755 },
+      );
+      const prevPath = process.env.PATH;
+      process.env.PATH = `${binDir}:${prevPath}`;
+      try {
+        await expect(resolveHead('https://example.com/a/b.git', undefined, 'tok-secret')).resolves.toBe(headSha);
+      } finally {
+        process.env.PATH = prevPath;
+      }
+      const recorded = readFileSync(log, 'utf8');
+      const expectedHeader = `AUTHORIZATION: basic ${Buffer.from('x-access-token:tok-secret').toString('base64')}`;
+      expect(recorded).toContain(`CFG=${expectedHeader}`);
+      expect(recorded).toMatch(/ARGV=ls-remote -- https:\/\/example\.com\/a\/b\.git HEAD/);
+      expect(recorded).not.toContain('ARGV=-c');
+      expect(recorded).not.toContain('tok-secret');
     });
 
     it('pins the current head sha into the template so a moved branch rebuilds', async () => {

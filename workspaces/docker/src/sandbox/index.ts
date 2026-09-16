@@ -427,6 +427,14 @@ export class DockerSandbox extends MastraSandbox {
         await this._container.start();
       }
 
+      // The container was created with a working directory (possibly derived
+      // from a template); keep resolving relative paths against it rather than
+      // this instance's default.
+      const reconnectedWorkingDir = info.Config?.WorkingDir;
+      if (!this._workingDirectoryWasSet && reconnectedWorkingDir) {
+        this.setWorkingDirectory(reconnectedWorkingDir);
+      }
+
       // Provide container reference to process manager
       this.processes.setContainer(this._container);
 

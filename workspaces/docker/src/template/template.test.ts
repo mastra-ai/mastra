@@ -133,6 +133,14 @@ describe('DockerTemplate.build', () => {
     expect(opts.t).toBe(template.templateId);
   });
 
+  it('shares one in-flight build across concurrent callers', async () => {
+    mockImage.inspect.mockRejectedValue(new Error('no such image'));
+    const template = new DockerTemplate().runCmd('echo hi');
+    const results = await Promise.all([template.build(), template.build(), template.build()]);
+    expect(results.every(r => r.status === 'ready')).toBe(true);
+    expect(mockDocker.buildImage).toHaveBeenCalledTimes(1);
+  });
+
   it('rebuilds when force is set', async () => {
     const template = new DockerTemplate().runCmd('echo hi');
     await template.build({ force: true });
