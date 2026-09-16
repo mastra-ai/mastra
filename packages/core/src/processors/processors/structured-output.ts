@@ -164,9 +164,17 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     if (requestState.isStructuringAgentStreamStarted) return;
     requestState.isStructuringAgentStreamStarted = true;
     try {
+      const attemptParts = streamParts.slice(requestState.streamPartsStartIndex);
+      // On a retry the message list's response messages still include the rejected attempt,
+      // so feed only the current attempt's own output instead.
+      const responseContext: MessageInput[] =
+        requestState.streamPartsStartIndex > 0
+          ? [{ role: 'assistant', content: [{ type: 'text', text: this.buildStructuringPrompt(attemptParts) }] }]
+          : messageList?.get?.response?.db() || [];
+
       const structuringAgentStream = await this.getStructuringStream(
-        streamParts.slice(requestState.streamPartsStartIndex),
-        requestState.streamPartsStartIndex > 0,
+        attemptParts,
+        responseContext,
         requestContext,
         messageList,
         observabilityContext,
@@ -233,7 +241,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
    */
   private async getStructuringStream(
     streamParts: ChunkType[],
-    currentAttemptOnly: boolean,
+    responseContext: MessageInput[],
     requestContext?: RequestContext,
     messageList?: ProcessOutputStreamArgs['messageList'],
     observabilityContext?: ObservabilityContext,
@@ -278,15 +286,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         ],
       };
 
-      const currentAttemptMessage: MessageInput = {
-        role: 'assistant',
-        content: [{ type: 'text', text: this.buildStructuringPrompt(streamParts) }],
-      };
-      const messages: MessageListInput = [
-        ...(messageList?.get?.input?.db() || []),
-        ...(currentAttemptOnly ? [currentAttemptMessage] : messageList?.get?.response?.db() || []),
-        promptMessage,
-      ];
+      const messages: MessageListInput = [...(messageList?.get?.input?.db() || []), ...responseContext, promptMessage];
 
       const structuringRequestContext = requestContext ? new RequestContext(requestContext.entries()) : undefined;
 
