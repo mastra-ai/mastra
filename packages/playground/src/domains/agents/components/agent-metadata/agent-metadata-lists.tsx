@@ -9,6 +9,9 @@ import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from
 import { useScorers } from '@/domains/scores';
 import { useLinkComponent } from '@/lib/framework';
 
+const metadataLinkClassName =
+  'pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center pointer-coarse:justify-center';
+
 export interface AgentMetadataNetworkListProps {
   agents: { id: string; name: string }[];
 }
@@ -25,7 +28,7 @@ export const AgentMetadataNetworkList = ({ agents }: AgentMetadataNetworkListPro
       items={agents}
       getKey={agent => agent.id}
       renderItem={agent => (
-        <Link href={paths.agentLink(agent.id)} data-testid="agent-badge">
+        <Link href={paths.agentLink(agent.id)} data-testid="agent-badge" className={metadataLinkClassName}>
           <Badge>{agent.name}</Badge>
         </Link>
       )}
@@ -50,7 +53,7 @@ export const AgentMetadataToolList = ({ tools, agentId }: AgentMetadataToolListP
       items={tools}
       getKey={tool => tool.id}
       renderItem={tool => (
-        <Link href={paths.agentToolLink(agentId, tool.id)} data-testid="tool-badge">
+        <Link href={paths.agentToolLink(agentId, tool.id)} data-testid="tool-badge" className={metadataLinkClassName}>
           <Badge>{tool.id}</Badge>
         </Link>
       )}
@@ -74,7 +77,7 @@ export const AgentMetadataWorkflowList = ({ workflows }: AgentMetadataWorkflowLi
       items={workflows}
       getKey={workflow => workflow.id}
       renderItem={workflow => (
-        <Link href={paths.workflowLink(workflow.id)} data-testid="workflow-badge">
+        <Link href={paths.workflowLink(workflow.id)} data-testid="workflow-badge" className={metadataLinkClassName}>
           <Badge>{workflow.name}</Badge>
         </Link>
       )}
@@ -115,7 +118,7 @@ export const AgentMetadataScorerList = ({ entityId, entityType }: AgentMetadataS
       items={scorerList}
       getKey={scorer => scorer.id}
       renderItem={scorer => (
-        <Link href={paths.scorerLink(scorer.id)} data-testid="scorer-badge">
+        <Link href={paths.scorerLink(scorer.id)} data-testid="scorer-badge" className={metadataLinkClassName}>
           <Badge>{scorer.scorer.config.name}</Badge>
         </Link>
       )}
@@ -162,6 +165,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
                 <Link
                   href={paths.agentSkillLink(agentId, skill.name, skill.path, workspaceId)}
                   data-testid="skill-badge"
+                  className={metadataLinkClassName}
                 >
                   {badge}
                 </Link>
@@ -170,7 +174,11 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
             </Tooltip>
           </TooltipProvider>
         ) : (
-          <Link href={paths.agentSkillLink(agentId, skill.name, skill.path, workspaceId)} data-testid="skill-badge">
+          <Link
+            href={paths.agentSkillLink(agentId, skill.name, skill.path, workspaceId)}
+            data-testid="skill-badge"
+            className={metadataLinkClassName}
+          >
             {badge}
           </Link>
         );
@@ -244,14 +252,22 @@ export const AgentMetadataCombinedProcessorList = ({
     <AgentMetadataList>
       {inputProcessors.length > 0 && inputProcessorId && (
         <AgentMetadataListItem>
-          <Link href={`${paths.workflowLink(inputProcessorId)}/graph`} data-testid="processor-badge">
+          <Link
+            href={`${paths.workflowLink(inputProcessorId)}/graph`}
+            data-testid="processor-badge"
+            className={metadataLinkClassName}
+          >
             <Badge>input</Badge>
           </Link>
         </AgentMetadataListItem>
       )}
       {outputProcessors.length > 0 && outputProcessorId && (
         <AgentMetadataListItem>
-          <Link href={`${paths.workflowLink(outputProcessorId)}/graph`} data-testid="processor-badge">
+          <Link
+            href={`${paths.workflowLink(outputProcessorId)}/graph`}
+            data-testid="processor-badge"
+            className={metadataLinkClassName}
+          >
             <Badge>output</Badge>
           </Link>
         </AgentMetadataListItem>

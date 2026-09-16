@@ -70,7 +70,7 @@ export const AgentMetadataSection = ({
                     aria-label={hint.title}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="opacity-0 group-focus-within/metadata:opacity-100 group-hover/metadata:opacity-100 pointer-coarse:opacity-100"
+                    className="opacity-0 group-focus-within/metadata:opacity-100 group-hover/metadata:opacity-100 pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center pointer-coarse:justify-center pointer-coarse:opacity-100"
                   >
                     <Icon className="text-neutral3" size="sm">
                       {hint.icon || <InfoIcon />}

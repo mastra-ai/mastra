@@ -11,7 +11,8 @@ import { AgentMetadataSection } from '../agent-metadata/agent-metadata-section';
 import { normalizePromptIndentation } from './normalize-prompt-indentation';
 import { cn } from '@/lib/utils';
 
-const promptTabClassName = 'h-form-sm px-1 text-ui-sm font-medium underline-offset-4 data-[active]:underline';
+const promptTabClassName =
+  'h-form-sm px-1 text-ui-sm font-medium underline-offset-4 data-[active]:underline pointer-coarse:min-h-11 pointer-coarse:min-w-11';
 
 export function AgentSystemPrompt({ instructions, children }: { instructions: string; children?: ReactNode }) {
   const [activeTab, setActiveTab] = useState('read');
@@ -41,7 +42,7 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
         }
       >
         {hasInstructions ? (
-          <div className="group/prompt relative min-w-0 pointer-coarse:pt-8">
+          <div className="group/prompt relative min-w-0 pointer-coarse:pt-12">
             <div className="bg-surface2 absolute top-0 right-0 z-10 flex items-center gap-1 rounded-md opacity-0 group-focus-within/prompt:opacity-100 group-hover/prompt:opacity-100 pointer-coarse:opacity-100">
               {activeTab === 'source' && (
                 <Button
@@ -50,13 +51,19 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
                   aria-label="Wrap lines"
                   aria-pressed={wrapSource}
                   tooltip="Wrap lines"
-                  className="aria-pressed:bg-surface3 aria-pressed:text-neutral5"
+                  className="aria-pressed:bg-surface3 aria-pressed:text-neutral5 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                   onClick={() => setWrapSource(wrapped => !wrapped)}
                 >
                   <WrapText />
                 </Button>
               )}
-              <CopyButton content={instructions} tooltip="Copy system prompt" variant="ghost" size="icon-sm" />
+              <CopyButton
+                content={instructions}
+                tooltip="Copy system prompt"
+                variant="ghost"
+                size="icon-sm"
+                className="pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+              />
             </div>
             <TabContent value="read" className="overflow-visible py-0">
               <MarkdownRenderer>{normalizePromptIndentation(instructions)}</MarkdownRenderer>
