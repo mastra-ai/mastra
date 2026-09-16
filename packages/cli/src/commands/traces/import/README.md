@@ -80,8 +80,8 @@ report, and removes the prepared trace file.
 `mastra traces import langfuse` connects these layers into the customer-facing
 workflow. Langfuse credentials come from `LANGFUSE_PUBLIC_KEY`,
 `LANGFUSE_SECRET_KEY`, and optional `LANGFUSE_BASE_URL`. The destination uses
-the normal Mastra login or `MASTRA_API_TOKEN`, plus `--project`,
-`MASTRA_PROJECT_ID`, or the linked project configuration.
+the normal Mastra login, or `MASTRA_API_TOKEN` together with `MASTRA_ORG_ID`,
+plus `--project`, `MASTRA_PROJECT_ID`, or the linked project configuration.
 
 The command prepares a fixed window, displays counts before upload, asks for
 confirmation, uploads pending batches, verifies a sample, and writes a report.

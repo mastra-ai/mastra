@@ -6,6 +6,13 @@ import { runTraceImport, resolveTraceImportWindow, type TraceImportActionDepende
 import type { TraceImportProvider } from './provider.js';
 import type { PreparedTraceBatch, TraceImportSpan, TraceImportTrace } from './types.js';
 
+vi.mock('../../auth/credentials.js', () => ({
+  getCurrentOrgId: vi.fn(),
+  getToken: vi.fn(),
+}));
+
+const { getCurrentOrgId, getToken } = await import('../../auth/credentials.js');
+
 const NOW = new Date('2026-09-11T12:00:00.000Z');
 const temporaryDirectories: string[] = [];
 
@@ -123,6 +130,23 @@ describe('resolveTraceImportWindow', () => {
 });
 
 describe('runTraceImport', () => {
+  it('requires an organization when authenticating with MASTRA_API_TOKEN', async () => {
+    const previousToken = process.env.MASTRA_API_TOKEN;
+    process.env.MASTRA_API_TOKEN = 'headless-token';
+    vi.mocked(getToken).mockResolvedValue('headless-token');
+    vi.mocked(getCurrentOrgId).mockResolvedValue('saved-login-org');
+
+    try {
+      await expect(runTraceImport({ provider: 'langfuse', dryRun: true }, { ui: ui() })).rejects.toThrow(
+        'MASTRA_ORG_ID is required when MASTRA_API_TOKEN is set.',
+      );
+      expect(getCurrentOrgId).not.toHaveBeenCalled();
+    } finally {
+      if (previousToken === undefined) delete process.env.MASTRA_API_TOKEN;
+      else process.env.MASTRA_API_TOKEN = previousToken;
+    }
+  });
+
   it('prepares a dry run without creating an upload target', async () => {
     const createTarget = vi.fn(() => target());
     const deps = await dependencies({ createTarget });

@@ -80,8 +80,14 @@ function defaultUi(): TraceImportUi {
 
 async function defaultResolveDestination(project: string | undefined): Promise<PlatformDestination> {
   const token = await getToken();
-  const orgId = process.env.MASTRA_ORG_ID ?? (await getCurrentOrgId());
-  if (!orgId) throw new Error('No organization selected. Run: mastra auth orgs switch');
+  const usesEnvironmentToken = Boolean(process.env.MASTRA_API_TOKEN);
+  const orgId = usesEnvironmentToken ? process.env.MASTRA_ORG_ID : await getCurrentOrgId();
+  if (!orgId) {
+    if (usesEnvironmentToken) {
+      throw new Error('MASTRA_ORG_ID is required when MASTRA_API_TOKEN is set.');
+    }
+    throw new Error('No organization selected. Run: mastra auth orgs switch');
+  }
   const resolved = await resolveProject(token, orgId, project);
   return { accessToken: token, projectId: resolved.id, projectName: resolved.name };
 }
