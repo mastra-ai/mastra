@@ -3,6 +3,7 @@ import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.
 export type WorkItemSource =
   | 'github-issue'
   | 'github-pr'
+  | 'gitlab-issue'
   | 'linear-issue'
   | 'jira-issue'
   | 'incidentio-follow-up'
@@ -31,10 +32,12 @@ export function needsApproval(item: {
 export function workItemSource(source: ExternalWorkItemSource | null): WorkItemSource {
   if (!source) return 'manual';
   if (source.integrationId === 'linear') return 'linear-issue';
+  if (source.integrationId === 'gitlab' && source.type === 'issue') return 'gitlab-issue';
   if (source.integrationId === 'jira') return 'jira-issue';
   if (source.integrationId === 'incidentio') return 'incidentio-follow-up';
-  // Only GitHub, Linear, and Jira have provider-specific rules; anything else
-  // (a Slack thread, say) is a plain work item, not a mislabeled GitHub issue.
+  // Only GitHub, GitLab, Linear, Jira, and incident.io have provider-specific
+  // rules; anything else (a Slack thread, say) is a plain work item, not a
+  // mislabeled GitHub issue.
   if (source.integrationId !== 'github') return 'manual';
   return source.type === 'pull-request' ? 'github-pr' : 'github-issue';
 }
@@ -126,6 +129,7 @@ export type FactoryRuleBoard = (typeof FACTORY_RULE_BOARDS)[number] | (string & 
 export const FACTORY_RULE_SOURCES = [
   'issue',
   'pullRequest',
+  'gitlabIssue',
   'linearIssue',
   'jiraIssue',
   'incidentioFollowUp',
@@ -523,6 +527,8 @@ export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRul
       return 'issue';
     case 'github-pr':
       return 'pullRequest';
+    case 'gitlab-issue':
+      return 'gitlabIssue';
     case 'linear-issue':
       return 'linearIssue';
     case 'jira-issue':

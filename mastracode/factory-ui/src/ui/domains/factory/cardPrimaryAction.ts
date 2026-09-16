@@ -43,7 +43,12 @@ export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMov
   if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [RE_REVIEW] : [];
   if (columnStage === 'review' && item.source !== 'github-pr') return [];
   if (item.source === 'github-issue') return needsApproval(item) ? [PREPARE_APPROVAL] : [INVESTIGATE, BUILD];
-  if (item.source === 'linear-issue' || item.source === 'jira-issue' || item.source === 'incidentio-follow-up') {
+  if (
+    item.source === 'gitlab-issue' ||
+    item.source === 'linear-issue' ||
+    item.source === 'jira-issue' ||
+    item.source === 'incidentio-follow-up'
+  ) {
     return [INVESTIGATE, BUILD];
   }
   return item.source === 'github-pr' ? [REVIEW] : [];
@@ -165,8 +170,7 @@ export function cardPrimaryAction({
 }
 
 export type CardAction = { label: string; ariaLabel?: string; disabled?: boolean; urgent?: boolean } & (
-  | { href: string }
-  | { start: () => void }
+  { href: string } | { start: () => void }
 );
 
 export function sessionLink(href: string | undefined): CardAction | undefined {

@@ -9,6 +9,7 @@ describe('workItemBranchSource', () => {
     expect(workItemBranchSource({ integrationId: 'github', type: 'pull-request', externalId: '2' })).toBe('github-pr');
     expect(workItemBranchSource({ integrationId: 'linear', type: 'issue', externalId: '3' })).toBe('linear-issue');
     expect(workItemBranchSource({ integrationId: 'jira', type: 'issue', externalId: '4' })).toBe('jira-issue');
+    expect(workItemBranchSource({ integrationId: 'gitlab', type: 'issue', externalId: '4' })).toBe('gitlab-issue');
     expect(workItemBranchSource({ integrationId: 'slack', type: 'slack-thread', externalId: '5' })).toBe('manual');
   });
 });
@@ -43,6 +44,13 @@ describe('workItemBranch', () => {
     expect(workItemBranch({ id, source: 'jira-issue', metadata: { identifier: 'OPS-17' } })).toBe(
       'factory/jira-ops-17',
     );
+  });
+
+  it('sanitizes the GitLab identifier into a bounded branch name', () => {
+    expect(workItemBranch({ id, source: 'gitlab-issue', metadata: { identifier: 'Acme/App #42' } })).toBe(
+      'factory/gitlab-acme-app-42',
+    );
+    expect(workItemBranch({ id, source: 'gitlab-issue', metadata: { identifier: '  ' } })).toBe(`factory/item-${id}`);
   });
 
   it('falls back when the linear identifier is empty or whitespace', () => {

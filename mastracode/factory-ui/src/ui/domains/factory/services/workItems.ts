@@ -13,6 +13,7 @@ import { requestJson } from './request';
 export type WorkItemSource =
   | 'github-issue'
   | 'github-pr'
+  | 'gitlab-issue'
   | 'linear-issue'
   | 'jira-issue'
   | 'incidentio-follow-up'
@@ -117,6 +118,7 @@ function sourceFromExternalSource(source: ExternalWorkItemSource | null): WorkIt
   if (!source) return 'manual';
   if (source.integrationId === 'github' && source.type === 'issue') return 'github-issue';
   if (source.integrationId === 'github' && source.type === 'pull-request') return 'github-pr';
+  if (source.integrationId === 'gitlab' && source.type === 'issue') return 'gitlab-issue';
   if (source.integrationId === 'linear' && source.type === 'issue') return 'linear-issue';
   if (source.integrationId === 'jira' && source.type === 'issue') return 'jira-issue';
   if (source.integrationId === 'incidentio' && source.type === 'issue') return 'incidentio-follow-up';
@@ -132,6 +134,8 @@ function externalSourceTarget(
       return { integrationId: 'github', type: 'issue' };
     case 'github-pr':
       return { integrationId: 'github', type: 'pull-request' };
+    case 'gitlab-issue':
+      return { integrationId: 'gitlab', type: 'issue' };
     case 'linear-issue':
       return { integrationId: 'linear', type: 'issue' };
     case 'jira-issue':

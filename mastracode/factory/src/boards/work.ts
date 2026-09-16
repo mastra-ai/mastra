@@ -13,6 +13,10 @@ function sourceIdentifier(item: FactoryRuleItemContext): string | undefined {
 
 function sourceRef(item: FactoryRuleItemContext): string {
   const link = item.url ? ` (${item.url})` : '';
+  if (item.source === 'gitlab-issue') {
+    const identifier = linearIdentifier(item);
+    return identifier ? 'GitLab issue ' + identifier + link : 'GitLab issue ' + item.title + link;
+  }
   if (item.source === 'linear-issue') {
     const identifier = sourceIdentifier(item);
     return identifier ? `Linear issue ${identifier}${link}` : `Linear issue ${item.title}${link}`;
@@ -55,6 +59,19 @@ function prepareApproval(context: FactoryStageRuleContext) {
 
 function triageIssueEntry(context: FactoryStageRuleContext) {
   return needsApproval(context.item) ? prepareApproval(context) : invokeIssueInvestigation(context);
+}
+
+const GITLAB_FETCH_HINT =
+  "Start by fetching the issue's full details (description and comments) with the gitlab_get_issue tool.";
+
+function investigateTriagedGitLabIssue(context: FactoryStageRuleContext) {
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: context.ingress.id + ':factory-triage-gitlab',
+    role: 'triage',
+    skillName: 'factory-triage',
+    arguments: GITLAB_FETCH_HINT + '\n\n' + sourceRef(context.item),
+  } as const;
 }
 
 const LINEAR_FETCH_HINT =
@@ -172,6 +189,7 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
       outcomes: allOtherPhases,
       onEnter: {
         issue: triageIssueEntry,
+        gitlabIssue: investigateTriagedGitLabIssue,
         linearIssue: investigateTriagedLinearIssue,
         jiraIssue: investigateTriagedJiraIssue,
         incidentioFollowUp: investigateTriagedIncidentioFollowUp,
@@ -184,6 +202,7 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
       outcomes: allOtherPhases,
       onEnter: {
         issue: planWorkItem,
+        gitlabIssue: planWorkItem,
         linearIssue: planWorkItem,
         jiraIssue: planWorkItem,
         incidentioFollowUp: planWorkItem,
@@ -197,6 +216,7 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
       outcomes: allOtherPhases,
       onEnter: {
         issue: buildWorkItem,
+        gitlabIssue: buildWorkItem,
         linearIssue: buildWorkItem,
         jiraIssue: buildWorkItem,
         incidentioFollowUp: buildWorkItem,

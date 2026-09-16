@@ -8,6 +8,7 @@ import type { ExternalWorkItemSource } from './storage/domains/work-items/base.j
 export type WorkItemBranchSource =
   | 'github-issue'
   | 'github-pr'
+  | 'gitlab-issue'
   | 'linear-issue'
   | 'jira-issue'
   | 'incidentio-follow-up'
@@ -24,9 +25,10 @@ export interface WorkItemBranchInput {
 export function workItemBranchSource(externalSource: ExternalWorkItemSource | null | undefined): WorkItemBranchSource {
   if (!externalSource) return 'manual';
   if (externalSource.integrationId === 'linear') return 'linear-issue';
+  if (externalSource.integrationId === 'gitlab' && externalSource.type === 'issue') return 'gitlab-issue';
   if (externalSource.integrationId === 'jira') return 'jira-issue';
   if (externalSource.integrationId === 'incidentio') return 'incidentio-follow-up';
-  // Only GitHub, Linear, Jira, and incident.io carry provider identities; anything
+  // Only GitHub, GitLab, Linear, Jira, and incident.io carry provider identities; anything
   // else (a Slack thread, say) is a plain work item rather than a mislabeled GitHub issue.
   if (externalSource.integrationId !== 'github') return 'manual';
   return externalSource.type === 'pull-request' ? 'github-pr' : 'github-issue';
@@ -76,6 +78,13 @@ export function workItemBranch(item: WorkItemBranchInput): string {
       const provider = item.source === 'linear-issue' ? 'linear' : item.source === 'jira-issue' ? 'jira' : 'incidentio';
       return `factory/${provider}-${identifier.toLowerCase()}`;
     }
+  }
+  if (item.source === 'gitlab-issue' && typeof metadata.identifier === 'string') {
+    const identifier = metadata.identifier
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, '-');
+    if (identifier) return 'factory/gitlab-' + identifier.slice(0, 80);
   }
   return `factory/item-${item.id}`;
 }

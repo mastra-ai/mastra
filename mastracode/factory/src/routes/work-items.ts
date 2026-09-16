@@ -166,7 +166,11 @@ function summaryRole(boards: BoardRegistry, decision: Record<string, unknown>): 
 function summarySource(decision: Record<string, unknown>): WorkItemSource | null {
   if (decision.type !== 'upsertLinkedWorkItem') return null;
   const source = decision.source;
-  return source === 'github-issue' || source === 'github-pr' || source === 'linear-issue' || source === 'manual'
+  return source === 'github-issue' ||
+    source === 'github-pr' ||
+    source === 'gitlab-issue' ||
+    source === 'linear-issue' ||
+    source === 'manual'
     ? source
     : null;
 }

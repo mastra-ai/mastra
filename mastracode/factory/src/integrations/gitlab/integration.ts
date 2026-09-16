@@ -144,7 +144,12 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {
-    return buildGitLabRoutes({ gitlab: this, auth: ctx.auth, webhookSecret: this.webhookSecret });
+    return buildGitLabRoutes({
+      gitlab: this,
+      auth: ctx.auth,
+      intake: ctx.storage?.intake,
+      webhookSecret: this.webhookSecret,
+    });
   }
 
   async agentTools(args: { requestContext: RequestContext }): Promise<IntegrationTools> {
@@ -225,7 +230,10 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   async #listIssues(input: ListIntakeIssuesInput) {
     const result = await this.#listIssuePage(input.sourceIds, input.cursor, input.labels);
     return {
-      issues: result.issues.map(({ issue, source }) => this.#toIntakeIssue(issue, source.projectPath)),
+      issues: result.issues.map(({ issue, source }) => ({
+        ...this.#toIntakeIssue(issue, source.projectPath),
+        sourceId: encodeSourceId(source),
+      })),
       nextCursor: result.nextCursor,
     };
   }
