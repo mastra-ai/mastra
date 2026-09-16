@@ -315,6 +315,26 @@ describe('execute compact structuredOutput.instructions (issue #23798)', () => {
     expect(promptJson).not.toContain(SENTINEL);
   });
 
+  it("substitutes instructions when 'auto' resolves to injection on a model without native support", async () => {
+    const prompt = await run({
+      runId: 'test-run-23798-auto',
+      messages: [
+        { role: 'system' as const, content: 'Keep this prefix stable.' },
+        { role: 'user' as const, content: [{ type: 'text' as const, text: 'Extract now.' }] },
+      ],
+      structuredOutput: { schema: sentinelSchema, jsonPromptInjection: 'auto', instructions: INSTRUCTIONS },
+    });
+
+    // 'auto' resolves to inline injection when capability data says the model has no native
+    // structured output, so the compact text lands on the latest user message.
+    const promptJson = JSON.stringify(prompt);
+    expect(promptJson).toContain(INSTRUCTIONS);
+    expect(prompt[0]).toEqual({ role: 'system', content: 'Keep this prefix stable.' });
+    expect(promptJson).not.toContain(INLINE_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SYSTEM_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SENTINEL);
+  });
+
   it('creates a system message carrying the instructions when none exists', async () => {
     const prompt = await run({
       runId: 'test-run-23798-system-none',

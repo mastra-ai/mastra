@@ -622,13 +622,39 @@ describe('DurableAgent compact structuredOutput.instructions (issue #23798)', ()
     expect((result.workflowInput as any).options.structuredOutput.instructions).toBe(INSTRUCTIONS);
   });
 
+  it('does not serialize instructions when a separate structuring model is configured', async () => {
+    const baseAgent = new Agent({
+      id: 'durable-instructions-structuring-model',
+      name: 'Durable Instructions Structuring Model',
+      instructions: 'Test serialization',
+      model: createStructuredOutputModel({ __mastra23798Sentinel: 'ok' }) as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const result = await durableAgent.prepare('Extract now.', {
+      structuredOutput: {
+        schema: sentinelSchema,
+        model: createStructuredOutputModel({ __mastra23798Sentinel: 'ok' }) as LanguageModelV2,
+        jsonPromptInjection: 'system',
+        instructions: INSTRUCTIONS,
+      },
+    });
+
+    // The durable path has no separate structuring pass, so it treats every config as direct
+    // injection. Structuring-agent instructions must not leak into the injected prompt as the
+    // sole output guidance; the generated schema instruction is used instead.
+    expect((result.workflowInput as any).options.structuredOutput.instructions).toBeUndefined();
+  });
+
   it('injects compact instructions instead of the schema dump on a durable run (system mode)', async () => {
     const promptJson = await runDurable(
       { schema: sentinelSchema, jsonPromptInjection: 'system', instructions: INSTRUCTIONS },
       'durable-instructions-system',
     );
 
-    expect(promptJson).toContain(INSTRUCTIONS);
+    // Pin the join shape, not just containment: the durable path must produce the same
+    // "<agent instructions>\n\n<compact text>" system message the in-process path pins.
+    expect(promptJson).toContain(`\\n\\n${INSTRUCTIONS}`);
     expect(promptJson).not.toContain(INLINE_SCHEMA_PREFIX);
     expect(promptJson).not.toContain(SYSTEM_SCHEMA_PREFIX);
     expect(promptJson).not.toContain(SENTINEL);

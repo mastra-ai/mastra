@@ -79,7 +79,7 @@ export function resolveJsonPromptInjection(
 type InjectJsonInstructionArgs = Parameters<typeof injectJsonInstructionIntoMessagesV3>[0];
 
 /**
- * Typed V2 wrapper for the provider-utils v4 helper, which only reads and rewrites the
+ * Typed V2 wrapper for the `@ai-sdk/provider-utils-v6` helper, which only reads and rewrites the
  * leading system message's string content — a shape shared by V2 and V3 prompts.
  */
 function injectJsonInstructionIntoMessages(
