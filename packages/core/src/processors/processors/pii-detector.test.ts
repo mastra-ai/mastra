@@ -2295,7 +2295,13 @@ describe('PIIDetector', () => {
           text: JSON.stringify(createMockPIIResult()),
         }),
       });
-      const detector = new PIIDetector({ model, strategy: 'redact', detectionTypes: ['email', 'name'] });
+      const events: any[] = [];
+      const detector = new PIIDetector({
+        model,
+        strategy: 'redact',
+        detectionTypes: ['email', 'name'],
+        onDetection: event => void events.push(event),
+      });
       const state: Record<string, any> = {};
       const finishOne = { type: 'step-finish' as any, payload: { step: 1 }, runId: 'one', from: ChunkFrom.AGENT };
       const finishTwo = { type: 'step-finish' as any, payload: { step: 2 }, runId: 'two', from: ChunkFrom.AGENT };
@@ -2309,7 +2315,12 @@ describe('PIIDetector', () => {
       await detector.processOutputStream({ part: finishOne, streamParts: [], state, abort: vi.fn() as any });
       expect(
         await detector.processOutputStream({
-          part: { type: 'text-delta', payload: { id: 'b', text: 'second' }, runId: 'b', from: ChunkFrom.AGENT },
+          part: {
+            type: 'text-delta',
+            payload: { id: 'b', text: 'secret@example.com' },
+            runId: 'b',
+            from: ChunkFrom.AGENT,
+          },
           streamParts: [],
           state,
           abort: vi.fn() as any,
@@ -2322,8 +2333,12 @@ describe('PIIDetector', () => {
         abort: vi.fn() as any,
       });
 
-      expect(flushed).toMatchObject({ type: 'text-delta', payload: { text: 'second' } });
+      expect(flushed).toMatchObject({ type: 'text-delta', payload: { text: 's****t@*******.com' } });
       expect(state._piiPendingNonText).toEqual([finishTwo]);
+      expect(events.filter(event => event.detectionResult.detections?.length)).toHaveLength(1);
+      expect(events.find(event => event.detectionResult.detections?.length)?.detectionResult.detections).toMatchObject([
+        { type: 'email', value: 'secret@example.com' },
+      ]);
     });
 
     it('should drain queued non-text parts in FIFO order', async () => {

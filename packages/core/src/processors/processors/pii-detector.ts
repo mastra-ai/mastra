@@ -983,12 +983,12 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
     state._piiRegexTail = combined.slice(emitEnd);
     if (!emitted) return null;
 
+    const emittedPart = (state._piiRegexTailPart as typeof textPart | undefined) ?? textPart;
     state._piiRegexTailPart = textPart;
     if (this.hasLLMOnlyTypes) {
-      const carryoverPart = (state._piiRegexTailPart as typeof textPart | undefined) ?? textPart;
       if (!state._piiFirstPayloadId) {
-        state._piiFirstPayloadId = carryoverPart.payload.id;
-        state._piiFirstRunId = carryoverPart.runId;
+        state._piiFirstPayloadId = emittedPart.payload.id;
+        state._piiFirstRunId = emittedPart.runId;
       }
       state._piiBuffer = (state._piiBuffer || '') + emitted;
       if (state._piiBuffer.length >= this.bufferSize || /[.!?]\s*$/.test(emitted)) {
@@ -1006,12 +1006,12 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
    * Two modes based on configured detection types:
    *
    * 1. **Regex-only** (no LLM-only types like name/address/DOB configured):
-   *    Each chunk is checked with zero-cost regex patterns and emitted
-   *    immediately. No LLM calls, no buffering, no latency.
+   *    Each chunk is checked with zero-cost regex patterns. The redact strategy
+   *    withholds a bounded suffix so regex matches can safely span chunks.
    *
    * 2. **Regex + LLM buffering** (LLM-only types configured):
-   *    Each chunk is first checked with regex. Chunks are then buffered and
-   *    flushed through the LLM at sentence boundaries or size thresholds.
+   *    Each chunk is first checked with regex. Stable text is buffered and
+   *    flushed through the LLM at safe sentence or size boundaries.
    *    This ensures context-dependent PII (names, addresses) is caught
    *    before reaching the user, while limiting LLM calls to ~3-5 per
    *    response instead of 50-100.
