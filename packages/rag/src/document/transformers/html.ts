@@ -111,19 +111,19 @@ export class HTMLHeaderTransformer {
       return element.text || '';
     }
 
-    // For element nodes, combine their text with children's text
-    let content = element.text || '';
-
-    if (element.childNodes) {
-      for (const child of element.childNodes) {
-        const childText = this.getTextContent(child);
-        if (childText) {
-          content += ' ' + childText;
-        }
-      }
+    // An element's `text` already contains every descendant's text, so taking
+    // it *and* recursing repeated the content once per level of nesting.
+    // Recurse instead, and join with a space so neighbouring blocks stay apart.
+    const children = element.childNodes;
+    if (!children || children.length === 0) {
+      return (element.text || '').trim();
     }
 
-    return content.trim();
+    return children
+      .map((child: any) => this.getTextContent(child))
+      .filter((text: string) => text)
+      .join(' ')
+      .trim();
   }
 
   private aggregateElementsToChunks(elements: ElementType[]): Document[] {
@@ -250,19 +250,19 @@ export class HTMLSectionTransformer {
       return element.text || '';
     }
 
-    // For element nodes, combine their text with children's text
-    let content = element.text || '';
-
-    if (element.childNodes) {
-      for (const child of element.childNodes) {
-        const childText = this.getTextContent(child);
-        if (childText) {
-          content += ' ' + childText;
-        }
-      }
+    // An element's `text` already contains every descendant's text, so taking
+    // it *and* recursing repeated the content once per level of nesting.
+    // Recurse instead, and join with a space so neighbouring blocks stay apart.
+    const children = element.childNodes;
+    if (!children || children.length === 0) {
+      return (element.text || '').trim();
     }
 
-    return content.trim();
+    return children
+      .map((child: any) => this.getTextContent(child))
+      .filter((text: string) => text)
+      .join(' ')
+      .trim();
   }
 
   private splitHtmlByHeaders(htmlDoc: string): Array<{
