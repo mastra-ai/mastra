@@ -1,23 +1,32 @@
 import * as coreStorage from '@mastra/core/storage';
 import type {
+  GetTraceQueryValuesResponse,
+  QueryThreadsResult,
   TraceQueryCanonicalField,
+  TraceQueryObservedFieldsResult,
   TraceQueryFeedbackField,
   TraceQueryField,
   TraceQueryPredicateField,
   TraceQueryResponse,
   TraceQueryScoreField,
   TraceQuerySpanField,
+  TrustedThreadPredicate,
+  TrustedThreadQueryPlan,
+  TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
+  TrustedTraceQueryValuesPlan,
   TrustedTraceQueryPredicate,
   TrustedTraceQueryScalarPredicate,
 } from '@mastra/core/storage';
 
 import type { DuckDBConnection } from '../../db/index';
+import { parseJson } from './helpers';
 
 type ParameterType = 'scalar' | 'timestamp';
 type FieldDefinition = { sql: string; parameterType: ParameterType };
 type FieldRegistry<TField extends string> = Record<TField, FieldDefinition>;
 type SqlFragment = { sql: string; values: unknown[] };
+type RelatedCollection = 'spans' | 'scores' | 'feedback';
 
 const TRACE_STATUS_SQL = `CASE WHEN r.error IS NOT NULL THEN 'error' ELSE 'success' END`;
 
@@ -78,6 +87,11 @@ const FEEDBACK_FIELDS = {
 const TRACE_SELECT = `
   r.traceId AS traceId,
   r.spanId AS rootSpanId,
+  r.name AS name,
+  r.entityId AS entityId,
+  r.parentSpanId AS parentSpanId,
+  r.metadata AS metadata,
+  r.input AS input,
   r.threadId AS threadId,
   r.resourceId AS resourceId,
   r.startedAt AS startedAt,
@@ -195,7 +209,7 @@ function compileFeedbackScalarPredicate(predicate: TrustedTraceQueryScalarPredic
     return { sql: `s.value IS ${predicate.operator === 'exists' ? 'NOT ' : ''}NULL`, values: [] };
   }
   const sample = predicate.type === 'membership' ? predicate.values[0] : predicate.value;
-  const field = typeof sample === 'number' ? 'TRY_CAST(s.value AS DOUBLE)' : 's.value';
+  const field = typeof sample === 'number' ? 's.valueNumber' : 's.valueString';
   return compileScalarPredicate(predicate, { value: { sql: field, parameterType: 'scalar' } });
 }
 
@@ -241,10 +255,36 @@ function compilePredicate(predicate: TrustedTraceQueryPredicate): SqlFragment {
   return compileScalarPredicate(predicate, TRACE_FIELDS, true);
 }
 
+function compileThreadPredicate(predicate: TrustedThreadPredicate): SqlFragment {
+  if (predicate.type === 'relation') {
+    const compiled = compilePredicate(predicate.predicate);
+    const existence = `EXISTS (
+      SELECT 1 FROM eligible_roots r
+      WHERE r.threadId = t.threadId
+        AND (${compiled.sql})
+    )`;
+    return {
+      sql: predicate.quantifier === 'some' ? existence : `NOT ${existence}`,
+      values: compiled.values,
+    };
+  }
+  if (predicate.type === 'boolean') {
+    const values: unknown[] = [];
+    const parts = predicate.args.map(arg => {
+      const compiled = compileThreadPredicate(arg);
+      values.push(...compiled.values);
+      return `(${compiled.sql})`;
+    });
+    return { sql: parts.join(predicate.operator === 'and' ? ' AND ' : ' OR '), values };
+  }
+  const compiled = compileThreadPredicate(predicate.arg);
+  return { sql: `NOT (${compiled.sql})`, values: compiled.values };
+}
+
 function collectRelatedCollections(
   predicate: TrustedTraceQueryPredicate | undefined,
-  collections = new Set<'spans' | 'scores' | 'feedback'>(),
-): Set<'spans' | 'scores' | 'feedback'> {
+  collections = new Set<RelatedCollection>(),
+): Set<RelatedCollection> {
   if (!predicate) return collections;
   if (predicate.type === 'relation') {
     collections.add(predicate.collection);
@@ -256,26 +296,27 @@ function collectRelatedCollections(
   return collections;
 }
 
+function collectThreadRelatedCollections(
+  predicate: TrustedThreadPredicate | undefined,
+  collections: Set<RelatedCollection>,
+): Set<RelatedCollection> {
+  if (!predicate) return collections;
+  if (predicate.type === 'relation') {
+    collectRelatedCollections(predicate.predicate, collections);
+  } else if (predicate.type === 'boolean') {
+    for (const arg of predicate.args) collectThreadRelatedCollections(arg, collections);
+  } else {
+    collectThreadRelatedCollections(predicate.arg, collections);
+  }
+  return collections;
+}
+
 export interface CompiledDuckDBTraceQuery {
   sql: string;
   values: unknown[];
 }
 
-export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDuckDBTraceQuery {
-  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to];
-  const conditions = [
-    `r.endedAt IS NOT NULL`,
-    `r.startedAt >= CAST(? AS TIMESTAMP)`,
-    `r.startedAt < CAST(? AS TIMESTAMP)`,
-  ];
-
-  if (plan.where) {
-    const predicate = compilePredicate(plan.where);
-    conditions.push(`(${predicate.sql})`);
-    values.push(...predicate.values);
-  }
-
-  const relatedCollections = collectRelatedCollections(plan.where);
+function compileDuckDBTraceScope(relatedCollections: Set<RelatedCollection>): string[] {
   const ctes = [
     `root_events AS (
       SELECT
@@ -362,6 +403,26 @@ export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDu
     )`);
   }
 
+  return ctes;
+}
+
+export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDuckDBTraceQuery {
+  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to];
+  const conditions = [
+    `r.endedAt IS NOT NULL`,
+    `r.startedAt >= CAST(? AS TIMESTAMP)`,
+    `r.startedAt < CAST(? AS TIMESTAMP)`,
+  ];
+
+  if (plan.where) {
+    const predicate = compilePredicate(plan.where);
+    conditions.push(`(${predicate.sql})`);
+    values.push(...predicate.values);
+  }
+
+  const relatedCollections = collectRelatedCollections(plan.where);
+  const ctes = compileDuckDBTraceScope(relatedCollections);
+
   ctes.push(`candidates AS (
     SELECT ${TRACE_SELECT}
     FROM root_scope r
@@ -407,6 +468,156 @@ LIMIT ?`,
   };
 }
 
+export function compileDuckDBThreadQuery(plan: TrustedThreadQueryPlan): CompiledDuckDBTraceQuery {
+  const values: unknown[] = [plan.traces.timeRange.from, plan.traces.timeRange.to];
+  const relatedCollections = collectRelatedCollections(plan.traces.where);
+  collectThreadRelatedCollections(plan.where, relatedCollections);
+  const ctes = compileDuckDBTraceScope(relatedCollections);
+
+  let eligibilitySql = 'TRUE';
+  if (plan.traces.where) {
+    const eligibility = compilePredicate(plan.traces.where);
+    eligibilitySql = eligibility.sql;
+    values.push(...eligibility.values);
+  }
+  ctes.push(`eligible_roots AS (
+      SELECT *
+      FROM root_scope r
+      WHERE ${eligibilitySql}
+    )`);
+  ctes.push(`thread_ids AS (
+      SELECT threadId
+      FROM eligible_roots
+      WHERE threadId IS NOT NULL
+      GROUP BY threadId
+    )`);
+
+  let threadPredicateSql = 'TRUE';
+  if (plan.where) {
+    const predicate = compileThreadPredicate(plan.where);
+    threadPredicateSql = predicate.sql;
+    values.push(...predicate.values);
+  }
+  ctes.push(`qualified_threads AS (
+      SELECT t.threadId
+      FROM thread_ids t
+      WHERE ${threadPredicateSql}
+    )`);
+
+  const pageCondition = plan.cursor ? `WHERE threadId > ?` : '';
+  if (plan.cursor) values.push(plan.cursor.threadId);
+  values.push(plan.limit + 1);
+  return {
+    sql: `WITH ${ctes.join(',\n  ')}
+SELECT threadId
+FROM qualified_threads
+${pageCondition}
+ORDER BY threadId ASC
+LIMIT ?`,
+    values,
+  };
+}
+
+function discoveryRegistry(scope: TrustedTraceQueryValuesPlan['predicateScope']): Partial<FieldRegistry<string>> {
+  if (scope === 'trace') return TRACE_FIELDS;
+  if (scope === 'spans') return SPAN_FIELDS;
+  if (scope === 'scores') return SCORE_FIELDS;
+  return FEEDBACK_FIELDS;
+}
+
+function discoverySource(scope: TrustedTraceQueryValuesPlan['predicateScope']): string {
+  if (scope === 'trace') return 'root_scope r';
+  if (scope === 'spans') return 'current_spans s';
+  if (scope === 'scores') return 'current_scores s';
+  return 'current_feedback s';
+}
+
+function discoveryCollections(scope: TrustedTraceQueryValuesPlan['predicateScope']): Set<RelatedCollection> {
+  return scope === 'trace' ? new Set() : new Set([scope]);
+}
+
+export function compileDuckDBTraceQueryObservedFields(
+  plan: TrustedTraceQueryObservedFieldsPlan,
+): CompiledDuckDBTraceQuery {
+  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to];
+  if (plan.search) values.push(plan.search);
+  values.push(plan.limit + 1);
+  const search = plan.search ? `AND strpos(lower('metadata.' || entry.key), lower(?)) > 0` : '';
+  return {
+    sql: `WITH ${compileDuckDBTraceScope(new Set()).join(',\n  ')}
+SELECT 'metadata.' || entry.key AS path, count(*) AS occurrences
+FROM root_scope r, LATERAL json_each(r.metadata) entry
+WHERE entry.type = 'VARCHAR'
+  AND trim(json_extract_string(entry.value, '$')) <> ''
+  AND entry.key <> ''
+  AND strpos(entry.key, '.') = 0
+  AND octet_length(encode('metadata.' || entry.key)) <= ${coreStorage.TRACE_QUERY_MAX_PATH_BYTES}
+  AND octet_length(encode(json_extract_string(entry.value, '$'))) <= ${coreStorage.TRACE_QUERY_MAX_STRING_BYTES}
+  ${search}
+GROUP BY entry.key
+ORDER BY occurrences DESC, path ASC
+LIMIT ?`,
+    values,
+  };
+}
+
+export function compileDuckDBTraceQueryValues(plan: TrustedTraceQueryValuesPlan): CompiledDuckDBTraceQuery {
+  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to];
+  const ctes = compileDuckDBTraceScope(discoveryCollections(plan.predicateScope));
+  let fieldSql: string;
+  if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
+    const jsonPath = `$.${JSON.stringify(plan.path.slice('metadata.'.length))}`;
+    fieldSql = `NULLIF(trim(CASE WHEN json_type(r.metadata, ?) = 'VARCHAR' THEN json_extract_string(r.metadata, ?) END), '')`;
+    values.push(jsonPath, jsonPath);
+  } else {
+    fieldSql = fieldDefinition(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField).sql;
+  }
+  if (plan.search) values.push(plan.search);
+  values.push(plan.limit + 1);
+  const search = plan.search ? 'AND strpos(lower(CAST(value AS VARCHAR)), lower(?)) > 0' : '';
+  return {
+    sql: `WITH ${ctes.join(',\n  ')}, extracted AS (
+  SELECT ${fieldSql} AS value FROM ${discoverySource(plan.predicateScope)}
+)
+SELECT CAST(value AS VARCHAR) AS value, count(*) AS count
+FROM extracted
+WHERE value IS NOT NULL
+  AND octet_length(encode(CAST(value AS VARCHAR))) <= ${coreStorage.TRACE_QUERY_MAX_STRING_BYTES}
+  ${search}
+GROUP BY value
+ORDER BY count DESC, value ASC
+LIMIT ?`,
+    values,
+  };
+}
+
+export async function getTraceQueryObservedFields(
+  db: DuckDBConnection,
+  plan: TrustedTraceQueryObservedFieldsPlan,
+): Promise<TraceQueryObservedFieldsResult> {
+  if (plan.predicateScope !== 'trace') return { observedFields: [], observedFieldsTruncated: false };
+  const query = compileDuckDBTraceQueryObservedFields(plan);
+  const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
+  return {
+    observedFields: rows
+      .slice(0, plan.limit)
+      .map(row => coreStorage.createTraceQueryObservedFieldDescriptor(String(row.path), Number(row.occurrences))),
+    observedFieldsTruncated: rows.length > plan.limit,
+  };
+}
+
+export async function getTraceQueryValues(
+  db: DuckDBConnection,
+  plan: TrustedTraceQueryValuesPlan,
+): Promise<GetTraceQueryValuesResponse> {
+  const query = compileDuckDBTraceQueryValues(plan);
+  const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
+  return coreStorage.getTraceQueryValuesResponseSchema.parse({
+    values: rows.slice(0, plan.limit).map(row => ({ value: String(row.value), count: Number(row.count) })),
+    valuesTruncated: rows.length > plan.limit,
+  });
+}
+
 function asIsoTimestamp(value: unknown): string {
   return value instanceof Date ? value.toISOString() : new Date(value as string | number).toISOString();
 }
@@ -433,6 +644,12 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
   const traces = visibleRows.map(row => ({
     traceId: String(row.traceId),
     rootSpanId: String(row.rootSpanId),
+    name: row.name,
+    entityId: row.entityId ?? null,
+    parentSpanId: row.parentSpanId ?? null,
+    createdAt: asIsoTimestamp(row.startedAt),
+    metadata: parseJson(row.metadata) ?? null,
+    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
     threadId: row.threadId == null ? null : String(row.threadId),
     resourceId: row.resourceId == null ? null : String(row.resourceId),
     startedAt: asIsoTimestamp(row.startedAt),
@@ -453,6 +670,22 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
               sortValue: last[plan.orderBy.field],
               traceId: last.traceId,
             })
+          : null,
+    },
+  });
+}
+
+export async function queryThreads(db: DuckDBConnection, plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+  const query = compileDuckDBThreadQuery(plan);
+  const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
+  const threads = rows.slice(0, plan.limit).map(row => ({ threadId: String(row.threadId) }));
+  const last = threads.at(-1);
+  return coreStorage.queryThreadsResultSchema.parse({
+    threads,
+    page: {
+      next:
+        rows.length > plan.limit && last
+          ? coreStorage.encodeTraceQueryCursor(plan, { result: 'threads', threadId: last.threadId })
           : null,
     },
   });

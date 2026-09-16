@@ -9,6 +9,8 @@ packages:
 
 The `.cloneThread()` method creates a copy of an existing conversation thread, including all its messages. It supports creating divergent conversation paths from a specific point in a conversation. When semantic recall is enabled, the method also creates vector embeddings for the cloned messages.
 
+`cloneThread()` loads the cloned messages to return them. If you only need the new thread ID, use [`copyThread()`](/reference/memory/copyThread), which copies the thread without loading message content into memory.
+
 ## Usage example
 
 The following example creates a `Memory` instance and clones an existing thread.

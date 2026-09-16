@@ -560,6 +560,8 @@ export interface GetAgentBrowserSessionResponse {
   screencastAvailable: boolean;
 }
 
+export type ClientToolsResolver = () => ToolsInput | undefined;
+
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   model?: string;
@@ -567,6 +569,7 @@ export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined =
   experimental_output?: T;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
   Omit<
@@ -582,6 +585,7 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
   experimental_output?: T;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
   Omit<
@@ -601,6 +605,7 @@ export type StreamParamsBase<OUTPUT = undefined> = {
   tracingOptions?: TracingOptions;
   requestContext?: RequestContext;
   clientTools?: ToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
 } & WithoutMethods<
   Omit<
     AgentExecutionOptions<OUTPUT>,
@@ -952,6 +957,12 @@ export interface McpToolInfo {
 export interface McpServerToolListResponse {
   tools: McpToolInfo[];
 }
+
+/**
+ * `{ result }` for a completed tool, or the suspended shape a 2026-07-28 server reports
+ * when the tool asked for input (answer with `resumeData` and the echoed `suspendPayload`).
+ */
+export type McpToolExecuteResponse = RouteResponse<'POST /mcp/:serverId/tools/:toolId/execute'>;
 
 /**
  * Client version of ScoreRowData with dates serialized as strings (from JSON)
@@ -2779,9 +2790,24 @@ export interface ExperimentGrouping {
   trialIndex?: number;
 }
 
+export type ExperimentTargetType = 'agent' | 'workflow' | 'scorer' | 'processor';
+
 export interface ListExperimentsParams extends ExperimentGrouping {
   page?: number;
   perPage?: number;
+  /** Only return experiments run against targets of this type */
+  targetType?: ExperimentTargetType;
+  /** Only return experiments run against this target ID */
+  targetId?: string;
+}
+
+export interface ListDatasetsParams {
+  page?: number;
+  perPage?: number;
+  /** Only return datasets attached to targets of this type */
+  targetType?: ExperimentTargetType;
+  /** Only return datasets attached to at least one of these target IDs */
+  targetIds?: string[];
 }
 
 export interface DatasetExperiment {
@@ -3594,6 +3620,8 @@ export type PermissionPattern = string;
 /**
  * Response from GET /auth/permission-patterns.
  */
+export type WorkflowBuilderSettingsResponse = GeneratedResponse<'GET /editor/workflow-builder/settings'>;
+
 export type PermissionPatternsResponse = GeneratedResponse<'GET /auth/permission-patterns'>;
 
 /**

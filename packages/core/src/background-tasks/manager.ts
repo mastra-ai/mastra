@@ -619,6 +619,7 @@ export class BackgroundTaskManager {
       timeoutMs?: number;
       onProgress?: (elapsedMs: number) => void;
       progressIntervalMs?: number;
+      abortSignal?: AbortSignal;
     },
   ): Promise<BackgroundTask> {
     const storage = await this.getStorage();
@@ -635,28 +636,45 @@ export class BackgroundTaskManager {
 
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      let progressInterval: ReturnType<typeof setInterval> | undefined;
+      let pollInterval: ReturnType<typeof setInterval> | undefined;
 
-      const timeout = options?.timeoutMs
+      const cleanup = () => {
+        if (pollInterval) clearInterval(pollInterval);
+        if (timeout) clearTimeout(timeout);
+        if (progressInterval) clearInterval(progressInterval);
+        options?.abortSignal?.removeEventListener('abort', handleAbort);
+      };
+      const handleAbort = () => {
+        cleanup();
+        reject(options?.abortSignal?.reason ?? new Error('Background task wait aborted'));
+      };
+
+      if (options?.abortSignal?.aborted) {
+        handleAbort();
+        return;
+      }
+      options?.abortSignal?.addEventListener('abort', handleAbort, { once: true });
+
+      timeout = options?.timeoutMs
         ? setTimeout(() => {
-            clearInterval(pollInterval);
-            if (progressInterval) clearInterval(progressInterval);
+            cleanup();
             reject(new Error('Timed out waiting for background task'));
           }, options.timeoutMs)
         : undefined;
 
-      const progressInterval = options?.onProgress
+      progressInterval = options?.onProgress
         ? setInterval(() => {
             options.onProgress!(Date.now() - startTime);
           }, options.progressIntervalMs ?? 3000)
         : undefined;
 
-      const pollInterval = setInterval(async () => {
+      pollInterval = setInterval(async () => {
         for (const id of taskIds) {
           const task = await storage.getTask(id);
           if (task && isTerminal(task.status)) {
-            clearInterval(pollInterval);
-            if (timeout) clearTimeout(timeout);
-            if (progressInterval) clearInterval(progressInterval);
+            cleanup();
             resolve(task);
             return;
           }
@@ -850,10 +868,16 @@ export class BackgroundTaskManager {
     });
   }
 
-  shutdown(): Promise<void> {
+  /**
+   * @param options.deadline - Absolute wall-clock deadline (ms since epoch) to
+   *   bound teardown by. `Mastra.shutdown()` passes the deadline shared with
+   *   its workflow drain so the two do not stack. Defaults to
+   *   `SHUTDOWN_GRACE_PERIOD_MS` from now when called standalone.
+   */
+  shutdown(options?: { deadline?: number }): Promise<void> {
     if (this.shutdownPromise) return this.shutdownPromise;
     this.shuttingDown = true;
-    this.shutdownDeadline = Date.now() + SHUTDOWN_GRACE_PERIOD_MS;
+    this.shutdownDeadline = options?.deadline ?? Date.now() + SHUTDOWN_GRACE_PERIOD_MS;
     this.shutdownPromise = this.#shutdown();
     return this.shutdownPromise;
   }
@@ -959,11 +983,7 @@ export class BackgroundTaskManager {
     const remainingMs = this.#remainingShutdownBudgetMs();
     if (remainingMs <= 0) {
       void promise.catch(() => {});
-      this.#mastra
-        ?.getLogger?.()
-        ?.warn(
-          `${description} left running in the background: the ${SHUTDOWN_GRACE_PERIOD_MS}ms shutdown budget is spent`,
-        );
+      this.#mastra?.getLogger?.()?.warn(`${description} left running in the background: the shutdown budget is spent`);
       return undefined;
     }
 
@@ -986,9 +1006,7 @@ export class BackgroundTaskManager {
     if (outcome.status === 'timed-out') {
       this.#mastra
         ?.getLogger?.()
-        ?.warn(
-          `${description} exhausted the remaining ${remainingMs}ms of the ${SHUTDOWN_GRACE_PERIOD_MS}ms graceful shutdown budget`,
-        );
+        ?.warn(`${description} exhausted the remaining ${remainingMs}ms of the graceful shutdown budget`);
       return undefined;
     }
     return outcome.value;

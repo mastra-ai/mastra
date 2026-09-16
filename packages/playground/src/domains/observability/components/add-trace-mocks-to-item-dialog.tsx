@@ -11,7 +11,7 @@ import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import { EyeIcon, WrenchIcon } from 'lucide-react';
+import { EyeIcon, WrenchIcon, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetItem, useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
@@ -228,10 +228,11 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
       </div>
 
       <div className="flex justify-end gap-2 pt-4">
-        <Button type="button" variant="outline" onClick={onClose}>
+        <Button icon={<X />} type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
         <Button
+          icon={<Plus />}
           type="submit"
           variant="default"
           disabled={

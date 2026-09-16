@@ -1,6 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog } from '@mastra/playground-ui/components/Dialog';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { getNodeIndicators, WorkflowCardBadges } from '@mastra/playground-ui/components/Workflow';
+
 import { useAutoscroll } from '@mastra/playground-ui/hooks/use-autoscroll';
 import { CheckIcon } from '@mastra/playground-ui/icons/CheckIcon';
 import { CrossIcon } from '@mastra/playground-ui/icons/CrossIcon';
@@ -20,8 +22,6 @@ import type { CSSProperties } from 'react';
 import { useCurrentRun } from '../context/use-current-run';
 import type { Step } from '../context/use-current-run';
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
-import { getNodeIndicators } from './components/workflow-card-badge-utils';
-import { WorkflowCardBadges } from './components/workflow-card-badges';
 import { WorkflowJsonDialogContent } from './workflow-json-dialog';
 import type { TimelineRow } from './workflow-timeline-utils';
 import { buildTimeline, formatTimelineDuration } from './workflow-timeline-utils';

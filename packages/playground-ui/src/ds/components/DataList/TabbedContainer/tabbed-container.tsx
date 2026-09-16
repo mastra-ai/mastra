@@ -1,14 +1,8 @@
-import { TabbedContainerDataList, TabbedContainerPanel, TabbedContainerRoot } from './tabbed-container-root';
-
-export type {
-  TabbedContainerDataListProps,
-  TabbedContainerFilterProps,
-  TabbedContainerPanelProps,
-  TabbedContainerProps,
-  TabbedContainerSearchProps,
-} from './tabbed-container-root';
-
-export const TabbedContainer = Object.assign(TabbedContainerRoot, {
-  Panel: TabbedContainerPanel,
-  DataList: TabbedContainerDataList,
-});
+export {
+  TabbedContainer,
+  type TabbedContainerDataListProps,
+  type TabbedContainerFilterProps,
+  type TabbedContainerPanelProps,
+  type TabbedContainerProps,
+  type TabbedContainerSearchProps,
+} from '@/ds/layout/tabbed-container';

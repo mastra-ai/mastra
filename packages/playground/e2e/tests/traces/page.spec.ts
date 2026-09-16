@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../__utils__/reset-storage';
-import { expectCurrentBreadcrumb, expectRouteDocsLink } from '../__utils__/route-header';
+import { expectCurrentBreadcrumb } from '../__utils__/route-header';
 
 test.describe('Traces page', () => {
   test.afterEach(async () => {
@@ -8,16 +8,11 @@ test.describe('Traces page', () => {
   });
 
   test.describe('when the traces page is visited', () => {
-    test('shows the page header and docs link', async ({ page }) => {
+    test('shows the page header', async ({ page }) => {
       await page.goto('/traces');
 
       await expect(page).toHaveTitle(/Mastra Studio/);
       await expectCurrentBreadcrumb(page, 'Traces');
-      await expectRouteDocsLink(
-        page,
-        'Traces documentation',
-        'https://mastra.ai/en/docs/observability/tracing/overview',
-      );
     });
 
     test('shows the filter dropdown', async ({ page }) => {
@@ -32,8 +27,7 @@ test.describe('Traces page', () => {
       await page.goto('/traces');
 
       // We check that the page has loaded and the traces tools are visible
-      // The date preset dropdown defaults to "Last 24 hours"
-      await expect(page.getByRole('button', { name: 'Last 24 hours' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Last 7 days' })).toBeVisible();
     });
   });
 

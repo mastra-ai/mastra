@@ -618,6 +618,53 @@ describe('OpenAISchemaCompatLayer', () => {
       const perLevel = sizes[1]! - sizes[0]!;
       expect(sizes[2]!).toBe(sizes[1]! + 6 * perLevel);
     });
+
+    it('allows null for optional typed scalar enum and const properties', async () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          encoding: { type: 'string', enum: ['utf8', 'base64'] },
+          kind: { type: 'string', const: 'input' },
+          requiredEncoding: { type: 'string', enum: ['utf8', 'base64'] },
+          requiredKind: { type: 'string', const: 'input' },
+        },
+        required: ['requiredEncoding', 'requiredKind'],
+      } as const;
+      const compatSchema = compat.processToCompatSchema(schema);
+      const result = compatSchema['~standard'].jsonSchema.input({ target: 'draft-07' }) as Record<string, any>;
+
+      const encoding = result.properties.encoding;
+      expect(encoding).not.toHaveProperty('enum');
+      expect(encoding.anyOf).toEqual([{ type: 'string', enum: ['utf8', 'base64'] }, { type: 'null' }]);
+
+      const kind = result.properties.kind;
+      expect(kind).not.toHaveProperty('const');
+      expect(kind.anyOf).toEqual([{ type: 'string', const: 'input' }, { type: 'null' }]);
+
+      const validate = new Ajv({ strict: false }).compile(result);
+      expect(validate({ encoding: null, kind: null, requiredEncoding: 'utf8', requiredKind: 'input' })).toBe(true);
+      expect(validate({ encoding: 'base64', kind: 'input', requiredEncoding: 'utf8', requiredKind: 'input' })).toBe(
+        true,
+      );
+      expect(validate({ encoding: 'hex', kind: 'output', requiredEncoding: 'utf8', requiredKind: 'input' })).toBe(
+        false,
+      );
+      expect(validate({ encoding: null, kind: null, requiredEncoding: null, requiredKind: null })).toBe(false);
+
+      const nullResult: any = await compatSchema['~standard'].validate({
+        encoding: null,
+        kind: null,
+        requiredEncoding: 'utf8',
+        requiredKind: 'input',
+      });
+      expect(nullResult).not.toHaveProperty('issues');
+      expect(nullResult.value).toEqual({
+        encoding: undefined,
+        kind: undefined,
+        requiredEncoding: 'utf8',
+        requiredKind: 'input',
+      });
+    });
   });
 
   // OpenAI strict mode rejects `propertyNames`, which z.record() emits for its key type.

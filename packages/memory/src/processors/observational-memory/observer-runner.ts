@@ -170,10 +170,8 @@ export class ObserverRunner {
       ),
       model,
       ...(memory ? { memory } : {}),
+      ...(this.mastra ? { mastra: this.mastra } : {}),
     });
-    if (this.mastra) {
-      agent.__registerMastra(this.mastra);
-    }
     return agent;
   }
 

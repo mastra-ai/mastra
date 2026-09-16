@@ -85,12 +85,13 @@ export function SpanDataPanelView({
         </div>
         <ButtonsGroup className="ml-auto shrink-0 self-start">
           <DataPanel.NextPrevNav
+            variant="ghost"
             onPrevious={onPrevious}
             onNext={onNext}
             previousLabel="Previous span"
             nextLabel="Next span"
           />
-          <DataPanel.CloseButton onClick={onClose} />
+          <DataPanel.CloseButton variant="ghost" onClick={onClose} />
         </ButtonsGroup>
       </DataPanel.Header>
 
@@ -251,7 +252,7 @@ function SpanDataPanelContent({
   return (
     <DataPanel.Content>
       <Tabs defaultTab="details" value={activeTab} onValueChange={onTabChange}>
-        <TabList variant="pill-ghost" className="px-0">
+        <TabList variant="pill-ghost">
           <Tab value="details">Details</Tab>
           <Tab value="feedback">Feedback{feedbackTabBadge}</Tab>
         </TabList>

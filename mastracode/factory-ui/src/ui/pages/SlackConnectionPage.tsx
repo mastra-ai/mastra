@@ -17,8 +17,8 @@ import { useSetFactorySlackWorkItemsMutation } from '../../hooks/useFactorySlack
 import { useFactoriesQuery } from '../../hooks/useFactories';
 import { ConnectionSettingsShell } from '../domains/settings/components/ConnectionSettingsShell';
 import { IdentityWithTooltip } from '../domains/settings/components/IdentityWithTooltip';
-import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
-import { SettingsCard } from '../domains/settings/components/SettingsCard';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+
 import { SlackNotConfigured } from '../domains/settings/components/ConnectedAccountsSection';
 import { SettingsSubsection } from '../domains/settings/components/SettingsSubsection';
 import { connectSlackUrl, type ConnectedChannelAccount } from '../domains/settings/services/channelAccounts';
@@ -116,7 +116,7 @@ export function SlackConnectionSettings() {
         </SettingsSubsection>
       ) : accounts.length === 0 ? (
         <SettingsSubsection scope="personal" title="Connection">
-          <SettingsCard>
+          <SettingsContainer>
             <button
               type="button"
               disabled={!canConnect}
@@ -124,7 +124,6 @@ export function SlackConnectionSettings() {
               className="group hover:bg-surface4 focus-visible:ring-accent1 block w-full cursor-pointer rounded-xl text-left outline-hidden transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <SettingsRow
-                variant="factory"
                 label="Slack"
                 description={canConnect ? 'Not connected' : 'Slack connection is not configured'}
               >
@@ -134,16 +133,15 @@ export function SlackConnectionSettings() {
                 </span>
               </SettingsRow>
             </button>
-          </SettingsCard>
+          </SettingsContainer>
         </SettingsSubsection>
       ) : (
         <div className="flex flex-col gap-8">
           <SettingsSubsection scope="personal" title={accounts.length === 1 ? 'Connection' : 'Connections'}>
             <div className="flex flex-col gap-4">
               {accounts.map(account => (
-                <SettingsCard key={`${account.externalTeamId}:${account.externalUserId}`}>
+                <SettingsContainer key={`${account.externalTeamId}:${account.externalUserId}`}>
                   <SettingsRow
-                    variant="factory"
                     label={
                       <span className="flex items-center gap-1.5">
                         <IdentityWithTooltip
@@ -165,16 +163,15 @@ export function SlackConnectionSettings() {
                       </Txt>
                     }
                   />
-                </SettingsCard>
+                </SettingsContainer>
               ))}
             </div>
           </SettingsSubsection>
 
           <SettingsSubsection scope="personal" title="Session behavior">
-            <SettingsCard>
+            <SettingsContainer>
               {accounts.map(account => (
                 <SettingsRow
-                  variant="factory"
                   key={`${account.externalTeamId}:${account.externalUserId}`}
                   label={
                     accounts.length > 1
@@ -209,13 +206,12 @@ export function SlackConnectionSettings() {
                   </Select>
                 </SettingsRow>
               ))}
-            </SettingsCard>
+            </SettingsContainer>
           </SettingsSubsection>
 
           <SettingsSubsection scope="factory" title="Work items">
-            <SettingsCard>
+            <SettingsContainer>
               <SettingsRow
-                variant="factory"
                 label="Create work items for new Slack threads"
                 description="Add new Slack thread sessions to this Factory's Work board in Building."
               >
@@ -232,14 +228,13 @@ export function SlackConnectionSettings() {
                   }
                 />
               </SettingsRow>
-            </SettingsCard>
+            </SettingsContainer>
           </SettingsSubsection>
 
           <SettingsSubsection scope="personal" title="Danger zone">
-            <SettingsCard>
+            <SettingsContainer>
               {accounts.map(account => (
                 <SettingsRow
-                  variant="factory"
                   key={`${account.externalTeamId}:${account.externalUserId}`}
                   label="Disconnect Slack"
                   description={
@@ -267,7 +262,7 @@ export function SlackConnectionSettings() {
                   </Button>
                 </SettingsRow>
               ))}
-            </SettingsCard>
+            </SettingsContainer>
           </SettingsSubsection>
         </div>
       )}

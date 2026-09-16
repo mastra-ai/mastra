@@ -20,6 +20,7 @@ export {
   SandboxExecutionError,
   SandboxTimeoutError,
   SandboxNotReadyError,
+  SandboxUnsupportedFeatureError,
   SandboxAbortError,
   IsolationUnavailableError,
   MountError,
@@ -90,7 +91,14 @@ export type {
 export type { FilesystemMountConfig, MountResult, FilesystemIcon } from './filesystem';
 
 // Sandbox
-export { MountManager, supportsNetworking, supportsComputer } from './sandbox';
+export {
+  MountManager,
+  supportsNetworking,
+  supportsComputer,
+  validateSandboxFileMode,
+  assertModesUnsupported,
+  MAX_SANDBOX_FILE_MODE,
+} from './sandbox';
 export type {
   WorkspaceSandbox,
   SandboxNetworking,

@@ -90,8 +90,14 @@ import type {
   GetEnvironmentsResponse,
   GetTagsArgs,
   GetTagsResponse,
+  GetTraceQueryValuesResponse,
+  QueryThreadsResult,
+  TraceQueryObservedFieldsResult,
   TraceQueryResponse,
+  TrustedThreadQueryPlan,
+  TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
+  TrustedTraceQueryValuesPlan,
 } from '@mastra/core/storage';
 
 import { resolveClickhouseConfig } from '../../../db';
@@ -690,10 +696,10 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override getFeatures() {
     if (!deltaPollingSupported(this.#deltaCursorStrategy)) {
-      return ['metrics', 'logs', 'trace-query'] as const;
+      return ['metrics', 'logs', 'trace-query', 'trace-query-discovery', 'thread-query'] as const;
     }
 
-    return ['metrics', 'logs', 'delta-polling', 'trace-query'] as const;
+    return ['metrics', 'logs', 'delta-polling', 'trace-query', 'trace-query-discovery', 'thread-query'] as const;
   }
 
   // -------------------------------------------------------------------------
@@ -847,6 +853,56 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'QUERY_TRACES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async getTraceQueryObservedFields(
+    plan: TrustedTraceQueryObservedFieldsPlan,
+  ): Promise<TraceQueryObservedFieldsResult> {
+    try {
+      return await traceQueryOps.getTraceQueryObservedFields(this.#client, plan, this.#traceQueryTimeoutMs);
+    } catch (error) {
+      if (error instanceof MastraError || error instanceof coreStorage.TraceQueryExecutionError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_TRACE_QUERY_OBSERVED_FIELDS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async getTraceQueryValues(plan: TrustedTraceQueryValuesPlan): Promise<GetTraceQueryValuesResponse> {
+    try {
+      return await traceQueryOps.getTraceQueryValues(this.#client, plan, this.#traceQueryTimeoutMs);
+    } catch (error) {
+      if (error instanceof MastraError || error instanceof coreStorage.TraceQueryExecutionError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_TRACE_QUERY_VALUES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+    try {
+      return await traceQueryOps.queryThreads(this.#client, plan, this.#traceQueryTimeoutMs);
+    } catch (error) {
+      if (error instanceof MastraError || error instanceof coreStorage.TraceQueryExecutionError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'QUERY_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

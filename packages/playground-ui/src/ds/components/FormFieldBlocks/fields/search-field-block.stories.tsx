@@ -28,7 +28,7 @@ const meta: Meta<typeof SearchFieldBlock> = {
   argTypes: {
     size: {
       control: { type: 'select' },
-      options: ['sm', 'md', 'default', 'lg'],
+      options: ['xs', 'sm', 'md', 'lg'],
     },
     layout: {
       control: { type: 'select' },
@@ -140,9 +140,9 @@ export const Minimized: Story = {
 export const Sizes: Story = {
   render: () => (
     <div className="grid gap-6">
+      <SearchFieldBlockControlled name="search-xs" label="Extra small" placeholder="Extra small size" size="xs" />
       <SearchFieldBlockControlled name="search-sm" label="Small" placeholder="Small size" size="sm" />
       <SearchFieldBlockControlled name="search-md" label="Medium" placeholder="Medium size" size="md" />
-      <SearchFieldBlockControlled name="search-default" label="Default" placeholder="Default size" />
       <SearchFieldBlockControlled name="search-lg" label="Large" placeholder="Large size" size="lg" />
     </div>
   ),

@@ -15,7 +15,7 @@ import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType, MastraOnFinishCallback, MastraStreamTransformOptions } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { deepMerge } from '../../utils';
-import type { WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
+import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import { beginGoalActivity, stopGoalActivity } from '../goal';
@@ -220,6 +220,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   system?: AgentExecutionOptions<OUTPUT>['system'];
   /** When true, background tasks are disabled for this run. */
   disableBackgroundTasks?: AgentExecutionOptions<OUTPUT>['disableBackgroundTasks'];
+  /** Execution-scoped background dispatch policy for delegated agents. */
+  backgroundTaskPolicy?: AgentExecutionOptions<OUTPUT>['backgroundTaskPolicy'];
   /** Tracing options forwarded to the agent/model spans. */
   tracingOptions?: AgentExecutionOptions<OUTPUT>['tracingOptions'];
   /** Per-call actor signal forwarded to FGA checks and tool execution. */
@@ -381,6 +383,29 @@ export interface DurableAgentConfig<
    * Set to 0 to disable auto-cleanup (manual cleanup() required).
    */
   cleanupTimeoutMs?: number;
+
+  /**
+   * Overrides the snapshot-persistence policy for this agent's durable
+   * workflows. Returning false for a status skips that snapshot write.
+   *
+   * The default policy always persists `pending | paused | suspended`
+   * (required for human-in-the-loop `resume()`), and persists `running`
+   * only when the Mastra instance is configured with
+   * `recovery: { durableAgents: 'auto' }` — `running` checkpoints exist
+   * solely so `listActiveRuns()` / `recover()` / `recoverActiveRuns()` can
+   * see in-flight runs after a crash.
+   *
+   * Footguns when providing a custom predicate:
+   * - Excluding `paused` / `suspended` breaks human-in-the-loop resume.
+   * - Excluding `running` makes the agent invisible to crash recovery.
+   * A guardrail warning is logged for both cases (detected by probing the
+   * predicate with an empty `stepResults`, so predicates that read
+   * `stepResults` may probe inaccurately — the warning is best-effort).
+   *
+   * EventedAgent and InngestAgent own their persistence policy and ignore
+   * this option with a warning.
+   */
+  shouldPersistSnapshot?: ShouldPersistSnapshotFn;
 
   /**
    * Per-topic opt-out of the replay cache.
@@ -593,6 +618,16 @@ export class DurableAgent<
   readonly #shouldCache: ((topic: string) => boolean) | undefined;
 
   /**
+   * User-supplied snapshot-persistence policy
+   * (see DurableAgentConfig.shouldPersistSnapshot). Protected so subclasses
+   * that pin their own policy (EventedAgent) can detect and warn when set.
+   */
+  protected readonly userShouldPersistSnapshot: ShouldPersistSnapshotFn | undefined;
+
+  /** Whether the one-time persistence-policy guardrail warnings have run */
+  #warnedPersistencePolicy = false;
+
+  /**
    * Create a new DurableAgent that wraps an existing Agent
    */
   constructor(config: DurableAgentConfig<TAgentId, TTools, TOutput>) {
@@ -605,6 +640,7 @@ export class DurableAgent<
       maxSteps,
       cleanupTimeoutMs,
       shouldCache,
+      shouldPersistSnapshot,
     } = config;
 
     // Use provided id/name or fall back to agent.id/agent.name
@@ -629,6 +665,7 @@ export class DurableAgent<
     this.#cacheConfig = cache;
     this.#cleanupTimeoutMs = cleanupTimeoutMs ?? 30_000;
     this.#shouldCache = shouldCache;
+    this.userShouldPersistSnapshot = shouldPersistSnapshot;
   }
 
   // ===========================================================================
@@ -1602,6 +1639,7 @@ export class DurableAgent<
       maxSteps: this.#maxSteps,
       cleanupTimeoutMs: this.#cleanupTimeoutMs,
       shouldCache: this.#shouldCache,
+      shouldPersistSnapshot: this.userShouldPersistSnapshot,
     });
 
     // Preserve runtime state set after construction (mastra registration and the
@@ -1703,8 +1741,44 @@ export class DurableAgent<
   protected createWorkflow(): ReturnType<typeof createDurableAgenticWorkflow> {
     return createDurableAgenticWorkflow({
       maxSteps: this.#maxSteps,
+      shouldPersistSnapshot: this.resolveShouldPersistSnapshot(),
     });
   }
+
+  /**
+   * Resolve the effective snapshot-persistence policy for this agent's
+   * workflows: the user-supplied predicate when set, otherwise the
+   * recovery-aware default. Subclasses that own their persistence policy
+   * (EventedAgent) override this to pin their required policy.
+   *
+   * @internal
+   */
+  protected resolveShouldPersistSnapshot(): ShouldPersistSnapshotFn {
+    return this.userShouldPersistSnapshot ?? this.#recoveryAwarePersistencePolicy;
+  }
+
+  /**
+   * Default snapshot-persistence policy for plain durable agents.
+   *
+   * Always persists `pending | paused | suspended` — those records are the
+   * resume artifacts human-in-the-loop flows depend on. Persists `running`
+   * only when crash recovery is enabled (`recovery.durableAgents: 'auto'`):
+   * `running` checkpoints exist solely to feed `listActiveRuns()` /
+   * `recover()` / `recoverActiveRuns()`, and are pure write amplification
+   * when nothing consumes them (issue #23915).
+   *
+   * Reads the recovery config lazily (per persist call, via the Mastra
+   * reference) so the policy stays correct regardless of whether the
+   * workflow was built before or after Mastra registration.
+   */
+  readonly #recoveryAwarePersistencePolicy: ShouldPersistSnapshotFn = ({ workflowStatus }) => {
+    return (
+      workflowStatus === 'pending' ||
+      workflowStatus === 'paused' ||
+      workflowStatus === 'suspended' ||
+      (workflowStatus === 'running' && this.#mastra?.recoveryConfig?.durableAgents === 'auto')
+    );
+  };
 
   /**
    * Emit an error event to pubsub.
@@ -1717,6 +1791,17 @@ export class DurableAgent<
     // End the root spans on error so the trace exports (mirrors the non-durable map-results-step).
     endRunSpansWithError(runId, error);
     await emitErrorEvent(this.pubsub, runId, error);
+  }
+
+  /**
+   * `emitError` for fire-and-forget call sites. A pubsub that is already
+   * closing (for example during shutdown) must not turn a run's own failure
+   * into an unhandledRejection.
+   */
+  protected emitErrorInBackground(runId: string, error: Error): void {
+    this.emitError(runId, error).catch(publishError => {
+      this.logger.warn(`Failed to publish error event for run ${runId}`, { runId, error: publishError });
+    });
   }
 
   /**
@@ -1945,24 +2030,39 @@ export class DurableAgent<
     // Track cleanup state to avoid double cleanup
     let cleanedUp = false;
     let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+    // Assigned once the stream is created below. Declared here so the shared
+    // performCleanup() closure can unsubscribe the pubsub reader (via
+    // streamCleanup) from both the auto-cleanup timer and the explicit
+    // cleanup() path — mirroring observe().
+    let streamCleanup: (() => void) | undefined;
+
+    // Single cleanup path for both the auto-cleanup timer and the explicit
+    // cleanup(). Unsubscribes the pubsub reader FIRST, then tears down the
+    // registry entries and pubsub topic. Idempotent via `cleanedUp`.
+    const performCleanup = () => {
+      if (autoCleanupTimer) {
+        clearTimeout(autoCleanupTimer);
+        autoCleanupTimer = null;
+      }
+      if (cleanedUp) return;
+
+      streamCleanup?.();
+      this.#runRegistry.cleanup(runId);
+      globalRunRegistry.delete(runId);
+      this.#clearPubsubTopic(runId);
+      cleanedUp = true;
+    };
 
     // Schedule automatic registry cleanup after stream ends
     const scheduleAutoCleanup = () => {
       if (autoCleanupTimer || cleanedUp || this.#cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(() => {
-        if (!cleanedUp) {
-          this.#runRegistry.cleanup(runId);
-          globalRunRegistry.delete(runId);
-          this.#clearPubsubTopic(runId);
-          cleanedUp = true;
-        }
-      }, this.#cleanupTimeoutMs);
+      autoCleanupTimer = setTimeout(performCleanup, this.#cleanupTimeoutMs);
     };
 
     // 3. Create the durable agent stream (subscribes to pubsub)
     const {
       output,
-      cleanup: streamCleanup,
+      cleanup: createdStreamCleanup,
       ready,
     } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
@@ -2005,6 +2105,7 @@ export class DurableAgent<
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
       messageList,
     });
+    streamCleanup = createdStreamCleanup;
 
     // 4. Wait for subscription to be ready, then execute workflow
     // This prevents race conditions where events are published before subscription
@@ -2034,7 +2135,7 @@ export class DurableAgent<
         }
       })
       .catch(error => {
-        void this.emitError(runId, error);
+        this.emitErrorInBackground(runId, error);
       });
     const trackedEntry = globalRunRegistry.get(runId);
     if (trackedEntry) {
@@ -2052,20 +2153,10 @@ export class DurableAgent<
       this.getPubSub(),
     );
 
-    // 5. Create cleanup function (cancels auto-cleanup timer if called)
-    const cleanup = () => {
-      if (autoCleanupTimer) {
-        clearTimeout(autoCleanupTimer);
-        autoCleanupTimer = null;
-      }
-      if (!cleanedUp) {
-        streamCleanup();
-        this.#runRegistry.cleanup(runId);
-        globalRunRegistry.delete(runId);
-        this.#clearPubsubTopic(runId);
-        cleanedUp = true;
-      }
-    };
+    // 5. Cleanup function — routes through the shared performCleanup() so the
+    // explicit call and the auto-cleanup timer release the same resources
+    // (including the pubsub subscription via streamCleanup).
+    const cleanup = performCleanup;
 
     const abort = async (reason?: unknown) => {
       if (!abortController.signal.aborted) {
@@ -2272,17 +2363,31 @@ export class DurableAgent<
     // Track cleanup state to avoid double cleanup
     let cleanedUp = false;
     let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+    // Assigned once the stream is created below so the shared performCleanup()
+    // closure can unsubscribe the pubsub reader (via streamCleanup) from both
+    // the auto-cleanup timer and the explicit cleanup() path — mirroring observe().
+    let streamCleanup: (() => void) | undefined;
+
+    // Single cleanup path for both the auto-cleanup timer and the explicit
+    // cleanup(). Unsubscribes the pubsub reader FIRST, then tears down the
+    // registry entries and pubsub topic. Idempotent via `cleanedUp`.
+    const performCleanup = () => {
+      if (autoCleanupTimer) {
+        clearTimeout(autoCleanupTimer);
+        autoCleanupTimer = null;
+      }
+      if (cleanedUp) return;
+
+      streamCleanup?.();
+      this.#runRegistry.cleanup(runId);
+      globalRunRegistry.delete(runId);
+      this.#clearPubsubTopic(runId);
+      cleanedUp = true;
+    };
 
     const scheduleAutoCleanup = () => {
       if (autoCleanupTimer || cleanedUp || this.#cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(() => {
-        if (!cleanedUp) {
-          this.#runRegistry.cleanup(runId);
-          globalRunRegistry.delete(runId);
-          this.#clearPubsubTopic(runId);
-          cleanedUp = true;
-        }
-      }, this.#cleanupTimeoutMs);
+      autoCleanupTimer = setTimeout(performCleanup, this.#cleanupTimeoutMs);
     };
 
     const globalEntry = globalRunRegistry.get(runId);
@@ -2348,7 +2453,7 @@ export class DurableAgent<
 
     const {
       output,
-      cleanup: streamCleanup,
+      cleanup: createdStreamCleanup,
       ready,
     } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
@@ -2384,6 +2489,7 @@ export class DurableAgent<
       tracingContext: resumeSegmentSpan ? { currentSpan: resumeSegmentSpan } : undefined,
       messageList: globalEntry?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
+    streamCleanup = createdStreamCleanup;
 
     // Wait for subscription to be ready, then resume workflow
     const workflow = this.getWorkflow();
@@ -2433,7 +2539,7 @@ export class DurableAgent<
         }
         if (result?.status === 'failed') {
           const error = new Error((result as any).error?.message || 'Workflow resume failed');
-          void this.emitError(runId, error);
+          this.emitErrorInBackground(runId, error);
         }
         // Same snapshot cleanup as the initial `start()` path: once resume
         // settles on any non-suspended terminal status the persisted rows are
@@ -2444,7 +2550,7 @@ export class DurableAgent<
         }
       })
       .catch(error => {
-        void this.emitError(runId, error);
+        this.emitErrorInBackground(runId, error);
       });
     const trackedResumeEntry = globalRunRegistry.get(runId);
     if (trackedResumeEntry) {
@@ -2464,19 +2570,10 @@ export class DurableAgent<
       this.getPubSub(),
     );
 
-    const cleanup = () => {
-      if (autoCleanupTimer) {
-        clearTimeout(autoCleanupTimer);
-        autoCleanupTimer = null;
-      }
-      if (!cleanedUp) {
-        streamCleanup();
-        this.#runRegistry.cleanup(runId);
-        globalRunRegistry.delete(runId);
-        this.#clearPubsubTopic(runId);
-        cleanedUp = true;
-      }
-    };
+    // Route the explicit cleanup through the shared performCleanup() so it and
+    // the auto-cleanup timer release the same resources (including the pubsub
+    // subscription via streamCleanup).
+    const cleanup = performCleanup;
 
     const abort = async (reason?: unknown) => {
       if (!abortController.signal.aborted) {
@@ -2599,6 +2696,11 @@ export class DurableAgent<
     // 3. Cleanup plumbing (mirrors stream()/resume()).
     let cleanedUp = false;
     let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+    // Assigned once the recovered stream is created below so the shared
+    // performCleanup() closure can unsubscribe the pubsub reader (via
+    // streamCleanup) from both the auto-cleanup timer and the explicit
+    // cleanup() path — mirroring observe().
+    let streamCleanup: (() => void) | undefined;
     const cleanupOwnedRegistryState = () => {
       if (this.#runRegistry.get(runId) === registryEntry) {
         this.#runRegistry.cleanup(runId);
@@ -2609,13 +2711,21 @@ export class DurableAgent<
       }
       cleanedUp = true;
     };
+    // Single cleanup path for the auto-cleanup timer, the explicit cleanup(),
+    // and the recovery error paths. Unsubscribes the pubsub reader FIRST, then
+    // tears down the owned registry entries. Idempotent via `cleanedUp`.
+    const performCleanup = () => {
+      if (autoCleanupTimer) {
+        clearTimeout(autoCleanupTimer);
+        autoCleanupTimer = null;
+      }
+      if (cleanedUp) return;
+      streamCleanup?.();
+      cleanupOwnedRegistryState();
+    };
     const scheduleAutoCleanup = () => {
       if (autoCleanupTimer || cleanedUp || this.#cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(() => {
-        if (!cleanedUp) {
-          cleanupOwnedRegistryState();
-        }
-      }, this.#cleanupTimeoutMs);
+      autoCleanupTimer = setTimeout(performCleanup, this.#cleanupTimeoutMs);
     };
 
     let workflow: ReturnType<DurableAgent<TAgentId, TTools, TOutput>['getWorkflow']>;
@@ -2641,7 +2751,8 @@ export class DurableAgent<
       scheduleAutoCleanup,
       recoveryLease,
     });
-    const { output, cleanup: streamCleanup, ready } = stream;
+    const { output, cleanup: createdStreamCleanup, ready } = stream;
+    streamCleanup = createdStreamCleanup;
     const recoveryPubsub = this.#createRecoveryFencedPubSub(recoveryLease);
 
     // 5. Re-drive the workflow from the persisted snapshot in the background
@@ -2681,15 +2792,13 @@ export class DurableAgent<
         const leaseLossError = recoveryLease.getLossError();
         if (leaseLossError) {
           await threadRegistration?.rollback({ releaseLease: false });
-          streamCleanup();
-          cleanupOwnedRegistryState();
+          performCleanup();
         }
         const recoveryError = leaseLossError ?? error;
         const reported = await this.#reportRecoveryFailure(runId, recoveryError);
         if (!reported && !leaseLossError) {
           await threadRegistration?.rollback();
-          streamCleanup();
-          cleanupOwnedRegistryState();
+          performCleanup();
         }
         throw recoveryError;
       })
@@ -2704,16 +2813,10 @@ export class DurableAgent<
     // the stream's `onError` callback.
     workflowExecution.catch(() => {});
 
-    const cleanup = () => {
-      if (autoCleanupTimer) {
-        clearTimeout(autoCleanupTimer);
-        autoCleanupTimer = null;
-      }
-      if (!cleanedUp) {
-        streamCleanup();
-        cleanupOwnedRegistryState();
-      }
-    };
+    // Route the explicit cleanup through the shared performCleanup() so it, the
+    // auto-cleanup timer, and the recovery error paths release the same
+    // resources (including the pubsub subscription via streamCleanup).
+    const cleanup = performCleanup;
 
     const abort = async (reason?: unknown) => {
       if (!abortController.signal.aborted) {
@@ -2981,7 +3084,7 @@ export class DurableAgent<
         }
       })
       .catch(error => {
-        void this.emitError(runId, error);
+        this.emitErrorInBackground(runId, error);
       });
     const trackedEntry = globalRunRegistry.get(runId);
     if (trackedEntry) {
@@ -3500,6 +3603,7 @@ export class DurableAgent<
    */
   getWorkflow() {
     if (!this.#workflow) {
+      this.warnOnRiskyPersistencePolicy();
       this.#workflow = this.createWorkflow();
       // Register mastra on the workflow so execution steps can access agents/tools.
       // DurableAgent goes through the normal Agent registration path (not the durable wrapper
@@ -3514,6 +3618,58 @@ export class DurableAgent<
       }
     }
     return this.#workflow;
+  }
+
+  /**
+   * One-time guardrail warnings for user-supplied `shouldPersistSnapshot`
+   * policies. Probes the predicate with an empty `stepResults`, so predicates
+   * that read `stepResults` may probe inaccurately — the warnings are
+   * best-effort and never block execution.
+   *
+   * Subclasses that ignore the user predicate (EventedAgent) override this
+   * with their own warning.
+   *
+   * @internal
+   */
+  protected warnOnRiskyPersistencePolicy(): void {
+    if (this.#warnedPersistencePolicy) return;
+    this.#warnedPersistencePolicy = true;
+    const predicate = this.userShouldPersistSnapshot;
+    if (!predicate) return;
+    const probe = (workflowStatus: WorkflowRunStatus): boolean => {
+      try {
+        return predicate({ workflowStatus, stepResults: {} });
+      } catch {
+        // The predicate depends on data the probe can't fake — assume it
+        // persists rather than emitting a false-positive warning.
+        return true;
+      }
+    };
+    if (!probe('suspended') || !probe('paused')) {
+      this.guardrailLogger?.warn(
+        `DurableAgent '${this.id}': the custom shouldPersistSnapshot policy does not persist 'suspended'/'paused' snapshots. ` +
+          `Suspended runs cannot be resumed — human-in-the-loop flows will break.`,
+      );
+    }
+    if (this.#mastra?.recoveryConfig?.durableAgents === 'auto' && !probe('running')) {
+      this.guardrailLogger?.warn(
+        `DurableAgent '${this.id}': recovery.durableAgents is 'auto' but the custom shouldPersistSnapshot policy does not persist 'running' snapshots. ` +
+          `In-flight runs of this agent are invisible to crash recovery (listActiveRuns/recoverActiveRuns).`,
+      );
+    }
+  }
+
+  /**
+   * Logger for the persistence-policy guardrail warnings. The durable
+   * registration path rewires the *underlying* agent's logger but not the
+   * wrapper's, so prefer the Mastra-configured logger (which also respects
+   * `logger: false`) and fall back to the base logger for unregistered
+   * agents.
+   *
+   * @internal
+   */
+  protected get guardrailLogger() {
+    return this.#mastra?.getLogger() ?? this.logger;
   }
 
   /**

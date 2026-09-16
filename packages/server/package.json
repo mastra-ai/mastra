@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.67.0-alpha.2",
+  "version": "1.68.0-alpha.2",
   "description": "",
   "type": "module",
   "files": [
@@ -153,6 +153,6 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "hono": "^4.12.8"
+    "hono": "^4.13.7"
   }
 }

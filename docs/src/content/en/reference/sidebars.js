@@ -412,6 +412,7 @@ const sidebars = {
         { type: 'doc', id: 'memory/serialized-memory-config', label: 'SerializedMemoryConfig' },
         { type: 'doc', id: 'memory/summarizeConversation', label: 'summarizeConversation()' },
         { type: 'doc', id: 'memory/cloneThread', label: '.cloneThread()' },
+        { type: 'doc', id: 'memory/copyThread', label: '.copyThread()' },
         { type: 'doc', id: 'memory/createThread', label: '.createThread()' },
         { type: 'doc', id: 'memory/deleteMessages', label: '.deleteMessages()' },
         { type: 'doc', id: 'memory/getThreadById', label: '.getThreadById()' },
@@ -897,6 +898,7 @@ const sidebars = {
         { type: 'doc', id: 'vectors/qdrant', label: 'Qdrant Vector Store' },
         { type: 'doc', id: 'vectors/turbopuffer', label: 'Turbopuffer Vector Store' },
         { type: 'doc', id: 'vectors/upstash', label: 'Upstash Vector Store' },
+        { type: 'doc', id: 'vectors/weaviate', label: 'Weaviate Vector Store' },
       ],
     },
     {

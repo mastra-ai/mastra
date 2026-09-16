@@ -1,5 +1,268 @@
 # mastra
 
+## 1.31.0-alpha.2
+
+### Patch Changes
+
+- Fixed Studio repeatedly polling unsupported feedback storage and requesting metrics before storage support is known. Metrics shows a loading indicator while checking storage support. Capability lookup failures now retain their authentication and error states. Date and URL filter controls remain available with unsupported storage. ([#23816](https://github.com/mastra-ai/mastra/pull/23816))
+
+- Updated dependencies [[`291a694`](https://github.com/mastra-ai/mastra/commit/291a694b3f9b7d9a17af7d10ed3c9c357bed7a6c), [`291a694`](https://github.com/mastra-ai/mastra/commit/291a694b3f9b7d9a17af7d10ed3c9c357bed7a6c), [`467e0a6`](https://github.com/mastra-ai/mastra/commit/467e0a630db09a1750ce9271bddb38e46681bf04), [`c016c9b`](https://github.com/mastra-ai/mastra/commit/c016c9bd051612714e662588e5928b72bd6a6ac6), [`644ac13`](https://github.com/mastra-ai/mastra/commit/644ac131110a9f24a8d92b62dd3777384211a2e7), [`717b196`](https://github.com/mastra-ai/mastra/commit/717b1963a7657d7986dc85cdc2577338b162faf3), [`aa38e6f`](https://github.com/mastra-ai/mastra/commit/aa38e6f424a0eae0e43a5c2ae0b387e404f5e6a6), [`8d9eadb`](https://github.com/mastra-ai/mastra/commit/8d9eadb59ccbcae054600128aa15d95ea4d1141a), [`5085475`](https://github.com/mastra-ai/mastra/commit/5085475c0da226e618eb3ee2676d347788c3fb00), [`5085475`](https://github.com/mastra-ai/mastra/commit/5085475c0da226e618eb3ee2676d347788c3fb00), [`76c7d98`](https://github.com/mastra-ai/mastra/commit/76c7d989f691510d7bfc016723cc78d7e08ac108), [`61f953a`](https://github.com/mastra-ai/mastra/commit/61f953a79736ac0d8a9650f0561c6dab1b097c8e), [`32edb03`](https://github.com/mastra-ai/mastra/commit/32edb0371b8d884bee66897f236e852a959ae07a), [`bc12e6c`](https://github.com/mastra-ai/mastra/commit/bc12e6cd9cc74fb078b006ed5d14429e2101cbb2)]:
+  - @mastra/core@1.68.0-alpha.2
+  - @mastra/deployer@1.68.0-alpha.2
+
+## 1.31.0-alpha.1
+
+### Patch Changes
+
+- Fixed failed sub-agent delegations looking successful in Studio chat. Agent cards now show a failure indicator and the error message, and stay expanded on failure unless the user manually collapsed them. Reloading restores all saved child assistant messages, including partial output produced after resuming a delegation. ([#23420](https://github.com/mastra-ai/mastra/pull/23420))
+
+- Updated dependencies [[`81ccd7b`](https://github.com/mastra-ai/mastra/commit/81ccd7b93040952fe9c7168a2757c43a217f0a87), [`a46385d`](https://github.com/mastra-ai/mastra/commit/a46385dc1b773d1e1453627b1d62e7b6ebe93cf1), [`164e197`](https://github.com/mastra-ai/mastra/commit/164e197aa5b0973ae49a82252294f6276b2829aa), [`25d940a`](https://github.com/mastra-ai/mastra/commit/25d940add25504daebe65bc5cc02f268d6eba07c), [`d7f0579`](https://github.com/mastra-ai/mastra/commit/d7f0579a0445469430b9eadbf9c28ed3fa009839), [`b483910`](https://github.com/mastra-ai/mastra/commit/b48391034dee9a19396c1b3ec084ecf20faf550e), [`164e197`](https://github.com/mastra-ai/mastra/commit/164e197aa5b0973ae49a82252294f6276b2829aa), [`fa4c366`](https://github.com/mastra-ai/mastra/commit/fa4c3664c5446ae13d991204275883b2d7f00690), [`164e197`](https://github.com/mastra-ai/mastra/commit/164e197aa5b0973ae49a82252294f6276b2829aa), [`1670091`](https://github.com/mastra-ai/mastra/commit/16700919c35dadb9737dc7fe7e5feb67cc209494), [`b8e3ee5`](https://github.com/mastra-ai/mastra/commit/b8e3ee5da5cbc46b182ca75214acda667bac5205), [`d777788`](https://github.com/mastra-ai/mastra/commit/d7777889d72b4f37a3d50b830f8208c736ee0e7a), [`56680bf`](https://github.com/mastra-ai/mastra/commit/56680bfff71e7cdad71721b424b160bdd5de6e02), [`93a3425`](https://github.com/mastra-ai/mastra/commit/93a342569d592d0449eee7b4b4f7555dc001081b), [`b130872`](https://github.com/mastra-ai/mastra/commit/b130872508e95f17894c2ed4932d4952db0a2d3c), [`1853f3d`](https://github.com/mastra-ai/mastra/commit/1853f3d9331e3131930581556df781cca85f2d2d), [`fdb59c6`](https://github.com/mastra-ai/mastra/commit/fdb59c6a4c3d9aea19159886aac8d80602763f04)]:
+  - @mastra/core@1.68.0-alpha.1
+  - @mastra/deployer@1.68.0-alpha.1
+
+## 1.31.0-alpha.0
+
+### Minor Changes
+
+- Added reliable trace-import uploads to Mastra Platform with whole-trace batching, bounded retries, upload pacing, and acknowledgement validation. ([#23633](https://github.com/mastra-ai/mastra/pull/23633))
+
+### Patch Changes
+
+- **Breaking change** ([#22978](https://github.com/mastra-ai/mastra/pull/22978))
+
+  Agent Controller streams now emit one complete `message_start` payload, followed by ID-addressed `message_update` events for text, reasoning, and message-part changes. `message_end` now contains only the message ID.
+
+  **Migration**
+
+  Previously, consumers read the complete message from each update. Now, store the start payload by ID and apply subsequent updates to that message:
+
+  ```ts
+  if (event.type === 'message_start') messages.set(event.message.id, event.message);
+  if (event.type === 'message_update') applyUpdate(messages.get(event.id), event.event);
+  ```
+
+- Fixed trace score details opening below the trace panel instead of in its right-hand detail column. ([#23994](https://github.com/mastra-ai/mastra/pull/23994))
+
+- Fixed Studio locking you out when authentication is enabled but the provider has no login screen, for example `MastraJwtAuth`. The blocked "Authentication Required" screen now shows a header form, so you can save the `Authorization` header right there. Studio checks your access again as soon as you save, so you get in without a page reload. No route is exempted from the auth gate; every page stays protected until the server accepts your header. The form shows on all Studio builds, including Mastra Platform. ([#21214](https://github.com/mastra-ai/mastra/pull/21214))
+
+- Improved Studio agent navigation with Chat, Traces, Evals, and Editor tabs. Config is toggled from the header actions, and unavailable Editor/Evals features show icon-only setup hints on the right. Nested Review under Evals, moved Run options beside the evaluation sub-tabs, added `A` (Attach) and `U` (Run options) shortcuts, and clarified review empty states. ([#23989](https://github.com/mastra-ai/mastra/pull/23989))
+
+  The review queue now lives at the Evals tab, and the old route redirects there:
+
+  ```text
+  /agents/my-agent/evaluate?tab=review
+  ```
+
+- Updated dependencies [[`1e68460`](https://github.com/mastra-ai/mastra/commit/1e68460205d0061c6dbc7a7e7a50950236af774b), [`7cfa0df`](https://github.com/mastra-ai/mastra/commit/7cfa0df76759a31b54dd1a87bc95d3064f2026e9), [`cd6948c`](https://github.com/mastra-ai/mastra/commit/cd6948c50aa4478d795613bdfa2d5259a7045026), [`096825c`](https://github.com/mastra-ai/mastra/commit/096825c0cc37de5f465ecdc6617d642b8c898a78), [`fec1259`](https://github.com/mastra-ai/mastra/commit/fec125946766805f3122be391272415691de6408), [`34fd538`](https://github.com/mastra-ai/mastra/commit/34fd538060402e414bdf65af9f469e7bff60be1e), [`d39b43b`](https://github.com/mastra-ai/mastra/commit/d39b43beada08e69a962a47b58d743384722cd1f)]:
+  - @mastra/core@1.68.0-alpha.0
+  - @mastra/deployer@1.68.0-alpha.0
+
+## 1.30.0
+
+### Minor Changes
+
+- Added per-table markdown copying and CSV downloads to Studio assistant messages. Actions are available once the text containing the table finishes streaming and displaying. ([#23537](https://github.com/mastra-ai/mastra/pull/23537))
+
+  Studio enables these controls automatically; no configuration is required.
+
+- Added the `mastra api trace query` command for advanced observability trace predicates and cursor pagination. ([#23680](https://github.com/mastra-ai/mastra/pull/23680))
+
+  ```bash
+  mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"}}'
+  ```
+
+### Patch Changes
+
+- Replaced the agent **Overview** tab in Studio with a collapsible side panel. ([#23870](https://github.com/mastra-ai/mastra/pull/23870))
+
+  The models, capabilities (agents, tools, workflows, processors, skills, scorers), memory, channels and system prompt of an agent are now shown in a resizable panel on the right of the Studio frame. Toggle it with the panel button in the top-right header on any agent page (Chat, Editor, Evaluate, Review, Traces); its open state and width are remembered across reloads. Long lists show the first 10 items with a `+N` button to reveal the rest.
+
+  Opening `/agents/:agentId` (and the old `/overview` and `/settings` URLs) now lands on the agent chat.
+
+  Press `]` to toggle the overview panel from the keyboard (tooltips on the header button show the shortcut). The **Share** action in the agent header is now an icon button.
+
+- Added the Studio Workflow Builder backend. Configure the editor with the new `workflowBuilder` option to enable a hidden, editor-owned agent that authors persisted workflow definitions: ([#23493](https://github.com/mastra-ai/mastra/pull/23493))
+
+  ```ts
+  import { Mastra } from '@mastra/core';
+  import { MastraEditor } from '@mastra/editor';
+
+  const mastra = new Mastra({
+    editor: new MastraEditor({
+      workflowBuilder: {
+        enabled: true,
+        model: 'openai/gpt-5.5', // optional, this is the default
+        lastMessages: 100, // optional, raise or lower how much authoring history the agent recalls
+      },
+    }),
+  });
+  ```
+
+  The server exposes two new endpoints for it: `GET /editor/workflow-builder/settings` reports availability and the admin model policy, and `POST /editor/workflow-builder/stream` streams responses from the builder agent. Access is gated by the `stored-workflows:read` and `stored-workflows:write` permissions, and the `stored:<action>` permission umbrella now also matches `stored-workflows:<action>`, so roles granted `stored` access can use the stored-workflow endpoints.
+
+- Fixed `create-mastra` appearing to freeze when enabling Mastra platform observability. Template clone and dependency install still run in the background during platform sign-in, but once sign-in finishes the CLI now shows a spinner until the install completes instead of going silent. ([#23440](https://github.com/mastra-ai/mastra/pull/23440))
+
+- Fixed new signal-based Studio chats losing their thread identity when navigating or refreshing before the first response finishes. Late send acknowledgements no longer navigate away from another conversation. ([#23550](https://github.com/mastra-ai/mastra/pull/23550))
+
+- Added a Delete button to the prompt block editor in Studio so you can remove stored prompt blocks directly from the UI. Previously the delete endpoint existed but no UI consumed it, forcing a manual API call. A confirmation dialog guards against accidental deletion, and you are returned to the prompt blocks list once a block is deleted. Fixes #22356. ([#23703](https://github.com/mastra-ai/mastra/pull/23703))
+
+- Fixed `mastra deploy` creating a plain Studio project when deploying a Mastra Factory project for the first time, which left the deployment without workspace sandboxes or the `<slug>.factory.mastra.cloud` route. ([#23473](https://github.com/mastra-ai/mastra/pull/23473))
+
+  **Factory projects on `mastra deploy`**
+
+  - New projects for Factory deployments are created with the factory flag, so the platform provisions sandboxes and the Factory route.
+  - The deployment region is asked once for a new Factory project and reused for its environment.
+  - Deploying a Factory build into an existing project that was created without Factory support now explains the problem and offers to create a new Factory project instead, since that support cannot be added later.
+  - `--region` now rejects values other than `us` and `eu` instead of silently ignoring them for the project.
+
+  ```bash
+  # from a directory scaffolded with `npm create factory`
+  mastra deploy --region us
+  ```
+
+  **Legacy commands**
+
+  - `mastra server deploy` creates Factory projects with the flag and sends it on the deploy request.
+  - `mastra studio deploy` warns that it cannot enable Factory support and points at `mastra deploy`.
+
+- Fixed Studio retaining stale agents after hot reload. Missing agents now offer Reload and Choose agent recovery actions instead of leaving users in a dead chat. ([#23936](https://github.com/mastra-ai/mastra/pull/23936))
+
+- Fixed CSV and other text uploads filling the Studio chat transcript. Text uploads now have compact, named previews while remaining readable by the model, including after reload. Unsupported local binaries such as XLS/XLSX are rejected with guidance to export as CSV instead of sending garbled content. ([#23523](https://github.com/mastra-ai/mastra/pull/23523))
+
+- Improved nested workflow graphs in Studio with a resizable desktop panel and a full-width layout on smaller screens. ([#23662](https://github.com/mastra-ai/mastra/pull/23662))
+
+- Fixed Studio chat model selections and settings resetting after navigation or refresh. Preferences are now saved per chat in the browser and restored for subsequent requests without leaking between chats. Explicitly cleared settings remain cleared after refresh. Previously saved agent-wide settings are not carried over; chats without saved per-chat preferences start from agent defaults. Existing per-chat preferences are preserved. Restored model selections respect the current admin model policy. ([#23676](https://github.com/mastra-ai/mastra/pull/23676))
+
+- Improved Studio tool-call groups to show outcome counts without expanding individual calls, including unfinished calls after a run stops. Expanded groups label each unfinished call as incomplete, including historical calls while a later run is active. Explicit error flags on legacy tool results are recognized as failures. ([#23536](https://github.com/mastra-ai/mastra/pull/23536))
+
+- Keep the "Purge Data" confirmation open while the purge request is in flight. Previously the dialog dismissed itself as soon as the confirm button was clicked, hiding the pending state and any failure behind a toast. ([#23572](https://github.com/mastra-ai/mastra/pull/23572))
+
+- Added copying for user messages in Studio chat, with controls shown on hover or keyboard focus and kept visible on touch devices. Fixed clipped assistant message action icons. ([#23906](https://github.com/mastra-ai/mastra/pull/23906))
+
+  To reuse a prompt, hover over your message in Studio chat and click Copy, then paste it into the composer or another editor. On touch devices, tap the Copy button below your message.
+
+- Renamed the deploy diagnosis commands so `diagnosis` is the primary name and `suggestions` is the alias. Run `mastra env diagnosis`, `mastra studio deploy diagnosis`, or `mastra server deploy diagnosis` to debug a failed deploy; the previous `suggestions` names still work. ([#23672](https://github.com/mastra-ai/mastra/pull/23672))
+
+- Added a Langfuse Observations API v2 reader for trace imports. ([#23425](https://github.com/mastra-ai/mastra/pull/23425))
+
+- Improved deploy log output in the CLI. Log lines now match the platform dashboard: timestamps are shown as a short gray local time instead of the full ISO string, log levels like info, warn and error are colored and no longer wrapped in square brackets, and only the last 20 lines stay on screen while a deploy streams so long builds do not flood the terminal. Pass --debug to print every line, and piped or CI output still prints everything. ([#23524](https://github.com/mastra-ai/mastra/pull/23524))
+
+  Fixed `mastra server deploy` showing no build or deploy logs for projects backed by platform environments. The platform returns those logs as a single combined string, which the CLI now reads.
+
+  When a deploy fails, the CLI now prints the error lines from the deploy log with a few lines of context around each, followed by a link to the full log in the dashboard. Successful deploys keep the short tail.
+
+- Added "go to" keyboard shortcuts in Studio for every sidebar page: press `g` then a letter to jump there. For example, `g` then `a` opens Agents, `g` then `w` opens Workflows, `g` then `t` opens Traces, `g` then `p` opens Prompts, `g` then `l` opens Logs and `g` then `,` opens Settings. Inside an agent page, `g` then `t` opens that agent's traces instead of the global traces page. ([#23831](https://github.com/mastra-ai/mastra/pull/23831))
+
+- Improved the Studio Settings page with a theme toggle and separate rows for the instance URL, API prefix, and request headers. ([#23747](https://github.com/mastra-ai/mastra/pull/23747))
+
+- Added a loading skeleton in the Studio agent chat while an existing thread's message history is being fetched, instead of briefly showing the empty welcome screen before the messages appear. ([#23595](https://github.com/mastra-ai/mastra/pull/23595))
+
+- Improved the Traces page in Studio: "View full thread" now opens the thread's full conversation (every turn with its messages and spans) inside the trace side panel, anchored on the current trace, instead of navigating away to the agent thread page. A "Back to trace" button returns to the trace timeline, and selecting another trace falls back to the trace panel automatically. ([#23900](https://github.com/mastra-ai/mastra/pull/23900))
+
+- Updated dependencies [[`d9ef543`](https://github.com/mastra-ai/mastra/commit/d9ef54303b7f050f4e364701c3821fc61e7002f2), [`b96744d`](https://github.com/mastra-ai/mastra/commit/b96744daad8c6e181f03fdf38c732206ded428a2), [`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`e86be03`](https://github.com/mastra-ai/mastra/commit/e86be034c017fca7deae7d1ebb34d36413928cb8), [`492c0ae`](https://github.com/mastra-ai/mastra/commit/492c0aedcee3fde9555111a660b6c975c160a0db), [`4fd3b29`](https://github.com/mastra-ai/mastra/commit/4fd3b299b83a8c97c2e4ff0f83e04fddad593c87), [`0f4d9cf`](https://github.com/mastra-ai/mastra/commit/0f4d9cf79b49b6dc6a484a0b2d1cf381eb2343a6), [`50e2658`](https://github.com/mastra-ai/mastra/commit/50e2658cdcdc55a14abde08610a8e2b12fdf67a4), [`a0aa698`](https://github.com/mastra-ai/mastra/commit/a0aa698427db9730e39f0c9956d21b97307ab313), [`8510a6d`](https://github.com/mastra-ai/mastra/commit/8510a6d38b9d211af7d94b7860ab182ce55c39d1), [`ddbd352`](https://github.com/mastra-ai/mastra/commit/ddbd3527654a058ed413ae164a1246003dcc9030), [`5eba942`](https://github.com/mastra-ai/mastra/commit/5eba9420330b3f116810891ae14888f7f256cd4f), [`4112ecd`](https://github.com/mastra-ai/mastra/commit/4112ecdec76827384d3a7ab4e8db3ccf90ae7ed1), [`37065ad`](https://github.com/mastra-ai/mastra/commit/37065ad6cd3f74afd16417e8d4e0839c13beca40), [`617c1b3`](https://github.com/mastra-ai/mastra/commit/617c1b30e7e794bbb77feaced1848fde291fc240), [`648dd4f`](https://github.com/mastra-ai/mastra/commit/648dd4f4c4cd330013c0a98f50ffac77fe2ad632), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`617c1b3`](https://github.com/mastra-ai/mastra/commit/617c1b30e7e794bbb77feaced1848fde291fc240), [`1ce03b9`](https://github.com/mastra-ai/mastra/commit/1ce03b9c04c633e815bc21cb78c29f7f19851fb2), [`c3d00db`](https://github.com/mastra-ai/mastra/commit/c3d00db279a95c7dcba0f767704a2bb6544b7b29), [`df14b5d`](https://github.com/mastra-ai/mastra/commit/df14b5d12374137db86f92061f8714b28473672e), [`fff3361`](https://github.com/mastra-ai/mastra/commit/fff33614a3376676797cb9b5a5c5b090b026fa0e), [`422e798`](https://github.com/mastra-ai/mastra/commit/422e798ab1a4b14302c5b49fed2f6c818a82706e), [`3fc8c2d`](https://github.com/mastra-ai/mastra/commit/3fc8c2d35f724c3648150b29e50cf61a9360b274), [`ddb3639`](https://github.com/mastra-ai/mastra/commit/ddb3639e3de41f3fe33f68f81c2e5850ff1280b6), [`4b3f587`](https://github.com/mastra-ai/mastra/commit/4b3f587ceabb3f3697c4c1ad4fb154d58002ef7c), [`47868b2`](https://github.com/mastra-ai/mastra/commit/47868b2dde360b038d829c9f88e15061acf3efb5), [`44c20c9`](https://github.com/mastra-ai/mastra/commit/44c20c9a40ba5ef153e1d5d0c413b825e1de42d7), [`502ca89`](https://github.com/mastra-ai/mastra/commit/502ca8904848e77d44622669f2728171d36ad6ca), [`953be88`](https://github.com/mastra-ai/mastra/commit/953be88befd9cdb789b4cfc16680121c663a631b), [`b95aabb`](https://github.com/mastra-ai/mastra/commit/b95aabba261a39b73430d95f3ed051634117d517), [`055057c`](https://github.com/mastra-ai/mastra/commit/055057ca2102e35008fe30871f7c8f422ae25ec2), [`7290151`](https://github.com/mastra-ai/mastra/commit/7290151bdb3bfe518653b0a66a19d6790925e4a0), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`9bc7895`](https://github.com/mastra-ai/mastra/commit/9bc789591ad683f304c63bd01e554fbba2df9cf6), [`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac), [`f466753`](https://github.com/mastra-ai/mastra/commit/f4667539a0c41ae4aa08a4ed380f374687db2592), [`c3d00db`](https://github.com/mastra-ai/mastra/commit/c3d00db279a95c7dcba0f767704a2bb6544b7b29), [`0c4e1b0`](https://github.com/mastra-ai/mastra/commit/0c4e1b087fd8e7ee45b34f304bc238bdd4e587fe), [`04c11b3`](https://github.com/mastra-ai/mastra/commit/04c11b3cd698fa37af8fad466dc2bf6fa0d5494d), [`967ab17`](https://github.com/mastra-ai/mastra/commit/967ab179c9814e734af9c3395ff8ef795acbe06c), [`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`6d20620`](https://github.com/mastra-ai/mastra/commit/6d206205f781cfa2598c2a55123a336909e039b4), [`47868b2`](https://github.com/mastra-ai/mastra/commit/47868b2dde360b038d829c9f88e15061acf3efb5), [`fde3ca5`](https://github.com/mastra-ai/mastra/commit/fde3ca590f7d854ff33354eff4261b907bdacde4), [`3a1d253`](https://github.com/mastra-ai/mastra/commit/3a1d2537ad28754a164aedbf0dd94be224ccb0c3), [`0775cde`](https://github.com/mastra-ai/mastra/commit/0775cdee12b6ad2ad6b5c97874e6248db720224c), [`e3c3e5e`](https://github.com/mastra-ai/mastra/commit/e3c3e5e3e354e88207aa9747f9f0cd3352cea972), [`6902f94`](https://github.com/mastra-ai/mastra/commit/6902f940f1879955a90faa0a0ac871667b59d428), [`16faab5`](https://github.com/mastra-ai/mastra/commit/16faab549fcf13dc4551caac454e07f84d5a4940), [`d55aa61`](https://github.com/mastra-ai/mastra/commit/d55aa616b3e88015c3b74342c75bd510c7e764df), [`7148bf5`](https://github.com/mastra-ai/mastra/commit/7148bf55b147e3fae90b3ba0c9517adb0af5f2a4), [`e83dfad`](https://github.com/mastra-ai/mastra/commit/e83dfade569ee5aea688de9f2bb8bf8db0a653a7), [`44057ea`](https://github.com/mastra-ai/mastra/commit/44057eac6fd048100574bf71c6dc095f769a6d63), [`d581249`](https://github.com/mastra-ai/mastra/commit/d581249a5bf97d32d73e0f1f30cd50ff108e2d67), [`2289456`](https://github.com/mastra-ai/mastra/commit/228945659b2003633e0ebb33e7e34cc2f6efbded), [`6bb122c`](https://github.com/mastra-ai/mastra/commit/6bb122c5147b612c0fe7f173f940933066c4cfcc), [`2c501bc`](https://github.com/mastra-ai/mastra/commit/2c501bc8f661b27a06842f1312221efa6125e580), [`990b47f`](https://github.com/mastra-ai/mastra/commit/990b47fa7370753967ea7ce83100a522f79ab328), [`90846f2`](https://github.com/mastra-ai/mastra/commit/90846f2bfd890de159ab7c3d4fcf8a71c6fb7125), [`6bdb944`](https://github.com/mastra-ai/mastra/commit/6bdb944acb3f39bccad59ee140d7614420948f6b), [`d1b070c`](https://github.com/mastra-ai/mastra/commit/d1b070cd77a944e6bb2e5848052b1e8275be88a2), [`7f6d101`](https://github.com/mastra-ai/mastra/commit/7f6d101044eefc0d776a555b45dbea1c0d5224c4), [`4573c23`](https://github.com/mastra-ai/mastra/commit/4573c231c108e7d796eab12b8e9b2094f8cc4d47), [`a54766a`](https://github.com/mastra-ai/mastra/commit/a54766a10381295583144847b856d18e8f924d30), [`1bd31e7`](https://github.com/mastra-ai/mastra/commit/1bd31e7fd49e6de56e6e9a157a6b452cbbd86983), [`a4381a2`](https://github.com/mastra-ai/mastra/commit/a4381a2b36cdb81c4e33c435cd882921edfc146c), [`ff45065`](https://github.com/mastra-ai/mastra/commit/ff45065d42132075c4efb064d96169c4eadbab58), [`e872dd6`](https://github.com/mastra-ai/mastra/commit/e872dd6619f3a5a46f1158b190b02f607b74d191)]:
+  - @mastra/core@1.67.0
+  - @mastra/deployer@1.67.0
+  - @mastra/loggers@1.3.2
+
+## 1.30.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`a4381a2`](https://github.com/mastra-ai/mastra/commit/a4381a2b36cdb81c4e33c435cd882921edfc146c)]:
+  - @mastra/core@1.67.0-alpha.6
+  - @mastra/deployer@1.67.0-alpha.6
+
+## 1.30.0-alpha.6
+
+### Minor Changes
+
+- Added per-table markdown copying and CSV downloads to Studio assistant messages. Actions are available once the text containing the table finishes streaming and displaying. ([#23537](https://github.com/mastra-ai/mastra/pull/23537))
+
+  Studio enables these controls automatically; no configuration is required.
+
+### Patch Changes
+
+- Fixed Studio retaining stale agents after hot reload. Missing agents now offer Reload and Choose agent recovery actions instead of leaving users in a dead chat. ([#23936](https://github.com/mastra-ai/mastra/pull/23936))
+
+- Fixed Studio chat model selections and settings resetting after navigation or refresh. Preferences are now saved per chat in the browser and restored for subsequent requests without leaking between chats. Explicitly cleared settings remain cleared after refresh. Previously saved agent-wide settings are not carried over; chats without saved per-chat preferences start from agent defaults. Existing per-chat preferences are preserved. Restored model selections respect the current admin model policy. ([#23676](https://github.com/mastra-ai/mastra/pull/23676))
+
+- Improved Studio tool-call groups to show outcome counts without expanding individual calls, including unfinished calls after a run stops. Expanded groups label each unfinished call as incomplete, including historical calls while a later run is active. Explicit error flags on legacy tool results are recognized as failures. ([#23536](https://github.com/mastra-ai/mastra/pull/23536))
+
+- Added copying for user messages in Studio chat, with controls shown on hover or keyboard focus and kept visible on touch devices. Fixed clipped assistant message action icons. ([#23906](https://github.com/mastra-ai/mastra/pull/23906))
+
+  To reuse a prompt, hover over your message in Studio chat and click Copy, then paste it into the composer or another editor. On touch devices, tap the Copy button below your message.
+
+- Renamed the deploy diagnosis commands so `diagnosis` is the primary name and `suggestions` is the alias. Run `mastra env diagnosis`, `mastra studio deploy diagnosis`, or `mastra server deploy diagnosis` to debug a failed deploy; the previous `suggestions` names still work. ([#23672](https://github.com/mastra-ai/mastra/pull/23672))
+
+- Updated dependencies [[`0f4d9cf`](https://github.com/mastra-ai/mastra/commit/0f4d9cf79b49b6dc6a484a0b2d1cf381eb2343a6), [`50e2658`](https://github.com/mastra-ai/mastra/commit/50e2658cdcdc55a14abde08610a8e2b12fdf67a4), [`8510a6d`](https://github.com/mastra-ai/mastra/commit/8510a6d38b9d211af7d94b7860ab182ce55c39d1), [`5eba942`](https://github.com/mastra-ai/mastra/commit/5eba9420330b3f116810891ae14888f7f256cd4f), [`648dd4f`](https://github.com/mastra-ai/mastra/commit/648dd4f4c4cd330013c0a98f50ffac77fe2ad632), [`3fc8c2d`](https://github.com/mastra-ai/mastra/commit/3fc8c2d35f724c3648150b29e50cf61a9360b274), [`ddb3639`](https://github.com/mastra-ai/mastra/commit/ddb3639e3de41f3fe33f68f81c2e5850ff1280b6), [`502ca89`](https://github.com/mastra-ai/mastra/commit/502ca8904848e77d44622669f2728171d36ad6ca), [`953be88`](https://github.com/mastra-ai/mastra/commit/953be88befd9cdb789b4cfc16680121c663a631b), [`0c4e1b0`](https://github.com/mastra-ai/mastra/commit/0c4e1b087fd8e7ee45b34f304bc238bdd4e587fe), [`6d20620`](https://github.com/mastra-ai/mastra/commit/6d206205f781cfa2598c2a55123a336909e039b4), [`d55aa61`](https://github.com/mastra-ai/mastra/commit/d55aa616b3e88015c3b74342c75bd510c7e764df), [`4573c23`](https://github.com/mastra-ai/mastra/commit/4573c231c108e7d796eab12b8e9b2094f8cc4d47)]:
+  - @mastra/core@1.67.0-alpha.5
+  - @mastra/deployer@1.67.0-alpha.5
+
+## 1.30.0-alpha.5
+
+### Patch Changes
+
+- Replaced the agent **Overview** tab in Studio with a collapsible side panel. ([#23870](https://github.com/mastra-ai/mastra/pull/23870))
+
+  The models, capabilities (agents, tools, workflows, processors, skills, scorers), memory, channels and system prompt of an agent are now shown in a resizable panel on the right of the Studio frame. Toggle it with the panel button in the top-right header on any agent page (Chat, Editor, Evaluate, Review, Traces); its open state and width are remembered across reloads. Long lists show the first 10 items with a `+N` button to reveal the rest.
+
+  Opening `/agents/:agentId` (and the old `/overview` and `/settings` URLs) now lands on the agent chat.
+
+  Press `]` to toggle the overview panel from the keyboard (tooltips on the header button show the shortcut). The **Share** action in the agent header is now an icon button.
+
+- Added the Studio Workflow Builder backend. Configure the editor with the new `workflowBuilder` option to enable a hidden, editor-owned agent that authors persisted workflow definitions: ([#23493](https://github.com/mastra-ai/mastra/pull/23493))
+
+  ```ts
+  import { Mastra } from '@mastra/core';
+  import { MastraEditor } from '@mastra/editor';
+
+  const mastra = new Mastra({
+    editor: new MastraEditor({
+      workflowBuilder: {
+        enabled: true,
+        model: 'openai/gpt-5.5', // optional, this is the default
+        lastMessages: 100, // optional, raise or lower how much authoring history the agent recalls
+      },
+    }),
+  });
+  ```
+
+  The server exposes two new endpoints for it: `GET /editor/workflow-builder/settings` reports availability and the admin model policy, and `POST /editor/workflow-builder/stream` streams responses from the builder agent. Access is gated by the `stored-workflows:read` and `stored-workflows:write` permissions, and the `stored:<action>` permission umbrella now also matches `stored-workflows:<action>`, so roles granted `stored` access can use the stored-workflow endpoints.
+
+- Added a Delete button to the prompt block editor in Studio so you can remove stored prompt blocks directly from the UI. Previously the delete endpoint existed but no UI consumed it, forcing a manual API call. A confirmation dialog guards against accidental deletion, and you are returned to the prompt blocks list once a block is deleted. Fixes #22356. ([#23703](https://github.com/mastra-ai/mastra/pull/23703))
+
+- Added "go to" keyboard shortcuts in Studio for every sidebar page: press `g` then a letter to jump there. For example, `g` then `a` opens Agents, `g` then `w` opens Workflows, `g` then `t` opens Traces, `g` then `p` opens Prompts, `g` then `l` opens Logs and `g` then `,` opens Settings. Inside an agent page, `g` then `t` opens that agent's traces instead of the global traces page. ([#23831](https://github.com/mastra-ai/mastra/pull/23831))
+
+- Improved the Studio Settings page with a theme toggle and separate rows for the instance URL, API prefix, and request headers. ([#23747](https://github.com/mastra-ai/mastra/pull/23747))
+
+- Improved the Traces page in Studio: "View full thread" now opens the thread's full conversation (every turn with its messages and spans) inside the trace side panel, anchored on the current trace, instead of navigating away to the agent thread page. A "Back to trace" button returns to the trace timeline, and selecting another trace falls back to the trace panel automatically. ([#23900](https://github.com/mastra-ai/mastra/pull/23900))
+
+- Updated dependencies [[`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`df14b5d`](https://github.com/mastra-ai/mastra/commit/df14b5d12374137db86f92061f8714b28473672e), [`fff3361`](https://github.com/mastra-ai/mastra/commit/fff33614a3376676797cb9b5a5c5b090b026fa0e), [`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac), [`04c11b3`](https://github.com/mastra-ai/mastra/commit/04c11b3cd698fa37af8fad466dc2bf6fa0d5494d), [`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`e83dfad`](https://github.com/mastra-ai/mastra/commit/e83dfade569ee5aea688de9f2bb8bf8db0a653a7), [`6bb122c`](https://github.com/mastra-ai/mastra/commit/6bb122c5147b612c0fe7f173f940933066c4cfcc), [`7f6d101`](https://github.com/mastra-ai/mastra/commit/7f6d101044eefc0d776a555b45dbea1c0d5224c4)]:
+  - @mastra/core@1.67.0-alpha.4
+  - @mastra/deployer@1.67.0-alpha.4
+
+## 1.30.0-alpha.4
+
+### Minor Changes
+
+- Added the `mastra api trace query` command for advanced observability trace predicates and cursor pagination. ([#23680](https://github.com/mastra-ai/mastra/pull/23680))
+
+  ```bash
+  mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"}}'
+  ```
+
+## 1.29.1-alpha.3
+
+### Patch Changes
+
+- Fixed `create-mastra` appearing to freeze when enabling Mastra platform observability. Template clone and dependency install still run in the background during platform sign-in, but once sign-in finishes the CLI now shows a spinner until the install completes instead of going silent. ([#23440](https://github.com/mastra-ai/mastra/pull/23440))
+
+- Improved nested workflow graphs in Studio with a resizable desktop panel and a full-width layout on smaller screens. ([#23662](https://github.com/mastra-ai/mastra/pull/23662))
+
+- Updated dependencies [[`492c0ae`](https://github.com/mastra-ai/mastra/commit/492c0aedcee3fde9555111a660b6c975c160a0db), [`4fd3b29`](https://github.com/mastra-ai/mastra/commit/4fd3b299b83a8c97c2e4ff0f83e04fddad593c87), [`ddbd352`](https://github.com/mastra-ai/mastra/commit/ddbd3527654a058ed413ae164a1246003dcc9030), [`4112ecd`](https://github.com/mastra-ai/mastra/commit/4112ecdec76827384d3a7ab4e8db3ccf90ae7ed1), [`617c1b3`](https://github.com/mastra-ai/mastra/commit/617c1b30e7e794bbb77feaced1848fde291fc240), [`617c1b3`](https://github.com/mastra-ai/mastra/commit/617c1b30e7e794bbb77feaced1848fde291fc240), [`422e798`](https://github.com/mastra-ai/mastra/commit/422e798ab1a4b14302c5b49fed2f6c818a82706e), [`47868b2`](https://github.com/mastra-ai/mastra/commit/47868b2dde360b038d829c9f88e15061acf3efb5), [`b95aabb`](https://github.com/mastra-ai/mastra/commit/b95aabba261a39b73430d95f3ed051634117d517), [`055057c`](https://github.com/mastra-ai/mastra/commit/055057ca2102e35008fe30871f7c8f422ae25ec2), [`7290151`](https://github.com/mastra-ai/mastra/commit/7290151bdb3bfe518653b0a66a19d6790925e4a0), [`9bc7895`](https://github.com/mastra-ai/mastra/commit/9bc789591ad683f304c63bd01e554fbba2df9cf6), [`47868b2`](https://github.com/mastra-ai/mastra/commit/47868b2dde360b038d829c9f88e15061acf3efb5), [`6902f94`](https://github.com/mastra-ai/mastra/commit/6902f940f1879955a90faa0a0ac871667b59d428), [`7148bf5`](https://github.com/mastra-ai/mastra/commit/7148bf55b147e3fae90b3ba0c9517adb0af5f2a4), [`6bdb944`](https://github.com/mastra-ai/mastra/commit/6bdb944acb3f39bccad59ee140d7614420948f6b), [`a54766a`](https://github.com/mastra-ai/mastra/commit/a54766a10381295583144847b856d18e8f924d30), [`ff45065`](https://github.com/mastra-ai/mastra/commit/ff45065d42132075c4efb064d96169c4eadbab58)]:
+  - @mastra/core@1.67.0-alpha.3
+  - @mastra/deployer@1.67.0-alpha.3
+
 ## 1.29.1-alpha.2
 
 ### Patch Changes

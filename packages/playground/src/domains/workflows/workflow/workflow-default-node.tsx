@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { WorkflowClock } from '@mastra/playground-ui/components/Workflow';
 import { CheckIcon } from '@mastra/playground-ui/icons/CheckIcon';
 import { CrossIcon } from '@mastra/playground-ui/icons/CrossIcon';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -9,7 +10,6 @@ import type { NodeProps, Node } from '@xyflow/react';
 import { CircleDashed, HourglassIcon, Loader2, PauseIcon, ShieldAlert } from 'lucide-react';
 import { useCurrentRun } from '../context/use-current-run';
 
-import { Clock } from './workflow-clock';
 import { BADGE_COLORS, BADGE_ICONS, getNodeBadgeInfo } from './workflow-node-badges';
 
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
@@ -143,7 +143,7 @@ export function WorkflowDefaultNode({
             variant="ui-lg"
             className="text-neutral6 inline-flex w-full items-center justify-between gap-1 font-medium"
           >
-            {label} {step?.startedAt && <Clock startedAt={step.startedAt} endedAt={step.endedAt} />}
+            {label} {step?.startedAt && <WorkflowClock startedAt={step.startedAt} endedAt={step.endedAt} />}
           </Txt>
         </div>
 

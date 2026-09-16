@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import { defineBoard } from './define-board.js';
 import { createBoardRegistry } from './registry.js';
-import { boardForWorkItem, resolveBoardToolRule, resolvePhaseSemantics, workItemPhaseSemantics } from './semantics.js';
+import {
+  boardForWorkItem,
+  isTerminalWorkItem,
+  resolveBoardToolRule,
+  resolvePhaseSemantics,
+  workItemPhaseSemantics,
+} from './semantics.js';
 import { createTestBoard } from './test-utils.js';
 
 describe('boardForWorkItem', () => {
@@ -108,5 +114,24 @@ describe('resolveBoardToolRule', () => {
     expect(
       resolveBoardToolRule(createBoardRegistry({ boards: [], includeDefaultBoards: false }), 'work', 'submit_plan'),
     ).toBeUndefined();
+  });
+});
+
+describe('isTerminalWorkItem', () => {
+  const custom = createBoardRegistry({ boards: [createTestBoard()] });
+
+  it("follows the installed board's phase kind", () => {
+    expect(isTerminalWorkItem(custom, { board: 'release', externalSource: null, stages: ['shipped'] })).toBe(true);
+    expect(isTerminalWorkItem(custom, { board: 'release', externalSource: null, stages: ['queued'] })).toBe(false);
+    expect(isTerminalWorkItem(custom, { board: 'work', externalSource: null, stages: ['done'] })).toBe(true);
+    expect(isTerminalWorkItem(custom, { board: 'work', externalSource: null, stages: ['intake'] })).toBe(false);
+  });
+
+  it('falls back to the built-in names only for Work and Review rows on uninstalled boards', () => {
+    const none = createBoardRegistry({ includeDefaultBoards: false });
+    expect(isTerminalWorkItem(none, { board: 'work', externalSource: null, stages: ['done'] })).toBe(true);
+    expect(isTerminalWorkItem(none, { board: null, externalSource: null, stages: ['canceled'] })).toBe(true);
+    expect(isTerminalWorkItem(none, { board: 'ghost', externalSource: null, stages: ['done'] })).toBe(false);
+    expect(isTerminalWorkItem(none, { board: 'work', externalSource: null, stages: ['done', 'intake'] })).toBe(false);
   });
 });

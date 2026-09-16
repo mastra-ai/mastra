@@ -366,6 +366,25 @@ describe('BackgroundTaskManager', () => {
       expect((await manager.getTask(bgTask.task.id))?.status).toBe('cancelled');
     });
 
+    it('stops waiting when the caller aborts', async () => {
+      const bgTask = createBackgroundTask(manager, {
+        toolName: 'tool',
+        toolCallId: 'call-1',
+        args: {},
+        agentId: 'a1',
+        runId: 'run-1',
+        context: ctx(vi.fn(() => new Promise(() => {}))),
+      });
+      const abortController = new AbortController();
+
+      await bgTask.dispatch();
+      const waiting = bgTask.waitForCompletion({ abortSignal: abortController.signal });
+      abortController.abort(new Error('request aborted'));
+
+      await expect(waiting).rejects.toThrow('request aborted');
+      await bgTask.cancel();
+    });
+
     it('throws if cancel/wait called before dispatch', async () => {
       const bgTask = createBackgroundTask(manager, {
         toolName: 'tool',
@@ -1095,6 +1114,87 @@ describe('BackgroundTaskManager', () => {
       expect(completed?.status).toBe('completed');
       expect(completed?.result).toEqual({ approvedBy: 'alice', suspendedToolRunId: 'delegated-run-id' });
       expect(completed?.suspendPayload).toBeUndefined();
+      expect(executeFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('drops a model-authored sentinel suspendedToolRunId so the framework-persisted id wins on resume', async () => {
+      // Some models emit the literal string "null" for the optional
+      // `suspendedToolRunId` arg on fresh calls. It must be treated as absent:
+      // dropped from the fresh call, and replaced by the suspend payload's
+      // framework-persisted run id on resume (#23739).
+      const executeFn = vi.fn(async (args, opts: any) => {
+        if (!opts.resumeData) {
+          await opts.suspend(
+            { awaiting: 'approval', suspendedToolRunId: 'delegated-run-id' },
+            { runId: 'delegated-run-id' },
+          );
+          return undefined;
+        }
+        return {
+          approvedBy: (opts.resumeData as { user: string }).user,
+          suspendedToolRunId: args.suspendedToolRunId,
+        };
+      });
+
+      const { task } = await manager.enqueue(
+        {
+          toolName: 't',
+          toolCallId: 'cres-sentinel',
+          args: { suspendedToolRunId: 'null' },
+          agentId: 'a1',
+          runId: 'r3s',
+        },
+        ctx(executeFn),
+      );
+      await tick(200);
+      expect((await manager.getTask(task.id))?.status).toBe('suspended');
+      expect(executeFn.mock.calls[0]?.[0]).not.toHaveProperty('suspendedToolRunId');
+
+      await manager.resume(task.id, { user: 'alice' });
+      await tick(200);
+
+      const completed = await manager.getTask(task.id);
+      expect(completed?.status).toBe('completed');
+      expect(completed?.result).toEqual({ approvedBy: 'alice', suspendedToolRunId: 'delegated-run-id' });
+      expect(executeFn.mock.calls[1]?.[0]).toMatchObject({ suspendedToolRunId: 'delegated-run-id' });
+      expect(executeFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('resumes an agent-as-tool delegation whose runId is only in suspendOptions', async () => {
+      // Mirrors the real agent-as-tool suspend: the nested sub-agent runId is
+      // passed via `suspendOptions.runId` (with `isAgentSuspend: true`) and is
+      // absent from the suspend payload. The resume path must still restore it
+      // into `args.suspendedToolRunId`.
+      const executeFn = vi.fn(async (args, opts: any) => {
+        if (!opts.resumeData) {
+          await opts.suspend({ awaiting: 'approval' }, { runId: 'delegated-run-id', isAgentSuspend: true });
+          return undefined;
+        }
+        return {
+          approvedBy: (opts.resumeData as { user: string }).user,
+          suspendedToolRunId: args.suspendedToolRunId,
+        };
+      });
+
+      const { task } = await manager.enqueue(
+        { toolName: 't', toolCallId: 'cres-agent', args: {}, agentId: 'a1', runId: 'r4' },
+        ctx(executeFn),
+      );
+      await tick(200);
+
+      const suspended = await manager.getTask(task.id);
+      expect(suspended?.status).toBe('suspended');
+      // The user-facing suspend payload must stay clean — no runId leaked in.
+      expect(suspended?.suspendPayload).toEqual({ awaiting: 'approval' });
+      expect(executeFn.mock.calls[0]?.[0]).not.toHaveProperty('suspendedToolRunId');
+
+      await manager.resume(task.id, { user: 'alice' });
+      await tick(200);
+
+      const completed = await manager.getTask(task.id);
+      expect(completed?.status).toBe('completed');
+      expect(completed?.result).toEqual({ approvedBy: 'alice', suspendedToolRunId: 'delegated-run-id' });
+      expect(executeFn.mock.calls[1]?.[0]).toMatchObject({ suspendedToolRunId: 'delegated-run-id' });
       expect(executeFn).toHaveBeenCalledTimes(2);
     });
 

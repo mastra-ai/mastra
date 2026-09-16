@@ -1,26 +1,38 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import * as coreStorage from '@mastra/core/storage';
 import type {
+  GetTraceQueryValuesResponse,
+  QueryThreadsResult,
   TraceQueryCanonicalField,
+  TraceQueryObservedFieldsResult,
   TraceQueryFeedbackField,
   TraceQueryField,
   TraceQueryPredicateField,
   TraceQueryResponse,
   TraceQueryScoreField,
   TraceQuerySpanField,
+  TrustedThreadPredicate,
+  TrustedThreadQueryPlan,
+  TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
+  TrustedTraceQueryValuesPlan,
   TrustedTraceQueryPredicate,
   TrustedTraceQueryScalarPredicate,
 } from '@mastra/core/storage';
 
 import { TABLE_FEEDBACK_EVENTS, TABLE_SCORE_EVENTS, TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS } from './ddl';
-import { CH_SETTINGS } from './helpers';
+import { CH_SETTINGS, parseJson } from './helpers';
 
 type ClickHouseParameterType = 'String' | 'Float64' | 'UInt64' | "DateTime64(3, 'UTC')";
 type FieldDefinition = { sql: string; parameterType: ClickHouseParameterType };
 type FieldRegistry<TField extends string> = Record<TField, FieldDefinition>;
 type QueryParams = Record<string, string | number>;
 type SqlFragment = { sql: string; params: QueryParams };
+type RelatedCollection = 'spans' | 'scores' | 'feedback';
+type TraceSelection = {
+  timeRange: { from: string; to: string };
+  where?: TrustedTraceQueryPredicate;
+};
 
 const TRACE_STATUS_SQL = `if(isNotNull(r.error), 'error', 'success')`;
 
@@ -81,6 +93,11 @@ const FEEDBACK_FIELDS = {
 const TRACE_SELECT = `
   r.traceId AS traceId,
   r.spanId AS rootSpanId,
+  r.name AS name,
+  r.entityId AS entityId,
+  r.parentSpanId AS parentSpanId,
+  r.metadataRaw AS metadata,
+  r.input AS input,
   r.threadId AS threadId,
   r.resourceId AS resourceId,
   r.startedAt AS startedAt,
@@ -186,8 +203,8 @@ function compileFeedbackScalarPredicate(
 
 function collectRelationCollections(
   predicate: TrustedTraceQueryPredicate | undefined,
-  collections = new Set<'spans' | 'scores' | 'feedback'>(),
-): Set<'spans' | 'scores' | 'feedback'> {
+  collections = new Set<RelatedCollection>(),
+): Set<RelatedCollection> {
   if (!predicate) return collections;
   if (predicate.type === 'relation') {
     collections.add(predicate.collection);
@@ -195,6 +212,21 @@ function collectRelationCollections(
     for (const arg of predicate.args) collectRelationCollections(arg, collections);
   } else if (predicate.type === 'not') {
     collectRelationCollections(predicate.arg, collections);
+  }
+  return collections;
+}
+
+function collectThreadRelationCollections(
+  predicate: TrustedThreadPredicate | undefined,
+  collections: Set<RelatedCollection>,
+): Set<RelatedCollection> {
+  if (!predicate) return collections;
+  if (predicate.type === 'relation') {
+    collectRelationCollections(predicate.predicate, collections);
+  } else if (predicate.type === 'boolean') {
+    for (const arg of predicate.args) collectThreadRelationCollections(arg, collections);
+  } else {
+    collectThreadRelationCollections(predicate.arg, collections);
   }
   return collections;
 }
@@ -233,16 +265,34 @@ function compilePredicate(predicate: TrustedTraceQueryPredicate, parameters: Par
   return compileScalarPredicate(predicate, TRACE_FIELDS, parameters, true);
 }
 
+function compileThreadPredicate(predicate: TrustedThreadPredicate, parameters: ParameterBuilder): string {
+  if (predicate.type === 'relation') {
+    const existence = `EXISTS (
+      SELECT 1 FROM eligible_roots r
+      WHERE r.threadId = t.threadId
+        AND (${compilePredicate(predicate.predicate, parameters)})
+    )`;
+    return predicate.quantifier === 'some' ? existence : `NOT ${existence}`;
+  }
+  if (predicate.type === 'boolean') {
+    const parts = predicate.args.map(arg => `(${compileThreadPredicate(arg, parameters)})`);
+    return parts.join(predicate.operator === 'and' ? ' AND ' : ' OR ');
+  }
+  return `NOT (${compileThreadPredicate(predicate.arg, parameters)})`;
+}
+
 export interface CompiledClickHouseTraceQuery {
   query: string;
   query_params: QueryParams;
 }
 
-export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): CompiledClickHouseTraceQuery {
-  const parameters = new ParameterBuilder();
-  const from = parameters.add(plan.timeRange.from, "DateTime64(3, 'UTC')");
-  const to = parameters.add(plan.timeRange.to, "DateTime64(3, 'UTC')");
-  const relationCollections = collectRelationCollections(plan.where);
+function compileClickHouseTraceScope(
+  selection: TraceSelection,
+  relationCollections: Set<RelatedCollection>,
+  parameters: ParameterBuilder,
+): string[] {
+  const from = parameters.add(selection.timeRange.from, "DateTime64(3, 'UTC')");
+  const to = parameters.add(selection.timeRange.to, "DateTime64(3, 'UTC')");
   const ctes = [
     `current_roots AS (
     SELECT * FROM (
@@ -334,6 +384,14 @@ export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): Compil
   )`);
   }
 
+  return ctes;
+}
+
+export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): CompiledClickHouseTraceQuery {
+  const parameters = new ParameterBuilder();
+  const relationCollections = collectRelationCollections(plan.where);
+  const ctes = compileClickHouseTraceScope(plan, relationCollections, parameters);
+
   const predicate = plan.where ? compilePredicate(plan.where, parameters) : '1';
   ctes.push(`candidates AS (
     SELECT ${TRACE_SELECT}
@@ -378,6 +436,128 @@ LIMIT ${limit}`,
   };
 }
 
+export function compileClickHouseThreadQuery(plan: TrustedThreadQueryPlan): CompiledClickHouseTraceQuery {
+  const parameters = new ParameterBuilder();
+  const relationCollections = collectRelationCollections(plan.traces.where);
+  collectThreadRelationCollections(plan.where, relationCollections);
+  const ctes = compileClickHouseTraceScope(plan.traces, relationCollections, parameters);
+
+  const eligibility = plan.traces.where ? compilePredicate(plan.traces.where, parameters) : '1';
+  ctes.push(`eligible_roots AS (
+    SELECT *
+    FROM root_scope r
+    WHERE ${eligibility}
+  )`);
+  ctes.push(`thread_ids AS (
+    SELECT threadId
+    FROM eligible_roots
+    WHERE isNotNull(threadId)
+    GROUP BY threadId
+  )`);
+
+  const threadPredicate = plan.where ? compileThreadPredicate(plan.where, parameters) : '1';
+  ctes.push(`qualified_threads AS (
+    SELECT t.threadId
+    FROM thread_ids t
+    WHERE ${threadPredicate}
+  )`);
+
+  const pageCondition = plan.cursor ? `WHERE threadId > ${parameters.add(plan.cursor.threadId, 'String')}` : '';
+  const limit = parameters.add(plan.limit + 1, 'UInt64');
+  return {
+    query: `WITH ${ctes.join(',\n')}
+SELECT threadId
+FROM qualified_threads
+${pageCondition}
+ORDER BY threadId ASC
+LIMIT ${limit}`,
+    query_params: parameters.params,
+  };
+}
+
+function discoveryRegistry(scope: TrustedTraceQueryValuesPlan['predicateScope']): Partial<FieldRegistry<string>> {
+  if (scope === 'trace') return TRACE_FIELDS;
+  if (scope === 'spans') return SPAN_FIELDS;
+  if (scope === 'scores') return SCORE_FIELDS;
+  return FEEDBACK_FIELDS;
+}
+
+function discoverySource(scope: TrustedTraceQueryValuesPlan['predicateScope']): string {
+  if (scope === 'trace') return 'root_scope r';
+  if (scope === 'spans') return 'current_spans s';
+  if (scope === 'scores') return 'current_scores s';
+  return 'current_feedback s';
+}
+
+function discoveryCollections(scope: TrustedTraceQueryValuesPlan['predicateScope']): Set<RelatedCollection> {
+  return scope === 'trace' ? new Set() : new Set([scope]);
+}
+
+export function compileClickHouseTraceQueryObservedFields(
+  plan: TrustedTraceQueryObservedFieldsPlan,
+): CompiledClickHouseTraceQuery {
+  const parameters = new ParameterBuilder();
+  const ctes = compileClickHouseTraceScope(plan, new Set(), parameters);
+  const search = plan.search
+    ? `AND positionCaseInsensitiveUTF8(concat('metadata.', key), ${parameters.add(plan.search, 'String')}) > 0`
+    : '';
+  const limit = parameters.add(plan.limit + 1, 'UInt64');
+  ctes.push(`metadata_entries AS (
+    SELECT
+      entry.1 AS key,
+      entry.2 AS rawValue,
+      JSONExtractString(entry.2) AS value
+    FROM root_scope r
+    ARRAY JOIN JSONExtractKeysAndValuesRaw(ifNull(r.metadataRaw, '{}')) AS entry
+  )`);
+  return {
+    query: `WITH ${ctes.join(',\n')}
+SELECT concat('metadata.', key) AS path, count() AS occurrences
+FROM metadata_entries
+WHERE JSONType(rawValue) = 'String'
+  AND trim(value) != ''
+  AND key != ''
+  AND position(key, '.') = 0
+  AND length(concat('metadata.', key)) <= ${coreStorage.TRACE_QUERY_MAX_PATH_BYTES}
+  AND length(value) <= ${coreStorage.TRACE_QUERY_MAX_STRING_BYTES}
+  ${search}
+GROUP BY key
+ORDER BY occurrences DESC, path ASC
+LIMIT ${limit}`,
+    query_params: parameters.params,
+  };
+}
+
+export function compileClickHouseTraceQueryValues(plan: TrustedTraceQueryValuesPlan): CompiledClickHouseTraceQuery {
+  const parameters = new ParameterBuilder();
+  const ctes = compileClickHouseTraceScope(plan, discoveryCollections(plan.predicateScope), parameters);
+  let field: string;
+  if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
+    const key = parameters.add(plan.path.slice('metadata.'.length), 'String');
+    field = `coalesce(if(mapContains(r.metadataSearch, ${key}), r.metadataSearch[${key}], NULL), nullIf(trim(JSONExtractString(r.metadataRaw, ${key})), ''))`;
+  } else {
+    field = fieldDefinition(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField).sql;
+  }
+  const search = plan.search
+    ? `AND positionCaseInsensitiveUTF8(value, ${parameters.add(plan.search, 'String')}) > 0`
+    : '';
+  const limit = parameters.add(plan.limit + 1, 'UInt64');
+  return {
+    query: `WITH ${ctes.join(',\n')}, extracted AS (
+  SELECT toString(${field}) AS value FROM ${discoverySource(plan.predicateScope)}
+)
+SELECT value, count() AS count
+FROM extracted
+WHERE value IS NOT NULL
+  AND length(value) <= ${coreStorage.TRACE_QUERY_MAX_STRING_BYTES}
+  ${search}
+GROUP BY value
+ORDER BY count DESC, value ASC
+LIMIT ${limit}`,
+    query_params: parameters.params,
+  };
+}
+
 function asIsoTimestamp(value: unknown): string {
   return new Date(value as string | number | Date).toISOString();
 }
@@ -410,6 +590,37 @@ export async function runWithClickHouseTraceQueryTimeout(
   }
 }
 
+export async function getTraceQueryObservedFields(
+  client: ClickHouseClient,
+  plan: TrustedTraceQueryObservedFieldsPlan,
+  timeoutMs: number,
+): Promise<TraceQueryObservedFieldsResult> {
+  if (plan.predicateScope !== 'trace') return { observedFields: [], observedFieldsTruncated: false };
+  const rows = await runWithClickHouseTraceQueryTimeout(
+    client,
+    timeoutMs,
+    compileClickHouseTraceQueryObservedFields(plan),
+  );
+  return {
+    observedFields: rows
+      .slice(0, plan.limit)
+      .map(row => coreStorage.createTraceQueryObservedFieldDescriptor(String(row.path), Number(row.occurrences))),
+    observedFieldsTruncated: rows.length > plan.limit,
+  };
+}
+
+export async function getTraceQueryValues(
+  client: ClickHouseClient,
+  plan: TrustedTraceQueryValuesPlan,
+  timeoutMs: number,
+): Promise<GetTraceQueryValuesResponse> {
+  const rows = await runWithClickHouseTraceQueryTimeout(client, timeoutMs, compileClickHouseTraceQueryValues(plan));
+  return coreStorage.getTraceQueryValuesResponseSchema.parse({
+    values: rows.slice(0, plan.limit).map(row => ({ value: String(row.value), count: Number(row.count) })),
+    valuesTruncated: rows.length > plan.limit,
+  });
+}
+
 export async function queryTraces(
   client: ClickHouseClient,
   plan: TrustedTraceQueryPlan,
@@ -435,6 +646,12 @@ export async function queryTraces(
   const traces = visibleRows.map(row => ({
     traceId: String(row.traceId),
     rootSpanId: String(row.rootSpanId),
+    name: row.name,
+    entityId: row.entityId ?? null,
+    parentSpanId: row.parentSpanId ?? null,
+    createdAt: asIsoTimestamp(row.startedAt),
+    metadata: parseJson(row.metadata) ?? null,
+    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
     threadId: row.threadId == null ? null : String(row.threadId),
     resourceId: row.resourceId == null ? null : String(row.resourceId),
     startedAt: asIsoTimestamp(row.startedAt),
@@ -455,6 +672,25 @@ export async function queryTraces(
               sortValue: last[plan.orderBy.field],
               traceId: last.traceId,
             })
+          : null,
+    },
+  });
+}
+
+export async function queryThreads(
+  client: ClickHouseClient,
+  plan: TrustedThreadQueryPlan,
+  timeoutMs: number,
+): Promise<QueryThreadsResult> {
+  const rows = await runWithClickHouseTraceQueryTimeout(client, timeoutMs, compileClickHouseThreadQuery(plan));
+  const threads = rows.slice(0, plan.limit).map(row => ({ threadId: String(row.threadId) }));
+  const last = threads.at(-1);
+  return coreStorage.queryThreadsResultSchema.parse({
+    threads,
+    page: {
+      next:
+        rows.length > plan.limit && last
+          ? coreStorage.encodeTraceQueryCursor(plan, { result: 'threads', threadId: last.threadId })
           : null,
     },
   });

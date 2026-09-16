@@ -69,6 +69,12 @@ function snapshotRequestContextEntries(
     // Never persist the framework-managed bearer token in durable workflow
     // input; a resumed authenticated request supplies its own fresh token.
     if (key === MASTRA_AUTH_TOKEN_KEY) continue;
+    // The merged version overrides (Mastra defaults < requestContext <
+    // call-site) are framework state written during prep (step 3). Persisting
+    // the merged value would freeze the preparing process's defaults over the
+    // executing worker's. The caller's own versions entry is re-added at the
+    // call site.
+    if (key === MASTRA_VERSIONS_KEY) continue;
     // Serialize each entry exactly once with a bounded pass: a shared-reference
     // graph would otherwise make JSON.stringify expand exponentially and wedge
     // the event loop on every durable step, and reading the value twice (probe
@@ -142,6 +148,8 @@ interface DurablePreparationAgent {
     hooks?: ToolHooks;
     delegation?: DelegationConfig;
     methodType?: AgentMethodType;
+    backgroundTaskEnabled?: boolean;
+    backgroundTaskPolicy?: AgentExecutionOptions<any>['backgroundTaskPolicy'];
   }): Promise<Record<string, CoreTool>>;
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
@@ -256,13 +264,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // 2. Get request context
   const requestContext = providedRequestContext ?? new RequestContext();
 
-  // 2a. Snapshot caller-provided RequestContext entries *before* preparation
-  // mutates the context (version overrides at step 3, MastraMemory at step 4).
-  // The persisted `customContext` should reflect only what the caller passed in,
-  // not internal-key state added during prep.
-  const requestContextEntriesSnapshot = snapshotRequestContextEntries(requestContext);
-
-  // 2b. Merge the wrapped agent's defaultOptions under the per-request options,
+  // 2a. Merge the wrapped agent's defaultOptions under the per-request options,
   // mirroring the non-durable Agent.stream()/generate() paths. Without this the
   // agent's configured defaults (maxSteps, providerOptions, etc.) are silently
   // dropped and durable runs fall back to DurableAgentDefaults.MAX_STEPS.
@@ -496,6 +498,33 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     }
   }
 
+  // Snapshot the request context AFTER input processors have run so their
+  // writes reach the durable run (#23904) — cross-process engines rebuild the
+  // context from these entries via restoreRequestContext, so anything missing
+  // here is silently dropped on the worker. Framework-internal prep state
+  // (memory keys, auth token, merged versions) is excluded by key inside
+  // snapshotRequestContextEntries; the versions entry is pinned back to the
+  // caller's own value (captured at step 3, before the merge) so persisted
+  // input still reflects only caller intent.
+  let requestContextEntriesSnapshot = snapshotRequestContextEntries(requestContext);
+  if (requestVersions !== undefined) {
+    const requestVersionsJson = boundedStringify(requestVersions);
+    if (requestVersionsJson !== undefined) {
+      requestContextEntriesSnapshot = {
+        ...requestContextEntriesSnapshot,
+        [MASTRA_VERSIONS_KEY]: JSON.parse(requestVersionsJson),
+      };
+    }
+  }
+
+  // Resolve background task configuration before converting tools so eligible
+  // tools expose the per-call `_background` override in their input schemas.
+  const backgroundTasksConfig = typedAgent.getBackgroundTasksConfig?.();
+  const backgroundTaskManager =
+    execOptions?.disableBackgroundTasks || execOptions?.backgroundTaskPolicy?.allowToolDispatch === false
+      ? undefined
+      : mastra?.backgroundTaskManager;
+
   // 7. Convert tools to CoreTool format for execution
   let tools: Record<string, CoreTool> = {};
   try {
@@ -511,6 +540,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       hooks: execOptions?.hooks,
       delegation: execOptions?.delegation,
       methodType,
+      backgroundTaskEnabled: Boolean(backgroundTaskManager),
+      backgroundTaskPolicy: execOptions?.backgroundTaskPolicy,
     });
   } catch (error) {
     logger?.warn?.(`[DurableAgent] Error converting tools: ${error}`);
@@ -585,12 +616,6 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     }
   }
 
-  // 11. Get background task config. When the caller opts out with
-  // `disableBackgroundTasks: true`, drop the manager so the registry entry
-  // signals "no background tasks for this run" to the check step.
-  const backgroundTasksConfig = typedAgent.getBackgroundTasksConfig?.();
-  const backgroundTaskManager = execOptions?.disableBackgroundTasks ? undefined : mastra?.backgroundTaskManager;
-
   // Resolve tool payload transform policy with the same precedence the
   // non-durable Agent uses: per-call > agent-level > mastra-level. The
   // resolved policy carries a closure, so it lives on the run registry; the
@@ -658,6 +683,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       structuredOutput: serializedStructuredOutput,
       skipBgTaskWait: (execOptions as any)?._skipBgTaskWait,
       disableBackgroundTasks: execOptions?.disableBackgroundTasks,
+      backgroundTaskPolicy: execOptions?.backgroundTaskPolicy,
       tracingOptions: execOptions?.tracingOptions,
       actor: execOptions?.actor,
       instructionsOverride: execOptions?.instructions,
