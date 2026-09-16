@@ -1,0 +1,190 @@
+---
+title: "Freestyle | Sandbox"
+description: "Run Mastra workspace commands in powerful, persistent, hardware-virtualized Freestyle Linux VMs with full root access."
+packages:
+  - "@mastra/freestyle"
+---
+
+# Freestyle
+
+[Freestyle](https://www.freestyle.sh) runs Mastra sandboxes in powerful, persistent, hardware-virtualized Linux virtual machines with full root access. The VMs preserve their filesystem and memory when paused, and support workloads that need Docker, Filesystem in Userspace (FUSE), extended Berkeley Packet Filter (eBPF), full Linux networking, or nested virtualization.
+
+`FreestyleSandbox` reconnects to a VM by stable slug. Mastra's `stop()` lifecycle pauses the VM without discarding its runtime state, while `destroy()` permanently deletes it. For interface details, see the [WorkspaceSandbox interface](/reference/workspace/sandbox).
+
+:::warning
+
+The provider supports foreground commands and direct file uploads. It doesn't expose Mastra's background process manager or interactive stdin. Use the underlying [`vm.pty`](https://www.freestyle.sh/docs/vms/pty) API when you need a persistent or interactive process.
+
+:::
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/freestyle
+```
+
+Create an API key in the [Freestyle dashboard](https://dash.freestyle.sh), then set it in your environment:
+
+```bash
+FREESTYLE_API_KEY=your-api-key
+```
+
+## Usage
+
+Add a `FreestyleSandbox` to a workspace and assign it to an agent:
+
+```typescript title="src/mastra/agents/dev-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { FreestyleSandbox } from '@mastra/freestyle'
+
+const workspace = new Workspace({
+  sandbox: new FreestyleSandbox({
+    id: 'developer-agent',
+    workingDirectory: '/workspace',
+  }),
+})
+
+const agent = new Agent({
+  id: 'dev-agent',
+  name: 'Development agent',
+  model: 'openai/gpt-5.6-sol',
+  instructions: 'Use the workspace to inspect, edit, build, and test the project.',
+  workspace,
+})
+```
+
+The `id` becomes the VM's stable slug. A new `FreestyleSandbox` with the same `id` reconnects to that VM after an application restart.
+
+## Configure the VM
+
+Pass Freestyle [`vms.create()`](https://www.freestyle.sh/docs/vms) options through `createOptions`. The sandbox provides a persistent Ubuntu VM with outbound internet access by default.
+
+This example selects a larger base snapshot and adds metadata:
+
+```typescript
+const sandbox = new FreestyleSandbox({
+  id: 'build-agent',
+  createOptions: {
+    snapshotId: 'freestyle/ubuntu-lg',
+    metadata: { workload: 'mastra' },
+  },
+})
+```
+
+Set your own `firewall` in `createOptions` when the VM needs a stricter egress policy or private Virtual Private Cloud (VPC) access. Freestyle VMs receive no network access that the firewall doesn't allow.
+
+## Run commands and write files
+
+Mastra calls `executeCommand()` for foreground shell commands. The provider applies the workspace environment, working directory, command arguments, and timeout before calling `vm.exec()`:
+
+```typescript
+const result = await sandbox.executeCommand('npm', ['test'], {
+  cwd: '/workspace/app',
+  env: { NODE_ENV: 'test' },
+  timeout: 300_000,
+})
+
+if (!result.success) {
+  console.error(result.stderr)
+}
+```
+
+Use `writeFiles()` to upload text or binary files directly through the VM filesystem API:
+
+```typescript
+await sandbox.writeFiles([
+  { path: '/workspace/package.json', content: '{"private":true}' },
+  { path: '/workspace/run.sh', content: 'npm test\n', mode: 0o755 },
+])
+```
+
+## Persistence and cleanup
+
+The provider maps Mastra's lifecycle onto the VM lifecycle:
+
+| Mastra lifecycle | Freestyle behavior |
+| - | - |
+| `start()` | Reconnects by stable slug, then starts or resumes the VM. Creates the VM when it doesn't exist. |
+| `stop()` | Pauses the VM while preserving its memory and disk. |
+| `destroy()` | Permanently deletes the VM. |
+
+Workspace shutdown calls `stop()`, so a later application process can construct `FreestyleSandbox` with the same `id` and resume the previous environment. Call `destroy()` when the user, thread, or project no longer needs the VM.
+
+## Use the Freestyle SDK directly
+
+After the sandbox starts, `sandbox.vm` exposes the underlying Freestyle SDK VM handle:
+
+```typescript
+await sandbox.start()
+
+const { snapshotId } = await sandbox.vm.snapshot()
+const shell = await sandbox.vm.pty.open({ exec: '/bin/bash -l' })
+```
+
+Use this handle for snapshots, PTYs, VM resizing, private networking, and other provider-specific operations that aren't part of Mastra's sandbox interface.
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Stable VM slug used to create or reconnect to the sandbox.',
+    isOptional: true,
+    defaultValue: 'Generated mastra-* slug',
+  },
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'Freestyle API key. Falls back to the FREESTYLE_API_KEY environment variable.',
+    isOptional: true,
+  },
+  {
+    name: 'baseUrl',
+    type: 'string',
+    description: 'Freestyle API base URL. Use this for a custom control plane.',
+    isOptional: true,
+  },
+  {
+    name: 'createOptions',
+    type: "Omit<CreateVmOptions, 'slug' | 'firewall'> & { firewall?: CreateVmOptions['firewall'] }",
+    description:
+      'Options forwarded to freestyle.vms.create(). The sandbox sets slug from id and supplies a default firewall.',
+    isOptional: true,
+  },
+  {
+    name: 'workingDirectory',
+    type: 'string',
+    description: 'Default command working directory. A per-command cwd takes precedence.',
+    isOptional: true,
+  },
+  {
+    name: 'commandTimeoutMs',
+    type: 'number',
+    description:
+      'Default timeout for one-shot commands in milliseconds. Freestyle vm.exec() supports up to five minutes.',
+    isOptional: true,
+    defaultValue: '300000',
+  },
+  {
+    name: 'env',
+    type: 'Record<string, string | undefined>',
+    description: 'Environment variables merged into each command.',
+    isOptional: true,
+  },
+  {
+    name: 'instructions',
+    type: 'string | ((opts) => string)',
+    description: 'Custom instructions that replace or extend the defaults returned by getInstructions().',
+    isOptional: true,
+  },
+]}
+/>
+
+## Related
+
+- [Sandbox overview](/docs/sandbox/overview)
+- [WorkspaceSandbox interface](/reference/workspace/sandbox)
+- [Freestyle VM documentation](https://www.freestyle.sh/docs/vms)
