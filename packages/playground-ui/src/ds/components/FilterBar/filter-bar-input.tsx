@@ -264,7 +264,10 @@ export function FilterBarInput({
             positionMethod={FLOATING_POSITION_METHOD}
             className={comboboxStyles.positioner}
           >
-            <ComboboxPrimitive.Popup className={cn(comboboxStyles.popup, 'w-64')} data-slot="filter-bar-editor">
+            <ComboboxPrimitive.Popup // The input stretches across the bar, so drop the anchor-width floor: size to content.
+              className={cn(comboboxStyles.popup, 'min-w-44')}
+              data-slot="filter-bar-editor"
+            >
               {draft.step === 'field' && (
                 <FilterBarOptionList<FilterBarField>
                   aria-label="Fields"

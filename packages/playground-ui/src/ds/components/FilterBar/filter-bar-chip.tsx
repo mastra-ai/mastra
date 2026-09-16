@@ -300,7 +300,7 @@ function SegmentCombobox<T>({
           positionMethod={FLOATING_POSITION_METHOD}
           className={comboboxStyles.positioner}
         >
-          <ComboboxPrimitive.Popup className={cn(comboboxStyles.popup, 'w-56')} data-slot="filter-bar-editor">
+          <ComboboxPrimitive.Popup className={cn(comboboxStyles.popup, 'min-w-44')} data-slot="filter-bar-editor">
             <SegmentPopupContext.Provider value={{ highlighted }}>{children}</SegmentPopupContext.Provider>
           </ComboboxPrimitive.Popup>
         </ComboboxPrimitive.Positioner>
