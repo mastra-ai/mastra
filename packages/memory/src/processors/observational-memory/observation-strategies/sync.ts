@@ -39,7 +39,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
     return true;
   }
   get needsReflection() {
-    return true;
+    return !this.observationConfig.archive;
   }
   get rethrowOnFailure() {
     return true;
@@ -161,6 +161,17 @@ export class SyncObservationStrategy extends ObservationStrategy {
     );
     const observationTokens = this.tokenCounter.countObservations(newObservations);
     const cycleObservationTokens = this.tokenCounter.countObservations(output.observations);
+    let observationGroups: ProcessedObservation['observationGroups'];
+    if (this.observationConfig.archive) {
+      const existingGroupIds = new Set((record.observationGroups ?? []).map(group => group.groupId));
+      const cycleGroups = this.createObservationGroupMetadata(
+        newObservations,
+        messages,
+        this.getArchiveSummary(output),
+        this.scope === 'resource' ? threadId : undefined,
+      ).filter(group => !existingGroupIds.has(group.groupId));
+      observationGroups = this.mergeObservationGroupMetadata(newObservations, cycleGroups);
+    }
 
     const newMessageIds = messages.map(m => m.id);
     const existingIds = record.observedMessageIds ?? [];
@@ -185,6 +196,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
       observations: newObservations,
       observationTokens,
       cycleObservationTokens,
+      observationGroups,
       observedMessageIds,
       lastObservedAt,
       suggestedContinuation: output.suggestedContinuation,
@@ -245,6 +257,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
       id: record.id,
       expectedWriteEpoch: record.writeEpoch ?? 0,
       observations: processed.observations,
+      observationGroups: processed.observationGroups,
       tokenCount: processed.observationTokens,
       lastObservedAt: processed.lastObservedAt,
       observedMessageIds: processed.observedMessageIds,

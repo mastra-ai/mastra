@@ -20,6 +20,10 @@ const threadTitleInstructions = `A short, noun-phrase title for this conversatio
 - "Deployment pipeline setup" — not "Setting up deployment pipeline for project"
 Only update when the topic meaningfully changes.`;
 
+export const ARCHIVE_SUMMARY_EXTRACTOR_SLUG = 'archive-catalog-summary';
+
+const archiveSummaryInstructions = `Write one concise sentence that helps the agent decide whether to recall this observation group later. Include the specific people, projects, decisions, or outcomes that distinguish it. Do not mention memory, observations, archives, or this instruction.`;
+
 export function createCurrentTaskExtractor(): Extractor<string> {
   return new Extractor(
     {
@@ -56,6 +60,18 @@ export function createThreadTitleExtractor(): Extractor<string> {
   );
 }
 
+export function createArchiveSummaryExtractor(): Extractor<string> {
+  return new Extractor(
+    {
+      name: ARCHIVE_SUMMARY_EXTRACTOR_SLUG,
+      instructions: archiveSummaryInstructions,
+      includePreviousExtraction: false,
+      metadataKeyPath: false,
+    },
+    true,
+  );
+}
+
 export interface ResolvedContinuationHints {
   currentTask: boolean;
   suggestedResponse: boolean;
@@ -81,6 +97,7 @@ export function resolveContinuationHints(config: ContinuationHintsConfig | undef
 interface ComposeExtractorOptions {
   continuationHints?: ContinuationHintsConfig;
   includeThreadTitle?: boolean;
+  includeArchiveSummary?: boolean;
   userExtractors?: readonly Extractor<any>[];
 }
 
@@ -96,16 +113,21 @@ export function composeExtractors(options: ComposeExtractorOptions): Extractor<a
   if (options.includeThreadTitle) {
     extractors.push(createThreadTitleExtractor());
   }
+  if (options.includeArchiveSummary) {
+    extractors.push(createArchiveSummaryExtractor());
+  }
   extractors.push(...(options.userExtractors ?? []));
   return validateExtractorList(extractors);
 }
 
 export function composeObservationExtractors(
-  config: Pick<ResolvedObservationConfig, 'threadTitle'> & Pick<ObservationConfig, 'extract' | 'continuationHints'>,
+  config: Pick<ResolvedObservationConfig, 'threadTitle' | 'archive'> &
+    Pick<ObservationConfig, 'extract' | 'continuationHints'>,
 ): Extractor[] {
   return composeExtractors({
     continuationHints: config.continuationHints,
     includeThreadTitle: config.threadTitle,
+    includeArchiveSummary: Boolean(config.archive),
     userExtractors: config.extract,
   });
 }

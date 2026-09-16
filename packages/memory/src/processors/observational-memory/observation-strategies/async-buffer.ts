@@ -122,6 +122,14 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     }
 
     const observationTokens = this.tokenCounter.countObservations(newObservations);
+    const observationGroups = this.observationConfig.archive
+      ? this.createObservationGroupMetadata(
+          newObservations,
+          messages,
+          this.getArchiveSummary(output),
+          this.scope === 'resource' ? threadId : undefined,
+        )
+      : undefined;
     const messageIds = messages.map(m => m.id);
     const maxTs = this.getMaxMessageTimestamp(messages);
     const lastObservedAt = new Date(maxTs.getTime() + 1);
@@ -130,6 +138,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       observations: newObservations,
       observationTokens,
       cycleObservationTokens: observationTokens,
+      observationGroups,
       observedMessageIds: messageIds,
       lastObservedAt,
       suggestedContinuation: output.suggestedContinuation,
@@ -163,6 +172,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
             threadTitle: processed.threadTitle,
             extractedValues: processed.extractedValues,
             extractionFailures: processed.extractionFailures,
+            observationGroups: processed.observationGroups,
           },
           lastBufferedAtTime: processed.lastObservedAt,
         }),

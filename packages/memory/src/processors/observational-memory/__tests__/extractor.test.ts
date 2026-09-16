@@ -95,6 +95,7 @@ describe('Extractor', () => {
   it('rejects empty, duplicate, and reserved slugs', () => {
     expect(() => new Extractor({ name: '!!!', instructions: 'No usable slug.' })).toThrow(/non-empty slug/);
     expect(() => new Extractor({ name: 'current-task', instructions: 'Reserved.' })).toThrow(/reserved/);
+    expect(() => new Extractor({ name: 'archive-catalog-summary', instructions: 'Reserved.' })).toThrow(/reserved/);
 
     const first = new Extractor({ name: 'Priority', instructions: 'Extract priority.' });
     const second = new Extractor({ name: 'priority', instructions: 'Extract priority again.' });
@@ -568,6 +569,13 @@ describe('Extractor', () => {
     expect(
       composeObservationExtractors({ threadTitle: true, extract: [user] }).map(extractor => extractor.slug),
     ).toEqual(['current-task', 'suggested-response', 'thread-title', 'preference']);
+    expect(
+      composeObservationExtractors({
+        threadTitle: false,
+        archive: { afterTokens: 40_000, keepTokens: 8_000, maxCatalogTokens: 2_000 },
+        extract: [user],
+      }).map(extractor => extractor.slug),
+    ).toEqual(['current-task', 'suggested-response', 'archive-catalog-summary', 'preference']);
     expect(composeReflectionExtractors({ extract: [user] }).map(extractor => extractor.slug)).toEqual([
       'current-task',
       'suggested-response',

@@ -114,17 +114,22 @@ export type {
  * Returns the options object if enabled, undefined if disabled.
  * Inlined here to avoid importing runtime exports that don't exist on older @mastra/core versions.
  */
-type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model' | 'observation' | 'reflection'> & {
-  model?: ObservationalMemoryConfig['model'];
-  observation?: ObservationalMemoryConfig['observation'];
-  reflection?: ObservationalMemoryConfig['reflection'];
-  /** @experimental This API may change without notice. */
-  experimental_subconscious?: Subconscious;
-  activateAfterIdle?: ObservationalMemoryConfig['activateAfterIdle'];
-  activateOnProviderChange?: ObservationalMemoryConfig['activateOnProviderChange'];
-  temporalMarkers?: boolean;
-  hooks?: ObservationalMemoryConfig['hooks'];
-};
+type ObservationReflectionConfig<T> = T extends { observation: infer Observation; reflection?: infer Reflection }
+  ? { observation: Observation; reflection?: Reflection }
+  : T extends { observation?: infer Observation; reflection?: infer Reflection }
+    ? { observation?: Observation; reflection?: Reflection }
+    : never;
+
+type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model' | 'observation' | 'reflection'> &
+  ObservationReflectionConfig<ObservationalMemoryConfig> & {
+    model?: ObservationalMemoryConfig['model'];
+    /** @experimental This API may change without notice. */
+    experimental_subconscious?: Subconscious;
+    activateAfterIdle?: ObservationalMemoryConfig['activateAfterIdle'];
+    activateOnProviderChange?: ObservationalMemoryConfig['activateOnProviderChange'];
+    temporalMarkers?: boolean;
+    hooks?: ObservationalMemoryConfig['hooks'];
+  };
 
 type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
   observationalMemory?: boolean | MemoryObservationalMemoryOptions;
@@ -507,7 +512,7 @@ export class Memory extends MastraMemory {
           extract: [...extract, ...subconsciousExtractors],
         },
       },
-    } as MemoryConfigInternal;
+    } as unknown as MemoryConfigInternal;
   }
 
   private applyManagedWorkingMemoryDefaults(config: MemoryConfigInternal): MemoryConfigInternal {
@@ -537,7 +542,7 @@ export class Memory extends MastraMemory {
           extract: hasWorkingMemoryExtractor(extract) ? extract : [...extract, new WorkingMemoryExtractor()],
         },
       },
-    } as MemoryConfigInternal;
+    } as unknown as MemoryConfigInternal;
   }
 
   constructor(config: MemoryConstructorConfig = {}) {
@@ -2770,12 +2775,17 @@ Notes:
     }
 
     const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
-    if (omConfig?.retrieval) {
+    const archiveEnabled = omConfig?.observation?.archive !== undefined;
+    if (omConfig?.retrieval || archiveEnabled) {
       const retrievalScope =
-        typeof omConfig.retrieval === 'object' ? (omConfig.retrieval.scope ?? 'resource') : 'resource';
+        typeof omConfig?.retrieval === 'object'
+          ? (omConfig.retrieval.scope ?? 'resource')
+          : archiveEnabled
+            ? (omConfig?.scope ?? 'thread')
+            : 'resource';
       tools.recall = recallTool(mergedConfig, {
         retrievalScope,
-        searchEnabled: this.hasRetrievalSearch(omConfig.retrieval),
+        searchEnabled: this.hasRetrievalSearch(omConfig?.retrieval),
       });
     }
     if (

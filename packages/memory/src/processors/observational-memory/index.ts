@@ -75,6 +75,7 @@ export type {
   ObserveHookContext,
   ObserveHookUsage,
   ObserveTrigger,
+  ObservationArchiveConfig,
   ObservationConfig,
   ReflectionConfig,
   ContinuationHintsConfig,

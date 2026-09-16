@@ -89,7 +89,24 @@ export type ContinuationHintsConfig =
       suggestedResponse?: boolean;
     };
 
+export interface ObservationArchiveConfig {
+  /** Observation-token threshold that triggers retirement. @default 40000 */
+  afterTokens?: number;
+  /** Approximate newest observation tokens to keep live. @default 8000 */
+  keepTokens?: number;
+  /** Hard token ceiling for the rendered archive catalog. @default 2000 */
+  maxCatalogTokens?: number;
+}
+
+export type ResolvedObservationArchiveConfig = Required<ObservationArchiveConfig>;
+
 export interface ObservationConfig {
+  /**
+   * Retire complete old observation groups into durable archive generations.
+   * Archive mode is opt-in and cannot be combined with explicit reflection configuration.
+   */
+  archive?: ObservationArchiveConfig;
+
   /**
    * Model for the Observer agent.
    * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
@@ -946,7 +963,7 @@ export interface ReflectionCommittedContext {
   observabilityContext?: ObservabilityContext;
 }
 
-export interface ObservationalMemoryConfig {
+interface ObservationalMemoryConfigBase {
   /**
    * Storage adapter for persisting observations.
    * Must be a MemoryStorage instance (from MastraStorage.stores.memory).
@@ -994,16 +1011,6 @@ export interface ObservationalMemoryConfig {
    * @default 'google/gemini-2.5-flash'
    */
   model?: ObservationalMemoryModel;
-
-  /**
-   * Observation step configuration.
-   */
-  observation?: ObservationConfig;
-
-  /**
-   * Reflection step configuration.
-   */
-  reflection?: ReflectionConfig;
 
   /**
    * Memory scope for observations.
@@ -1106,6 +1113,21 @@ export interface ObservationalMemoryConfig {
   mastra?: Mastra;
 }
 
+type ObservationConfigWithoutArchive = Omit<ObservationConfig, 'archive'> & { archive?: never };
+type ObservationConfigWithArchive = Omit<ObservationConfig, 'archive'> & { archive: ObservationArchiveConfig };
+
+/**
+ * Configuration for Observational Memory.
+ *
+ * Archive and reflection are mutually exclusive. The runtime repeats this validation
+ * for JavaScript callers and values that bypass TypeScript.
+ */
+export type ObservationalMemoryConfig = ObservationalMemoryConfigBase &
+  (
+    | { observation?: ObservationConfigWithoutArchive; reflection?: ReflectionConfig }
+    | { observation: ObservationConfigWithArchive; reflection?: never }
+  );
+
 /**
  * Internal resolved config with all defaults applied.
  * Thresholds are stored as ThresholdRange internally for dynamic calculation,
@@ -1117,6 +1139,8 @@ export interface ResolvedObservationConfig {
   messageTokens: number | ThresholdRange;
   /** Whether shared token budget is enabled */
   shareTokenBudget: boolean;
+  /** Resolved rolling archive policy when archive mode is enabled. */
+  archive?: ResolvedObservationArchiveConfig;
   /** Model settings - merged with user config and defaults */
   modelSettings: ModelSettings;
   providerOptions: ProviderOptions;

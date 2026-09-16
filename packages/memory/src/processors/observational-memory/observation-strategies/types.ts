@@ -2,7 +2,7 @@ import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { ObservationalMemoryRecord } from '@mastra/core/storage';
+import type { ObservationGroupMetadata, ObservationalMemoryRecord } from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 
 import type { Extractor } from '../extractor';
@@ -71,6 +71,7 @@ export interface ProcessedObservation {
   observations: string;
   observationTokens: number;
   cycleObservationTokens: number;
+  observationGroups?: ObservationGroupMetadata[];
   observedMessageIds: string[];
   lastObservedAt: Date;
   threadMetadataUpdates?: Array<{

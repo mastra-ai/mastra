@@ -1148,6 +1148,12 @@ export interface ObservationGroupMetadata {
   messageRange?: string;
   /** True when the source message range cannot be reconstructed. */
   sourceUnavailable?: boolean;
+  /** How this group was produced. Legacy groups cover exact ungrouped spans from upgraded records. */
+  kind?: 'observation' | 'reflection' | 'legacy';
+  /** UTF-16 length used to preserve deterministic legacy segmentation as new text is appended. */
+  legacyTextLength?: number;
+  /** Digest used to verify a persisted legacy segment before reusing its stable group ID. */
+  legacyTextDigest?: string;
   /** Thread that produced this group when the owning record uses resource scope. */
   sourceThreadId?: string;
   /** Inclusive date range covered by the observed source messages. */
