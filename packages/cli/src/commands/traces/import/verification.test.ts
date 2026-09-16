@@ -116,6 +116,38 @@ describe('trace import verification', () => {
     });
   });
 
+  it('compares error presence without requiring truncatable error details to match', () => {
+    const expected = trace(1);
+    expected.spans[0]!.error = {
+      name: 'ProviderError',
+      message: 'Provider request failed',
+      details: { response: 'full provider response' },
+    };
+    const actual = stored(expected);
+    actual[0] = {
+      ...actual[0]!,
+      error: {
+        name: 'ProviderError',
+        message: 'Provider request failed',
+        details: { response: '<truncated: value too long>' },
+      },
+    };
+
+    expect(compareVerifiedTrace(expected.spans, actual)).toEqual({ matches: true, differences: [] });
+
+    actual[0] = { ...actual[0]!, error: null };
+    expect(compareVerifiedTrace(expected.spans, actual)).toEqual({
+      matches: false,
+      differences: [
+        {
+          traceId: expected.spans[0]!.traceId,
+          spanId: expected.spans[0]!.spanId,
+          fields: ['error'],
+        },
+      ],
+    });
+  });
+
   it('verifies a deterministic sample, completes the import, and writes a private report', async () => {
     const traces = Array.from({ length: 21 }, (_, index) => trace(index + 1));
     const directory = await prepareAndUpload(traces);

@@ -452,6 +452,30 @@ describe('MastraPlatformTraceTarget', () => {
     });
   });
 
+  it('preserves the oversized response result when stream cancellation fails', async () => {
+    const fetch = vi.fn(
+      async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new Uint8Array(16 * 1024 * 1024 + 1));
+            },
+            cancel() {
+              throw new Error('socket already closed');
+            },
+          }),
+          { status: 200 },
+        ),
+    );
+    const target = new MastraPlatformTraceTarget({ accessToken: 'secret-token', projectId: 'project_1' }, { fetch });
+
+    await expect(target.readTrace('00000000000000000000000000000001')).resolves.toEqual({
+      kind: 'unavailable',
+      reason: 'Mastra Platform query response exceeds the 16 MiB verification limit.',
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
   it('treats malformed or inconsistent lightweight responses as unavailable', async () => {
     const fetch = vi.fn(async () =>
       Response.json({

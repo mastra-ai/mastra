@@ -66,8 +66,8 @@ an individual trace remains whole even when it contains more than 100 spans.
 After every prepared trace is acknowledged, the shared verifier selects a
 deterministic sample of at most ten traces. It uses Platform's lightweight
 trace endpoint to compare span IDs, parent links, names, span types, event
-flags, timestamps, and errors. It does not download or compare customer input,
-output, attributes, metadata, or tags.
+flags, timestamps, and error presence. It does not download or compare customer
+input, output, attributes, metadata, or tags.
 
 Verification retries briefly for query propagation. A mismatch, timeout, or
 unavailable query API pauses the import, writes `report.json`, and keeps

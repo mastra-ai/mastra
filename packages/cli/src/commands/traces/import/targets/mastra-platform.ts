@@ -433,7 +433,11 @@ async function readResponseText(response: Response, maximumBytes: number): Promi
     if (done) return text + decoder.decode();
     bytes += value.byteLength;
     if (bytes > maximumBytes) {
-      await reader.cancel();
+      try {
+        await reader.cancel();
+      } catch {
+        // Cancellation is best-effort cleanup; preserve the meaningful size error.
+      }
       throw new QueryResponseTooLargeError();
     }
     text += decoder.decode(value, { stream: true });

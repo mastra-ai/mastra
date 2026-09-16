@@ -50,7 +50,9 @@ function comparable(field: ComparedField, value: unknown): unknown {
   if (field === 'startedAt' || field === 'endedAt') {
     return typeof value === 'string' ? Date.parse(value) : value;
   }
-  if (field === 'parentSpanId' || field === 'error') return value ?? null;
+  // Platform may truncate error details; read-back only verifies whether an error was preserved.
+  if (field === 'error') return value != null;
+  if (field === 'parentSpanId') return value ?? null;
   return value;
 }
 
