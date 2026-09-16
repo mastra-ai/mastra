@@ -1,3 +1,4 @@
+import type { UpdateDatasetItemParams } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
@@ -649,12 +650,13 @@ function ExpandedItemEditor({
       }
     }
 
-    let parsedTrajectory: unknown | undefined;
+    let parsedTrajectory: UpdateDatasetItemParams['expectedTrajectory'];
     if (trajectoryValue.trim()) {
       try {
         parsedTrajectory = JSON.parse(trajectoryValue);
       } catch {
-        parsedTrajectory = trajectoryValue;
+        toast.error('Expected Trajectory must be valid JSON');
+        return;
       }
     }
 

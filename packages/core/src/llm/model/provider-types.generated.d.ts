@@ -3578,10 +3578,6 @@ export type ProviderModelsMap = {
     'klingai/kling-v3.0-i2v',
     'klingai/kling-v3.0-motion-control',
     'klingai/kling-v3.0-t2v',
-    'kwaipilot/kat-coder-air-v2.5',
-    'kwaipilot/kat-coder-pro-v1',
-    'kwaipilot/kat-coder-pro-v2',
-    'kwaipilot/kat-coder-pro-v2.5',
     'meta/llama-3.1-70b',
     'meta/llama-3.1-8b',
     'meta/llama-3.3-70b',
@@ -4902,6 +4898,7 @@ export type ProviderModelsMap = {
     'stealth/claude-opus-4.8',
     'stealth/claude-sonnet-4.6',
     'stealth/qwen3.6-plus',
+    'stealth/union-alpha',
     'stepfun/step-3.5-flash',
     'stepfun/step-3.7-flash',
     'stepfun/step-3.7-flash:free',
@@ -5403,6 +5400,7 @@ export type ProviderModelsMap = {
     'qwen3.6-plus-free',
     'ring-2.6-1t-free',
     'trinity-large-preview-free',
+    'union-alpha',
     'x-preview-f-free',
   ];
   readonly 'moonshotai-cn': readonly ['kimi-k2.6', 'kimi-k2.7-code', 'kimi-k2.7-code-highspeed', 'kimi-k3'];
@@ -5749,6 +5747,7 @@ export type ProviderModelsMap = {
     'sao10k/l3-lunaris-8b',
     'sao10k/l3.1-euryale-70b',
     'sao10k/l3.3-euryale-70b',
+    'stealth/union-alpha',
     'stepfun/step-3.5-flash',
     'stepfun/step-3.7-flash',
     'tencent/hunyuan-a13b-instruct',
@@ -6987,6 +6986,7 @@ export type ProviderModelsMap = {
     'qwen3.7-plus',
     'qwen3.8-flash',
     'qwen3.8-max',
+    'union-alpha',
   ];
   readonly 'tencent-token-plan': readonly ['hy3', 'hy4-preview'];
   readonly vispark: readonly ['vispark/vision-large', 'vispark/vision-medium', 'vispark/vision-small'];
