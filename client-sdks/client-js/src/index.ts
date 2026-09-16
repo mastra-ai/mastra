@@ -35,7 +35,7 @@ export { RequestContext } from '@mastra/core/request-context';
 export type { ObservabilityCollector } from './observability/types';
 export type { QueryTraceThreadsInput, QueryTraceThreadsResult, QueryTracesInput } from './resources/observability';
 export type { UIMessageWithMetadata } from '@mastra/core/agent';
-export type { GetMetricTimeSeriesResponse } from '@mastra/core/storage';
+export type { GetMetricTimeSeriesResponse } from './types';
 export type {
   Body,
   Client,

@@ -1,4 +1,4 @@
-import type { GetScorerResponse } from '@mastra/client-js';
+import type { GetScorerResponse, RouteResponse } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import {
   DataList as EntityList,
@@ -13,7 +13,7 @@ import { useLinkComponent } from '@/lib/framework';
 export type ScorersListItem = GetScorerResponse & { id: string };
 
 export interface ScorersListProps {
-  scorers: Record<string, GetScorerResponse>;
+  scorers: RouteResponse<'GET /scores/scorers'>;
   isLoading: boolean;
   search?: string;
   sourceFilter?: string;

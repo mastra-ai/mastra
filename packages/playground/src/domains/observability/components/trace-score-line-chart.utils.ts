@@ -1,7 +1,7 @@
-import type { ScoreRowData } from '@mastra/core/evals';
+import type { ClientScoreRowData } from '@mastra/client-js';
 import { format } from 'date-fns';
 
-export function buildScoreChartData(scores: ScoreRowData[]): {
+export function buildScoreChartData(scores: ClientScoreRowData[]): {
   data: Record<string, unknown>[];
   scorerNames: string[];
 } {

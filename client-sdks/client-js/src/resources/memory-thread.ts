@@ -1,5 +1,5 @@
 import type { RequestContext } from '@mastra/core/di';
-import type { StorageThreadType } from '@mastra/core/memory';
+import type { RouteResponse } from '../route-types.generated.js';
 
 import type {
   ClientOptions,
@@ -60,7 +60,7 @@ export class MemoryThread extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing thread details including title and metadata
    */
-  get(requestContext?: RequestContext | Record<string, any>): Promise<StorageThreadType> {
+  get(requestContext?: RequestContext | Record<string, any>): Promise<RouteResponse<'GET /memory/threads/:threadId'>> {
     const agentIdParam = this.getAgentIdQueryParam('?');
     const contextParam = requestContextQueryString(requestContext, agentIdParam ? '&' : '?');
     return this.request(`/memory/threads/${this.threadId}${agentIdParam}${contextParam}`);
@@ -72,7 +72,7 @@ export class MemoryThread extends BaseResource {
    *                 `agentId` is required by the server; pass it here if not supplied on the constructor.
    * @returns Promise containing updated thread details
    */
-  update(params: UpdateMemoryThreadParams): Promise<StorageThreadType> {
+  update(params: UpdateMemoryThreadParams): Promise<RouteResponse<'PATCH /memory/threads/:threadId'>> {
     const agentId = this.requireAgentId(params.agentId, 'update');
     const { agentId: _omitAgentId, requestContext, ...body } = params;
     const agentIdParam = `?agentId=${agentId}`;
@@ -91,7 +91,7 @@ export class MemoryThread extends BaseResource {
    */
   delete(
     opts: { agentId?: string; requestContext?: RequestContext | Record<string, any> } = {},
-  ): Promise<{ result: string }> {
+  ): Promise<RouteResponse<'DELETE /memory/threads/:threadId'>> {
     const agentId = this.requireAgentId(opts.agentId, 'delete');
     const agentIdParam = `?agentId=${agentId}`;
     const contextParam = requestContextQueryString(opts.requestContext, '&');
@@ -143,7 +143,7 @@ export class MemoryThread extends BaseResource {
       | { agentId?: string; requestContext?: RequestContext | Record<string, any> }
       | RequestContext
       | Record<string, any> = {},
-  ): Promise<{ success: boolean; message: string }> {
+  ): Promise<RouteResponse<'POST /memory/messages/delete'>> {
     const { agentId: explicitAgentId, requestContext } = normalizeWriteOpts(opts);
     const agentId = this.requireAgentId(explicitAgentId, 'deleteMessages');
     const queryString = `agentId=${agentId}`;
@@ -178,7 +178,7 @@ export class MemoryThread extends BaseResource {
    * @param params - Transfer parameters including the target `resourceId`, optional `agentId`, and request context.
    * @returns Promise containing the transferred thread with its new `resourceId`
    */
-  transfer(params: TransferMemoryThreadParams): Promise<StorageThreadType> {
+  transfer(params: TransferMemoryThreadParams): Promise<RouteResponse<'POST /memory/threads/:threadId/transfer'>> {
     const { agentId, requestContext, ...body } = params;
     const resolvedAgentId = agentId ?? this.agentId;
     const agentIdParam = resolvedAgentId ? `?agentId=${resolvedAgentId}` : '';
