@@ -526,21 +526,21 @@ describe('MastraAuthAuth0', () => {
       expect(headers['Set-Cookie']).toContain('Max-Age=0');
     });
 
-    it('should extract session ID from request cookie', () => {
+    it('should extract session ID from request cookie', async () => {
       const auth0 = new MastraAuthAuth0(mockSSOOptions) as any;
       const request = new Request('http://localhost', {
         headers: { Cookie: 'auth0_session=encrypted-data; other=val' },
       });
 
-      const sessionId = auth0.getSessionIdFromRequest(request);
+      const sessionId = await auth0.getSessionIdFromRequest(request);
       expect(sessionId).toBe('encrypted-data');
     });
 
-    it('should return null when no session cookie', () => {
+    it('should return null when no session cookie', async () => {
       const auth0 = new MastraAuthAuth0(mockSSOOptions) as any;
       const request = new Request('http://localhost');
 
-      const sessionId = auth0.getSessionIdFromRequest(request);
+      const sessionId = await auth0.getSessionIdFromRequest(request);
       expect(sessionId).toBeNull();
     });
   });
