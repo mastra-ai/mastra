@@ -20,7 +20,7 @@ import {
   rawCompletedRun,
   suspendedLoop,
 } from './fixtures/completed-loop';
-import { completedChunks, runningChunk } from './fixtures/workflow-stream';
+import { completedChunks, replayedChunks, runningChunk } from './fixtures/workflow-stream';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -112,14 +112,14 @@ function CompletedRunProbe() {
           })
         }
       >
-        Replay canceled run
+        Replay run
       </button>
       <button
         onClick={() =>
           observeWorkflowStream?.({
             workflowId: 'two-step-workflow',
             runId: completedLoop.runId,
-            storeRunResult: result,
+            storedStatus: result?.status,
           })
         }
       >
@@ -424,8 +424,46 @@ describe('WorkflowRunProvider', () => {
       await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('success'));
       fireEvent.click(screen.getByRole('button', { name: 'Mark canceled' }));
       expect(screen.getByLabelText('Run state').textContent).toBe('canceled');
-      fireEvent.click(screen.getByRole('button', { name: 'Replay canceled run' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Replay run' }));
       await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('running'));
+    });
+  });
+
+  describe('when a successful replay finishes before its snapshot refresh', () => {
+    it('keeps the new output while supplementing it with persisted step details', async () => {
+      let replayed = false;
+      let refreshStarted = false;
+      let releaseSnapshot!: () => void;
+      const snapshotPending = new Promise<void>(resolve => {
+        releaseSnapshot = resolve;
+      });
+      server.use(
+        http.get(`${BASE_URL}/api/workflows/two-step-workflow/runs/completed-loop`, async () => {
+          if (!replayed) return HttpResponse.json(completedLoop);
+          refreshStarted = true;
+          await snapshotPending;
+          return HttpResponse.json({ ...partialCompletedLoop, runId: completedLoop.runId });
+        }),
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/create-run`, () =>
+          HttpResponse.json({ runId: completedLoop.runId }),
+        ),
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/time-travel-stream`, () => {
+          replayed = true;
+          return new HttpResponse(replayedChunks.map(chunk => JSON.stringify(chunk) + '\x1e').join(''));
+        }),
+      );
+      renderProvider(completedLoop.runId);
+      await waitFor(() => expect(screen.getByLabelText('Child output').textContent).toBe('{"words":2}'));
+      fireEvent.click(screen.getByRole('button', { name: 'Replay run' }));
+      try {
+        await waitFor(() => expect(refreshStarted).toBe(true));
+        expect(screen.getByLabelText('Streaming state').textContent).toBe('false');
+        expect(screen.getByLabelText('Child output').textContent).toBe('{"words":9}');
+      } finally {
+        releaseSnapshot();
+      }
+      await waitFor(() => expect(screen.getByLabelText('Persisted state').textContent).toBe('success'));
+      expect(screen.getByLabelText('Child output').textContent).toBe('{"words":9}');
     });
   });
 

@@ -45,14 +45,10 @@ export type WorkflowRunContextType = {
   runId?: string;
   setRunId: Dispatch<SetStateAction<string>>;
   workflowError: Error | null;
-  observeWorkflowStream?: ({
-    workflowId,
-    runId,
-    storeRunResult,
-  }: {
+  observeWorkflowStream?: (params: {
     workflowId: string;
     runId: string;
-    storeRunResult: WorkflowRunStreamResult | null;
+    storedStatus?: WorkflowRunStreamResult['status'];
   }) => void;
   closeStreamsAndReset: () => void;
   timeTravelWorkflowStream: (

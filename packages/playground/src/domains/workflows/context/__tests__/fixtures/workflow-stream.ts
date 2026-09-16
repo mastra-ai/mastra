@@ -31,3 +31,9 @@ export const completedChunks: StreamVNextChunkType[] = [
     },
   },
 ];
+
+export const replayedChunks: StreamVNextChunkType[] = completedChunks.map(chunk => ({
+  ...chunk,
+  runId: completedLoop.runId,
+  ...(chunk.type === 'workflow-step-result' ? { payload: { ...chunk.payload, output: { words: 9 } } } : {}),
+}));

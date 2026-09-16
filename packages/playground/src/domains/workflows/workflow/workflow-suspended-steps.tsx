@@ -94,7 +94,6 @@ export function WorkflowSuspendedSteps({
               step={step}
               stepSchema={stepSchema}
               description={stepDefinition.description}
-              isStreaming={isStreaming}
               onResume={onResume}
             />
           );
@@ -114,11 +113,10 @@ interface SuspendedStepCardProps {
   step: SuspendedStep;
   stepSchema: z.ZodSchema;
   description?: string;
-  isStreaming: boolean;
   onResume: WorkflowSuspendedStepsProps['onResume'];
 }
 
-function SuspendedStepCard({ step, stepSchema, description, isStreaming, onResume }: SuspendedStepCardProps) {
+function SuspendedStepCard({ step, stepSchema, description, onResume }: SuspendedStepCardProps) {
   const [isPayloadOpen, setIsPayloadOpen] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
 
@@ -185,7 +183,7 @@ function SuspendedStepCard({ step, stepSchema, description, isStreaming, onResum
         <div className="-mx-5">
           <WorkflowInputData
             schema={stepSchema}
-            isSubmitLoading={isStreaming || isResuming}
+            isSubmitLoading={isResuming}
             submitButtonLabel="Resume"
             submitButtonVariant="primary"
             submitButtonIcon={<Play />}

@@ -121,9 +121,11 @@ test.describe('Workflow graph detail page', () => {
       await getRunButton(page).click();
       await expect(topLevelWorkflowNodes(page).nth(0)).toHaveAttribute('data-workflow-step-status', 'success');
 
-      await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
-      await expect(page.getByRole('slider', { name: 'Canvas zoom' })).toHaveAttribute('aria-valuenow', '1.2');
+      await page.emulateMedia({ reducedMotion: 'reduce' });
       const viewport = page.locator('.react-flow__viewport');
+      const initialCamera = await viewport.evaluate(element => getComputedStyle(element).transform);
+      await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+      await expect(viewport).not.toHaveCSS('transform', initialCamera);
       const camera = await viewport.evaluate(element => getComputedStyle(element).transform);
       const recentRun = page.locator('a[href*="/workflows/enumWorkflow/graph/"]');
       await expect(recentRun).toHaveCount(1);

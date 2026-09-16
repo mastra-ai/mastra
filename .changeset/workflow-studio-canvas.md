@@ -7,3 +7,5 @@ Redesign the Studio workflow canvas with floating, collapsible run and recent-ru
 Keep Form and JSON views synchronized with the same run-input draft. Clarify step-by-step execution and suspension controls, preserve completed run state, and display repeated failures only once. Inspect live step data without a blocking dialog and restore suspended-step controls when inspection closes.
 
 Preserve explicit empty collections, nullable values, and processor message data while switching input views, and omit untouched optional form groups. Keep stored and live run data consistent through cancellation, resume, and replay, preserve stored foreach iteration data and arbitrary step IDs, and enforce execution permissions on suspended-step controls.
+
+Keep new replay output visible instead of briefly replacing it with the previous result.

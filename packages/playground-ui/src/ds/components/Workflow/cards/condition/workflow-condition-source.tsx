@@ -18,9 +18,7 @@ function FormattedConditionSource({ source }: { source: string }) {
       .then(expression => {
         if (!cancelled) setFormatted(expression.trim());
       })
-      .catch(() => {
-        if (!cancelled) setFormatted(undefined);
-      });
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };

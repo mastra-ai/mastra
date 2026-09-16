@@ -8,7 +8,6 @@ import type { ContextType, ReactNode } from 'react';
 import { useEffect, useContext, useState } from 'react';
 
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
-import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { WorkflowRunDetail } from '../runs/workflow-run-details';
 import { WorkflowRecentRuns } from '../runs/workflow-run-list';
@@ -42,15 +41,7 @@ type InitialWorkflowSidebarProps = WorkflowActionProps & {
 
 type RunWorkflowSidebarProps = InitialWorkflowSidebarProps & {
   runId: string;
-  observeWorkflowStream?: ({
-    workflowId,
-    runId,
-    storeRunResult,
-  }: {
-    workflowId: string;
-    runId: string;
-    storeRunResult: WorkflowRunStreamResult | null;
-  }) => void;
+  observeWorkflowStream?: ContextType<typeof WorkflowRunContext>['observeWorkflowStream'];
 };
 
 function NewWorkflowRunButton({ workflowId, onClick }: { workflowId: string; onClick: () => void }) {

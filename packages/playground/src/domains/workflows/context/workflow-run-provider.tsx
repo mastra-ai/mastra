@@ -15,18 +15,15 @@ import { useWorkflow, useWorkflowRun } from '@/hooks';
 function resolveWorkflowRunResult(
   liveResult: WorkflowRunStreamResult | null,
   storedResult: WorkflowRunStreamResult | null,
-  isStreaming: boolean,
 ) {
   if (!liveResult?.status) return storedResult ?? liveResult;
   if (!storedResult) return liveResult;
-  const canReconcile =
-    !isStreaming && storedResult.status === liveResult.status && isWorkflowRunFinished(liveResult.status);
-  const previousSteps = canReconcile ? liveResult.steps : storedResult.steps;
-  const latestSteps = canReconcile ? storedResult.steps : liveResult.steps;
   const steps = {
-    ...previousSteps,
+    ...storedResult.steps,
     ...Object.fromEntries(
-      Object.entries(latestSteps).map(([stepId, step]) => [stepId, { ...previousSteps[stepId], ...step }] as const),
+      Object.entries(liveResult.steps).map(
+        ([stepId, step]) => [stepId, { ...storedResult.steps[stepId], ...step }] as const,
+      ),
     ),
   };
   return {
@@ -103,10 +100,7 @@ export function WorkflowRunProvider({
     const storedSnapshot = executionSnapshot ?? snapshot;
     return storedSnapshot ? convertWorkflowRunStateToStreamResult(storedSnapshot) : null;
   }, [executionSnapshot, snapshot]);
-  const result = useMemo(
-    () => resolveWorkflowRunResult(liveResult, storedResult, isStreamOpen),
-    [liveResult, storedResult, isStreamOpen],
-  );
+  const result = useMemo(() => resolveWorkflowRunResult(liveResult, storedResult), [liveResult, storedResult]);
   const isObservingIdleRun =
     streamRun?.mode === 'observe' && (result?.status === 'paused' || result?.status === 'suspended');
   const isStreamingWorkflow = isStreamOpen && !isObservingIdleRun;
@@ -171,11 +165,10 @@ export function WorkflowRunProvider({
 
   const startStreamWorkflow = useCallback(
     async (props: Parameters<WorkflowRunContextType['streamWorkflow']>[0]) => {
-      closeStreamsAndReset();
       selectStreamRun(props.runId);
       await streamWorkflow(props);
     },
-    [closeStreamsAndReset, selectStreamRun, streamWorkflow],
+    [selectStreamRun, streamWorkflow],
   );
 
   const startResumeWorkflow = useCallback(
@@ -192,7 +185,7 @@ export function WorkflowRunProvider({
 
   const startObserveWorkflowStream = useCallback(
     (props: Parameters<NonNullable<WorkflowRunContextType['observeWorkflowStream']>>[0]) => {
-      if (props.storeRunResult?.status === 'suspended') {
+      if (props.storedStatus === 'suspended') {
         closeStreamsAndReset();
         return;
       }

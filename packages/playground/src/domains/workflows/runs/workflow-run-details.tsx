@@ -1,9 +1,9 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCallback, useContext } from 'react';
-import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
+import type { WorkflowRunContextType } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
-import { convertWorkflowRunStateToStreamResult, isWorkflowRunFinished } from '../utils';
+import { isWorkflowRunFinished } from '../utils';
 import type { WorkflowTriggerProps } from '../workflow/workflow-trigger';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
 
@@ -13,15 +13,7 @@ export interface WorkflowRunDetailProps extends Omit<
 > {
   workflowId: string;
   runId?: string;
-  observeWorkflowStream?: ({
-    workflowId,
-    runId,
-    storeRunResult,
-  }: {
-    workflowId: string;
-    runId: string;
-    storeRunResult: WorkflowRunStreamResult | null;
-  }) => void;
+  observeWorkflowStream?: WorkflowRunContextType['observeWorkflowStream'];
 }
 
 export const WorkflowRunDetail = ({
@@ -37,7 +29,7 @@ export const WorkflowRunDetail = ({
     observeWorkflowStream?.({
       workflowId,
       runId,
-      storeRunResult: convertWorkflowRunStateToStreamResult(runSnapshot),
+      storedStatus: runSnapshot.status,
     });
   }, [workflowId, runId, runSnapshot, observeWorkflowStream]);
 
