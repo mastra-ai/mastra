@@ -46,6 +46,7 @@ type BridgeClient = Pick<
 interface S3CompatibleMountConfig extends FilesystemMountConfig {
   type: 's3';
   bucket: string;
+  region?: string;
   endpoint?: string;
   accessKeyId?: string;
   secretAccessKey?: string;
@@ -84,13 +85,18 @@ function toMountRequest(
   if (Boolean(s3.accessKeyId) !== Boolean(s3.secretAccessKey)) {
     return { error: 'Cloudflare Sandbox bucket mounts need both accessKeyId and secretAccessKey, or neither' };
   }
+  // The bridge treats a request with no endpoint as an R2 binding mount, so a
+  // region-only AWS filesystem must resolve to an explicit S3 endpoint.
+  const endpoint = s3.endpoint ?? (s3.region ? `https://s3.${s3.region}.amazonaws.com` : undefined);
+  // The bridge requires the prefix to start with `/`; S3Filesystem emits `dir/`.
+  const prefix = s3.prefix ? (s3.prefix.startsWith('/') ? s3.prefix : `/${s3.prefix}`) : undefined;
   return {
     request: {
       bucket: s3.bucket,
       mountPath,
       options: {
-        endpoint: s3.endpoint,
-        prefix: s3.prefix,
+        endpoint,
+        prefix,
         readOnly: s3.readOnly,
         credentials:
           s3.accessKeyId && s3.secretAccessKey
