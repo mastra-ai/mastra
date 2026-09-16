@@ -202,7 +202,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       const res = await fetch(`http://localhost:${port}/transitive-workspace`);
       const body = await res.json();
       expect(res.status).toBe(200);
-      expect(body).toEqual({ value: 'a -> b -> c', app: 'App value is BEFORE.' });
+      expect(body).toEqual({ value: 'a -> b -> c', root: 'root', app: 'App value is BEFORE.' });
     });
 
     it('reports hasBrowser for an agent with a workspace-level CLI browser', async () => {
@@ -411,14 +411,14 @@ export const environmentRoute = registerApiRoute('/environment', {
           }
         };
 
-        const waitForReload = async (predicate: (body: { value: string; app: string }) => boolean) => {
+        const waitForReload = async (predicate: (body: { value: string; root: string; app: string }) => boolean) => {
           const started = Date.now();
-          let lastBody: { value: string; app: string } | undefined;
+          let lastBody: { value: string; root: string; app: string } | undefined;
           while (Date.now() - started < 60_000) {
             try {
               const res = await fetch(`http://localhost:${port}/transitive-workspace`);
               if (res.ok) {
-                lastBody = (await res.json()) as { value: string; app: string };
+                lastBody = (await res.json()) as { value: string; root: string; app: string };
                 if (predicate(lastBody)) {
                   return lastBody;
                 }
@@ -436,7 +436,7 @@ export const environmentRoute = registerApiRoute('/environment', {
           const baseline = await waitForReload(
             body => body.value === 'a -> b -> c' && body.app === 'App value is BEFORE.',
           );
-          expect(baseline).toEqual({ value: 'a -> b -> c', app: 'App value is BEFORE.' });
+          expect(baseline).toEqual({ value: 'a -> b -> c', root: 'root', app: 'App value is BEFORE.' });
           const initialInstance = await readServerInstance();
           expect(await readServerInstance()).toBe(initialInstance);
 
@@ -445,7 +445,7 @@ export const environmentRoute = registerApiRoute('/environment', {
           const afterPackage = await waitForReload(
             body => body.value === 'a -> b -> c-AFTER' && body.app === 'App value is BEFORE.',
           );
-          expect(afterPackage).toEqual({ value: 'a -> b -> c-AFTER', app: 'App value is BEFORE.' });
+          expect(afterPackage).toEqual({ value: 'a -> b -> c-AFTER', root: 'root', app: 'App value is BEFORE.' });
           // A browser reconnecting after this broadcast must still detect the restart.
           await fetch(`http://localhost:${port}/__refresh`, { method: 'POST' });
           const packageInstance = await readServerInstance();
@@ -457,7 +457,7 @@ export const environmentRoute = registerApiRoute('/environment', {
           const afterApp = await waitForReload(
             body => body.value === 'a -> b -> c-AFTER' && body.app === 'App value is AFTER.',
           );
-          expect(afterApp).toEqual({ value: 'a -> b -> c-AFTER', app: 'App value is AFTER.' });
+          expect(afterApp).toEqual({ value: 'a -> b -> c-AFTER', root: 'root', app: 'App value is AFTER.' });
         } finally {
           // Restore fixture so subsequent build/start suites see the original sources.
           await writeFile(packageSource, originalPackageSource);
