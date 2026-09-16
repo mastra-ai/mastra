@@ -18,8 +18,8 @@ import { getLastObservedMessageCursor } from '../message-utils';
 import { buildMessageRange } from '../observational-memory';
 import { formatMessagesForObserver } from '../observer-agent';
 import { ObservationStrategy } from './base';
-import { resolveThreadTitleUpdate } from './thread-title';
 import type { StrategyDeps } from './base';
+import { resolveThreadTitleUpdate } from './thread-title';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
 
 export class SyncObservationStrategy extends ObservationStrategy {
