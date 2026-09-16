@@ -1239,7 +1239,24 @@ export class InternalMastraMCPClient extends MastraBase {
   private convertInputSchema(
     inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'],
   ): JSONSchema7 {
-    return ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
+    const rawSchema = 'jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema;
+    const schema = rawSchema as JSONSchema7;
+
+    // Fix common schema malformation: `required` nested inside `properties`
+    // instead of at the object level. Example of the bug:
+    //   { "properties": { "coin": { "type": "string" }, "required": ["coin"] } }
+    // Should be:
+    //   { "properties": { "coin": { "type": "string" } }, "required": ["coin"] }
+    if (schema && typeof schema === 'object' && 'properties' in schema) {
+      const props = (schema as any).properties;
+      if (props && typeof props === 'object' && 'required' in props) {
+        const required = props.required;
+        delete props.required;
+        schema.required = Array.isArray(required) ? required : [];
+      }
+    }
+
+    return schema;
   }
 
   /**
