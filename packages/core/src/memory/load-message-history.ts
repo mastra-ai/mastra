@@ -33,25 +33,17 @@ export type LoadMessageHistoryResult = {
   overflow: MastraDBMessage[];
 };
 
-function getToolCallReferences(message: MastraDBMessage): { id: string; state?: string }[] {
-  const references = new Map<string, { id: string; state?: string }>();
+function getToolCallIds(message: MastraDBMessage): string[] {
+  const ids = new Set<string>();
   for (const part of message.content.parts) {
     if (part.type === 'tool-invocation' && part.toolInvocation?.toolCallId) {
-      const reference = { id: part.toolInvocation.toolCallId, state: part.toolInvocation.state };
-      references.set(`${reference.id}:${reference.state}`, reference);
+      ids.add(part.toolInvocation.toolCallId);
     }
   }
   for (const invocation of message.content.toolInvocations ?? []) {
-    if (invocation.toolCallId) {
-      const reference = { id: invocation.toolCallId, state: invocation.state };
-      references.set(`${reference.id}:${reference.state}`, reference);
-    }
+    if (invocation.toolCallId) ids.add(invocation.toolCallId);
   }
-  return [...references.values()];
-}
-
-function getToolCallIds(message: MastraDBMessage): string[] {
-  return [...new Set(getToolCallReferences(message).map(reference => reference.id))];
+  return [...ids];
 }
 
 export function groupLinkedToolMessages(messages: MastraDBMessage[]): MastraDBMessage[][] {
@@ -97,7 +89,6 @@ async function partitionMessages(
   LoadMessageHistoryResult & {
     cutoff?: MastraDBMessage;
     overflowReason?: 'messages' | 'tokens';
-    hasPotentiallyIncompleteLinkedGroup: boolean;
   }
 > {
   const maxTokens = limits.maxTokens === undefined ? undefined : limits.maxTokens - (limits.atMaxRemoveTokens ?? 0);
@@ -148,20 +139,7 @@ async function partitionMessages(
     .reverse();
   const cutoff = messagesDescending.find(message => !retainedIds.has(message.id));
   const overflowReason = reachedTokenLimit ? 'tokens' : reachedMessageLimit ? 'messages' : undefined;
-  const loadedToolCallIds = new Set(
-    messagesDescending
-      .flatMap(getToolCallReferences)
-      .filter(reference => reference.state !== 'result')
-      .map(reference => reference.id),
-  );
-  const hasPotentiallyIncompleteLinkedGroup = countWindowGroups.some(group =>
-    group.some(message =>
-      getToolCallReferences(message).some(
-        reference => reference.state === 'result' && !loadedToolCallIds.has(reference.id),
-      ),
-    ),
-  );
-  return { messages, overflow, cutoff, overflowReason, hasPotentiallyIncompleteLinkedGroup };
+  return { messages, overflow, cutoff, overflowReason };
 }
 
 function laterDate(left: Date | undefined, right: Date | undefined): Date | undefined {
@@ -245,12 +223,7 @@ export async function loadMessageHistory(args: LoadMessageHistoryArgs): Promise<
       oldestTimestamp !== undefined &&
       oldestTimestamp < new Date(args.boundary.createdAt).getTime();
 
-    if (
-      !result.hasMore ||
-      (crossedCutoff && !partitioned.hasPotentiallyIncompleteLinkedGroup) ||
-      reachedBoundary ||
-      result.messages.length === 0
-    ) {
+    if (!result.hasMore || crossedCutoff || reachedBoundary || result.messages.length === 0) {
       return args.includeOverflow && partitioned.overflowReason === 'tokens'
         ? partitioned
         : { messages: partitioned.messages, overflow: [] };

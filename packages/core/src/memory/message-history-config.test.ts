@@ -349,10 +349,10 @@ describe('token-based memory history', () => {
     expect(result.overflow).toEqual([]);
   });
 
-  it('does not split linked tool messages separated across history pages', async () => {
+  it('keeps pagination bounded for a self-contained tool result', async () => {
     const store = (await new InMemoryStore().getStore('memory'))!;
-    const toolMessage = (id: string, state: 'call' | 'result', seconds: number): MastraDBMessage => ({
-      ...message(id, seconds),
+    const resultMessage: MastraDBMessage = {
+      ...message('completed-tool', 10),
       role: 'assistant',
       content: {
         format: 2,
@@ -360,59 +360,18 @@ describe('token-based memory history', () => {
           {
             type: 'tool-invocation',
             toolInvocation: {
-              state,
-              toolCallId: 'tool-call',
+              state: 'result',
+              toolCallId: 'completed-tool-call',
               toolName: 'lookup',
               args: {},
-              ...(state === 'result' ? { result: 'done' } : {}),
-            },
-          },
-        ],
-      },
-    });
-    await store.saveMessages({
-      messages: [
-        toolMessage('call', 'call', 0),
-        message('ordinary-2', 1),
-        message('ordinary-1', 2),
-        toolMessage('result', 'result', 3),
-      ],
-    });
-
-    const result = await loadMessageHistory({
-      storage: store,
-      threadId: 'thread',
-      resourceId: 'resource',
-      maxMessages: 1,
-      pageSize: 2,
-    });
-
-    expect(result.messages).toEqual([]);
-    expect(result.overflow).toEqual([]);
-  });
-
-  it('stops at the count cutoff for a terminal call-only tool message', async () => {
-    const store = (await new InMemoryStore().getStore('memory'))!;
-    const terminalCall: MastraDBMessage = {
-      ...message('terminal-call', 10),
-      role: 'assistant',
-      content: {
-        format: 2,
-        parts: [
-          {
-            type: 'tool-invocation',
-            toolInvocation: {
-              state: 'call',
-              toolCallId: 'client-tool-call',
-              toolName: 'client-tool',
-              args: {},
+              result: 'done',
             },
           },
         ],
       },
     };
     await store.saveMessages({
-      messages: [...Array.from({ length: 10 }, (_, index) => message(`ordinary-${index}`, index)), terminalCall],
+      messages: [...Array.from({ length: 10 }, (_, index) => message(`ordinary-${index}`, index)), resultMessage],
     });
     const listMessages = vi.spyOn(store, 'listMessages');
 
@@ -424,60 +383,8 @@ describe('token-based memory history', () => {
       pageSize: 2,
     });
 
-    expect(result.messages.map(item => item.id)).toEqual(['terminal-call']);
+    expect(result.messages.map(item => item.id)).toEqual(['completed-tool']);
     expect(listMessages).toHaveBeenCalledTimes(2);
-  });
-
-  it('resolves each active tool-call ID before stopping pagination', async () => {
-    const store = (await new InMemoryStore().getStore('memory'))!;
-    const toolMessage = (
-      id: string,
-      invocations: { toolCallId: string; state: 'call' | 'result' }[],
-      seconds: number,
-    ): MastraDBMessage => ({
-      ...message(id, seconds),
-      role: 'assistant',
-      content: {
-        format: 2,
-        parts: invocations.map(({ toolCallId, state }) => ({
-          type: 'tool-invocation' as const,
-          toolInvocation: {
-            state,
-            toolCallId,
-            toolName: 'lookup',
-            args: {},
-            ...(state === 'result' ? { result: 'done' } : {}),
-          },
-        })),
-      },
-    });
-    await store.saveMessages({
-      messages: [
-        toolMessage('call-b', [{ toolCallId: 'tool-b', state: 'call' }], 0),
-        message('ordinary-1', 1),
-        message('ordinary-2', 2),
-        toolMessage('call-a', [{ toolCallId: 'tool-a', state: 'call' }], 3),
-        toolMessage(
-          'results',
-          [
-            { toolCallId: 'tool-a', state: 'result' },
-            { toolCallId: 'tool-b', state: 'result' },
-          ],
-          4,
-        ),
-      ],
-    });
-
-    const result = await loadMessageHistory({
-      storage: store,
-      threadId: 'thread',
-      resourceId: 'resource',
-      maxMessages: 2,
-      pageSize: 2,
-    });
-
-    expect(result.messages).toEqual([]);
-    expect(result.overflow).toEqual([]);
   });
 
   it('persists full-prompt trimming from token overflow inside the explicit count window', async () => {
