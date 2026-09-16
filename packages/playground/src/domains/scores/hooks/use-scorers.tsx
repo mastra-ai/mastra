@@ -1,4 +1,5 @@
 import type { GetScorerResponse, ListScoresResponse } from '@mastra/client-js';
+import { useOptionalRequestContext } from '@mastra/playground-ui/domains/request-context';
 import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
 import {
   isObservabilityUnavailableError,
@@ -8,7 +9,6 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { useMergedRequestContext } from '@/domains/request-context';
 
 const SCORES_PER_PAGE = 25;
 const SCORES_REFETCH_INTERVAL_MS = 5000;
@@ -111,7 +111,7 @@ export const useScorer = (scorerId: string) => {
 
 export const useScorers = (options?: { enabled?: boolean }) => {
   const client = useMastraClient();
-  const requestContext = useMergedRequestContext();
+  const requestContext = useOptionalRequestContext();
 
   return useQuery({
     queryKey: ['scorers', requestContext],

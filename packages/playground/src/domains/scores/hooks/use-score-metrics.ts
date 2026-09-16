@@ -1,6 +1,6 @@
+import { useOptionalRequestContext } from '@mastra/playground-ui/domains/request-context';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import { useMergedRequestContext } from '@/domains/request-context';
 
 export interface ScorerSummary {
   scorer: string;
@@ -19,7 +19,7 @@ export type ScoreMetricsDateRange = { start?: Date; end?: Date };
 
 export function useScoreMetrics(dateRange?: ScoreMetricsDateRange) {
   const client = useMastraClient();
-  const requestContext = useMergedRequestContext();
+  const requestContext = useOptionalRequestContext();
   const timestamp = dateRange?.start || dateRange?.end ? dateRange : undefined;
 
   return useQuery({

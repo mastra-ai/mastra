@@ -3,7 +3,6 @@ import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useStoredAgent } from './use-stored-agents';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 /**
  * Hook to read and mutate the skills config for a stored agent.
@@ -15,7 +14,6 @@ import { usePlaygroundStore } from '@/store/playground-store';
 export function useAgentSkills(agentId?: string) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   const { data: agent } = useStoredAgent(agentId, { status: 'draft' });
 
@@ -36,7 +34,7 @@ export function useAgentSkills(agentId?: string) {
     mutationFn: (newSkills: Record<string, StoredAgentSkillConfig> | undefined) => {
       if (!agentId) throw new Error('agentId is required');
       const params: UpdateStoredAgentParams = { skills: newSkills };
-      return client.getStoredAgent(agentId).update(params, requestContext);
+      return client.getStoredAgent(agentId).update(params);
     },
     onSuccess: () => {
       if (agentId) {

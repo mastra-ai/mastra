@@ -1,4 +1,5 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
+import { RequestContextProvider } from '@mastra/playground-ui/domains/request-context';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useForm } from 'react-hook-form';
@@ -66,15 +67,17 @@ function Harness() {
   });
 
   return (
-    <AgentEditFormProvider form={form} mode="edit" isSubmitting={false} handlePublish={async () => {}}>
-      <PlaygroundModelProvider>
-        <GenerationProvider>
-          <ReviewQueueProvider>
-            <AgentPlaygroundEvaluate agentId="chef-agent" />
-          </ReviewQueueProvider>
-        </GenerationProvider>
-      </PlaygroundModelProvider>
-    </AgentEditFormProvider>
+    <RequestContextProvider entityKey="agent:chef-agent">
+      <AgentEditFormProvider form={form} mode="edit" isSubmitting={false} handlePublish={async () => {}}>
+        <PlaygroundModelProvider>
+          <GenerationProvider>
+            <ReviewQueueProvider>
+              <AgentPlaygroundEvaluate agentId="chef-agent" />
+            </ReviewQueueProvider>
+          </GenerationProvider>
+        </PlaygroundModelProvider>
+      </AgentEditFormProvider>
+    </RequestContextProvider>
   );
 }
 

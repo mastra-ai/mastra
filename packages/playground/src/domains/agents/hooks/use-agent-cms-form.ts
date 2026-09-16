@@ -28,7 +28,6 @@ import {
   type UnresolvedPromptBlock,
 } from '../utils/instruction-blocks-runtime';
 import { useStoredAgentMutations } from './use-stored-agents';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 type CreateOptions = {
   mode: 'create';
@@ -54,7 +53,6 @@ export type UseAgentCmsFormOptions = CreateOptions | EditOptions;
 export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
 
@@ -276,7 +274,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       await Promise.all(
         refIds.map(async id => {
           try {
-            const details = await client.getStoredPromptBlock(id).details(requestContext);
+            const details = await client.getStoredPromptBlock(id).details();
             if (!details) {
               publicationStatuses.set(id, 'unknown');
               unresolvedBlocks.push({ id, reason: 'not_found' });
@@ -318,7 +316,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
 
       return false;
     },
-    [client, isCodeAgentOverride, ownsInstructions, requestContext],
+    [client, isCodeAgentOverride, ownsInstructions],
   );
 
   const handleSaveDraft = useCallback(

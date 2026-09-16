@@ -1,15 +1,15 @@
 import type { GetObservationalMemoryResponse, GetMemoryStatusResponse } from '@mastra/client-js';
+import { useOptionalRequestContext } from '@mastra/playground-ui/domains/request-context';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
-import { useMergedRequestContext } from '@/domains/request-context';
 
 import type { MemorySearchParams } from '@/types/memory';
 
 export const useMemory = (agentId?: string) => {
   const client = useMastraClient();
-  const requestContext = useMergedRequestContext();
+  const requestContext = useOptionalRequestContext();
 
   return useQuery({
     queryKey: ['memory', agentId, requestContext],
@@ -23,7 +23,7 @@ export const useMemory = (agentId?: string) => {
 
 export const useMemoryConfig = (agentId?: string) => {
   const client = useMastraClient();
-  const requestContext = useMergedRequestContext();
+  const requestContext = useOptionalRequestContext();
 
   return useQuery({
     queryKey: ['memory', 'config', agentId, requestContext],
@@ -38,7 +38,7 @@ export const useMemoryConfig = (agentId?: string) => {
 
 export const useThread = ({ threadId, agentId }: { threadId?: string; agentId?: string }) => {
   const client = useMastraClient();
-  const requestContext = useMergedRequestContext();
+  const requestContext = useOptionalRequestContext();
 
   return useQuery({
     queryKey: ['memory', 'thread', threadId, agentId, requestContext],
@@ -61,7 +61,7 @@ export const useThreads = ({
   isMemoryEnabled: boolean;
 }) => {
   const client = useMastraClient();
-  const requestContext = useMergedRequestContext();
+  const requestContext = useOptionalRequestContext();
 
   return useQuery({
     queryKey: ['memory', 'threads', resourceId, agentId, requestContext],
@@ -81,7 +81,7 @@ export const useThreads = ({
 export const useDeleteThread = () => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const requestContext = useMergedRequestContext();
+  const requestContext = useOptionalRequestContext();
 
   return useMutation({
     mutationFn: ({ threadId, agentId }: { threadId: string; agentId: string }) => {
@@ -110,7 +110,7 @@ export const useMemorySearch = ({
   resourceId: string;
   threadId?: string;
 }) => {
-  const requestContext = useMergedRequestContext();
+  const requestContext = useOptionalRequestContext();
   const client = useMastraClient();
   return useMutation({
     mutationFn: async ({ searchQuery, memoryConfig }: { searchQuery: string; memoryConfig?: MemorySearchParams }) => {
@@ -122,7 +122,7 @@ export const useMemorySearch = ({
 export const useCloneThread = () => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const requestContext = useMergedRequestContext();
+  const requestContext = useOptionalRequestContext();
 
   return useMutation({
     mutationFn: async ({ threadId, agentId, title }: { threadId: string; agentId: string; title?: string }) => {
@@ -161,7 +161,7 @@ export const useObservationalMemory = ({
   isActive?: boolean;
 }) => {
   const client = useMastraClient();
-  const requestContext = useMergedRequestContext();
+  const requestContext = useOptionalRequestContext();
 
   return useQuery<GetObservationalMemoryResponse | null>({
     queryKey: ['observational-memory', agentId, resourceId, threadId, requestContext],
@@ -201,7 +201,7 @@ export const useMemoryWithOMStatus = ({
   pollWhenActive?: boolean;
 }) => {
   const client = useMastraClient();
-  const requestContext = useMergedRequestContext();
+  const requestContext = useOptionalRequestContext();
   const [isActive, setIsActive] = useState(false);
 
   const query = useQuery<GetMemoryStatusResponse | null>({

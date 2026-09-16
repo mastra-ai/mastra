@@ -1,38 +1,38 @@
 import { jsonLanguage } from '@codemirror/lang-json';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { formatJSON, isValidJson } from '@mastra/playground-ui/utils/formatting';
-import { toast } from '@mastra/playground-ui/utils/toast';
 import CodeMirror from '@uiw/react-codemirror';
-import { Braces, CopyIcon, ExternalLink, X, Check } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { Braces, CopyIcon, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { RequestContextLabel } from '@/domains/request-context/components/request-context-label';
-import type { RequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
-import { useRequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
 
-import { useLinkComponent } from '@/lib/framework';
-import { usePlaygroundStore } from '@/store/playground-store';
+import { useRequestContext } from '../context/request-context-provider';
+import type { RequestContextPresets } from '../hooks/use-request-context-presets';
+import { useRequestContextPresets } from '../hooks/use-request-context-presets';
+import { RequestContextLabel } from './request-context-label';
+import { useRunOptionsDraft } from '@/domains/run-options/context/run-options-draft';
+import { Button } from '@/ds/components/Button';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Icon } from '@/ds/icons/Icon';
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
+import { formatJSON, isValidJson } from '@/lib/formatting';
+import { toast } from '@/lib/toast';
+import { cn } from '@/lib/utils';
 
-interface RequestContextProps {
+export interface RequestContextJsonEditorProps {
   editorClassName?: string;
   labelTooltip?: string;
 }
 
+const CUSTOM_PRESET = '__custom__';
+
 function getMatchingPresetKey(presets: RequestContextPresets | null, requestContextStr: string) {
-  if (!presets) return '__custom__';
+  if (!presets) return CUSTOM_PRESET;
 
   for (const [key, value] of Object.entries(presets)) {
     if (JSON.stringify(value) === requestContextStr) return key;
   }
 
-  return '__custom__';
+  return CUSTOM_PRESET;
 }
 
 function normalizeJsonString(value: string) {
@@ -43,17 +43,19 @@ function normalizeJsonString(value: string) {
   }
 }
 
-export const RequestContext = ({ editorClassName = 'h-[400px]', labelTooltip }: RequestContextProps = {}) => {
-  const { requestContext, setRequestContext } = usePlaygroundStore();
+/** Freeform JSON editor bound to the current entity request context. */
+export const RequestContextJsonEditor = ({
+  editorClassName = 'h-[400px]',
+  labelTooltip,
+}: RequestContextJsonEditorProps = {}) => {
+  const { requestContext, setRequestContext } = useRequestContext();
   const [requestContextValue, setRequestContextValue] = useState<string>('');
   const [savedRequestContextValue, setSavedRequestContextValue] = useState<string>('');
   const theme = useCodemirrorTheme();
   const presets = useRequestContextPresets();
   const requestContextStr = JSON.stringify(requestContext ?? {});
 
-  const [selectedPreset, setSelectedPreset] = useState<string>(() => {
-    return getMatchingPresetKey(presets, requestContextStr);
-  });
+  const [selectedPreset, setSelectedPreset] = useState<string>(() => getMatchingPresetKey(presets, requestContextStr));
 
   const { handleCopy } = useCopyToClipboard({ text: requestContextValue });
 
@@ -83,18 +85,18 @@ export const RequestContext = ({ editorClassName = 'h-[400px]', labelTooltip }: 
     return requestContextValue !== savedRequestContextValue;
   }, [requestContextStr, requestContextValue, savedRequestContextValue]);
 
-  const handleSaveRequestContext = () => {
-    if (!isRequestContextDirty) return;
-
-    try {
-      const parsedContext = JSON.parse(requestContextValue);
-      setRequestContext(parsedContext);
-      toast.success('Request context saved successfully');
-    } catch (error) {
-      console.error('error', error);
-      toast.error('Invalid JSON');
-    }
-  };
+  useRunOptionsDraft({
+    isDirty: isRequestContextDirty,
+    save: () => {
+      try {
+        setRequestContext(JSON.parse(requestContextValue));
+        return true;
+      } catch {
+        toast.error('Invalid request context JSON');
+        return false;
+      }
+    },
+  });
 
   const handleRevertRequestContext = () => {
     setRequestContextValue(savedRequestContextValue);
@@ -115,7 +117,7 @@ export const RequestContext = ({ editorClassName = 'h-[400px]', labelTooltip }: 
 
   const handlePresetChange = async (presetKey: string) => {
     setSelectedPreset(presetKey);
-    if (presetKey === '__custom__' || !presets) return;
+    if (presetKey === CUSTOM_PRESET || !presets) return;
 
     const presetValue = presets[presetKey];
     if (presetValue) {
@@ -126,8 +128,8 @@ export const RequestContext = ({ editorClassName = 'h-[400px]', labelTooltip }: 
 
   const handleEditorChange = (value: string) => {
     setRequestContextValue(value);
-    if (selectedPreset !== '__custom__') {
-      setSelectedPreset('__custom__');
+    if (selectedPreset !== CUSTOM_PRESET) {
+      setSelectedPreset(CUSTOM_PRESET);
     }
   };
 
@@ -141,24 +143,28 @@ export const RequestContext = ({ editorClassName = 'h-[400px]', labelTooltip }: 
 
           <div className="flex items-center gap-2">
             <Tooltip>
-              <TooltipTrigger asChild>
-                <button type="button" onClick={formatRequestContext} className={buttonClass}>
-                  <Icon>
-                    <Braces />
-                  </Icon>
-                </button>
-              </TooltipTrigger>
+              <TooltipTrigger
+                render={
+                  <button type="button" onClick={formatRequestContext} className={buttonClass}>
+                    <Icon>
+                      <Braces />
+                    </Icon>
+                  </button>
+                }
+              />
               <TooltipContent>Format the Request Context JSON</TooltipContent>
             </Tooltip>
 
             <Tooltip>
-              <TooltipTrigger asChild>
-                <button type="button" onClick={handleCopy} className={buttonClass}>
-                  <Icon>
-                    <CopyIcon />
-                  </Icon>
-                </button>
-              </TooltipTrigger>
+              <TooltipTrigger
+                render={
+                  <button type="button" onClick={handleCopy} className={buttonClass}>
+                    <Icon>
+                      <CopyIcon />
+                    </Icon>
+                  </button>
+                }
+              />
               <TooltipContent>Copy Request Context</TooltipContent>
             </Tooltip>
           </div>
@@ -171,7 +177,7 @@ export const RequestContext = ({ editorClassName = 'h-[400px]', labelTooltip }: 
                 <SelectValue placeholder="Select a preset..." />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__custom__">Custom</SelectItem>
+                <SelectItem value={CUSTOM_PRESET}>Custom</SelectItem>
                 {Object.keys(presets).map(key => (
                   <SelectItem key={key} value={key}>
                     {key}
@@ -189,13 +195,13 @@ export const RequestContext = ({ editorClassName = 'h-[400px]', labelTooltip }: 
           extensions={[jsonLanguage]}
           className={cn(
             editorClassName,
-            'overflow-y-scroll rounded-lg border border-border1 bg-surface2 overflow-hidden p-3',
+            'overflow-hidden overflow-y-scroll rounded-lg border border-border1 bg-surface2 p-3',
             '[&_.cm-editor]:!bg-surface2 [&_.cm-gutters]:!bg-surface2',
           )}
         />
 
-        <div className="flex justify-end gap-2 pt-2">
-          {isRequestContextDirty && (
+        {isRequestContextDirty && (
+          <div className="flex justify-end pt-2">
             <Button
               variant="default"
               size="icon-md"
@@ -205,41 +211,9 @@ export const RequestContext = ({ editorClassName = 'h-[400px]', labelTooltip }: 
             >
               <X />
             </Button>
-          )}
-          <Button icon={<Check />} type="button" onClick={handleSaveRequestContext} disabled={!isRequestContextDirty}>
-            Save
-          </Button>
-        </div>
+          </div>
+        )}
       </div>
     </TooltipProvider>
-  );
-};
-
-export const RequestContextWrapper = ({ children }: { children: ReactNode }) => {
-  const { Link } = useLinkComponent();
-
-  return (
-    <div>
-      <Notice
-        variant="note"
-        title="Request context"
-        className="mb-5"
-        action={
-          <Notice.Button as={Link} to="https://mastra.ai/docs/server/request-context" target="_blank">
-            <Icon>
-              <ExternalLink />
-            </Icon>
-            See documentation
-          </Notice.Button>
-        }
-      >
-        <Notice.Message>
-          Mastra provides request context, which is a system based on dependency injection that enables you to configure
-          your agents and tools with runtime variables. If you find yourself creating several different agents that do
-          very similar things, request context allows you to combine them into one agent.
-        </Notice.Message>
-      </Notice>
-      {children}
-    </div>
   );
 };

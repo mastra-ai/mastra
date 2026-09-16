@@ -10,7 +10,6 @@ import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useTool } from '@/domains/tools/hooks';
 import { useExecuteTool } from '@/domains/tools/hooks/use-execute-tool';
 import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export interface ToolPanelProps {
   toolId: string;
@@ -41,7 +40,6 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
   const tool: any = agentTool || apiTool;
 
   const { mutateAsync: executeTool, isPending: isExecuting, data: result } = useExecuteTool();
-  const { requestContext: playgroundRequestContext } = usePlaygroundStore();
 
   useEffect(() => {
     if (error) {
@@ -50,16 +48,8 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
     }
   }, [error]);
 
-  const handleExecuteTool = async (data: any, schemaRequestContext?: Record<string, any>) => {
+  const handleExecuteTool = async (data: any, requestContext: Record<string, unknown>) => {
     if (!tool) return;
-
-    // Merge global playground request context with schema request context.
-    // Schema values take precedence and explicitly override global values,
-    // including when schema values are empty strings (user intentionally cleared them).
-    const requestContext = {
-      ...(playgroundRequestContext ?? {}),
-      ...(schemaRequestContext ?? {}),
-    };
 
     return executeTool({
       toolId: tool.id,
@@ -108,6 +98,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
       toolDescription={tool.description}
       toolId={tool.id}
       requestContextSchema={tool.requestContextSchema}
+      entityKey={`tool:${tool.id}`}
     />
   );
 };

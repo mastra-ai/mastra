@@ -1,8 +1,9 @@
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Info } from 'lucide-react';
 import type { ReactNode } from 'react';
+
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
 
 interface RequestContextLabelProps {
   as?: 'label' | 'span';
@@ -23,18 +24,20 @@ export function RequestContextLabel({ as = 'span', children, tooltip }: RequestC
       {tooltip && (
         <TooltipProvider delay={10}>
           <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label={ariaLabel}
-                className="text-neutral3 hover:text-neutral6 focus-visible:ring-border2 rounded-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
-              >
-                <Icon size="sm">
-                  <Info />
-                </Icon>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-[240px]">
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label={ariaLabel}
+                  className="text-neutral3 hover:text-neutral6 focus-visible:ring-border2 rounded-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                >
+                  <Icon size="sm">
+                    <Info />
+                  </Icon>
+                </button>
+              }
+            />
+            <TooltipContent side="top" className="max-w-60">
               {tooltip}
             </TooltipContent>
           </Tooltip>

@@ -1,6 +1,7 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { useOptionalRequestContext } from '@mastra/playground-ui/domains/request-context';
 import { Save } from 'lucide-react';
 import { useMemo } from 'react';
 import { useFormState } from 'react-hook-form';
@@ -13,10 +14,9 @@ import { BrowserToolCallsProvider } from '../../context/browser-tool-calls-conte
 import { useAgent } from '../../hooks/use-agent';
 import { buildAgentDefaultSettings } from '../../utils/agent-default-settings';
 import { AgentChat } from '../agent-chat';
+import { AgentRunOptions } from '../agent-run-options';
 import { BrowserViewPanel } from '../browser-view/browser-view-panel';
-import { ComposerRunOptions } from '../composer-run-options';
 import { ThreadInputProvider } from '@/domains/conversation';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { DatasetSaveProvider } from '@/lib/ai-ui/context/dataset-save-context';
 
 interface AgentPlaygroundTestChatProps {
@@ -75,7 +75,7 @@ export function AgentPlaygroundTestChat({
   // Generate a stable ephemeral thread ID for test chat sessions
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: regenerate thread ID when agent changes
   const testThreadId = useMemo(() => uuid(), [agentId]);
-  const mergedRequestContext = useMergedRequestContext();
+  const mergedRequestContext = useOptionalRequestContext();
   const hasRequestContext = Object.keys(mergedRequestContext).length > 0;
 
   const editFormCtx = useOptionalAgentEditFormContext();
@@ -113,7 +113,9 @@ export function AgentPlaygroundTestChat({
                       memory={hasMemory}
                       modelList={agent?.modelList}
                       isNewThread
-                      runOptionsSlot={<ComposerRunOptions requestContextSchema={agent?.requestContextSchema} />}
+                      runOptionsSlot={
+                        <AgentRunOptions triggerVariant="icon" requestContextSchema={agent?.requestContextSchema} />
+                      }
                     />
                   </div>
                 </div>

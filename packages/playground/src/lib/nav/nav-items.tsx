@@ -7,7 +7,6 @@ import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { MetricsIcon } from '@mastra/playground-ui/icons/MetricsIcon';
 import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
 import { PromptIcon } from '@mastra/playground-ui/icons/PromptIcon';
-import { RequestContextIcon } from '@mastra/playground-ui/icons/RequestContextIcon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { SettingsIcon } from '@mastra/playground-ui/icons/SettingsIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
@@ -110,12 +109,6 @@ export const mainNav: NavSection[] = [
         name: 'Workspaces',
         url: '/workspaces',
         Icon: WorkspacesIcon,
-        isOnMastraPlatform: true,
-      },
-      {
-        name: 'Request Context',
-        url: '/request-context',
-        Icon: RequestContextIcon,
         isOnMastraPlatform: true,
       },
     ],

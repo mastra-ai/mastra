@@ -1,5 +1,6 @@
 import { coreFeatures } from '@mastra/core/features';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { RequestContextProvider } from '@mastra/playground-ui/domains/request-context';
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { useParams, useLocation, useNavigate } from 'react-router';
@@ -18,7 +19,6 @@ import { useHasObservability } from '@/domains/configuration/hooks/use-has-obser
 import { GenerationProvider } from '@/domains/datasets/context/generation-context';
 import { cleanProviderId } from '@/domains/llm/utils';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
-import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { RouteSidePanel } from '@/lib/route-side-panel';
 
 /** Shadows the global "go to" sequences with agent-scoped targets while an agent page is mounted. */
@@ -78,7 +78,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
-      <SchemaRequestContextProvider>
+      <RequestContextProvider key={agentId} entityKey={`agent:${agentId}`}>
         <PlaygroundModelProvider
           key={`${agentId}:${defaultProvider}/${defaultModel}`}
           defaultProvider={defaultProvider}
@@ -88,7 +88,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
             <ReviewQueueProvider>{content}</ReviewQueueProvider>
           </GenerationProvider>
         </PlaygroundModelProvider>
-      </SchemaRequestContextProvider>
+      </RequestContextProvider>
     </TracingSettingsProvider>
   );
 };

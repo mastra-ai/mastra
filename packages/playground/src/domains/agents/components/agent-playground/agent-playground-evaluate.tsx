@@ -41,7 +41,7 @@ import { useAgentExperiments } from '../../hooks/use-agent-experiments';
 import type { AgentExperiment } from '../../hooks/use-agent-experiments';
 import { useStoredAgentMutations } from '../../hooks/use-stored-agents';
 import { mapScorersToApi, mapInstructionBlocksToApi } from '../../utils/agent-form-mappers';
-import { AgentTopBarRunOptions } from '../agent-top-bar-controls';
+import { AgentRunOptions } from '../agent-run-options';
 import { ExperimentResultsPanel } from './agent-playground-eval';
 import { AgentPlaygroundReview } from './agent-playground-review';
 import { AttachButton } from './attach-button';
@@ -987,7 +987,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
                 )}
               </>
             )}
-            <AgentTopBarRunOptions requestContextSchema={requestContextSchema} />
+            <AgentRunOptions triggerVariant="labelled" requestContextSchema={requestContextSchema} />
           </div>
         </div>
 

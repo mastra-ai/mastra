@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createContext, useContext, useEffect, useImperativeHandle, useState } from 'react';
 import type { ReactNode, Ref } from 'react';
@@ -330,9 +330,7 @@ describe('Standalone thread page', () => {
         expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
         await act(async () => releaseHistory());
         await waitFor(() =>
-          expect(queryClient.getQueryState(['memory', 'messages', THREAD_ID, AGENT_ID, 'requestContext'])?.status).toBe(
-            'success',
-          ),
+          expect(queryClient.getQueryState(['memory', 'messages', THREAD_ID, AGENT_ID, {}])?.status).toBe('success'),
         );
         expect(historyReturned).toHaveBeenCalledOnce();
         await waitFor(
@@ -935,6 +933,122 @@ describe('Standalone thread page', () => {
           modelSettings: expect.objectContaining({ temperature: 0.2 }),
         }),
       );
+    });
+  });
+
+  describe('when the agent has a persisted per-entity request context', () => {
+    it('sends it in the message request body', async () => {
+      installHandlers();
+      window.localStorage.setItem(`mastra:request-context:agent:${AGENT_ID}`, JSON.stringify({ userId: 'u-1' }));
+      const sent = vi.fn();
+      const subscribed = vi.fn();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, () => HttpResponse.json([])),
+        http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () =>
+          HttpResponse.json({ workingMemory: null }),
+        ),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId`, () => HttpResponse.json(threadsResponse.threads[0])),
+        http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [] })),
+        http.post(`${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`, () => {
+          subscribed();
+          return new HttpResponse(new ReadableStream<Uint8Array>(), {
+            headers: { 'Content-Type': 'text/event-stream' },
+          });
+        }),
+        http.post(`${BASE_URL}/api/agents/${AGENT_ID}/send-message`, async ({ request }) => {
+          sent(await request.json());
+          return HttpResponse.json({ accepted: true, runId: 'run-1' });
+        }),
+      );
+      renderAt(`/agents/${AGENT_ID}/threads/new`);
+      await waitFor(() => expect(subscribed).toHaveBeenCalled());
+      const input = await screen.findByRole('textbox');
+      fireEvent.change(input, { target: { value: 'Who am I?' } });
+      fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+
+      await waitFor(() => expect(sent).toHaveBeenCalledOnce());
+      expect(sent).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          ifIdle: expect.objectContaining({
+            streamOptions: expect.objectContaining({ requestContext: { userId: 'u-1' } }),
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('when the user opens run options from the composer', () => {
+    it('shows the per-agent request context editor', async () => {
+      installHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, () => HttpResponse.json([])),
+        http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () =>
+          HttpResponse.json({ workingMemory: null }),
+        ),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId`, () => HttpResponse.json(threadsResponse.threads[0])),
+        http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [] })),
+        http.post(
+          `${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`,
+          () =>
+            new HttpResponse(new ReadableStream<Uint8Array>(), {
+              headers: { 'Content-Type': 'text/event-stream' },
+            }),
+        ),
+      );
+      renderAt(`/agents/${AGENT_ID}/threads/new`);
+
+      fireEvent.click(await screen.findByTestId('composer-run-options-trigger'));
+
+      expect(await screen.findByText('Request Context (JSON)')).not.toBeNull();
+      expect(await screen.findByText('Tracing Options (JSON)')).not.toBeNull();
+    });
+
+    it('keeps the popover open after saving request context while the agent refetches', async () => {
+      (window as typeof window & { MASTRA_REQUEST_CONTEXT_PRESETS?: string }).MASTRA_REQUEST_CONTEXT_PRESETS =
+        JSON.stringify({ French: { locale: 'fr' } });
+      installHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, () => HttpResponse.json([])),
+        http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () =>
+          HttpResponse.json({ workingMemory: null }),
+        ),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId`, () => HttpResponse.json(threadsResponse.threads[0])),
+        http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [] })),
+        http.post(
+          `${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`,
+          () =>
+            new HttpResponse(new ReadableStream<Uint8Array>(), {
+              headers: { 'Content-Type': 'text/event-stream' },
+            }),
+        ),
+      );
+      renderAt(`/agents/${AGENT_ID}/threads/new`);
+
+      fireEvent.click(await screen.findByTestId('composer-run-options-trigger'));
+      const popover = (await screen.findByText('Run options')).closest('[role="dialog"]') as HTMLElement;
+
+      fireEvent.click(within(popover).getByRole('combobox'));
+      const presetOption = await screen.findByRole('option', { name: 'French' });
+      fireEvent.pointerDown(presetOption, { pointerType: 'mouse' });
+      fireEvent.click(presetOption, { detail: 1 });
+      const saveButton = within(popover).getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+      await waitFor(() => expect(saveButton.disabled).toBe(false));
+      fireEvent.click(saveButton);
+
+      await waitFor(() =>
+        expect(window.localStorage.getItem(`mastra:request-context:agent:${AGENT_ID}`)).toBe(
+          JSON.stringify({ locale: 'fr' }),
+        ),
+      );
+      // The agent query refetches with the new context; the chat must not drop into
+      // its loading skeleton (which would remount the composer and close the popover).
+      await waitFor(() => expect(screen.queryByTestId('composer-run-options-trigger')).not.toBeNull());
+      expect(screen.queryByText('Request Context (JSON)')).not.toBeNull();
+      expect(screen.queryByText('Tracing Options (JSON)')).not.toBeNull();
+      delete (window as typeof window & { MASTRA_REQUEST_CONTEXT_PRESETS?: string }).MASTRA_REQUEST_CONTEXT_PRESETS;
     });
   });
 

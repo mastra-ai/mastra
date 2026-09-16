@@ -3,7 +3,6 @@ import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useStoredAgent } from './use-stored-agents';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 /**
  * Hook to read and mutate the workspace reference for a stored agent.
@@ -16,7 +15,6 @@ import { usePlaygroundStore } from '@/store/playground-store';
 export function useAgentWorkspace(agentId?: string) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   const { data: agent } = useStoredAgent(agentId, { status: 'draft' });
 
@@ -33,7 +31,7 @@ export function useAgentWorkspace(agentId?: string) {
     mutationFn: (ref: StoredWorkspaceRef | undefined) => {
       if (!agentId) throw new Error('agentId is required');
       const params: UpdateStoredAgentParams = { workspace: ref };
-      return client.getStoredAgent(agentId).update(params, requestContext);
+      return client.getStoredAgent(agentId).update(params);
     },
     onSuccess: () => {
       if (agentId) {

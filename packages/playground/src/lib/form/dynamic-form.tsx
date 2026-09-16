@@ -123,44 +123,65 @@ export function DynamicForm({
     return new CustomZodProvider(normalizeSchema(schema) as any);
   }, [schema, isNotZodObject]);
 
+  // SubmitButton is handed to AutoForm as a component. Its identity must stay stable
+  // across re-renders, otherwise React remounts the whole submit row (closing any
+  // popover rendered in submitActions/leftActions). Read live props through a ref
+  // instead of recreating the component when they change.
+  const submitPropsRef = useRef({
+    onSubmit,
+    isSubmitLoading,
+    submitButtonLabel,
+    submitButtonClassName,
+    submitButtonIcon,
+    submitButtonVariant,
+    submitButtonFullWidth,
+    disableSubmit,
+    submitActions,
+    leftActions,
+  });
+  submitPropsRef.current = {
+    onSubmit,
+    isSubmitLoading,
+    submitButtonLabel,
+    submitButtonClassName,
+    submitButtonIcon,
+    submitButtonVariant,
+    submitButtonFullWidth,
+    disableSubmit,
+    submitActions,
+    leftActions,
+  };
+
   const uiComponents = useMemo(
     () => ({
-      SubmitButton: ({ children: buttonChildren }: { children: React.ReactNode }) =>
-        onSubmit ? (
-          <div className={cn('flex items-center justify-between gap-1', submitButtonFullWidth && 'block')}>
-            {!submitButtonFullWidth && (leftActions ?? <div />)}
-            <div className={cn('flex items-center gap-1', submitButtonFullWidth && 'w-full')}>
-              {submitActions}
+      SubmitButton: ({ children: buttonChildren }: { children: React.ReactNode }) => {
+        const p = submitPropsRef.current;
+        if (!p.onSubmit) return null;
+        return (
+          <div className={cn('flex items-center justify-between gap-1', p.submitButtonFullWidth && 'block')}>
+            {!p.submitButtonFullWidth && (p.leftActions ?? <div />)}
+            <div className={cn('flex items-center gap-1', p.submitButtonFullWidth && 'w-full')}>
+              {p.submitActions}
               <Button
-                variant={submitButtonVariant}
-                disabled={isSubmitLoading || disableSubmit}
-                className={cn(submitButtonFullWidth && 'w-full justify-center', submitButtonClassName)}
+                variant={p.submitButtonVariant}
+                disabled={p.isSubmitLoading || p.disableSubmit}
+                className={cn(p.submitButtonFullWidth && 'w-full justify-center', p.submitButtonClassName)}
               >
-                {isSubmitLoading ? (
+                {p.isSubmitLoading ? (
                   <Loader2 className="animate-spin" />
                 ) : (
                   <>
-                    {submitButtonIcon}
-                    {submitButtonLabel || buttonChildren}
+                    {p.submitButtonIcon}
+                    {p.submitButtonLabel || buttonChildren}
                   </>
                 )}
               </Button>
             </div>
           </div>
-        ) : null,
+        );
+      },
     }),
-    [
-      onSubmit,
-      isSubmitLoading,
-      submitButtonLabel,
-      submitButtonClassName,
-      submitButtonIcon,
-      submitButtonVariant,
-      submitButtonFullWidth,
-      submitActions,
-      leftActions,
-      disableSubmit,
-    ],
+    [],
   );
 
   const formComponents = useMemo(

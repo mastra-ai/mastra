@@ -52,7 +52,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
 
   const handleToolCall = useCallback(
     async (_toolName: string, args: Record<string, unknown>) => {
-      const response = await executeTool(args);
+      const response = await executeTool({ data: args });
       return response;
     },
     [executeTool],
@@ -65,10 +65,10 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
     }
   }, [error]);
 
-  const handleExecuteTool = async (data: any) => {
+  const handleExecuteTool = async (data: any, requestContext: Record<string, unknown>) => {
     if (!tool) return;
 
-    return await executeTool(data);
+    return await executeTool({ data, requestContext });
   };
 
   if (isLoading) {
@@ -123,6 +123,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
         handleExecuteTool={handleExecuteTool}
         toolDescription={tool.description || ''}
         toolId={tool.id}
+        entityKey={`mcp:${serverId}:${tool.id}`}
       />
     </div>
   );

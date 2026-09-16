@@ -7,14 +7,12 @@ import type {
 } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export const useStoredPromptBlocks = (params?: ListStoredPromptBlocksParams) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useQuery<ListStoredPromptBlocksResponse>({
-    queryKey: ['stored-prompt-blocks', params, requestContext],
+    queryKey: ['stored-prompt-blocks', params],
     queryFn: () => client.listStoredPromptBlocks(params),
     placeholderData: previousData => previousData,
   });
@@ -22,11 +20,10 @@ export const useStoredPromptBlocks = (params?: ListStoredPromptBlocksParams) => 
 
 export const useStoredPromptBlock = (blockId?: string, options?: { status?: 'draft' | 'published' }) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useQuery<StoredPromptBlockResponse | null>({
-    queryKey: ['stored-prompt-block', blockId, options?.status, requestContext],
-    queryFn: () => (blockId ? client.getStoredPromptBlock(blockId).details(requestContext, options) : null),
+    queryKey: ['stored-prompt-block', blockId, options?.status],
+    queryFn: () => (blockId ? client.getStoredPromptBlock(blockId).details(undefined, options) : null),
     enabled: Boolean(blockId),
   });
 };
@@ -34,7 +31,6 @@ export const useStoredPromptBlock = (blockId?: string, options?: { status?: 'dra
 export const useStoredPromptBlockMutations = (blockId?: string) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   const createMutation = useMutation({
     mutationFn: (params: CreateStoredPromptBlockParams) => client.createStoredPromptBlock(params),
@@ -46,7 +42,7 @@ export const useStoredPromptBlockMutations = (blockId?: string) => {
   const updateMutation = useMutation({
     mutationFn: (params: UpdateStoredPromptBlockParams) => {
       if (!blockId) throw new Error('blockId is required for update');
-      return client.getStoredPromptBlock(blockId).update(params, requestContext);
+      return client.getStoredPromptBlock(blockId).update(params);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['stored-prompt-blocks'] });
@@ -60,7 +56,7 @@ export const useStoredPromptBlockMutations = (blockId?: string) => {
   const deleteMutation = useMutation({
     mutationFn: () => {
       if (!blockId) throw new Error('blockId is required for delete');
-      return client.getStoredPromptBlock(blockId).delete(requestContext);
+      return client.getStoredPromptBlock(blockId).delete();
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['stored-prompt-blocks'] });

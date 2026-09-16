@@ -53,7 +53,6 @@ describe('GlobalShortcuts', () => {
       ['m', '/mcps'],
       ['o', '/tools'],
       ['k', '/workspaces'],
-      ['r', '/request-context'],
       ['e', '/evaluation'],
       ['s', '/scorers'],
       ['d', '/datasets'],

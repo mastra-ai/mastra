@@ -6,13 +6,13 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useOptionalRequestContext } from '@mastra/playground-ui/domains/request-context';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { Loader2 } from 'lucide-react';
 import { useState, useEffect, useContext, useRef } from 'react';
-import { WorkflowRequestContextDialog } from '../components/workflow-request-context-dialog';
-import { WorkflowRunOptionsDialog } from '../components/workflow-run-options-dialog';
+import { WorkflowRunOptions } from '../components/workflow-run-options';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
@@ -23,7 +23,6 @@ import { WorkflowJsonDialog } from './workflow-json-dialog';
 import { WorkflowRunError } from './workflow-run-error';
 import { WorkflowTriggerForm } from './workflow-trigger-form';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 
 export interface WorkflowTriggerProps {
   workflowId: string;
@@ -219,7 +218,7 @@ export function WorkflowTrigger({
   isCancellingWorkflowRun,
   cancelWorkflowRun,
 }: WorkflowTriggerProps) {
-  const requestContext = useMergedRequestContext();
+  const requestContext = useOptionalRequestContext();
 
   const {
     result,
@@ -359,14 +358,7 @@ export function WorkflowTrigger({
               collapsible={false}
               headingSlot={headingSlot}
               leftActions={!paramsRunId ? <DebugModeSwitch /> : undefined}
-              submitActions={
-                <>
-                  {workflow?.requestContextSchema && (
-                    <WorkflowRequestContextDialog requestContextSchema={workflow.requestContextSchema} />
-                  )}
-                  <WorkflowRunOptionsDialog />
-                </>
-              }
+              submitActions={<WorkflowRunOptions requestContextSchema={workflow?.requestContextSchema} />}
             />
           </>
         )}

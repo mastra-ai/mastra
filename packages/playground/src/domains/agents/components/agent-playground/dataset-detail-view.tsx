@@ -8,6 +8,7 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useOptionalRequestContext } from '@mastra/playground-ui/domains/request-context';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -21,7 +22,6 @@ import { useDatasetExperiments } from '@/domains/datasets/hooks/use-dataset-expe
 import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasetVersions } from '@/domains/datasets/hooks/use-dataset-versions';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 interface DatasetDetailViewProps {
@@ -163,7 +163,7 @@ export function DatasetDetailView({
     setSelectedAgentVersion('');
   }, [agentId]);
 
-  const mergedRequestContext = useMergedRequestContext();
+  const mergedRequestContext = useOptionalRequestContext();
   const queryClient = useQueryClient();
   const { triggerExperiment } = useDatasetMutations();
 

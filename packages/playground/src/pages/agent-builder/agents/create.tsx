@@ -14,7 +14,7 @@ const AGENT_BUILDER_AGENTS_ROUTE = '/agent-builder/agents';
 export default function AgentBuilderCreate() {
   const { canWrite } = useBuilderAgentAccess();
   const navigate = useNavigate();
-  // Warm the ['tools'], ['agents', requestContext], ['workflows', requestContext], and
+  // Warm the ['tools'], ['agents'], ['workflows'], and
   // ['stored-skills'] tanstack-query caches while the user types their prompt, so the
   // edit page can dispatch the initial message with a tools- and skills-aware schema on
   // its very first render instead of waiting for the queries to resolve.

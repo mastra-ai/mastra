@@ -1,7 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { useMastraClient } from '@mastra/react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export type ProcessorPhase = 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep';
 
@@ -56,30 +55,27 @@ export interface ExecuteProcessorResponse {
 }
 
 export const useProcessors = (options?: { enabled?: boolean }) => {
-  const { requestContext } = usePlaygroundStore();
   const client = useMastraClient();
 
   return useQuery({
     queryKey: ['processors'],
-    queryFn: () => client.listProcessors(requestContext),
+    queryFn: () => client.listProcessors(),
     enabled: options?.enabled ?? true,
   });
 };
 
 export const useProcessor = (processorId: string, options?: { enabled?: boolean }) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useQuery({
     queryKey: ['processor', processorId],
-    queryFn: () => client.getProcessor(processorId).details(requestContext),
+    queryFn: () => client.getProcessor(processorId).details(),
     enabled: options?.enabled !== false && !!processorId,
   });
 };
 
 export const useExecuteProcessor = () => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useMutation({
     mutationFn: async ({
@@ -92,7 +88,6 @@ export const useExecuteProcessor = () => {
         phase,
         messages,
         agentId,
-        requestContext,
       });
     },
   });

@@ -4,9 +4,16 @@ export interface RequestContextPresets {
   [key: string]: Record<string, unknown>;
 }
 
+declare global {
+  interface Window {
+    MASTRA_REQUEST_CONTEXT_PRESETS?: string;
+  }
+}
+
+/** Reads the presets injected at build time on `window.MASTRA_REQUEST_CONTEXT_PRESETS`. */
 export function useRequestContextPresets(): RequestContextPresets | null {
   return useMemo(() => {
-    const presetsStr = typeof window !== 'undefined' ? (window as any).MASTRA_REQUEST_CONTEXT_PRESETS : undefined;
+    const presetsStr = typeof window !== 'undefined' ? window.MASTRA_REQUEST_CONTEXT_PRESETS : undefined;
 
     if (!presetsStr || presetsStr === '%%MASTRA_REQUEST_CONTEXT_PRESETS%%') {
       return null;
