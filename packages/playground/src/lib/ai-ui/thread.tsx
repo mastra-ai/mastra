@@ -296,7 +296,7 @@ const AgentComposer = ({
   );
   const [preparationError, setPreparationError] = useState<string>();
   const send = useChatSend();
-  const { attachments, toCoreUserMessages, clear, cancelPending } = useComposerAttachments();
+  const { attachments, toCoreUserMessages, clear, isAddingAttachments } = useComposerAttachments();
   const { isRunning, canSendWhileStreaming, cancelRun } = useChatRunning();
   const [sendPulseKey, setSendPulseKey] = useState(0);
   const { canExecute } = usePermissions();
@@ -309,11 +309,18 @@ const AgentComposer = ({
   const sendBlocked = isRunning && !canSendWhileStreaming;
 
   const submit = async () => {
-    if (isEmpty || sendBlocked || !canExecuteAgent || draftStatus?.restoring || preparing.current) return;
+    if (
+      isEmpty ||
+      sendBlocked ||
+      !canExecuteAgent ||
+      draftStatus?.restoring ||
+      isAddingAttachments ||
+      preparing.current
+    )
+      return;
     preparing.current = true;
     const currentLifetime = lifetime.current;
     const submittedIds = new Set(attachments.map(attachment => attachment.id));
-    cancelPending();
     setPreparationError(undefined);
     try {
       const coreUserMessages = attachments.length > 0 ? await toCoreUserMessages() : undefined;
@@ -520,6 +527,7 @@ const ComposerSendButton = ({
   canSendWhileStreaming,
   onCancel,
 }: ComposerSendButtonProps) => {
+  const { isAddingAttachments } = useComposerAttachments();
   // While streaming and not allowed to send mid-stream, the only action is cancel.
   if (isRunning && !canSendWhileStreaming) {
     return (
@@ -537,7 +545,7 @@ const ComposerSendButton = ({
         size="icon-md"
         tooltip={canExecute ? 'Send' : 'No permission to execute'}
         className="border-border1 bg-surface5 rounded-full border"
-        disabled={!canExecute || isEmpty}
+        disabled={!canExecute || isEmpty || isAddingAttachments}
       >
         <ArrowUp className="text-neutral3 hover:text-neutral6 h-6 w-6" />
       </Button>

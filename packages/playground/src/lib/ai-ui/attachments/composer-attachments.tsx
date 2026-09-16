@@ -24,7 +24,7 @@ interface ComposerAttachmentsContextValue {
   addUrl: (url: string) => Promise<void>;
   remove: (id: string) => void;
   clear: () => void;
-  cancelPending: () => void;
+  isAddingAttachments: boolean;
   toCoreUserMessages: () => Promise<CoreUserMessage[]>;
 }
 
@@ -124,6 +124,7 @@ export const ComposerAttachmentsProvider = ({
   const attachments = controlled?.value ?? localAttachments;
   const setAttachments = controlled?.onChange ?? setLocalAttachments;
   const generation = useRef(0);
+  const [pendingAdditions, setPendingAdditions] = useState(0);
   useEffect(
     () => () => {
       generation.current++;
@@ -134,24 +135,29 @@ export const ComposerAttachmentsProvider = ({
   const addFiles = useCallback(
     async (files: File[] | FileList) => {
       const currentGeneration = generation.current;
-      const list = await Promise.all(
-        Array.from(files).map(async file => {
-          const attachment = toAttachment(file);
-          if (
-            attachment.kind === 'file' &&
-            !attachment.contentType.startsWith('application/vnd.ms-excel') &&
-            !attachment.contentType.startsWith('application/vnd.openxmlformats-officedocument.spreadsheetml') &&
-            (await looksLikeText(file))
-          ) {
-            return { ...attachment, kind: 'text' as const, contentType: 'text/plain' };
-          }
-          return attachment;
-        }),
-      );
-      const accepted = list.filter(attachment => attachment.kind !== 'file');
-      if (accepted.length > 0 && generation.current === currentGeneration)
-        setAttachments(prev => [...prev, ...accepted]);
-      return list.filter(attachment => attachment.kind === 'file').map(attachment => attachment.name);
+      setPendingAdditions(count => count + 1);
+      try {
+        const list = await Promise.all(
+          Array.from(files).map(async file => {
+            const attachment = toAttachment(file);
+            if (
+              attachment.kind === 'file' &&
+              !attachment.contentType.startsWith('application/vnd.ms-excel') &&
+              !attachment.contentType.startsWith('application/vnd.openxmlformats-officedocument.spreadsheetml') &&
+              (await looksLikeText(file))
+            ) {
+              return { ...attachment, kind: 'text' as const, contentType: 'text/plain' };
+            }
+            return attachment;
+          }),
+        );
+        const accepted = list.filter(attachment => attachment.kind !== 'file');
+        if (accepted.length > 0 && generation.current === currentGeneration)
+          setAttachments(prev => [...prev, ...accepted]);
+        return list.filter(attachment => attachment.kind === 'file').map(attachment => attachment.name);
+      } finally {
+        if (generation.current === currentGeneration) setPendingAdditions(count => count - 1);
+      }
     },
     [setAttachments],
   );
@@ -159,10 +165,15 @@ export const ComposerAttachmentsProvider = ({
   const addUrl = useCallback(
     async (url: string) => {
       const currentGeneration = generation.current;
-      const contentType = (await getFileContentType(url)) ?? 'application/octet-stream';
-      // URL attachments are represented by an empty File named with the URL.
-      const file = new File([], url, { type: contentType });
-      if (generation.current === currentGeneration) setAttachments(prev => [...prev, toAttachment(file)]);
+      setPendingAdditions(count => count + 1);
+      try {
+        const contentType = (await getFileContentType(url)) ?? 'application/octet-stream';
+        // URL attachments are represented by an empty File named with the URL.
+        const file = new File([], url, { type: contentType });
+        if (generation.current === currentGeneration) setAttachments(prev => [...prev, toAttachment(file)]);
+      } finally {
+        if (generation.current === currentGeneration) setPendingAdditions(count => count - 1);
+      }
     },
     [setAttachments],
   );
@@ -176,6 +187,7 @@ export const ComposerAttachmentsProvider = ({
 
   const clear = useCallback(() => {
     generation.current++;
+    setPendingAdditions(0);
     setAttachments([]);
   }, [setAttachments]);
 
@@ -190,12 +202,10 @@ export const ComposerAttachmentsProvider = ({
       addUrl,
       remove,
       clear,
-      cancelPending: () => {
-        generation.current++;
-      },
+      isAddingAttachments: pendingAdditions > 0,
       toCoreUserMessages,
     }),
-    [attachments, addFiles, addUrl, remove, clear, toCoreUserMessages],
+    [attachments, addFiles, addUrl, remove, clear, toCoreUserMessages, pendingAdditions],
   );
 
   return <ComposerAttachmentsContext.Provider value={value}>{children}</ComposerAttachmentsContext.Provider>;
