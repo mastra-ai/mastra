@@ -145,6 +145,12 @@ System messages, context, the current turn's input, and the agent's responses ar
 
 Trimmed messages stay in storage. During agent runs, Mastra persists a per-thread boundary so they're excluded from later turns. Setting `messageHistory` without `lastMessages` disables the default 10-message cap. Set both to combine a count cap with a token budget. Set `maxTokens` to `0` to disable message history.
 
+#### Storage compatibility
+
+Boundary persistence uses an optional storage operation. Official storage adapters with compare-and-set or transaction support implement it, so a persisted boundary never moves backwards even when several app instances share one database. ClickHouse and Cloudflare Workers KV cannot return an authoritative boundary across replicas, so they never persist one; the token budget is still applied per request and prompts stay within budget.
+
+Older or custom storage adapters don't implement the operation. Each request still applies the token budget, but the trim boundary isn't persisted across independent storage instances, so trimmed messages can reappear in a later turn. Upgrade to the latest official storage package to enable distributed boundary persistence — no other package needs to upgrade at the same time.
+
 :::tip
 
 When memory is enabled, [Studio](/docs/studio/overview) uses message history to display past conversations in the chat sidebar.
