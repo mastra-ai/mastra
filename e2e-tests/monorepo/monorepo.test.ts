@@ -1028,7 +1028,6 @@ export const mastra = new Mastra({
     );
   });
 
-  it(
   describe.sequential('Studio control route authentication', () => {
     it(
       'keeps Studio control routes public during development when server auth is configured',
