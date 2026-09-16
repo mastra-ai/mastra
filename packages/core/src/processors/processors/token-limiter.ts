@@ -7,6 +7,9 @@ import { groupLinkedToolMessages } from '../../memory/load-message-history';
 import type { ChunkType } from '../../stream';
 import type { ProcessInputArgs, ProcessInputStepArgs, ProcessOutputStreamArgs, Processor } from '../index';
 
+// Unicode mode matches lone surrogate code points without matching complete pairs.
+const UNPAIRED_SURROGATE_RE = /[\uD800-\uDFFF]/gu;
+
 /**
  * Configuration options for TokenLimiter processor
  */
@@ -516,7 +519,10 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
             } else {
               // Truncate the text to fit within the remaining token limit
               const remainingTokens = Math.max(0, limit - cumulativeTokens);
-              const truncatedText = remainingTokens > 0 ? sliceByTokens(textContent, 0, remainingTokens) : '';
+              const truncatedText =
+                remainingTokens > 0
+                  ? sliceByTokens(textContent, 0, remainingTokens).replace(UNPAIRED_SURROGATE_RE, '\uFFFD')
+                  : '';
               cumulativeTokens += this.countTokens(truncatedText);
 
               return {
