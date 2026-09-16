@@ -1,7 +1,7 @@
 import type { DatasetExperiment, DatasetExperimentResult, DatasetRecord } from '@mastra/client-js';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { http, HttpResponse, delay } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { DatasetReview } from '../dataset-review';
 import { server } from '@/test/msw-server';
@@ -143,5 +143,37 @@ describe('DatasetReview without a scope', () => {
 
     render(<DatasetReview />, { wrapper });
     expect(await screen.findByText(/freshly flagged input/)).toBeTruthy();
+  });
+});
+
+describe('DatasetReview scoped to an agent', () => {
+  describe('when onCreateScorer is provided and review items are loaded', () => {
+    it('calls onCreateScorer with the visible items input/output', async () => {
+      setupHandlers();
+      const onCreateScorer = vi.fn();
+      renderWithProviders(<DatasetReview targetType="agent" targetId="chef-agent" onCreateScorer={onCreateScorer} />);
+
+      await screen.findByText(/exp one input/);
+      await screen.findByText(/exp two input/);
+      fireEvent.click(screen.getByRole('button', { name: 'Create Scorer' }));
+
+      expect(onCreateScorer).toHaveBeenCalledTimes(1);
+      expect(onCreateScorer.mock.calls[0]?.[0]).toEqual(
+        expect.arrayContaining([
+          { input: 'exp one input', output: 'output for exp one input' },
+          { input: 'exp two input', output: 'output for exp two input' },
+        ]),
+      );
+    });
+  });
+
+  describe('when onCreateScorer is not provided', () => {
+    it('does not render the Create Scorer action', async () => {
+      setupHandlers();
+      renderWithProviders(<DatasetReview targetType="agent" targetId="chef-agent" />);
+
+      await screen.findByText(/exp one input/);
+      expect(screen.queryByRole('button', { name: 'Create Scorer' })).toBeNull();
+    });
   });
 });

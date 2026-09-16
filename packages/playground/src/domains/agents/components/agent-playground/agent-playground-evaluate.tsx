@@ -35,14 +35,11 @@ import type { ReactNode } from 'react';
 import { useWatch } from 'react-hook-form';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { useReviewQueue } from '../../context/review-queue-context';
 import { useAgentExperiments } from '../../hooks/use-agent-experiments';
-import type { AgentExperiment } from '../../hooks/use-agent-experiments';
 import { useStoredAgentMutations } from '../../hooks/use-stored-agents';
 import { mapScorersToApi, mapInstructionBlocksToApi } from '../../utils/agent-form-mappers';
 import { AgentTopBarRunOptions } from '../agent-top-bar-controls';
 import { ExperimentResultsPanel } from './agent-playground-eval';
-import { AgentPlaygroundReview } from './agent-playground-review';
 import { AttachButton } from './attach-button';
 import { DatasetDetailView } from './dataset-detail-view';
 import { RunExperimentButton } from './run-experiment-button';
@@ -55,6 +52,7 @@ import { useGenerationTasks } from '@/domains/datasets/context/generation-contex
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { ExperimentsList } from '@/domains/experiments/components/experiments-list';
+import { DatasetReview } from '@/domains/review/components/dataset-review';
 import { ScorersList } from '@/domains/scores/components/scorers-list/scorers-list';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
@@ -130,7 +128,6 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
   const [scorersSearch, setScorersSearch] = useState('');
 
   const { form, isCodeAgentOverride } = useAgentEditFormContext();
-  const { addItems } = useReviewQueue();
 
   const watchedScorers = useWatch({ control: form.control, name: 'scorers' });
   const agentScorers = useMemo(() => watchedScorers ?? {}, [watchedScorers]);
@@ -291,19 +288,6 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
       }
     }
 
-    addItems(
-      selectedItems.map(item => ({
-        id: item.id,
-        itemId: item.itemId,
-        input: item.input,
-        output: item.output,
-        error: item.error,
-        scores: item.scores,
-        experimentId: item.experimentId,
-        datasetId: item.datasetId,
-        traceId: item.traceId,
-      })),
-    );
     setActiveTab('review');
     setDetailView(null);
   };
@@ -889,8 +873,13 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
         )}
 
         <div className="flex-1 overflow-hidden px-4 pb-4">
-          <TabContent value="review" className="h-full overflow-hidden py-0">
-            <AgentPlaygroundReview agentId={agentId} onCreateScorer={handleCreateScorerFromFailures} />
+          <TabContent value="review" className="grid h-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden py-0">
+            <DatasetReview
+              targetType="agent"
+              targetId={agentId}
+              detailPanelVariant="inline"
+              onCreateScorer={handleCreateScorerFromFailures}
+            />
           </TabContent>
           <TabContent value="experiments" className="h-full overflow-hidden py-0">
             <Columns className={hasDetailPanel && detailView?.type === 'experiment' ? 'grid-cols-[1fr_1fr]' : ''}>
