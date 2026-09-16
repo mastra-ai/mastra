@@ -387,7 +387,7 @@ describe('OM Error State', { timeout: 30_000 }, () => {
     expect(result.tripwire?.reason).toContain('Encountered error during memory observation');
   });
 
-  it('continues without retrying transient observer failures under continue policy', async () => {
+  it('continues after a transient observer failure when the stage budget is exhausted', async () => {
     let attempts = 0;
     const continuingMemory = new Memory({
       storage: store,
@@ -403,6 +403,7 @@ describe('OM Error State', { timeout: 30_000 }, () => {
             ],
             messageTokens: 20,
             bufferTokens: false,
+            maxRetries: 0,
             failurePolicy: 'continue',
           },
           reflection: {

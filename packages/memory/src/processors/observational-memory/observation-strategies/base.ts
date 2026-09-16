@@ -117,6 +117,7 @@ export abstract class ObservationStrategy {
           observationTokens: processed.observationTokens,
           threadId,
           writer,
+          messageList: this.opts.messageList,
           abortSignal,
           mainAgent: this.opts.agent,
           sendSignal: this.opts.sendSignal,

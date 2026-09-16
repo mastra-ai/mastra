@@ -766,10 +766,13 @@ export class ObservationalMemory {
     observation: {
       messageTokens: number | ThresholdRange;
       previousObserverTokens: number | false | undefined;
+      maxRetries: number;
       failurePolicy: 'abort' | 'continue';
     };
     reflection: {
       observationTokens: number | ThresholdRange;
+      maxRetries: number;
+      failurePolicy: 'abort' | 'continue';
     };
   } {
     return {
@@ -778,10 +781,13 @@ export class ObservationalMemory {
       observation: {
         messageTokens: this.observationConfig.messageTokens,
         previousObserverTokens: this.observationConfig.previousObserverTokens,
+        maxRetries: this.observationConfig.maxRetries,
         failurePolicy: this.observationConfig.failurePolicy,
       },
       reflection: {
         observationTokens: this.reflectionConfig.observationTokens,
+        maxRetries: this.reflectionConfig.maxRetries,
+        failurePolicy: this.reflectionConfig.failurePolicy,
       },
     };
   }
@@ -1284,9 +1290,9 @@ export class ObservationalMemory {
   }
 
   /**
-   * Persist a data-om-* marker part on the last assistant message in messageList
-   * AND save the updated message to the DB so it survives page reload.
-   * (data-* parts are filtered out before sending to the LLM, so they don't affect model calls.)
+   * Persist a data-om-* marker part on the message that owns the operation in
+   * messageList and save it to the DB. Observation markers belong to the latest
+   * assistant message; reflection markers belong to the current user input.
    * @internal Used by ReflectorRunner. Do not call directly.
    */
   async persistMarkerToMessage(
@@ -1294,17 +1300,17 @@ export class ObservationalMemory {
     messageList: MessageList | undefined,
     threadId: string,
     resourceId?: string,
-  ): Promise<void> {
-    if (!messageList) return;
-    const allMsgs = getObservableMessages(messageList);
-    // Find the last assistant message to attach the marker to
+  ): Promise<boolean> {
+    if (!messageList) return false;
+    const allMsgs = messageList.get.all.db();
+    const markerData = marker.data as { cycleId?: string; operationType?: string } | undefined;
+    const targetRole = markerData?.operationType === 'reflection' ? 'user' : 'assistant';
     for (let i = allMsgs.length - 1; i >= 0; i--) {
       const msg = allMsgs[i];
-      if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
+      if (msg?.role === targetRole && msg.content?.parts && Array.isArray(msg.content.parts)) {
         // Only push if the marker isn't already in the parts array.
         // writer.custom() adds the marker to the stream, and the AI SDK may have
         // already appended it to the message's parts before this runs.
-        const markerData = marker.data as { cycleId?: string } | undefined;
         const alreadyPresent =
           markerData?.cycleId &&
           msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
@@ -1323,16 +1329,18 @@ export class ObservationalMemory {
         } catch (e) {
           omDebug(`[OM:persistMarker] failed to save marker to DB: ${e}`);
         }
-        return;
+        return true;
       }
     }
+    return false;
   }
 
   /**
-   * Persist a marker to the last assistant message in storage.
-   * Unlike persistMarkerToMessage, this fetches messages directly from the DB
-   * so it works even when no MessageList is available (e.g. async buffering ops).
-   * @internal Used by observation strategies. Do not call directly.
+   * Persist a marker to the message that owns the operation in storage.
+   * Observation markers belong to the latest assistant message. Reflection runs
+   * before the current assistant reply exists, so its failure marker belongs to
+   * the latest user input that triggered it.
+   * @internal Used by observation strategies and the reflector. Do not call directly.
    */
   async persistMarkerToStorage(
     marker: { type: string; data: unknown },
@@ -1346,11 +1354,10 @@ export class ObservationalMemory {
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
       const messages = result?.messages ?? [];
-      // Find the last assistant message
+      const markerData = marker.data as { cycleId?: string; operationType?: string } | undefined;
+      const targetRole = markerData?.operationType === 'reflection' ? 'user' : 'assistant';
       for (const msg of messages) {
-        if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
-          // Only push if the marker isn't already in the parts array.
-          const markerData = marker.data as { cycleId?: string } | undefined;
+        if (msg?.role === targetRole && msg.content?.parts && Array.isArray(msg.content.parts)) {
           const alreadyPresent =
             markerData?.cycleId &&
             msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);

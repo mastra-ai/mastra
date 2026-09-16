@@ -211,7 +211,7 @@ export class ReflectorRunner {
     messageList: MessageList | undefined,
     threadId: string,
     resourceId?: string,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   private readonly getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
   private readonly memory?: Memory;
   private readonly onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
@@ -252,7 +252,7 @@ export class ReflectorRunner {
       messageList: MessageList | undefined,
       threadId: string,
       resourceId?: string,
-    ) => Promise<void>;
+    ) => Promise<boolean>;
     getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
     resolveModel: ReflectionModelResolver;
     mastra?: Mastra;
@@ -1455,7 +1455,23 @@ export class ReflectorRunner {
         // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
         await writer.custom({ ...failedMarker, transient: true }).catch(() => {});
       }
-      await this.persistMarkerToStorage(failedMarker, threadId, record.resourceId ?? undefined);
+      // Reflection runs before the current assistant reply exists, so the marker
+      // belongs to the live user input. Fall back to a storage scan when no
+      // MessageList is available (e.g. async buffering activation).
+      let persistedToList = false;
+      try {
+        persistedToList = await this.persistMarkerToMessage(
+          failedMarker,
+          messageList,
+          threadId,
+          record.resourceId ?? undefined,
+        );
+      } catch {
+        persistedToList = false;
+      }
+      if (!persistedToList) {
+        await this.persistMarkerToStorage(failedMarker, threadId, record.resourceId ?? undefined);
+      }
       reflectionError = error instanceof Error ? error : new Error(String(error));
       this.emitDebugEvent({
         type: 'reflection_failed',

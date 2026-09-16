@@ -4920,10 +4920,13 @@ describe('ObservationalMemory Integration', () => {
         observation: {
           messageTokens: 500,
           previousObserverTokens: 2000,
+          maxRetries: 8,
           failurePolicy: 'abort',
         },
         reflection: {
           observationTokens: 1000,
+          maxRetries: 8,
+          failurePolicy: 'abort',
         },
       });
     });

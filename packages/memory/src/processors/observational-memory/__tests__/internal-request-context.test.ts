@@ -315,6 +315,7 @@ describe('multi-thread observer failure state', () => {
         bufferTokens: false,
         previousObserverTokens: 1000,
         observeAttachments: false,
+        maxRetries: 0,
         failurePolicy: 'continue',
       } as any,
       observedMessageIds,
