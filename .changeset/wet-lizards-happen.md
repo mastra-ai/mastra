@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed conditional workflow time travel retaining stale results for branches that were not selected.
+Fixed unrecorded conditional arms appearing successful when time-travelling past them. Preserve explicit replacement output for recorded failed arms.
