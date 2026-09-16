@@ -1,5 +1,25 @@
 # @mastra/voice-google-gemini-live
 
+## 0.14.11-alpha.0
+
+### Patch Changes
+
+- Add `thinkingConfig` to `GeminiLiveVoice` so callers can configure the model's thinking behavior on the Gemini Live session. It is forwarded to the setup frame as `generation_config.thinking_config` (and honored by `updateSessionConfig`). On native-audio thinking models, set `thinkingConfig.includeThoughts: false` to stop the model's reasoning from being spoken as the reply, or bound it with `thinkingBudget`. Default behavior is unchanged when the field is omitted. ([#24050](https://github.com/mastra-ai/mastra/pull/24050))
+
+  ```ts
+  const voice = new GeminiLiveVoice({
+    apiKey: process.env.GOOGLE_API_KEY,
+    thinkingConfig: { includeThoughts: false },
+  });
+  ```
+
+- Fixed a WebSocket denial-of-service advisory by updating ws to 8.21.3. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
+- Fixed a hang when connecting the Google Gemini Live voice provider with a rejected setup (for example an unknown model id). The server closes the WebSocket with an abnormal code such as 1007, which previously was only logged, so connect() waited out the full 30s timeout and reported a generic timeout instead of the real reason. connect() now rejects immediately, carrying the close code and reason. ([#24092](https://github.com/mastra-ai/mastra/pull/24092))
+
+- Updated dependencies [[`fef227a`](https://github.com/mastra-ai/mastra/commit/fef227a8b7cb0ad7f68087e26d1fd2051054a61a)]:
+  - @mastra/schema-compat@1.3.11-alpha.0
+
 ## 0.14.10
 
 ### Patch Changes
