@@ -93,6 +93,16 @@ Handlers return one typed decision or `undefined`. Supported sources are `issue`
 
 There is no global rules object. Every rule has one owner: boards own lifecycle handlers, transition policy, phase semantics, and tool-result rules; integrations own their event handlers. The runtime only executes rules.
 
+### Review groups
+
+Review displays a provider's ordered pull request groups with a shared heading and outline in each stage. GitHub supplies these groups through its native `stack` metadata. Branch ancestry alone does not create a group. Filters and pagination preserve the provider's group identity and positions; dragging or reviewing a card still acts on that card alone.
+
+Providers normalize membership into `ReviewGroup` from `@mastra/factory/capabilities/review-group`: an opaque `key`, display `label`, positive integer `position`, and optional `targetBranch`. Keys must include enough provider, host, and repository identity to avoid collisions. This presentation contract is independent of the intake source and `parentWorkItemId`; it does not describe a general dependency graph or add GitLab/Jira support.
+
+GitHub webhooks signal membership changes. Synchronization reads current provider state and writes only `metadata.reviewGroup`, using the card revision. Conflicts reload both the card and provider state, with at most three write attempts before surfacing an error for retry. Matching webhook hints avoid a provider read. Reconciliation repairs missed events; newly materialized cards receive membership on their next pull request refresh or reconciliation. Lifecycle decisions do not persist webhook group snapshots.
+
+An explicit `null` means no membership. An omitted normalized field means unavailable and preserves saved membership; malformed native metadata fails the provider read. Hosted deployments need a Platform proxy that forwards the native `stack` field and returns `null` when absent. Older proxies remain usable but cannot synchronize groups.
+
 ### Board tool-result rules
 
 A board may react to a tool result produced inside one of its seats. Declare handlers under `tools`, keyed by tool name:

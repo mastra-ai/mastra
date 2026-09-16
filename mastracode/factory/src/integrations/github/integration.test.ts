@@ -511,7 +511,12 @@ describe('GithubIntegration capability surface', () => {
           baseBranch: 'main',
           headBranch: 'feat/intake',
           headSha: 'abc123',
-          stack: { id: 100, number: 7, position: 2, base: { ref: 'main' } },
+          reviewGroup: {
+            key: 'github:https://github.com/acme/app:stack:100',
+            label: 'Stack #7',
+            position: 2,
+            targetBranch: 'main',
+          },
         }),
       ],
       nextCursor: null,
@@ -808,14 +813,33 @@ describe('GithubIntegration merge reconciler', () => {
       labels: [],
       headBranch: 'feat/intake',
       baseBranch: 'main',
-      stack: { id: 100, number: 7, position: 2, base: { ref: 'main' } },
+      reviewGroup: {
+        key: 'github:https://github.com/acme/app:stack:100',
+        label: 'Stack #7',
+        position: 2,
+        targetBranch: 'main',
+      },
       author: 'ada',
       createdAt: '2026-07-01T00:00:00Z',
     });
   });
 
-  // A fabricated merge would move a card to done and fire merge rules.
-  it('returns undefined rather than a state when the pull request cannot be read', async () => {
+  it('rejects malformed remote stack data so saved membership cannot be cleared', async () => {
+    const github = new GithubIntegration(validConfig());
+    const octokit = github.getInstallationOctokit(7);
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue(octokit);
+    vi.spyOn(octokit.pulls, 'get').mockResolvedValue({
+      data: { ...pullRequestData(), stack: {} },
+      status: 200,
+      headers: {},
+      url: 'https://api.github.com/repos/acme/app/pulls/34',
+    });
+    await expect(
+      github.fetchPullRequestState({ installationId: 7, repository: 'acme/app', number: 34 }),
+    ).rejects.toThrow('Invalid GitHub stack metadata');
+  });
+
+  it('propagates provider failures so delivery can retry', async () => {
     const github = new GithubIntegration(validConfig());
     const get = vi.fn(async () => {
       throw new Error('bad credentials');
@@ -824,7 +848,7 @@ describe('GithubIntegration merge reconciler', () => {
 
     await expect(
       github.fetchPullRequestState({ installationId: 7, repository: 'acme/app', number: 34 }),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow('bad credentials');
   });
 });
 

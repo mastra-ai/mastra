@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -10,7 +10,7 @@ import { createAppRoutes } from '../../../router';
 import { CARD_MIME } from '../boardDrag';
 import type { GithubPullRequest } from '../services/factory';
 import type { WorkItem } from '../services/workItems';
-import { pullRequest, pullRequestStack, reviewWorkItem, wireWorkItem } from './__tests__/fixtures';
+import { pullRequest, reviewGroup, reviewWorkItem, wireWorkItem } from './__tests__/fixtures';
 
 function stubReviewBoard(
   workItems: WorkItem[],
@@ -74,6 +74,31 @@ function columnCardTitles(column: HTMLElement) {
 }
 
 describe('Review stack columns', () => {
+  it('preserves an open comment draft and focus through joining, reordering, switching, and leaving a group', async () => {
+    const item = reviewWorkItem(pullRequest(1));
+    const sibling = reviewWorkItem(pullRequest(2, reviewGroup(2)));
+    stubReviewBoard([item, sibling]);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/prs/1`, () =>
+        HttpResponse.json({ ...pullRequest(1), description: 'PR description' }),
+      ),
+    );
+    const { client } = renderReviewBoard();
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Details for Pull request 1' }));
+    const comment = screen.getByRole('textbox', { name: 'Comment' });
+    await userEvent.setup().type(comment, 'Unsaved review feedback');
+    for (const membership of [reviewGroup(1), reviewGroup(3), reviewGroup(1, 200, 8), undefined]) {
+      stubReviewBoard([{ ...item, metadata: { ...item.metadata, reviewGroup: membership } }, sibling]);
+      await act(async () => {
+        await client.invalidateQueries();
+      });
+      expect(screen.getByRole('button', { name: 'Collapse Pull request 1' })).toBeInTheDocument();
+      expect(screen.getByRole('textbox', { name: 'Comment' })).toBe(comment);
+      expect(comment).toHaveValue('Unsaved review feedback');
+      expect(comment).toHaveFocus();
+    }
+  });
+
   it('leaves dependent branches without native stack membership ungrouped', async () => {
     stubReviewBoard([reviewWorkItem(pullRequest(1))], [{ ...pullRequest(2), baseBranch: 'feature-1' }]);
     renderReviewBoard();
@@ -84,11 +109,8 @@ describe('Review stack columns', () => {
 
   it('groups saved and candidate cards together, sharing native stack headers across stages', async () => {
     stubReviewBoard(
-      [
-        reviewWorkItem(pullRequest(2, pullRequestStack(2)), ['intake']),
-        reviewWorkItem(pullRequest(3, pullRequestStack(3))),
-      ],
-      [pullRequest(9), pullRequest(2, pullRequestStack(2)), pullRequest(1, pullRequestStack(1))],
+      [reviewWorkItem(pullRequest(2, reviewGroup(2)), ['intake']), reviewWorkItem(pullRequest(3, reviewGroup(3)))],
+      [pullRequest(9), pullRequest(2, reviewGroup(2)), pullRequest(1, reviewGroup(1))],
     );
     renderReviewBoard();
     await screen.findByText('Pull request 1');
@@ -101,7 +123,7 @@ describe('Review stack columns', () => {
   });
 
   it('retains the stack identity and order when filters hide a middle PR', async () => {
-    const items = [1, 2, 3].map(number => reviewWorkItem(pullRequest(number, pullRequestStack(number))));
+    const items = [1, 2, 3].map(number => reviewWorkItem(pullRequest(number, reviewGroup(number))));
     items[0].metadata.labels = ['keep'];
     items[2].metadata.labels = ['keep'];
     stubReviewBoard(items);
@@ -120,29 +142,29 @@ describe('Review stack columns', () => {
   });
 
   it('preserves the card budget and reveals a deep-linked dependent beyond it', async () => {
-    const items = Array.from({ length: 45 }, (_, index) =>
-      reviewWorkItem(pullRequest(index + 1, pullRequestStack(index + 1))),
+    const items = Array.from({ length: 500 }, (_, index) =>
+      reviewWorkItem(pullRequest(index + 1, reviewGroup(index + 1))),
     );
     stubReviewBoard(items);
     const firstRender = renderReviewBoard();
     await screen.findByRole('heading', { name: 'Stack #7 · main' });
     expect(screen.getAllByTestId('work-item-card')).toHaveLength(30);
-    expect(screen.queryByLabelText('Pull request 45')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Pull request 500')).not.toBeInTheDocument();
     firstRender.unmount();
-    renderReviewBoard('?item=pr-45');
-    expect(await screen.findByRole('button', { name: 'Details for Pull request 45' })).toHaveFocus();
-    expect(screen.getAllByTestId('work-item-card')).toHaveLength(45);
+    renderReviewBoard('?item=pr-500');
+    expect(await screen.findByRole('button', { name: 'Details for Pull request 500' })).toHaveFocus();
+    expect(screen.getAllByTestId('work-item-card')).toHaveLength(500);
   });
 
   it('keeps the native stack identity when another candidate page loads without fetching it eagerly', async () => {
-    stubReviewBoard([], [pullRequest(2, pullRequestStack(2))], 2);
+    stubReviewBoard([], [pullRequest(2, reviewGroup(2))], 2);
     const requestedPages: string[] = [];
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/prs`, ({ request }) => {
         const page = new URL(request.url).searchParams.get('page') ?? '1';
         requestedPages.push(page);
         return HttpResponse.json({
-          pullRequests: [pullRequest(page === '1' ? 2 : 1, pullRequestStack(page === '1' ? 2 : 1))],
+          pullRequests: [pullRequest(page === '1' ? 2 : 1, reviewGroup(page === '1' ? 2 : 1))],
           nextPage: page === '1' ? 2 : null,
         });
       }),
@@ -158,10 +180,7 @@ describe('Review stack columns', () => {
   });
 
   it('moves only the dragged card to the target stage', async () => {
-    stubReviewBoard(
-      [reviewWorkItem(pullRequest(2, pullRequestStack(2)), ['intake'])],
-      [pullRequest(1, pullRequestStack(1))],
-    );
+    stubReviewBoard([reviewWorkItem(pullRequest(2, reviewGroup(2)), ['intake'])], [pullRequest(1, reviewGroup(1))]);
     const requests: unknown[] = [];
     server.use(
       http.post(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items/pr-2/transition`, async ({ request }) => {

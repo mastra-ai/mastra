@@ -1,4 +1,4 @@
-import type { PullRequestStack } from '@mastra/factory/capabilities/pull-request-stack';
+import type { ReviewGroup } from '@mastra/factory/capabilities/review-group';
 import type { BoardCandidate } from '../boardCandidates';
 import { pullRequestStatusForItem } from '../boardItems';
 import type { WorkItem } from '../services/workItems';
@@ -6,7 +6,7 @@ import type { WorkItem } from '../services/workItems';
 export type ReviewCard = { kind: 'work-item'; value: WorkItem } | { kind: 'candidate'; value: BoardCandidate };
 
 export interface ReviewCardGroup {
-  stack?: PullRequestStack;
+  reviewGroup?: ReviewGroup;
   cards: ReviewCard[];
 }
 
@@ -21,26 +21,25 @@ export function reviewCards(workItems: readonly WorkItem[], candidates: readonly
   ];
 }
 
-function cardStack(card: ReviewCard): PullRequestStack | undefined {
-  if (card.value.source !== 'github-pr') return;
+function cardGroup(card: ReviewCard): ReviewGroup | undefined {
   if (card.kind === 'work-item') {
     const status = pullRequestStatusForItem(card.value);
     if (status === 'closed' || status === 'merged') return;
   }
-  return card.value.metadata.stack;
+  return card.value.metadata.reviewGroup ?? undefined;
 }
 
 export function groupReviewCards(cards: readonly ReviewCard[]): ReviewCardGroup[] {
   const groups = new Map<string, ReviewCardGroup>();
   for (const card of cards) {
-    const stack = cardStack(card);
-    const key = stack ? `stack:${stack.id}` : reviewCardKey(card);
+    const reviewGroup = cardGroup(card);
+    const key = reviewGroup ? `group:${reviewGroup.key}` : reviewCardKey(card);
     const group = groups.get(key);
     if (group) group.cards.push(card);
-    else groups.set(key, { stack, cards: [card] });
+    else groups.set(key, { reviewGroup, cards: [card] });
   }
   return [...groups.values()].map(group => ({
     ...group,
-    cards: group.cards.toSorted((left, right) => (cardStack(left)?.position ?? 0) - (cardStack(right)?.position ?? 0)),
+    cards: group.cards.toSorted((left, right) => (cardGroup(left)?.position ?? 0) - (cardGroup(right)?.position ?? 0)),
   }));
 }

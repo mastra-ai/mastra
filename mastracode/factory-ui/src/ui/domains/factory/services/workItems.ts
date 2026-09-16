@@ -1,5 +1,5 @@
-import { readPullRequestStack } from '@mastra/factory/capabilities/pull-request-stack';
-import type { PullRequestStack } from '@mastra/factory/capabilities/pull-request-stack';
+import { readReviewGroup } from '@mastra/factory/capabilities/review-group';
+import type { ReviewGroup } from '@mastra/factory/capabilities/review-group';
 /**
  * Browser-side helpers for Factory work items (the kanban board records).
  *
@@ -30,7 +30,7 @@ export interface WorkItemStageEntry {
   exitedBy?: string;
 }
 
-export type WorkItemMetadata = Record<string, unknown> & { stack?: PullRequestStack };
+export type WorkItemMetadata = Record<string, unknown> & { reviewGroup?: ReviewGroup | null };
 
 export interface WorkItem {
   id: string;
@@ -159,7 +159,7 @@ function fromWireWorkItem(item: WireWorkItem): WorkItem {
     source: sourceFromExternalSource(externalSource),
     sourceKey: externalSource?.externalId ?? null,
     url: externalSource?.url ?? null,
-    metadata: { ...metadata, stack: readPullRequestStack(metadata?.stack) },
+    metadata: { ...metadata, reviewGroup: readReviewGroup(metadata?.reviewGroup) },
     commentCount: commentCount ?? 0,
     feedActivityAt: feedActivityAt ?? null,
     triageType: triageType ?? null,

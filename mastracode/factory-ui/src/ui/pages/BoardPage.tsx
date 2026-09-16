@@ -44,7 +44,7 @@ import { useBoardIntake } from '../domains/factory/hooks/useBoardIntake';
 import { useBoardItems } from '../domains/factory/hooks/useBoardItems';
 import { useBoardRuns } from '../domains/factory/hooks/useBoardRuns';
 import { useItemSessionStatuses } from '../domains/factory/hooks/useItemSessionStatuses';
-import { ReviewColumnCards } from '../domains/factory/review-stacks/ReviewColumnCards';
+import { ReviewColumnCards } from '../domains/factory/review-groups/ReviewColumnCards';
 import { relatedWorkItemIndex } from '../domains/factory/services/relationships';
 import type { WorkItem } from '../domains/factory/services/workItems';
 import { workItemHumanActorIds } from '../domains/factory/workItemActivity';

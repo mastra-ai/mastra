@@ -1,4 +1,3 @@
-import type { PullRequestStack } from '../capabilities/pull-request-stack.js';
 import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
 
 export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'manual';
@@ -245,7 +244,6 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
     updatedAt?: string;
   };
   pullRequest?: {
-    stack?: PullRequestStack;
     number: number;
     title: string;
     url: string;

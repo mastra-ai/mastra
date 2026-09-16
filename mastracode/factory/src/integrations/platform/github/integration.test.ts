@@ -270,7 +270,12 @@ describe('PlatformGithubIntegration', () => {
           id: '34',
           baseBranch: 'main',
           headBranch: 'feat/intake',
-          stack: { id: 100, number: 7, position: 2, base: { ref: 'main' } },
+          reviewGroup: {
+            key: 'github:https://github.com/acme/app:stack:100',
+            label: 'Stack #7',
+            position: 2,
+            targetBranch: 'main',
+          },
         }),
       ],
       nextCursor: null,
@@ -853,22 +858,31 @@ describe('PlatformGithubIntegration', () => {
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
   });
 
+  it.each([undefined, null, {}])('distinguishes old proxies, removal, and malformed stack data: %j', async stack => {
+    const integration = createIntegration(vi.fn<typeof fetch>().mockResolvedValue(json({ ...pullRequest, stack })));
+    const result = integration.fetchPullRequestState({ installationId: 7, repository: 'acme/app', number: 34 });
+    if (stack !== null && stack !== undefined) await expect(result).rejects.toThrow('Invalid GitHub stack metadata');
+    else await expect(result).resolves.toHaveProperty('reviewGroup', stack);
+  });
+
+  it('propagates rate limits so the worker retries instead of acknowledging a lost update', async () => {
+    const integration = createIntegration(
+      vi.fn<typeof fetch>().mockResolvedValue(json({ error: 'rate limited' }, 429)),
+    );
+    await expect(
+      integration.fetchPullRequestState({ installationId: 7, repository: 'acme/app', number: 34 }),
+    ).rejects.toHaveProperty('status', 429);
+  });
+
   it('maps pull request relevance from the Platform reconcile response', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
       json({
-        title: 'Ship intake',
-        html_url: 'https://github.com/acme/app/pull/34',
+        ...pullRequest,
         state: 'closed',
-        draft: false,
         merged: true,
-        created_at: '2026-07-01T00:00:00Z',
-        user: { login: 'ada' },
-        assignees: [{ login: 'linus' }],
-        requested_reviewers: [{ login: 'margaret' }],
-        labels: [{ name: 'bug' }, 'urgent'],
-        merged_by: { login: 'grace' },
-        head: { ref: 'feat/intake' },
-        base: { ref: 'main' },
+        assignees: ['linus'],
+        requestedReviewers: ['margaret'],
+        labels: ['bug', 'urgent'],
       }),
     );
     const integration = createIntegration(fetchImpl);
@@ -888,7 +902,12 @@ describe('PlatformGithubIntegration', () => {
       baseBranch: 'main',
       author: 'ada',
       createdAt: '2026-07-01T00:00:00Z',
-      mergedBy: 'grace',
+      reviewGroup: {
+        key: 'github:https://github.com/acme/app:stack:100',
+        label: 'Stack #7',
+        position: 2,
+        targetBranch: 'main',
+      },
     });
     expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
       'https://platform.example.com/v1/server/github/repos/acme/app/pulls/34',

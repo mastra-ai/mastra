@@ -72,7 +72,7 @@ export function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
       requestedReviewers: pr.requestedReviewers ?? [],
       headBranch: pr.headBranch,
       baseBranch: pr.baseBranch,
-      stack: pr.stack,
+      reviewGroup: pr.reviewGroup,
     },
   };
 }

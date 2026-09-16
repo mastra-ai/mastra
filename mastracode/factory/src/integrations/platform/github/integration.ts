@@ -12,7 +12,6 @@ import type {
   IntakeIssueDetail,
   UpdateIntakeIssueInput,
 } from '../../../capabilities/intake.js';
-import { readPullRequestStack } from '../../../capabilities/pull-request-stack.js';
 import type {
   CreatePullRequestCommentInput,
   CreatePullRequestInput,
@@ -56,6 +55,7 @@ import type {
   RepoSummary,
 } from '../../github/integration.js';
 import { attachGithubIssueReconciler } from '../../github/issue-reconciler.js';
+import { parseGithubReviewGroup } from '../../github/pull-request-stack.js';
 import { reconcileInterval, reconciliationEnabled } from '../../github/reconciliation-config.js';
 import { buildGithubRoutes } from '../../github/routes.js';
 import { attachGithubReconciler, attachGithubRules } from '../../github/rules.js';
@@ -356,7 +356,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
                   author: pullRequest.author,
                   baseBranch: pullRequest.baseBranch,
                   headBranch: pullRequest.headBranch,
-                  stack: pullRequest.stack,
+                  reviewGroup: pullRequest.reviewGroup,
                 },
               })),
             ],
@@ -817,65 +817,32 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     ];
   }
 
-  /**
-   * Reads live PR state through the Platform GitHub proxy for the merge
-   * reconciler. Returns undefined when the PR cannot be resolved (missing,
-   * proxy error) so a sweep never fabricates a merge.
-   */
   async fetchPullRequestState(input: {
     installationId: number;
     repository: string;
     number: number;
   }): Promise<ReconcilePullRequestState | undefined> {
-    let repository: { owner: string; repo: string };
-    try {
-      repository = splitRepository(input.repository);
-    } catch {
-      return undefined;
-    }
-    try {
-      const result = await this.#client.request<{
-        title?: string;
-        html_url?: string;
-        state?: string;
-        draft?: boolean;
-        merged?: boolean;
-        created_at?: string;
-        user?: { login?: string } | null;
-        assignees?: Array<{ login?: string }> | null;
-        requested_reviewers?: Array<{ login?: string }> | null;
-        labels?: Array<{ name?: string } | string> | null;
-        merged_by?: { login?: string } | null;
-        head?: { ref?: string };
-        base?: { ref?: string };
-        stack?: unknown;
-      }>(
-        'GET',
-        `${API_PREFIX}/github/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/pulls/${input.number}`,
-      );
-      return {
-        title: result.title ?? `PR ${input.number}`,
-        url: result.html_url ?? `https://github.com/${input.repository}/pull/${input.number}`,
-        state: result.state === 'closed' ? 'closed' : 'open',
-        draft: result.draft === true,
-        merged: result.merged === true,
-        assignees: (result.assignees ?? []).flatMap(assignee => (assignee.login ? [assignee.login] : [])),
-        requestedReviewers: (result.requested_reviewers ?? []).flatMap(reviewer =>
-          reviewer.login ? [reviewer.login] : [],
-        ),
-        labels: (result.labels ?? []).flatMap(label =>
-          typeof label === 'string' ? [label] : label.name ? [label.name] : [],
-        ),
-        headBranch: result.head?.ref ?? '',
-        baseBranch: result.base?.ref ?? '',
-        stack: readPullRequestStack(result.stack),
-        ...(result.user?.login ? { author: result.user.login } : {}),
-        ...(result.created_at ? { createdAt: result.created_at } : {}),
-        ...(result.merged_by?.login ? { mergedBy: result.merged_by.login } : {}),
-      };
-    } catch {
-      return undefined;
-    }
+    const pullRequest = await this.#getPullRequest({
+      connection: { type: 'app-installation', installationId: input.installationId },
+      sourceId: input.repository,
+      pullRequestId: String(input.number),
+    });
+    if (!pullRequest) return undefined;
+    return {
+      title: pullRequest.title,
+      url: pullRequest.url,
+      state: pullRequest.state === 'closed' ? 'closed' : 'open',
+      draft: pullRequest.draft,
+      merged: pullRequest.merged,
+      assignees: pullRequest.assignees ?? [],
+      requestedReviewers: pullRequest.requestedReviewers ?? [],
+      labels: pullRequest.labels ?? [],
+      headBranch: pullRequest.headBranch,
+      baseBranch: pullRequest.baseBranch,
+      reviewGroup: pullRequest.reviewGroup,
+      ...(pullRequest.author ? { author: pullRequest.author } : {}),
+      ...(pullRequest.createdAt ? { createdAt: pullRequest.createdAt } : {}),
+    };
   }
 
   /**
@@ -1559,7 +1526,8 @@ function parsePullRequest(pullRequest: GithubPullRequest): PullRequest {
     baseBranch: pullRequest.base.ref,
     headBranch: pullRequest.head.ref,
     headSha: pullRequest.head.sha,
-    stack: readPullRequestStack(pullRequest.stack),
+    reviewGroup:
+      pullRequest.stack === undefined ? undefined : parseGithubReviewGroup(pullRequest.stack, pullRequest.htmlUrl),
     createdAt: pullRequest.createdAt,
     updatedAt: pullRequest.updatedAt,
   };

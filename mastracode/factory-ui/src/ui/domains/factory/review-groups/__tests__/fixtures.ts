@@ -1,14 +1,19 @@
 import type { WorkItemRow } from '@mastra/factory';
-import type { PullRequestStack } from '@mastra/factory/capabilities/pull-request-stack';
+import type { ReviewGroup } from '@mastra/factory/capabilities/review-group';
 import { pullRequestCandidate } from '../../boardCandidates';
 import type { GithubPullRequest } from '../../services/factory';
 import type { WorkItem } from '../../services/workItems';
 
-export function pullRequestStack(position: number, id = 100, number = 7): PullRequestStack {
-  return { id, number, position, base: { ref: 'main' } };
+export function reviewGroup(position: number, id = 100, number = 7): ReviewGroup {
+  return {
+    key: `github:https://github.com/acme/app:stack:${id}`,
+    label: `Stack #${number}`,
+    position,
+    targetBranch: 'main',
+  };
 }
 
-export function pullRequest(number: number, stack?: PullRequestStack, repository = 'acme/app'): GithubPullRequest {
+export function pullRequest(number: number, reviewGroup?: ReviewGroup, repository = 'acme/app'): GithubPullRequest {
   return {
     number,
     title: `Pull request ${number}`,
@@ -17,7 +22,7 @@ export function pullRequest(number: number, stack?: PullRequestStack, repository
     assignees: [],
     requestedReviewers: [],
     baseBranch: 'main',
-    stack,
+    reviewGroup,
     headBranch: `feature-${number}`,
     createdAt: '2026-09-14T08:00:00.000Z',
     updatedAt: '2026-09-14T08:00:00.000Z',
@@ -62,6 +67,7 @@ export function wireWorkItem(item: WorkItem): WorkItemRow {
     acceptedAt: null,
     feedActivityAt: null,
     autonomyArmedAt: null,
+    claimKey: null,
     plansPreapprovedAt: null,
     factoryProjectId: githubProjectId,
     externalSource: {

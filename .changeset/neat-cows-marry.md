@@ -2,4 +2,4 @@
 '@mastra/factory': minor
 ---
 
-Added native GitHub pull request stack metadata to Factory integrations, Intake responses, and saved Review cards. Stack membership stays synchronized through webhooks and reconciliation.
+Added provider-neutral review groups backed by native GitHub stack metadata. Membership updates read current provider state, retry revision conflicts, and preserve saved groups when provider metadata is unavailable.

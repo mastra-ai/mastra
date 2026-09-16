@@ -20,7 +20,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { Context } from 'hono';
-import type { PullRequestStack } from '../../capabilities/pull-request-stack.js';
+import type { ReviewGroup } from '../../capabilities/review-group.js';
 import type { RouteAuth } from '../../routes/route.js';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
 import { requireExec } from '../../sandbox/materialization.js';
@@ -324,7 +324,7 @@ function polledPullRequestEvent(
     requestedReviewers: string[];
     headBranch: string;
     baseBranch: string;
-    stack?: PullRequestStack;
+    reviewGroup?: ReviewGroup | null;
     createdAt: string;
   },
 ): ParsedGithubWebhook {
@@ -332,6 +332,7 @@ function polledPullRequestEvent(
   return {
     event: 'pull_request',
     deliveryId: `poll:${repositoryId}:pull-request:${pullRequest.number}:${pullRequest.createdAt}`,
+    reviewGroup: pullRequest.reviewGroup,
     payload: {
       action: 'opened',
       installation: { id: Number(project.installation.externalId) },
@@ -348,7 +349,6 @@ function polledPullRequestEvent(
         requested_reviewers: pullRequest.requestedReviewers.map(login => ({ login })),
         head: { ref: pullRequest.headBranch },
         base: { ref: pullRequest.baseBranch },
-        stack: pullRequest.stack,
       },
     },
   };
@@ -799,7 +799,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             requestedReviewers: pr.requestedReviewers ?? [],
             baseBranch: pr.baseBranch,
             headBranch: pr.headBranch,
-            stack: pr.stack,
+            reviewGroup: pr.reviewGroup,
             createdAt: pr.createdAt,
             updatedAt: pr.updatedAt,
           }));
@@ -849,7 +849,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             requestedReviewers: pr.requestedReviewers ?? [],
             baseBranch: pr.baseBranch,
             headBranch: pr.headBranch,
-            stack: pr.stack,
+            reviewGroup: pr.reviewGroup,
             createdAt: pr.createdAt,
             updatedAt: pr.updatedAt,
             description: pr.body,
