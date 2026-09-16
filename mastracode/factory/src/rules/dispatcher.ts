@@ -378,9 +378,11 @@ function externalSourceForDecision(decision: Extract<FactoryCommitDecision, { ty
       ? ['github', 'pull-request']
       : decision.source === 'github-issue'
         ? ['github', 'issue']
-        : decision.source === 'linear-issue'
-          ? ['linear', 'issue']
-          : ['factory', 'manual'];
+        : decision.source === 'gitlab-issue'
+          ? ['gitlab', 'issue']
+          : decision.source === 'linear-issue'
+            ? ['linear', 'issue']
+            : ['factory', 'manual'];
   return { integrationId, type, externalId: decision.sourceKey, url: decision.url ?? undefined };
 }
 
