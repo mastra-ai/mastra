@@ -740,11 +740,23 @@ export abstract class Bundler extends MastraBundler {
         projectRoot,
       );
 
+      const unresolvedWorkspaceImports: Array<{ source: string }> = [];
+
       const bundler = await this.createBundler(
         {
           ...inputOptions,
           logLevel: inputOptions.logLevel === 'silent' ? 'warn' : inputOptions.logLevel,
           onwarn: warning => {
+            if (warning.code === 'UNRESOLVED_IMPORT') {
+              const src = (warning as { source?: string; id?: string }).source ?? (warning as { id?: string }).id ?? '';
+              if (src) {
+                const pkgName = getPackageName(src);
+                if (pkgName && analyzedBundleInfo.workspaceMap.has(pkgName)) {
+                  unresolvedWorkspaceImports.push({ source: src });
+                }
+              }
+            }
+
             if (warning.code === 'CIRCULAR_DEPENDENCY') {
               if (warning.ids?.[0]?.includes('node_modules')) {
                 return;
@@ -766,6 +778,16 @@ export abstract class Bundler extends MastraBundler {
       );
 
       await bundler.write();
+
+      if (unresolvedWorkspaceImports.length > 0) {
+        const importList = unresolvedWorkspaceImports.map(i => `  - ${i.source}`).join('\n');
+        throw new MastraError({
+          id: 'DEPLOYER_BUNDLER_UNRESOLVED_WORKSPACE_IMPORT',
+          text: `Workspace imports could not be resolved during bundling:\n${importList}\n\nThis means the analyzer did not capture these workspace subpath imports during the analysis phase. Try adding the package as a direct dependency of the app, or check the workspace configuration.`,
+          domain: ErrorDomain.DEPLOYER,
+          category: ErrorCategory.SYSTEM,
+        });
+      }
       const toolImports: string[] = [];
       const toolsExports: string[] = [];
       Array.from(Object.keys(inputOptions.input || {}))
