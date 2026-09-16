@@ -10,6 +10,7 @@ import { useValueStep } from './use-value-step';
 import { Button } from '@/ds/components/Button/Button';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import { unstyledFormElementStyle } from '@/ds/primitives/form-element';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
@@ -227,7 +228,10 @@ export function FilterBarInput({
           data-step={draft.step}
           placeholder={inputPlaceholder}
           className={cn(
-            'h-form-sm flex-1 bg-transparent px-1 text-ui-smd leading-ui-sm text-neutral6 outline-none placeholder:text-neutral3',
+            // Naked control inside the styled FilterBar surface — same baseline as the DS Input `unstyled` variant.
+            unstyledFormElementStyle,
+            'h-form-sm flex-1 px-1 text-ui-smd leading-ui-sm text-neutral6',
+            'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
             draft.step === 'field' ? 'min-w-32' : 'min-w-24 pl-0',
             className,
           )}

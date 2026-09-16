@@ -4,6 +4,7 @@ import { FilterBarClear } from './filter-bar-clear';
 import { FilterBarProvider, useFilterBarContext } from './filter-bar-context';
 import { FilterBarInput } from './filter-bar-input';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from './types';
+import { inputFocusBorderWithin, inputHoverBorderWithin } from '@/ds/primitives/form-element';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
 
@@ -25,8 +26,14 @@ function FilterBarSurface({ className, children }: { className?: string; childre
       aria-label={ctx.ariaLabel}
       data-slot="filter-bar"
       className={cn(
-        'flex min-h-form-md w-full flex-wrap items-center gap-1 rounded-xl border border-border1 bg-surface2 px-2 py-1',
-        'cursor-text transition-colors focus-within:border-border2',
+        // Same surface/hover/focus recipe as InputGroup (wrapper whose focus lives on the nested input),
+        // with rounded-xl since the bar wraps onto multiple lines.
+        'flex min-h-form-md w-full flex-wrap items-center gap-1 rounded-xl border border-border1 bg-surface-overlay-soft px-2 py-1',
+        'cursor-text transition-all duration-normal ease-out-custom',
+        'hover:bg-surface-overlay-strong',
+        inputHoverBorderWithin,
+        'outline-hidden focus-within:bg-surface-overlay-strong focus-within:outline-hidden',
+        inputFocusBorderWithin,
         className,
       )}
       onClick={ctx.focusInput}
