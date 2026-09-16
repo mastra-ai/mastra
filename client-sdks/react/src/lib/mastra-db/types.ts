@@ -65,6 +65,8 @@ export const CLIENT_MESSAGE_ID_KEY = 'clientMessageId';
 export type MastraDBMessageMetadata = {
   /** Which run mode produced this message. */
   mode?: 'generate' | 'stream' | 'network';
+  /** Execution that produced or resumed this message; not inferred from history order. */
+  runId?: string;
   /** Client-generated correlation id (see {@link CLIENT_MESSAGE_ID_KEY}). */
   clientMessageId?: string;
   /**

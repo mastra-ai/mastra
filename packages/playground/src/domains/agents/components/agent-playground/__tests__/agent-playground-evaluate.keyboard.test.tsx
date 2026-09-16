@@ -7,7 +7,6 @@ import { describe, expect, it } from 'vitest';
 
 import { AgentEditFormProvider } from '../../../context/agent-edit-form-context';
 import { PlaygroundModelProvider } from '../../../context/playground-model-context';
-import { ReviewQueueProvider } from '../../../context/review-queue-context';
 import type { AgentFormValues } from '../../agent-edit-page/utils/form-validation';
 import { AgentPlaygroundEvaluate } from '../agent-playground-evaluate';
 import { GenerationProvider } from '@/domains/datasets/context/generation-context';
@@ -69,9 +68,7 @@ function Harness() {
     <AgentEditFormProvider form={form} mode="edit" isSubmitting={false} handlePublish={async () => {}}>
       <PlaygroundModelProvider>
         <GenerationProvider>
-          <ReviewQueueProvider>
-            <AgentPlaygroundEvaluate agentId="chef-agent" />
-          </ReviewQueueProvider>
+          <AgentPlaygroundEvaluate agentId="chef-agent" />
         </GenerationProvider>
       </PlaygroundModelProvider>
     </AgentEditFormProvider>
@@ -90,9 +87,30 @@ const setupHandlers = (experiments: DatasetExperiment[] = []) => {
         pagination: { total: datasetExperiments.length, page: 0, perPage: 100, hasMore: false },
       });
     }),
+    http.get('*/api/experiments', () =>
+      HttpResponse.json({ experiments: [], pagination: { total: 0, page: 0, perPage: 100, hasMore: false } }),
+    ),
     http.get('*/api/scores/scorers', () => HttpResponse.json({})),
   );
 };
+
+describe('Evaluate navigation', () => {
+  describe('when opened on the Review tab', () => {
+    it('shows the review queue empty state', async () => {
+      setupHandlers();
+      renderWithProviders(<Harness />, { router: { initialEntries: ['/agents/chef-agent/evaluate?tab=review'] } });
+      expect(await screen.findByText('No items to review')).not.toBeNull();
+      expect(screen.getByRole('tab', { name: 'Review' }).getAttribute('aria-selected')).toBe('true');
+    });
+  });
+  describe('when opened on Experiments', () => {
+    it('provides Run options inside Evaluate', async () => {
+      setupHandlers();
+      renderWithProviders(<Harness />, { router: true });
+      expect(await screen.findByTestId('agent-top-bar-run-options-trigger')).not.toBeNull();
+    });
+  });
+});
 
 const renderDatasetsTab = async () => {
   setupHandlers();
@@ -169,6 +187,59 @@ describe('AgentPlaygroundEvaluate', () => {
       fireEvent.keyDown(window, { key: 'c' });
 
       expect(screen.queryByText('Create dataset page')).toBeNull();
+    });
+  });
+
+  describe('shortcuts', () => {
+    it('opens Run options on U', async () => {
+      setupHandlers();
+      renderWithProviders(<Harness />, { router: true });
+      await screen.findByTestId('agent-top-bar-run-options-trigger');
+
+      fireEvent.keyDown(window, { key: 'u' });
+
+      expect(await screen.findByRole('heading', { name: 'Run options' })).toBeTruthy();
+    });
+
+    it('opens the Attach dataset dialog on A from the Datasets tab', async () => {
+      setupHandlers();
+      server.use(
+        http.get('*/api/datasets', () =>
+          HttpResponse.json({
+            datasets: [...datasets, { ...makeDataset('ds-4', 'Dataset Four'), targetIds: ['other-agent'] }],
+            pagination: { total: 4, page: 0, perPage: 100, hasMore: false },
+          }),
+        ),
+      );
+      renderWithProviders(<Harness />, { router: true });
+      fireEvent.click(screen.getByRole('tab', { name: 'Datasets' }));
+      await screen.findByRole('button', { name: 'Attach' });
+
+      fireEvent.keyDown(window, { key: 'a' });
+
+      expect(await screen.findByRole('dialog', { name: 'Attach Existing Dataset' })).toBeTruthy();
+    });
+  });
+
+  describe('when only a workflow-targeted dataset is unattached', () => {
+    it('hides the Attach action so the dataset cannot be mislabeled as an agent dataset', async () => {
+      setupHandlers();
+      server.use(
+        http.get('*/api/datasets', () =>
+          HttpResponse.json({
+            datasets: [
+              ...datasets,
+              { ...makeDataset('ds-wf', 'Workflow Dataset'), targetType: 'workflow', targetIds: ['my-workflow'] },
+            ],
+            pagination: { total: 4, page: 0, perPage: 100, hasMore: false },
+          }),
+        ),
+      );
+      renderWithProviders(<Harness />, { router: true });
+      fireEvent.click(screen.getByRole('tab', { name: 'Datasets' }));
+      await screen.findByText('Dataset One');
+
+      expect(screen.queryByRole('button', { name: 'Attach' })).toBeNull();
     });
   });
 

@@ -8,6 +8,7 @@ import type {
   ListDueNotificationsInput,
   ListNotificationsInput,
   UpdateNotificationInput,
+  UpdateNotificationsStatusInput,
 } from '@mastra/core/notifications';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
@@ -60,6 +61,10 @@ export class LazyNotificationsStorage extends NotificationsStorage {
 
   async updateNotification(input: UpdateNotificationInput) {
     return (await this.getNotificationsStorage()).updateNotification(input);
+  }
+
+  override async updateNotificationsStatus(input: UpdateNotificationsStatusInput) {
+    return (await this.getNotificationsStorage()).updateNotificationsStatus(input);
   }
 
   async dangerouslyClearAll() {

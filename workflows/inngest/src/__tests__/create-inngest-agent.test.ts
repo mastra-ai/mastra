@@ -1181,3 +1181,75 @@ describe('InngestAgent observability tracing', () => {
     });
   });
 });
+
+describe('createInngestAgent shouldPersistSnapshot handling (#23915)', () => {
+  const inngest = new Inngest({
+    id: 'create-inngest-agent-persistence-policy',
+    baseUrl: `http://localhost:${INNGEST_PORT}`,
+  });
+
+  function makeAgent(id: string) {
+    return new Agent({
+      id,
+      name: id,
+      instructions: 'Test',
+      model: createMockModel() as any,
+    });
+  }
+
+  it('warns and ignores a user-provided shouldPersistSnapshot', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const durableAgent = createInngestAgent({
+        agent: makeAgent('persistence-warn'),
+        inngest,
+        shouldPersistSnapshot: () => true,
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('ignoring the shouldPersistSnapshot option'));
+
+      // The option must not leak into the workflows: the pinned suspended-only
+      // policy stays in effect on every durable workflow (Inngest's replay
+      // owns durability; Mastra snapshots exist purely for HITL resume).
+      // Probe the complete WorkflowRunStatus matrix so no status can silently
+      // start persisting.
+      const allStatuses = [
+        'running',
+        'success',
+        'failed',
+        'tripwire',
+        'suspended',
+        'waiting',
+        'pending',
+        'canceled',
+        'bailed',
+        'paused',
+        'skipped',
+      ] as const;
+      const workflows = durableAgent.getDurableWorkflows();
+      expect(workflows.length).toBeGreaterThan(0);
+      for (const workflow of workflows) {
+        const predicate = (workflow as any).options.shouldPersistSnapshot;
+        for (const workflowStatus of allStatuses) {
+          expect(predicate({ stepResults: {}, workflowStatus })).toBe(workflowStatus === 'suspended');
+        }
+      }
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('does not warn when shouldPersistSnapshot is not set', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      createInngestAgent({ agent: makeAgent('persistence-no-warn'), inngest });
+
+      const persistenceWarnings = warnSpy.mock.calls.filter(
+        call => typeof call[0] === 'string' && call[0].includes('shouldPersistSnapshot'),
+      );
+      expect(persistenceWarnings).toHaveLength(0);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+});

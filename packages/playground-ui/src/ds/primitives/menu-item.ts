@@ -1,12 +1,18 @@
 import { buttonVariants } from '@/ds/components/Button/Button';
-import { inputFocusBorderWithin } from '@/ds/primitives/form-element';
-import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-// Block-level items keep w-max popups from measuring options side by side.
+// Shared recipe for items rendered inside floating menus (DropdownMenu, ContextMenu,
+// Select, Combobox, PropertyFilter, DataFilter). An item is a ghost/md Button laid out
+// left-aligned, with `rounded-lg` instead of the pill radius so stacked items sit
+// concentrically inside a `rounded-xl p-1` popup. Base UI drives keyboard/pointer
+// highlight via `data-highlighted`, which `:hover` alone does not cover.
+// `flex` (not Button's `inline-flex`): popups size to their content (`w-max`), and
+// inline-level items would be measured side by side on one line, stretching the popup
+// to the full available width instead of the widest item.
 const MENU_ITEM_OVERRIDES = cn(
   'flex w-full justify-start rounded-lg text-left select-none',
-  'ds-focus-item',
+  // Button brightens its border on focus-visible; inside a menu the highlight is the focus cue.
+  'focus-visible:border-transparent',
   'data-highlighted:bg-neutral6/5 data-highlighted:text-neutral6',
   'data-selected:text-neutral6',
   'data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:opacity-50',
@@ -21,21 +27,25 @@ export const menuItemDestructiveClass = cn(
   'data-highlighted:bg-accent2/10 data-highlighted:text-accent2',
 );
 
-// Apply to a wrapper: Button's direct-SVG margins would override ml-auto on the icon.
+// Trailing indicator (check / submenu chevron) — applied to a wrapper element, not the
+// svg itself, because the Button recipe's `[&>svg]:mx-[-.3em]` would beat `ml-auto`.
 export const menuItemTrailingIconClass =
   'ml-auto flex size-[1.1em] shrink-0 items-center justify-center [&>svg]:size-full';
 
 export const menuItemCheckClass = cn(menuItemTrailingIconClass, 'text-neutral6');
 
+// Left padding matching icon width + gap, for items aligned with iconed siblings.
 export const menuItemInsetClass = 'pl-[calc(.9em+1.1em+.75em)]';
 
 export const MENU_SIDE_OFFSET = 4;
 
-// Hide detached popups instead of showing them at the floating fallback origin.
+// A hidden anchor makes Floating UI fall back to the top-left corner, so the popup goes with it.
 export const menuPositionerClass = 'z-50 outline-none data-[anchor-hidden]:hidden';
 
+// Width: at least the anchor (or 11rem), otherwise as wide as the widest item, never
+// wider than the space Floating UI reports. Shared by every menu-like popup.
 export const menuPopupClass = cn(
-  'ds-focus-menu z-50 max-h-[min(var(--max-height-dropdown-max-height),var(--available-height))]',
+  'z-50 max-h-[min(var(--max-height-dropdown-max-height),var(--available-height))]',
   'w-max max-w-(--available-width) min-w-[max(11rem,var(--anchor-width))]',
   'origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto',
   'rounded-xl border border-border1 bg-surface3 p-1 text-neutral4 shadow-dialog outline-none',
@@ -49,15 +59,14 @@ export const menuSeparatorClass = '-mx-1 my-1 h-px bg-border1';
 
 export const menuShortcutClass = 'ml-auto text-ui-xs tracking-wider text-neutral3 tabular-nums';
 
+/** Non-interactive row (empty / loading) on the same size grid as an item. */
 export const menuEmptyClass =
   'flex h-form-md items-center gap-[.75em] px-[.9em] py-0.5 text-ui-smd leading-ui-sm text-neutral3 box-content';
 
 export const menuSearchClasses = {
-  container: cn(
-    'ds-focus ds-focus-within flex items-center gap-[.75em] border-b border-border1 px-[.9em] py-0.5 text-ui-smd',
-    inputFocusBorderWithin,
-    transitions.colors,
-  ),
+  // Row = h-form-md input + py-0.5 → 32px, one notch above the 28px items so the
+  // divider does not crowd the first option while the text stays on the item grid.
+  container: 'flex items-center gap-[.75em] border-b border-border1 px-[.9em] py-0.5 text-ui-smd',
   icon: 'size-[1.1em] shrink-0 text-neutral3',
   input:
     'h-form-md w-full bg-transparent text-ui-smd leading-ui-sm text-neutral6 outline-none placeholder:text-neutral3',

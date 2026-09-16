@@ -417,6 +417,67 @@ describe('factory_transition_work_item', () => {
     ).rejects.toThrow(/binding is unavailable, revoked, or no longer matches/);
   });
 
+  it('offers a retired-session tool that fails loudly when the bound item reached a terminal stage', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBoundItem(storage);
+    const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
+    // The item settles at a terminal stage, then terminal cleanup revokes the seat.
+    await storage.commitTransition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: prepared.item.id,
+      expectedRevision: prepared.item.revision,
+      destinationStage: 'done',
+      actorId: 'user-1',
+      ingress: { identity: 'external-close', triggerType: 'github', transitionId: 'external-close' },
+      configVersion: 'rules-v1',
+      causalChain: [],
+      evaluation: { outcome: 'accepted', decisions: [] },
+    });
+    await storage.revokeRunBinding({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      bindingId: prepared.binding.id,
+      revokedAt: new Date(),
+    });
+
+    const tools = await createFactoryTransitionTools({
+      requestContext: requestContext(),
+      storage,
+      transitionService: service,
+      boards: createBoardRegistry(),
+    });
+    const tool = tools.factory_transition_work_item as ExecutableTool;
+    expect(tool).toBeDefined();
+    expect(tool.requireApproval).toBe(false);
+    await expect(
+      execute(tool, requestContext(), { stage: 'done', expectedRevision: 2, rationale: 'Continue.' }),
+    ).rejects.toThrow(/retired/i);
+  });
+
+  it('offers no tool when a revoked binding belongs to an item still in flight', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBoundItem(storage);
+    const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
+    // Binding revoked while the item stays in a working/resting lane (e.g. a peer
+    // role took over on another session): not a retirement, so no tool.
+    await storage.revokeRunBinding({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      bindingId: prepared.binding.id,
+      revokedAt: new Date(),
+    });
+
+    await expect(
+      createFactoryTransitionTools({
+        requestContext: requestContext(),
+        storage,
+        transitionService: service,
+        boards: createBoardRegistry(),
+      }),
+    ).resolves.toEqual({});
+  });
+
   it('keeps working when the next role takes its turn in the same session', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBoundItem(storage);

@@ -1,5 +1,11 @@
 # @mastra/auth-clerk
 
+## 1.2.5-alpha.0
+
+### Patch Changes
+
+- Fixed a stored XSS advisory in Clerk by updating @clerk/backend to 3.17.2. `createClerkClient` and the rest of the Mastra Clerk auth API are unchanged. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
 ## 1.2.4
 
 ### Patch Changes
