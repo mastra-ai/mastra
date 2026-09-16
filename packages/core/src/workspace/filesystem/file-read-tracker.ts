@@ -21,25 +21,32 @@ export interface FileReadRecord {
 
 /**
  * Interface for tracking file reads.
+ *
+ * Methods may return promises so implementations can be backed by external
+ * storage (e.g. to persist read records across process restarts in
+ * serverless environments).
  */
 export interface FileReadTracker {
   /** Record that a file was read */
-  recordRead(path: string, modifiedAt: Date): void;
+  recordRead(path: string, modifiedAt: Date): void | Promise<void>;
 
   /** Get the last read record for a path */
-  getReadRecord(path: string): FileReadRecord | undefined;
+  getReadRecord(path: string): FileReadRecord | undefined | Promise<FileReadRecord | undefined>;
 
   /**
    * Check if file needs re-reading.
    * Returns needsReRead: true if file was never read or was modified since last read.
    */
-  needsReRead(path: string, currentModifiedAt: Date): { needsReRead: boolean; reason?: string };
+  needsReRead(
+    path: string,
+    currentModifiedAt: Date,
+  ): { needsReRead: boolean; reason?: string } | Promise<{ needsReRead: boolean; reason?: string }>;
 
   /** Clear read record (typically after a successful write) */
-  clearReadRecord(path: string): void;
+  clearReadRecord(path: string): void | Promise<void>;
 
   /** Clear all records */
-  clear(): void;
+  clear(): void | Promise<void>;
 }
 
 /**

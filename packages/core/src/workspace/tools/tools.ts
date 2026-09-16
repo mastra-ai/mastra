@@ -288,7 +288,7 @@ function wrapWithReadTracker(
         // Optimistic concurrency: attach the mtime from the last read
         // *before* stat so it's preserved even when the file has been
         // deleted externally (stat throws FileNotFoundError).
-        const record = readTracker.getReadRecord(input.path);
+        const record = await readTracker.getReadRecord(input.path);
         if (record) {
           enrichedContext = { ...enrichedContext, __expectedMtime: record.modifiedAtRead };
         }
@@ -306,7 +306,7 @@ function wrapWithReadTracker(
               true,
             );
             if (shouldRequireRead) {
-              const check = readTracker.needsReRead(input.path, stat.modifiedAt);
+              const check = await readTracker.needsReRead(input.path, stat.modifiedAt);
               if (check.needsReRead) {
                 throw new FileReadRequiredError(input.path, check.reason!);
               }
@@ -328,12 +328,12 @@ function wrapWithReadTracker(
       if (mode === 'read' && fs) {
         try {
           const stat = await fs.stat(input.path);
-          readTracker.recordRead(input.path, stat.modifiedAt);
+          await readTracker.recordRead(input.path, stat.modifiedAt);
         } catch {
           // Ignore stat errors for tracking
         }
       } else if (mode === 'write') {
-        readTracker.clearReadRecord(input.path);
+        await readTracker.clearReadRecord(input.path);
       }
 
       return result;
@@ -401,14 +401,22 @@ function wrapWithWriteLock(tool: any, writeLock: FileWriteLock): any {
  */
 export async function createWorkspaceTools(
   workspace: Workspace,
-  configContext?: Omit<ToolConfigContext, 'requestContext'> & { requestContext?: unknown },
+  configContext?: Omit<ToolConfigContext, 'requestContext'> & { requestContext?: unknown; threadId?: string },
 ) {
   // Seed fallback context so dynamic enabled functions always get called,
   // even if the caller omits configContext.  Normalize requestContext so
   // user-provided functions always receive a plain Record, not a Map.
-  const effectiveConfigContext: ToolConfigContext = configContext
-    ? { ...configContext, requestContext: toPlainRequestContext(configContext.requestContext) }
-    : { requestContext: {}, workspace };
+  // threadId is factory-internal (read-tracker keying) and is not exposed to
+  // user dynamic-config functions.
+  let effectiveConfigContext: ToolConfigContext;
+  let threadId: string | undefined;
+  if (configContext) {
+    const { threadId: contextThreadId, ...rest } = configContext;
+    threadId = contextThreadId;
+    effectiveConfigContext = { ...rest, requestContext: toPlainRequestContext(configContext.requestContext) };
+  } else {
+    effectiveConfigContext = { requestContext: {}, workspace };
+  }
   const tools: Record<string, any> = {};
   const toolsConfig = workspace.getToolsConfig();
   const isReadOnly = workspace.filesystem?.readOnly ?? false;
@@ -421,8 +429,12 @@ export async function createWorkspaceTools(
 
   // Shared read tracker — always active so optimistic concurrency (mtime
   // checking) works on every write, regardless of the requireReadBeforeWrite
-  // policy setting.
-  const readTracker: FileReadTracker = new InMemoryFileReadTracker();
+  // policy setting. Precedence: an explicitly injected tracker (caller owns
+  // persistence, e.g. serverless storage) → the workspace's per-thread
+  // tracker (records survive suspend/resume and turns within the thread) →
+  // a per-run tracker when there is no thread identity to key on.
+  const readTracker: FileReadTracker =
+    toolsConfig?.readTracker ?? (threadId ? workspace.getReadTracker(threadId) : new InMemoryFileReadTracker());
 
   // Helper: add a tool with config-driven filtering
   const addTool = async (

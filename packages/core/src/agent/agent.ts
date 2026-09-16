@@ -4004,6 +4004,9 @@ export class Agent<
     const workspaceTools = await createWorkspaceTools(workspace, {
       requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
       workspace,
+      // Keys the default read-before-write tracker per memory thread so read
+      // records survive suspend/resume and multiple turns within the thread.
+      threadId,
     });
 
     if (Object.keys(workspaceTools).length > 0) {

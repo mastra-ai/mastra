@@ -169,6 +169,13 @@ const workspace = new Workspace({
             description: 'Hooks that run before and after every enabled workspace tool call. See Tool hooks below.',
             isOptional: true,
           },
+          {
+            name: 'readTracker',
+            type: 'FileReadTracker',
+            description:
+              'Custom tracker for read-before-write records. Defaults to an in-memory tracker keyed by memory thread. See Read-before-write tracking below.',
+            isOptional: true,
+          },
         ],
       },
     ],
@@ -219,7 +226,7 @@ const workspace = new Workspace({
 
 The config object has two types of settings:
 
-- **Global settings**: `enabled` and `requireApproval` apply to all workspace tools unless overridden. `hooks` and `writeLockTimeoutMs` are global-only and can't be configured per tool.
+- **Global settings**: `enabled` and `requireApproval` apply to all workspace tools unless overridden. `hooks`, `writeLockTimeoutMs`, and `readTracker` are global-only and can't be configured per tool.
 - **Per-tool overrides**: Use `WORKSPACE_TOOLS` constants as keys to configure individual tools
 
 Per-tool overrides accept the following options:
@@ -249,7 +256,8 @@ Per-tool overrides accept the following options:
   {
     name: 'requireReadBeforeWrite',
     type: 'boolean | ((context: ToolConfigWithArgsContext) => boolean | Promise<boolean>)',
-    description: 'For write tools, require the agent to read an existing file before changing it.',
+    description:
+      'For write tools, require the agent to read an existing file before changing it. See Read-before-write tracking below.',
     isOptional: true,
     defaultValue: 'false',
   },
@@ -303,6 +311,24 @@ const workspace = new Workspace({
 ```
 
 Tool names must be unique across all workspace tools. Setting a custom name that conflicts with another tool's default or custom name throws an error.
+
+### Read-before-write tracking
+
+When `requireReadBeforeWrite` is enabled, read records are stored in a `FileReadTracker`. By default, records are kept in memory per memory thread, so they survive suspend/resume cycles and multiple turns within the same conversation. A file read before a tool suspends (for example, awaiting approval) doesn't need to be re-read after the run resumes. If a file changes on disk after it was read, the write is still rejected until the agent re-reads it, and a successful write always clears the record. Runs without a memory thread track reads per run.
+
+The default tracker is in-memory, so records don't survive process restarts. On serverless runtimes where the process may be torn down between suspend and resume, set `tools.readTracker` to an implementation backed by your own storage. All `FileReadTracker` methods may return promises:
+
+```typescript {7}
+import { Workspace } from '@mastra/core/workspace'
+import { myStorageBackedTracker } from './read-tracker'
+
+const workspace = new Workspace({
+  id: 'my-workspace',
+  tools: {
+    readTracker: myStorageBackedTracker,
+  },
+})
+```
 
 ### Tool hooks
 

@@ -758,6 +758,83 @@ describe('Workspace tools receive workspace via ToolOptions fallback (GH-14203)'
   });
 });
 
+describe('Read-before-write records survive across listWorkspaceTools calls (GH-23772)', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'workspace-read-tracker-'));
+    await fs.writeFile(path.join(tempDir, 'notes.txt'), 'original notes');
+  });
+
+  afterEach(async () => {
+    try {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  it('should allow edit_file in a later run after read_file in an earlier run on the same thread', async () => {
+    const workspace = new Workspace({
+      id: 'read-tracker-workspace',
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      tools: {
+        [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: { requireReadBeforeWrite: true },
+      },
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: 'done' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'read-tracker-agent',
+      name: 'Read Tracker Agent',
+      instructions: 'test',
+      model: mockModel,
+      workspace,
+    });
+
+    // Run 1: read the file, then "suspend" (the run ends).
+    const run1Tools = await (agent as any).listWorkspaceTools({
+      threadId: 'thread-1',
+      requestContext: new RequestContext(),
+      getModel: () => agent.getModel(),
+    });
+    await run1Tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute!({ path: 'notes.txt' }, {
+      toolCallId: 'read-1',
+      messages: [],
+    } as any);
+
+    // Run 2 (resume): fresh tool batch for the same thread — the earlier read
+    // must still count, so edit_file succeeds without a forced re-read.
+    const run2Tools = await (agent as any).listWorkspaceTools({
+      threadId: 'thread-1',
+      requestContext: new RequestContext(),
+      getModel: () => agent.getModel(),
+    });
+    const editResult = await run2Tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute!(
+      { path: 'notes.txt', old_string: 'original notes', new_string: 'updated notes' },
+      { toolCallId: 'edit-1', messages: [] } as any,
+    );
+    expect(editResult).toContain('Replaced 1 occurrence');
+
+    const content = await fs.readFile(path.join(tempDir, 'notes.txt'), 'utf-8');
+    expect(content).toBe('updated notes');
+  });
+});
+
 describe('Dynamic filesystem resolver in auto-injected workspace tools', () => {
   let tempDirA: string;
   let tempDirB: string;
