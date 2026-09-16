@@ -1229,8 +1229,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   if (useCrossAgentSignals) {
     controller.onSessionCreated(
       async session => {
-        const latestObservedTitles = new Map<string, string | undefined>();
+        const latestObservedTitles = new Map<string, { revision: number; title: string | undefined }>();
         const threadOwnership = createThreadOwnershipManager(async threadId => {
+          const revisionAtStart = latestObservedTitles.get(threadId)?.revision ?? 0;
           const thread = await session.thread.getById({ threadId });
           const agent = controller.getCurrentAgent(session);
           const claim = await agent.claimThreadOwnership({
@@ -1242,11 +1243,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
               ...(thread?.title ? { title: thread.title } : {}),
             },
           });
-          if (claim.claimed && latestObservedTitles.has(threadId)) {
+          const observedTitle = latestObservedTitles.get(threadId);
+          if (claim.claimed && observedTitle && observedTitle.revision !== revisionAtStart) {
             agent.updateThreadPeerAdvertisement({
               resourceId: session.identity.getResourceId(),
               threadId,
-              peer: { title: latestObservedTitles.get(threadId) },
+              peer: { title: observedTitle.title },
             });
           }
           return claim;
@@ -1264,7 +1266,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           else if (event.type === 'thread_created') void claimThreadOwnership(event.thread.id);
           else if (event.type === 'thread_title_updated' || event.type === 'om_thread_title_updated') {
             const title = event.type === 'thread_title_updated' ? event.title : event.newTitle;
-            latestObservedTitles.set(event.threadId, title);
+            const revision = (latestObservedTitles.get(event.threadId)?.revision ?? 0) + 1;
+            latestObservedTitles.set(event.threadId, { revision, title });
             controller.getCurrentAgent(session).updateThreadPeerAdvertisement({
               resourceId: session.identity.getResourceId(),
               threadId: event.threadId,

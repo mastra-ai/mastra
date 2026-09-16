@@ -868,7 +868,7 @@ describe('createMastraCode', () => {
     });
   });
 
-  it('re-applies a title update that arrives while thread ownership is being claimed', async () => {
+  it('re-applies only title updates that arrive during the current ownership claim', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode({ crossAgentSignals: true });
@@ -896,7 +896,10 @@ describe('createMastraCode', () => {
       machinery: { buildStreamOptions: vi.fn(async () => ({})) },
       thread: {
         getId: () => null,
-        getById: vi.fn(async () => ({ id: 'thread-1', title: 'Original title' })),
+        getById: vi
+          .fn()
+          .mockResolvedValueOnce({ id: 'thread-1', title: 'Original title' })
+          .mockResolvedValue({ id: 'thread-1', title: 'Fresh title from storage' }),
       },
     });
 
@@ -917,6 +920,17 @@ describe('createMastraCode', () => {
       threadId: 'thread-1',
       peer: { title: 'Renamed during claim' },
     });
+
+    handleSessionEvent!({ type: 'thread_changed', threadId: 'thread-1' });
+    await vi.waitFor(() => expect(claimThreadOwnershipMock).toHaveBeenCalledTimes(2));
+    expect(claimThreadOwnershipMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        threadId: 'thread-1',
+        peer: expect.objectContaining({ title: 'Fresh title from storage' }),
+      }),
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(updateThreadPeerAdvertisementMock).toHaveBeenCalledTimes(2);
   });
 
   it('omits cross-agent signals unless experimental cross-agent communication is enabled', async () => {

@@ -298,6 +298,18 @@ describe('agent connection tools', () => {
           sourcePeerId: 'code-agent:resource-1:thread-1',
           returnPeerId: 'code-agent:resource-1:thread-1',
         },
+        metadata: {
+          crossAgentMessaging: expect.objectContaining({
+            expectsReply: true,
+            messageId: 'request-1',
+            returnPeerId: 'code-agent:resource-1:thread-1',
+          }),
+        },
+        payload: expect.objectContaining({
+          expectsReply: true,
+          messageId: 'request-1',
+          returnPeerId: 'code-agent:resource-1:thread-1',
+        }),
       }),
       expect.objectContaining({
         resourceId: 'resource-2',
@@ -339,10 +351,8 @@ describe('agent connection tools', () => {
       ),
     ]);
 
-    const attributes: Array<Record<string, unknown>> = sendNotificationSignal.mock.calls.map(
-      (call: unknown[]) => (call[0] as { attributes: Record<string, unknown> }).attributes,
-    );
-    expect(attributes).toEqual(
+    const notifications = sendNotificationSignal.mock.calls.map((call: unknown[]) => call[0] as Record<string, any>);
+    expect(notifications.map(notification => notification.attributes)).toEqual(
       expect.arrayContaining([
         {
           expectsReply: false,
@@ -356,7 +366,11 @@ describe('agent connection tools', () => {
         },
       ]),
     );
-    expect(attributes.every(attributes => !Object.hasOwn(attributes, 'returnPeerId'))).toBe(true);
+    for (const notification of notifications) {
+      expect(notification.attributes).not.toHaveProperty('returnPeerId');
+      expect(notification.metadata.crossAgentMessaging).not.toHaveProperty('returnPeerId');
+      expect(notification.payload).not.toHaveProperty('returnPeerId');
+    }
   });
 
   it('reports unacknowledged delivery as retryable and does not record sent history', async () => {
@@ -389,23 +403,95 @@ describe('agent connection tools', () => {
     expect(getStored().sentSignals).toBeUndefined();
   });
 
-  it('rejects reply obligations on low-priority summarized signals', () => {
-    const tools = createAgentConnectionTools({ registry: createRegistry() });
-
-    const parsed = (tools.agent_signal_send as any).inputSchema.safeParse({
+  it('does not report a summarized low-priority signal as a successful reply obligation', async () => {
+    const sendNotificationSignal = vi
+      .fn()
+      .mockResolvedValueOnce({
+        record: { id: 'notification-1', status: 'pending' as const, deliveryReason: 'idle-low-summary' },
+        decision: { action: 'summarize' as const, reason: 'idle-low-summary' },
+        persisted: Promise.resolve(),
+      })
+      .mockResolvedValueOnce({
+        record: { id: 'notification-2' },
+        decision: { action: 'deliver' as const },
+        accepted: Promise.resolve({ action: 'deliver' as const, runId: 'run-2' }),
+      });
+    const tools = createAgentConnectionTools({
+      registry: createRegistry(),
+      getAgent: () => ({ sendNotificationSignal }),
+    });
+    const { context, getStored } = createContext([savedPeer()]);
+    const input = {
       targetId: PEER_ID,
       summary: 'Reply later',
       priority: 'low',
       expectsReply: true,
-    });
+      messageId: 'low-reply-message',
+    };
 
-    expect(parsed.success).toBe(false);
-    expect(parsed.error.issues).toContainEqual(
-      expect.objectContaining({
-        path: ['expectsReply'],
-        message: 'Low-priority signals are summarized and cannot require a reply. Use medium or higher priority.',
-      }),
+    expect((tools.agent_signal_send as any).inputSchema.safeParse(input).success).toBe(true);
+    await expect((tools.agent_signal_send as any).execute(input, context)).resolves.toMatchObject({
+      isError: true,
+      messageId: 'low-reply-message',
+      priority: 'low',
+      expectsReply: true,
+      routingAction: 'persist',
+      content:
+        'Failed to establish a reply obligation: the signal was queued for a notification summary instead of being delivered directly to "Peer One". Send a new signal at a priority that routes directly when a reply is required.',
+    });
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ ifIdle: { behavior: 'persist' } }),
     );
+    expect(getStored().sentSignals).toBeUndefined();
+
+    await expect(
+      (tools.agent_signal_send as any).execute(
+        { ...input, priority: 'medium', messageId: 'medium-reply-message' },
+        context,
+      ),
+    ).resolves.toMatchObject({
+      isError: false,
+      messageId: 'medium-reply-message',
+      priority: 'medium',
+      expectsReply: true,
+      routingAction: 'deliver',
+    });
+    expect(getStored().sentSignals).toEqual([
+      expect.objectContaining({ messageId: 'medium-reply-message', priority: 'medium', routingAction: 'deliver' }),
+    ]);
+  });
+
+  it('does not record a reply obligation when policy summarizes a medium-priority signal', async () => {
+    const sendNotificationSignal = vi.fn(async () => ({
+      record: { id: 'notification-1', status: 'pending' as const, deliveryReason: 'active-batch-summary' },
+      decision: { action: 'summarize' as const, reason: 'active-batch-summary' },
+      persisted: Promise.resolve(),
+    }));
+    const tools = createAgentConnectionTools({
+      registry: createRegistry(),
+      getAgent: () => ({ sendNotificationSignal }),
+    });
+    const { context, getStored } = createContext([savedPeer()]);
+
+    await expect(
+      (tools.agent_signal_send as any).execute(
+        {
+          targetId: PEER_ID,
+          summary: 'Reply when available',
+          priority: 'medium',
+          expectsReply: true,
+          messageId: 'medium-summary-message',
+        },
+        context,
+      ),
+    ).resolves.toMatchObject({
+      isError: true,
+      priority: 'medium',
+      expectsReply: true,
+      routingAction: 'persist',
+    });
+    expect(getStored().sentSignals).toBeUndefined();
   });
 
   it('reports low-priority notifications queued for summary as persisted', async () => {

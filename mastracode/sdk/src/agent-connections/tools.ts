@@ -301,29 +301,24 @@ The peer does not need to be currently advertised. Disconnecting is idempotent a
     id: 'agent_signal_send',
     description: `Send a prioritized notification signal to a connected peer agent.
 
-The target must already be saved and freshly advertise the same exact thread endpoint at send time. Use expectsReply to declare whether the peer owes one signal back to this thread; false removes that obligation but does not prevent or forbid a reply. Low-priority signals are summarized and cannot require a reply. Reuse messageId when retrying the same logical send, and set replyTo to the request messageId when replying. Use priority to indicate urgency: low, medium, high, or urgent.`,
-    inputSchema: z
-      .object({
-        targetId: z.string().min(1).describe('Connected peer id.'),
-        summary: z.string().min(1).describe('Short summary to deliver to the peer.'),
-        priority: prioritySchema.default('medium'),
-        expectsReply: z
-          .boolean()
-          .describe('Whether the peer owes one signal back. False means no obligation, not no permission to reply.'),
-        messageId: z
-          .string()
-          .min(1)
-          .optional()
-          .describe(
-            'Stable logical message id. Reuse the same id for a sequential retry; receiver-side notification coalescing also uses it.',
-          ),
-        replyTo: z.string().min(1).optional().describe('Message id of the peer request this signal replies to.'),
-        payload: z.unknown().optional().describe('Optional structured payload for the peer.'),
-      })
-      .refine(input => input.priority !== 'low' || !input.expectsReply, {
-        message: 'Low-priority signals are summarized and cannot require a reply. Use medium or higher priority.',
-        path: ['expectsReply'],
-      }),
+The target must already be saved and freshly advertise the same exact thread endpoint at send time. Use expectsReply to declare whether the peer owes one signal back to this thread; false removes that obligation but does not prevent or forbid a reply. Signals routed to a notification summary cannot establish a reply obligation until the recipient opens the full notification, so use a priority that routes directly when a reply is required. Reuse messageId when retrying the same logical send, and set replyTo to the request messageId when replying. Use priority to indicate urgency: low, medium, high, or urgent.`,
+    inputSchema: z.object({
+      targetId: z.string().min(1).describe('Connected peer id.'),
+      summary: z.string().min(1).describe('Short summary to deliver to the peer.'),
+      priority: prioritySchema.default('medium'),
+      expectsReply: z
+        .boolean()
+        .describe('Whether the peer owes one signal back. False means no obligation, not no permission to reply.'),
+      messageId: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          'Stable logical message id. Reuse the same id for a sequential retry; receiver-side notification coalescing also uses it.',
+        ),
+      replyTo: z.string().min(1).optional().describe('Message id of the peer request this signal replies to.'),
+      payload: z.unknown().optional().describe('Optional structured payload for the peer.'),
+    }),
     outputSchema: signalResultSchema,
     execute: async (
       { targetId, summary, priority = 'medium', expectsReply, messageId: inputMessageId, replyTo, payload },
@@ -403,7 +398,7 @@ The target must already be saved and freshly advertise the same exact thread end
           expectsReply,
           messageId,
           ...(replyTo ? { replyTo } : {}),
-          returnPeerId,
+          ...(expectsReply ? { returnPeerId } : {}),
           from: { resourceId: currentAgent.resourceId, threadId: currentAgent.threadId },
           targetId,
         };
@@ -442,6 +437,20 @@ The target must already be saved and freshly advertise the same exact thread end
             notification.decision.action === 'defer' ||
             notification.decision.action === 'summarize'
           ) {
+            if (expectsReply) {
+              await notification.persisted;
+              return {
+                content: `Failed to establish a reply obligation: the signal was queued for a notification summary instead of being delivered directly to ${untrustedPeerLabel(target)}. Send a new signal at a priority that routes directly when a reply is required.`,
+                target,
+                priority: priority as AgentSignalPriority,
+                expectsReply,
+                messageId,
+                replyTo,
+                returnPeerId,
+                routingAction: 'persist',
+                isError: true,
+              };
+            }
             accepted = { action: 'persist' };
           } else if (notification.decision.action === 'discard') {
             accepted = { action: 'discard' };
