@@ -952,6 +952,43 @@ describe('Span Filtering', () => {
       await tracing.shutdown();
     });
 
+    it('should drop a span with a logged error when a processor returns a copy that forwards exportSpan', async () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        spanOutputProcessors: [
+          {
+            name: 'forwarding-processor',
+            process: span =>
+              span
+                ? ({ ...span, input: '[REDACTED]', exportSpan: span.exportSpan.bind(span) } as unknown as typeof span)
+                : undefined,
+            shutdown: async () => {},
+          },
+        ],
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        input: 'secret-input',
+      });
+      agentSpan.end({ output: 'secret-output' });
+      await tracing.flush();
+
+      // A forwarding copy passes a method-presence check but exportSpan is bound
+      // to the original, so it would export the unredacted span. Must be dropped.
+      expect(testExporter.events).toHaveLength(0);
+
+      expect(mockConsole.error).toHaveBeenCalledWith(
+        expect.stringContaining('Processor error [name=forwarding-processor]'),
+      );
+
+      await tracing.shutdown();
+    });
+
     it('should export spans when a processor mutates in place and returns the same instance', async () => {
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'test',
