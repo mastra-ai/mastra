@@ -2291,6 +2291,7 @@ describe('PIIDetector', () => {
       expect(llmCallCount).toBe(3);
       expect(emitted.join('')).toBe(`${'x'.repeat(128)} ip [IP-ADDRESS] [EMAIL]`);
       expect(emittedParts[0]).toMatchObject({ payload: { id: 'first' }, runId: 'first' });
+      expect(emittedParts[1]).toMatchObject({ payload: { id: 'first' }, runId: 'first' });
     });
 
     it('keeps text queued behind direct-call non-text parts', async () => {
