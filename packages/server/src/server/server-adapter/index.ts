@@ -1404,6 +1404,17 @@ export async function checkRouteFGA(
   requestContext: RequestContext,
   params: Record<string, unknown>,
 ): Promise<{ status: number; error: string; message: string } | null> {
+  // Branch routes authorize the complete lineage in their handlers and deliberately translate
+  // denied access to BRANCH_NOT_FOUND so the route preflight must not disclose the target thread.
+  if (
+    route.path === '/memory/threads/:threadId/branch' ||
+    route.path === '/memory/threads/:threadId/parent' ||
+    route.path === '/memory/threads/:threadId/branches' ||
+    route.path === '/memory/threads/:threadId/branch-history'
+  ) {
+    return null;
+  }
+
   // Use request context to determine which FGA provider to use (studio vs server)
   const fgaProvider = getFGAProvider(mastra, requestContext);
   if (!fgaProvider) return null;

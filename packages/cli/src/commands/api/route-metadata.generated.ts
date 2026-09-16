@@ -1366,6 +1366,79 @@ export const API_ROUTE_METADATA = {
       "listProperty": "clonedMessages"
     }
   },
+  "POST /memory/threads/:threadId/branch": {
+    "method": "POST",
+    "path": "/memory/threads/:threadId/branch",
+    "pathParams": [
+      "threadId"
+    ],
+    "queryParams": [
+      "agentId"
+    ],
+    "bodyParams": [
+      "branchPointMessageId",
+      "metadata",
+      "title"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /memory/threads/:threadId/parent": {
+    "method": "GET",
+    "path": "/memory/threads/:threadId/parent",
+    "pathParams": [
+      "threadId"
+    ],
+    "queryParams": [
+      "agentId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /memory/threads/:threadId/branches": {
+    "method": "GET",
+    "path": "/memory/threads/:threadId/branches",
+    "pathParams": [
+      "threadId"
+    ],
+    "queryParams": [
+      "agentId",
+      "page",
+      "perPage"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "branches",
+      "paginationProperty": "page"
+    }
+  },
+  "GET /memory/threads/:threadId/branch-history": {
+    "method": "GET",
+    "path": "/memory/threads/:threadId/branch-history",
+    "pathParams": [
+      "threadId"
+    ],
+    "queryParams": [
+      "agentId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "history"
+    }
+  },
   "POST /memory/threads/:threadId/transfer": {
     "method": "POST",
     "path": "/memory/threads/:threadId/transfer",
