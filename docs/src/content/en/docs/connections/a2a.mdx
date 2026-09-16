@@ -95,6 +95,7 @@ import { A2AAgent } from '@mastra/core/a2a'
 
 const remoteWeatherAgent = new A2AAgent({
   url: 'https://weather.example.com/api/.well-known/weather-agent/agent-card.json',
+  protocolVersion: '1.0',
   headers: {
     Authorization: `Bearer ${process.env.WEATHER_AGENT_TOKEN}`,
   },
@@ -117,7 +118,7 @@ During execution, `A2AAgent`:
 
 - Fetches and caches the remote agent card.
 - Reads the execution URL and capabilities from the card.
-- Calls `message/send` for non-streaming runs or `message/stream` when streaming is supported.
+- Calls `message/send` or `message/stream` with v0.3, and `SendMessage` or `SendStreamingMessage` with v1.0.
 - Converts remote messages, tasks, artifacts, and status updates into Mastra subagent results.
 - Supports `resumeGenerate()` and `resumeStream()` when the remote task requires follow-up input or resubscription.
 

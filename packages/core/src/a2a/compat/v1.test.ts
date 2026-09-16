@@ -28,6 +28,7 @@ describe('v1Compat', () => {
         description: 'A remote agent',
         supportedInterfaces: [
           { url: 'https://remote.example.com/grpc', protocolBinding: 'GRPC', protocolVersion: '1.0' },
+          { url: 'https://remote.example.com/a2a-v0', protocolBinding: 'JSONRPC', protocolVersion: '0.3' },
           { url: 'https://remote.example.com/a2a', protocolBinding: 'JSONRPC', protocolVersion: '1.0' },
         ],
         version: '1.0',

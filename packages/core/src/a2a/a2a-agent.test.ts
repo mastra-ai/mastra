@@ -1076,6 +1076,7 @@ describe('A2AAgent', () => {
     const agent = new A2AAgent({
       url: 'https://remote.example.com',
       protocolVersion: '1.0',
+      headers: { 'A2A-Version': '0.3' },
       fetch: fetchMock as typeof fetch,
     });
 

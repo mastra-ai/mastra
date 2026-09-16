@@ -1534,9 +1534,9 @@ export class A2AAgent implements SubAgent {
 
     const finalHeaders = {
       accept: stream ? 'text/event-stream' : 'application/json',
-      ...this.#compat.headers,
       ...this.#headers,
       ...headers,
+      ...this.#compat.headers,
     };
 
     while (attempts <= this.#retries) {
