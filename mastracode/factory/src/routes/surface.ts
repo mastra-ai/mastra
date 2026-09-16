@@ -17,10 +17,12 @@ import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import {
+  createSourceControlSessionLookup,
   ensureFactorySourceSession,
   FactorySourceSessionResolutionError,
   resolveFactoryDefaultModelId,
   resolveFactoryProjectForSession,
+  resolveFactorySourceControl,
 } from '../session/factory-session.js';
 import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
@@ -324,6 +326,7 @@ export function buildIntegrationContext(
     | 'factoryStorage'
     | 'integrationStorage'
     | 'sourceControlStorage'
+    | 'integrations'
   > & {
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
@@ -359,6 +362,9 @@ export function buildIntegrationContext(
       ...(deps.sourceControlOwnerId
         ? { sourceControlOwner: deps.sourceControlStorage.forIntegration(deps.sourceControlOwnerId) }
         : {}),
+      sourceControls: (deps.integrations ?? [])
+        .filter(({ integration }) => integration.versionControl)
+        .map(({ integration }) => deps.sourceControlStorage.forIntegration(integration.id)),
       projects: deps.domains.projects,
       intake: deps.domains.intake,
       channelIdentity: deps.domains.channelIdentity,
@@ -462,18 +468,10 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
   const githubIntegration = githubRegistration?.integration as GithubIntegration | undefined;
   const sourceControlRegistrations = registrations.filter(({ integration }) => integration.versionControl);
-  const defaultSourceControlId =
-    githubRegistration?.integration.id ??
-    (sourceControlRegistrations.length === 1 ? sourceControlRegistrations[0]!.integration.id : undefined);
-  const sourceControlFor = (
-    externalSource: FactoryBindingPreparationInput['item']['externalSource'] | undefined,
-  ): SourceControlStorageHandle | undefined => {
-    const matching = externalSource
-      ? sourceControlRegistrations.find(({ integration }) => integration.id === externalSource.integrationId)
-      : undefined;
-    const integrationId = matching?.integration.id ?? defaultSourceControlId;
-    return integrationId ? deps.sourceControlStorage.forIntegration(integrationId) : undefined;
-  };
+  const sourceControls = sourceControlRegistrations.map(({ integration }) =>
+    deps.sourceControlStorage.forIntegration(integration.id),
+  );
+  const sourceControlSessions = createSourceControlSessionLookup(sourceControls);
 
   const integrationRoutes = registrations.flatMap(registration => {
     const { integration } = registration;
@@ -513,7 +511,13 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         deps.controller,
         deps.domains.workItems,
         transitionService,
-        request => sourceControlFor(request.workItem.input.externalSource),
+        request =>
+          resolveFactorySourceControl({
+            sourceControls,
+            orgId: request.orgId,
+            factoryProjectId: request.factoryProjectId,
+            sessionId: request.sessionId,
+          }),
         deps.domains.memorySettings,
       )
     : undefined;
@@ -522,12 +526,16 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       transitionService,
       ...(sourceControlRegistrations.length > 0
         ? {
-            prepareBinding: (input: FactoryBindingPreparationInput) => {
-              const sourceControl = sourceControlFor(input.item.externalSource);
+            prepareBinding: async (input: FactoryBindingPreparationInput) => {
+              const sourceControl = await resolveFactorySourceControl({
+                sourceControls,
+                orgId: input.record.orgId,
+                factoryProjectId: input.record.factoryProjectId,
+              });
               if (!sourceControl) {
                 throw new FactoryDispatchError(
                   'source_control_missing',
-                  `No source-control provider is available for '${input.item.externalSource?.integrationId ?? 'manual'}'.`,
+                  'Factory project has no linked source-control repository.',
                 );
               }
               return prepareFactoryRuleBinding(
@@ -548,7 +556,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       root: deps.fsRoot,
       sessionFs: {
         auth: deps.auth,
-        sessions: deps.sourceControlStorage.forIntegration('github').sessions,
+        sessions: sourceControlSessions,
         filesystem: deps.domains.filesystem,
       },
     }),
@@ -558,7 +566,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
       modelPacks: deps.domains.modelPacks,
-      sourceControlSessions: deps.sourceControlStorage.forIntegration('github').sessions,
+      sourceControlSessions,
       memorySettings: deps.domains.memorySettings,
       factoryProjects: deps.domains.projects,
       customProviders: deps.domains.customProviders,

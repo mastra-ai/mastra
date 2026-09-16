@@ -15,9 +15,11 @@ import type { SlackAdapterChannelConfig } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
 
 import {
+  createSourceControlSessionLookup,
   hydrateFactorySession,
   resolveFactoryDefaultModelId,
   resolveFactoryProjectForSession,
+  resolveFactorySourceControl,
   resolveFactorySourceRepository,
 } from '../../session/factory-session.js';
 import { readRequestContextOrgId, seedSessionOrg } from '../../session/org-seed.js';
@@ -93,6 +95,8 @@ interface SlackChannelDeps {
    * registered) → chat-only sessions as before.
    */
   sourceControl?: SourceControlStorageHandle;
+  /** Registered source-control partitions used to select the provider linked to each Factory project. */
+  sourceControls?: readonly SourceControlStorageHandle[];
   /**
    * Observational-memory settings domain. When provided, a repo-backed session
    * adopts its factory project's shared memory settings on start, matching the
@@ -113,6 +117,10 @@ interface SlackChannelDeps {
   feed?: Pick<CommentsDomain, 'createComment'>;
   /** Overrides applied to the Slack channel adapter entry. */
   adapterOptions?: SlackAdapterChannelConfig;
+}
+
+function configuredSourceControls(deps: SlackChannelDeps): readonly SourceControlStorageHandle[] {
+  return deps.sourceControls ?? (deps.sourceControl ? [deps.sourceControl] : []);
 }
 
 /**
@@ -330,7 +338,8 @@ function threadBranch(threadId: string): string {
  * gate's job; this hook must never post.
  */
 export function createChannelResourceIdResolver(deps: SlackChannelDeps): ResolveResourceId {
-  const { accountLinks, projects, sourceControl } = deps;
+  const { accountLinks, projects } = deps;
+  const sourceControls = configuredSourceControls(deps);
   return async ({ platform, thread, message }) => {
     // NOT the hook's `defaultResourceId`: configuring a custom resolver
     // bypasses AgentControllerChannels' own `channel:{thread.id}` derivation
@@ -338,7 +347,7 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
     // default is the per-USER memory key. Chat-only fallbacks must stay
     // per-thread, so reproduce the controller default here.
     const chatOnlyResourceId = `channel:${thread.id}`;
-    if (!accountLinks || !projects || !sourceControl) return chatOnlyResourceId;
+    if (!accountLinks || !projects || sourceControls.length === 0) return chatOnlyResourceId;
     try {
       const externalTeamId = rawTeamId(message.raw);
       if (!externalTeamId) return chatOnlyResourceId;
@@ -362,6 +371,8 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
       }
       if (!factoryProjectId) return chatOnlyResourceId;
 
+      const sourceControl = await resolveFactorySourceControl({ sourceControls, orgId, factoryProjectId });
+      if (!sourceControl) return chatOnlyResourceId;
       const repo = await resolveFactorySourceRepository({ sourceControl, orgId, factoryProjectId });
       if (!repo.found) return chatOnlyResourceId;
 
@@ -407,12 +418,14 @@ export const resolveChannelThreadId: ResolveThreadId = ({ resourceId, defaultThr
 
 /** Create channel sessions with their Factory ownership present in initial controller state. */
 export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSessionResolve {
-  const { sourceControl } = deps;
+  const sourceControlSessions = createSourceControlSessionLookup(configuredSourceControls(deps));
   return async ({ controller, thread, requestContext }) => {
-    const owner =
-      sourceControl && !thread.resourceId.startsWith('channel:')
-        ? await resolveFactoryProjectForSession({ sourceControl, sessionId: thread.resourceId })
-        : null;
+    const sourceControl = thread.resourceId.startsWith('channel:')
+      ? null
+      : await sourceControlSessions.getSourceControlBySessionId(thread.resourceId);
+    const owner = sourceControl
+      ? await resolveFactoryProjectForSession({ sourceControl, sessionId: thread.resourceId })
+      : null;
     return controller.createSession({
       id: thread.resourceId,
       ownerId: controller.id,
@@ -442,7 +455,8 @@ export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSes
  * the user's selection every time the process restarts.
  */
 export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSessionStart {
-  const { projects, sourceControl, memorySettings } = deps;
+  const { projects, memorySettings } = deps;
+  const sourceControlSessions = createSourceControlSessionLookup(configuredSourceControls(deps));
   return async ({ session, thread, requestContext }) => {
     // Seed the tenant org above every guard below. `gateDispatch` stamps it on
     // the message's request context before the session exists, so this needs no
@@ -452,9 +466,11 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
     // rather than being left to look like a local session.
     await seedSessionOrg(session, readRequestContextOrgId(requestContext));
 
-    if (!projects || !sourceControl) return;
+    if (!projects) return;
     if (thread.resourceId.startsWith('channel:')) return;
 
+    const sourceControl = await sourceControlSessions.getSourceControlBySessionId(thread.resourceId);
+    if (!sourceControl) return;
     const owner = await resolveFactoryProjectForSession({ sourceControl, sessionId: thread.resourceId });
     if (!owner) return;
 
