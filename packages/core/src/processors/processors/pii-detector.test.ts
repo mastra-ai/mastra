@@ -2259,6 +2259,7 @@ describe('PIIDetector', () => {
       });
       const state: Record<string, any> = {};
       const emitted: string[] = [];
+      const emittedParts: any[] = [];
 
       for (const [id, text] of [
         ['first', `${'x'.repeat(128)} ip 1.1.1.1 secret@`],
@@ -2270,7 +2271,10 @@ describe('PIIDetector', () => {
           state,
           abort: vi.fn() as any,
         });
-        if (result?.type === 'text-delta') emitted.push(result.payload.text);
+        if (result?.type === 'text-delta') {
+          emitted.push(result.payload.text);
+          emittedParts.push(result);
+        }
       }
 
       const flushed = await detector.processOutputStream({
@@ -2279,10 +2283,14 @@ describe('PIIDetector', () => {
         state,
         abort: vi.fn() as any,
       });
-      if (flushed?.type === 'text-delta') emitted.push(flushed.payload.text);
+      if (flushed?.type === 'text-delta') {
+        emitted.push(flushed.payload.text);
+        emittedParts.push(flushed);
+      }
 
-      expect(llmCallCount).toBeGreaterThanOrEqual(2);
+      expect(llmCallCount).toBe(3);
       expect(emitted.join('')).toBe(`${'x'.repeat(128)} ip [IP-ADDRESS] [EMAIL]`);
+      expect(emittedParts[0]).toMatchObject({ payload: { id: 'first' }, runId: 'first' });
     });
 
     it('keeps text queued behind direct-call non-text parts', async () => {
