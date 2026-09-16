@@ -208,6 +208,7 @@ export async function persistStepUpdate(
 
     const snapshot: WorkflowRunState = {
       runId,
+      rootRun: executionContext.rootRun,
       status: workflowStatus,
       value: executionContext.state,
       context: stepResults as any,
@@ -359,6 +360,7 @@ export async function executeEntry(
       stepResults,
       resume,
       executionContext: {
+        rootRun: executionContext.rootRun,
         workflowId,
         runId,
         executionPath: [...executionContext.executionPath, idx!],
@@ -433,6 +435,7 @@ export async function executeEntry(
         stepResults,
         resume,
         executionContext: {
+          rootRun: executionContext.rootRun,
           workflowId,
           runId,
           executionPath: [...executionContext.executionPath, idx!],
@@ -472,6 +475,7 @@ export async function executeEntry(
         restart,
         timeTravel,
         executionContext: {
+          rootRun: executionContext.rootRun,
           workflowId,
           runId,
           executionPath: [...executionContext.executionPath, idx!],

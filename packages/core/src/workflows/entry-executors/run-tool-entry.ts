@@ -26,6 +26,7 @@ export async function runToolEntry(entry: ToolStepEntry, ctx: EntryExecuteContex
     resumeData,
     runId,
     workflowId,
+    rootRun,
     state,
     setState,
     abortSignal,
@@ -42,6 +43,7 @@ export async function runToolEntry(entry: ToolStepEntry, ctx: EntryExecuteContex
     resumeData,
     workflow: {
       runId,
+      rootRun,
       suspend,
       resumeData,
       workflowId,

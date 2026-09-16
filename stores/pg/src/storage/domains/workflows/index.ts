@@ -409,6 +409,10 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
   }
 
+  override supportsAtomicWorkflowStarts(): boolean {
+    return true;
+  }
+
   async persistWorkflowSnapshot({
     workflowName,
     runId,
@@ -416,6 +420,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     snapshot,
     createdAt,
     updatedAt,
+    createOnly,
   }: {
     workflowName: string;
     runId: string;
@@ -423,6 +428,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     snapshot: WorkflowRunState;
     createdAt?: Date;
     updatedAt?: Date;
+    createOnly?: boolean;
   }): Promise<void> {
     try {
       const now = new Date();
@@ -434,8 +440,11 @@ export class WorkflowsPG extends WorkflowsStorage {
         `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} AS t
                  (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                 ON CONFLICT (workflow_name, run_id) DO UPDATE
-                 SET "resourceId" = COALESCE($3, t."resourceId"), snapshot = $4, "updatedAt" = $6, "updatedAtZ" = $8`,
+                 ON CONFLICT (workflow_name, run_id) ${
+                   createOnly
+                     ? 'DO NOTHING'
+                     : 'DO UPDATE SET "resourceId" = COALESCE($3, t."resourceId"), snapshot = $4, "updatedAt" = $6, "updatedAtZ" = $8'
+                 }`,
         [
           workflowName,
           runId,
