@@ -35,14 +35,14 @@ import type { LLMRecording } from './llm-recorder';
  * Mode detection tests
  */
 describe('LLM Test Mode Detection', () => {
-  it('reports current mode', () => {
+  it('reports current mode', async () => {
     const mode = getLLMTestMode();
     console.log(`[test] Current LLM_TEST_MODE: ${mode}`);
     expect(['auto', 'update', 'replay', 'live', 'record']).toContain(mode);
   });
 
-  it('setupLLMRecording reflects correct mode', () => {
-    const recording = setupLLMRecording({ name: 'mode-test' });
+  it('setupLLMRecording reflects correct mode', async () => {
+    const recording = await setupLLMRecording({ name: 'mode-test' });
     console.log(`[test] Recording mode: ${recording.mode}`);
     console.log(`[test] isLive: ${recording.isLive}`);
     console.log(`[test] isRecording: ${recording.isRecording}`);
@@ -85,14 +85,14 @@ describe('withLLMRecording', () => {
  * transformRequest tests
  */
 describe('transformRequest', () => {
-  it('accepts transformRequest option and creates a recorder', () => {
+  it('accepts transformRequest option and creates a recorder', async () => {
     const transformFn = vi.fn(({ url, body }: { url: string; body: unknown }) => ({
       url: url.replace(/v[0-9]+/, 'v1'),
       body: { ...(body as Record<string, unknown>), timestamp: 'NORMALIZED' },
     }));
 
     // Verify the option is accepted and the recorder is created successfully
-    const recorder = setupLLMRecording({
+    const recorder = await setupLLMRecording({
       name: 'transform-test',
       transformRequest: transformFn,
     });
@@ -107,8 +107,8 @@ describe('transformRequest', () => {
     }
   });
 
-  it('accepts transformRequest in setupLLMRecording options', () => {
-    const recorder = setupLLMRecording({
+  it('accepts transformRequest in setupLLMRecording options', async () => {
+    const recorder = await setupLLMRecording({
       name: 'transform-use-test',
       transformRequest: ({ url, body }) => ({ url, body }),
     });
@@ -127,7 +127,7 @@ describe('transformRequest', () => {
  * Active recorder tracking and useLiveMode tests
  */
 describe('getActiveRecorder', () => {
-  it('is callable and returns null or an active recorder', () => {
+  it('is callable and returns null or an active recorder', async () => {
     // At this point in the test run, there may or may not be an active recorder
     // from the enclosing suite. Verify the function is callable and returns a
     // valid type (null or an object with expected shape).
@@ -139,8 +139,8 @@ describe('getActiveRecorder', () => {
     }
   });
 
-  it('tracks the active recorder after start/stop', () => {
-    const recorder = setupLLMRecording({ name: 'active-tracker-test' });
+  it('tracks the active recorder after start/stop', async () => {
+    const recorder = await setupLLMRecording({ name: 'active-tracker-test' });
 
     recorder.start();
     expect(getActiveRecorder()).toBe(recorder);
@@ -153,36 +153,37 @@ describe('getActiveRecorder', () => {
 
 describe('useLiveMode', () => {
   // Set up a recording for the suite
-  const recording = useLLMRecording('live-mode-test');
+  useLLMRecording('live-mode-test');
 
-  it('recording is active in normal tests', () => {
-    // The suite-level recorder should be active
-    expect(getActiveRecorder()).toBe(recording);
-    if (recording.mode === 'live') {
+  it('recording is active in normal tests', async () => {
+    const recording = getActiveRecorder();
+    expect(recording).not.toBeNull();
+    if (recording?.mode === 'live') {
       expect(recording.server).toBeNull();
     } else {
-      expect(recording.server).not.toBeNull();
+      expect(recording?.server).not.toBeNull();
     }
   });
 
   describe('live mode block', () => {
     useLiveMode();
 
-    it('MSW server is stopped during live mode tests', () => {
-      // After useLiveMode's beforeEach, the server should be closed.
+    it('MSW server is stopped during live mode tests', async () => {
+      const recording = getActiveRecorder();
+      expect(recording).not.toBeNull();
+      // After useLiveMode's beforeEach, the server is closed.
       // In live mode, server is null and useLiveMode is effectively a no-op.
-      if (recording.mode === 'live') {
+      if (recording?.mode === 'live') {
         expect(recording.server).toBeNull();
       } else {
-        // The server object still exists on the recorder, but it's been closed.
-        expect(recording.server).not.toBeNull();
+        expect(recording?.server).not.toBeNull();
       }
     });
   });
 
-  it('recording is still active after live mode block ends', () => {
-    // After the live mode describe block's afterEach, the server should be restarted
-    expect(getActiveRecorder()).toBe(recording);
+  it('recording is still active after live mode block ends', async () => {
+    // After the live mode describe block's afterEach, the server should be restarted.
+    expect(getActiveRecorder()).not.toBeNull();
   });
 });
 
@@ -216,7 +217,7 @@ describe('recording file format', () => {
           },
           recordings: [
             {
-              hash: '974ca75b0f8ba432',
+              hash: 'ad0ddcdc8e711a50',
               request: {
                 url: 'https://api.openai.com/v1/responses',
                 method: 'POST',
@@ -241,7 +242,7 @@ describe('recording file format', () => {
 
     process.env.LLM_TEST_MODE = 'replay';
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const recorder = setupLLMRecording({ name, recordingsDir: tempDir, exactMatch: true, debug: true });
+    const recorder = await setupLLMRecording({ name, recordingsDir: tempDir, exactMatch: true, debug: true });
     recorder.start();
 
     try {
@@ -295,7 +296,7 @@ describe('recording file format', () => {
       }),
     );
 
-    const recorder = setupLLMRecording({
+    const recorder = await setupLLMRecording({
       name,
       recordingsDir: tempDir,
       metaContext: { testFile: '/tmp/binary-response.test.ts', provider: 'openai', model: 'gpt-4o' },
@@ -320,12 +321,14 @@ describe('recording file format', () => {
       contentType: 'audio/wav',
       size: payload.length,
     });
+    expect(parsed.recordings[0].hash).toMatch(/^[0-9a-f]{16}$/);
+    expect(parsed.recordings[0].response.binaryArtifact.path).toMatch(/^[0-9a-f]{16}-response-[0-9a-f]{12}\.wav$/);
     const artifactPath = path.join(tempDir, parsed.recordings[0].response.binaryArtifact.path);
     expect(fs.existsSync(artifactPath)).toBe(true);
 
     process.env.LLM_TEST_MODE = 'replay';
 
-    const replayRecorder = setupLLMRecording({ name, recordingsDir: tempDir });
+    const replayRecorder = await setupLLMRecording({ name, recordingsDir: tempDir });
     replayRecorder.start();
     const replayResponse = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
@@ -339,7 +342,7 @@ describe('recording file format', () => {
     expect(replayBytes).toEqual(payload);
   });
 
-  it('loads legacy array recording format in replay mode', () => {
+  it('loads legacy array recording format in replay mode', async () => {
     const legacyName = 'legacy-array-format';
     const filePath = path.join(tempDir, `${legacyName}.json`);
     const legacyRecordings: LLMRecording[] = [
@@ -357,7 +360,7 @@ describe('recording file format', () => {
     fs.writeFileSync(filePath, JSON.stringify(legacyRecordings, null, 2), 'utf-8');
 
     process.env.LLM_TEST_MODE = 'replay';
-    const recorder = setupLLMRecording({ name: legacyName, recordingsDir: tempDir });
+    const recorder = await setupLLMRecording({ name: legacyName, recordingsDir: tempDir });
 
     expect(recorder.mode).toBe('replay');
     // recordingCount tracks newly captured recordings (record mode), not loaded ones
@@ -365,7 +368,7 @@ describe('recording file format', () => {
     recorder.stop();
   });
 
-  it('loads new meta + recordings format in replay mode', () => {
+  it('loads new meta + recordings format in replay mode', async () => {
     const name = 'new-format';
     const filePath = path.join(tempDir, `${name}.json`);
     fs.writeFileSync(
@@ -389,7 +392,7 @@ describe('recording file format', () => {
     );
 
     process.env.LLM_TEST_MODE = 'replay';
-    const recorder = setupLLMRecording({ name, recordingsDir: tempDir });
+    const recorder = await setupLLMRecording({ name, recordingsDir: tempDir });
 
     expect(recorder.mode).toBe('replay');
     expect(recorder.recordingCount).toBe(0);
@@ -448,7 +451,7 @@ describe('recording file format', () => {
       }),
     );
 
-    const recorder = setupLLMRecording({
+    const recorder = await setupLLMRecording({
       name,
       recordingsDir: tempDir,
       metaContext: { testFile: '/tmp/update-mode.test.ts', provider: 'openai', model: 'gpt-4o' },
@@ -498,7 +501,7 @@ describe('recording file format', () => {
       .mockResolvedValueOnce(makeResponse('first-response'))
       .mockResolvedValueOnce(makeResponse('second-response'));
 
-    const recorder = setupLLMRecording({ name, recordingsDir: tempDir });
+    const recorder = await setupLLMRecording({ name, recordingsDir: tempDir });
     recorder.start();
     const requestInit = {
       method: 'POST',
@@ -542,7 +545,7 @@ describe('recording file format', () => {
       body: JSON.stringify({ model: 'gpt-4o', input: 'same prompt' }),
     };
 
-    const recorder = setupLLMRecording({ name, recordingsDir: tempDir });
+    const recorder = await setupLLMRecording({ name, recordingsDir: tempDir });
     recorder.start();
     await fetch('https://api.openai.com/v1/responses', requestInit);
     await fetch('https://api.openai.com/v1/responses', requestInit);
@@ -556,7 +559,7 @@ describe('recording file format', () => {
     vi.restoreAllMocks();
     process.env.LLM_TEST_MODE = 'replay';
 
-    const replayer = setupLLMRecording({ name, recordingsDir: tempDir });
+    const replayer = await setupLLMRecording({ name, recordingsDir: tempDir });
     replayer.start();
     const first = await (await fetch('https://api.openai.com/v1/responses', requestInit)).json();
     const second = await (await fetch('https://api.openai.com/v1/responses', requestInit)).json();
@@ -568,13 +571,13 @@ describe('recording file format', () => {
     expect(third.id).toBe('second-response');
   });
 
-  it('tolerates corrupted JSON in record mode', () => {
+  it('tolerates corrupted JSON in record mode', async () => {
     const name = 'corrupted-json';
     const filePath = path.join(tempDir, `${name}.json`);
     fs.writeFileSync(filePath, '{ invalid json !!!', 'utf-8');
 
     process.env.LLM_TEST_MODE = 'record';
-    const recorder = setupLLMRecording({ name, recordingsDir: tempDir });
+    const recorder = await setupLLMRecording({ name, recordingsDir: tempDir });
 
     expect(recorder.mode).toBe('record');
     // Should start without throwing
@@ -582,13 +585,13 @@ describe('recording file format', () => {
     recorder.stop();
   });
 
-  it('throws on corrupted JSON in replay mode', () => {
+  it('throws on corrupted JSON in replay mode', async () => {
     const name = 'corrupted-replay';
     const filePath = path.join(tempDir, `${name}.json`);
     fs.writeFileSync(filePath, '{ invalid json !!!', 'utf-8');
 
     process.env.LLM_TEST_MODE = 'replay';
-    expect(() => setupLLMRecording({ name, recordingsDir: tempDir })).toThrow();
+    await expect(setupLLMRecording({ name, recordingsDir: tempDir })).rejects.toThrow();
   });
 
   it('writes the new meta + recordings format in record mode', async () => {
@@ -605,7 +608,7 @@ describe('recording file format', () => {
       }),
     );
 
-    const recorder = setupLLMRecording({
+    const recorder = await setupLLMRecording({
       name,
       recordingsDir: tempDir,
       metaContext: {

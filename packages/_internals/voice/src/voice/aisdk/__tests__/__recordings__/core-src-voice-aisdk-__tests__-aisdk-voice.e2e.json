@@ -8,7 +8,7 @@
   },
   "recordings": [
     {
-      "hash": "c05edf5e6b99144d",
+      "hash": "0cd7c0f65151bcb4",
       "request": {
         "url": "https://api.openai.com/v1/audio/speech",
         "method": "POST",
@@ -59,7 +59,7 @@
       }
     },
     {
-      "hash": "c27b6034c6ec8f57",
+      "hash": "e1639ba014d7b405",
       "request": {
         "url": "https://api.openai.com/v1/audio/speech",
         "method": "POST",
@@ -110,7 +110,7 @@
       }
     },
     {
-      "hash": "8a47b614e89e5ba8",
+      "hash": "278960356dc17663",
       "request": {
         "url": "https://api.openai.com/v1/audio/speech",
         "method": "POST",
@@ -161,7 +161,7 @@
       }
     },
     {
-      "hash": "ca58e1d3824603ce",
+      "hash": "b4605f0a8406cfbc",
       "request": {
         "url": "https://api.openai.com/v1/audio/speech",
         "method": "POST",
@@ -212,7 +212,7 @@
       }
     },
     {
-      "hash": "8d5a4eabb2757b33",
+      "hash": "dd0f20e1f6ca816a",
       "request": {
         "url": "https://api.openai.com/v1/audio/speech",
         "method": "POST",
@@ -263,7 +263,7 @@
       }
     },
     {
-      "hash": "5f6cf82242660350",
+      "hash": "b47d705cfbee0f35",
       "request": {
         "url": "https://api.openai.com/v1/audio/transcriptions",
         "method": "POST",
@@ -271,7 +271,7 @@
           "__binary": true,
           "contentType": "multipart/form-data; boundary=----formdata-undici-058423579947",
           "size": 35306,
-          "digest": "d898ad6b626ed273"
+          "digest": "02e644847fd62547"
         },
         "timestamp": 1773993382113,
         "binaryArtifact": {
@@ -316,7 +316,7 @@
       }
     },
     {
-      "hash": "9238bc1e793d9dac",
+      "hash": "72588c9b1687145d",
       "request": {
         "url": "https://api.openai.com/v1/audio/transcriptions",
         "method": "POST",
@@ -324,7 +324,7 @@
           "__binary": true,
           "contentType": "multipart/form-data; boundary=----formdata-undici-073454715536",
           "size": 35306,
-          "digest": "200587659f2ea609"
+          "digest": "f0ded33572512cf8"
         },
         "timestamp": 1773993384131,
         "binaryArtifact": {
@@ -369,7 +369,7 @@
       }
     },
     {
-      "hash": "6014e37fed406cde",
+      "hash": "a4bcb1d3fcc4bb3f",
       "request": {
         "url": "https://api.openai.com/v1/audio/speech",
         "method": "POST",
@@ -420,7 +420,7 @@
       }
     },
     {
-      "hash": "cb57a68c37ad642d",
+      "hash": "9e56a7ce8ecc5365",
       "request": {
         "url": "https://api.openai.com/v1/audio/transcriptions",
         "method": "POST",
@@ -428,7 +428,7 @@
           "__binary": true,
           "contentType": "multipart/form-data; boundary=----formdata-undici-009912858135",
           "size": 28991,
-          "digest": "b124b356e54e5af3"
+          "digest": "fcdbfb497f7d57b6"
         },
         "timestamp": 1773993386258,
         "binaryArtifact": {
@@ -490,7 +490,7 @@
       }
     },
     {
-      "hash": "465ad448709388f5",
+      "hash": "51c703335606b422",
       "request": {
         "url": "https://api.openai.com/v1/audio/speech",
         "method": "POST",
@@ -541,7 +541,7 @@
       }
     },
     {
-      "hash": "4e3c88b0c9aa0735",
+      "hash": "a76733ed316ab9e4",
       "request": {
         "url": "https://api.openai.com/v1/audio/speech",
         "method": "POST",
@@ -592,7 +592,7 @@
       }
     },
     {
-      "hash": "8a5a4fde538b6074",
+      "hash": "631415fc130c0138",
       "request": {
         "url": "https://api.openai.com/v1/audio/transcriptions",
         "method": "POST",
@@ -600,7 +600,7 @@
           "__binary": true,
           "contentType": "multipart/form-data; boundary=----formdata-undici-033937327904",
           "size": 26186,
-          "digest": "c89fe1b529bbe959"
+          "digest": "82cb984a1417f832"
         },
         "timestamp": 1773993388985,
         "binaryArtifact": {
@@ -645,7 +645,7 @@
       }
     },
     {
-      "hash": "dc3b9a7c08b76f8f",
+      "hash": "19b7bd49d122f0a3",
       "request": {
         "url": "https://api.openai.com/v1/audio/speech",
         "method": "POST",
@@ -696,7 +696,7 @@
       }
     },
     {
-      "hash": "147c71d83c7e3d90",
+      "hash": "18a28a89ecd902f4",
       "request": {
         "url": "https://api.openai.com/v1/audio/transcriptions",
         "method": "POST",
@@ -704,7 +704,7 @@
           "__binary": true,
           "contentType": "multipart/form-data; boundary=----formdata-undici-044832854074",
           "size": 74186,
-          "digest": "c365cff3f0374c77"
+          "digest": "5a5e97e5f7c0f198"
         },
         "timestamp": 1773993393041,
         "binaryArtifact": {

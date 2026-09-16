@@ -37,7 +37,7 @@
  * import { useLLMRecording } from '@internal/llm-recorder';
  *
  * describe('My LLM Tests', () => {
- *   const recording = useLLMRecording('my-test-suite');
+ *   useLLMRecording('my-test-suite');
  *
  *   it('generates text', async () => {
  *     const response = await agent.generate('Hello');
@@ -56,7 +56,6 @@
  * ```
  */
 
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { diffJson } from 'diff';
@@ -271,7 +270,7 @@ export interface LLMRecorderOptions {
    *
    * @example
    * ```typescript
-   * setupLLMRecording({
+   * const recorder = await setupLLMRecording({
    *   name: 'openai-only',
    *   hosts: ['https://api.openai.com'],
    * });
@@ -407,6 +406,11 @@ interface ParsedRequestBody {
   };
 }
 
+async function sha256Hex(value: string | Uint8Array): Promise<string> {
+  const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : new Uint8Array(value);
+  return Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', bytes)).toString('hex');
+}
+
 /**
  * Parse request payload into a JSON/text value or binary bytes.
  */
@@ -430,7 +434,7 @@ async function parseRequestBody(request: Request): Promise<ParsedRequestBody> {
     return { value: {} };
   }
 
-  const digest = crypto.createHash('md5').update(bytes).digest('hex').slice(0, 16);
+  const digest = (await sha256Hex(bytes)).slice(0, 16);
 
   return {
     value: {
@@ -463,8 +467,8 @@ function serializeRequestContent(url: string, body: unknown): string {
 /**
  * Hash a request to create a unique identifier for matching
  */
-function hashRequest(url: string, body: unknown): string {
-  return crypto.createHash('md5').update(serializeRequestContent(url, body)).digest('hex').slice(0, 16);
+async function hashRequest(url: string, body: unknown): Promise<string> {
+  return (await sha256Hex(serializeRequestContent(url, body))).slice(0, 16);
 }
 
 /**
@@ -488,13 +492,13 @@ function filterHeaders(headers: Headers): Record<string, string> {
   return filtered;
 }
 
-function writeBinaryArtifact(params: {
+async function writeBinaryArtifact(params: {
   recordingsDir: string;
   hash: string;
   kind: 'request' | 'response';
   contentType: string;
   bytes: Uint8Array;
-}): LLMBinaryArtifact {
+}): Promise<LLMBinaryArtifact> {
   fs.mkdirSync(params.recordingsDir, { recursive: true });
 
   const ext = params.contentType.includes('mpeg')
@@ -507,7 +511,7 @@ function writeBinaryArtifact(params: {
           ? 'webm'
           : 'bin';
 
-  const payloadDigest = crypto.createHash('md5').update(params.bytes).digest('hex').slice(0, 12);
+  const payloadDigest = (await sha256Hex(params.bytes)).slice(0, 12);
   const fileName = `${params.hash}-${params.kind}-${payloadDigest}.${ext}`;
   const absolutePath = path.join(params.recordingsDir, fileName);
   fs.writeFileSync(absolutePath, Buffer.from(params.bytes));
@@ -728,33 +732,35 @@ function isExactRecordingMatch(recording: ReplayRecording, hash: string): boolea
   return recording.hash === hash || recording.lookupHashes?.includes(hash) === true;
 }
 
-function prepareReplayRecordings(
+async function prepareReplayRecordings(
   recordings: LLMRecording[],
   transformRequest?: LLMRecorderOptions['transformRequest'],
-): ReplayRecording[] {
+): Promise<ReplayRecording[]> {
   if (!transformRequest) {
     return recordings;
   }
 
-  return recordings.map(recording => {
-    const transformed = transformRequest({ url: recording.request.url, body: recording.request.body });
-    const transformedHash = hashRequest(transformed.url, transformed.body);
+  return Promise.all(
+    recordings.map(async recording => {
+      const transformed = transformRequest({ url: recording.request.url, body: recording.request.body });
+      const transformedHash = await hashRequest(transformed.url, transformed.body);
 
-    if (transformedHash === recording.hash) {
-      return recording;
-    }
+      if (transformedHash === recording.hash) {
+        return recording;
+      }
 
-    return {
-      ...recording,
-      lookupHashes: [recording.hash, transformedHash],
-    };
-  });
+      return {
+        ...recording,
+        lookupHashes: [recording.hash, transformedHash],
+      };
+    }),
+  );
 }
 
 /**
  * Set up LLM response recording/replay
  */
-export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInstance {
+export async function setupLLMRecording(options: LLMRecorderOptions): Promise<LLMRecorderInstance> {
   const recordingsDir = options.recordingsDir || DEFAULT_RECORDINGS_DIR;
   const recordingPath = path.join(recordingsDir, `${options.name}.json`);
   const recordingExists = fs.existsSync(recordingPath);
@@ -776,7 +782,7 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
     try {
       const file = loadRecordingFile(recordingPath, options.name);
       existingMeta = file.meta;
-      savedRecordings = prepareReplayRecordings(file.recordings, options.transformRequest);
+      savedRecordings = await prepareReplayRecordings(file.recordings, options.transformRequest);
     } catch (err) {
       if (!willRecord) {
         throw err;
@@ -865,9 +871,9 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
       if (options.transformRequest) {
         const transformed = options.transformRequest({ url, body });
         transformedBody = transformed.body;
-        hash = hashRequest(transformed.url, transformedBody);
+        hash = await hashRequest(transformed.url, transformedBody);
       } else {
-        hash = hashRequest(url, transformedBody);
+        hash = await hashRequest(url, transformedBody);
       }
 
       if (isRecordMode) {
@@ -881,7 +887,7 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
           if (isStreaming) {
             const { chunks, timings, headers } = await captureStreamingResponse(realResponse.clone());
             const requestBinaryArtifact = parsedRequest.binary
-              ? writeBinaryArtifact({
+              ? await writeBinaryArtifact({
                   recordingsDir,
                   hash,
                   kind: 'request',
@@ -914,7 +920,7 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
             const headers = filterHeaders(realResponse.headers);
             const responseContentType = realResponse.headers.get('content-type')?.toLowerCase() || '';
             const requestBinaryArtifact = parsedRequest.binary
-              ? writeBinaryArtifact({
+              ? await writeBinaryArtifact({
                   recordingsDir,
                   hash,
                   kind: 'request',
@@ -938,7 +944,7 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
             } else {
               const responseBuffer = await realResponse.arrayBuffer();
               const responseBytes = new Uint8Array(responseBuffer);
-              responseBinaryArtifact = writeBinaryArtifact({
+              responseBinaryArtifact = await writeBinaryArtifact({
                 recordingsDir,
                 hash,
                 kind: 'response',
@@ -1174,7 +1180,7 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
  * @example
  * ```typescript
  * describe('My Tests', () => {
- *   const recording = useLLMRecording('my-tests');
+ *   useLLMRecording('my-tests');
  *
  *   it('works', async () => {
  *     const result = await agent.generate('Hello');
@@ -1183,23 +1189,24 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
  * });
  * ```
  */
-export function useLLMRecording(name: string, options: Omit<LLMRecorderOptions, 'name'> = {}) {
-  const recorder = setupLLMRecording({ name, ...options });
+export function useLLMRecording(name: string, options: Omit<LLMRecorderOptions, 'name'> = {}): void {
+  let recorder: LLMRecorderInstance | undefined;
 
-  beforeAll(() => {
+  beforeAll(async () => {
+    recorder = await setupLLMRecording({ name, ...options });
     recorder.start();
   });
 
   beforeEach(() => {
-    recorder.resetFuzzyMatches();
+    recorder?.resetFuzzyMatches();
   });
 
   afterAll(async () => {
-    await recorder.save();
-    recorder.stop();
+    if (recorder) {
+      await recorder.save();
+      recorder.stop();
+    }
   });
-
-  return recorder;
 }
 
 /**
@@ -1273,7 +1280,7 @@ export async function withLLMRecording<T>(
 
   let recorder: LLMRecorderInstance | undefined;
   try {
-    recorder = setupLLMRecording({ name, ...options });
+    recorder = await setupLLMRecording({ name, ...options });
     recorder.start();
     const result = await fn();
     return result;

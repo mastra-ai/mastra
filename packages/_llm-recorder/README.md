@@ -153,8 +153,8 @@ LLM_TEST_MODE=replay pnpm test
 | `useLLMRecording(name, options?)`      | Vitest helper — sets up `beforeAll`/`afterAll` hooks                         |
 | `useLiveMode()`                        | Opt tests out of recording (real API calls) within a recorded suite          |
 | `withLLMRecording(name, fn, options?)` | Callback wrapper for single-test recording                                   |
-| `setupLLMRecording(options)`           | Lower-level API for manual setup                                             |
-| `enableAutoRecording(options?)`        | Per-file auto-recording                                                      |
+| `setupLLMRecording(options)`           | Async lower-level API for manual setup; await the returned recorder          |
+| `enableAutoRecording(options?)`        | Per-file auto-recording; setup runs asynchronously in `beforeAll`            |
 | `getActiveRecorder()`                  | Returns the currently active recorder instance (if any)                      |
 | `getLLMTestMode()`                     | Returns current mode: `'auto' \| 'update' \| 'replay' \| 'live' \| 'record'` |
 

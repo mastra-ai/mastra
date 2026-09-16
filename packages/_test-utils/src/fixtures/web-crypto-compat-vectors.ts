@@ -22,6 +22,13 @@ export const WEB_CRYPTO_COMPAT_VECTORS = {
     body: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJvcmdJZCI6Im9yZy0xMjMiLCJ1c2VySWQiOiJ1c2VyLTQ1NiIsIm5vbmNlIjoiMDAxMTIyMzM0NDU1NjY3NyIsImlzc3VlZEF0IjoxNzAwMDAwMDAwMDAwfQ',
     signature: 'QzDMlyV099-kPt736Egq8ofEJv4GfJQ_EaCUY7K_LVs',
   },
+  cookieSession: {
+    secret: '12345678901234567890123456789012',
+    json: '{"id":"00000000-0000-4000-8000-000000000000","userId":"user-123","expiresAt":4102444800000,"createdAt":1700000000000,"metadata":{"role":"admin"}}',
+    signature: 'x5p6P6CUS48bl4DUiLBFKFgQKDMpfv6srNsELchhk0c',
+    payload:
+      'eyJpZCI6IjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMCIsInVzZXJJZCI6InVzZXItMTIzIiwiZXhwaXJlc0F0Ijo0MTAyNDQ0ODAwMDAwLCJjcmVhdGVkQXQiOjE3MDAwMDAwMDAwMDAsIm1ldGFkYXRhIjp7InJvbGUiOiJhZG1pbiJ9fQ==.x5p6P6CUS48bl4DUiLBFKFgQKDMpfv6srNsELchhk0c',
+  },
   hkdfAndAesGcm: {
     slack: {
       passphrase: 'test-encryption-key-32-chars-ok!',

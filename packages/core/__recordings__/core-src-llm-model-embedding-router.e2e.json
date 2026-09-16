@@ -7,7 +7,7 @@
   },
   "recordings": [
     {
-      "hash": "e588fe2ad7a42eee",
+      "hash": "eebc53f4873190a6",
       "request": {
         "url": "https://api.openai.com/v1/embeddings",
         "method": "POST",
@@ -382,7 +382,7 @@
       }
     },
     {
-      "hash": "ed899480d901e55f",
+      "hash": "1c82a50f2a689540",
       "request": {
         "url": "https://api.openai.com/v1/embeddings",
         "method": "POST",
@@ -662,7 +662,7 @@
       }
     },
     {
-      "hash": "0c2afaccac0a4d5e",
+      "hash": "d917cdb72ff3b762",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
         "method": "POST",

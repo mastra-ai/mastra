@@ -9,7 +9,7 @@
   },
   "recordings": [
     {
-      "hash": "14bb1b0e87dde618",
+      "hash": "bc84f0b70f257176",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -145,7 +145,7 @@
       }
     },
     {
-      "hash": "c25592c893a6ee8c",
+      "hash": "992af03897382ec7",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -232,7 +232,7 @@
       }
     },
     {
-      "hash": "2f29450133bab0d6",
+      "hash": "e5f6a15860631079",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -368,7 +368,7 @@
       }
     },
     {
-      "hash": "6bb56b0431866abf",
+      "hash": "50bcddeee7af4189",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -455,7 +455,7 @@
       }
     },
     {
-      "hash": "f2b250e396a59a7b",
+      "hash": "054d26b119ddc9c6",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -591,7 +591,7 @@
       }
     },
     {
-      "hash": "bdfcfcc5a7224acd",
+      "hash": "ea9d67663e9e0b30",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -678,7 +678,7 @@
       }
     },
     {
-      "hash": "98721e5825ee84bd",
+      "hash": "78b21f0b18f4e5f1",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -814,7 +814,7 @@
       }
     },
     {
-      "hash": "f861da36e0f27941",
+      "hash": "c379fc2725e39775",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",

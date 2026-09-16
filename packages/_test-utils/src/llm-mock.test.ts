@@ -54,16 +54,18 @@ describe('createLLMMock', () => {
     expect(mock2.recordingName).toContain('--anthropic-messages--claude-3-5-sonnet');
   });
 
-  it('exposes the underlying recorder', () => {
+  it('exposes the underlying recorder after initialization', async () => {
     const mock = createLLMMock(fakeModel('openai.chat', 'gpt-4o'), { name: 'test-recorder' });
     mocks.push(mock);
+    await mock.start();
     expect(mock.recorder).toBeDefined();
     expect(mock.recorder.mode).toBe(mock.mode);
   });
 
-  it('has a defined mode', () => {
+  it('has a defined mode after initialization', async () => {
     const mock = createLLMMock(fakeModel('openai.chat', 'gpt-4o'), { name: 'test-mode' });
     mocks.push(mock);
+    await mock.start();
     expect(['record', 'replay', 'auto', 'live', 'update']).toContain(mock.mode);
   });
 });
@@ -74,9 +76,10 @@ describe('createGatewayMock', () => {
     for (const m of mocks) await m.saveAndStop();
   });
 
-  it('creates a mock with explicit name', () => {
+  it('creates a mock with explicit name', async () => {
     const mock = createGatewayMock({ name: 'test-gateway' });
     mocks.push(mock);
+    await mock.start();
     expect(mock.recordingName).toBe('test-gateway');
     expect(mock.mode).toBeDefined();
   });
@@ -90,9 +93,10 @@ describe('createGatewayMock', () => {
     expect(mock.recordingName.includes('--')).toBe(false);
   });
 
-  it('exposes the underlying recorder', () => {
+  it('exposes the underlying recorder after initialization', async () => {
     const mock = createGatewayMock({ name: 'test-gw-recorder' });
     mocks.push(mock);
+    await mock.start();
     expect(mock.recorder).toBeDefined();
     expect(mock.recorder.mode).toBe(mock.mode);
   });

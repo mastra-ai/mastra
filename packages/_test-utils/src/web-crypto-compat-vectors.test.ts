@@ -67,6 +67,18 @@ describe('pre-migration Web Crypto compatibility vectors', () => {
     expect([...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('')).toBe(
       vectors.digest.emptySha256,
     );
+
+    const cookieKey = await globalThis.crypto.subtle.importKey(
+      'raw',
+      encoded(vectors.cookieSession.secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign'],
+    );
+    const cookieSignature = await globalThis.crypto.subtle.sign('HMAC', cookieKey, encoded(vectors.cookieSession.json));
+    expect(
+      base64FromBytes(new Uint8Array(cookieSignature)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
+    ).toBe(vectors.cookieSession.signature);
   });
 
   it('derives the frozen Slack key and decrypts its AES-GCM envelope', async () => {

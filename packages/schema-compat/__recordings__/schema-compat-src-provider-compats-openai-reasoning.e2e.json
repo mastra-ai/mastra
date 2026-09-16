@@ -9,7 +9,7 @@
   },
   "recordings": [
     {
-      "hash": "dc3fd98b01b1a7e2",
+      "hash": "4522ed7b0c954699",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -764,7 +764,7 @@
       }
     },
     {
-      "hash": "3cbc06c658fc784d",
+      "hash": "0fdde032ab83a519",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1520,7 +1520,7 @@
       }
     },
     {
-      "hash": "836e8f24563d6122",
+      "hash": "59092e668a482074",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -2290,7 +2290,7 @@
       }
     },
     {
-      "hash": "eed05c10448b819a",
+      "hash": "1aea7ba510dd2c5c",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -3046,7 +3046,7 @@
       }
     },
     {
-      "hash": "ad348475b143746d",
+      "hash": "648e7eb7224a6f4a",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
