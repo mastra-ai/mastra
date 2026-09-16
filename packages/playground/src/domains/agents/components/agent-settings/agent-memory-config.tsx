@@ -1,5 +1,6 @@
 import type { GetMemoryConfigResponse } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
@@ -11,16 +12,26 @@ import { useMemoryConfig } from '@/domains/memory/hooks';
 
 interface MemoryConfigSection {
   title: string;
-  items: Array<{ label: string; value: string | number | boolean }>;
+  items: Array<{ label: string; value: string | number | boolean; badge?: BadgeVariant }>;
 }
 
-const semanticRecallSchema = z.object({
-  scope: z.enum(['resource', 'thread']).optional(),
-  topK: z.number().optional(),
-  messageRange: z
-    .union([z.number(), z.object({ before: z.number().optional(), after: z.number().optional() })])
-    .optional(),
+const recallDisplayValueSchema = z.union([z.string(), z.number()]).optional().catch('Unavailable');
+
+const semanticRecallDisplaySchema = z.object({
+  scope: recallDisplayValueSchema,
+  topK: recallDisplayValueSchema,
+  messageRange: z.union([
+    z.object({ before: recallDisplayValueSchema, after: recallDisplayValueSchema }),
+    recallDisplayValueSchema,
+  ]),
 });
+
+function formatRecallMessageRange(messageRange: z.infer<typeof semanticRecallDisplaySchema>['messageRange']) {
+  if (typeof messageRange === 'string') return messageRange;
+  const before = typeof messageRange === 'object' ? messageRange.before : messageRange;
+  const after = typeof messageRange === 'object' ? messageRange.after : messageRange;
+  return `${before ?? 1} before, ${after ?? 1} after`;
+}
 
 function formatThreshold(threshold: number | { min: number; max: number } | undefined) {
   if (threshold === undefined) return 'Default';
@@ -35,25 +46,27 @@ function getMemorySections(config: NonNullable<GetMemoryConfigResponse['config']
       items: [
         { label: 'Status', value: true },
         { label: 'Last Messages', value: config.lastMessages ?? 'Default' },
-        { label: 'Auto-generate Titles', value: 'generateTitle' in config && Boolean(config.generateTitle) },
+        {
+          label: 'Auto-generate Titles',
+          value: 'generateTitle' in config && Boolean(config.generateTitle),
+          badge: 'blue',
+        },
       ],
     },
   ];
 
   if (config.semanticRecall) {
-    const semanticRecall = semanticRecallSchema.safeParse(config.semanticRecall === true ? {} : config.semanticRecall);
+    const semanticRecall = semanticRecallDisplaySchema.safeParse(
+      config.semanticRecall === true ? {} : config.semanticRecall,
+    );
     if (semanticRecall.success) {
-      const messageRange = semanticRecall.data.messageRange;
-      const before = typeof messageRange === 'object' ? messageRange.before : messageRange;
-      const after = typeof messageRange === 'object' ? messageRange.after : messageRange;
-
       sections.push({
         title: 'Semantic Recall',
         items: [
           { label: 'Status', value: true },
           { label: 'Scope', value: semanticRecall.data.scope ?? 'resource' },
           { label: 'Top K Results', value: semanticRecall.data.topK ?? 4 },
-          { label: 'Message Range', value: `${before ?? 1} before, ${after ?? 1} after` },
+          { label: 'Message Range', value: formatRecallMessageRange(semanticRecall.data.messageRange) },
         ],
       });
     } else {
@@ -88,6 +101,12 @@ function formatMemoryValue(value: string | number | boolean) {
   return value;
 }
 
+function getMemoryBadgeVariant({ value, badge }: MemoryConfigSection['items'][number]) {
+  if (value === false) return 'red';
+  if (value === true) return badge ?? 'green';
+  return 'neutral';
+}
+
 function MemoryConfigFields({ items }: Pick<MemoryConfigSection, 'items'>) {
   return (
     <KeyValueList
@@ -100,7 +119,11 @@ function MemoryConfigFields({ items }: Pick<MemoryConfigSection, 'items'>) {
           </Txt>
         ),
         value: (
-          <Badge className="h-auto min-h-5 min-w-0 break-words whitespace-normal">
+          <Badge
+            variant={getMemoryBadgeVariant(item)}
+            indicator={typeof item.value === 'boolean' ? 'dot' : undefined}
+            className="h-auto min-h-5 min-w-0 break-words whitespace-normal"
+          >
             {formatMemoryValue(item.value)}
           </Badge>
         ),

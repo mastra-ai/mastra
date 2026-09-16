@@ -33,7 +33,21 @@ export const memoryConfigWithNumericRange: GetMemoryConfigResponse = {
 export const memoryConfigWithUnsupportedRecall: GetMemoryConfigResponse = {
   config: {
     ...memoryConfigWithThresholds.config,
-    semanticRecall: { topK: 'automatic' },
+    semanticRecall: [],
+  },
+};
+
+export const memoryConfigWithReadableRecall: GetMemoryConfigResponse = {
+  config: {
+    ...memoryConfigWithThresholds.config,
+    semanticRecall: { scope: 'thread', topK: 'automatic', messageRange: { before: 0, after: 2 } },
+  },
+};
+
+export const memoryConfigWithPartialRecall: GetMemoryConfigResponse = {
+  config: {
+    ...memoryConfigWithThresholds.config,
+    semanticRecall: { scope: 'thread', topK: { strategy: 'automatic' }, messageRange: { before: 0, after: {} } },
   },
 };
 

@@ -6,6 +6,8 @@ import {
   memoryConfigWithDefaults,
   memoryConfigWithDisabledFeatures,
   memoryConfigWithNumericRange,
+  memoryConfigWithPartialRecall,
+  memoryConfigWithReadableRecall,
   memoryConfigWithThresholds,
   memoryConfigWithUnsupportedRecall,
   memoryNotConfigured,
@@ -129,6 +131,34 @@ describe('AgentMemoryConfig', () => {
       expect(screen.getByText('Last Messages')).toBeTruthy();
       expect(screen.getByText('30,000 tokens')).toBeTruthy();
       expect(screen.getByText('Unavailable')).toBeTruthy();
+    });
+  });
+
+  describe('when semantic recall includes a readable value outside the current config type', () => {
+    it('preserves the supplied value and the remaining recall settings', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/memory/config`, () => HttpResponse.json(memoryConfigWithReadableRecall)),
+      );
+      renderWithProviders(<AgentMemoryConfig agentId="agent-1" />);
+
+      expect(await screen.findByText('automatic')).toBeTruthy();
+      expect(screen.getByText('thread')).toBeTruthy();
+      expect(screen.getByText('0 before, 2 after')).toBeTruthy();
+      expect(screen.queryByText('Unavailable')).toBeNull();
+    });
+  });
+
+  describe('when only some semantic recall values cannot be displayed', () => {
+    it('keeps the readable fields and identifies the unavailable values', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/memory/config`, () => HttpResponse.json(memoryConfigWithPartialRecall)),
+      );
+      renderWithProviders(<AgentMemoryConfig agentId="agent-1" />);
+
+      expect(await screen.findByText('0 before, Unavailable after')).toBeTruthy();
+      expect(screen.getByText('thread')).toBeTruthy();
+      expect(screen.getByText('Unavailable')).toBeTruthy();
+      expect(screen.queryByText('Configuration')).toBeNull();
     });
   });
 
