@@ -272,7 +272,10 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         body: JSON.stringify({ data: { a: 'two', b: 3 } }),
       });
       const body = await res.json();
-      expect({ status: res.status, body }).toEqual({ status: 400, body: { error: expect.stringContaining('calculatorTool') } });
+      expect({ status: res.status, body }).toEqual({
+        status: 400,
+        body: { error: expect.stringContaining('calculatorTool') },
+      });
     });
   }
 
