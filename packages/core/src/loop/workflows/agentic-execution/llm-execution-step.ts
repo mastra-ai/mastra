@@ -1285,6 +1285,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       currentIteration++;
       // Resolve run-scoped state from either the Mastra-managed RunScope or
       // the legacy `_internal` bag (back-compat for tests).
+      const scopeCtx: RunScopeContext = { mastra, runId, _internal };
+
       /**
        * This attempt is being thrown away: the error handling either retries the request
        * or falls through to the next model, and the tool calls this attempt emitted are
@@ -1302,7 +1304,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         eagerCoordinator?.beginTurn();
       };
 
-      const scopeCtx: RunScopeContext = { mastra, runId, _internal };
       if (eagerCoordinator) {
         writeScoped(scopeCtx, EAGER_TOOL_EXECUTION_KEY, 'eagerToolExecutionCoordinator', eagerCoordinator);
         // A caller abort stops further eager dispatch permanently. Executions already in
