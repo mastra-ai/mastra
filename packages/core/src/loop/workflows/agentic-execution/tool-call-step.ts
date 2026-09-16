@@ -32,6 +32,7 @@ import {
   AGENT_BACKGROUND_CONFIG_KEY,
   BACKGROUND_TASK_MANAGER_CONFIG_KEY,
   BACKGROUND_TASK_MANAGER_KEY,
+  EAGER_TOOL_EXECUTION_KEY,
   GENERATE_ID_KEY,
   MEMORY_CONFIG_KEY,
   MEMORY_KEY,
@@ -51,6 +52,7 @@ import type { ResolvedSuspendedToolIdentity } from '../../shared/suspended-tool-
 import type { OuterLLMRun } from '../../types';
 import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
+import { EAGER_TOOL_EXECUTION_MARKER, eagerToolCallDidNotExecute } from './eager-tool-execution';
 
 type AddToolMetadataOptions = {
   toolCallId: string;
@@ -94,10 +96,27 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
-    execute: async ({ inputData, suspend, resumeData: workflowResumeData, suspendData, requestContext }) => {
+    execute: async executionContext => {
+      const { inputData, suspend, resumeData: workflowResumeData, suspendData, requestContext } = executionContext;
       // Resolve run-scoped state from either the Mastra-managed RunScope (production
       // path via loop.ts hydration) or the legacy `_internal` bag (tests).
       const scopeCtx: RunScopeContext = { mastra, runId, _internal };
+      // Adopt an execution the LLM step started eagerly for this call, if any. The
+      // eager invocation itself carries the marker so it never adopts itself.
+      if (!(executionContext as any)[EAGER_TOOL_EXECUTION_MARKER]) {
+        const eagerExecution = readScoped(scopeCtx, EAGER_TOOL_EXECUTION_KEY, 'eagerToolExecutionCoordinator')?.get(
+          inputData.toolCallId,
+        );
+        if (eagerExecution) {
+          try {
+            return (await eagerExecution) as any;
+          } catch (error) {
+            // The eager attempt failed before the tool itself ran (cancelled while
+            // queued, or it turned out to need suspension). Run it normally instead.
+            if (!eagerToolCallDidNotExecute(error)) throw error;
+          }
+        }
+      }
       // Use tools from the scope (set by llmExecutionStep via prepareStep/processInputStep)
       // when available. This avoids serialization — execute functions live off-the-wire.
       // Fall back to the original tools from the closure if not set.

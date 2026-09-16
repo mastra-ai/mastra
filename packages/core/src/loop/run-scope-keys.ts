@@ -23,6 +23,7 @@ import type { MastraMemory, MemoryConfigInternal } from '../memory';
 import type { StreamTransportRef } from '../stream/types';
 import type { ToolPayloadTransformPolicy } from '../tools';
 import type { Workspace } from '../workspace/workspace';
+import type { EagerToolExecutionCoordinator } from './workflows/agentic-execution/eager-tool-execution';
 
 // --- Identity / clock injectors --------------------------------------------
 
@@ -45,6 +46,7 @@ export const STEP_TOOLS_KEY = createRunScopeKey<ToolSet>('loop:stepTools');
 export const STEP_ACTIVE_TOOLS_KEY = createRunScopeKey<string[]>('loop:stepActiveTools');
 export const STEP_WORKSPACE_KEY = createRunScopeKey<Workspace>('loop:stepWorkspace');
 export const STEP_MODEL_MESSAGES_KEY = createRunScopeKey<ModelMessage[]>('loop:stepModelMessages');
+export const EAGER_TOOL_EXECUTION_KEY = createRunScopeKey<EagerToolExecutionCoordinator>('loop:eagerToolExecution');
 
 // --- Delegation / bail flags -----------------------------------------------
 

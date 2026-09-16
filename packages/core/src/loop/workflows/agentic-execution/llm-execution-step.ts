@@ -57,7 +57,7 @@ import {
 } from '../../../tools/payload-transform';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
-import { getProviderToolName, isMastraTool, isProviderTool } from '../../../tools/toolchecks';
+import { getNeedsApprovalFn, getProviderToolName, isMastraTool, isProviderTool } from '../../../tools/toolchecks';
 import { createMastraProxy, makeCoreTool } from '../../../utils';
 import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
@@ -67,6 +67,7 @@ import {
   AGENT_BACKGROUND_CONFIG_KEY,
   BACKGROUND_TASK_MANAGER_KEY,
   DRAIN_PENDING_SIGNALS_KEY,
+  EAGER_TOOL_EXECUTION_KEY,
   GENERATE_ID_KEY,
   INITIAL_SIGNAL_ECHOES_KEY,
   MEMORY_KEY,
@@ -91,6 +92,8 @@ import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { buildMessagesFromChunks } from './build-messages-from-chunks';
 import type { CollectedChunk } from './build-messages-from-chunks';
+import { EAGER_TOOL_EXECUTION_MARKER, EagerToolExecutionIneligible } from './eager-tool-execution';
+import type { EagerToolExecutionCoordinator } from './eager-tool-execution';
 import type { PendingProviderToolCall } from './provider-tool-spans';
 import { endPendingProviderToolSpan } from './provider-tool-spans';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
@@ -205,6 +208,13 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   pendingProviderToolCallsByToolCallId?: Map<string, PendingProviderToolCall>;
   /** Live step tracker, consulted at tool-result time to parent PROVIDER_TOOL_CALL spans. */
   modelSpanTracker?: IModelSpanTracker;
+  onCompleteToolCall?: (toolCall: {
+    toolCallId: string;
+    toolName: string;
+    args: unknown;
+    providerMetadata?: Record<string, unknown>;
+    providerExecuted?: boolean;
+  }) => void;
 };
 
 /**
@@ -538,6 +548,7 @@ async function processOutputStream<OUTPUT = undefined>({
   tracingContext,
   pendingProviderToolCallsByToolCallId,
   modelSpanTracker,
+  onCompleteToolCall,
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
@@ -792,6 +803,13 @@ async function processOutputStream<OUTPUT = undefined>({
         toolCallId: chunk.payload.toolCallId,
         toolName: chunk.payload.toolName,
         args: chunk.payload.args,
+        providerExecuted: chunk.payload.providerExecuted,
+      });
+      onCompleteToolCall?.({
+        toolCallId: chunk.payload.toolCallId,
+        toolName: chunk.payload.toolName,
+        args: chunk.payload.args,
+        providerMetadata: chunk.payload.providerMetadata,
         providerExecuted: chunk.payload.providerExecuted,
       });
     }
@@ -1221,7 +1239,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   outputWriter,
   mastra,
   rotateResponseMessageId: rotateLoopResponseMessageId,
-}: OuterLLMRun<TOOLS, OUTPUT> & { toolCallForeachOptions?: ToolCallForeachOptions }) {
+  eagerCoordinator,
+  eagerToolCallStep,
+}: OuterLLMRun<TOOLS, OUTPUT> & {
+  toolCallForeachOptions?: ToolCallForeachOptions;
+  eagerCoordinator?: EagerToolExecutionCoordinator;
+  eagerToolCallStep?: { execute: (context: any) => Promise<unknown> };
+}) {
   const initialUntaggedSystemMessages = messageList.getSystemMessages();
   const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
 
@@ -1247,6 +1271,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // Resolve run-scoped state from either the Mastra-managed RunScope or
       // the legacy `_internal` bag (back-compat for tests).
       const scopeCtx: RunScopeContext = { mastra, runId, _internal };
+      if (eagerCoordinator) {
+        writeScoped(scopeCtx, EAGER_TOOL_EXECUTION_KEY, 'eagerToolExecutionCoordinator', eagerCoordinator);
+        // A caller abort stops further eager dispatch. Executions already in flight
+        // observe the same signal through the tool execution options.
+        options?.abortSignal?.addEventListener('abort', () => eagerCoordinator.stop(), { once: true });
+      }
 
       // Insert a step-start boundary between loop iterations so that
       // consecutive tool-only turns are not collapsed into a single block
@@ -1910,6 +1940,50 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
             pendingProviderToolCallsByToolCallId,
             modelSpanTracker,
+            onCompleteToolCall:
+              eagerCoordinator && eagerToolCallStep
+                ? toolCall => {
+                    const tool = currentStep.tools?.[toolCall.toolName];
+                    const hasPostStreamProcessor = outputProcessors?.some(
+                      processor => 'processLLMResponse' in processor || 'processOutputStep' in processor,
+                    );
+                    if (
+                      hasPostStreamProcessor ||
+                      options?.abortSignal?.aborted ||
+                      toolCall.args === undefined ||
+                      toolCall.providerExecuted ||
+                      !tool ||
+                      isProviderTool(tool) ||
+                      !('execute' in tool) ||
+                      typeof tool.execute !== 'function' ||
+                      ('hasSuspendSchema' in tool && Boolean(tool.hasSuspendSchema)) ||
+                      requireToolApproval === true ||
+                      typeof requireToolApproval === 'function' ||
+                      ('requireApproval' in tool && Boolean(tool.requireApproval)) ||
+                      Boolean(getNeedsApprovalFn(tool))
+                    ) {
+                      return;
+                    }
+
+                    eagerCoordinator.start(toolCall.toolCallId, () =>
+                      eagerToolCallStep.execute({
+                        inputData: toolCall,
+                        runId,
+                        mastra,
+                        requestContext,
+                        abortSignal: options?.abortSignal,
+                        writer: outputWriter,
+                        suspend: async () => {
+                          throw new EagerToolExecutionIneligible('the call requested suspension');
+                        },
+                        bail: async () => undefined,
+                        resumeData: undefined,
+                        tracingContext,
+                        [EAGER_TOOL_EXECUTION_MARKER]: true,
+                      }),
+                    );
+                  }
+                : undefined,
           });
           toolResultTripwireFromStream = streamToolResultTripwire;
 
