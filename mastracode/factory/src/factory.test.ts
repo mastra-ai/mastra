@@ -983,6 +983,40 @@ describe('MastraFactory.prepare integrations', () => {
     expect(initialize.mock.calls[0]![0].storage.integrationId).toBe('custom-version-control');
   });
 
+  it('requires source-control storage before GitLab integration routes are ready', async () => {
+    const storage = fakeStorage();
+    vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'source-control');
+    const ensureDomainReady = vi.spyOn(storage, 'ensureDomainReady').mockResolvedValue(undefined);
+    const routes = vi.fn((_ctx: IntegrationContext) => [
+      {
+        path: '/web/gitlab/webhook',
+        method: 'POST' as const,
+        handler: () => new Response(null, { status: 202 }),
+      },
+    ]);
+    const versionControl = {
+      initialize: vi.fn(),
+      registerInstallation: vi.fn(),
+      registerRepositories: vi.fn(),
+      getRepositoryAccess: vi.fn(),
+    } as unknown as VersionControl;
+    const config = await prepareFactory({
+      storage,
+      integrations: [fakeIntegration({ id: 'gitlab', routes, versionControl })],
+    });
+    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{
+      path: string;
+      handler?: (context: unknown) => Promise<Response>;
+    }>;
+    const route = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).find(
+      candidate => candidate.path === '/web/gitlab/webhook',
+    );
+
+    await route?.handler?.({});
+
+    expect(ensureDomainReady).toHaveBeenCalledWith('source-control');
+  });
+
   it("folds a ready integration's routes into buildApiRoutes", async () => {
     const routes = vi.fn((_ctx: IntegrationContext) => [
       { path: '/web/custom/status', method: 'GET' as const, handler: () => new Response() },
