@@ -1,4 +1,5 @@
 import { formatZodError, isZodError } from '@mastra/server/handlers/error';
+import { getCustomHTTPExceptionResponse, HTTPException as MastraHTTPException } from '@mastra/server/server-adapter';
 import { Catch, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import type { Request, Response } from 'express';
@@ -30,13 +31,30 @@ interface NormalizedError {
 export class MastraExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(MastraExceptionFilter.name);
 
-  catch(exception: unknown, host: ArgumentsHost): void {
+  async catch(exception: unknown, host: ArgumentsHost): Promise<void> {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
     // Don't try to send response if already sent
     if (response.headersSent) {
+      return;
+    }
+
+    if (exception instanceof ValidationError) {
+      response.status(exception.status).json(exception.body);
+      return;
+    }
+
+    const customResponse = getCustomHTTPExceptionResponse(exception);
+    if (customResponse) {
+      customResponse.headers.forEach((value, name) => response.setHeader(name, value));
+      response.status(customResponse.status).send(Buffer.from(await customResponse.arrayBuffer()));
+      return;
+    }
+
+    if (exception instanceof MastraHTTPException) {
+      response.status(exception.status).json({ error: exception.message });
       return;
     }
 

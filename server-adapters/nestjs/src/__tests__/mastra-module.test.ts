@@ -454,9 +454,7 @@ describe('MastraModule', () => {
       expect(response.status).toBe(404);
 
       const body = response.body as any;
-      // Error response should have structured format
-      expect(body.error).toBeDefined();
-      expect(body.timestamp).toBeDefined();
+      expect(body).toEqual({ error: expect.any(String) });
 
       await app.close();
     });

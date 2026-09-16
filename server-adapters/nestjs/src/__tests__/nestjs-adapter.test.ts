@@ -7,6 +7,7 @@ import type {
 } from '@mastra/server-adapters-test-suite';
 import { createRouteAdapterTestSuite } from '@mastra/server-adapters-test-suite';
 import type { INestApplication } from '@nestjs/common';
+import { ExpressAdapter } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import type { Application } from 'express';
 import { describe } from 'vitest';
@@ -24,6 +25,10 @@ type NestJSTestApp = Application & {
 describe('NestJS Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'NestJS Adapter Integration Tests',
+    emptyBodyNormalization: {
+      withoutContentType: 'empty-object',
+      withJsonContentType: 'empty-object',
+    },
 
     setupAdapter: async (context: AdapterTestContext, options?: AdapterSetupOptions) => {
       // Create a NestJS app using MastraModule
@@ -40,7 +45,7 @@ describe('NestJS Server Adapter', () => {
         ],
       }).compile();
 
-      const nestApp: INestApplication = moduleRef.createNestApplication();
+      const nestApp: INestApplication = moduleRef.createNestApplication(new ExpressAdapter(), { bodyParser: false });
       await nestApp.init();
 
       // Get the underlying Express app
@@ -61,7 +66,12 @@ describe('NestJS Server Adapter', () => {
       expressApp.server = server;
       expressApp.port = address.port;
 
-      return { app: expressApp, adapter: null, nestApp };
+      const adapter = context.mastra.getMastraServer();
+      if (!adapter || !('registerRoute' in adapter)) {
+        throw new Error('NestJS server adapter was not registered');
+      }
+
+      return { app: expressApp, adapter, nestApp };
     },
 
     executeHttpRequest: async (app: NestJSTestApp, httpRequest: HttpRequest): Promise<HttpResponse> => {
@@ -98,8 +108,8 @@ describe('NestJS Server Adapter', () => {
         },
       };
 
-      // Add body for POST/PUT/PATCH
-      if (httpRequest.body && ['POST', 'PUT', 'PATCH'].includes(httpRequest.method)) {
+      // Add body for methods that support route body schemas
+      if (httpRequest.body !== undefined && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpRequest.method)) {
         fetchOptions.body = JSON.stringify(httpRequest.body);
       }
 
@@ -140,7 +150,7 @@ describe('NestJS Server Adapter', () => {
         try {
           data = JSON.parse(text);
         } catch {
-          data = { raw: text };
+          data = text;
         }
       }
 
