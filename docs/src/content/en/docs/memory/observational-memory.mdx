@@ -881,8 +881,7 @@ Because hooks receive `threadId` and `resourceId`, you can also use them to upda
 Agent skills are injected into the agent as tools (`skill`, `skill_search`, `skill_read`). Their results contain the skill's full instructions or file contents, so without a filter the Observer re-observes that text every time a skill is used. `skillResultFilter()` is a ready-made `beforeObservation` hook that drops results from those tools and leaves everything else — including the skill tool calls themselves — in place.
 
 ```typescript
-import { Memory } from '@mastra/memory'
-import { skillResultFilter } from '@mastra/memory/processors'
+import { Memory, skillResultFilter } from '@mastra/memory'
 
 const memory = new Memory({
   options: {

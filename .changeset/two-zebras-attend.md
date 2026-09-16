@@ -7,8 +7,7 @@ Added `skillResultFilter`, a ready-made `beforeObservation` hook that keeps Agen
 The built-in skill tools (`skill`, `skill_search`, `skill_read`) return a skill's instructions or file contents as their result. Without a filter, the Observer re-observes that text every time a skill is used. `skillResultFilter()` drops those results before the Observer runs and leaves the skill tool calls and every other message intact.
 
 ```ts
-import { Memory } from '@mastra/memory';
-import { skillResultFilter } from '@mastra/memory/processors';
+import { Memory, skillResultFilter } from '@mastra/memory';
 
 const memory = new Memory({
   options: {
