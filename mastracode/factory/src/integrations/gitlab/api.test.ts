@@ -62,6 +62,91 @@ describe('GitLabApiClient', () => {
     expect(JSON.parse(String(requestOf(fetchMock, 2).init.body))).toEqual({ state_event: 'close' });
   });
 
+  it('sends merge request, discussion, approval, reviewer, and member requests directly', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(() => Promise.resolve(json({})));
+    const client = new GitLabApiClient({
+      baseUrl: 'https://gitlab.example.com',
+      accessToken: 'group-token',
+      fetchImpl: fetchMock,
+    });
+    const position = {
+      position_type: 'text' as const,
+      base_sha: 'base-sha',
+      start_sha: 'start-sha',
+      head_sha: 'head-sha',
+      old_path: 'src/old.ts',
+      new_path: 'src/new.ts',
+      new_line: 42,
+    };
+
+    await client.createMergeRequest('group/project', {
+      sourceBranch: 'feature',
+      targetBranch: 'main',
+      title: 'Add feature',
+      description: 'Details',
+    });
+    await client.mergeMergeRequest('group/project', 17, { squash: true });
+    await client.createMergeRequestDiscussion('group/project', 17, { body: 'Please revise', position });
+    await client.approveMergeRequest('group/project', 17, 'head-sha');
+    await client.setMergeRequestReviewers('group/project', 17, [11, 22]);
+    await client.listProjectMembers('group/project', { query: 'alice', page: 2 });
+
+    expect(requestOf(fetchMock, 0)).toMatchObject({
+      url: 'https://gitlab.example.com/api/v4/projects/group%2Fproject/merge_requests',
+      init: { method: 'POST' },
+    });
+    expect(JSON.parse(String(requestOf(fetchMock, 0).init.body))).toEqual({
+      source_branch: 'feature',
+      target_branch: 'main',
+      title: 'Add feature',
+      description: 'Details',
+    });
+    expect(requestOf(fetchMock, 1)).toMatchObject({
+      url: 'https://gitlab.example.com/api/v4/projects/group%2Fproject/merge_requests/17/merge',
+      init: { method: 'PUT' },
+    });
+    expect(JSON.parse(String(requestOf(fetchMock, 1).init.body))).toEqual({ squash: true });
+    expect(requestOf(fetchMock, 2)).toMatchObject({
+      url: 'https://gitlab.example.com/api/v4/projects/group%2Fproject/merge_requests/17/discussions',
+      init: { method: 'POST' },
+    });
+    expect(JSON.parse(String(requestOf(fetchMock, 2).init.body))).toEqual({ body: 'Please revise', position });
+    expect(requestOf(fetchMock, 3)).toMatchObject({
+      url: 'https://gitlab.example.com/api/v4/projects/group%2Fproject/merge_requests/17/approve',
+      init: { method: 'POST' },
+    });
+    expect(JSON.parse(String(requestOf(fetchMock, 3).init.body))).toEqual({ sha: 'head-sha' });
+    expect(requestOf(fetchMock, 4)).toMatchObject({
+      url: 'https://gitlab.example.com/api/v4/projects/group%2Fproject/merge_requests/17',
+      init: { method: 'PUT' },
+    });
+    expect(JSON.parse(String(requestOf(fetchMock, 4).init.body))).toEqual({ reviewer_ids: [11, 22] });
+    expect(requestOf(fetchMock, 5).url).toBe(
+      'https://gitlab.example.com/api/v4/projects/group%2Fproject/members/all?query=alice&page=2&per_page=100',
+    );
+  });
+
+  it('routes merge request requests through the integrations v2 proxy', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(json({ iid: 17 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new GitLabApiClient({
+      client: new PlatformApiClient({ baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' }),
+      connectionId: 'a1b_gitlab',
+    });
+
+    await client.createMergeRequest('group/project', {
+      sourceBranch: 'feature',
+      targetBranch: 'main',
+      title: 'Add feature',
+    });
+
+    expect(requestOf(fetchMock)).toMatchObject({
+      url: 'https://integrations.example.com/v2/connections/a1b_gitlab/proxy/api/v4/projects/group%2Fproject/merge_requests',
+      init: { method: 'POST' },
+    });
+    expect(requestOf(fetchMock).init.headers).toMatchObject({ authorization: 'Bearer platform-token' });
+  });
+
   it.each([
     [401, 'gitlab_auth_failed'],
     [403, 'gitlab_auth_failed'],
