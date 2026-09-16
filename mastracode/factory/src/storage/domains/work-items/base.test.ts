@@ -402,6 +402,35 @@ describe('WorkItemsStorage', () => {
     expect(second.binding.id).toBe(first.binding.id);
   });
 
+  it('mints a fresh binding when the prior pending row references a deleted work item', async () => {
+    const storage = await makeStorage();
+    const start = (kickoffKey: string) =>
+      storage.prepareRunStart({
+        orgId: 'org1',
+        userId: 'user1',
+        factoryProjectId: 'project1',
+        workItem: { input: { ...input } },
+        role: 'work',
+        session: { sessionId: `session-${kickoffKey}`, branch: 'factory/42', threadId: `thread-${kickoffKey}` },
+        resourceId: 'resource-1',
+        kickoffKey,
+        kickoffMessage: null,
+      });
+
+    const first = await start('kickoff-1');
+    expect(first.replayed).toBe(false);
+
+    // The work item is gone but its pending-start row survives; re-entry must
+    // treat the dangling pending row as a dead-run artifact rather than throw.
+    await storage.delete({ orgId: 'org1', id: first.item.id });
+
+    const second = await start('kickoff-1');
+    expect(second.replayed).toBe(false);
+    expect(second.binding.id).not.toBe(first.binding.id);
+    expect(second.binding.status).toBe('active');
+    expect(second.pendingStart.bindingId).toBe(second.binding.id);
+  });
+
   it('purges replay state when a linked work item is deleted', async () => {
     const storage = await makeStorage();
     const scope = { orgId: 'org1', factoryProjectId: 'p1' };
