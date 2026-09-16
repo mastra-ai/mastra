@@ -27,6 +27,26 @@ export const mastra = new Mastra({
 })
 ```
 
+## Restricting login to a single organization
+
+Set `organizationId` or `organizationSlug` to only allow members of a specific Clerk organization to sign in. Non-members are rejected during authorization.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthClerk } from '@mastra/auth-clerk'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthClerk({
+      jwksUri: process.env.CLERK_JWKS_URI,
+      publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+      secretKey: process.env.CLERK_SECRET_KEY,
+      organizationId: process.env.CLERK_ORGANIZATION_ID,
+    }),
+  },
+})
+```
+
 ## Constructor parameters
 
 <PropertiesTable
@@ -51,6 +71,22 @@ export const mastra = new Mastra({
     description: 'The JWKS URI from your Clerk application. Used to verify JWT signatures.',
     isOptional: true,
     defaultValue: 'process.env.CLERK_JWKS_URI',
+  },
+  {
+    name: 'organizationId',
+    type: 'string',
+    description:
+      'Restrict login to members of a single Clerk organization, identified by its ID. Users who are not members of this organization are denied access.',
+    isOptional: true,
+    defaultValue: 'process.env.CLERK_ORGANIZATION_ID',
+  },
+  {
+    name: 'organizationSlug',
+    type: 'string',
+    description:
+      'Restrict login to members of a single Clerk organization, identified by its slug. Users who are not members of this organization are denied access.',
+    isOptional: true,
+    defaultValue: 'process.env.CLERK_ORGANIZATION_SLUG',
   },
   {
     name: 'name',

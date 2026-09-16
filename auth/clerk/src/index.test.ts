@@ -197,6 +197,70 @@ describe('MastraAuthClerk', () => {
     });
   });
 
+  describe('single-organization restriction', () => {
+    it('allows members of the configured organization (by id) via API lookup', async () => {
+      mockClerkClient.users.getOrganizationMembershipList.mockResolvedValue({
+        data: [{ organization: { id: 'org_allowed', slug: 'allowed' } }],
+      });
+
+      const auth = new MastraAuthClerk({ ...mockOptions, organizationId: 'org_allowed' });
+      expect(await auth.authorizeUser({ sub: 'user123' })).toBe(true);
+      expect(mockClerkClient.users.getOrganizationMembershipList).toHaveBeenCalledWith({ userId: 'user123' });
+    });
+
+    it('denies users who are not members of the configured organization', async () => {
+      mockClerkClient.users.getOrganizationMembershipList.mockResolvedValue({
+        data: [{ organization: { id: 'org_other', slug: 'other' } }],
+      });
+
+      const auth = new MastraAuthClerk({ ...mockOptions, organizationId: 'org_allowed' });
+      expect(await auth.authorizeUser({ sub: 'user123' })).toBe(false);
+    });
+
+    it('allows members of the configured organization (by slug)', async () => {
+      mockClerkClient.users.getOrganizationMembershipList.mockResolvedValue({
+        data: [{ organization: { id: 'org_allowed', slug: 'allowed' } }],
+      });
+
+      const auth = new MastraAuthClerk({ ...mockOptions, organizationSlug: 'allowed' });
+      expect(await auth.authorizeUser({ sub: 'user123' })).toBe(true);
+    });
+
+    it('uses org_id JWT claim fast-path without an API call', async () => {
+      const auth = new MastraAuthClerk({ ...mockOptions, organizationId: 'org_allowed' });
+      expect(await auth.authorizeUser({ sub: 'user123', org_id: 'org_allowed' })).toBe(true);
+      expect(mockClerkClient.users.getOrganizationMembershipList).not.toHaveBeenCalled();
+    });
+
+    it('fails closed when the membership lookup throws', async () => {
+      mockClerkClient.users.getOrganizationMembershipList.mockRejectedValue(new Error('api error'));
+
+      const auth = new MastraAuthClerk({ ...mockOptions, organizationId: 'org_allowed' });
+      expect(await auth.authorizeUser({ sub: 'user123' })).toBe(false);
+    });
+
+    it('reads organization id from CLERK_ORGANIZATION_ID env var', async () => {
+      const prev = process.env.CLERK_ORGANIZATION_ID;
+      process.env.CLERK_ORGANIZATION_ID = 'org_env';
+      try {
+        mockClerkClient.users.getOrganizationMembershipList.mockResolvedValue({
+          data: [{ organization: { id: 'org_env', slug: 'env' } }],
+        });
+        const auth = new MastraAuthClerk(mockOptions);
+        expect(await auth.authorizeUser({ sub: 'user123' })).toBe(true);
+      } finally {
+        if (prev === undefined) delete process.env.CLERK_ORGANIZATION_ID;
+        else process.env.CLERK_ORGANIZATION_ID = prev;
+      }
+    });
+
+    it('does not restrict when no organization is configured', async () => {
+      const auth = new MastraAuthClerk(mockOptions);
+      expect(await auth.authorizeUser({ sub: 'user123' })).toBe(true);
+      expect(mockClerkClient.users.getOrganizationMembershipList).not.toHaveBeenCalled();
+    });
+  });
+
   describe('getCurrentUser', () => {
     it('should return user from Authorization header token', async () => {
       const mockPayload = { sub: 'user_123', email: 'test@example.com', name: 'Test User' };
