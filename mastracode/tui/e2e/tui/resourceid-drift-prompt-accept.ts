@@ -83,10 +83,10 @@ export const resourceidDriftPromptAcceptScenario: McE2eScenario = {
   name: 'resourceid-drift-prompt-accept',
   description: 'Prompts before cloning an old-resource thread and resumes the clone when accepted.',
   testName: 'accepts resource drift clone prompt and resumes cloned thread',
-  prepare({ dbPath, projectDir }) {
+  async prepare({ dbPath, projectDir }) {
     scenarioDbPath = dbPath;
     seedProject(projectDir);
-    currentResourceId = detectProject(projectDir).resourceId;
+    currentResourceId = (await detectProject(projectDir)).resourceId;
     seedDriftThread(dbPath, projectDir);
   },
   async run({ terminal, runtime }) {
