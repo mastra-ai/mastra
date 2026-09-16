@@ -731,6 +731,8 @@ export interface MemoryOperationAttributes extends AIBaseAttributes, ProcessorPi
    */
   operationType?: 'recall' | 'save' | 'delete' | 'update' | 'observe' | 'reflect';
   messageCount?: number;
+  /** Number of client-echoed message IDs considered during reconciliation. */
+  reconciliationMessageCount?: number;
   embeddingTokens?: number;
   semanticRecallEnabled?: boolean;
   vectorResultCount?: number;
