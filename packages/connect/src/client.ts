@@ -298,11 +298,21 @@ function assertValidBaseUrlOverride(baseUrlOverride: string): void {
   }
 }
 
+export interface ProxyRequestResult {
+  data: unknown;
+  /**
+   * The provider status relayed by the platform proxy. Templates branch on
+   * it for async flows (for example Snowflake's 202 + statement-handle
+   * polling), so it must not be collapsed to a stub value.
+   */
+  status: number;
+}
+
 export async function proxyRequest(
   client: ResolvedClient,
   connectionId: string,
   options: ProxyRequestOptions,
-): Promise<unknown> {
+): Promise<ProxyRequestResult> {
   const cleanPath = options.path.replace(/^\/+/, '');
   if (hasDotSegment(cleanPath)) {
     throw new MastraConnectError(
@@ -377,12 +387,12 @@ export async function proxyRequest(
     );
   }
 
-  if (response.status === 204) return null;
+  if (response.status === 204) return { data: null, status: response.status };
   const text = await response.text();
-  if (!text) return null;
+  if (!text) return { data: null, status: response.status };
   try {
-    return JSON.parse(text);
+    return { data: JSON.parse(text), status: response.status };
   } catch {
-    return text;
+    return { data: text, status: response.status };
   }
 }

@@ -45,6 +45,19 @@ describe('createPlatformProxy request context binding', () => {
     expect(logSpy).not.toHaveBeenCalled();
   });
 
+  it('relays the provider status so templates can branch on async responses', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ statementHandle: 'h-1' }, { status: 202 }));
+    const proxy = createPlatformProxy({
+      connectionId: 'conn-1',
+      client: { accessToken: 'token', baseUrl: 'https://example.test', fetch: fetchMock },
+    });
+
+    const response = await proxy.post({ endpoint: '/api/v2/statements' });
+
+    expect(response.status).toBe(202);
+    expect(response.data).toEqual({ statementHandle: 'h-1' });
+  });
+
   it('forwards template baseUrlOverride values to the platform proxy request', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
     const proxy = createPlatformProxy({

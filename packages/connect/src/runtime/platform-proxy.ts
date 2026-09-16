@@ -166,18 +166,18 @@ async function callProxy<T>(
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
-      const data = (await proxyRequest(client, resolvedConnectionId, {
+      const { data, status } = await proxyRequest(client, resolvedConnectionId, {
         method,
         path: config.endpoint,
         query: config.params,
         headers: config.headers,
         baseUrlOverride: config.baseUrlOverride,
         body: config.data,
-      })) as T;
-      // proxyRequest currently returns the parsed JSON body only; templates
-      // rarely inspect status/headers, but expose stubs to keep the shape
-      // faithful.
-      return { data, status: 200, headers: {} };
+      });
+      // Relay the provider status: templates branch on it for async flows
+      // (for example Snowflake's 202 + statement-handle polling). Headers are
+      // not exposed by the platform proxy; keep the shape with a stub.
+      return { data: data as T, status, headers: {} };
     } catch (error) {
       lastError = error;
       // Only retry on network-ish failures. MastraConnectError with

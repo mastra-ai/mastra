@@ -362,10 +362,7 @@ function extractAction(
   // factory itself (`Parameters<Parameters<typeof createAction>[0]['exec']>[0]`).
   // Both names are stripped from the generated module, so rewrite those
   // references to the imported `PlatformProxy` type.
-  const actionVariableName = createActionCall
-    .getFirstAncestorByKind(SyntaxKind.VariableStatement)
-    ?.getDeclarations()[0]
-    ?.getName();
+  const actionVariableName = createActionCall.getFirstAncestorByKind(SyntaxKind.VariableDeclaration)?.getName();
   const inlineContextTypes = new Set(
     [
       actionVariableName ? `Parameters<(typeof ${actionVariableName})['exec']>[0]` : undefined,
