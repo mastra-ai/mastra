@@ -251,6 +251,20 @@ describe('buildProviderAccess', () => {
     expect(access.cerebras).toBe('apikey');
     expect(access.xai).toBe('apikey');
   });
+
+  it('grants custom providers by their stored key, never by the catalog', async () => {
+    const access = await buildProviderAccess({
+      controller: makeAgentController([]),
+      tenantCredentials: [],
+      customProviders: [
+        { providerId: 'acme', apiKey: 'sk-acme' },
+        { providerId: 'keyless', apiKey: undefined },
+      ],
+    });
+
+    expect(access.acme).toBe('apikey');
+    expect(access.keyless).toBe(false);
+  });
 });
 
 // ── Scoped API key routes (tenant mode) ─────────────────────────────────
@@ -512,6 +526,53 @@ describe('GET /web/config/models', () => {
     expect(await res.json()).toEqual({
       models: [{ id: 'acme/fast-1', provider: 'acme', modelName: 'fast-1', hasApiKey: true }],
     });
+  });
+});
+
+describe('GET /web/config/providers with custom providers', () => {
+  async function buildApp(orgId: string) {
+    const seed = await createFactoryStorageForTests();
+    await seed.customProviders.upsert({
+      orgId: 'org1',
+      userId: 'user-a',
+      input: { providerId: 'acme', name: 'Acme', url: 'https://llm.acme.dev/v1', apiKey: 'sk', models: ['fast-1'] },
+    });
+    await seed.customProviders.upsert({
+      orgId: 'org1',
+      userId: 'user-a',
+      input: { providerId: 'keyless', name: 'Keyless', url: 'https://keyless.dev/v1', models: ['m-1'] },
+    });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: orgId } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: fakeRouteAuth(),
+        controller: makeAgentController([{ provider: 'anthropic', hasApiKey: false }]),
+        modelCredentials: seed.credentials,
+        customProviders: seed.customProviders,
+      }).routes(),
+    );
+    return app;
+  }
+
+  it('lists keyed custom providers of the caller org as connected org keys', async () => {
+    const res = await buildApp('org1').then(app => app.request('/web/config/providers'));
+    expect(res.status).toBe(200);
+    const { providers } = await res.json();
+    expect(providers).toEqual([
+      expect.objectContaining({ provider: 'anthropic', source: 'none' }),
+      { provider: 'acme', source: 'stored-org', orgKey: true, orgCredential: 'api_key', custom: true },
+    ]);
+  });
+
+  it('keeps custom providers invisible across organizations', async () => {
+    const res = await buildApp('org2').then(app => app.request('/web/config/providers'));
+    const { providers } = await res.json();
+    expect(providers.map((p: { provider: string }) => p.provider)).toEqual(['anthropic']);
   });
 });
 
@@ -952,6 +1013,7 @@ describe('OM routes with a tenant', () => {
         auth: fakeRouteAuth({ enabled: opts.authEnabled !== false }),
         controller,
         modelCredentials: seed.credentials,
+        customProviders: seed.customProviders,
         ...(opts.withStorage === false ? {} : { memorySettings: seed.memorySettings, factoryProjects: seed.projects }),
       }).routes(),
     );
@@ -1018,6 +1080,38 @@ describe('OM routes with a tenant', () => {
     });
     // The personal row must remain untouched.
     await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toBeNull();
+  });
+
+  it('seeds OM defaults from a custom provider model of the caller org', async () => {
+    await seed.customProviders.upsert({
+      orgId: 'org1',
+      userId: 'user-a',
+      input: { providerId: 'acme', name: 'Acme', url: 'https://llm.acme.dev/v1', apiKey: 'sk', models: ['fast-1'] },
+    });
+    const res = await postJson(buildApp(makeOmSession()), '/web/config/om/provider-defaults', {
+      providerId: 'acme',
+      factoryModelId: 'acme/fast-1',
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).config).toMatchObject({
+      observerModelId: 'acme/fast-1',
+      reflectorModelId: 'acme/fast-1',
+    });
+  });
+
+  it('rejects OM defaults for a custom provider of another org', async () => {
+    await seed.customProviders.upsert({
+      orgId: 'org2',
+      userId: 'user-b',
+      input: { providerId: 'acme', name: 'Acme', url: 'https://llm.acme.dev/v1', apiKey: 'sk', models: ['fast-1'] },
+    });
+    const res = await postJson(buildApp(makeOmSession()), '/web/config/om/provider-defaults', {
+      providerId: 'acme',
+      factoryModelId: 'acme/fast-1',
+    });
+
+    expect(res.status).toBe(400);
   });
 
   it('rejects factory-scoped OM access for a factory outside the caller org', async () => {

@@ -20,13 +20,23 @@ export function useCustomProvidersQuery() {
   });
 }
 
+// A custom provider is also a row in the provider catalogue and its models
+// appear in the model list, so both refetch alongside the custom list.
+function invalidateCustomProviderQueries(queryClient: ReturnType<typeof useQueryClient>) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.customProviders() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.providers() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.availableModels() }),
+  ]);
+}
+
 export function useSaveCustomProvider() {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: SaveCustomProviderBody) =>
       client.post<{ ok: true; provider?: CustomProviderInfo }>('/web/config/custom-providers', body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.customProviders() }),
+    onSuccess: () => invalidateCustomProviderQueries(queryClient),
   });
 }
 
@@ -40,6 +50,6 @@ export function useRemoveCustomProvider() {
   return useMutation({
     mutationFn: ({ id }: RemoveCustomProviderArgs) =>
       client.del<OkResponse>(`/web/config/custom-providers/${encodeURIComponent(id)}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.customProviders() }),
+    onSuccess: () => invalidateCustomProviderQueries(queryClient),
   });
 }
