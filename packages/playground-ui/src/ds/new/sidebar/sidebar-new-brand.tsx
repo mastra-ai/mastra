@@ -17,9 +17,7 @@ export function SidebarNewBrand({ logo, title, className, ...props }: SidebarNew
       {state === 'collapsed' ? (
         <VisuallyHidden>{title}</VisuallyHidden>
       ) : (
-        <span className="text-ui-md text-mastra-foreground truncate font-sans font-semibold tracking-tight">
-          {title}
-        </span>
+        <span className="text-ui-md text-foreground truncate font-sans font-semibold tracking-tight">{title}</span>
       )}
     </div>
   );

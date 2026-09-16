@@ -11,14 +11,14 @@ describe('SidebarNewMeter', () => {
     const { container } = render(<SidebarNewMeter label="Credits" value="$26" status="Auto top-ups On" />);
 
     const card = container.querySelector('[data-slot="sidebar-new-meter"]');
-    expect(card?.className).toContain('border-mastra-border');
-    expect(card?.className).toContain('bg-mastra-background');
-    expect(screen.getByText('Credits').className).toContain('text-mastra-muted-foreground');
-    expect(screen.getByText('$26').className).toContain('text-mastra-foreground');
-    expect(screen.getByText('Auto top-ups On').className).toContain('text-mastra-muted-foreground');
+    expect(card?.className).toContain('border-border');
+    expect(card?.className).toContain('bg-background');
+    expect(screen.getByText('Credits').className).toContain('text-muted-foreground');
+    expect(screen.getByText('$26').className).toContain('text-foreground');
+    expect(screen.getByText('Auto top-ups On').className).toContain('text-muted-foreground');
 
     const bloom = container.querySelector<HTMLElement>('[data-slot="sidebar-new-meter-bloom"]');
-    expect(bloom?.style.backgroundImage).toContain('var(--mastra-foreground)');
+    expect(bloom?.style.backgroundImage).toContain('var(--foreground)');
   });
 
   it('exposes the tone and keeps grain to the neutral tone', () => {
@@ -63,11 +63,11 @@ describe('SidebarNewMeter', () => {
     );
 
     expect(screen.queryByText('Credits')).toBeNull();
-    expect(screen.getByText('$4').className).toContain('text-mastra-foreground');
+    expect(screen.getByText('$4').className).toContain('text-foreground');
     expect(screen.getByLabelText('Credit balance').getAttribute('href')).toBe('/billing');
     const card = container.querySelector('[data-state="collapsed"]');
-    expect(card?.className).toContain('border-mastra-border');
-    expect(card?.className).toContain('bg-mastra-background');
+    expect(card?.className).toContain('border-border');
+    expect(card?.className).toContain('bg-background');
   });
 
   it('renders the action outside the card link', () => {
@@ -84,7 +84,7 @@ describe('SidebarNewMeter', () => {
     const link = container.querySelector('a[aria-label="Credit balance"]');
     expect(link).not.toBeNull();
     expect(link?.querySelector('button')).toBeNull();
-    expect(link?.parentElement?.className).toContain('hover:bg-mastra-card');
+    expect(link?.parentElement?.className).toContain('hover:bg-card');
     expect(screen.getByRole('button', { name: 'What are credits?' })).toBeDefined();
   });
 });
@@ -128,21 +128,19 @@ describe('SidebarNew colors', () => {
     );
 
     const sidebar = container.querySelector('aside[aria-label="Sidebar"] > div');
-    expect(sidebar?.classList.contains('mastra-theme')).toBe(true);
+    expect(sidebar?.classList.contains('new-theme')).toBe(true);
     expect(sidebar?.className).toContain('sidebar-new-theme');
-    expect(sidebar?.className).toContain('bg-mastra-sidebar');
-    expect(sidebar?.className).toContain('text-mastra-foreground');
+    expect(sidebar?.className).toContain('bg-sidebar');
+    expect(sidebar?.className).toContain('text-foreground');
     expect(sidebar?.className).not.toContain('[--');
-    expect(screen.getByText('Mastra').className).toContain('text-mastra-foreground');
-    expect(screen.getByText('Project').className).toContain('text-mastra-muted-foreground');
+    expect(screen.getByText('Mastra').className).toContain('text-foreground');
+    expect(screen.getByText('Project').className).toContain('text-muted-foreground');
     expect(
-      [...container.querySelectorAll<HTMLElement>('[class]')].some(element =>
-        element.className.includes('bg-mastra-border'),
-      ),
+      [...container.querySelectorAll<HTMLElement>('[class]')].some(element => element.className.includes('bg-border')),
     ).toBe(true);
 
     const back = screen.getByRole('button', { name: 'Back to main navigation: Settings' });
-    expect(back.className).toContain('text-mastra-muted-foreground');
-    expect(back.className).toContain('hover:text-mastra-foreground');
+    expect(back.className).toContain('text-muted-foreground');
+    expect(back.className).toContain('hover:text-foreground');
   });
 });

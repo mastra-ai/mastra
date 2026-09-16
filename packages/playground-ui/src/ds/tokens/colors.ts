@@ -26,16 +26,16 @@ export const Colors = {
   neutral4: 'var(--neutral4)',
   neutral5: 'var(--neutral5)',
   neutral6: 'var(--neutral6)',
-  background: 'var(--mastra-background)',
-  sidebar: 'var(--mastra-sidebar)',
-  card: 'var(--mastra-card)',
-  popover: 'var(--mastra-popover)',
-  muted: 'var(--mastra-muted)',
-  foreground: 'var(--mastra-foreground)',
-  'muted-foreground': 'var(--mastra-muted-foreground)',
-  ring: 'var(--mastra-ring)',
-  'sidebar-accent': 'var(--mastra-sidebar-accent)',
-  selected: 'var(--mastra-selected)',
+  background: 'var(--background)',
+  sidebar: 'var(--sidebar)',
+  card: 'var(--card)',
+  popover: 'var(--popover)',
+  muted: 'var(--muted)',
+  foreground: 'var(--foreground)',
+  'muted-foreground': 'var(--muted-foreground)',
+  ring: 'var(--ring)',
+  'sidebar-accent': 'var(--sidebar-accent)',
+  selected: 'var(--selected)',
 
   error: 'var(--error)',
 
@@ -45,5 +45,5 @@ export const Colors = {
 export const BorderColors = {
   border1: 'var(--border1)',
   border2: 'var(--border2)',
-  border: 'var(--mastra-border)',
+  border: 'var(--border)',
 };

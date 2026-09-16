@@ -148,13 +148,13 @@ const scanFile = (repositoryRoot, file) => {
   );
   findMatches(
     content,
-    new RegExp(`\\b${colorUtilityPattern}-(?:mastra-)?(${semanticTokenPattern})(?:\\/[0-9.]+)?(?=$|[^\\w-])`, 'g'),
+    new RegExp(`\\b${colorUtilityPattern}-(${semanticTokenPattern})(?:\\/[0-9.]+)?(?=$|[^\\w-])`, 'g'),
     match => match[1],
     token => add(token, 'tailwind', 'semantic'),
   );
   findMatches(
     content,
-    new RegExp(`var\\(\\s*--(?:mastra-)?(${semanticTokenPattern})(?![\\w-])[^)]*\\)`, 'g'),
+    new RegExp(`var\\(\\s*--(${semanticTokenPattern})(?![\\w-])[^)]*\\)`, 'g'),
     match => match[1],
     token => add(token, 'css-variable', 'semantic'),
   );

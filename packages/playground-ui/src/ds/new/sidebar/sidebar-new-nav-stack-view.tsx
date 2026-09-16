@@ -57,7 +57,7 @@ export function SidebarNewNavStackView({
         onClick={handleBack}
         className={cn(
           navItemClasses(),
-          'mb-2 grid grid-cols-[2rem_1fr_2rem] px-1 text-mastra-muted-foreground hover:text-mastra-foreground',
+          'mb-2 grid grid-cols-[2rem_1fr_2rem] px-1 text-muted-foreground hover:text-foreground',
         )}
       >
         <ArrowLeftIcon className="justify-self-center" aria-hidden="true" />

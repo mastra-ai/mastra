@@ -20,7 +20,7 @@ const GRAIN_SIZE = 110;
 const FALLOFF_RAMP = [0, 0.08, 0.16, 0.25, 0.34, 0.44, 0.55, 0.66, 0.78, 0.89, 1];
 
 const TONES = {
-  neutral: { colorVar: '--mastra-foreground', peak: 0.08, grain: true, text: 'text-mastra-muted-foreground' },
+  neutral: { colorVar: '--foreground', peak: 0.08, grain: true, text: 'text-muted-foreground' },
   warning: {
     colorVar: '--notice-warning',
     peak: 0.16,
@@ -138,14 +138,14 @@ export const SidebarNewMeter = forwardRef<HTMLDivElement, SidebarNewMeterProps>(
         data-tone={tone}
         data-state={state}
         className={cn(
-          'relative isolate flex items-center justify-center overflow-hidden rounded-lg border border-mastra-border bg-mastra-background px-1 py-2',
+          'relative isolate flex items-center justify-center overflow-hidden rounded-lg border border-border bg-background px-1 py-2',
           className,
         )}
         {...props}
       >
         <Bloom tone={tone} />
         {href ? <Link href={href} className="absolute inset-0 rounded-lg" aria-label={linkLabel} /> : null}
-        <span className="text-ui-xs text-mastra-foreground pointer-events-none relative font-semibold tabular-nums">
+        <span className="text-ui-xs text-foreground pointer-events-none relative font-semibold tabular-nums">
           {value}
         </span>
       </div>
@@ -159,8 +159,8 @@ export const SidebarNewMeter = forwardRef<HTMLDivElement, SidebarNewMeterProps>(
       data-tone={tone}
       data-state={state}
       className={cn(
-        'relative isolate flex flex-col justify-center overflow-hidden rounded-lg border border-mastra-border bg-mastra-background px-3',
-        href && 'transition-colors hover:bg-mastra-card',
+        'relative isolate flex flex-col justify-center overflow-hidden rounded-lg border border-border bg-background px-3',
+        href && 'transition-colors hover:bg-card',
         className,
       )}
       style={{ height: CARD_HEIGHT }}
@@ -172,11 +172,11 @@ export const SidebarNewMeter = forwardRef<HTMLDivElement, SidebarNewMeterProps>(
       <div className="pointer-events-none relative">
         <div className="flex items-center gap-1.5">
           {tone === 'neutral' ? null : icon}
-          <span className="text-ui-sm text-mastra-muted-foreground font-medium">{label}</span>
+          <span className="text-ui-sm text-muted-foreground font-medium">{label}</span>
           {action ? <span className="pointer-events-auto">{action}</span> : null}
         </div>
 
-        <p className="text-ui-lg text-mastra-foreground mt-0.5 leading-tight font-semibold tabular-nums">{value}</p>
+        <p className="text-ui-lg text-foreground mt-0.5 leading-tight font-semibold tabular-nums">{value}</p>
 
         {status ? (
           <div className="text-ui-xs mt-1">
