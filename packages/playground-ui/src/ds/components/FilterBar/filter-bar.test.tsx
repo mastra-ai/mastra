@@ -117,6 +117,30 @@ describe('FilterBar', () => {
       expect(getChips()).toHaveLength(1);
     });
 
+    it('commits a free-text value from the inline Apply button', async () => {
+      const onChange = vi.fn();
+      render(<Harness onChange={onChange} />);
+
+      const input = getInput();
+      input.focus();
+      type('trace');
+      await screen.findByRole('option', { name: 'Trace ID' });
+      key('Enter');
+      await screen.findByRole('option', { name: 'contains' });
+      key('ArrowDown');
+      key('Enter');
+
+      const apply = (await screen.findByRole('button', { name: 'Apply' })) as HTMLButtonElement;
+      expect(apply.disabled).toBe(true);
+      type('abc-123');
+      expect(apply.disabled).toBe(false);
+      fireEvent.click(apply);
+
+      const [items] = onChange.mock.calls[0] as [FilterBarItem[]];
+      expect(items[0]).toMatchObject({ fieldId: 'traceId', operatorId: 'contains', value: 'abc-123' });
+      expect(getChips()).toHaveLength(1);
+    });
+
     it('moves the highlight with the arrow keys and mirrors it in aria-activedescendant', async () => {
       render(<Harness />);
       const input = getInput();

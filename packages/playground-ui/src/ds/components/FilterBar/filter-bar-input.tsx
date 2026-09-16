@@ -9,6 +9,7 @@ import type { FilterBarField, FilterBarOperator, FilterBarOption } from './types
 import { useValueStep } from './use-value-step';
 import { Button } from '@/ds/components/Button/Button';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
+import { Txt } from '@/ds/components/Txt';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { unstyledFormElementStyle } from '@/ds/primitives/form-element';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
@@ -277,7 +278,20 @@ export function FilterBarInput({
                 />
               )}
               {draft.step === 'value' && !valueStep.hasSuggestions && (
-                <div className="text-ui-xs text-neutral3 px-[.9em] py-2">Type a value and press Enter.</div>
+                <div className="flex items-center justify-between gap-2 py-1 pr-1 pl-[.9em]">
+                  <Txt variant="ui-sm" className="text-neutral3">
+                    Type a value, then press Enter
+                  </Txt>
+                  <Button
+                    size="xs"
+                    variant="primary"
+                    disabled={query.trim().length === 0}
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={() => valueStep.commitFreeText()}
+                  >
+                    Apply
+                  </Button>
+                </div>
               )}
               {draft.step === 'value' && valueStep.isMany && (
                 <div className="border-border1 flex items-center justify-end gap-1 border-t p-1">
