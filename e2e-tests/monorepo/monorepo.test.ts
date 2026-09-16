@@ -205,6 +205,13 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(body).toEqual({ value: 'a -> b -> c', app: 'App value is BEFORE.' });
     });
 
+    it('should preserve dynamic subpath imports when the package has a nested module package.json', async () => {
+      const res = await fetch(`http://localhost:${port}/protobuf-subpath`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body).toEqual({ typeName: 'google.protobuf.Timestamp' });
+    });
+
     it('reports hasBrowser for an agent with a workspace-level CLI browser', async () => {
       const res = await fetch(`http://localhost:${port}/api/agents/browser-agent`);
       const body = await res.json();

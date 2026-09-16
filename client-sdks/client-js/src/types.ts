@@ -963,6 +963,12 @@ export interface McpServerToolListResponse {
 }
 
 /**
+ * `{ result }` for a completed tool, or the suspended shape a 2026-07-28 server reports
+ * when the tool asked for input (answer with `resumeData` and the echoed `suspendPayload`).
+ */
+export type McpToolExecuteResponse = RouteResponse<'POST /mcp/:serverId/tools/:toolId/execute'>;
+
+/**
  * Client version of ScoreRowData with dates serialized as strings (from JSON)
  */
 export type ClientScoreRowData = Omit<ScoreRowData, 'createdAt' | 'updatedAt'> & {
