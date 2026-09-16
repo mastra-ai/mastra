@@ -241,6 +241,13 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
   private indexClient: SearchIndexClient;
   private searchClients: Map<string, SearchClient<AzureAISearchDocument>> = new Map();
 
+  /**
+   * Azure AI Search rejects indexing requests containing more than 1,000 documents
+   * (and any request larger than 16 MB). Chunk large upload/merge/delete calls to
+   * stay within these per-request limits.
+   */
+  private static readonly INDEXING_BATCH_SIZE = 1000;
+
   constructor({ id, endpoint, credential, apiVersion, clientOptions }: AzureAISearchVectorOptions & { id: string }) {
     super({ id });
 
@@ -297,6 +304,24 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       this.searchClients.set(indexName, client);
     }
     return this.searchClients.get(indexName)!;
+  }
+
+  /**
+   * Runs an indexing operation (upload/merge/delete) in batches that respect
+   * Azure AI Search's 1,000-document per-request limit, aggregating the
+   * per-document results across all batches.
+   */
+  private async runBatchedIndexing<R extends { succeeded: boolean; key: string; errorMessage?: string }>(
+    documents: unknown[],
+    operation: (batch: unknown[]) => Promise<{ results: R[] }>,
+  ): Promise<R[]> {
+    const results: R[] = [];
+    for (let i = 0; i < documents.length; i += AzureAISearchVector.INDEXING_BATCH_SIZE) {
+      const batch = documents.slice(i, i + AzureAISearchVector.INDEXING_BATCH_SIZE);
+      const { results: batchResults } = await operation(batch);
+      results.push(...batchResults);
+    }
+    return results;
   }
 
   /**
@@ -493,7 +518,9 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
           type: 'Edm.String',
           key: true,
           filterable: true,
-          sortable: false,
+          // Sortable so filter-based lookups can page past Azure's 100,000 $skip
+          // ceiling using a stable ordered range scan (see findIdsByFilter).
+          sortable: true,
           facetable: false,
           searchable: false,
         },
@@ -817,12 +844,14 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
         }),
       );
 
-      // Upload documents
+      // Upload documents (batched to respect Azure's per-request limits)
       const searchClient = this.getSearchClient(indexName);
-      const uploadResult = await searchClient.uploadDocuments(documents as any);
+      const uploadResults = await this.runBatchedIndexing(documents, batch =>
+        searchClient.uploadDocuments(batch as any),
+      );
 
       // Check for failures
-      const failures = uploadResult.results.filter(result => !result.succeeded);
+      const failures = uploadResults.filter(result => !result.succeeded);
       if (failures.length > 0) {
         throw new MastraError(
           {
@@ -831,13 +860,13 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
             category: ErrorCategory.THIRD_PARTY,
             details: {
               indexName,
-              totalDocuments: uploadResult.results.length,
+              totalDocuments: uploadResults.length,
               failedCount: failures.length,
               firstFailedKey: failures[0]?.key || 'unknown',
               firstFailedError: failures[0]?.errorMessage || 'No error message',
             },
           },
-          new Error(`${failures.length} of ${uploadResult.results.length} documents failed to upload`),
+          new Error(`${failures.length} of ${uploadResults.length} documents failed to upload`),
         );
       }
 
@@ -1147,11 +1176,13 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
         }),
       );
 
-      // Merge documents (update operation)
-      const mergeResult = await searchClient.mergeDocuments(updatedDocs as any);
+      // Merge documents (update operation, batched to respect Azure's per-request limits)
+      const mergeResults = await this.runBatchedIndexing(updatedDocs, batch =>
+        searchClient.mergeDocuments(batch as any),
+      );
 
       // Check for per-document failures
-      const mergeFailures = mergeResult.results.filter(result => !result.succeeded);
+      const mergeFailures = mergeResults.filter(result => !result.succeeded);
       if (mergeFailures.length > 0) {
         throw new MastraError(
           {
@@ -1160,13 +1191,13 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
             category: ErrorCategory.THIRD_PARTY,
             details: {
               indexName,
-              totalDocuments: mergeResult.results.length,
+              totalDocuments: mergeResults.length,
               failedCount: mergeFailures.length,
               firstFailedKey: mergeFailures[0]?.key || 'unknown',
               firstFailedError: mergeFailures[0]?.errorMessage || 'No error message',
             },
           },
-          new Error(`${mergeFailures.length} of ${mergeResult.results.length} documents failed to update`),
+          new Error(`${mergeFailures.length} of ${mergeResults.length} documents failed to update`),
         );
       }
     } catch (error) {
@@ -1240,10 +1271,13 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       }
 
       const searchClient = this.getSearchClient(indexName);
-      const deleteResult = await searchClient.deleteDocuments(idsToDelete.map(id => ({ id })) as any);
+      const deleteDocs = idsToDelete.map(id => ({ id }));
+      const deleteResults = await this.runBatchedIndexing(deleteDocs, batch =>
+        searchClient.deleteDocuments(batch as any),
+      );
 
       // Check for per-document failures
-      const deleteFailures = deleteResult.results.filter(result => !result.succeeded);
+      const deleteFailures = deleteResults.filter(result => !result.succeeded);
       if (deleteFailures.length > 0) {
         throw new MastraError(
           {
@@ -1252,13 +1286,13 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
             category: ErrorCategory.THIRD_PARTY,
             details: {
               indexName,
-              totalDocuments: deleteResult.results.length,
+              totalDocuments: deleteResults.length,
               failedCount: deleteFailures.length,
               firstFailedKey: deleteFailures[0]?.key || 'unknown',
               firstFailedError: deleteFailures[0]?.errorMessage || 'No error message',
             },
           },
-          new Error(`${deleteFailures.length} of ${deleteResult.results.length} documents failed to delete`),
+          new Error(`${deleteFailures.length} of ${deleteResults.length} documents failed to delete`),
         );
       }
     } catch (error) {
@@ -1359,14 +1393,19 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
     const odataFilter = this.transformFilter(filter);
 
     const ids: string[] = [];
-    let skip = 0;
     const pageSize = 1000;
+    // Azure AI Search caps $skip at 100,000, so paginate with a stable
+    // ordered range scan ("search after") on the sortable key field instead.
+    let lastId: string | undefined;
 
     while (true) {
+      const rangeClause = lastId !== undefined ? `id gt '${lastId.replace(/'/g, "''")}'` : undefined;
+      const combinedFilter = [odataFilter ? `(${odataFilter})` : undefined, rangeClause].filter(Boolean).join(' and ');
+
       const searchResults = await searchClient.search('*', {
-        filter: odataFilter,
+        filter: combinedFilter || undefined,
         top: pageSize,
-        skip,
+        orderBy: ['id asc'],
         select: ['id'],
       } as any);
 
@@ -1374,6 +1413,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       for await (const result of searchResults.results) {
         if (result.document?.id) {
           ids.push(result.document.id);
+          lastId = result.document.id;
         }
         count++;
       }
@@ -1381,7 +1421,6 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       if (count < pageSize) {
         break;
       }
-      skip += pageSize;
     }
 
     return ids;

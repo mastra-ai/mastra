@@ -295,6 +295,25 @@ describe('AzureAISearchVector Unit Tests', () => {
       ]);
     });
 
+    it('should batch uploads that exceed Azure per-request document limit', async () => {
+      mockSearchClientInstance.uploadDocuments.mockImplementation((docs: any[]) =>
+        Promise.resolve({ results: docs.map(doc => ({ succeeded: true, key: doc.id })) }),
+      );
+
+      const count = 2500;
+      const vectors = Array.from({ length: count }, () => [0.1, 0.2, 0.3]);
+      const metadata = Array.from({ length: count }, () => ({ type: 'document' }));
+      const ids = Array.from({ length: count }, (_, i) => `doc-${i}`);
+
+      const result = await azureVector.upsert({ indexName: 'test-index', vectors, metadata, ids });
+
+      expect(result).toEqual(ids);
+      // 2500 documents -> 1000 + 1000 + 500 across three requests
+      expect(mockSearchClientInstance.uploadDocuments).toHaveBeenCalledTimes(3);
+      const batchSizes = mockSearchClientInstance.uploadDocuments.mock.calls.map((call: any[]) => call[0].length);
+      expect(batchSizes).toEqual([1000, 1000, 500]);
+    });
+
     it('should generate IDs when not provided', async () => {
       const vectors = [[0.1, 0.2, 0.3]];
       const metadata = [{ type: 'document' }];
@@ -614,6 +633,40 @@ describe('AzureAISearchVector Unit Tests', () => {
       });
 
       expect(mockSearchClientInstance.deleteDocuments).toHaveBeenCalledWith([{ id: 'doc1' }, { id: 'doc2' }]);
+    });
+
+    it('should page filter matches with an ordered search-after range scan', async () => {
+      const makePage = (start: number, size: number) =>
+        (async function* () {
+          for (let i = 0; i < size; i++) {
+            yield { document: { id: `doc-${start + i}` }, score: 1 };
+          }
+        })();
+
+      // First full page (1000) forces a second request; second page is partial.
+      mockSearchClientInstance.search
+        .mockResolvedValueOnce({ results: makePage(0, 1000) })
+        .mockResolvedValueOnce({ results: makePage(1000, 5) });
+
+      await azureVector.deleteVectors({
+        indexName: 'test-index',
+        filter: { eq: { category: 'books' } },
+      });
+
+      expect(mockSearchClientInstance.search).toHaveBeenCalledTimes(2);
+
+      const [, firstOptions] = mockSearchClientInstance.search.mock.calls[0];
+      const [, secondOptions] = mockSearchClientInstance.search.mock.calls[1];
+
+      // Stable ordering is required; no unbounded $skip is used.
+      expect(firstOptions.orderBy).toEqual(['id asc']);
+      expect(firstOptions.skip).toBeUndefined();
+      // Second page continues after the last seen id rather than skipping.
+      expect(secondOptions.orderBy).toEqual(['id asc']);
+      expect(secondOptions.skip).toBeUndefined();
+      expect(secondOptions.filter).toContain("id gt 'doc-999'");
+
+      expect(mockSearchClientInstance.deleteDocuments).toHaveBeenCalledTimes(2);
     });
   });
 

@@ -281,11 +281,11 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 
 Beyond the standard `query()` method, `AzureAISearchVector` exposes Azure AI Search-specific capabilities:
 
-- **`advancedQuery()`** — exposes Azure AI Search vector query parameters directly: exhaustive search, query weighting, oversampling, additional vector queries for multi-vector search, pre/post filtering mode, and text-based query types (`semantic`, `hybrid`).
-- **`semanticQuery()`** — convenience wrapper around `advancedQuery()` for semantic ranking with a configured semantic configuration.
-- **`hybridQuery()`** — convenience wrapper combining vector search with a full-text query.
-- **`multiVectorQuery()`** — convenience wrapper for querying against multiple weighted vectors at once.
-- **`exactQuery()`** — convenience wrapper for `advancedQuery()` with exhaustive (non-approximate) search enabled.
+- **`advancedQuery()`**: exposes Azure AI Search vector query parameters directly, including exhaustive search, query weighting, oversampling, additional vector queries for multi-vector search, pre/post filtering mode, and text-based query types (`semantic`, `hybrid`).
+- **`semanticQuery()`**: convenience wrapper around `advancedQuery()` for semantic ranking with a configured semantic configuration.
+- **`hybridQuery()`**: convenience wrapper combining vector search with a full-text query.
+- **`multiVectorQuery()`**: convenience wrapper for querying against multiple weighted vectors at once.
+- **`exactQuery()`**: convenience wrapper for `advancedQuery()` with exhaustive (non-approximate) search enabled.
 
 These methods are additive: `query()` remains the Memory-compatible entry point used by Mastra's semantic recall.
 
