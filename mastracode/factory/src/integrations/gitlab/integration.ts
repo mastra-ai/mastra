@@ -56,6 +56,7 @@ const DIRECT_CONNECTION_ID = 'direct';
 const GITLAB_CONNECTION_TOKEN_PREFIX = 'gitlab-connection:';
 const GITLAB_SOURCE_PREFIX = 'gitlab-project:';
 const GITLAB_ISSUE_PREFIX = 'gitlab-issue:';
+// Bound issue detail reads to 2,000 notes. GitLab does not expose truncation through the Intake contract.
 const MAX_NOTES_PAGES = 20;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -339,7 +340,7 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
       author: displayName(issue.author),
       state: issue.state,
       stateType: issue.state === 'closed' ? 'completed' : 'unstarted',
-      priority: issue.severity && issue.severity !== 'unknown' ? issue.severity : null,
+      priority: typeof issue.weight === 'number' ? String(issue.weight) : null,
       assignee: displayName(issue.assignee) ?? assignees[0] ?? null,
       assignees,
       source: projectPath,
@@ -514,6 +515,7 @@ function parseIssueLocator(value: string): {
 
 function targetStateEvent(input: UpdateIntakeIssueInput): 'close' | 'reopen' | null {
   if (input.state.kind === 'byType') {
+    // GitLab issues have only opened/closed states, so canceled is intentionally mapped to close.
     return input.state.stateType === 'completed' || input.state.stateType === 'canceled' ? 'close' : 'reopen';
   }
   const name = input.state.name.trim().toLowerCase();

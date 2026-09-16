@@ -32,7 +32,7 @@ describe('GitLabApiClient', () => {
 
     const request = requestOf(fetchMock);
     expect(request.url).toBe(
-      'https://gitlab.example.com/api/v4/projects?membership=true&simple=true&with_issues_enabled=true&order_by=last_activity_at&sort=desc&page=2&per_page=100',
+      'https://gitlab.example.com/api/v4/projects?membership=true&simple=true&with_issues_enabled=true&min_access_level=20&order_by=last_activity_at&sort=desc&page=2&per_page=100',
     );
     expect(request.init.headers).toMatchObject({ 'private-token': 'group-token' });
   });
