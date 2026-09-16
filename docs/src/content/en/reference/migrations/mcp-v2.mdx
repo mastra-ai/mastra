@@ -1,48 +1,47 @@
 ---
 title: "Migration: @mastra/mcp v1 to v2 | Migration Guide"
-description: "@mastra/mcp 2.0 serves and consumes only the MCP 2026-07-28 revision: self-contained requests, native input_required continuation, subscriptions/listen, per-request logging and pre-registered or URL-based OAuth clients."
+description: "@mastra/mcp 2.0 serves the MCP 2026-07-28 revision only: self-contained requests, suspend/resume carried as input_required, subscriptions/listen, per-request logging and pre-registered or URL-based OAuth clients. The client speaks 2026-07-28 and still connects to older servers."
 packages:
   - "@mastra/mcp"
 ---
 
 # Migrate @mastra/mcp from v1 to v2
 
-`@mastra/mcp` 2.0 implements the MCP **2026-07-28** revision only. Servers no longer negotiate older protocol revisions and clients no longer downgrade to them. Every request is self-contained: there is no `initialize` handshake, no session header, no standalone HTTP+SSE transport and no server-initiated requests. Tools, resources and prompts that need input from the caller return a native `input_required` continuation, which the client answers by repeating the call with keyed `inputResponses`.
+`@mastra/mcp` 2.0 serves the MCP **2026-07-28** revision only. Servers no longer negotiate older protocol revisions. Every request is self-contained: the `initialize` handshake, session header, standalone HTTP+SSE transport and server-initiated requests are gone. A tool, resource or prompt that needs input from the caller calls `suspend()`. The server answers with a native `input_required` continuation and runs the handler again with the caller's answer in `resumeData`.
 
-If you need to keep serving pre-2026 clients, stay on `@mastra/mcp` 1.x. It remains supported against current `@mastra/core`, and a Mastra instance can register 1.x and 2.x servers side by side.
+The client speaks 2026-07-28 and, by default, probes each server and speaks whichever revision it offers, so one `MCPClient` can reach upgraded and third-party servers alike. Features that older revisions lack fail with an explicit error on a legacy-negotiated connection instead of being emulated.
 
-Streamable HTTP still streams responses as Server-Sent Events. What is removed is the standalone `GET /sse` + `POST /messages` transport, not SSE framing.
+If you need to keep **serving** pre-2026 clients, stay on `@mastra/mcp` 1.x. It remains supported against current `@mastra/core`, and a Mastra instance can register 1.x and 2.x servers side by side.
+
+Streamable HTTP still streams responses as Server-Sent Events. What's removed is the standalone `GET /sse` + `POST /messages` transport, not SSE framing.
 
 ## Changed
 
 ### `@mastra/core` peer range
 
-`@mastra/mcp` 2.0 requires `@mastra/core` 1.67 or newer, which ships the MCP v2 contracts (`MCPServerBaseV2`, `createMCPTool`, `MCPRequestContextV2`). Update both packages together.
+`@mastra/mcp` 2.0 requires `@mastra/core` 1.68 or newer, which adds the shared server contract (`mcpVersion`, `MCPToolExecutionResultV2`, `context.mcp.protocolVersion`). Update both packages together.
 
 ```diff
 - "@mastra/core": "^1.60.0",
 - "@mastra/mcp": "^1.17.0"
-+ "@mastra/core": "^1.67.0",
++ "@mastra/core": "^1.68.0",
 + "@mastra/mcp": "^2.0.0"
 ```
 
-### Tools that ask the caller for input use `createMCPTool`
+### Tools that ask the caller for input suspend and resume
 
-In 1.x a tool asked for input through `context.mcp.elicitation.sendRequest()` inside `createTool` and awaited the answer while the request stayed open. In 2.0 the server returns `input_required` and the handler runs again with the caller's answers, so protocol-aware tools are written with `createMCPTool` from `@mastra/core/mcp` and return an explicit outcome per round. Ordinary `createTool` definitions still work unchanged on a v2 server; they receive their normal execution context without a `context.mcp` property.
+In 1.x a tool asked for input through `context.mcp.elicitation.sendRequest()` and awaited the answer while the request stayed open. In 2.0 the tool calls `context.suspend(payload)` and returns; the server ends the request as `input_required`, and when the caller answers, the tool runs again with `context.resumeData` (the answer, validated against `resumeSchema`) and `context.suspendPayload` (what it suspended with, validated against `suspendSchema`). This is the same `suspend`/`resume` vocabulary agents and workflows already use, so one `createTool` definition serves all three.
 
-To migrate, move each `sendRequest` into a named round: read the answer for that round from `request.inputResponses`, return `{ kind: 'input_required', result }` when it is missing, and return `{ kind: 'completed', value }` when the tool is done. Carry the state the next round needs in `requestState`; the client echoes it byte for byte.
+To migrate, move each `sendRequest` into a suspension. Put the state the next round needs in the suspend payload and branch on it when the tool resumes. The server never replays earlier rounds: each round sees only the previous payload and the current answer.
 
 ```diff
-- import { createTool } from '@mastra/core/tools';
-+ import { createMCPTool } from '@mastra/core/mcp';
-+ import { inputRequired } from '@modelcontextprotocol/server';
-
-- export const bookDelivery = createTool({
-+ export const bookDelivery = createMCPTool({
+  export const bookDelivery = createTool({
     id: 'bookDelivery',
     inputSchema: z.object({ orderId: z.string() }),
     outputSchema: z.object({ confirmed: z.boolean() }),
--   execute: async ({ orderId }, context) => {
++   suspendSchema: z.object({ phase: z.literal('address'), message: z.string() }),
++   resumeSchema: z.object({ address: z.string() }),
+    execute: async ({ orderId }, context) => {
 -     const answer = await context.mcp!.elicitation.sendRequest({
 -       message: 'Delivery address?',
 -       requestedSchema: addressSchema,
@@ -50,50 +49,67 @@ To migrate, move each `sendRequest` into a named round: read the answer for that
 -     if (answer.action !== 'accept') return { confirmed: false };
 -     await book(orderId, answer.content.address);
 -     return { confirmed: true };
--   },
-+   execute: async ({ orderId }, { request }) => {
-+     const answer = request.inputResponses?.address;
-+     if (!answer) {
-+       return {
-+         kind: 'input_required',
-+         result: inputRequired({
-+           inputRequests: {
-+             address: inputRequired.elicit({ message: 'Delivery address?', requestedSchema: addressSchema }),
-+           },
-+         }),
-+       };
++     if (!context.resumeData) {
++       await context.suspend?.({ phase: 'address', message: 'Delivery address?' });
++       return;
 +     }
-+     if (answer.action !== 'accept') return { kind: 'completed', value: { confirmed: false } };
-+     await book(orderId, (answer.content as { address: string }).address);
-+     return { kind: 'completed', value: { confirmed: true } };
-+   },
++     await book(orderId, context.resumeData.address);
++     return { confirmed: true };
+    },
   });
 ```
 
-Carry state between rounds in `requestState`: the client echoes it byte for byte, and the server must treat it as untrusted. Pass a `createRequestStateCodec` `verify` function as `requestState: { verify }` in the `MCPServer` config so the framework rejects tampered or expired state before your handler runs and hands the decoded payload to `request.requestState`.
+`resumeSchema` becomes the form the caller fills in, so it must describe a flat object of primitives. A caller that declines or cancels the form ends the call with an error, and the tool doesn't run again.
 
-Native tools belong to the MCP server only. Passing one to an agent, workflow or `Mastra` `tools` map throws, because a protocol continuation is not a business result.
+The continuation travels as an opaque `requestState` string that the client echoes byte for byte. The server signs it, and rejects a tampered, expired or foreign state (a different tool, different arguments or a different principal) before your handler runs. The payload is signed, not encrypted, so keep it small and non-secret (IDs and phase, not confidential data). Set `requestState: { key }` from the environment so every instance that may answer a continuation shares the key. Without it the server generates a key per process and continuations only succeed on that process.
 
-### Resource and prompt callbacks receive `{ request, requestContext }`
+```diff
+  const server = new MCPServer({
+    name: 'booking',
+    version: '2.0.0',
+    tools: { bookDelivery },
++   requestState: { key: process.env.MCP_REQUEST_STATE_KEY!, ttlSeconds: 600 },
+  });
+```
 
-Resource and prompt callbacks used to receive `{ extra }`, a copy of the SDK handler context. They now receive an `MCPServerRequest`: `request` is the request-scoped protocol context (cancellation `signal`, `_meta`, `inputResponses`, `requestState`, `log`) and `requestContext` is the trusted application context that already carries `authInfo` and the user mapped by `mapAuthInfoToUser`. Callbacks may also return an `input_required` continuation.
+### `context.mcp` is the same object, with server-initiated requests removed
 
-To migrate, read authentication from `requestContext` and cancellation from `request.signal`.
+Tools still receive `context.mcp` on a 2.0 server: `extra` (cancellation `signal`, `requestId`, `authInfo`, `_meta`), `log` and `progress` work as before, and `context.mcp.protocolVersion` is `'2026-07-28'`. The members that relied on server-initiated requests are deprecated and throw on a 2.0 server with a message that names the replacement: `elicitation.sendRequest` (use `suspend`), `extra.sendRequest` and `extra.sendNotification` (use `log` and `progress`).
+
+### `executeTool` reports a suspension
+
+`server.executeTool()` and the Mastra REST route `POST /api/mcp/:serverId/tools/:toolId/execute` return `{ status: 'completed', output }` for a finished call and `{ status: 'suspended', suspendPayload, resumeSchema }` when the tool asked for input. Continue by posting the same `data` again with `resumeData` and the echoed `suspendPayload`. Invalid `resumeData` rejects the call.
+
+```diff
+- const output = await server.executeTool('bookDelivery', { orderId });
++ const result = await server.executeTool('bookDelivery', { orderId });
++ if (result.status === 'suspended') {
++   const answer = await askUser(result.suspendPayload, result.resumeSchema);
++   await server.executeTool('bookDelivery', { orderId }, { resumeData: answer, suspendPayload: result.suspendPayload });
++ }
+```
+
+### Resource and prompt callbacks can suspend too
+
+`getResourceContent` and `getPromptMessages` receive `{ extra, requestContext, suspend, resumeData, suspendPayload }` alongside their existing parameters. `extra` is the same protocol context tools see as `context.mcp.extra`, and `requestContext` is the trusted application context that already carries `authInfo` and the user mapped by `mapAuthInfoToUser`. Declare `resumeSchema` on `resources` or `prompts` to make `suspend` usable.
 
 ```diff
   resources: {
--   listResources: async ({ extra }) => listFor(extra?.authInfo?.clientId),
+    listResources: async ({ requestContext }) => listFor(requestContext.get('authInfo')?.clientId),
 -   getResourceContent: async ({ uri, extra }) => read(uri, extra?.signal),
-+   listResources: async ({ requestContext }) => listFor(requestContext.get('authInfo')?.clientId),
-+   getResourceContent: async ({ uri, request }) => read(uri, request.signal),
++   resumeSchema: z.object({ reader: z.string() }),
++   getResourceContent: async ({ uri, extra, suspend, resumeData }) => {
++     if (!resumeData) return suspend({ message: 'Who is reading?' });
++     return read(uri, resumeData.reader, extra.signal);
++   },
   },
 ```
 
 ### Per-request logging replaces session log levels
 
-Servers no longer accept `logging/setLevel` or keep a log level per connection. A client opts in per request by sending the `io.modelcontextprotocol/logLevel` metadata key, and the server delivers `notifications/message` for that request only, filtered to the requested severity. Tools log through `request.log(level, data)` on native tools; ordinary tools keep using the Mastra logger and observability, which are unaffected.
+Servers no longer accept `logging/setLevel` or keep a log level per connection. A client opts in per request by sending the `io.modelcontextprotocol/logLevel` metadata key, and the server delivers `notifications/message` for that request only, filtered to the requested severity. A later round of the same tool call is a new request: it must opt in again. Tools keep logging through `context.mcp.log(level, message, data)`. The Mastra logger and observability are unaffected.
 
-On the client, `enableServerLogs` (default `true`) now attaches the metadata key to every request at `serverLogLevel` (default `'info'`); set `enableServerLogs: false` to receive nothing. Delivered messages still reach your `logger` handler.
+On the client, `enableServerLogs` (default `true`) attaches the metadata key to every request at `serverLogLevel` (default `'info'`). Set `enableServerLogs: false` to receive nothing. Delivered messages still reach your `logger` handler.
 
 ```diff
   servers: {
@@ -108,7 +124,7 @@ On the client, `enableServerLogs` (default `true`) now attaches the metadata key
 
 ### Resource updates arrive through `subscriptions.listen`
 
-`resources.subscribe` and `resources.unsubscribe` are replaced by a single `subscriptions/listen` stream that carries list-changed and resource-updated notifications. Register handlers first, then open the stream with the filter you need; close the returned subscription to stop.
+`resources.subscribe` and `resources.unsubscribe` are replaced by a single `subscriptions/listen` stream that carries list-changed and resource-updated notifications. Register handlers first, then open the stream with the filter you need. Close the returned subscription to stop.
 
 ```diff
   await mcp.resources.onUpdated('weather', ({ uri }) => refresh(uri));
@@ -123,7 +139,7 @@ On the client, `enableServerLogs` (default `true`) now attaches the metadata key
 
 ### Client input handlers are configured per server
 
-The client answered server elicitation with `mcp.elicitation.onRequest(serverName, handler)`. Because input requests are now embedded in `input_required` results, the handler is part of the server definition and receives one keyed request at a time. Configuring it advertises the `elicitation.form` capability; servers only embed elicitation for clients that advertise it.
+The client answered server elicitation with `mcp.elicitation.onRequest(serverName, handler)`. Because input requests are now embedded in `input_required` results, the handler is part of the server definition and receives one request at a time. Configuring it advertises the `elicitation.form` capability. Without a handler an `input_required` result is surfaced as an error rather than answered on your behalf.
 
 ```diff
   const mcp = new MCPClient({
@@ -135,6 +151,22 @@ The client answered server elicitation with `mcp.elicitation.onRequest(serverNam
     },
   });
 - await mcp.elicitation.onRequest('booking', async params => askUser(params));
+```
+
+### Client `protocolVersion` pins instead of selecting a revision
+
+The 1.x client accepted `protocolVersion: '2025-11-25' | '2026-07-28' | 'auto'`. The 2.0 client always speaks 2026-07-28 and, when the option is omitted, probes the server with `server/discover` and falls back to the `initialize` handshake for servers that haven't upgraded. Pin `'2026-07-28'` to skip the probe and fail on a legacy server, or `'legacy'` to skip the probe and use the handshake directly. The negotiated revision is cached per connection for reconnects and reported by `mcp.getServerProtocolVersions()`.
+
+On a legacy-negotiated connection the shared verbs work (`tools/list`, `tools/call`, `resources/read`, `prompts/get`, list-changed notifications). `subscriptions.listen` and embedded input requests throw an error naming the negotiated revision.
+
+```diff
+  servers: {
+    thirdParty: {
+      url: new URL('https://example.com/mcp'),
+-     protocolVersion: 'auto',
++     protocolVersion: 'legacy', // optional: skip the probe for a server known not to have upgraded
+    },
+  },
 ```
 
 ### OAuth clients are pre-registered or use a Client ID Metadata Document
@@ -151,7 +183,7 @@ The client answered server elicitation with `mcp.elicitation.onRequest(serverNam
 
 ### `startHTTP` options
 
-`startHTTP` keeps `url`, `httpPath`, `req` and `res`. The `options` object only carries request security (`enableDnsRebindingProtection`, `allowedHosts`, `allowedOrigins`); the session and serverless flags are gone because every request is stateless.
+`startHTTP` keeps `url`, `httpPath`, `req` and `res`. The `options` object only carries request security (`enableDnsRebindingProtection`, `allowedHosts`, `allowedOrigins`). The session and serverless flags are gone because every request is stateless.
 
 ```diff
   await server.startHTTP({
@@ -175,9 +207,9 @@ The client answered server elicitation with `mcp.elicitation.onRequest(serverNam
 
 ## Removed
 
-### `protocolVersion` option
+### Server `protocolVersion` option
 
-Servers and clients accepted `protocolVersion` (`'2025-11-25'`, `'2026-07-28'` or `'auto'`). Only `2026-07-28` is spoken now, exposed as the `MCP_PROTOCOL_VERSION` and `MCP_CLIENT_PROTOCOL_VERSION` constants. Remove the option; a peer that does not offer `2026-07-28` fails with an explicit negotiation error instead of a downgrade.
+Servers accepted `protocolVersion` (`'2025-11-25'`, `'2026-07-28'` or `'auto'`). Only `2026-07-28` is served now, exposed as the `MCP_PROTOCOL_VERSION` constant. Remove the option; a client that doesn't offer `2026-07-28` fails with an explicit negotiation error instead of a downgrade.
 
 ```diff
   const server = new MCPServer({
@@ -190,7 +222,7 @@ Servers and clients accepted `protocolVersion` (`'2025-11-25'`, `'2026-07-28'` o
 
 ### `startSSE`, `startHonoSSE`, `connectSSE` and the `/sse` + `/messages` routes
 
-The standalone HTTP+SSE transport is removed from servers, and the client no longer falls back to it when Streamable HTTP is unavailable. Mastra server adapters answer `404` on `/sse` and `/messages` for v2 servers, and Studio no longer shows an SSE endpoint for them. Point every client at the `/mcp` endpoint.
+The standalone HTTP+SSE transport is no longer served, and the client no longer falls back to it when Streamable HTTP is unavailable. `startSSE` and `startHonoSSE` remain on the shared `MCPServerBase` for 1.x servers but reject on a 2.0 server. `connectSSE` is removed. Mastra server adapters answer `404` on `/sse` and `/messages` for 2.0 servers, and Studio no longer shows an SSE endpoint for them. Point every client at the `/mcp` endpoint.
 
 ```diff
 - url: new URL('http://localhost:4111/api/mcp/weather/sse'),
@@ -199,7 +231,7 @@ The standalone HTTP+SSE transport is removed from servers, and the client no lon
 
 ### `handleServerlessRequest`, `sessionId`, `sessionIds`, `reconnectionOptions`, `eventSourceInit`
 
-Requests are stateless, so there is nothing to resume or identify. `startHTTP` handles serverless and long-lived servers alike; remove the session options from server and client definitions.
+Requests are stateless, so there is nothing to resume or identify. `startHTTP` handles serverless and long-lived servers alike. Remove the session options from server and client definitions.
 
 ```diff
   servers: {
@@ -213,31 +245,29 @@ Requests are stateless, so there is nothing to resume or identify. `startHTTP` h
 
 ### `elicitation` actions on server and client
 
-`server.elicitation.sendRequest()` and `mcp.elicitation.onRequest()` are removed together with the `context.mcp` execution context. Use `createMCPTool` on the server and the `inputRequests` server option on the client, as shown above.
+`server.elicitation.sendRequest()` and `mcp.elicitation.onRequest()` are removed. Suspend from the tool and configure `inputRequests` on the client.
 
 ### `roots` and `sampling`
 
-Clients no longer advertise `roots`; `setRoots()` and `sendRootsListChanged()` are gone. Servers neither request sampling nor advertise it. A server that embeds a `roots/list` or `sampling/createMessage` request in `input_required` is not answered: the client has no handler for those methods, so the call fails instead of fabricating a response.
+Clients no longer advertise `roots`. `setRoots()` and `sendRootsListChanged()` are gone. Servers neither request sampling nor advertise it. A server that embeds a `roots/list` or `sampling/createMessage` request in `input_required` isn't answered: the client has no handler for those methods, so the call fails instead of fabricating a response.
 
 ### `logging/setLevel` and `sendLoggingMessage`
 
-Servers keep the static `logging` capability required by the specification but reject `logging/setLevel` with method-not-found; `server.sendLoggingMessage()` and `server.getServer()` are removed. Log per request through `request.log` or keep using the Mastra logger.
+Servers keep the static `logging` capability required by the specification but reject `logging/setLevel` with method-not-found. `server.sendLoggingMessage()` and `server.getServer()` are removed. Log per request through `context.mcp.log` or keep using the Mastra logger.
 
 ### `resources/subscribe` and `resources/unsubscribe`
 
-Legacy resource subscriptions are removed from both sides; use `subscriptions.listen` as shown above.
+Legacy resource subscriptions are removed from both sides. Use `subscriptions.listen` instead.
 
 ### Dynamic client registration
 
 `registerClient`, `OAuthClientRegistrationError` and the `saveClientInformation`-driven registration fallback are removed. See the OAuth section above for the replacement.
 
-### `MCPServerBase` for `@mastra/mcp` servers
+### Telling 1.x and 2.0 servers apart
 
-`MCPServer` and `MCPClientServerProxy` now extend `MCPServerBaseV2`. Code that narrows registry entries should use `isMCPServerV2()` from `@mastra/core/mcp`; `mastra.getMCPServer()` returns the `MCPServerRegistryEntry` union so 1.x and 2.x servers coexist.
+Both extend the same `MCPServerBase`, and a 2.0 server sets `mcpVersion` to `2`. Use it to branch where the two differ, such as whether an `executeTool` result can be a suspension.
 
 ```diff
-- import { MCPServerBase } from '@mastra/core/mcp';
-- if (server instanceof MCPServerBase) { ... }
-+ import { isMCPServerV2 } from '@mastra/core/mcp';
-+ if (isMCPServerV2(server)) { ... }
+  const server = mastra.getMCPServer('booking');
++ if (server?.mcpVersion === 2) { ... }
 ```
