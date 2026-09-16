@@ -12,10 +12,11 @@ const embeddedPricingRegistry = PricingRegistry.fromText(fs.readFileSync(embedde
 
 describe('estimateCosts', () => {
   it.each([
-    ['gpt-5.6', '02673ef8836dfa48', 0.005, 0.0005, 0.00625, 0.03, 0.00001, 0.000045],
-    ['gpt-5.6-sol', '20d0cde775d1441d', 0.005, 0.0005, 0.00625, 0.03, 0.00001, 0.000045],
-    ['gpt-5.6-terra', 'd39bbd4dbe73180a', 0.0025, 0.00025, 0.003125, 0.015, 0.000005, 0.0000225],
-    ['gpt-5.6-luna', '3ad0e58759c048c0', 0.001, 0.0001, 0.00125, 0.006, 0.000002, 0.000009],
+    ['gpt-5.6', '02673ef8836dfa48', 0.004, 0.0004, 0.005, 0.02, 0.000008, 0.00003],
+    ['gpt-5.6-sol', '20d0cde775d1441d', 0.004, 0.0004, 0.005, 0.02, 0.000008, 0.00003],
+    ['gpt-5.6-terra', 'd39bbd4dbe73180a', 0.002, 0.0002, 0.0025, 0.012, 0.000004, 0.000018],
+    ['gpt-5.6-luna', '3ad0e58759c048c0', 0.0002, 0.00002, 0.00025, 0.0012, 0.0000004, 0.0000018],
+    ['gpt-6-astra', '8bec3a6a22594a1b', 0.01, 0.001, 0.0125, 0.05, 0.00002, 0.000075],
   ])(
     'estimates embedded OpenAI pricing for %s',
     (
@@ -68,7 +69,9 @@ describe('estimateCosts', () => {
 
   it.each([
     ['claude-fable-5', '00de3426817c9886', 0.01, 0.001, 0.0125, 0.05],
+    ['claude-fable-5-1', '8f9fcea39a26d035', 0.01, 0.00025, 0.0125, 0.05],
     ['claude-opus-4-8', '93c628c3a9d22500', 0.005, 0.0005, 0.00625, 0.025],
+    ['claude-opus-5', 'efdf78c24420cf8f', 0.005, 0.0005, 0.00625, 0.025],
     ['claude-sonnet-5', '916837951831cfe5', 0.002, 0.0002, 0.0025, 0.01],
   ])(
     'estimates embedded Anthropic pricing for %s',
@@ -173,11 +176,14 @@ describe('estimateCosts', () => {
     expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(0.0042);
   });
 
-  it('estimates embedded Google pricing for gemini-3.5-flash', () => {
+  it.each([
+    ['gemini-3.5-flash', 'f13bc1ec3f88b97d', 0.0015, 0.00015, 0.009],
+    ['gemini-3.8-flash', '95c06825343b6f09', 0.00075, 0.000075, 0.00375],
+  ])('estimates embedded Google pricing for %s', (model, pricingId, inputCost, cacheReadCost, outputCost) => {
     const costs = estimateCosts(
       {
         provider: 'google',
-        model: 'gemini-3.5-flash',
+        model,
         usage: {
           inputTokens: 2_000,
           outputTokens: 1_000,
@@ -188,17 +194,18 @@ describe('estimateCosts', () => {
       embeddedPricingRegistry,
     );
 
-    expect(costs.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(0.0015);
-    expect(costs.get(TokenMetrics.INPUT_CACHE_READ)?.estimatedCost).toBeCloseTo(0.00015);
-    expect(costs.get(TokenMetrics.OUTPUT_TEXT)?.estimatedCost).toBeCloseTo(0.009);
+    expect(costs.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(inputCost);
+    expect(costs.get(TokenMetrics.INPUT_CACHE_READ)?.estimatedCost).toBeCloseTo(cacheReadCost);
+    expect(costs.get(TokenMetrics.OUTPUT_TEXT)?.estimatedCost).toBeCloseTo(outputCost);
     expect(costs.get(TokenMetrics.TOTAL_INPUT)?.costMetadata).toEqual({
-      pricing_id: 'f13bc1ec3f88b97d',
+      pricing_id: pricingId,
       tier_index: 0,
     });
   });
 
   it.each([
     ['grok-4.5', 'ec1c2a95e38faa9b', 0.002, 0.0003, 0.006, 0.000004, 0.0000006, 0.000012],
+    ['grok-4.6', 'ff92768d5b083282', 0.002, 0.0005, 0.006, 0.000004, 0.000001, 0.000012],
     ['grok-build-0.1', 'd03e4214108e83a2', 0.001, 0.0002, 0.002, 0.000002, 0.0000004, 0.000004],
   ])(
     'estimates embedded xAI pricing for %s',
