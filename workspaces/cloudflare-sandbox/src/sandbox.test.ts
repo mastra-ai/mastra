@@ -323,6 +323,48 @@ describe('CloudflareSandbox', () => {
       expect(sandbox.mounts.has('/workspace/data')).toBe(false);
     });
 
+    it('re-mounts a stale mount before an operation after the container sleeps', async () => {
+      const bridge = createFakeBridge({ apiToken: 'secret' });
+      const sandbox = createSandbox(bridge, { id: 'wake-1' });
+      await sandbox._start();
+      await sandbox.mount(fakeFilesystem(r2Config), '/workspace/data');
+      expect(bridge.mounts).toHaveLength(1);
+
+      // The SDK forgets the mount when the idle container stops.
+      bridge.sleep();
+
+      await sandbox.executeCommand('true');
+
+      // The probe found the path missing and re-issued the same mount request.
+      expect(bridge.mounts).toHaveLength(2);
+      expect(bridge.mounts[1]).toMatchObject({ mountPath: '/workspace/data' });
+      expect(bridge.activeMounts.has('/workspace/data')).toBe(true);
+    });
+
+    it('does not re-mount when the mount is still active', async () => {
+      const bridge = createFakeBridge({ apiToken: 'secret' });
+      const sandbox = createSandbox(bridge, { id: 'wake-2' });
+      await sandbox._start();
+      await sandbox.mount(fakeFilesystem(r2Config), '/workspace/data');
+
+      await sandbox.executeCommand('true');
+      await sandbox.writeFiles([{ path: 'note.txt', content: 'hi' }]);
+
+      // Still one mount request; the probe saw the path was a live mountpoint.
+      expect(bridge.mounts).toHaveLength(1);
+    });
+
+    it('does not probe when nothing is mounted', async () => {
+      const bridge = createFakeBridge({ apiToken: 'secret' });
+      const sandbox = createSandbox(bridge, { id: 'wake-3' });
+      await sandbox._start();
+
+      await sandbox.executeCommand('echo hi');
+
+      expect(bridge.execs).toHaveLength(1);
+      expect(bridge.execs.every(exec => !exec.argv.join(' ').includes('mountpoint'))).toBe(true);
+    });
+
     it('mounts end-to-end through Workspace mounts on start, like other providers', async () => {
       const bridge = createFakeBridge({ apiToken: 'secret' });
       const sandbox = createSandbox(bridge, { id: 'mount-3' });

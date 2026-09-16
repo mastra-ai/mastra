@@ -2,7 +2,7 @@
 '@mastra/cloudflare-sandbox': minor
 ---
 
-Added bucket mounts to `CloudflareSandbox` so files can survive container sleep. Cloudflare stops an idle container after `sleepAfter`, and the next command starts fresh, so `/workspace` was silently lost between agent turns. The sandbox now implements the Workspace `mounts` hook: any `S3Filesystem` (including Cloudflare R2) listed under `mounts` is mounted through the bridge on `start()`, and the Cloudflare Sandbox re-establishes it when a slept container wakes.
+Added bucket mounts to `CloudflareSandbox` so files can survive container sleep. Cloudflare stops an idle container after `sleepAfter`, and the next command starts fresh, so `/workspace` was silently lost between agent turns. The sandbox now implements the Workspace `mounts` hook: any `S3Filesystem` (including Cloudflare R2) listed under `mounts` is mounted through the bridge on `start()`. A slept container boots without its mounts, so the sandbox detects and re-mounts any dropped paths before the next filesystem operation, keeping mounted data durable across sleep.
 
 ```typescript
 const workspace = new Workspace({

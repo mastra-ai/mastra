@@ -181,6 +181,8 @@ export class CloudflareSandbox extends MastraSandbox {
   private sandboxId?: string;
   private createdAt = new Date();
   private lastUsedAt?: Date;
+  /** Shared across concurrent callers so a wake triggers a single re-mount pass. */
+  private ensureMountsPromise?: Promise<void>;
 
   constructor(options: CloudflareSandboxOptions) {
     const name = options.name ?? 'Cloudflare Sandbox';
@@ -221,6 +223,7 @@ export class CloudflareSandbox extends MastraSandbox {
 
   async executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult> {
     const sandboxId = this.requireSandboxId();
+    await this.ensureMountsActive(sandboxId);
 
     const startedAt = Date.now();
     const timeout = options?.timeout ?? this.commandTimeout;
@@ -319,6 +322,7 @@ export class CloudflareSandbox extends MastraSandbox {
   async writeFiles(files: SandboxFileInput[]): Promise<void> {
     assertModesUnsupported(files, 'Cloudflare');
     const sandboxId = this.requireSandboxId();
+    await this.ensureMountsActive(sandboxId);
     // The bridge writes one file per request.
     for (const file of files) {
       await this.client.writeFile(sandboxId, resolveWorkspacePath(file.path), file.content);
@@ -329,6 +333,7 @@ export class CloudflareSandbox extends MastraSandbox {
   /** Reads a single file under /workspace, returning its raw bytes. */
   async readFile(path: string): Promise<Uint8Array> {
     const sandboxId = this.requireSandboxId();
+    await this.ensureMountsActive(sandboxId);
     const bytes = await this.client.readFile(sandboxId, resolveWorkspacePath(path));
     this.lastUsedAt = new Date();
     return bytes;
@@ -337,6 +342,7 @@ export class CloudflareSandbox extends MastraSandbox {
   /** Archives /workspace, returning raw tar bytes that can later restore it via hydrateWorkspace. */
   async persistWorkspace(options?: CloudflarePersistWorkspaceOptions): Promise<Uint8Array> {
     const sandboxId = this.requireSandboxId();
+    await this.ensureMountsActive(sandboxId);
     const archive = await this.client.persistWorkspace(sandboxId, options);
     this.lastUsedAt = new Date();
     return archive;
@@ -345,6 +351,7 @@ export class CloudflareSandbox extends MastraSandbox {
   /** Restores /workspace from a raw tar payload produced by persistWorkspace. */
   async hydrateWorkspace(tar: Uint8Array): Promise<void> {
     const sandboxId = this.requireSandboxId();
+    await this.ensureMountsActive(sandboxId);
     await this.client.hydrateWorkspace(sandboxId, tar);
     this.lastUsedAt = new Date();
   }
@@ -367,9 +374,10 @@ export class CloudflareSandbox extends MastraSandbox {
   /**
    * Mounts an S3-compatible bucket (R2, S3, MinIO, ...) at `mountPath` through
    * the bridge's mount route. Called by MountManager for each Workspace `mounts`
-   * entry after start(); the Cloudflare Sandbox re-establishes the mount itself
-   * when a slept container boots, so mounted paths are the durable part of the
-   * filesystem.
+   * entry after start(). The Cloudflare Sandbox SDK forgets mounts when an idle
+   * container is stopped and does not restore them on wake, so
+   * {@link ensureMountsActive} re-mounts stale paths before each operation; that
+   * makes mounted paths the durable part of the filesystem.
    */
   async mount(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult> {
     validateMountPath(mountPath);
@@ -419,6 +427,63 @@ export class CloudflareSandbox extends MastraSandbox {
     return typeof this.instructions === 'function'
       ? this.instructions({ defaultInstructions })
       : (this.instructions ?? defaultInstructions);
+  }
+
+  /**
+   * A slept container boots fresh without its mounts: `@cloudflare/sandbox` keeps
+   * `activeMounts` in memory and clears it on stop, so it never re-mounts on wake,
+   * and `GET /running` still reports `true` until the DO next talks to the
+   * container. Before any operation that reads or writes the filesystem, probe the
+   * mounted paths with `mountpoint` and re-mount the ones that are gone. The pass
+   * is shared across concurrent callers, and there is no probe when nothing is
+   * mounted.
+   */
+  private ensureMountsActive(sandboxId: string): Promise<void> {
+    const mountedPaths = [...this.mounts.entries]
+      .filter(([, entry]) => entry.state === 'mounted')
+      .map(([mountPath]) => mountPath);
+    if (mountedPaths.length === 0) return Promise.resolve();
+    if (!this.ensureMountsPromise) {
+      this.ensureMountsPromise = this.remountStalePaths(sandboxId, mountedPaths).finally(() => {
+        this.ensureMountsPromise = undefined;
+      });
+    }
+    return this.ensureMountsPromise;
+  }
+
+  private async remountStalePaths(sandboxId: string, mountedPaths: string[]): Promise<void> {
+    // Mount paths are validated against SAFE_MOUNT_PATH, so they are safe to embed
+    // directly. `mountpoint -q` exits non-zero for a path that is no longer a mount,
+    // and that path is echoed so a single exec reports every stale mount at once.
+    const script = `for p in ${mountedPaths.join(' ')}; do mountpoint -q "$p" || echo "$p"; done`;
+    const decoder = new TextDecoder();
+    let stdout = '';
+    await this.client.exec(
+      sandboxId,
+      { argv: [SHELL_PATH, '-c', script], timeoutMs: this.commandTimeout },
+      {
+        onEvent: event => {
+          if (event.type === 'stdout') stdout += decoder.decode(event.data, { stream: true });
+        },
+      },
+    );
+    stdout += decoder.decode();
+
+    const stalePaths = stdout
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean);
+    for (const mountPath of stalePaths) {
+      const entry = this.mounts.get(mountPath);
+      if (!entry?.config) continue;
+      const translated = toMountRequest(entry.config, mountPath);
+      if ('error' in translated) continue;
+      try {
+        await this.client.mountBucket(sandboxId, translated.request);
+      } catch (cause) {
+        this.logger?.warn(`Failed to re-mount ${mountPath} after container wake`, { error: cause });
+      }
+    }
   }
 
   private requireSandboxId(): string {
