@@ -39,7 +39,7 @@ export function ExperimentSideRail({ experiment, metrics, className }: Experimen
       : null;
 
   return (
-    <Card as="aside" aria-label="Experiment details" className={cn('grid content-start gap-8 p-5', className)}>
+    <Card as="aside" aria-label="Experiment details" className={cn('grid content-start gap-5 p-5', className)}>
       <Section title="Pipeline">
         <ExperimentFlowChain experiment={experiment} />
         {experiment.agentVersion && (

@@ -37,6 +37,11 @@ export function linearIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadat
   if (item.source !== 'linear-issue' || typeof item.metadata.identifier !== 'string') return;
   return item.metadata.identifier;
 }
+/** The opaque Linear issue id a card carries, when it has one. */
+export function linearIssueIdForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+  if (item.source !== 'linear-issue' || typeof item.metadata.linearIssueId !== 'string') return;
+  return item.metadata.linearIssueId;
+}
 
 export type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';
 

@@ -149,6 +149,7 @@ describe('FactoryStartCoordinator', () => {
     });
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
     const session = await vi.mocked(controller.createSession).mock.results[0]?.value;
+    expect(session.thread.rename).toHaveBeenCalledWith({ title: 'Investigate issue 1', pin: false });
     expect(session.permissions.setForTool).toHaveBeenCalledWith({
       toolName: 'factory_transition_work_item',
       policy: 'allow',

@@ -19,12 +19,12 @@ export function ChartCard({
     <div className={`border-border1 bg-surface2 flex flex-col rounded-lg border ${className}`}>
       <div className="flex shrink-0 items-start justify-between px-4 py-3">
         <div>
-          <h3 className="text-icon6 text-ui-lg font-semibold">{title}</h3>
+          <h3 className="text-icon6 text-ui-md font-semibold">{title}</h3>
           {description && <p className="text-icon2 text-ui-sm mt-0.5">{description}</p>}
         </div>
         {summary && (
           <div className="text-right">
-            <span className="text-icon6 text-ui-lg font-mono font-semibold">{summary}</span>
+            <span className="text-icon6 text-ui-md font-mono font-semibold">{summary}</span>
             {summaryLabel && <p className="text-icon2 text-ui-sm">{summaryLabel}</p>}
           </div>
         )}

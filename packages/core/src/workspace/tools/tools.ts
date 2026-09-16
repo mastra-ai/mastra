@@ -8,6 +8,7 @@
  */
 
 import { z } from 'zod/v4';
+import type { ToolBackgroundConfig } from '../../background-tasks/types';
 import { RequestContext } from '../../request-context';
 import type { WorkspaceToolName } from '../constants';
 import { WORKSPACE_TOOLS } from '../constants';
@@ -34,7 +35,7 @@ import { editFileTool } from './edit-file';
 import { executeCommandTool, executeCommandWithBackgroundTool } from './execute-command';
 import { fileStatTool } from './file-stat';
 import { getProcessOutputTool } from './get-process-output';
-import { grepTool } from './grep';
+import { createGrepTool, type GrepToolOptions } from './grep';
 import { indexContentTool } from './index-content';
 import { killProcessTool } from './kill-process';
 import { listFilesTool } from './list-files';
@@ -119,6 +120,7 @@ function toPlainRequestContext(requestContext: unknown): Record<string, unknown>
 export interface ResolvedToolConfig {
   enabled: boolean;
   requireApproval: DynamicToolConfigValue<ToolConfigWithArgsContext>;
+  background?: ToolBackgroundConfig;
   requireReadBeforeWrite?: DynamicToolConfigValue<ToolConfigWithArgsContext>;
   maxOutputTokens?: number;
   name?: string;
@@ -144,6 +146,7 @@ export async function resolveToolConfig(
 ): Promise<ResolvedToolConfig> {
   let enabled: DynamicToolConfigValue = true;
   let requireApproval: DynamicToolConfigValue<ToolConfigWithArgsContext> = false;
+  let background: ToolBackgroundConfig | undefined;
   let requireReadBeforeWrite: DynamicToolConfigValue<ToolConfigWithArgsContext> | undefined;
   let maxOutputTokens: number | undefined;
   let name: string | undefined;
@@ -165,6 +168,9 @@ export async function resolveToolConfig(
       if (perToolConfig.requireApproval !== undefined) {
         requireApproval = perToolConfig.requireApproval;
       }
+      if (perToolConfig.background !== undefined) {
+        background = perToolConfig.background;
+      }
       if (perToolConfig.requireReadBeforeWrite !== undefined) {
         requireReadBeforeWrite = perToolConfig.requireReadBeforeWrite;
       }
@@ -180,7 +186,15 @@ export async function resolveToolConfig(
   // Resolve `enabled` now (tool-listing time) — safe default: false (fail-closed)
   const resolvedEnabled = await resolveDynamicValue(enabled, context, false);
 
-  return { enabled: resolvedEnabled, requireApproval, requireReadBeforeWrite, maxOutputTokens, name, hooks };
+  return {
+    enabled: resolvedEnabled,
+    requireApproval,
+    background,
+    requireReadBeforeWrite,
+    maxOutputTokens,
+    name,
+    hooks,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -383,11 +397,14 @@ function wrapWithWriteLock(tool: any, writeLock: FileWriteLock): any {
  * Creates workspace tools that will be auto-injected into agents.
  *
  * @param workspace - The workspace instance to bind tools to
+ * @param configContext - Optional tool config context
+ * @param options - Optional tool construction options (e.g. grep strict mode)
  * @returns Record of workspace tools
  */
 export async function createWorkspaceTools(
   workspace: Workspace,
   configContext?: Omit<ToolConfigContext, 'requestContext'> & { requestContext?: unknown },
+  options?: { grep?: GrepToolOptions },
 ) {
   // Seed fallback context so dynamic enabled functions always get called,
   // even if the caller omits configContext.  Normalize requestContext so
@@ -454,6 +471,10 @@ export async function createWorkspaceTools(
       wrapped = { ...tool, requireApproval: config.requireApproval };
     }
 
+    if (config.background) {
+      wrapped = { ...wrapped, background: config.background };
+    }
+
     if (opts?.readTrackerMode) {
       wrapped = wrapWithReadTracker(wrapped, workspace, readTracker, config, opts.readTrackerMode);
     } else {
@@ -508,7 +529,7 @@ export async function createWorkspaceTools(
     });
     await addTool(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT, fileStatTool, { targets: { filesystem: true } });
     await addTool(WORKSPACE_TOOLS.FILESYSTEM.MKDIR, mkdirTool, { requireWrite: true, targets: { filesystem: true } });
-    await addTool(WORKSPACE_TOOLS.FILESYSTEM.GREP, grepTool, { targets: { filesystem: true } });
+    await addTool(WORKSPACE_TOOLS.FILESYSTEM.GREP, createGrepTool(options?.grep), { targets: { filesystem: true } });
 
     // AST edit tool (only if @ast-grep/napi is available at runtime)
     if (isAstGrepAvailable()) {

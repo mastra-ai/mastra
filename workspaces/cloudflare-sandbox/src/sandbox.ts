@@ -8,8 +8,12 @@ import type {
   SandboxFileInput,
   SandboxInfo,
 } from '@mastra/core/workspace';
-import { MastraSandbox } from '@mastra/core/workspace';
-import { CloudflareSandboxBridgeClient, type CloudflareSandboxBridgeClientOptions } from './bridge-client';
+import { MastraSandbox, assertModesUnsupported } from '@mastra/core/workspace';
+import {
+  CloudflareSandboxBridgeClient,
+  type CloudflarePersistWorkspaceOptions,
+  type CloudflareSandboxBridgeClientOptions,
+} from './bridge-client';
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;
 const WORKSPACE_ROOT = '/workspace';
@@ -17,7 +21,14 @@ const WORKSPACE_ROOT = '/workspace';
 type InstructionsOption = string | ((options: { defaultInstructions: string }) => string);
 type BridgeClient = Pick<
   CloudflareSandboxBridgeClient,
-  'createSandbox' | 'isRunning' | 'deleteSandbox' | 'writeFile' | 'exec'
+  | 'createSandbox'
+  | 'isRunning'
+  | 'deleteSandbox'
+  | 'writeFile'
+  | 'readFile'
+  | 'persistWorkspace'
+  | 'hydrateWorkspace'
+  | 'exec'
 >;
 
 export interface CloudflareSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
@@ -228,11 +239,35 @@ export class CloudflareSandbox extends MastraSandbox {
   }
 
   async writeFiles(files: SandboxFileInput[]): Promise<void> {
+    assertModesUnsupported(files, 'Cloudflare');
     const sandboxId = this.requireSandboxId();
     // The bridge writes one file per request.
     for (const file of files) {
       await this.client.writeFile(sandboxId, resolveWorkspacePath(file.path), file.content);
     }
+    this.lastUsedAt = new Date();
+  }
+
+  /** Reads a single file under /workspace, returning its raw bytes. */
+  async readFile(path: string): Promise<Uint8Array> {
+    const sandboxId = this.requireSandboxId();
+    const bytes = await this.client.readFile(sandboxId, resolveWorkspacePath(path));
+    this.lastUsedAt = new Date();
+    return bytes;
+  }
+
+  /** Archives /workspace, returning raw tar bytes that can later restore it via hydrateWorkspace. */
+  async persistWorkspace(options?: CloudflarePersistWorkspaceOptions): Promise<Uint8Array> {
+    const sandboxId = this.requireSandboxId();
+    const archive = await this.client.persistWorkspace(sandboxId, options);
+    this.lastUsedAt = new Date();
+    return archive;
+  }
+
+  /** Restores /workspace from a raw tar payload produced by persistWorkspace. */
+  async hydrateWorkspace(tar: Uint8Array): Promise<void> {
+    const sandboxId = this.requireSandboxId();
+    await this.client.hydrateWorkspace(sandboxId, tar);
     this.lastUsedAt = new Date();
   }
 

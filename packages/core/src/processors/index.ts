@@ -173,6 +173,8 @@ export interface ProcessOutputResultArgs<
  * The actual schema type is only known at the generate()/stream() call site.
  */
 export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
+  /** The active agent run ID, when this processor is running inside an agent loop */
+  runId?: string;
   /** The current step number (0-indexed) */
   stepNumber: number;
   steps: Array<StepResult<any>>;
@@ -342,6 +344,8 @@ export interface ProcessLLMRequestArgs<TTripwireMetadata = unknown> extends Proc
   prompt: LanguageModelV2Prompt;
   /** The model the prompt is being sent to. Use to scope provider-specific rewrites. */
   model: MastraLanguageModel;
+  /** The message list the prompt was built from, for provenance that the converted prompt no longer carries (e.g. per-message metadata stamps). */
+  messageList?: MessageList;
   /** The current step number (0-indexed) within the agentic loop. */
   stepNumber: number;
   /** All completed steps so far. */
@@ -983,6 +987,13 @@ export {
 export type { CompatRule } from './provider-history-compat';
 export { ProcessorState, ProcessorRunner } from './runner';
 export { createProcessorSendSignal } from './send-signal';
+export { createBackgroundWorkSignalProcessor } from './background-work-signals';
+export type {
+  BackgroundWorkDisposition,
+  BackgroundWorkInvocationKind,
+  BackgroundWorkLifecyclePayload,
+  BackgroundWorkTerminalStatus,
+} from './background-work-signals';
 export * from './memory';
 export type { TripWireOptions } from '../agent/trip-wire';
 export {

@@ -97,6 +97,8 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
   prompt: MessageListInput,
   options: AgentExecutionOptionsBase<OUTPUT> & {
     structuredOutput: StructuredOutputOptions<OUTPUT>;
+    /** Override injection placement only for the structured-output retry. */
+    fallbackJsonPromptInjection?: 'system' | 'inline';
     onStream?: (stream: Awaited<ReturnType<Agent['stream']>>) => void | Promise<void>;
     /** Called immediately before each primary or fallback stream invocation. */
     onStreamAttempt?: () => void | Promise<void>;
@@ -113,7 +115,7 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
     });
   }
 
-  const { onStream, onStreamAttempt, onStreamFinish, ...streamOptions } = options;
+  const { onStream, onStreamAttempt, onStreamFinish, fallbackJsonPromptInjection, ...streamOptions } = options;
 
   try {
     await onStreamAttempt?.();
@@ -143,10 +145,11 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
       structuredOutput: {
         ...streamOptions.structuredOutput,
         jsonPromptInjection:
-          streamOptions.structuredOutput.jsonPromptInjection === 'inline' ||
+          fallbackJsonPromptInjection ??
+          (streamOptions.structuredOutput.jsonPromptInjection === 'inline' ||
           streamOptions.structuredOutput.jsonPromptInjection === 'system'
             ? streamOptions.structuredOutput.jsonPromptInjection
-            : true,
+            : true),
       },
     });
     void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);

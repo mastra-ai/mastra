@@ -1,7 +1,9 @@
 {
   "attachment": [
+    "deepseek-v4-1-flash",
     "fugu-ultra-v1-0",
     "fugu-ultra-v1-1",
+    "fugu-ultra-v2-0",
     "gemma-3-27b",
     "gemma-4-26b-a4b",
     "glm-4-6v-flash",
@@ -43,6 +45,7 @@
   ],
   "temperature": [
     "deepseek-v3-2",
+    "deepseek-v4-1-flash",
     "deepseek-v4-flash",
     "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
@@ -99,12 +102,14 @@
   ],
   "structuredOutput": [
     "deepseek-v3-2",
+    "deepseek-v4-1-flash",
     "deepseek-v4-flash",
     "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
     "deepseek-v4-pro-0813",
     "fugu-ultra-v1-0",
     "fugu-ultra-v1-1",
+    "fugu-ultra-v2-0",
     "gemma-3-27b",
     "gemma-4-26b-a4b",
     "glm-4-5-flash",

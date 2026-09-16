@@ -6,8 +6,7 @@ import { isLeaseProvider, NoopLeaseProvider } from '../events/pubsub';
 import type { LeaseProvider, PubSub } from '../events/pubsub';
 import type { EventCallback } from '../events/types';
 import { parseMemoryRequestContext } from '../memory/types';
-import type { RequestContext } from '../request-context';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
 import { isSignalChunkExcluded } from '../stream/signal-exclusions';
 import { ChunkFrom } from '../stream/types';
@@ -20,10 +19,18 @@ import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
 import type {
+  AgentClaimThreadPeerOptions,
   AgentSignal,
   AgentSubscribeToThreadOptions,
   AgentThreadIdentityOptions,
+  AgentThreadPeerAdvertisement,
+  AgentThreadPeerInfo,
   AgentThreadSubscription,
+  DiscoverAgentThreadPeersOptions,
+  CancelQueuedAgentMessagesOptions,
+  CancelQueuedAgentMessagesResult,
+  AgentThreadEventListener,
+  SubscribeAgentThreadEventsOptions,
   QueueAgentMessageOptions,
   QueueAgentMessageResult,
   SendAgentMessageOptions,
@@ -37,6 +44,12 @@ import type {
 
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
 const AGENT_THREAD_STREAM_TOPIC_PREFIX = 'agent.thread-stream';
+const AGENT_THREAD_OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
+const AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS = 100;
+const AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS = 5_000;
+const AGENT_THREAD_PEER_DISCOVERY_TOPIC = 'agent.thread-peer-discovery';
+const AGENT_THREAD_PEER_DISCOVERY_TIMEOUT_MS = 100;
+
 /**
  * Lease TTL for the cross-process thread lease acquired in the idle-wake
  * path. Kept short so a crashed owner process frees the thread quickly; a
@@ -173,6 +186,8 @@ type PendingIdleSignal<OUTPUT = unknown> = {
   resourceId: string;
   threadId: string;
   streamOptions?: AgentExecutionOptions<OUTPUT>;
+  queueOwnerId?: string;
+  cancelled?: boolean;
 };
 
 type PendingContinuation<OUTPUT = unknown> = {
@@ -182,6 +197,30 @@ type PendingContinuation<OUTPUT = unknown> = {
   resourceId: string;
   threadId: string;
   streamOptions?: AgentExecutionOptions<OUTPUT>;
+};
+
+type ClaimedThreadOwnerStreamOptions =
+  | AgentExecutionOptions<any>
+  | (() => AgentExecutionOptions<any> | Promise<AgentExecutionOptions<any>>);
+
+type ClaimedThreadOwner<OUTPUT = unknown> = {
+  agent: Agent<any, any, any, any>;
+  resourceId: string;
+  threadId: string;
+  streamOptions?: ClaimedThreadOwnerStreamOptions;
+  peer?: AdvertisedThreadPeer;
+  unsubscribe: () => void;
+};
+
+type AdvertisedThreadPeer = AgentThreadPeerInfo & {
+  sourceId: string;
+  unsubscribe: () => void;
+};
+
+type ThreadEventListenerRegistration = SubscribeAgentThreadEventsOptions & {
+  agent: Agent<any, any, any, any>;
+  listener: AgentThreadEventListener;
+  lastCount: number;
 };
 
 type AgentThreadRuntimeState = {
@@ -201,11 +240,17 @@ type AgentThreadRuntimeState = {
   // request; `pendingSignalsByThread` follow-ups instead become their own turn.
   preRunSignalsByThread: Map<string, CreatedAgentSignal[]>;
   pendingIdleSignalsByThread: Map<string, PendingIdleSignal<any>[]>;
+  /** A dequeued idle message retains its cancellation identity until execution begins. */
+  drainingIdleSignalsByThread: Map<string, PendingIdleSignal<any>>;
   pendingContinuationsByThread: Map<string, PendingContinuation<any>[]>;
+  claimedThreadOwnerDiscoveries: Map<string, Promise<string | undefined>>;
+  claimedThreadOwners: Map<string, ClaimedThreadOwner<any>>;
+  advertisedThreadPeers: Map<string, AdvertisedThreadPeer>;
   watchedThreadStreamIds: Set<string>;
   preparedRunsById: Map<string, PreparedThreadRun>;
   resumeTailsByRunId: Map<string, Promise<void>>;
   abortedRunIds: Set<string>;
+  startingQueuedRunIds: Set<string>;
   /**
    * Active lease-renewal timers keyed by runId. Set when the owner
    * process wins the cross-process lease, cleared on release. Stored
@@ -213,6 +258,7 @@ type AgentThreadRuntimeState = {
    * if `activeThreadRunIds` is rotated by a follow-up signal.
    */
   leaseRenewalTimers: Map<string, ReturnType<typeof setInterval>>;
+  threadEventListeners: Set<ThreadEventListenerRegistration>;
 };
 
 export type AgentThreadState = 'active' | 'idle';
@@ -248,7 +294,38 @@ type AgentThreadStreamRuntimeEvent =
   | { type: 'run-abort-requested'; runId: string; streamId: string }
   | { type: 'run-aborted'; runId: string; streamId?: string }
   | { type: 'run-failed'; runId: string; streamId?: string; error: string }
-  | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string; preRun?: boolean };
+  | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string; preRun?: boolean }
+  | {
+      type: 'idle-signal-enqueued';
+      runId: string;
+      signal: SerializableAgentSignal;
+      sourceId: string;
+      requestId: string;
+      replyTopic: string;
+      targetSourceId: string;
+      timeoutMs: number;
+    };
+
+type AgentThreadIdleSignalAcceptanceEvent =
+  | { type: 'idle-signal-accepted'; requestId: string; runId: string; sourceId: string }
+  | { type: 'idle-signal-rejected'; requestId: string; runId: string; sourceId: string; error: string };
+
+type AgentThreadOwnerDiscoveryEvent =
+  | { type: 'thread-owner-request'; key: string; requestId: string; replyTopic: string; sourceId: string }
+  | { type: 'thread-owner-response'; key: string; requestId: string; sourceId: string };
+
+type AgentThreadPeerDiscoveryEvent =
+  | { type: 'thread-peer-request'; requestId: string; replyTopic: string; sourceId: string }
+  | { type: 'thread-peer-response'; requestId: string; peer: AgentThreadPeerInfo; sourceId: string };
+
+function toPublicThreadPeer(peer: AdvertisedThreadPeer): Omit<AdvertisedThreadPeer, 'unsubscribe'> {
+  const { unsubscribe: _unsubscribe, ...publicPeer } = peer;
+  return publicPeer;
+}
+
+function createThreadPeerId(agentId: string, resourceId: string, threadId: string): string {
+  return [agentId, resourceId, threadId].map(part => encodeURIComponent(part)).join(':');
+}
 
 function createRuntimeState(): AgentThreadRuntimeState {
   return {
@@ -265,12 +342,18 @@ function createRuntimeState(): AgentThreadRuntimeState {
     pendingSignalsByThread: new Map(),
     preRunSignalsByThread: new Map(),
     pendingIdleSignalsByThread: new Map(),
+    drainingIdleSignalsByThread: new Map(),
     pendingContinuationsByThread: new Map(),
+    claimedThreadOwnerDiscoveries: new Map(),
+    claimedThreadOwners: new Map(),
+    advertisedThreadPeers: new Map(),
     watchedThreadStreamIds: new Set(),
     preparedRunsById: new Map(),
     resumeTailsByRunId: new Map(),
     abortedRunIds: new Set(),
+    startingQueuedRunIds: new Set(),
     leaseRenewalTimers: new Map(),
+    threadEventListeners: new Set(),
   };
 }
 
@@ -476,6 +559,33 @@ export class AgentThreadStreamRuntime {
     return state;
   }
 
+  #queuedMessageCount(
+    state: AgentThreadRuntimeState,
+    scope: SubscribeAgentThreadEventsOptions & { agent: Agent<any, any, any, any> },
+  ): number {
+    const key = this.#threadKey(scope.resourceId, scope.threadId);
+    const matches = (pending: PendingIdleSignal<any> | undefined) =>
+      pending !== undefined &&
+      !pending.cancelled &&
+      (scope.queueOwnerId === undefined ||
+        (pending.agent === scope.agent && pending.queueOwnerId === scope.queueOwnerId));
+    return (
+      (state.pendingIdleSignalsByThread.get(key)?.filter(matches).length ?? 0) +
+      (matches(state.drainingIdleSignalsByThread.get(key)) ? 1 : 0)
+    );
+  }
+
+  #notifyThreadEvents(state: AgentThreadRuntimeState): void {
+    for (const registration of [...state.threadEventListeners]) {
+      const count = this.#queuedMessageCount(state, registration);
+      if (count === registration.lastCount) continue;
+      registration.lastCount = count;
+      try {
+        registration.listener({ type: 'queue-count-changed', count });
+      } catch {}
+    }
+  }
+
   #threadKey(resourceId: string | undefined, threadId: string): string {
     return [resourceId ?? '', threadId].join(AGENT_THREAD_KEY_SEPARATOR);
   }
@@ -612,15 +722,462 @@ export class AgentThreadStreamRuntime {
     return 'active';
   }
 
+  async claimThreadOwnership<OUTPUT = unknown>(
+    agent: Agent<any, any, any, any>,
+    options: {
+      resourceId: string;
+      threadId: string;
+      streamOptions?: ClaimedThreadOwnerStreamOptions;
+      peer?: false | AgentClaimThreadPeerOptions;
+    },
+    pubsub?: PubSub,
+  ): Promise<{ claimed: boolean; unsubscribe: () => void }> {
+    const resolvedPubSub = this.#getPubSub(pubsub);
+    const state = this.#getState(resolvedPubSub);
+    const key = this.#threadKey(options.resourceId, options.threadId);
+    const topic = this.#threadTopic(key);
+    const initialLocalClaim = state.claimedThreadOwners.get(key);
+
+    if (!initialLocalClaim) {
+      const remoteOwnerSourceId = await this.#findClaimedThreadOwner(resolvedPubSub, key, { includeLocal: false });
+      if (remoteOwnerSourceId) {
+        return { claimed: false, unsubscribe: () => {} };
+      }
+    }
+
+    const sourceId = this.#getSourceId();
+    const peerOptions = options.peer === false ? undefined : (options.peer ?? {});
+    const peerAgentId = peerOptions?.agentId ?? agent.id;
+    const peer: AdvertisedThreadPeer | undefined = peerOptions
+      ? {
+          id: peerOptions.id ?? createThreadPeerId(peerAgentId, options.resourceId, options.threadId),
+          agentId: peerAgentId,
+          resourceId: options.resourceId,
+          threadId: options.threadId,
+          ...(peerOptions.label ? { label: peerOptions.label } : {}),
+          ...(peerOptions.title ? { title: peerOptions.title } : {}),
+          ...(peerOptions.metadata ? { metadata: peerOptions.metadata } : {}),
+          sourceId,
+          unsubscribe: () => {},
+        }
+      : undefined;
+
+    let active = false;
+
+    const onEvent: EventCallback = async event => {
+      if (!active) return;
+      const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
+      if (data?.type !== 'idle-signal-enqueued' || data.sourceId === sourceId || data.targetSourceId !== sourceId) {
+        return;
+      }
+      const owner = state.claimedThreadOwners.get(key);
+      if (!owner) return;
+
+      let replyAttempted = false;
+      const reply = async (response: AgentThreadIdleSignalAcceptanceEvent) => {
+        if (replyAttempted) return;
+        replyAttempted = true;
+        await resolvedPubSub.publish(data.replyTopic, {
+          type: response.type,
+          runId: response.runId,
+          data: response,
+        });
+      };
+
+      try {
+        const accepted = await this.#startClaimedIdleRun(
+          state,
+          resolvedPubSub,
+          key,
+          owner,
+          data.runId,
+          createSignal(data.signal),
+          Date.now() + data.timeoutMs,
+          () => active && state.claimedThreadOwners.get(key)?.unsubscribe === unsubscribe,
+        );
+        if (!active || state.claimedThreadOwners.get(key)?.unsubscribe !== unsubscribe) return;
+        if (!accepted) {
+          await reply({
+            type: 'idle-signal-rejected',
+            requestId: data.requestId,
+            runId: data.runId,
+            sourceId,
+            error: `Claimed thread owner could not acquire the execution lease for ${key}`,
+          });
+        } else if (accepted.error) {
+          await reply({
+            type: 'idle-signal-rejected',
+            requestId: data.requestId,
+            runId: accepted.runId,
+            sourceId,
+            error: accepted.error,
+          });
+        } else {
+          await reply({
+            type: 'idle-signal-accepted',
+            requestId: data.requestId,
+            runId: accepted.runId,
+            sourceId,
+          });
+        }
+      } catch (error) {
+        if (!active || state.claimedThreadOwners.get(key)?.unsubscribe !== unsubscribe) return;
+        if (!replyAttempted) {
+          await reply({
+            type: 'idle-signal-rejected',
+            requestId: data.requestId,
+            runId: data.runId,
+            sourceId,
+            error: getErrorFromUnknown(error).message,
+          });
+        }
+      }
+    };
+
+    const onOwnerDiscovery: EventCallback = event => {
+      if (!active) return;
+      const data = event.data as AgentThreadOwnerDiscoveryEvent | undefined;
+      if (data?.type !== 'thread-owner-request' || data.key !== key || data.sourceId === sourceId) return;
+      void resolvedPubSub.publish(data.replyTopic, {
+        type: 'thread-owner-response',
+        runId: data.requestId,
+        data: { type: 'thread-owner-response', key, requestId: data.requestId, sourceId },
+      });
+    };
+
+    const onPeerDiscovery: EventCallback = event => {
+      if (!active || !peer) return;
+      const data = event.data as AgentThreadPeerDiscoveryEvent | undefined;
+      if (data?.type !== 'thread-peer-request' || data.sourceId === sourceId) return;
+      void resolvedPubSub.publish(data.replyTopic, {
+        type: 'thread-peer-response',
+        runId: data.requestId,
+        data: { type: 'thread-peer-response', requestId: data.requestId, peer: toPublicThreadPeer(peer), sourceId },
+      });
+    };
+
+    let threadSubscribed = false;
+    let ownerDiscoverySubscribed = false;
+    let peerDiscoverySubscribed = false;
+    try {
+      await resolvedPubSub.subscribe(topic, onEvent);
+      threadSubscribed = true;
+      await resolvedPubSub.subscribe(AGENT_THREAD_OWNER_DISCOVERY_TOPIC, onOwnerDiscovery);
+      ownerDiscoverySubscribed = true;
+      if (peer) {
+        await resolvedPubSub.subscribe(AGENT_THREAD_PEER_DISCOVERY_TOPIC, onPeerDiscovery);
+        peerDiscoverySubscribed = true;
+      }
+    } catch (error) {
+      await Promise.all([
+        threadSubscribed ? resolvedPubSub.unsubscribe(topic, onEvent).catch(() => {}) : Promise.resolve(),
+        ownerDiscoverySubscribed
+          ? resolvedPubSub.unsubscribe(AGENT_THREAD_OWNER_DISCOVERY_TOPIC, onOwnerDiscovery).catch(() => {})
+          : Promise.resolve(),
+        peerDiscoverySubscribed
+          ? resolvedPubSub.unsubscribe(AGENT_THREAD_PEER_DISCOVERY_TOPIC, onPeerDiscovery).catch(() => {})
+          : Promise.resolve(),
+      ]);
+      throw error;
+    }
+
+    const unsubscribe = () => {
+      active = false;
+      if (state.claimedThreadOwners.get(key)?.unsubscribe === unsubscribe) {
+        state.claimedThreadOwners.delete(key);
+      }
+      if (peer && state.advertisedThreadPeers.get(peer.id)?.unsubscribe === unsubscribe) {
+        state.advertisedThreadPeers.delete(peer.id);
+      }
+      void resolvedPubSub.unsubscribe(topic, onEvent).catch(() => {});
+      void resolvedPubSub.unsubscribe(AGENT_THREAD_OWNER_DISCOVERY_TOPIC, onOwnerDiscovery).catch(() => {});
+      if (peer) {
+        void resolvedPubSub.unsubscribe(AGENT_THREAD_PEER_DISCOVERY_TOPIC, onPeerDiscovery).catch(() => {});
+      }
+    };
+
+    const displacedClaim = state.claimedThreadOwners.get(key);
+    const displacedPeer = peer ? state.advertisedThreadPeers.get(peer.id) : undefined;
+    if (peer) {
+      peer.unsubscribe = unsubscribe;
+      state.advertisedThreadPeers.set(peer.id, peer);
+    }
+
+    state.claimedThreadOwners.set(key, {
+      agent,
+      resourceId: options.resourceId,
+      threadId: options.threadId,
+      streamOptions: options.streamOptions,
+      peer,
+      unsubscribe,
+    });
+    active = true;
+
+    displacedClaim?.unsubscribe();
+    if (displacedPeer?.unsubscribe !== displacedClaim?.unsubscribe) displacedPeer?.unsubscribe();
+
+    return { claimed: true, unsubscribe };
+  }
+
+  async discoverThreadPeers(
+    options: DiscoverAgentThreadPeersOptions = {},
+    pubsub?: PubSub,
+  ): Promise<AgentThreadPeerAdvertisement[]> {
+    const resolvedPubSub = this.#getPubSub(pubsub);
+    const state = this.#getState(resolvedPubSub);
+    const requestId = randomUUID();
+    const replyTopic = `${AGENT_THREAD_PEER_DISCOVERY_TOPIC}.${requestId}`;
+    const peers = new Map<string, AgentThreadPeerAdvertisement>();
+    const discoveredAt = new Date();
+
+    for (const peer of state.advertisedThreadPeers.values()) {
+      peers.set(peer.id, { ...toPublicThreadPeer(peer), discoveredAt });
+    }
+
+    await new Promise<void>(resolve => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve();
+        void resolvedPubSub.unsubscribe(replyTopic, onReply).catch(() => {});
+      };
+      const onReply: EventCallback = event => {
+        const data = event.data as AgentThreadPeerDiscoveryEvent | undefined;
+        if (data?.type !== 'thread-peer-response' || data.requestId !== requestId) return;
+        peers.set(data.peer.id, { ...data.peer, sourceId: data.sourceId, discoveredAt: new Date() });
+      };
+      const timeout = setTimeout(finish, options.timeoutMs ?? AGENT_THREAD_PEER_DISCOVERY_TIMEOUT_MS);
+
+      void resolvedPubSub
+        .subscribe(replyTopic, onReply)
+        .then(() =>
+          resolvedPubSub.publish(AGENT_THREAD_PEER_DISCOVERY_TOPIC, {
+            type: 'thread-peer-request',
+            runId: requestId,
+            data: { type: 'thread-peer-request', requestId, replyTopic, sourceId: this.#getSourceId() },
+          }),
+        )
+        .catch(() => finish());
+    });
+
+    return [...peers.values()].sort((a, b) => a.id.localeCompare(b.id));
+  }
+
+  async #startClaimedIdleRun<OUTPUT>(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub,
+    key: string,
+    owner: ClaimedThreadOwner<OUTPUT>,
+    runId: string,
+    signal: CreatedAgentSignal,
+    expiresAt: number,
+    isOwnerActive: () => boolean,
+  ): Promise<{ runId: string; error?: string } | undefined> {
+    if (!isOwnerActive()) {
+      return { runId, error: `Claimed thread owner was released for ${key}` };
+    }
+    if (Date.now() >= expiresAt) {
+      return { runId, error: `Claimed thread owner acceptance expired for ${key}` };
+    }
+    const streamOptions = typeof owner.streamOptions === 'function' ? await owner.streamOptions() : owner.streamOptions;
+    if (!isOwnerActive()) {
+      return { runId, error: `Claimed thread owner was released for ${key}` };
+    }
+    if (Date.now() >= expiresAt) {
+      return { runId, error: `Claimed thread owner acceptance expired for ${key}` };
+    }
+
+    const activeRunId = state.activeThreadRunIds.get(key);
+    const activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
+    if (activeRunId && (!activeRecord || this.#isThreadBlockingRun(state, activeRecord))) {
+      const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
+      idleQueue.push({
+        agent: owner.agent,
+        signal,
+        runId,
+        resourceId: owner.resourceId,
+        threadId: owner.threadId,
+        streamOptions,
+      });
+      state.pendingIdleSignalsByThread.set(key, idleQueue);
+      if (activeRecord) {
+        this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
+      }
+      return { runId };
+    }
+    if (activeRunId) {
+      state.activeThreadRunIds.delete(key);
+    }
+
+    if (!isOwnerActive()) {
+      return { runId, error: `Claimed thread owner was released for ${key}` };
+    }
+    state.activeThreadRunIds.set(key, runId);
+    state.threadKeysByRunId.set(runId, key);
+    const lease = await this.#acquireOrTransferThreadLease(pubsub, key, runId);
+    const ownerActive = isOwnerActive();
+    const expired = Date.now() >= expiresAt;
+    if (!lease.acquired || !ownerActive || expired) {
+      state.activeThreadRunIds.delete(key);
+      state.threadKeysByRunId.delete(runId);
+      const drained = await this.#drainPendingIdleSignals(state, pubsub, key, lease.acquired ? runId : undefined);
+      if (lease.acquired && !drained) this.#releaseThreadLease(pubsub, key, runId);
+      if (!ownerActive) return { runId, error: `Claimed thread owner was released for ${key}` };
+      if (expired) return { runId, error: `Claimed thread owner acceptance expired for ${key}` };
+      return undefined;
+    }
+
+    try {
+      await owner.agent.stream(signal, {
+        ...(streamOptions as any),
+        runId,
+        memory: withThreadMemory(streamOptions?.memory, owner.resourceId, owner.threadId),
+      });
+      return { runId };
+    } catch (error) {
+      const message = getErrorFromUnknown(error).message;
+      state.threadKeysByRunId.delete(runId);
+      this.#cleanupPreparedRun(state, runId);
+      if (state.activeThreadRunIds.get(key) === runId) {
+        state.activeThreadRunIds.delete(key);
+      }
+      this.#publish(pubsub, key, {
+        type: 'run-failed',
+        runId,
+        error: message,
+      });
+      if (!(await this.#drainPendingIdleSignals(state, pubsub, key, runId))) {
+        this.#releaseThreadLease(pubsub, key, runId);
+      }
+      return { runId, error: message };
+    }
+  }
+
   #publish(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
     void this.#publishAndWait(pubsub, key, event).catch(() => {});
   }
 
   async #publishAndWait(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
-    await this.#getPubSub(pubsub).publish(this.#threadTopic(key), {
+    const resolvedPubSub = this.#getPubSub(pubsub);
+    const topic = this.#threadTopic(key);
+    await resolvedPubSub.publish(topic, {
       type: event.type,
       runId: event.runId,
       data: event,
+    });
+  }
+
+  async #deliverToClaimedThreadOwner(
+    pubsub: PubSub,
+    key: string,
+    runId: string,
+    signal: CreatedAgentSignal,
+    targetSourceId: string,
+  ): Promise<string> {
+    const requestId = randomUUID();
+    const replyTopic = `${this.#threadTopic(key)}.idle-acceptance.${requestId}`;
+
+    return new Promise<string>((resolve, reject) => {
+      let settled = false;
+      const finish = (result: { runId: string } | { error: Error }) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        if ('error' in result) reject(result.error);
+        else resolve(result.runId);
+        void pubsub.unsubscribe(replyTopic, onReply).catch(() => {});
+      };
+      const onReply: EventCallback = event => {
+        const data = event.data as AgentThreadIdleSignalAcceptanceEvent | undefined;
+        if (!data || data.requestId !== requestId || data.sourceId !== targetSourceId) return;
+        if (data.type === 'idle-signal-rejected') {
+          finish({ error: new Error(data.error) });
+          return;
+        }
+        if (data.type === 'idle-signal-accepted') {
+          finish({ runId: data.runId });
+        }
+      };
+      const timeout = setTimeout(
+        () => finish({ error: new Error(`Claimed thread owner did not accept signal for ${key}`) }),
+        AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
+      );
+
+      void pubsub
+        .subscribe(replyTopic, onReply)
+        .then(() =>
+          this.#publishAndWait(pubsub, key, {
+            type: 'idle-signal-enqueued',
+            runId,
+            signal: this.#serializeSignal(signal),
+            sourceId: this.#getSourceId(),
+            requestId,
+            replyTopic,
+            targetSourceId,
+            timeoutMs: AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
+          }),
+        )
+        .catch(error => finish({ error: getErrorFromUnknown(error) }));
+    });
+  }
+
+  async #deliverAfterClaimedOwnerDiscovery<OUTPUT>(
+    pubsub: PubSub,
+    key: string,
+    runId: string,
+    signal: CreatedAgentSignal,
+    discovery: Promise<string | undefined>,
+  ): Promise<SendAgentSignalAccepted<OUTPUT>> {
+    const claimedOwnerSourceId = await discovery;
+    if (!claimedOwnerSourceId) {
+      throw new Error(`No claimed thread owner responded for ${key}`);
+    }
+    const acceptedRunId = await this.#deliverToClaimedThreadOwner(pubsub, key, runId, signal, claimedOwnerSourceId);
+    return { action: 'deliver', runId: acceptedRunId };
+  }
+
+  async #findClaimedThreadOwner(
+    pubsub: PubSub,
+    key: string,
+    options?: { includeLocal?: boolean },
+  ): Promise<string | undefined> {
+    const hasLocalOwner = this.#getState(pubsub).claimedThreadOwners.has(key);
+    if (options?.includeLocal !== false && hasLocalOwner) {
+      return this.#getSourceId();
+    }
+
+    const requestId = randomUUID();
+    const replyTopic = `${AGENT_THREAD_OWNER_DISCOVERY_TOPIC}.${requestId}`;
+
+    return new Promise<string | undefined>(resolve => {
+      let settled = false;
+      const finish = (sourceId?: string) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve(sourceId);
+        void pubsub.unsubscribe(replyTopic, onReply).catch(() => {});
+      };
+      const onReply: EventCallback = event => {
+        const data = event.data as AgentThreadOwnerDiscoveryEvent | undefined;
+        if (data?.type === 'thread-owner-response' && data.key === key && data.requestId === requestId) {
+          finish(data.sourceId);
+        }
+      };
+      const timeout = setTimeout(() => finish(), AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS);
+
+      void pubsub
+        .subscribe(replyTopic, onReply)
+        .then(() =>
+          pubsub.publish(AGENT_THREAD_OWNER_DISCOVERY_TOPIC, {
+            type: 'thread-owner-request',
+            runId: requestId,
+            data: { type: 'thread-owner-request', key, requestId, replyTopic, sourceId: this.#getSourceId() },
+          }),
+        )
+        .catch(() => finish());
     });
   }
 
@@ -850,6 +1407,18 @@ export class AgentThreadStreamRuntime {
       abort();
     }
 
+    const requestContext = options.requestContext;
+    const controllerContext = requestContext?.get('controller');
+    if (requestContext && typeof controllerContext === 'object' && controllerContext !== null) {
+      const preparedRequestContext = new RequestContext(requestContext.entries());
+      preparedRequestContext.set('controller', { ...controllerContext, abortSignal: abortController.signal });
+      return {
+        ...options,
+        abortSignal: abortController.signal,
+        requestContext: preparedRequestContext,
+      };
+    }
+
     return {
       ...options,
       abortSignal: abortController.signal,
@@ -1027,6 +1596,15 @@ export class AgentThreadStreamRuntime {
     state.preRunSignalsByThread.clear();
     state.pendingIdleSignalsByThread.clear();
     state.pendingContinuationsByThread.clear();
+    state.claimedThreadOwnerDiscoveries.clear();
+    for (const claim of [...state.claimedThreadOwners.values()]) {
+      claim.unsubscribe();
+    }
+    state.claimedThreadOwners.clear();
+    for (const peer of [...state.advertisedThreadPeers.values()]) {
+      peer.unsubscribe();
+    }
+    state.advertisedThreadPeers.clear();
     state.activeThreadStreamIds.clear();
     state.streamSeqByRunId.clear();
     state.watchedThreadStreamIds.clear();
@@ -1558,7 +2136,7 @@ export class AgentThreadStreamRuntime {
     state: AgentThreadRuntimeState,
     pubsub: PubSub | undefined,
     key: string,
-    previousRun: AgentThreadRunRecord<any>,
+    previousRun: Pick<AgentThreadRunRecord<any>, 'agent' | 'streamOptions' | 'runId' | 'resourceId' | 'threadId'>,
   ) {
     if (state.activeThreadRunIds.has(key)) {
       return;
@@ -1619,8 +2197,11 @@ export class AgentThreadStreamRuntime {
           return;
         }
 
+        state.startingQueuedRunIds.add(nextRunId);
         const output = await previousRun.agent.stream(signal, {
           ...(previousRun.streamOptions as any),
+          // Cancellation belongs to the finished run, not its queued follow-up.
+          abortSignal: undefined,
           runId: nextRunId,
           memory: withThreadMemory(
             previousRun.streamOptions.memory,
@@ -1682,6 +2263,8 @@ export class AgentThreadStreamRuntime {
         this.#releaseThreadLease(pubsub, key, failedRunId);
       });
       return;
+    } finally {
+      if (nextRunId) state.startingQueuedRunIds.delete(nextRunId);
     }
 
     if (await this.#drainPendingContinuations(state, pubsub, key, previousRun.runId)) {
@@ -1834,6 +2417,7 @@ export class AgentThreadStreamRuntime {
     if (idleQueue.length === 0) {
       state.pendingIdleSignalsByThread.delete(key);
     }
+    state.drainingIdleSignalsByThread.set(key, pendingIdle);
 
     state.activeThreadRunIds.set(key, pendingIdle.runId);
     state.threadKeysByRunId.set(pendingIdle.runId, key);
@@ -1844,16 +2428,45 @@ export class AgentThreadStreamRuntime {
     // now wants to wake the thread (it holds no lease — it must win one). Either
     // way the run must only start if this process owns the cross-process lease,
     // otherwise two processes could each start a competing idle run.
-    const owns = await this.#acquireOrTransferThreadLease(pubsub, key, pendingIdle.runId, fromRunId);
-    if (!owns.acquired) {
-      // Lost the wake race. Roll back the optimistic local reservation and
-      // forward the signal to the winner so it is not dropped, then try the
-      // next queued idle signal (which may belong to a different run we can win).
+    let owns: { acquired: boolean; owner?: string };
+    try {
+      owns = await this.#acquireOrTransferThreadLease(pubsub, key, pendingIdle.runId, fromRunId);
+    } catch (err) {
+      state.drainingIdleSignalsByThread.delete(key);
+      state.threadKeysByRunId.delete(pendingIdle.runId);
       if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
         state.activeThreadRunIds.delete(key);
       }
+      this.#notifyThreadEvents(state);
+      this.#publish(pubsub, key, {
+        type: 'run-failed',
+        runId: pendingIdle.runId,
+        error: getErrorFromUnknown(err).message,
+      });
+      if (!(await this.#drainPendingIdleSignals(state, pubsub, key, fromRunId))) {
+        this.#releaseThreadLease(pubsub, key, fromRunId ?? pendingIdle.runId);
+      }
+      return true;
+    }
+    if (!owns.acquired) {
+      // A cancellation during lease acquisition must not forward the signal.
+      if (pendingIdle.cancelled) {
+        state.drainingIdleSignalsByThread.delete(key);
+        state.threadKeysByRunId.delete(pendingIdle.runId);
+        if (state.activeThreadRunIds.get(key) === pendingIdle.runId) state.activeThreadRunIds.delete(key);
+        this.#notifyThreadEvents(state);
+        void this.#drainPendingIdleSignals(state, pubsub, key);
+        return true;
+      }
+      // Roll back the optimistic local reservation. If another process owns the
+      // lease, hand the already-accepted signal to that run.
+      if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
+        state.activeThreadRunIds.delete(key);
+      }
+      state.drainingIdleSignalsByThread.delete(key);
       state.threadKeysByRunId.delete(pendingIdle.runId);
       state.preRunSignalsByThread.delete(key);
+      this.#notifyThreadEvents(state);
       if (owns.owner) {
         await this.#publishAndWait(pubsub, key, {
           type: 'signal-enqueued',
@@ -1862,11 +2475,32 @@ export class AgentThreadStreamRuntime {
           sourceId: this.#getSourceId(),
         }).catch(() => {});
       }
-      await this.#drainPendingIdleSignals(state, pubsub, key, fromRunId);
+      const drained = await this.#drainPendingIdleSignals(
+        state,
+        pubsub,
+        key,
+        owns.acquired ? pendingIdle.runId : fromRunId,
+      );
+      if (owns.acquired && !drained) this.#releaseThreadLease(pubsub, key, pendingIdle.runId);
+      return drained || owns.acquired;
+    }
+
+    if (pendingIdle.cancelled) {
+      state.drainingIdleSignalsByThread.delete(key);
+      state.threadKeysByRunId.delete(pendingIdle.runId);
+      if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
+        state.activeThreadRunIds.delete(key);
+      }
+      this.#releaseThreadLease(pubsub, key, pendingIdle.runId);
+      this.#notifyThreadEvents(state);
+      void this.#drainPendingIdleSignals(state, pubsub, key);
       return true;
     }
 
     try {
+      state.drainingIdleSignalsByThread.delete(key);
+      this.#notifyThreadEvents(state);
+      state.startingQueuedRunIds.add(pendingIdle.runId);
       const output = await pendingIdle.agent.stream(pendingIdle.signal, {
         ...(pendingIdle.streamOptions as any),
         runId: pendingIdle.runId,
@@ -1890,10 +2524,16 @@ export class AgentThreadStreamRuntime {
         runId: pendingIdle.runId,
         error: getErrorFromUnknown(err).message,
       });
-      // Hand the lease to remaining idle work; release only when none remains.
-      if (!(await this.#drainPendingIdleSignals(state, pubsub, key, pendingIdle.runId))) {
-        this.#releaseThreadLease(pubsub, key, pendingIdle.runId);
-      }
+      // No completion watcher exists for a failed startup. Preserve pending-before-idle recovery here too.
+      await this.#drainPendingSignals(state, pubsub, key, {
+        agent: pendingIdle.agent,
+        runId: pendingIdle.runId,
+        resourceId: pendingIdle.resourceId,
+        threadId: pendingIdle.threadId,
+        streamOptions: pendingIdle.streamOptions ?? {},
+      });
+    } finally {
+      state.startingQueuedRunIds.delete(pendingIdle.runId);
     }
     return true;
   }
@@ -1908,6 +2548,10 @@ export class AgentThreadStreamRuntime {
    */
   drainPendingSignals(runId: string, pubsub?: PubSub, scope: 'pending' | 'pre-run' = 'pending'): CreatedAgentSignal[] {
     const state = this.#getState(pubsub);
+    // Leave queued input for the completion handler to deliver in a fresh run.
+    if (state.abortedRunIds.has(runId) || state.preparedRunsById.get(runId)?.abortController.signal.aborted) {
+      return [];
+    }
     const record = state.threadRunsById.get(runId);
     const key = record ? this.#threadKey(record.resourceId, record.threadId) : state.threadKeysByRunId.get(runId);
     if (!key) return [];
@@ -1991,14 +2635,34 @@ export class AgentThreadStreamRuntime {
    * (registration owns cleanup from then on) or if the reservation was already
    * replaced.
    */
-  releaseThreadRunReservation(runId: string, pubsub?: PubSub) {
+  releaseThreadRunReservation(
+    runId: string,
+    pubsub?: PubSub,
+    failedRun?: Pick<AgentThreadRunRecord<any>, 'agent' | 'streamOptions'>,
+  ) {
     const state = this.#getState(pubsub);
-    if (state.threadRunsById.has(runId)) return;
+    // Queued startups have their own catch path, which must restore input before draining anything else.
+    if (state.threadRunsById.has(runId) || state.startingQueuedRunIds.has(runId)) return;
     const key = state.threadKeysByRunId.get(runId);
     if (!key) return;
     state.threadKeysByRunId.delete(runId);
-    if (state.activeThreadRunIds.get(key) === runId) {
-      state.activeThreadRunIds.delete(key);
+    const activeRunId = state.activeThreadRunIds.get(key);
+    const wasAborted =
+      state.abortedRunIds.has(runId) || state.preparedRunsById.get(runId)?.abortController.signal.aborted;
+    if (activeRunId !== runId && (activeRunId || !wasAborted)) return;
+    state.activeThreadRunIds.delete(key);
+    const target = failedRun ? this.#getThreadTarget(failedRun.streamOptions) : undefined;
+    if (wasAborted && failedRun && target?.threadId) {
+      // Failed preparation never registers a completion watcher. Recover pending input before idle work.
+      this.#cleanupPreparedRun(state, runId);
+      void this.#drainPendingSignals(state, pubsub, key, {
+        ...failedRun,
+        threadId: target.threadId,
+        resourceId: target.resourceId,
+        runId,
+      });
+    } else {
+      void this.#drainPendingIdleSignals(state, pubsub, key);
     }
   }
 
@@ -2390,6 +3054,13 @@ export class AgentThreadStreamRuntime {
         if (data.sourceId === this.#id) return;
         const signalsByThread = data.preRun ? state.preRunSignalsByThread : state.pendingSignalsByThread;
         const queue = signalsByThread.get(key) ?? [];
+        // A handoff can forward an observed pre-run signal as pending (or vice versa).
+        if (
+          [state.preRunSignalsByThread.get(key), state.pendingSignalsByThread.get(key)].some(signals =>
+            signals?.some(signal => signal.id === data.signal.id),
+          )
+        )
+          return;
         queue.push(createSignal(data.signal));
         signalsByThread.set(key, queue);
         return;
@@ -2510,7 +3181,9 @@ export class AgentThreadStreamRuntime {
             void currentReader.cancel();
           } catch {}
         }
-        if (data.type !== 'run-suspended') {
+        // An abort is not completion: the owner still needs to finish and drain
+        // pending signals before idle messages can start.
+        if (data.type === 'run-completed') {
           await this.#drainPendingIdleSignals(state, resolvedPubSub, key, data.runId);
         }
         wake();
@@ -2653,6 +3326,66 @@ export class AgentThreadStreamRuntime {
     return this.sendSignal<OUTPUT>(agent, this.#createMessageSignalInput(message), target, pubsub);
   }
 
+  subscribeThreadEvents(
+    agent: Agent<any, any, any, any>,
+    scope: SubscribeAgentThreadEventsOptions,
+    listener: AgentThreadEventListener,
+    pubsub?: PubSub,
+  ): () => void {
+    const state = this.#getState(pubsub);
+    const registration: ThreadEventListenerRegistration = { ...scope, agent, listener, lastCount: 0 };
+    const count = this.#queuedMessageCount(state, registration);
+    registration.lastCount = count;
+    state.threadEventListeners.add(registration);
+    try {
+      listener({ type: 'queue-count-changed', count });
+    } catch {}
+    let subscribed = true;
+    return () => {
+      if (!subscribed) return;
+      subscribed = false;
+      state.threadEventListeners.delete(registration);
+    };
+  }
+
+  cancelQueuedMessages(
+    agent: Agent<any, any, any, any>,
+    target: CancelQueuedAgentMessagesOptions,
+    pubsub?: PubSub,
+  ): CancelQueuedAgentMessagesResult {
+    const state = this.#getState(pubsub);
+    const key = this.#threadKey(target.resourceId, target.threadId);
+    const hasSignalIds = Array.isArray((target as { signalIds?: unknown }).signalIds);
+    const hasQueueOwnerId = typeof (target as { queueOwnerId?: unknown }).queueOwnerId === 'string';
+    if (hasSignalIds === hasQueueOwnerId) {
+      throw new Error('cancelQueuedMessages requires exactly one of signalIds or queueOwnerId');
+    }
+    const matches = (pending: PendingIdleSignal<any>) =>
+      pending.agent === agent &&
+      (hasSignalIds
+        ? (target as { signalIds: string[] }).signalIds.includes(pending.signal.id)
+        : pending.queueOwnerId === (target as { queueOwnerId: string }).queueOwnerId);
+    const cancelledSignalIds: string[] = [];
+    const queue = state.pendingIdleSignalsByThread.get(key);
+    if (queue) {
+      const remaining = queue.filter(pending => {
+        if (!matches(pending)) return true;
+        cancelledSignalIds.push(pending.signal.id);
+        return false;
+      });
+      if (remaining.length === 0) state.pendingIdleSignalsByThread.delete(key);
+      else state.pendingIdleSignalsByThread.set(key, remaining);
+    }
+
+    const draining = state.drainingIdleSignalsByThread.get(key);
+    if (draining && matches(draining) && !draining.cancelled) {
+      draining.cancelled = true;
+      cancelledSignalIds.push(draining.signal.id);
+    }
+    if (cancelledSignalIds.length > 0) this.#notifyThreadEvents(state);
+    return { cancelledSignalIds };
+  }
+
   queueMessage<OUTPUT = unknown>(
     agent: Agent<any, any, any, any>,
     message: AgentMessageInput,
@@ -2695,13 +3428,28 @@ export class AgentThreadStreamRuntime {
       acceptedAt,
     });
     const queuedRunId = randomUUID();
-    const queuedStreamOptions = target.ifIdle?.streamOptions ?? activeRecord?.streamOptions;
+    // Preserve explicit cancellation, but don't inherit the active run's signal.
+    const queuedStreamOptions = target.ifIdle?.streamOptions ?? {
+      ...activeRecord?.streamOptions,
+      abortSignal: undefined,
+    };
 
-    if (activeRecord) {
+    if (activeRecord || state.activeThreadRunIds.has(key)) {
       const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
-      idleQueue.push({ agent, signal, runId: queuedRunId, resourceId, threadId, streamOptions: queuedStreamOptions });
+      idleQueue.push({
+        agent,
+        signal,
+        runId: queuedRunId,
+        resourceId,
+        threadId,
+        streamOptions: queuedStreamOptions,
+        queueOwnerId: target.queueOwnerId,
+      });
       state.pendingIdleSignalsByThread.set(key, idleQueue);
-      this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
+      this.#notifyThreadEvents(state);
+      if (activeRecord) {
+        this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
+      }
       return {
         signal,
         accepted: Promise.resolve({ action: 'deliver' as const, runId: queuedRunId }),
@@ -2810,7 +3558,7 @@ export class AgentThreadStreamRuntime {
           // id so early follow-ups still attach to the run that is starting.
           runId = activeRunId;
         } else {
-          // Stale cross-pod entry. Clean it up from the local map, then let the lease decide
+          // Stale cross-pod entry. Clean it up from the local map, then let the lease decide.
           state.activeThreadRunIds.delete(key);
           state.activeThreadStreamIds.delete(key);
         }
@@ -2921,6 +3669,18 @@ export class AgentThreadStreamRuntime {
         // by another runtime instance is reached only via PubSub; treat it as a
         // follow-up, since the sender cannot see the owner's request state.
         const isLocalReservedRun = state.threadKeysByRunId.get(runId) === key;
+        const claimedOwnerDiscovery = isLocalReservedRun ? state.claimedThreadOwnerDiscoveries.get(key) : undefined;
+        if (claimedOwnerDiscovery) {
+          const accepted = this.#deliverAfterClaimedOwnerDiscovery<OUTPUT>(
+            this.#getPubSub(pubsub),
+            key,
+            randomUUID(),
+            signal,
+            claimedOwnerDiscovery,
+          );
+          void accepted.catch(() => {});
+          return { signal, accepted };
+        }
         if (isLocalReservedRun) {
           const queue = state.preRunSignalsByThread.get(key) ?? [];
           queue.push(signal);
@@ -3021,6 +3781,51 @@ export class AgentThreadStreamRuntime {
     // signal off to the winning process via signal-enqueued and resolve a `deliver` result
     // (the signal was queued onto the winning run, not run locally).
     const accepted: Promise<SendAgentSignalAccepted<OUTPUT>> = (async () => {
+      const localClaimedOwner = state.claimedThreadOwners.get(reservedKey);
+      if (localClaimedOwner) {
+        if (state.activeThreadRunIds.get(reservedKey) === reservedRunId) {
+          state.activeThreadRunIds.delete(reservedKey);
+        }
+        state.threadKeysByRunId.delete(reservedRunId);
+        const localAcceptance = await this.#startClaimedIdleRun(
+          state,
+          resolvedPubSub,
+          reservedKey,
+          localClaimedOwner,
+          reservedRunId,
+          signal,
+          Date.now() + AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
+          () => state.claimedThreadOwners.get(reservedKey)?.unsubscribe === localClaimedOwner.unsubscribe,
+        );
+        if (!localAcceptance) {
+          throw new Error(`Claimed thread owner could not acquire the execution lease for ${reservedKey}`);
+        }
+        if (localAcceptance.error) throw new Error(localAcceptance.error);
+        return { action: 'deliver' as const, runId: localAcceptance.runId };
+      }
+
+      if (target.ifIdle?.requireClaimedOwner) {
+        const discovery = this.#findClaimedThreadOwner(resolvedPubSub, reservedKey, { includeLocal: false });
+        state.claimedThreadOwnerDiscoveries.set(reservedKey, discovery);
+        try {
+          return await this.#deliverAfterClaimedOwnerDiscovery<OUTPUT>(
+            resolvedPubSub,
+            reservedKey,
+            reservedRunId,
+            signal,
+            discovery,
+          );
+        } finally {
+          if (state.claimedThreadOwnerDiscoveries.get(reservedKey) === discovery) {
+            state.claimedThreadOwnerDiscoveries.delete(reservedKey);
+          }
+          if (state.activeThreadRunIds.get(reservedKey) === reservedRunId) {
+            state.activeThreadRunIds.delete(reservedKey);
+          }
+          state.threadKeysByRunId.delete(reservedRunId);
+        }
+      }
+
       // Fail-open on pubsub errors: if the lease backend is unreachable we treat the
       // call as "acquired" so the caller still gets a response. The tradeoff is that
       // if multiple processes hit the same pubsub failure simultaneously they can each

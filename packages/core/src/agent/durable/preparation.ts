@@ -142,6 +142,8 @@ interface DurablePreparationAgent {
     hooks?: ToolHooks;
     delegation?: DelegationConfig;
     methodType?: AgentMethodType;
+    backgroundTaskEnabled?: boolean;
+    backgroundTaskPolicy?: AgentExecutionOptions<any>['backgroundTaskPolicy'];
   }): Promise<Record<string, CoreTool>>;
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
@@ -496,6 +498,14 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     }
   }
 
+  // Resolve background task configuration before converting tools so eligible
+  // tools expose the per-call `_background` override in their input schemas.
+  const backgroundTasksConfig = typedAgent.getBackgroundTasksConfig?.();
+  const backgroundTaskManager =
+    execOptions?.disableBackgroundTasks || execOptions?.backgroundTaskPolicy?.allowToolDispatch === false
+      ? undefined
+      : mastra?.backgroundTaskManager;
+
   // 7. Convert tools to CoreTool format for execution
   let tools: Record<string, CoreTool> = {};
   try {
@@ -511,6 +521,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       hooks: execOptions?.hooks,
       delegation: execOptions?.delegation,
       methodType,
+      backgroundTaskEnabled: Boolean(backgroundTaskManager),
+      backgroundTaskPolicy: execOptions?.backgroundTaskPolicy,
     });
   } catch (error) {
     logger?.warn?.(`[DurableAgent] Error converting tools: ${error}`);
@@ -585,12 +597,6 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     }
   }
 
-  // 11. Get background task config. When the caller opts out with
-  // `disableBackgroundTasks: true`, drop the manager so the registry entry
-  // signals "no background tasks for this run" to the check step.
-  const backgroundTasksConfig = typedAgent.getBackgroundTasksConfig?.();
-  const backgroundTaskManager = execOptions?.disableBackgroundTasks ? undefined : mastra?.backgroundTaskManager;
-
   // Resolve tool payload transform policy with the same precedence the
   // non-durable Agent uses: per-call > agent-level > mastra-level. The
   // resolved policy carries a closure, so it lives on the run registry; the
@@ -658,6 +664,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       structuredOutput: serializedStructuredOutput,
       skipBgTaskWait: (execOptions as any)?._skipBgTaskWait,
       disableBackgroundTasks: execOptions?.disableBackgroundTasks,
+      backgroundTaskPolicy: execOptions?.backgroundTaskPolicy,
       tracingOptions: execOptions?.tracingOptions,
       actor: execOptions?.actor,
       instructionsOverride: execOptions?.instructions,

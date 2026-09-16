@@ -1,4 +1,5 @@
 import { createSandboxLifecycleTests } from '@internal/workspace-test-utils';
+import { SandboxUnsupportedFeatureError } from '@mastra/core/workspace';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { CloudflareSandbox } from './sandbox';
@@ -187,6 +188,58 @@ describe('CloudflareSandbox', () => {
 
     await expect(sandbox.executeCommand('echo', ['hi'])).rejects.toThrow(/has not been started/);
     await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'x' }])).rejects.toThrow(/has not been started/);
+  });
+
+  it('rejects an explicit per-file mode without writing', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'x', mode: 0o600 }])).rejects.toThrow(
+      SandboxUnsupportedFeatureError,
+    );
+    expect(bridge.files.size).toBe(0);
+  });
+
+  it('reads a file back under /workspace', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+    await sandbox.writeFiles([{ path: 'src/index.ts', content: 'export const a = 1;' }]);
+
+    const bytes = await sandbox.readFile('src/index.ts');
+
+    expect(Buffer.from(bytes).toString('utf8')).toBe('export const a = 1;');
+  });
+
+  it('rejects reads that escape /workspace', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    await expect(sandbox.readFile('../../etc/passwd')).rejects.toThrow(/under \/workspace/);
+  });
+
+  it('persists and hydrates /workspace through the bridge', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    const archive = await sandbox.persistWorkspace({ excludes: ['node_modules'] });
+    expect(Buffer.from(archive).toString('utf8')).toBe('fake-tar-archive');
+    expect(bridge.persists.at(-1)).toBe('node_modules');
+
+    await sandbox.hydrateWorkspace(new Uint8Array([9, 8, 7]));
+    expect(Array.from(bridge.hydrations.at(-1)!)).toEqual([9, 8, 7]);
+  });
+
+  it('requires start before readFile, persistWorkspace and hydrateWorkspace', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge, { id: 'not-started-2' });
+
+    await expect(sandbox.readFile('a.txt')).rejects.toThrow(/has not been started/);
+    await expect(sandbox.persistWorkspace()).rejects.toThrow(/has not been started/);
+    await expect(sandbox.hydrateWorkspace(new Uint8Array([1]))).rejects.toThrow(/has not been started/);
   });
 });
 

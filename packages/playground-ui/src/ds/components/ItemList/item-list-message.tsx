@@ -18,7 +18,7 @@ export function ItemListMessage({ children, message, className, type }: ItemList
       {message ? (
         <p
           className={cn(
-            'grid justify-center justify-items-center gap-2 p-8 text-center text-ui-md text-neutral3',
+            'grid justify-center justify-items-center gap-2 p-5 text-center text-ui-md text-neutral3',
             '[&>svg]:size-[1.5em] [&>svg]:opacity-75',
             {
               '[&>svg]:text-red-500': type === 'error',

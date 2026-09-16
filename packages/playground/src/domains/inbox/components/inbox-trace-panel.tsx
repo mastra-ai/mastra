@@ -6,7 +6,6 @@ import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useTraceOrBranchSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-or-branch-spans';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { format } from 'date-fns/format';
 import { Check } from 'lucide-react';
 import { useState } from 'react';
@@ -84,10 +83,13 @@ export function InboxTracePanel({
               </div>
             </div>
             <ButtonsGroup className="ml-auto shrink-0">
-              <Button variant="primary" size="sm" onClick={onMarkReviewed} disabled={isMarkingReviewed}>
-                <Icon>
-                  <Check />
-                </Icon>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={onMarkReviewed}
+                disabled={isMarkingReviewed}
+                icon={<Check />}
+              >
                 Mark as reviewed
               </Button>
             </ButtonsGroup>

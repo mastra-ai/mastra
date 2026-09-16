@@ -16,7 +16,7 @@ import {
   noScorers,
   noWorkflows,
 } from '@/domains/experiments/components/__tests__/fixtures/target-registries';
-import { EXPERIMENTS_PAGE_SIZE } from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
+import { EXPERIMENTS_PER_PAGE } from '@/domains/experiments/hooks/use-infinite-experiments';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -35,7 +35,11 @@ interface HandlerOptions {
 }
 
 function setupHandlers({ globalList = experimentsAcrossDatasets }: HandlerOptions = {}) {
-  const calls = { global: 0, datasetPerPage: undefined as string | null | undefined };
+  const calls = {
+    global: 0,
+    datasetPage: undefined as string | null | undefined,
+    datasetPerPage: undefined as string | null | undefined,
+  };
 
   server.use(
     http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
@@ -47,7 +51,9 @@ function setupHandlers({ globalList = experimentsAcrossDatasets }: HandlerOption
       return HttpResponse.json(buildListExperimentsResponse(globalList));
     }),
     http.get(`${TEST_BASE_URL}/api/datasets/:datasetId/experiments`, ({ params, request }) => {
-      calls.datasetPerPage = new URL(request.url).searchParams.get('perPage');
+      const searchParams = new URL(request.url).searchParams;
+      calls.datasetPage = searchParams.get('page');
+      calls.datasetPerPage = searchParams.get('perPage');
       return HttpResponse.json(
         buildListExperimentsResponse(experimentsAcrossDatasets.filter(exp => exp.datasetId === params.datasetId)),
       );
@@ -92,12 +98,13 @@ describe('Experiments page — dataset filter from URL', () => {
     expect(await screen.findByText('entity-extraction / model-b')).toBeDefined();
   });
 
-  it('requests a full page from the dataset-scoped endpoint instead of the global list', async () => {
+  it('requests the first page from the dataset-scoped endpoint instead of the global list', async () => {
     const calls = setupHandlers();
     renderPage('/experiments?dataset=dataset-1');
 
     await screen.findByText('entity-extraction / model-a');
-    expect(calls.datasetPerPage).toBe(String(EXPERIMENTS_PAGE_SIZE));
+    expect(calls.datasetPage).toBe('0');
+    expect(calls.datasetPerPage).toBe(String(EXPERIMENTS_PER_PAGE));
     expect(calls.global).toBe(0);
   });
 

@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
 import type { AgentInstructions, ToolsInput } from '@mastra/core/agent';
@@ -48,6 +46,7 @@ import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
 import { EditorMCPNamespace } from './mcp';
 import { createVersionFromSnapshotUpdate, getProvidedSnapshotFields } from './versioned-update';
+import { computeInlineWorkspaceIdentity } from './workspace-identity';
 
 type AgentEditorConfig = false | { instructions?: boolean; tools?: boolean | { description?: boolean } };
 
@@ -186,6 +185,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
   StorageResolvedAgentType,
   Agent
 > {
+  /** IDs of stored agents this namespace registered with Mastra. */
+  private _registeredStoredAgentIds = new Set<string>();
+
   protected async getStorageAdapter(): Promise<
     StorageAdapter<
       StorageCreateAgentInput,
@@ -396,9 +398,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         });
         this.logger?.debug(`[ensureStoredWorkspace] Persisted runtime workspace '${workspaceRef.workspaceId}' to DB`);
       } else if (workspaceRef.type === 'inline') {
-        // Derive a deterministic ID from the inline config
-        const configHash = createHash('sha256').update(JSON.stringify(workspaceRef.config)).digest('hex').slice(0, 12);
-        const workspaceId = `inline-${configHash}`;
+        // Derive a deterministic, key-order-independent ID from the inline config
+        const { workspaceId, configHash } = computeInlineWorkspaceIdentity(workspaceRef.config);
 
         // Check if already stored in DB
         const existing = await workspaceNs.getById(workspaceId);
@@ -422,6 +423,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
   }
 
   protected override onCacheEvict(id: string): void {
+    // Drop ownership tracking regardless of the registry outcome so the set
+    // never leaks stale IDs.
+    this._registeredStoredAgentIds.delete(id);
     // Only remove stored agents from the Mastra registry.
     // Code-defined agents must survive cache eviction because they live
     // in code and may only have a stored config overlay.
@@ -432,6 +436,22 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       }
     } catch {
       // Agent not found in registry — nothing to remove
+    }
+  }
+
+  /**
+   * Clear cached agents. Extends the base clear-all to also evict stored agents
+   * that were registered with Mastra via version-specific requests, which skip
+   * the value cache and would otherwise survive a no-ID clearCache().
+   */
+  override clearCache(id?: string): void {
+    super.clearCache(id);
+    // Targeted clears already ran onCacheEvict(id) (which pruned the set) via
+    // the base implementation; only clear-all needs to mop up untracked-in-cache
+    // registrations.
+    if (id) return;
+    for (const registeredId of Array.from(this._registeredStoredAgentIds)) {
+      this.onCacheEvict(registeredId);
     }
   }
 
@@ -1133,6 +1153,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     // endpoint to show the agent as "stored" instead of "code".
     if (!this.getCodeDefinedAgent(storedAgent.id)) {
       this.mastra?.addAgent(agent, storedAgent.id, { source: 'stored' });
+      this._registeredStoredAgentIds.add(storedAgent.id);
     }
     this.logger?.debug(`[createAgentFromStoredConfig] Successfully created agent "${storedAgent.id}"`);
 
@@ -1860,8 +1881,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     if (workspaceRef.type === 'inline') {
       // Use a deterministic ID based on config content to avoid leaking
       // duplicate workspace instances on repeated calls.
-      const configHash = createHash('sha256').update(JSON.stringify(workspaceRef.config)).digest('hex').slice(0, 12);
-      return workspaceNs.hydrateSnapshotToWorkspace(`inline-${configHash}`, workspaceRef.config, hydrateOptions);
+      const { workspaceId } = computeInlineWorkspaceIdentity(workspaceRef.config);
+      return workspaceNs.hydrateSnapshotToWorkspace(workspaceId, workspaceRef.config, hydrateOptions);
     }
 
     if (workspaceRef.type === 'provider') {

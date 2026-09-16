@@ -26,13 +26,7 @@ import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
 
 import { z } from 'zod/v4';
-import {
-  MASTRA_IS_STUDIO_KEY,
-  MASTRA_RESOURCE_ID_KEY,
-  WORKSPACE_TOOLS,
-  isReservedRequestContextKey,
-  resolveToolConfig,
-} from '../constants';
+import { MASTRA_IS_STUDIO_KEY, MASTRA_RESOURCE_ID_KEY, WORKSPACE_TOOLS, resolveToolConfig } from '../constants';
 import type { WorkspaceToolName } from '../constants';
 import { MastraFGAPermissions } from '../fga-permissions';
 
@@ -95,6 +89,7 @@ import {
   requireEffectiveResourceId,
   getEffectiveThreadId,
   enforceThreadAccess,
+  mergeBodyRequestContext,
   validateThreadOwnership,
   validateRunOwnership,
 } from './utils';
@@ -137,19 +132,6 @@ function ensureDefaultVersionStatus(ctx: RequestContext, versionOptions: { versi
 
 function getIsStudioFromContext(requestContext: RequestContext): boolean {
   return requestContext.get(MASTRA_IS_STUDIO_KEY) === true;
-}
-
-function mergeBodyRequestContext(serverRequestContext: RequestContext, bodyRequestContext: unknown): void {
-  if (!bodyRequestContext || typeof bodyRequestContext !== 'object') {
-    return;
-  }
-
-  for (const [key, value] of Object.entries(bodyRequestContext)) {
-    if (isReservedRequestContextKey(key)) continue;
-    if (serverRequestContext.get(key) === undefined) {
-      serverRequestContext.set(key, value);
-    }
-  }
 }
 
 function normalizePublicExecutionOptions(
