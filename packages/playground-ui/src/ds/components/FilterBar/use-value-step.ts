@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import type { FilterBarField, FilterBarOperator, FilterBarOption } from './types';
-import { useListbox } from './use-listbox';
 import { useValueSuggestions } from './use-value-suggestions';
 
 export type UseValueStepOptions = {
@@ -13,20 +12,23 @@ export type UseValueStepOptions = {
   onCommit: (value: string | string[]) => void;
 };
 
-const getOptionLabel = (option: FilterBarOption) => option.label ?? option.value;
-
 /**
  * Shared value-editing logic for the typeahead value step and the chip value
  * editor. Single arity: picking an option (or Enter on free text) commits.
  * Many arity: Enter/click toggles the highlighted option; Ctrl/Meta+Enter (or
- * `commitSelection`) commits the selection.
+ * `commitSelection`) commits the selection. List navigation itself is owned by
+ * the surrounding `ComboboxPrimitive.Root`.
  */
 export function useValueStep({ field, operator, query, enabled, initialValue, onCommit }: UseValueStepOptions) {
   const isMany = operator?.arity === 'many';
   const [selected, setSelected] = useState<string[]>(() => (Array.isArray(initialValue) ? initialValue : []));
+  const initialValueRef = useRef(initialValue);
+  initialValueRef.current = initialValue;
 
+  // The editor stays mounted across opens: re-seed from the current value each time it opens.
   useEffect(() => {
-    if (!enabled) setSelected([]);
+    const initial = initialValueRef.current;
+    setSelected(enabled && Array.isArray(initial) ? initial : []);
   }, [enabled]);
 
   const suggestions = useValueSuggestions({ field, operatorId: operator?.id ?? '', query, enabled });
@@ -43,14 +45,6 @@ export function useValueStep({ field, operator, query, enabled, initialValue, on
     },
     [isMany, toggle, onCommit],
   );
-
-  const listbox = useListbox({
-    options: suggestions.options,
-    getLabel: getOptionLabel,
-    // Lazy resolvers already filter server-side; static lists were filtered by useValueSuggestions.
-    query: '',
-    onSelect: handleSelect,
-  });
 
   const commitSelection = useCallback(() => {
     if (selected.length === 0) return false;
@@ -69,27 +63,31 @@ export function useValueStep({ field, operator, query, enabled, initialValue, on
     return true;
   }, [allowFreeText, query, isMany, selected, onCommit]);
 
+  /**
+   * Enter handling that Base UI does not cover: Ctrl/Meta+Enter commits a
+   * multi-selection; plain Enter with nothing highlighted commits free text.
+   * Returns `true` when the event was consumed.
+   */
   const handleKeyDown = useCallback(
-    (event: KeyboardEvent): boolean => {
-      if (event.key === 'Enter' && isMany && (event.ctrlKey || event.metaKey)) {
+    (event: KeyboardEvent, highlighted: FilterBarOption | null): boolean => {
+      if (event.key !== 'Enter') return false;
+      if (isMany && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
         return commitSelection() || commitFreeText();
       }
-      if (listbox.handleKeyDown(event)) return true;
-      if (event.key === 'Enter') {
+      if (highlighted === null) {
         event.preventDefault();
         return commitFreeText();
       }
       return false;
     },
-    [isMany, commitSelection, commitFreeText, listbox],
+    [isMany, commitSelection, commitFreeText],
   );
 
   return {
     isMany,
     selected,
     toggle,
-    listbox,
     options: suggestions.options,
     isLoading: suggestions.isLoading,
     error: suggestions.error,

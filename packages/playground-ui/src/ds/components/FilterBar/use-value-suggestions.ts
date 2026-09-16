@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { matchesQuery } from './match-query';
 import type { FilterBarField, FilterBarOption } from './types';
-import { matchesQuery } from './use-listbox';
 
 const DEBOUNCE_MS = 150;
 
@@ -39,9 +39,13 @@ export function useValueSuggestions({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<unknown>(undefined);
   const requestId = useRef(0);
+  // Consumers typically define the resolver inline; a new identity must not refire (and abort) the request.
+  const resolverRef = useRef(resolver);
+  resolverRef.current = resolver;
+  const hasResolver = Boolean(resolver);
 
   useEffect(() => {
-    if (!resolver || !enabled) {
+    if (!hasResolver || !enabled) {
       setRemote([]);
       setIsLoading(false);
       setError(undefined);
@@ -54,7 +58,7 @@ export function useValueSuggestions({
 
     const timer = setTimeout(() => {
       Promise.resolve()
-        .then(() => resolver({ query, operatorId, signal: controller.signal }))
+        .then(() => resolverRef.current?.({ query, operatorId, signal: controller.signal }) ?? [])
         .then(result => {
           if (id !== requestId.current) return;
           setRemote(result);
@@ -72,7 +76,7 @@ export function useValueSuggestions({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [resolver, enabled, query, operatorId]);
+  }, [hasResolver, enabled, query, operatorId]);
 
   const options = useMemo(() => {
     if (staticOptions) return staticOptions.filter(o => matchesQuery(o.label ?? o.value, query));

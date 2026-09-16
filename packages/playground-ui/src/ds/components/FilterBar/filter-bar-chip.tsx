@@ -1,18 +1,21 @@
 /* eslint-disable react-refresh/only-export-components */
+import type { BaseUIEvent } from '@base-ui/react/types';
 import { LockIcon, SearchIcon, XIcon } from 'lucide-react';
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
-import type { KeyboardEvent, MouseEvent, ReactNode, RefObject } from 'react';
+import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { emptyValueFor, useFilterBarContext } from './filter-bar-context';
-import { FilterBarListbox } from './filter-bar-listbox';
-import type { FilterBarField, FilterBarItem, FilterBarOperator, FilterBarSegment } from './types';
-import { useListbox } from './use-listbox';
+import { FilterBarOptionList } from './filter-bar-option-list';
+import { matchesQueryFilter } from './match-query';
+import type { FilterBarField, FilterBarItem, FilterBarOperator, FilterBarOption, FilterBarSegment } from './types';
 import { useValueStep } from './use-value-step';
 import { Button } from '@/ds/components/Button/Button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
-import { MENU_SIDE_OFFSET, menuPopupClass, menuSearchClasses } from '@/ds/primitives/menu-item';
+import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
+import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
+import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 
-const segmentClass = cn(
+export const segmentClass = cn(
   'flex max-w-48 min-w-0 items-center gap-1 px-2 text-ui-sm leading-ui-sm whitespace-nowrap outline-none',
   'first:rounded-l-full last:rounded-r-full',
 );
@@ -46,10 +49,6 @@ const useChip = () => {
   return chip;
 };
 
-// Ref pass-through so editors can hand their search input to the popover's initialFocus.
-const SearchRefContext = createContext<RefObject<HTMLInputElement | null> | null>(null);
-const useSearchRef = () => useContext(SearchRefContext);
-
 export type FilterBarChipProps = {
   item: FilterBarItem;
   /** Locked chip: plain labels, no editors, no remove button. */
@@ -60,7 +59,7 @@ export type FilterBarChipProps = {
 };
 
 function isInsidePopup(target: EventTarget | null) {
-  return target instanceof Element && Boolean(target.closest('[data-slot="popover-content"]'));
+  return target instanceof Element && Boolean(target.closest('[data-slot="filter-bar-editor"]'));
 }
 
 export function FilterBarChip({ item, readOnly = false, className, children }: FilterBarChipProps) {
@@ -146,21 +145,50 @@ export function FilterBarChip({ item, readOnly = false, className, children }: F
   );
 }
 
-type SegmentPopoverProps = {
+type SegmentComboboxProps<T> = {
   segment: Exclude<FilterBarSegment, 'remove'>;
   label: string;
   ariaLabel: string;
-  children: (close: () => void) => ReactNode;
+  items: readonly T[];
+  itemToString: (item: T) => string;
+  /** `null` when `items` are already filtered. */
+  filter: null | ((item: T, query: string, itemToString?: (item: T) => string) => boolean);
+  /** Current selection, surfaced through Base UI's `ItemIndicator`. */
+  value?: T | null;
+  query: string;
+  onQueryChange: (query: string) => void;
+  onSelect: (item: T) => void;
+  onOpen?: () => void;
+  onInputKeyDown?: (event: BaseUIEvent<KeyboardEvent<HTMLInputElement>>, highlighted: T | null) => void;
+  placeholder: string;
+  children: ReactNode;
 };
 
-function SegmentPopover({ segment, label, ariaLabel, children }: SegmentPopoverProps) {
+/**
+ * A chip segment: a button trigger that opens a searchable option list. The
+ * editor owning the segment supplies items, filtering and selection routing.
+ */
+function SegmentCombobox<T>({
+  segment,
+  label,
+  ariaLabel,
+  items,
+  itemToString,
+  filter,
+  value = null,
+  query,
+  onQueryChange,
+  onSelect,
+  onOpen,
+  onInputKeyDown,
+  placeholder,
+  children,
+}: SegmentComboboxProps<T>) {
   const ctx = useFilterBarContext();
   const chip = useChip();
+  const container = usePortalContainer();
   const open = chip.openSegment === segment;
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const searchRef = useRef<HTMLInputElement | null>(null);
-
-  const close = useCallback(() => chip.setOpenSegment(null), [chip]);
+  const [highlighted, setHighlighted] = useState<T | null>(null);
 
   if (chip.readOnly) {
     return (
@@ -171,12 +199,33 @@ function SegmentPopover({ segment, label, ariaLabel, children }: SegmentPopoverP
   }
 
   return (
-    <Popover open={open} onOpenChange={next => chip.setOpenSegment(next ? segment : null)}>
-      <PopoverTrigger
-        ref={el => {
-          triggerRef.current = el;
-          ctx.registerSegment(chip.item.id, segment, el);
-        }}
+    <ComboboxPrimitive.Root<T>
+      items={items}
+      itemToStringLabel={itemToString}
+      filter={filter}
+      value={value}
+      onValueChange={(item, details) => {
+        // The editor decides what a pick means (and when to close); Base UI must not keep it.
+        details.cancel();
+        if (item !== null) onSelect(item);
+      }}
+      inputValue={query}
+      onInputValueChange={(next, details) => {
+        if (details.reason === 'input-change') onQueryChange(next);
+      }}
+      onItemHighlighted={item => setHighlighted(item ?? null)}
+      open={open}
+      onOpenChange={next => {
+        if (next) onOpen?.();
+        else onQueryChange('');
+        chip.setOpenSegment(next ? segment : null);
+      }}
+      // See FilterBarInput: the runtime supports 'always' although ComboboxRoot types it as boolean.
+      autoHighlight={'always' as unknown as boolean}
+      modal={false}
+    >
+      <ComboboxPrimitive.Trigger
+        ref={el => ctx.registerSegment(chip.item.id, segment, el)}
         render={
           <button
             type="button"
@@ -189,57 +238,36 @@ function SegmentPopover({ segment, label, ariaLabel, children }: SegmentPopoverP
         }
       >
         <span className="truncate">{label}</span>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        sideOffset={MENU_SIDE_OFFSET}
-        className={cn(menuPopupClass, 'w-56')}
-        initialFocus={searchRef}
-      >
-        <SearchRefContext.Provider value={searchRef}>{children(close)}</SearchRefContext.Provider>
-      </PopoverContent>
-    </Popover>
+      </ComboboxPrimitive.Trigger>
+      <ComboboxPrimitive.Portal container={container}>
+        <ComboboxPrimitive.Positioner
+          align="start"
+          sideOffset={MENU_SIDE_OFFSET}
+          positionMethod={FLOATING_POSITION_METHOD}
+          className={comboboxStyles.positioner}
+        >
+          <ComboboxPrimitive.Popup className={cn(comboboxStyles.popup, 'w-56')} data-slot="filter-bar-editor">
+            <div className={comboboxStyles.searchContainer}>
+              <SearchIcon className={comboboxStyles.searchIcon} />
+              <ComboboxPrimitive.Input
+                className={comboboxStyles.searchInput}
+                placeholder={placeholder}
+                onKeyDown={event => onInputKeyDown?.(event, highlighted)}
+              />
+            </div>
+            {children}
+          </ComboboxPrimitive.Popup>
+        </ComboboxPrimitive.Positioner>
+      </ComboboxPrimitive.Portal>
+    </ComboboxPrimitive.Root>
   );
 }
 
-function EditorSearch({
-  value,
-  onChange,
-  onKeyDown,
-  placeholder,
-  listboxId,
-  activeDescendant,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
-  placeholder: string;
-  listboxId?: string;
-  activeDescendant?: string;
-}) {
-  const searchRef = useSearchRef();
-  return (
-    <div className={menuSearchClasses.container}>
-      <SearchIcon className={menuSearchClasses.icon} />
-      <input
-        ref={searchRef ?? undefined}
-        role="combobox"
-        aria-expanded
-        aria-controls={listboxId}
-        aria-activedescendant={activeDescendant}
-        aria-autocomplete="list"
-        autoComplete="off"
-        className={menuSearchClasses.input}
-        placeholder={placeholder}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        onKeyDown={onKeyDown}
-      />
-    </div>
-  );
-}
+const fieldLabel = (field: FilterBarField) => field.label;
+const operatorLabel = (operator: FilterBarOperator) => operator.label;
+const optionLabel = (option: FilterBarOption) => option.label ?? option.value;
 
-function FieldEditor({ close }: { close: () => void }) {
+function FieldEditor() {
   const ctx = useFilterBarContext();
   const chip = useChip();
   const [query, setQuery] = useState('');
@@ -254,37 +282,36 @@ function FieldEditor({ close }: { close: () => void }) {
         operatorId: nextOperator?.id ?? chip.item.operatorId,
         value: arityChanged || field.id !== chip.item.fieldId ? emptyValueFor(nextOperator) : chip.item.value,
       });
-      close();
+      chip.setOpenSegment(null);
     },
-    [ctx, chip, close],
+    [ctx, chip],
   );
 
-  const listbox = useListbox({ options: ctx.fields, getLabel: f => f.label, query, onSelect });
-
   return (
-    <>
-      <EditorSearch
-        value={query}
-        onChange={setQuery}
-        onKeyDown={e => listbox.handleKeyDown(e)}
-        placeholder="Change field…"
-        listboxId={listbox.listboxId}
-        activeDescendant={listbox.activeDescendant}
-      />
-      <FilterBarListbox
-        listbox={listbox}
+    <SegmentCombobox<FilterBarField>
+      segment="field"
+      ariaLabel="Field"
+      label={chip.field?.label ?? chip.item.fieldId}
+      items={ctx.fields}
+      itemToString={fieldLabel}
+      filter={matchesQueryFilter}
+      value={chip.field}
+      query={query}
+      onQueryChange={setQuery}
+      onSelect={onSelect}
+      placeholder="Change field…"
+    >
+      <FilterBarOptionList<FilterBarField>
         aria-label="Fields"
         getKey={f => f.id}
         renderOption={f => f.label}
-        isSelected={f => f.id === chip.item.fieldId}
-        onSelect={onSelect}
         emptyText="No matching field."
       />
-    </>
+    </SegmentCombobox>
   );
 }
 
-function OperatorEditor({ close }: { close: () => void }) {
+function OperatorEditor() {
   const ctx = useFilterBarContext();
   const chip = useChip();
   const [query, setQuery] = useState('');
@@ -297,44 +324,42 @@ function OperatorEditor({ close }: { close: () => void }) {
         operatorId: operator.id,
         value: arityChanged ? emptyValueFor(operator) : chip.item.value,
       });
-      close();
+      chip.setOpenSegment(null);
     },
-    [ctx, chip, close],
+    [ctx, chip],
   );
 
-  const listbox = useListbox({ options, getLabel: o => o.label, query, onSelect });
-
   return (
-    <>
-      <EditorSearch
-        value={query}
-        onChange={setQuery}
-        onKeyDown={e => listbox.handleKeyDown(e)}
-        placeholder="Change operator…"
-        listboxId={listbox.listboxId}
-        activeDescendant={listbox.activeDescendant}
-      />
-      <FilterBarListbox
-        listbox={listbox}
+    <SegmentCombobox<FilterBarOperator>
+      segment="operator"
+      ariaLabel="Operator"
+      label={chip.operator?.label ?? chip.item.operatorId}
+      items={options}
+      itemToString={operatorLabel}
+      filter={matchesQueryFilter}
+      value={chip.operator}
+      query={query}
+      onQueryChange={setQuery}
+      onSelect={onSelect}
+      placeholder="Change operator…"
+    >
+      <FilterBarOptionList<FilterBarOperator>
         aria-label="Operators"
         getKey={o => o.id}
         renderOption={o => o.label}
-        isSelected={o => o.id === chip.item.operatorId}
-        onSelect={onSelect}
         emptyText="No matching operator."
       />
-    </>
+    </SegmentCombobox>
   );
 }
 
-function ValueEditor({ close }: { close: () => void }) {
+function ValueEditor() {
   const ctx = useFilterBarContext();
   const chip = useChip();
-  // Prefill free-text values only; with suggestions, the current value is shown as checked instead.
-  const [query, setQuery] = useState(() =>
-    typeof chip.item.value === 'string' && !chip.field?.suggestions ? chip.item.value : '',
-  );
+  const open = chip.openSegment === 'value';
+  const [query, setQuery] = useState('');
 
+  const close = useCallback(() => chip.setOpenSegment(null), [chip]);
   const onCommit = useCallback(
     (value: string | string[]) => {
       ctx.updateItem(chip.item.id, { value });
@@ -347,7 +372,7 @@ function ValueEditor({ close }: { close: () => void }) {
     field: chip.field,
     operator: chip.operator,
     query,
-    enabled: true,
+    enabled: open,
     initialValue: chip.item.value,
     onCommit,
   });
@@ -359,24 +384,33 @@ function ValueEditor({ close }: { close: () => void }) {
     : 'Type a value…';
 
   return (
-    <>
-      <EditorSearch
-        value={query}
-        onChange={setQuery}
-        onKeyDown={e => step.handleKeyDown(e)}
-        placeholder={placeholder}
-        listboxId={step.hasSuggestions ? step.listbox.listboxId : undefined}
-        activeDescendant={step.hasSuggestions ? step.listbox.activeDescendant : undefined}
-      />
+    <SegmentCombobox<FilterBarOption>
+      segment="value"
+      ariaLabel="Value"
+      label={formatValue(chip.item.value, chip.field) || '…'}
+      items={step.options}
+      itemToString={optionLabel}
+      filter={null}
+      query={query}
+      onQueryChange={setQuery}
+      onSelect={step.handleSelect}
+      // Prefill free-text values only; with suggestions, the current value is shown as checked instead.
+      onOpen={() => setQuery(typeof chip.item.value === 'string' && !chip.field?.suggestions ? chip.item.value : '')}
+      onInputKeyDown={(event, highlighted) => {
+        const highlightedOption = step.hasSuggestions ? highlighted : null;
+        const handled = step.handleKeyDown(event, highlightedOption);
+        // Base UI closes on Enter when nothing is highlighted; a rejected free-text value must keep the editor open.
+        if (handled || (event.key === 'Enter' && highlightedOption === null)) event.preventBaseUIHandler();
+      }}
+      placeholder={placeholder}
+    >
       {step.hasSuggestions && (
-        <FilterBarListbox
-          listbox={step.listbox}
+        <FilterBarOptionList<FilterBarOption>
           aria-label="Values"
           aria-multiselectable={step.isMany || undefined}
           getKey={o => o.value}
           renderOption={o => o.label ?? o.value}
           isSelected={o => (step.isMany ? step.selected.includes(o.value) : chip.item.value === o.value)}
-          onSelect={step.handleSelect}
           isLoading={step.isLoading}
           error={step.error}
           emptyText={step.allowFreeText ? 'No suggestions — press Enter to use your text.' : 'No matching value.'}
@@ -392,37 +426,22 @@ function ValueEditor({ close }: { close: () => void }) {
           </Button>
         </div>
       )}
-    </>
+    </SegmentCombobox>
   );
 }
 
 export function FilterBarChipField() {
-  const chip = useChip();
-  return (
-    <SegmentPopover segment="field" ariaLabel="Field" label={chip.field?.label ?? chip.item.fieldId}>
-      {close => <FieldEditor close={close} />}
-    </SegmentPopover>
-  );
+  return <FieldEditor />;
 }
 
 export function FilterBarChipOperator() {
-  const chip = useChip();
-  return (
-    <SegmentPopover segment="operator" ariaLabel="Operator" label={chip.operator?.label ?? chip.item.operatorId}>
-      {close => <OperatorEditor close={close} />}
-    </SegmentPopover>
-  );
+  return <OperatorEditor />;
 }
 
 export function FilterBarChipValue() {
   const chip = useChip();
   if ((chip.operator?.arity ?? 'one') === 'none') return null;
-  const text = formatValue(chip.item.value, chip.field);
-  return (
-    <SegmentPopover segment="value" ariaLabel="Value" label={text || '…'}>
-      {close => <ValueEditor close={close} />}
-    </SegmentPopover>
-  );
+  return <ValueEditor />;
 }
 
 export function FilterBarChipRemove() {

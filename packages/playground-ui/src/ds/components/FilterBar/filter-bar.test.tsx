@@ -103,7 +103,7 @@ describe('FilterBar', () => {
       key('ArrowDown');
       key('Enter');
 
-      expect(input.placeholder).toBe('Type a value, then Enter');
+      expect(input.placeholder).toBe('Value…');
       type('abc-123');
       key('Enter');
 
@@ -115,6 +115,25 @@ describe('FilterBar', () => {
       expect(input.value).toBe('');
       expect(document.activeElement).toBe(input);
       expect(getChips()).toHaveLength(1);
+    });
+
+    it('moves the highlight with the arrow keys and mirrors it in aria-activedescendant', async () => {
+      render(<Harness />);
+      const input = getInput();
+      input.focus();
+      const first = await screen.findByRole('option', { name: 'Status' });
+      const second = screen.getByRole('option', { name: 'Trace ID' });
+
+      await waitFor(() => expect(input.getAttribute('aria-activedescendant')).toBe(first.id));
+      expect(first.hasAttribute('data-highlighted')).toBe(true);
+
+      key('ArrowDown');
+      await waitFor(() => expect(input.getAttribute('aria-activedescendant')).toBe(second.id));
+      expect(second.hasAttribute('data-highlighted')).toBe(true);
+      expect(first.hasAttribute('data-highlighted')).toBe(false);
+
+      key('ArrowUp');
+      await waitFor(() => expect(input.getAttribute('aria-activedescendant')).toBe(first.id));
     });
 
     it('keeps the draft when the input itself is clicked mid-flow', async () => {
@@ -175,6 +194,39 @@ describe('FilterBar', () => {
       expect(input.getAttribute('aria-expanded')).toBe('false');
     });
 
+    it('accumulates the draft as an inline chip next to the input', async () => {
+      render(<Harness />);
+      const input = getInput();
+      const draftChip = () => document.querySelector('[data-slot="filter-bar-draft-chip"]');
+
+      input.focus();
+      expect(draftChip()).toBeNull();
+
+      type('status');
+      key('Enter');
+      await screen.findByRole('option', { name: 'is' });
+      expect(draftChip()?.textContent).toBe('Status');
+      expect(input.placeholder).toBe('Operator…');
+
+      key('Enter');
+      await screen.findByRole('listbox', { name: 'Values' });
+      expect(draftChip()?.textContent).toBe('Statusis');
+
+      key('Escape');
+      expect(draftChip()?.textContent).toBe('Status');
+      key('Backspace');
+      expect(draftChip()).toBeNull();
+
+      type('status');
+      key('Enter');
+      await screen.findByRole('option', { name: 'is' });
+      key('Enter');
+      await screen.findByRole('option', { name: 'Running' });
+      key('Enter');
+      expect(draftChip()).toBeNull();
+      expect(getChips()).toHaveLength(1);
+    });
+
     it('commits immediately for arity "none" operators', async () => {
       const onChange = vi.fn();
       render(<Harness onChange={onChange} />);
@@ -219,6 +271,11 @@ describe('FilterBar', () => {
       await screen.findByText('No matching value.');
       key('Enter');
       expect(onChange).not.toHaveBeenCalled();
+      // The rejected value must not close or reset the draft.
+      const input = getInput();
+      expect(input.dataset.step).toBe('value');
+      expect(input.getAttribute('aria-expanded')).toBe('true');
+      expect(input.value).toBe('zzz');
     });
 
     it('Backspace on an empty input removes the last chip', () => {
@@ -255,20 +312,20 @@ describe('FilterBar', () => {
       const input = getInput();
       input.focus();
       key('ArrowLeft');
-      const lastValue = screen.getByRole('button', { name: 'Value: x' });
+      const lastValue = screen.getByRole('combobox', { name: 'Value: x' });
       expect(document.activeElement).toBe(lastValue);
 
       const secondChip = screen.getByRole('group', { name: 'Trace ID is x' });
       fireEvent.keyDown(lastValue, { key: 'ArrowLeft' });
-      expect(document.activeElement).toBe(within(secondChip).getByRole('button', { name: 'Operator: is' }));
+      expect(document.activeElement).toBe(within(secondChip).getByRole('combobox', { name: 'Operator: is' }));
       pressActive({ key: 'ArrowLeft' });
-      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Field: Trace ID' }));
+      expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Field: Trace ID' }));
       // Across chips
       pressActive({ key: 'ArrowLeft' });
       expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove Status filter' }));
 
       pressActive({ key: 'ArrowRight' });
-      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Field: Trace ID' }));
+      expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Field: Trace ID' }));
       pressActive({ key: 'ArrowRight' });
       pressActive({ key: 'ArrowRight' });
       pressActive({ key: 'ArrowRight' });
@@ -280,17 +337,17 @@ describe('FilterBar', () => {
     it('Delete on a chip removes it and moves focus to the neighbour', () => {
       const onChange = vi.fn();
       render(<Harness initial={INITIAL} onChange={onChange} />);
-      const first = screen.getByRole('button', { name: 'Value: Running' });
+      const first = screen.getByRole('combobox', { name: 'Value: Running' });
       first.focus();
       fireEvent.keyDown(first, { key: 'Delete' });
       expect(argAt(onChange, 0, 0).map((i: FilterBarItem) => i.id)).toEqual(['b']);
-      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Value: x' }));
+      expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Value: x' }));
     });
 
     it('edits the value segment by clicking it', async () => {
       const onChange = vi.fn();
       render(<Harness initial={INITIAL} onChange={onChange} />);
-      fireEvent.click(screen.getByRole('button', { name: 'Value: Running' }));
+      fireEvent.click(screen.getByRole('combobox', { name: 'Value: Running' }));
       const success = await screen.findByRole('option', { name: 'Success' });
       fireEvent.click(success);
       expect(argAt(onChange, 0, 0)[0]).toMatchObject({ id: 'a', value: 'success' });
@@ -300,7 +357,7 @@ describe('FilterBar', () => {
     it('edits a free-text value with the keyboard', async () => {
       const onChange = vi.fn();
       render(<Harness initial={INITIAL} onChange={onChange} />);
-      const value = screen.getByRole('button', { name: 'Value: x' });
+      const value = screen.getByRole('combobox', { name: 'Value: x' });
       value.focus();
       fireEvent.click(value);
       const search = await screen.findByPlaceholderText('Type a value…');
@@ -314,7 +371,7 @@ describe('FilterBar', () => {
       const onChange = vi.fn();
       render(<Harness initial={INITIAL} onChange={onChange} />);
       const chip = screen.getByRole('group', { name: 'Status is Running' });
-      fireEvent.click(within(chip).getByRole('button', { name: 'Operator: is' }));
+      fireEvent.click(within(chip).getByRole('combobox', { name: 'Operator: is' }));
       fireEvent.click(await screen.findByRole('option', { name: 'in' }));
       expect(argAt(onChange, 0, 0)[0]).toMatchObject({ id: 'a', operatorId: 'in', value: [] });
     });
@@ -323,7 +380,7 @@ describe('FilterBar', () => {
       const onChange = vi.fn();
       render(<Harness initial={INITIAL} onChange={onChange} />);
       const chip = screen.getByRole('group', { name: 'Status is Running' });
-      fireEvent.click(within(chip).getByRole('button', { name: 'Operator: is' }));
+      fireEvent.click(within(chip).getByRole('combobox', { name: 'Operator: is' }));
       fireEvent.click(await screen.findByRole('option', { name: 'is not' }));
       expect(argAt(onChange, 0, 0)[0]).toMatchObject({ id: 'a', operatorId: 'is-not', value: 'running' });
     });
@@ -336,7 +393,7 @@ describe('FilterBar', () => {
           onChange={onChange}
         />,
       );
-      fireEvent.click(screen.getByRole('button', { name: 'Field: Status' }));
+      fireEvent.click(screen.getByRole('combobox', { name: 'Field: Status' }));
       fireEvent.click(await screen.findByRole('option', { name: 'Trace ID' }));
       expect(argAt(onChange, 0, 0)[0]).toMatchObject({ id: 'a', fieldId: 'traceId', operatorId: 'is', value: '' });
     });
@@ -347,7 +404,7 @@ describe('FilterBar', () => {
       expect(within(locked).queryAllByRole('button')).toHaveLength(0);
       getInput().focus();
       key('ArrowLeft');
-      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Value: Running' }));
+      expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Value: Running' }));
     });
 
     it('Clear empties the bar and focuses the input', () => {
@@ -377,7 +434,8 @@ describe('FilterBar', () => {
       expect(resolver).not.toHaveBeenCalled();
       key('Enter');
 
-      await screen.findByText('Loading…');
+      // Base UI's Status live region appends an invisible marker to its text on mount.
+      await screen.findByText(/Loading…/);
       await screen.findByRole('option', { name: 'alpha' });
       expect(resolver).toHaveBeenCalledTimes(1);
       expect(argAt(resolver, 0, 0)).toMatchObject({ query: '', operatorId: 'is' });
@@ -427,11 +485,38 @@ describe('FilterBar', () => {
       type('name');
       key('Enter');
       key('Enter');
-      await screen.findByText("Couldn't load values.");
+      await screen.findByText(/Couldn't load values./);
       type('manual');
-      await screen.findByText("Couldn't load values.");
+      await screen.findByText(/Couldn't load values./);
       key('Enter');
       expect(argAt(onChange, 0, 0)[0]).toMatchObject({ value: 'manual' });
+    });
+
+    it('tolerates an inline resolver whose identity changes on every render', async () => {
+      const calls: string[] = [];
+      function Inline() {
+        const [, rerender] = useState(0);
+        const fields: FilterBarField[] = [
+          {
+            id: 'name',
+            label: 'Name',
+            operators: ['is'],
+            suggestions: async ({ query }) => {
+              calls.push(query);
+              rerender(n => n + 1); // like a story/consumer logging calls into state
+              return [{ value: 'alpha' }];
+            },
+          },
+        ];
+        return <Harness fields={fields} />;
+      }
+      render(<Inline />);
+      getInput().focus();
+      type('name');
+      key('Enter');
+      key('Enter');
+      await screen.findByRole('option', { name: 'alpha' });
+      expect(calls).toEqual(['']);
     });
   });
 });

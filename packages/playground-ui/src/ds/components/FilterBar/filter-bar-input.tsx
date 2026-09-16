@@ -1,15 +1,17 @@
-import { Popover as PopoverPrimitive } from '@base-ui/react/popover';
-import { ChevronRightIcon } from 'lucide-react';
+import type { BaseUIEvent } from '@base-ui/react/types';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useFilterBarContext } from './filter-bar-context';
-import { FilterBarListbox } from './filter-bar-listbox';
-import type { FilterBarField, FilterBarOperator } from './types';
-import { useListbox } from './use-listbox';
+import { FilterBarDraftChip } from './filter-bar-draft-chip';
+import { FilterBarOptionList } from './filter-bar-option-list';
+import { matchesQueryFilter } from './match-query';
+import type { FilterBarField, FilterBarOperator, FilterBarOption } from './types';
 import { useValueStep } from './use-value-step';
 import { Button } from '@/ds/components/Button/Button';
-import { PopoverContent } from '@/ds/components/Popover/popover';
-import { MENU_SIDE_OFFSET, menuPopupClass } from '@/ds/primitives/menu-item';
+import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
+import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
+import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 
 type Step = 'field' | 'operator' | 'value';
@@ -20,7 +22,11 @@ type Draft = {
   operatorId?: string;
 };
 
+type Item = FilterBarField | FilterBarOperator | FilterBarOption;
+
 const INITIAL_DRAFT: Draft = { step: 'field' };
+
+const getItemLabel = (item: Item) => ('label' in item && item.label ? item.label : 'value' in item ? item.value : '');
 
 export type FilterBarInputProps = {
   placeholder?: string;
@@ -38,10 +44,12 @@ export function FilterBarInput({
   'aria-label': ariaLabel = 'Add filter',
 }: FilterBarInputProps) {
   const ctx = useFilterBarContext();
+  const container = usePortalContainer();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState<Draft>(INITIAL_DRAFT);
+  const [highlighted, setHighlighted] = useState<Item | null>(null);
 
   const field = draft.fieldId ? ctx.getField(draft.fieldId) : undefined;
   const operator = draft.operatorId ? ctx.getOperator(draft.operatorId) : undefined;
@@ -84,13 +92,6 @@ export function FilterBarInput({
     [draft.fieldId, commit],
   );
 
-  const fieldListbox = useListbox({ options: ctx.fields, getLabel: f => f.label, query, onSelect: selectField });
-  const operatorListbox = useListbox({
-    options: fieldOperators,
-    getLabel: o => o.label,
-    query,
-    onSelect: selectOperator,
-  });
   const valueStep = useValueStep({
     field,
     operator,
@@ -108,20 +109,31 @@ export function FilterBarInput({
     setQuery('');
   }, [draft]);
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+  // Selection is routed per step and never kept by Base UI (`value` stays null).
+  const handleSelect = (item: Item) => {
+    if (draft.step === 'field') selectField(item as FilterBarField);
+    else if (draft.step === 'operator') selectOperator(item as FilterBarOperator);
+    else valueStep.handleSelect(item as FilterBarOption);
+  };
+
+  // App-level keys run before Base UI's own input handling.
+  const handleKeyDown = (event: BaseUIEvent<KeyboardEvent<HTMLInputElement>>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
+      event.preventBaseUIHandler();
       stepBack();
       return;
     }
     if (!open && (event.key === 'ArrowDown' || event.key === 'Enter')) {
       event.preventDefault();
+      event.preventBaseUIHandler();
       setOpen(true);
       return;
     }
     if (query === '') {
       if (event.key === 'Backspace') {
         event.preventDefault();
+        event.preventBaseUIHandler();
         if (draft.step !== 'field') stepBack();
         else {
           const last = ctx.items[ctx.items.length - 1];
@@ -136,165 +148,149 @@ export function FilterBarInput({
     }
     if (!open) return;
 
-    if (draft.step === 'field') {
-      const highlightedField = fieldListbox.filtered[fieldListbox.highlighted];
-      if (event.key === 'Tab' && highlightedField && query !== '') {
-        event.preventDefault();
-        selectField(highlightedField);
-        return;
-      }
-      fieldListbox.handleKeyDown(event);
+    if (event.key === 'Tab' && highlighted && draft.step !== 'value' && (draft.step === 'operator' || query !== '')) {
+      event.preventDefault();
+      event.preventBaseUIHandler();
+      handleSelect(highlighted);
       return;
     }
-    if (draft.step === 'operator') {
-      const highlightedOperator = operatorListbox.filtered[operatorListbox.highlighted];
-      if (event.key === 'Tab' && highlightedOperator) {
-        event.preventDefault();
-        selectOperator(highlightedOperator);
-        return;
-      }
-      operatorListbox.handleKeyDown(event);
-      return;
+    if (draft.step === 'value') {
+      const highlightedOption = valueStep.hasSuggestions ? (highlighted as FilterBarOption | null) : null;
+      const handled = valueStep.handleKeyDown(event, highlightedOption);
+      // Base UI closes on Enter when nothing is highlighted (form submission); the draft must stay open.
+      if (handled || (event.key === 'Enter' && highlightedOption === null)) event.preventBaseUIHandler();
     }
-    valueStep.handleKeyDown(event);
   };
 
-  const activeListbox =
-    draft.step === 'field' ? fieldListbox : draft.step === 'operator' ? operatorListbox : valueStep.listbox;
-  const showListbox = draft.step !== 'value' || valueStep.hasSuggestions;
+  const items: readonly Item[] =
+    draft.step === 'field' ? ctx.fields : draft.step === 'operator' ? fieldOperators : valueStep.options;
 
   const inputPlaceholder =
     draft.step === 'field'
       ? placeholder
       : draft.step === 'operator'
-        ? 'Choose an operator…'
-        : valueStep.hasSuggestions
-          ? valueStep.allowFreeText
-            ? 'Search or type a value…'
-            : 'Search values…'
-          : 'Type a value, then Enter';
+        ? 'Operator…'
+        : valueStep.hasSuggestions && valueStep.allowFreeText
+          ? 'Search or type a value…'
+          : 'Value…';
 
   return (
-    <PopoverPrimitive.Root
-      open={open}
-      onOpenChange={(next, details) => {
-        // Escape is handled by the input (it steps back rather than closing).
-        if (!next && details.reason === 'escape-key') return;
-        // The input is the anchor, not a trigger: clicking it must keep the draft open.
-        if (
-          !next &&
-          details.reason === 'outside-press' &&
-          details.event.target instanceof Node &&
-          inputRef.current?.contains(details.event.target)
-        ) {
-          return;
-        }
-        if (next) setOpen(true);
-        else close();
-      }}
-      modal={false}
-    >
-      <input
-        ref={el => {
-          inputRef.current = el;
-          ctx.registerInput(el);
+    <>
+      <FilterBarDraftChip field={field} operator={operator} />
+      <ComboboxPrimitive.Root<Item>
+        items={items}
+        itemToStringLabel={getItemLabel}
+        // The value step is already filtered (locally or server-side) by useValueSuggestions.
+        filter={draft.step === 'value' ? null : matchesQueryFilter}
+        value={null}
+        onValueChange={(item, details) => {
+          // Never let Base UI keep the selection, fill the input or close: each step routes it.
+          details.cancel();
+          if (item) handleSelect(item);
         }}
-        type="text"
-        role="combobox"
-        aria-label={ariaLabel}
-        aria-expanded={open}
-        aria-controls={open && showListbox ? activeListbox.listboxId : undefined}
-        aria-activedescendant={open && showListbox ? activeListbox.activeDescendant : undefined}
-        aria-autocomplete="list"
-        autoComplete="off"
-        spellCheck={false}
-        data-slot="filter-bar-input"
-        data-step={draft.step}
-        placeholder={inputPlaceholder}
-        value={query}
-        className={cn(
-          'h-form-sm min-w-32 flex-1 bg-transparent px-1 text-ui-smd leading-ui-sm text-neutral6 outline-none placeholder:text-neutral3',
-          className,
-        )}
-        onChange={e => {
-          setQuery(e.target.value);
+        inputValue={query}
+        onInputValueChange={(next, details) => {
+          if (details.reason !== 'input-change') return;
+          setQuery(next);
           if (!open) setOpen(true);
         }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={handleKeyDown}
-      />
-      <PopoverContent
-        anchor={inputRef}
-        align="start"
-        sideOffset={MENU_SIDE_OFFSET}
-        className={cn(menuPopupClass, 'w-64')}
-        initialFocus={false}
-        finalFocus={false}
+        onItemHighlighted={item => setHighlighted(item ?? null)}
+        open={open}
+        onOpenChange={(next, details) => {
+          // Escape is handled by the input (it steps back rather than closing).
+          if (!next && details.reason === 'escape-key') return;
+          // The input is the anchor, not a trigger: clicking it must keep the draft open.
+          if (
+            !next &&
+            details.reason === 'outside-press' &&
+            details.event.target instanceof Node &&
+            inputRef.current?.contains(details.event.target)
+          ) {
+            return;
+          }
+          if (next) setOpen(true);
+          else close();
+        }}
+        // ComboboxRoot's typings narrow `autoHighlight` to boolean, but the runtime (shared with
+        // AutocompleteRoot) supports 'always': highlight the first item as soon as the list opens.
+        autoHighlight={'always' as unknown as boolean}
+        modal={false}
       >
-        {draft.step !== 'field' && (
-          <div className="border-border1 text-ui-xs text-neutral3 flex items-center gap-1 border-b px-[.9em] py-1.5">
-            <span className="text-neutral6">{field?.label}</span>
-            <ChevronRightIcon className="size-[1.1em]" />
-            {operator && (
-              <>
-                <span className="text-neutral6">{operator.label}</span>
-                <ChevronRightIcon className="size-[1.1em]" />
-              </>
-            )}
-          </div>
-        )}
-        {draft.step === 'field' && (
-          <FilterBarListbox
-            listbox={fieldListbox}
-            aria-label="Fields"
-            getKey={f => f.id}
-            renderOption={f => f.label}
-            onSelect={selectField}
-            emptyText="No matching field."
-          />
-        )}
-        {draft.step === 'operator' && (
-          <FilterBarListbox
-            listbox={operatorListbox}
-            aria-label="Operators"
-            getKey={o => o.id}
-            renderOption={o => o.label}
-            onSelect={selectOperator}
-            emptyText="No matching operator."
-          />
-        )}
-        {draft.step === 'value' && valueStep.hasSuggestions && (
-          <FilterBarListbox
-            listbox={valueStep.listbox}
-            aria-label="Values"
-            aria-multiselectable={valueStep.isMany || undefined}
-            getKey={o => o.value}
-            renderOption={o => o.label ?? o.value}
-            isSelected={o => valueStep.isMany && valueStep.selected.includes(o.value)}
-            onSelect={valueStep.handleSelect}
-            isLoading={valueStep.isLoading}
-            error={valueStep.error}
-            emptyText={
-              valueStep.allowFreeText ? 'No suggestions — press Enter to use your text.' : 'No matching value.'
-            }
-          />
-        )}
-        {draft.step === 'value' && !valueStep.hasSuggestions && (
-          <div className="text-ui-xs text-neutral3 px-[.9em] py-2">Type a value and press Enter.</div>
-        )}
-        {draft.step === 'value' && valueStep.isMany && (
-          <div className="border-border1 flex items-center justify-end gap-1 border-t p-1">
-            <Button
-              size="xs"
-              variant="primary"
-              onMouseDown={e => e.preventDefault()}
-              onClick={() => valueStep.commitSelection() || valueStep.commitFreeText()}
-            >
-              Done
-            </Button>
-          </div>
-        )}
-      </PopoverContent>
-    </PopoverPrimitive.Root>
+        <ComboboxPrimitive.Input
+          ref={el => {
+            inputRef.current = el;
+            ctx.registerInput(el);
+          }}
+          aria-label={ariaLabel}
+          spellCheck={false}
+          data-slot="filter-bar-input"
+          data-step={draft.step}
+          placeholder={inputPlaceholder}
+          className={cn(
+            'h-form-sm flex-1 bg-transparent px-1 text-ui-smd leading-ui-sm text-neutral6 outline-none placeholder:text-neutral3',
+            draft.step === 'field' ? 'min-w-32' : 'min-w-24 pl-0',
+            className,
+          )}
+          onFocus={() => setOpen(true)}
+          onKeyDown={handleKeyDown}
+        />
+        <ComboboxPrimitive.Portal container={container}>
+          <ComboboxPrimitive.Positioner
+            align="start"
+            sideOffset={MENU_SIDE_OFFSET}
+            positionMethod={FLOATING_POSITION_METHOD}
+            className={comboboxStyles.positioner}
+          >
+            <ComboboxPrimitive.Popup className={cn(comboboxStyles.popup, 'w-64')} data-slot="filter-bar-editor">
+              {draft.step === 'field' && (
+                <FilterBarOptionList<FilterBarField>
+                  aria-label="Fields"
+                  getKey={f => f.id}
+                  renderOption={f => f.label}
+                  emptyText="No matching field."
+                />
+              )}
+              {draft.step === 'operator' && (
+                <FilterBarOptionList<FilterBarOperator>
+                  aria-label="Operators"
+                  getKey={o => o.id}
+                  renderOption={o => o.label}
+                  emptyText="No matching operator."
+                />
+              )}
+              {draft.step === 'value' && valueStep.hasSuggestions && (
+                <FilterBarOptionList<FilterBarOption>
+                  aria-label="Values"
+                  aria-multiselectable={valueStep.isMany || undefined}
+                  getKey={o => o.value}
+                  renderOption={o => o.label ?? o.value}
+                  isSelected={o => valueStep.isMany && valueStep.selected.includes(o.value)}
+                  isLoading={valueStep.isLoading}
+                  error={valueStep.error}
+                  emptyText={
+                    valueStep.allowFreeText ? 'No suggestions — press Enter to use your text.' : 'No matching value.'
+                  }
+                />
+              )}
+              {draft.step === 'value' && !valueStep.hasSuggestions && (
+                <div className="text-ui-xs text-neutral3 px-[.9em] py-2">Type a value and press Enter.</div>
+              )}
+              {draft.step === 'value' && valueStep.isMany && (
+                <div className="border-border1 flex items-center justify-end gap-1 border-t p-1">
+                  <Button
+                    size="xs"
+                    variant="primary"
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={() => valueStep.commitSelection() || valueStep.commitFreeText()}
+                  >
+                    Done
+                  </Button>
+                </div>
+              )}
+            </ComboboxPrimitive.Popup>
+          </ComboboxPrimitive.Positioner>
+        </ComboboxPrimitive.Portal>
+      </ComboboxPrimitive.Root>
+    </>
   );
 }
