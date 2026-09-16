@@ -35,7 +35,7 @@ import { editFileTool } from './edit-file';
 import { executeCommandTool, executeCommandWithBackgroundTool } from './execute-command';
 import { fileStatTool } from './file-stat';
 import { getProcessOutputTool } from './get-process-output';
-import { grepTool } from './grep';
+import { createGrepTool, type GrepToolOptions } from './grep';
 import { indexContentTool } from './index-content';
 import { killProcessTool } from './kill-process';
 import { listFilesTool } from './list-files';
@@ -397,11 +397,14 @@ function wrapWithWriteLock(tool: any, writeLock: FileWriteLock): any {
  * Creates workspace tools that will be auto-injected into agents.
  *
  * @param workspace - The workspace instance to bind tools to
+ * @param configContext - Optional tool config context
+ * @param options - Optional tool construction options (e.g. grep strict mode)
  * @returns Record of workspace tools
  */
 export async function createWorkspaceTools(
   workspace: Workspace,
   configContext?: Omit<ToolConfigContext, 'requestContext'> & { requestContext?: unknown },
+  options?: { grep?: GrepToolOptions },
 ) {
   // Seed fallback context so dynamic enabled functions always get called,
   // even if the caller omits configContext.  Normalize requestContext so
@@ -526,7 +529,7 @@ export async function createWorkspaceTools(
     });
     await addTool(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT, fileStatTool, { targets: { filesystem: true } });
     await addTool(WORKSPACE_TOOLS.FILESYSTEM.MKDIR, mkdirTool, { requireWrite: true, targets: { filesystem: true } });
-    await addTool(WORKSPACE_TOOLS.FILESYSTEM.GREP, grepTool, { targets: { filesystem: true } });
+    await addTool(WORKSPACE_TOOLS.FILESYSTEM.GREP, createGrepTool(options?.grep), { targets: { filesystem: true } });
 
     // AST edit tool (only if @ast-grep/napi is available at runtime)
     if (isAstGrepAvailable()) {

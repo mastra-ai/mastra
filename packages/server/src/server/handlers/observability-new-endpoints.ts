@@ -80,6 +80,7 @@ import { handleError } from './error';
 import { paginationArgsSchema } from './observability-list-query-schemas';
 import {
   assertObservabilityDeltaSupported,
+  assertObservabilityThreadQuerySupported,
   assertObservabilityTraceQuerySupported,
   createObservabilityListQuerySchema,
   getObservabilityStore,
@@ -103,10 +104,11 @@ function createNewRoute<
     onValidationError?: ValidationErrorHook;
     maxBodySize?: number;
     preserveHttpExceptions?: boolean;
+    onUnsupportedCore?: () => never;
     handler: ServerRouteHandler<InferParams<TPathSchema, TQuerySchema, TBodySchema>>;
   },
 ) {
-  const { handler, preserveHttpExceptions, ...schemas } = config;
+  const { handler, preserveHttpExceptions, onUnsupportedCore, ...schemas } = config;
   return createRoute({
     ...def,
     ...schemas,
@@ -116,6 +118,7 @@ function createNewRoute<
     handler: (async (params: InferParams<TPathSchema, TQuerySchema, TBodySchema> & ServerContext) => {
       try {
         if (!coreFeatures.has('observability:v1.13.2')) {
+          if (onUnsupportedCore) onUnsupportedCore();
           throw new HTTPException(501, {
             message: 'New observability endpoints require @mastra/core >= 1.13.2, please upgrade.',
           });
@@ -291,6 +294,87 @@ if (QUERY_TRACES.openapi) {
   };
   QUERY_TRACES.openapi.responses[504] = {
     description: 'Trace query exceeded the configured database execution timeout',
+    content: { 'application/json': { schema: traceQueryTimeoutErrorSchema } },
+  };
+}
+
+export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
+  bodySchema: coreStorage.queryThreadsInputSchema,
+  responseSchema: coreStorage.queryThreadsResultSchema,
+  onValidationError: traceQueryValidationError,
+  maxBodySize: 256 * 1024,
+  preserveHttpExceptions: true,
+  onUnsupportedCore: () =>
+    throwTraceQueryError(501, {
+      code: 'TRACE_QUERY_UNSUPPORTED',
+      message: 'Thread queries require a newer @mastra/core with observability thread-query support. Please upgrade.',
+    }),
+  handler: async ({ mastra, traces, where, page }) => {
+    let plan;
+    try {
+      plan = coreStorage.planThreadQuery({ traces, where, page });
+    } catch (error) {
+      if (error instanceof coreStorage.TraceQueryValidationError) {
+        throwTraceQueryError(422, { code: error.code, message: error.message, issues: error.issues });
+      }
+      if (error instanceof coreStorage.TraceQueryCursorError) {
+        throwTraceQueryError(error.code === 'TRACE_QUERY_CURSOR_CONFLICT' ? 409 : 400, {
+          code: error.code,
+          message: error.message,
+        });
+      }
+      throw error;
+    }
+
+    let observabilityStore: Awaited<ReturnType<typeof getObservabilityStore>>;
+    try {
+      observabilityStore = await getObservabilityStore(mastra);
+      assertObservabilityThreadQuerySupported(observabilityStore);
+    } catch (error) {
+      if (error instanceof HTTPException && error.status === 501) {
+        throwTraceQueryError(501, { code: 'TRACE_QUERY_UNSUPPORTED', message: error.message });
+      }
+      throw error;
+    }
+
+    try {
+      return await observabilityStore.queryThreads(plan);
+    } catch (error) {
+      if (error instanceof coreStorage.TraceQueryExecutionError) {
+        throwTraceQueryError(504, { code: error.code, message: error.message });
+      }
+      throw error;
+    }
+  },
+});
+
+if (QUERY_THREADS.openapi) {
+  QUERY_THREADS.openapi.responses[400] = {
+    description: 'Malformed JSON or malformed cursor',
+    content: {
+      'application/json': {
+        schema: z.union([traceQueryMalformedBodyErrorSchema, traceQueryMalformedCursorErrorSchema]),
+      },
+    },
+  };
+  QUERY_THREADS.openapi.responses[409] = {
+    description: 'Cursor does not match the normalized query',
+    content: { 'application/json': { schema: traceQueryCursorConflictErrorSchema } },
+  };
+  QUERY_THREADS.openapi.responses[413] = {
+    description: 'Request body exceeds 256 KiB',
+    content: { 'application/json': { schema: traceQueryBodyTooLargeErrorSchema } },
+  };
+  QUERY_THREADS.openapi.responses[422] = {
+    description: 'Structurally or semantically invalid thread query',
+    content: { 'application/json': { schema: traceQueryValidationResponseSchema } },
+  };
+  QUERY_THREADS.openapi.responses[501] = {
+    description: 'The configured observability store does not support thread queries',
+    content: { 'application/json': { schema: traceQueryUnsupportedErrorSchema } },
+  };
+  QUERY_THREADS.openapi.responses[504] = {
+    description: 'Thread query exceeded the configured database execution timeout',
     content: { 'application/json': { schema: traceQueryTimeoutErrorSchema } },
   };
 }
@@ -715,6 +799,7 @@ export const GET_TAGS = createNewRoute(NEW_ROUTE_DEFS.GET_TAGS, {
 
 export const NEW_ROUTES = {
   QUERY_TRACES,
+  QUERY_THREADS,
   LIST_LOGS,
   LIST_SCORES,
   CREATE_SCORE,

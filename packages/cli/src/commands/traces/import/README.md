@@ -46,5 +46,20 @@ not keep source pages, shards, batch files, checksums, or fsync bookkeeping.
 Prepared trace data is removed only when the later orchestration layer marks the
 overall import successful.
 
-Platform upload, read-back verification, reports, and the customer-facing
-command are implemented by later tickets.
+## Platform upload
+
+The shared upload loop sends each in-memory whole-trace batch to a
+`TraceImportTarget`. The Mastra Platform target posts the exact prepared
+`{"spans": [...]}` payload to the project-scoped collector route and requires a
+successful acknowledgement with the expected span count before advancing the
+manifest checkpoint.
+
+Temporary network and collector failures are retried with bounded backoff. If a
+response is lost after the collector accepted it, the batch remains pending and
+is safely replayed with the same stable IDs. Authentication, quota, payload, and
+other permanent errors are returned immediately without changing progress.
+Consecutive batches are paced to approximately 100 spans per second by default;
+an individual trace remains whole even when it contains more than 100 spans.
+
+Read-back verification, reports, and the customer-facing command are
+implemented by later tickets.

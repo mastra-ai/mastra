@@ -898,6 +898,7 @@ const sidebars = {
         { type: 'doc', id: 'vectors/qdrant', label: 'Qdrant Vector Store' },
         { type: 'doc', id: 'vectors/turbopuffer', label: 'Turbopuffer Vector Store' },
         { type: 'doc', id: 'vectors/upstash', label: 'Upstash Vector Store' },
+        { type: 'doc', id: 'vectors/weaviate', label: 'Weaviate Vector Store' },
       ],
     },
     {

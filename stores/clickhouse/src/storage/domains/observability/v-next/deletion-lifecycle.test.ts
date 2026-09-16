@@ -1,7 +1,7 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ALL_TABLE_NAMES, DELETION_REQUESTS_DDL, TABLE_DELETION_REQUESTS } from './ddl';
+import { ALL_MIGRATIONS, ALL_TABLE_NAMES, DELETION_REQUESTS_DDL, TABLE_DELETION_REQUESTS } from './ddl';
 import { recordDeletionRequest } from './deletion-requests';
 
 describe('deletion request DDL', () => {
@@ -12,6 +12,17 @@ describe('deletion request DDL', () => {
     expect(DELETION_REQUESTS_DDL).toContain('ORDER BY (organizationId, resourceId, requestId)');
     expect(DELETION_REQUESTS_DDL).not.toContain('TTL');
     expect(ALL_TABLE_NAMES).toContain(TABLE_DELETION_REQUESTS);
+  });
+
+  it('indexes predicateValues for fresh tables and existing deployments', () => {
+    const indexDdl = 'idx_predicateValues predicateValues TYPE bloom_filter(0.01) GRANULARITY 2';
+    expect(DELETION_REQUESTS_DDL).toContain(`INDEX ${indexDdl}`);
+
+    const migration = ALL_MIGRATIONS.find(
+      entry =>
+        entry.kind === 'index' && entry.table === TABLE_DELETION_REQUESTS && entry.name === 'idx_predicateValues',
+    );
+    expect(migration?.sql).toBe(`ALTER TABLE ${TABLE_DELETION_REQUESTS} ADD INDEX IF NOT EXISTS ${indexDdl}`);
   });
 });
 
