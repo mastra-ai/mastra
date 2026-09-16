@@ -139,6 +139,14 @@ export abstract class TextTransformer implements Transformer {
             currentDoc = [];
             total = 0;
           }
+
+          // The overlap is carried into the next chunk, so it has to leave room
+          // for the split that triggered this one. Without this, an overlap that
+          // is large relative to maxSize produces chunks over the limit.
+          while (currentDoc.length > 0 && total + len + separatorLen > this.maxSize) {
+            const dropped = currentDoc.shift()!;
+            total -= this.lengthFunction(dropped) + (currentDoc.length > 0 ? separatorLen : 0);
+          }
         }
       }
 
