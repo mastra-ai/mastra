@@ -19,6 +19,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { BufferingCoordinator } from '../buffering-coordinator';
 import { Extractor } from '../extractor';
+import { skillResultFilter } from '../filters';
 import { ModelByInputTokens } from '../model-by-input-tokens';
 import { ObservationalMemory } from '../observational-memory';
 import { ObserverRunner } from '../observer-runner';
@@ -841,6 +842,46 @@ name: Tyler
       expect(onObservationEnd).toHaveBeenCalledOnce();
       const record = await transformOm.getRecord(threadId);
       expect(record?.observedMessageIds).toContain(messages[0]!.id);
+    });
+
+    it('skillResultFilter keeps skill results out of the observer prompt end-to-end', async () => {
+      const observerModel = createMockObserverModel();
+      const prompts = capturePrompts(observerModel);
+      const transformOm = createOM(storage, { observerModel, hooks: { beforeObservation: skillResultFilter() } });
+      const messages = createBulkMessages(10, threadId);
+      const skillMessage: MastraDBMessage = {
+        ...createTestMessage('', 'assistant', `${threadId}-skill`),
+        threadId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'skill-call', toolName: 'skill', args: { name: 'pdf' } },
+            },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'skill-call',
+                toolName: 'skill',
+                args: { name: 'pdf' },
+                result: 'SECRET_SKILL_INSTRUCTIONS',
+              },
+            },
+          ],
+        } as MastraMessageContentV2,
+      };
+      messages.push(skillMessage);
+
+      await transformOm.observe({ threadId, resourceId: 'res-1', messages });
+
+      expect(prompts()).toContain('Message 0');
+      expect(prompts()).toContain('Tool Call skill');
+      expect(prompts()).not.toContain('SECRET_SKILL_INSTRUCTIONS');
+      // Filtered messages are still marked as observed.
+      const record = await transformOm.getRecord(threadId);
+      expect(record?.observedMessageIds).toContain(`${threadId}-skill`);
     });
 
     it('afterObservation can replace the observation text before it is persisted', async () => {

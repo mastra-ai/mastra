@@ -1461,6 +1461,45 @@ const selector = new ModelByInputTokens({
 ]}
 />
 
+### skillResultFilter
+
+`skillResultFilter` builds a `beforeObservation` transform hook that drops the results of the built-in Agent Skills tools — `skill`, `skill_search`, and `skill_read` — before the Observer model sees them. Skill results contain a skill's full instructions or file contents, so filtering them keeps skill text out of observations while leaving the skill tool calls and all other messages intact.
+
+```typescript
+import { skillResultFilter } from '@mastra/memory/processors'
+
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: '__GATEWAY_GOOGLE_MODEL_FLASH__',
+      hooks: {
+        beforeObservation: skillResultFilter(),
+      },
+    },
+  },
+})
+```
+
+#### Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'toolNames',
+    type: 'readonly string[]',
+    description:
+      'Tool names whose results are dropped. Defaults to the built-in skill tools: `skill`, `skill_search`, and `skill_read`. Use this to filter a different set of tools.',
+    isOptional: true,
+  },
+]}
+/>
+
+#### Returns
+
+`(input: { messages: MastraDBMessage[] } & ObserveHookContext) => { messages: MastraDBMessage[] } | undefined`
+
+The hook returns messages with matching tool results removed, or `undefined` when no message matched (which passes the payload through unchanged).
+
 ### Related
 
 - [Observational Memory](/docs/memory/observational-memory)

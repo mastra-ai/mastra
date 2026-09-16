@@ -86,6 +86,12 @@ export {
   type ExtractorRuntimeContext,
   type ExtractorSource,
 } from './processors/observational-memory';
+export {
+  skillResultFilter,
+  SKILL_TOOL_NAMES,
+  type ObserverMessageFilter,
+  type SkillResultFilterOptions,
+} from './processors/observational-memory/filters';
 export { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
 export {
   KnowledgeSemanticIndexCoordinator,
