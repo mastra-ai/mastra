@@ -879,7 +879,10 @@ export class Memory extends MastraMemory {
             .add(rawMessages, 'memory')
             .add(
               semanticMessages.messages.filter(
-                message => !boundary || message.threadId !== threadId || isAfterMemoryTokenBoundary(message, boundary),
+                message =>
+                  !boundary ||
+                  (resourceScope && message.threadId !== threadId) ||
+                  isAfterMemoryTokenBoundary(message, boundary),
               ),
               'memory',
             )
