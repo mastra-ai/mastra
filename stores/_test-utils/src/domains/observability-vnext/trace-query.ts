@@ -2241,6 +2241,12 @@ function toTraceQueryTrace(root: RawTraceQuerySpan): TraceQueryTrace {
   return {
     traceId: root.traceId!,
     rootSpanId: root.spanId,
+    name: root.name,
+    entityId: root.entityId,
+    parentSpanId: root.parentSpanId,
+    createdAt: root.startedAt,
+    metadata: root.metadata,
+    inputPreview: null,
     threadId: root.threadId,
     resourceId: root.resourceId,
     startedAt: root.startedAt,

@@ -4927,6 +4927,9 @@ importers:
       esbuild:
         specifier: ^0.28.0
         version: 0.28.1
+      find-up-simple:
+        specifier: ^1.0.1
+        version: 1.0.1
       find-workspaces:
         specifier: ^0.3.1
         version: 0.3.1

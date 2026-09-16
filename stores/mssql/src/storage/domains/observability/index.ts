@@ -1,8 +1,11 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
+  executeRetentionPrune,
   listTracesArgsSchema,
   ObservabilityStorage,
+  resolveRetentionTargets,
+  retentionCutoffMs,
   SPAN_SCHEMA,
   TABLE_SPANS,
   toTraceSpans,
@@ -27,6 +30,10 @@ import type {
   GetRootSpanResponse,
   CreateSpanArgs,
   CreateIndexOptions,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import type { ConnectionPool } from 'mssql';
 import { MssqlDB, resolveMssqlConfig } from '../../db';
@@ -34,6 +41,10 @@ import type { MssqlDomainConfig } from '../../db';
 import { transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
 export class ObservabilityMSSQL extends ObservabilityStorage {
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    spans: { table: TABLE_SPANS, column: 'startedAt', indexed: true },
+  };
+
   public pool: ConnectionPool;
   private db: MssqlDB;
   private schema?: string;
@@ -54,6 +65,22 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     this.skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
     this.indexes = indexes?.filter(idx => (ObservabilityMSSQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({
+      policies,
+      descriptor: ObservabilityMSSQL.retentionTables,
+      order: ['spans'],
+    });
+    return executeRetentionPrune({
+      domain: 'observability',
+      targets,
+      options,
+      cutoffFor: (target, now) => new Date(retentionCutoffMs(target.policy, now)),
+      deleteBatch: (target, cutoff, limit) =>
+        this.db.pruneBatch({ tableName: target.table as typeof TABLE_SPANS, column: target.column, cutoff, limit }),
+    });
   }
 
   async init(): Promise<void> {
