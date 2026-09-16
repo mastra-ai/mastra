@@ -876,6 +876,12 @@ https://mastra.ai/en/docs/memory/overview`,
     return undefined;
   }
 
+  protected getSemanticRecallMessageRetriever(
+    _semanticRecall: MemoryConfigInternal['semanticRecall'],
+  ): ((args: { query: string; threadId: string; resourceId?: string }) => Promise<MastraDBMessage[]>) | undefined {
+    return undefined;
+  }
+
   /**
    * Get input processors for this memory instance
    * This allows Memory to be used as a ProcessorProvider in Agent's inputProcessors array.
@@ -1049,16 +1055,19 @@ https://mastra.ai/en/docs/memory/overview`,
         const indexName = this.getEmbeddingIndexName(embeddingDimension);
 
         processors.push(
-          new SemanticRecall({
-            storage: memoryStore,
-            vector: this.vector,
-            embedder: this.embedder,
-            embedderOptions: this.embedderOptions,
-            embeddingDimension: this.embeddingDimension,
-            indexName,
-            ...semanticConfig,
-            maxChunkChars: this.configuredMaxChunkChars,
-          }),
+          new SemanticRecall(
+            {
+              storage: memoryStore,
+              vector: this.vector,
+              embedder: this.embedder,
+              embedderOptions: this.embedderOptions,
+              embeddingDimension: this.embeddingDimension,
+              indexName,
+              ...semanticConfig,
+              maxChunkChars: this.configuredMaxChunkChars,
+            },
+            this.getSemanticRecallMessageRetriever(effectiveConfig.semanticRecall),
+          ),
         );
       }
     }

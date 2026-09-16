@@ -4847,6 +4847,23 @@ Notes:
     return history;
   }
 
+  protected override getSemanticRecallMessageRetriever(semanticRecall: MemoryConfigInternal['semanticRecall']) {
+    if (!semanticRecall) return undefined;
+
+    return async ({ query, threadId, resourceId }: { query: string; threadId: string; resourceId?: string }) => {
+      const result = await this.recall({
+        threadId,
+        ...(resourceId ? { resourceId } : {}),
+        vectorSearchString: query,
+        threadConfig: {
+          lastMessages: false,
+          semanticRecall,
+        },
+      });
+      return result.messages;
+    };
+  }
+
   /**
    * Get input processors for this memory instance.
    * Extends the base implementation to add ObservationalMemory processor when configured.
