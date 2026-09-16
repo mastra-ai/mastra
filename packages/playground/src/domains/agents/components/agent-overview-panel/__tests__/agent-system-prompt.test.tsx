@@ -7,6 +7,33 @@ const instructions =
   '\n  Follow **these instructions**.\n\n- Keep `source_text` unchanged.\n- Ask before publishing.\n\n';
 
 describe('AgentSystemPrompt', () => {
+  describe.each([
+    ['spaces', '\n      Follow **these instructions**.\n\n      - Keep the source.\n      - Ask before publishing.\n'],
+    ['tabs', '\n\tFollow **these instructions**.\n\n\t- Keep the source.\n\t- Ask before publishing.\n'],
+  ])('when the prompt has a common margin of %s', (_indentation, indentedInstructions) => {
+    it('renders paragraphs and bullets in the reading view', () => {
+      render(
+        <TooltipProvider>
+          <AgentSystemPrompt instructions={indentedInstructions} />
+        </TooltipProvider>,
+      );
+
+      expect(screen.getByText('these instructions').tagName).toBe('STRONG');
+      expect(screen.getAllByRole('listitem')).toHaveLength(2);
+    });
+
+    it('preserves the original indentation in the source view', () => {
+      render(
+        <TooltipProvider>
+          <AgentSystemPrompt instructions={indentedInstructions} />
+        </TooltipProvider>,
+      );
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Source' }));
+      expect(screen.getByRole('region', { name: 'System prompt source' }).textContent).toBe(indentedInstructions);
+    });
+  });
+
   describe('when the prompt contains markdown', () => {
     it('shows the exact prompt in the source view', async () => {
       render(

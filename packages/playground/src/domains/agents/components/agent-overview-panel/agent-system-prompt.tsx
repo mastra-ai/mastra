@@ -8,6 +8,7 @@ import { FileText, WrapText } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { AgentMetadataSection } from '../agent-metadata/agent-metadata-section';
+import { normalizePromptIndentation } from './normalize-prompt-indentation';
 import { cn } from '@/lib/utils';
 
 const promptTabClassName = 'h-form-sm px-1 text-ui-sm font-medium underline-offset-4 data-[active]:underline';
@@ -58,7 +59,7 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
               <CopyButton content={instructions} tooltip="Copy system prompt" variant="ghost" size="icon-sm" />
             </div>
             <TabContent value="read" className="overflow-visible py-0">
-              <MarkdownRenderer>{instructions}</MarkdownRenderer>
+              <MarkdownRenderer>{normalizePromptIndentation(instructions)}</MarkdownRenderer>
             </TabContent>
             <TabContent value="source" className="overflow-visible py-0">
               <Code
