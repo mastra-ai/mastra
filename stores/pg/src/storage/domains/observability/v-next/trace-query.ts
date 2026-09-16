@@ -654,6 +654,12 @@ function isPostgresStatementTimeout(error: unknown): boolean {
   return candidate.code === '57014' && String(candidate.message ?? '').includes('statement timeout');
 }
 
+function isPostgresResourceLimit(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: unknown };
+  return candidate.code === '53200' || candidate.code === '53400';
+}
+
 export async function runWithPostgresTraceQueryTimeout<T>(
   client: DbClient,
   timeoutMs: number,
@@ -667,6 +673,7 @@ export async function runWithPostgresTraceQueryTimeout<T>(
     });
   } catch (error) {
     if (isPostgresStatementTimeout(error)) throw new coreStorage.TraceQueryExecutionError();
+    if (isPostgresResourceLimit(error)) throw new coreStorage.TraceQueryResourceLimitError();
     throw error;
   }
 }

@@ -79,7 +79,11 @@ import type {
   GetTagsResponse,
   GetTraceQueryValuesResponse,
   ObservabilityStorageStrategy,
+  PruneOptions,
+  PruneResult,
   QueryThreadsResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
   TraceQueryObservedFieldsResult,
   TraceQueryResponse,
   TrustedThreadQueryPlan,
@@ -88,6 +92,7 @@ import type {
   TrustedTraceQueryValuesPlan,
 } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
+import { resolveTargets, runPrune } from '../../retention';
 import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
 import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
@@ -139,11 +144,29 @@ export interface ObservabilityDuckDBConfig {
  * Uses an append-only event-sourced model with SQL-based reconstruction for spans.
  */
 export class ObservabilityStorageDuckDB extends ObservabilityStorage {
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    spans: { table: 'span_events', column: 'timestamp', indexed: false },
+    metrics: { table: 'metric_events', column: 'timestamp', indexed: false },
+    logs: { table: 'log_events', column: 'timestamp', indexed: false },
+    scores: { table: 'score_events', column: 'timestamp', indexed: false },
+    feedback: { table: 'feedback_events', column: 'timestamp', indexed: false },
+  };
+
   private db: DuckDBConnection;
 
   constructor(config: ObservabilityDuckDBConfig) {
     super();
     this.db = config.db;
+  }
+
+  /** Delete observability events older than their configured max age. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: ObservabilityStorageDuckDB.retentionTables,
+      order: ['spans', 'metrics', 'logs', 'scores', 'feedback'],
+    });
+    return runPrune({ db: this.db, domain: 'observability', targets, options });
   }
 
   /** Create all observability tables if they don't exist. */
