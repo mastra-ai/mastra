@@ -103,6 +103,32 @@ describe('DurableAgent auto-cleanup unsubscribes the stream reader (issue #24070
     expect(unsubscribeSpy.mock.calls.length).toBe(callsAfterTimer);
   });
 
+  it('resume(): auto-cleanup timer unsubscribes from agent.stream.<runId>', async () => {
+    const { agent } = createSetup(pubsub);
+    const unsubscribeSpy = vi.spyOn(agent.pubsub, 'unsubscribe');
+
+    // prepare() builds a suspended run without executing; resume() runs it to
+    // completion, arming resume()'s own auto-cleanup timer — the path that
+    // previously leaked the reader subscription just like stream().
+    const { runId } = await agent.prepare('Start something');
+    const { output, cleanup } = await agent.resume(runId, { approved: true });
+    await output.consumeStream();
+
+    const topic = AGENT_STREAM_TOPIC(runId);
+
+    await vi.waitFor(
+      () => {
+        expect(unsubscribeSpy).toHaveBeenCalledWith(topic, expect.any(Function));
+      },
+      { timeout: CLEANUP_MS * 40 },
+    );
+
+    // Explicit cleanup after the timer is a harmless no-op (idempotent).
+    const callsAfterTimer = unsubscribeSpy.mock.calls.length;
+    cleanup();
+    expect(unsubscribeSpy.mock.calls.length).toBe(callsAfterTimer);
+  });
+
   it('explicit cleanup() unsubscribes the stream reader immediately', async () => {
     const { agent } = createSetup(pubsub);
     const unsubscribeSpy = vi.spyOn(agent.pubsub, 'unsubscribe');
