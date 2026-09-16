@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added bounded trace-query discovery contracts and a stable resource-limit error for field and value suggestions.
+Added a stable resource-limit error for bounded trace-query field and value discovery.
 
 ```ts
 import { TraceQueryResourceLimitError, planTraceQueryValues } from '@mastra/core/storage'
