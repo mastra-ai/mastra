@@ -6,6 +6,7 @@ packages:
   - "@mastra/express"
   - "@mastra/hono"
   - "@mastra/server"
+  - "@mastra/server-adapters-test-suite"
   - "@mastra/fastify"
   - "@mastra/koa"
 ---
@@ -384,6 +385,29 @@ await server.init()
 
 app.listen(4111)
 ```
+
+## Test adapter compatibility
+
+Use `@mastra/server-adapters-test-suite` to run the same conformance tests as Mastra's official adapters. Install it with its peer dependencies in your adapter project:
+
+```bash npm2yarn
+npm install --save-dev @mastra/server-adapters-test-suite @mastra/core @mastra/server vitest zod
+```
+
+Provide framework-specific setup and request execution functions to the route suite:
+
+```typescript title="src/my-framework-adapter.test.ts"
+import { createRouteAdapterTestSuite } from '@mastra/server-adapters-test-suite'
+import { executeHttpRequest, setupAdapter } from './adapter-test-helpers'
+
+createRouteAdapterTestSuite({
+  suiteName: 'My framework adapter',
+  setupAdapter,
+  executeHttpRequest,
+})
+```
+
+The package also provides root exports for Model Context Protocol (MCP), multipart request, HTTP logging, and body limit tests. See the [package README](https://github.com/mastra-ai/mastra/tree/main/server-adapters/_test-utils) for the supported peer dependency versions.
 
 :::tip
 

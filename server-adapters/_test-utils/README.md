@@ -7,10 +7,10 @@ Reusable conformance test suites for authors of Mastra server adapters.
 Install the suite with its peer dependencies in your adapter's development environment:
 
 ```bash
-npm install --save-dev @mastra/server-adapters-test-suite @mastra/core @mastra/server vitest zod
+npm install @mastra/server-adapters-test-suite
 ```
 
-The package requires Mastra Core and Server `>=1.64.0-0 <2.0.0-0`, Vitest `>=4.0.0 <5.0.0`, and Zod `^3.25.0 || ^4.0.0`.
+The package requires Mastra Core and Server `>=1.64.0-0 <2.0.0-0`, Vitest `>=4.0.0 <5.0.0`, and Zod `^3.25.0 || ^4.0.0`. Install those peer dependencies in your adapter's development environment.
 
 ## Usage
 
@@ -28,6 +28,10 @@ createRouteAdapterTestSuite({
 ```
 
 Additional root exports cover MCP routes and transports, multipart requests, HTTP logging, and request body limits.
+
+## Documentation
+
+- [Custom server adapters](https://mastra.ai/docs/server/custom-adapters#test-adapter-compatibility)
 
 ## Changelog
 
