@@ -101,8 +101,6 @@ export function useValueStep({ field, operator, query, enabled, initialValue, on
     allowFreeText,
     /** True when the current query can be committed as free text (non-empty, numeric when the field is a number). */
     canCommitQuery: canCommitFreeText(query.trim()),
-    /** `inputMode` hint for the value input. */
-    inputMode: isNumber ? ('decimal' as const) : undefined,
     handleSelect,
     handleKeyDown,
     commitSelection,

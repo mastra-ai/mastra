@@ -7,7 +7,14 @@ import type { ComponentProps, KeyboardEvent, MouseEvent, ReactNode } from 'react
 import { emptyValueFor, useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionList } from './filter-bar-option-list';
 import { matchesQueryFilter } from './match-query';
-import type { FilterBarField, FilterBarItem, FilterBarOperator, FilterBarOption, FilterBarSegment } from './types';
+import type {
+  FilterBarField,
+  FilterBarFieldType,
+  FilterBarItem,
+  FilterBarOperator,
+  FilterBarOption,
+  FilterBarSegment,
+} from './types';
 import { useValueStep } from './use-value-step';
 import { Button } from '@/ds/components/Button/Button';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
@@ -160,17 +167,46 @@ type SegmentComboboxProps<T> = {
   onQueryChange: (query: string) => void;
   onSelect: (item: T) => void;
   onOpen?: () => void;
-  onInputKeyDown?: (event: BaseUIEvent<KeyboardEvent<HTMLInputElement>>, highlighted: T | null) => void;
-  placeholder: string;
-  /** Leading icon of the popup input. Defaults to a search glass; free-text editing uses a pencil. */
-  icon?: LucideIcon;
-  inputMode?: ComponentProps<'input'>['inputMode'];
+  /** Popup content: typically a `SegmentSearchInput` followed by a `FilterBarOptionList`. */
   children: ReactNode;
 };
 
+// Highlighted item of the enclosing SegmentCombobox, for popup inputs that route Enter.
+const SegmentPopupContext = createContext<{ highlighted: unknown }>({ highlighted: null });
+
+type SegmentSearchInputProps<T> = {
+  placeholder: string;
+  /** Leading icon. Defaults to a search glass; free-text editing uses a pencil. */
+  icon?: LucideIcon;
+  inputMode?: ComponentProps<'input'>['inputMode'];
+  onKeyDown?: (event: BaseUIEvent<KeyboardEvent<HTMLInputElement>>, highlighted: T | null) => void;
+};
+
+/** The search/free-text input at the top of a segment popup. */
+function SegmentSearchInput<T>({
+  placeholder,
+  icon: Icon = SearchIcon,
+  inputMode,
+  onKeyDown,
+}: SegmentSearchInputProps<T>) {
+  const { highlighted } = useContext(SegmentPopupContext);
+  return (
+    <div className={comboboxStyles.searchContainer}>
+      <Icon className={comboboxStyles.searchIcon} />
+      <ComboboxPrimitive.Input
+        className={comboboxStyles.searchInput}
+        placeholder={placeholder}
+        inputMode={inputMode}
+        onKeyDown={event => onKeyDown?.(event, highlighted as T | null)}
+      />
+    </div>
+  );
+}
+
 /**
- * A chip segment: a button trigger that opens a searchable option list. The
- * editor owning the segment supplies items, filtering and selection routing.
+ * A chip segment: a button trigger that opens an option popup. The editor
+ * owning the segment supplies items, filtering, selection routing and the
+ * popup content.
  */
 function SegmentCombobox<T>({
   segment,
@@ -184,10 +220,6 @@ function SegmentCombobox<T>({
   onQueryChange,
   onSelect,
   onOpen,
-  onInputKeyDown,
-  placeholder,
-  icon: Icon = SearchIcon,
-  inputMode,
   children,
 }: SegmentComboboxProps<T>) {
   const ctx = useFilterBarContext();
@@ -253,16 +285,7 @@ function SegmentCombobox<T>({
           className={comboboxStyles.positioner}
         >
           <ComboboxPrimitive.Popup className={cn(comboboxStyles.popup, 'w-56')} data-slot="filter-bar-editor">
-            <div className={comboboxStyles.searchContainer}>
-              <Icon className={comboboxStyles.searchIcon} />
-              <ComboboxPrimitive.Input
-                className={comboboxStyles.searchInput}
-                placeholder={placeholder}
-                inputMode={inputMode}
-                onKeyDown={event => onInputKeyDown?.(event, highlighted)}
-              />
-            </div>
-            {children}
+            <SegmentPopupContext.Provider value={{ highlighted }}>{children}</SegmentPopupContext.Provider>
           </ComboboxPrimitive.Popup>
         </ComboboxPrimitive.Positioner>
       </ComboboxPrimitive.Portal>
@@ -306,8 +329,8 @@ function FieldEditor() {
       query={query}
       onQueryChange={setQuery}
       onSelect={onSelect}
-      placeholder="Change field…"
     >
+      <SegmentSearchInput placeholder="Change field…" />
       <FilterBarOptionList<FilterBarField>
         aria-label="Fields"
         getKey={f => f.id}
@@ -348,8 +371,8 @@ function OperatorEditor() {
       query={query}
       onQueryChange={setQuery}
       onSelect={onSelect}
-      placeholder="Change operator…"
     >
+      <SegmentSearchInput placeholder="Change operator…" />
       <FilterBarOptionList<FilterBarOperator>
         aria-label="Operators"
         getKey={o => o.id}
@@ -384,13 +407,7 @@ function ValueEditor() {
     onCommit,
   });
 
-  const placeholder = step.hasSuggestions
-    ? step.allowFreeText
-      ? 'Search or type a value…'
-      : 'Search values…'
-    : chip.field?.type === 'number'
-      ? 'Type a number…'
-      : 'Type a value…';
+  const ValueInput = VALUE_INPUTS[chip.field?.type ?? 'text'];
 
   return (
     <SegmentCombobox<FilterBarOption>
@@ -405,16 +422,22 @@ function ValueEditor() {
       onSelect={step.handleSelect}
       // Prefill free-text values only; with suggestions, the current value is shown as checked instead.
       onOpen={() => setQuery(typeof chip.item.value === 'string' && !chip.field?.suggestions ? chip.item.value : '')}
-      onInputKeyDown={(event, highlighted) => {
-        const highlightedOption = step.hasSuggestions ? highlighted : null;
-        const handled = step.handleKeyDown(event, highlightedOption);
-        // Base UI closes on Enter when nothing is highlighted; a rejected free-text value must keep the editor open.
-        if (handled || (event.key === 'Enter' && highlightedOption === null)) event.preventBaseUIHandler();
-      }}
-      placeholder={placeholder}
-      icon={step.hasSuggestions ? SearchIcon : PencilIcon}
-      inputMode={step.inputMode}
     >
+      <ValueInput step={step} onCancel={close} />
+    </SegmentCombobox>
+  );
+}
+
+type ValueInputProps = {
+  step: ReturnType<typeof useValueStep>;
+  onCancel: () => void;
+};
+
+/** Suggestion list + multi-select footer, shared by every value input. */
+function ValueOptions({ step, onCancel }: ValueInputProps) {
+  const chip = useChip();
+  return (
+    <>
       {step.hasSuggestions && (
         <FilterBarOptionList<FilterBarOption>
           aria-label="Values"
@@ -429,7 +452,7 @@ function ValueEditor() {
       )}
       {step.isMany && (
         <div className="border-border1 flex items-center justify-end gap-1 border-t p-1">
-          <Button size="xs" variant="ghost" onClick={close}>
+          <Button size="xs" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
           <Button size="xs" variant="primary" onClick={() => step.commitSelection() || step.commitFreeText()}>
@@ -437,9 +460,59 @@ function ValueEditor() {
           </Button>
         </div>
       )}
-    </SegmentCombobox>
+    </>
   );
 }
+
+/** Free-text (optionally suggestion-backed) value input; text and number share it. */
+function FreeTextValueInput({
+  step,
+  onCancel,
+  inputMode,
+  noun,
+}: ValueInputProps & { inputMode?: ComponentProps<'input'>['inputMode']; noun: string }) {
+  return (
+    <>
+      <SegmentSearchInput<FilterBarOption>
+        icon={step.hasSuggestions ? SearchIcon : PencilIcon}
+        inputMode={inputMode}
+        placeholder={
+          step.hasSuggestions
+            ? step.allowFreeText
+              ? `Search or type a ${noun}…`
+              : `Search ${noun}s…`
+            : `Type a ${noun}…`
+        }
+        onKeyDown={(event, highlighted) => {
+          const highlightedOption = step.hasSuggestions ? highlighted : null;
+          const handled = step.handleKeyDown(event, highlightedOption);
+          // Base UI closes on Enter when nothing is highlighted; a rejected free-text value must keep the editor open.
+          if (handled || (event.key === 'Enter' && highlightedOption === null)) event.preventBaseUIHandler();
+        }}
+      />
+      <ValueOptions step={step} onCancel={onCancel} />
+    </>
+  );
+}
+
+function TextValueInput(props: ValueInputProps) {
+  return <FreeTextValueInput {...props} noun="value" />;
+}
+
+function NumberValueInput(props: ValueInputProps) {
+  return <FreeTextValueInput {...props} inputMode="decimal" noun="number" />;
+}
+
+/** Select-like: no search input, just the True/False (or custom) options. */
+function BooleanValueInput(props: ValueInputProps) {
+  return <ValueOptions {...props} />;
+}
+
+const VALUE_INPUTS: Record<FilterBarFieldType, (props: ValueInputProps) => ReactNode> = {
+  text: TextValueInput,
+  number: NumberValueInput,
+  boolean: BooleanValueInput,
+};
 
 export function FilterBarChipField() {
   return <FieldEditor />;

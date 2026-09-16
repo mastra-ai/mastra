@@ -229,7 +229,7 @@ export function FilterBarInput({
           spellCheck={false}
           data-slot="filter-bar-input"
           data-step={draft.step}
-          inputMode={draft.step === 'value' ? valueStep.inputMode : undefined}
+          inputMode={draft.step === 'value' && field?.type === 'number' ? 'decimal' : undefined}
           placeholder={inputPlaceholder}
           className={cn(
             // Naked control inside the styled FilterBar surface — same baseline as the DS Input `unstyled` variant.
