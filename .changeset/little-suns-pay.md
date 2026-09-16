@@ -2,7 +2,7 @@
 '@mastra/server': minor
 ---
 
-Added `POST /agents/:agentId/threads/signals/cancel` to cancel selected process-local pending input across Agents sharing a memory thread. The route checks thread ownership and accepts 1–1,000 signal IDs:
+Added `POST /api/agents/:agentId/threads/signals/cancel` to cancel selected process-local pending input across Agents sharing a memory thread. The route checks thread ownership and accepts 1–1,000 signal IDs:
 
 ```json
 { "resourceId": "user-123", "threadId": "thread-abc", "signalIds": ["signal-123"] }
