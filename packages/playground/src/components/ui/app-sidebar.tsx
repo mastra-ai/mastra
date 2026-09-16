@@ -6,7 +6,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Ellipsis, Search, Wrench } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import { useLocation } from 'react-router';
 import { useAgentBuilderSidebarVisibility } from '@/domains/agent-builder/hooks/use-agent-builder-sidebar-visibility';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
@@ -97,7 +97,6 @@ export function AppSidebar() {
   const foldableItems = mainNav.flatMap(section => section.items).filter(item => item.foldable && filterItem(item));
   const foldable = useFoldableNavItems(foldableItems, pathname);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
-  const moreListId = useId();
   const isCollapsed = state === 'collapsed';
 
   const renderNavItem = (item: NavItem, siblings: NavItem[], level = 0) => (
@@ -125,31 +124,23 @@ export function AppSidebar() {
       );
     }
 
-    const foldedRows = foldable.folded.map(item => renderNavItem(item, siblings, isCollapsed ? 0 : 1));
-
+    // "More" is a flat placeholder: clicking it swaps the row for the folded items at the same level.
     return (
       <>
         {foldable.promoted.map(item => renderNavItem(item, siblings))}
-        {foldable.folded.length > 0 && (
+        {foldable.folded.length > 0 && !isMoreOpen && (
           <MainSidebar.NavLink
             state={state}
             link={{ name: 'More', url: '#', icon: <Ellipsis /> }}
             render={
-              <button
-                type="button"
-                aria-expanded={isMoreOpen}
-                aria-controls={isMoreOpen && !isCollapsed ? moreListId : undefined}
-                onClick={() => setIsMoreOpen(open => !open)}
-              >
+              <button type="button" onClick={() => setIsMoreOpen(true)}>
                 <Ellipsis />
                 <MainSidebar.NavLabel state={state}>More</MainSidebar.NavLabel>
               </button>
             }
-            subItems={isMoreOpen ? <MainSidebar.NavList id={moreListId}>{foldedRows}</MainSidebar.NavList> : null}
           />
         )}
-        {/* The DS drops `subItems` on the collapsed rail, so folded rows render as siblings there. */}
-        {isCollapsed && isMoreOpen && foldedRows}
+        {isMoreOpen && foldable.folded.map(item => renderNavItem(item, siblings))}
       </>
     );
   };

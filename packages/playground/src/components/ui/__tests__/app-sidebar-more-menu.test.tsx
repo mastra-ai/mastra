@@ -96,15 +96,14 @@ describe('AppSidebar — More menu', () => {
 
       renderSidebar();
 
-      const more = await screen.findByRole('button', { name: /^more$/i });
-      expect(more.getAttribute('aria-expanded')).toBe('false');
+      await screen.findByRole('button', { name: /^more$/i });
       expect(screen.queryByTestId('nav-more-skeleton')).toBeNull();
       for (const name of foldedNames) {
         expect(screen.queryByRole('link', { name })).toBeNull();
       }
     });
 
-    it('reveals the four items when More is clicked', async () => {
+    it('swaps the More button for the four items when clicked', async () => {
       server.use(...baseHandlers(), mcpServersHandler(noMcpServers), workspacesHandler(noWorkspaces));
 
       renderSidebar();
@@ -112,7 +111,7 @@ describe('AppSidebar — More menu', () => {
       const more = await screen.findByRole('button', { name: /^more$/i });
       fireEvent.click(more);
 
-      expect(more.getAttribute('aria-expanded')).toBe('true');
+      expect(screen.queryByRole('button', { name: /^more$/i })).toBeNull();
       for (const name of foldedNames) {
         expect(screen.getByRole('link', { name })).toBeTruthy();
       }
@@ -152,7 +151,8 @@ describe('AppSidebar — More menu', () => {
 
       renderSidebar();
 
-      await screen.findByRole('button', { name: /^more$/i });
+      // The 501 goes through the workspace retry policy before settling, so allow extra headroom.
+      await screen.findByRole('button', { name: /^more$/i }, { timeout: 5000 });
       expect(screen.queryByTestId('nav-more-skeleton')).toBeNull();
       expect(screen.queryByRole('link', { name: /^workspaces$/i })).toBeNull();
     });
