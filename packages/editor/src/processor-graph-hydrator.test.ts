@@ -460,6 +460,194 @@ describe('hydrateProcessorGraph', () => {
     });
   });
 
+  describe('graph step id preservation (regression #23715)', () => {
+    // Provider whose createProcessor ALWAYS returns a processor with the same
+    // stable `id`, regardless of which node uses it. This reproduces the
+    // collision: distinct graph nodes must still become distinct workflow steps.
+    function makeSharedIdProvider(): ProcessorProvider {
+      return {
+        info: { id: 'shared', name: 'Shared Provider' },
+        configSchema: z.object({}),
+        availablePhases: ['processInput'] as ProcessorPhase[],
+        createProcessor(): Processor {
+          return {
+            id: 'shared-instance',
+            name: 'Shared Instance',
+            processInput: async ({ messages }) => messages,
+          };
+        },
+      };
+    }
+
+    it('keeps parallel branches as distinct steps when the processor id collides', () => {
+      const provider = makeSharedIdProvider();
+      const graph: StoredProcessorGraph = {
+        steps: [
+          {
+            type: 'parallel',
+            branches: [
+              [
+                {
+                  type: 'step',
+                  step: { id: 'first', providerId: 'shared', config: {}, enabledPhases: ['processInput'] },
+                },
+              ],
+              [
+                {
+                  type: 'step',
+                  step: { id: 'second', providerId: 'shared', config: {}, enabledPhases: ['processInput'] },
+                },
+              ],
+            ],
+          },
+        ],
+      };
+
+      const result = hydrateProcessorGraph(graph, 'input', { providers: { shared: provider } })!;
+      expect(isProcessorWorkflow(result[0])).toBe(true);
+
+      const steps = (result[0] as unknown as { steps: Record<string, unknown> }).steps;
+      expect(Object.keys(steps)).toEqual(expect.arrayContaining(['processor:first', 'processor:second']));
+      expect(steps['processor:shared-instance']).toBeUndefined();
+    });
+
+    it('keeps conditional branches as distinct steps when the processor id collides', () => {
+      const provider = makeSharedIdProvider();
+      const graph: StoredProcessorGraph = {
+        steps: [
+          {
+            type: 'conditional',
+            conditions: [
+              {
+                rules: {
+                  operator: 'AND',
+                  conditions: [{ field: 'phase', operator: 'equals', value: 'processInput' }],
+                },
+                steps: [
+                  {
+                    type: 'step',
+                    step: { id: 'first', providerId: 'shared', config: {}, enabledPhases: ['processInput'] },
+                  },
+                ],
+              },
+              {
+                steps: [
+                  {
+                    type: 'step',
+                    step: { id: 'second', providerId: 'shared', config: {}, enabledPhases: ['processInput'] },
+                  },
+                ],
+              },
+            ],
+          } as ProcessorGraphEntry,
+        ],
+      };
+
+      const result = hydrateProcessorGraph(graph, 'input', { providers: { shared: provider } })!;
+      expect(isProcessorWorkflow(result[0])).toBe(true);
+
+      const steps = (result[0] as unknown as { steps: Record<string, unknown> }).steps;
+      expect(Object.keys(steps)).toEqual(expect.arrayContaining(['processor:first', 'processor:second']));
+      expect(steps['processor:shared-instance']).toBeUndefined();
+    });
+
+    it('does not mutate the provider-created processor', () => {
+      const created: Processor[] = [];
+      const provider: ProcessorProvider = {
+        info: { id: 'shared', name: 'Shared Provider' },
+        configSchema: z.object({}),
+        availablePhases: ['processInput'] as ProcessorPhase[],
+        createProcessor(): Processor {
+          const proc: Processor = {
+            id: 'shared-instance',
+            name: 'Shared Instance',
+            processInput: async ({ messages }) => messages,
+          };
+          created.push(proc);
+          return proc;
+        },
+      };
+
+      const graph: StoredProcessorGraph = {
+        steps: [
+          {
+            type: 'parallel',
+            branches: [
+              [
+                {
+                  type: 'step',
+                  step: { id: 'first', providerId: 'shared', config: {}, enabledPhases: ['processInput'] },
+                },
+              ],
+              [
+                {
+                  type: 'step',
+                  step: { id: 'second', providerId: 'shared', config: {}, enabledPhases: ['processInput'] },
+                },
+              ],
+            ],
+          },
+        ],
+      };
+
+      hydrateProcessorGraph(graph, 'input', { providers: { shared: provider } });
+
+      expect(created.length).toBeGreaterThan(0);
+      for (const proc of created) {
+        expect(proc.id).toBe('shared-instance');
+      }
+    });
+
+    it('still executes correctly with overridden step ids', async () => {
+      const provider = makeSharedIdProvider();
+      const graph: StoredProcessorGraph = {
+        steps: [
+          {
+            type: 'parallel',
+            branches: [
+              [
+                {
+                  type: 'step',
+                  step: { id: 'first', providerId: 'shared', config: {}, enabledPhases: ['processInput'] },
+                },
+              ],
+              [
+                {
+                  type: 'step',
+                  step: { id: 'second', providerId: 'shared', config: {}, enabledPhases: ['processInput'] },
+                },
+              ],
+            ],
+          },
+        ],
+      };
+
+      const result = hydrateProcessorGraph(graph, 'input', { providers: { shared: provider } })!;
+      const workflow = result[0] as ProcessorWorkflow;
+      expect(isProcessorWorkflow(workflow)).toBe(true);
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'test-msg-1',
+          role: 'user' as const,
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text' as const, text: 'Hello' }] },
+        },
+      ];
+      const ml = new MessageList();
+      ml.add(messages, 'input');
+
+      const run = await workflow.createRun();
+      const runResult = await run.start({
+        inputData: { phase: 'input', messages, messageList: ml },
+      });
+
+      expect(runResult.status).toBe('success');
+      if (runResult.status !== 'success') throw new Error(`Workflow failed: ${runResult.status}`);
+      expect(runResult.result.phase).toBe('input');
+    }, 10000);
+  });
+
   describe('config passthrough', () => {
     it('should pass config to the provider createProcessor', async () => {
       const createSpy = vi.fn().mockReturnValue({

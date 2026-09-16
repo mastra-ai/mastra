@@ -1,6 +1,6 @@
 {
   "name": "@mastra/express",
-  "version": "1.5.11",
+  "version": "1.5.12-alpha.2",
   "description": "Mastra Express adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -27,7 +27,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@fastify/busboy": "^3.2.0",
+    "@fastify/busboy": "^3.2.2",
     "@mastra/server": "workspace:*"
   },
   "devDependencies": {

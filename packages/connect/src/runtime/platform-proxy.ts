@@ -11,7 +11,14 @@
  */
 import type { RequestContext } from '@mastra/core/request-context';
 
-import { proxyRequest, resolveClient, type ConnectClientOptions, type ProxyRequestOptions } from '../client.js';
+import {
+  getConnectionContext,
+  proxyRequestWithResponse,
+  resolveClient,
+  type ConnectClientOptions,
+  type ConnectionContext,
+  type ProxyRequestOptions,
+} from '../client.js';
 import { MastraConnectError } from '../errors.js';
 
 /**
@@ -21,17 +28,20 @@ import { MastraConnectError } from '../errors.js';
  */
 export interface PlatformProxyRequest {
   endpoint: string;
-  params?: Record<string, string | number | boolean | undefined>;
+  params?: NonNullable<ProxyRequestOptions['query']>;
   headers?: Record<string, string>;
   data?: unknown;
   /**
    * Retry hint from templates. We treat this as a soft ceiling — the platform
    * proxy already applies its own retry policy; templates that ask for `n`
    * retries get up to `n` transient retries here on network/5xx failures.
-   * Only honored for idempotent HTTP methods (GET/HEAD/PUT/DELETE): a POST or
-   * PATCH the provider may have already applied is never repeated.
+   * Honored for idempotent HTTP methods (GET/HEAD/PUT/DELETE), and for a POST
+   * or PATCH that carries an `Idempotency-Key` header, since the provider then
+   * deduplicates a replay. Any other POST or PATCH gets exactly one attempt.
    */
   retries?: number;
+  /** Provider base URL selected by the tool from connection config or metadata. */
+  baseUrlOverride?: string;
 }
 
 /** Templates treat provider response bodies as untyped JSON until they validate them. */
@@ -67,6 +77,8 @@ export interface PlatformProxy {
   put<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
   patch<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
   delete<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
+  getConnection(): Promise<ConnectionContext>;
+  getMetadata<T = Record<string, unknown> | null>(): Promise<T>;
   ActionError: typeof ToolActionError;
   log: (...args: unknown[]) => void;
   /**
@@ -88,6 +100,21 @@ interface CreatePlatformProxyOptions {
   requestContext?: RequestContext;
 }
 
+function requireConnectionId(connectionId?: string): string {
+  if (connectionId) return connectionId;
+  throw new MastraConnectError(
+    'missing_connection_id',
+    'Missing connection id: pass connectionId or resolve tools through connect().',
+  );
+}
+
+async function loadConnectionContext({
+  connectionId,
+  client: clientOptions,
+}: CreatePlatformProxyOptions): Promise<ConnectionContext> {
+  return getConnectionContext(resolveClient(clientOptions), requireConnectionId(connectionId));
+}
+
 async function callProxy<T>(
   method: ProxyRequestOptions['method'],
   { connectionId, client: clientOptions }: CreatePlatformProxyOptions,
@@ -96,31 +123,26 @@ async function callProxy<T>(
   // Checked lazily per call, so building toolsets without a connection id
   // never throws. `connect()` always supplies one; direct `create<Provider>Tools`
   // callers must pass `connectionId`.
-  if (!connectionId) {
-    throw new MastraConnectError(
-      'missing_connection_id',
-      'Missing connection id: pass connectionId or resolve tools through connect().',
-    );
-  }
+  const resolvedConnectionId = requireConnectionId(connectionId);
   const client = resolveClient(clientOptions);
   // Non-idempotent writes get exactly one attempt: a POST/PATCH the provider
   // accepted just before a transient failure must not be replayed as a
-  // duplicate mutation. There is no idempotency-key contract on the proxy.
-  const attempts = IDEMPOTENT_METHODS.has(method) ? Math.max(1, Math.min(config.retries ?? 1, 5)) : 1;
+  // duplicate mutation. A caller-supplied Idempotency-Key makes the replay
+  // safe, so those requests may retry like idempotent methods.
+  const retryable = IDEMPOTENT_METHODS.has(method) || hasIdempotencyKey(config.headers);
+  const attempts = retryable ? Math.max(1, Math.min(config.retries ?? 1, 5)) : 1;
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
-      const data = (await proxyRequest(client, connectionId, {
+      const response = await proxyRequestWithResponse(client, resolvedConnectionId, {
         method,
         path: config.endpoint,
         query: config.params,
         headers: config.headers,
+        baseUrlOverride: config.baseUrlOverride,
         body: config.data,
-      })) as T;
-      // proxyRequest currently returns the parsed JSON body only; templates
-      // rarely inspect status/headers, but expose stubs to keep the shape
-      // faithful.
-      return { data, status: 200, headers: {} };
+      });
+      return { ...response, data: response.data as T };
     } catch (error) {
       lastError = error;
       // Only retry on network-ish failures. MastraConnectError with
@@ -131,6 +153,10 @@ async function callProxy<T>(
   throw lastError instanceof Error
     ? lastError
     : new MastraConnectError('proxy_error', 'Proxy call failed after retries.');
+}
+
+function hasIdempotencyKey(headers: Record<string, string> | undefined): boolean {
+  return Object.keys(headers ?? {}).some(name => name.toLowerCase() === 'idempotency-key');
 }
 
 function isTransient(error: unknown): boolean {
@@ -150,12 +176,16 @@ export function createPlatformProxy(context: CreatePlatformProxyOptions): Platfo
     (method: ProxyRequestOptions['method']) =>
     <T>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>> =>
       callProxy<T>(method, context, config);
+  let connectionContext: Promise<ConnectionContext> | undefined;
+  const getConnection = () => (connectionContext ??= loadConnectionContext(context));
   return {
     get: bind('GET'),
     post: bind('POST'),
     put: bind('PUT'),
     patch: bind('PATCH'),
     delete: bind('DELETE'),
+    getConnection,
+    getMetadata: async <T = Record<string, unknown> | null>() => (await getConnection()).metadata as T,
     ActionError: ToolActionError,
     // Upstream template logs may contain request or provider data. Keep the
     // compatibility method but discard arbitrary values at this trust boundary.

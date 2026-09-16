@@ -1,5 +1,27 @@
 # @mastra/observability
 
+## 1.17.9-alpha.1
+
+### Patch Changes
+
+- Documented the `SpanOutputProcessor.process()` contract: mutate the span you receive and return the same instance, or return `undefined` to drop it. Returning a copy is not supported because `exportSpan()` and `isValid` are instance members of the live span. Related to #23796 ([#24048](https://github.com/mastra-ai/mastra/pull/24048))
+
+- Fixed span output processors that return a copy of the span instead of the same instance. Previously this threw `TypeError: processedSpan?.exportSpan is not a function` out of `startSpan()` for started/updated spans, and silently dropped every ended span. Now the span is dropped with a logged processor error naming the processor, and the `SensitiveDataFilter.process()` docstring correctly states that it mutates the span in place. Fixes #23796 ([#24048](https://github.com/mastra-ai/mastra/pull/24048))
+
+- Refreshed pricing data to provide cost estimates for the newest models. ([#24141](https://github.com/mastra-ai/mastra/pull/24141))
+
+- Updated dependencies [[`291a694`](https://github.com/mastra-ai/mastra/commit/291a694b3f9b7d9a17af7d10ed3c9c357bed7a6c), [`291a694`](https://github.com/mastra-ai/mastra/commit/291a694b3f9b7d9a17af7d10ed3c9c357bed7a6c), [`467e0a6`](https://github.com/mastra-ai/mastra/commit/467e0a630db09a1750ce9271bddb38e46681bf04), [`c016c9b`](https://github.com/mastra-ai/mastra/commit/c016c9bd051612714e662588e5928b72bd6a6ac6), [`644ac13`](https://github.com/mastra-ai/mastra/commit/644ac131110a9f24a8d92b62dd3777384211a2e7), [`aa38e6f`](https://github.com/mastra-ai/mastra/commit/aa38e6f424a0eae0e43a5c2ae0b387e404f5e6a6), [`8d9eadb`](https://github.com/mastra-ai/mastra/commit/8d9eadb59ccbcae054600128aa15d95ea4d1141a), [`5085475`](https://github.com/mastra-ai/mastra/commit/5085475c0da226e618eb3ee2676d347788c3fb00), [`5085475`](https://github.com/mastra-ai/mastra/commit/5085475c0da226e618eb3ee2676d347788c3fb00), [`76c7d98`](https://github.com/mastra-ai/mastra/commit/76c7d989f691510d7bfc016723cc78d7e08ac108), [`61f953a`](https://github.com/mastra-ai/mastra/commit/61f953a79736ac0d8a9650f0561c6dab1b097c8e), [`32edb03`](https://github.com/mastra-ai/mastra/commit/32edb0371b8d884bee66897f236e852a959ae07a), [`bc12e6c`](https://github.com/mastra-ai/mastra/commit/bc12e6cd9cc74fb078b006ed5d14429e2101cbb2)]:
+  - @mastra/core@1.68.0-alpha.2
+
+## 1.17.9-alpha.0
+
+### Patch Changes
+
+- Fixed exact OpenRouter generation costs in observability spans and Langfuse exports, including BYOK upstream charges. ([#20336](https://github.com/mastra-ai/mastra/pull/20336))
+
+- Updated dependencies [[`1e68460`](https://github.com/mastra-ai/mastra/commit/1e68460205d0061c6dbc7a7e7a50950236af774b), [`7cfa0df`](https://github.com/mastra-ai/mastra/commit/7cfa0df76759a31b54dd1a87bc95d3064f2026e9), [`cd6948c`](https://github.com/mastra-ai/mastra/commit/cd6948c50aa4478d795613bdfa2d5259a7045026), [`096825c`](https://github.com/mastra-ai/mastra/commit/096825c0cc37de5f465ecdc6617d642b8c898a78), [`fec1259`](https://github.com/mastra-ai/mastra/commit/fec125946766805f3122be391272415691de6408), [`34fd538`](https://github.com/mastra-ai/mastra/commit/34fd538060402e414bdf65af9f469e7bff60be1e), [`d39b43b`](https://github.com/mastra-ai/mastra/commit/d39b43beada08e69a962a47b58d743384722cd1f)]:
+  - @mastra/core@1.68.0-alpha.0
+
 ## 1.17.8
 
 ### Patch Changes

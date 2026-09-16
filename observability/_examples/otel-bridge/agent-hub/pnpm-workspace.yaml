@@ -4,6 +4,7 @@ packages:
 
 minimumReleaseAgeExclude:
   - fastify@5.12.4
+  - '@opentelemetry/auto-instrumentations-node@0.80.0'
 
 overrides:
   '@mastra/core': link:../../../../packages/core
@@ -17,3 +18,7 @@ overrides:
   minimatch@<=10.2.1: 10.2.1
   '@isaacs/brace-expansion@<=5.0.1': 5.0.1
   brace-expansion@>=4.0.0 <5.0.9: 5.0.9
+
+allowBuilds:
+  esbuild: false
+  protobufjs: false

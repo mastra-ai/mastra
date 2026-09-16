@@ -55,6 +55,7 @@ import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
 import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
+import { normalizeMessageHistoryConfig } from '../memory/message-history-config';
 import { getMemoryRunState } from '../memory/run-state';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
 import {
@@ -143,6 +144,7 @@ import type { AnyWorkflow } from '../workflows/workflow';
 import { createStep, createStepFromProcessor, isProcessor } from '../workflows/workflow';
 import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
+import { ThreadStateFileReadTracker } from '../workspace/filesystem/thread-state-read-tracker';
 import { createSkillTools } from '../workspace/skills';
 import type { SkillFormat } from '../workspace/skills';
 import type { Skill, SkillMetadata, WorkspaceSkills } from '../workspace/skills/types';
@@ -237,7 +239,12 @@ import type {
   ModelWithRetries,
   ZodSchema,
 } from './types';
-import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
+import {
+  isSupportedLanguageModel,
+  resolveSuspendedToolRunId,
+  resolveThreadIdFromArgs,
+  supportedLanguageModelSpecifications,
+} from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
 
@@ -4001,9 +4008,18 @@ export class Agent<
       return convertedWorkspaceTools;
     }
 
+    // Read-before-write records persist per thread in the `threadState`
+    // storage domain (alongside task lists and goal objectives), so they
+    // survive suspend/resume, later turns, and process restarts. Without
+    // thread identity or storage, tracking falls back to per-run.
+    const threadStateStore = threadId ? await this.#mastra?.getStorage()?.getStore('threadState') : undefined;
     const workspaceTools = await createWorkspaceTools(workspace, {
       requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
       workspace,
+      readTracker:
+        threadStateStore && threadId
+          ? new ThreadStateFileReadTracker({ threadId, store: threadStateStore, logger: this.logger })
+          : undefined,
     });
 
     if (Object.keys(workspaceTools).length > 0) {
@@ -4638,17 +4654,16 @@ export class Agent<
     }
 
     const threadConfig = memory.getMergedThreadConfig(memoryConfig || {});
-    if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
+    const history = normalizeMessageHistoryConfig(threadConfig.lastMessages, threadConfig.messageHistory);
+    if (!history.enabled && !threadConfig.semanticRecall) {
       return { messages: [] };
     }
 
     return memory.recall({
       threadId,
       resourceId,
-      // When lastMessages is false (disabled), don't pass perPage so recall()
-      // can detect the disabled state from config and return empty history.
-      // When lastMessages is a number, pass it as perPage to limit results.
-      ...(typeof threadConfig.lastMessages === 'number' ? { perPage: threadConfig.lastMessages } : {}),
+      // Let recall apply the normalized count/token history configuration. In particular,
+      // token-only history must page backwards instead of mapping to `perPage: false`.
       // The agent only consumes `messages` from recall; skip the COUNT(*) work.
       includeTotal: false,
       threadConfig: memoryConfig,
@@ -5137,6 +5152,7 @@ export class Agent<
             // A hook that just threw is not in a state to handle its own
             // failure, so the failure path never re-invokes it.
             let completeHookInvoked = false;
+            let result: any;
 
             // Call onDelegationStart before resolving the sub-agent's runtime
             // config so mutations of the delegated run's context in the hook
@@ -5393,8 +5409,10 @@ export class Agent<
                 resourceId,
               });
 
-              let result: any;
-              const suspendedToolRunId = (inputData as any).suspendedToolRunId;
+              // The model authors this schema field, and some models emit sentinel strings like
+              // "null" for it on fresh calls. Normalize at the trust boundary so junk never
+              // reaches the resume gate below or resumeStream/resumeGenerate (#23739).
+              const suspendedToolRunId = resolveSuspendedToolRunId((inputData as any).suspendedToolRunId);
 
               const { resumeData, suspend } = context?.agent ?? {};
 
@@ -5729,15 +5747,6 @@ export class Agent<
                   }
                 }
 
-                if (requireToolApproval || suspendedPayload || resumeSchema) {
-                  return suspend?.(suspendedPayload, {
-                    resumeSchema,
-                    requireToolApproval,
-                    runId: streamResult.runId,
-                    isAgentSuspend: true,
-                  });
-                }
-
                 // Use streamResult.text (a delayed promise) which resolves to the
                 // output-processor-modified text, rather than the raw accumulated text-deltas.
                 const processedText = await streamResult.text;
@@ -5751,6 +5760,20 @@ export class Agent<
                   subAgentToolResults,
                   usage: subAgentUsage,
                 };
+
+                // Keep partial results available to the failure hook and saved transcript.
+                if (streamResult.error) {
+                  throw streamResult.error;
+                }
+
+                if (requireToolApproval || suspendedPayload || resumeSchema) {
+                  return suspend?.(suspendedPayload, {
+                    resumeSchema,
+                    requireToolApproval,
+                    runId: streamResult.runId,
+                    isAgentSuspend: true,
+                  });
+                }
               } else {
                 if (typeof resolvedAgent.streamLegacy !== 'function') {
                   throw new Error(`Sub-agent ${agent.id} returned a v1 model but does not implement streamLegacy`);
@@ -5893,7 +5916,7 @@ export class Agent<
                     primitiveId: agent.id,
                     primitiveType: 'agent',
                     prompt: effectivePrompt,
-                    result: { text: '' },
+                    result: result ?? { text: '' },
                     duration: Date.now() - startTime,
                     success: false,
                     error: err instanceof Error ? err : new Error(String(err)),
@@ -5971,6 +5994,9 @@ export class Agent<
                   details: {
                     agentName: this.name,
                     subAgentName: agent.name ?? agent.id,
+                    ...(result?.subAgentThreadId
+                      ? { subAgentThreadId: result.subAgentThreadId, subAgentResourceId: result.subAgentResourceId }
+                      : {}),
                     runId: runId || '',
                     threadId: threadId || '',
                     resourceId: resourceId || '',
@@ -6111,14 +6137,25 @@ export class Agent<
           execute: async (inputData, context) => {
             const invocationActor = getInvocationActor(context);
             const savedMastraMemory = requestContext.get('MastraMemory');
+            let runIdToUse: string | undefined;
             try {
-              const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
+              const {
+                initialState,
+                inputData: workflowInputData,
+                suspendedToolRunId: rawSuspendedToolRunId,
+              } = inputData as any;
+              const { resumeData, suspend } = context?.agent ?? {};
+              // The model authors this schema field, and some models emit sentinel strings like
+              // "null" for it on fresh calls. Normalize at the trust boundary (#23739).
+              const suspendedToolRunId = resolveSuspendedToolRunId(rawSuspendedToolRunId);
               // Use a unique runId for each workflow tool call to prevent parallel calls
               // from sharing the same cached Run instance (see #13473).
               // For resume cases, suspendedToolRunId is injected into inputData by
               // tool-call-step (from metadata stored during suspension).
-              // For fresh calls: generate a new unique runId.
-              const runIdToUse = suspendedToolRunId || randomUUID();
+              // A supplied id is only trusted alongside resumeData: on fresh calls any
+              // echoed id — model-authored or hook-pinned — is replaced with a unique id,
+              // otherwise two independent calls collide on one cached Run (#23739).
+              runIdToUse = resumeData && suspendedToolRunId ? suspendedToolRunId : randomUUID();
               this.logger.debug('Executing workflow as tool', {
                 agent: this.name,
                 workflow: workflowName,
@@ -6130,7 +6167,6 @@ export class Agent<
               });
 
               const run = await workflow.createRun({ runId: runIdToUse, resourceId });
-              const { resumeData, suspend } = context?.agent ?? {};
 
               let result: WorkflowResult<any, any, any, any> | undefined = undefined;
 
@@ -6256,7 +6292,7 @@ export class Agent<
                   category: ErrorCategory.USER,
                   details: {
                     agentName: this.name,
-                    runId: (inputData as any).suspendedToolRunId || runId || '',
+                    runId: runIdToUse || runId || '',
                     threadId: threadId || '',
                     resourceId: resourceId || '',
                   },
@@ -8998,7 +9034,10 @@ export class Agent<
     } catch (error) {
       // Release the thread reservation taken by waitForCrossAgentThreadRun so
       // a failed setup does not block subsequent runs on this thread.
-      agentThreadStreamRuntime.releaseThreadRunReservation(mergedOptions.runId, threadStreamPubSub);
+      agentThreadStreamRuntime.releaseThreadRunReservation(mergedOptions.runId, threadStreamPubSub, {
+        agent: this,
+        streamOptions: preparedOptions,
+      });
       throw error;
     }
   }

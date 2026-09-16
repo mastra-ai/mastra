@@ -1,4 +1,4 @@
-import type { ExperimentTargetType } from '@mastra/client-js';
+import type { DatasetExperiment, ExperimentTargetType } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
@@ -21,7 +21,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
-import { CheckCircle, CircleSlashIcon, EllipsisIcon, Sparkles, Trash2, XIcon, Check, X } from 'lucide-react';
+import { CheckCircle, CircleSlashIcon, EllipsisIcon, GaugeIcon, Sparkles, Trash2, XIcon, Check, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useReviewItems, useCompletedItems } from '../hooks/use-dataset-review-items';
@@ -56,6 +56,9 @@ export interface DatasetReviewProps {
   datasetId?: string;
   /** When set, scopes the review (and completed) lists to items produced by this experiment; otherwise project-wide. */
   experimentId?: string;
+  /** Overrides target-based discovery for both lists, including when empty. */
+  experiments?: DatasetExperiment[];
+  isLoadingExperiments?: boolean;
   /** When set, scopes the lists to experiments run against this target type (server-side). */
   targetType?: ExperimentTargetType | '';
   /** When set, scopes the lists to experiments run against this target ID (server-side). */
@@ -72,28 +75,39 @@ export interface DatasetReviewProps {
   toolbarStart?: ReactNode;
   /** Rendered at the end of the toolbar, after the bulk actions. */
   toolbarEnd?: ReactNode;
+  /** When set, shows a "Create Scorer" action fed with the visible review items (input/output). */
+  onCreateScorer?: (items: Array<{ input: unknown; output: unknown }>) => void;
 }
 
 export function DatasetReview({
   datasetId,
   experimentId,
+  experiments,
+  isLoadingExperiments,
   targetType,
   targetId,
   featuredItemId: featuredItemIdRequest,
   detailPanelVariant = 'inline',
   toolbarStart,
   toolbarEnd,
+  onCreateScorer,
 }: DatasetReviewProps) {
   const client = useMastraClient();
   const { paths } = useLinkComponent();
   const { data: dataset } = useDataset(datasetId ?? '');
-  // Keep `undefined` while loading: the hydration effect below treats a defined
-  // value as "server data arrived", so coercing to [] here would lock in an empty queue.
-  const { data: reviewItems, isLoading: isLoadingReview } = useReviewItems({ experimentId, targetType, targetId });
+  const { data: reviewItems, isLoading: isLoadingReview } = useReviewItems({
+    experimentId,
+    targetType,
+    targetId,
+    experiments,
+    isLoadingExperiments,
+  });
   const { data: completedItems, isLoading: isLoadingCompleted } = useCompletedItems({
     experimentId,
     targetType,
     targetId,
+    experiments,
+    isLoadingExperiments,
   });
   const { updateExperimentResult } = useDatasetMutations();
 
@@ -391,6 +405,7 @@ export function DatasetReview({
       : undefined;
 
   const hasSelection = !showCompleted && selectedItemIds.size > 0;
+  const showCreateScorer = !!onCreateScorer && !showCompleted && filteredItems.length > 0;
 
   const toolbar = (
     <div className="flex flex-wrap items-center gap-2">
@@ -426,9 +441,21 @@ export function DatasetReview({
         )}
       </ButtonsGroup>
 
-      {(hasSelection || toolbarEnd) && (
+      {(hasSelection || toolbarEnd || showCreateScorer) && (
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {toolbarEnd}
+          {showCreateScorer && (
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => onCreateScorer?.(filteredItems.map(item => ({ input: item.input, output: item.output })))}
+            >
+              <Icon size="sm">
+                <GaugeIcon />
+              </Icon>
+              Create Scorer
+            </Button>
+          )}
           {hasSelection && (
             <>
               <BulkTagPicker
