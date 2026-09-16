@@ -94,6 +94,7 @@ import { llmIterationOutputSchema } from '../schema';
 import { buildMessagesFromChunks } from './build-messages-from-chunks';
 import type { CollectedChunk } from './build-messages-from-chunks';
 import {
+  EAGER_TOOL_ABORT_SIGNAL,
   EAGER_TOOL_EXECUTION_MARKER,
   EagerToolExecutionNotRun,
   isEagerlyExecutableToolCall,
@@ -1285,8 +1286,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // listeners on the same signal.
         if (!eagerAbortListenerRegistered) {
           eagerAbortListenerRegistered = true;
-          options?.abortSignal?.addEventListener('abort', () => eagerCoordinator.stop(), { once: true });
+          options?.abortSignal?.addEventListener('abort', () => eagerCoordinator.stop({ permanent: true }), {
+            once: true,
+          });
         }
+        // A stop caused by one bad turn (tripwire, model error, retry) must not disable
+        // eager dispatch for the rest of the run: the next turn is a fresh model call.
+        // Only an abort is permanent.
+        eagerCoordinator.beginTurn();
       }
 
       // Insert a step-start boundary between loop iterations so that
@@ -1992,13 +1999,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       return;
                     }
 
-                    eagerCoordinator.start(toolCall.toolCallId, () =>
+                    eagerCoordinator.start(toolCall.toolCallId, eagerAbortSignal =>
                       eagerToolCallStep.execute({
                         inputData: toolCall,
                         runId,
                         mastra,
                         requestContext,
                         abortSignal: options?.abortSignal,
+                        // The coordinator's own signal, combined with the run's inside the
+                        // step, so eager work can be cancelled when its attempt is discarded
+                        // without the caller having aborted anything.
+                        [EAGER_TOOL_ABORT_SIGNAL]: eagerAbortSignal,
                         writer: outputWriter,
                         // The eligibility whitelist excludes every tool shape that can
                         // suspend or bail, so neither of these should be reachable. They
@@ -2131,6 +2142,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // Force-close any server tool spans opened during the failed stream
           // before abort/error/fallback handling can return or throw.
           cleanupProviderToolSpans(true);
+
+          // This attempt is being discarded: the error handling below either retries the
+          // request or falls through to the next model, and the tool calls this attempt
+          // emitted are discarded with it. The normal pipeline never runs them, so eager
+          // work that has not started must not run either — it would be the one case where
+          // eager execution produces a side effect the default path would not.
+          eagerCoordinator?.stop({ cancelRunning: true });
 
           const provider = model?.provider;
           const modelIdStr = model?.modelId;
