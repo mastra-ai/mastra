@@ -577,6 +577,29 @@ export type CloneMemoryThreadResponse = GeneratedResponse<'POST /memory/threads/
   clonedMessages: MastraDBMessage[];
 };
 
+export type BranchMemoryThreadParams = GeneratedRequest<Body<'POST /memory/threads/:threadId/branch'>> &
+  GeneratedRequest<QueryParams<'POST /memory/threads/:threadId/branch'>> &
+  RequestContextOptions;
+
+export type BranchMemoryThreadResponse = GeneratedResponse<'POST /memory/threads/:threadId/branch'>;
+
+export type GetMemoryThreadParentParams = GeneratedRequest<QueryParams<'GET /memory/threads/:threadId/parent'>> &
+  RequestContextOptions;
+
+export type GetMemoryThreadParentResponse = GeneratedResponse<'GET /memory/threads/:threadId/parent'>;
+
+export type ListMemoryThreadBranchesParams = GeneratedRequest<QueryParams<'GET /memory/threads/:threadId/branches'>> &
+  RequestContextOptions;
+
+export type ListMemoryThreadBranchesResponse = GeneratedResponse<'GET /memory/threads/:threadId/branches'>;
+
+export type GetMemoryThreadBranchHistoryParams = GeneratedRequest<
+  QueryParams<'GET /memory/threads/:threadId/branch-history'>
+> &
+  RequestContextOptions;
+
+export type GetMemoryThreadBranchHistoryResponse = GeneratedResponse<'GET /memory/threads/:threadId/branch-history'>;
+
 export type TransferMemoryThreadParams = GeneratedRequest<
   Body<'POST /memory/threads/:threadId/transfer'> & QueryParams<'POST /memory/threads/:threadId/transfer'>
 > &
