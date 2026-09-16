@@ -431,7 +431,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   if (!isGithubFeatureEnabled({ github, auth }) || !github || !stateSigner) {
     return routes;
   }
-  const signState = (orgId: string, userId: string): string => stateSigner.sign(orgId, userId);
+  const signState = (orgId: string, userId: string) => stateSigner.sign(orgId, userId);
   const verifyState = (state: string | undefined) => stateSigner.verify(state);
 
   routes.push(
@@ -514,7 +514,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
-        const state = signState(resolved.tenant.orgId, resolved.tenant.userId);
+        const state = await signState(resolved.tenant.orgId, resolved.tenant.userId);
         if (c.req.query('manage')) return c.redirect(github.buildInstallUrl(state));
         return c.redirect(github.buildOAuthIdentifyUrl(state, redirectUri));
       },
@@ -537,9 +537,9 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           // arrives with `installation_id` + `setup_action` but no state. We
           // never trust the raw installation_id; start a fresh identify bounce
           // bound to the current session so the update re-syncs installations.
-          return c.redirect(github.buildOAuthIdentifyUrl(signState(orgId, userId), redirectUri));
+          return c.redirect(github.buildOAuthIdentifyUrl(await signState(orgId, userId), redirectUri));
         }
-        const stateTenant = verifyState(state);
+        const stateTenant = await verifyState(state);
         if (!stateTenant || stateTenant.userId !== userId || stateTenant.orgId !== orgId) {
           // CSRF / cross-user/org linking protection: the signed state must belong
           // to the same logged-in user *and* their current org.
@@ -563,7 +563,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         // an arbitrary id — so when no code is present we bounce through the OAuth
         // identify flow to obtain a verified user token first.
         if (!code) {
-          return c.redirect(github.buildOAuthIdentifyUrl(signState(orgId, userId), redirectUri));
+          return c.redirect(github.buildOAuthIdentifyUrl(await signState(orgId, userId), redirectUri));
         }
 
         try {
@@ -574,7 +574,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             // install page. After installing, GitHub redirects back here with
             // the same state (and no code), which bounces through identify
             // again and lands in the persist path below.
-            return c.redirect(github.buildInstallUrl(signState(orgId, userId)));
+            return c.redirect(github.buildInstallUrl(await signState(orgId, userId)));
           }
           for (const inst of installations) {
             // The installation is org-owned; `userId` records who connected it.

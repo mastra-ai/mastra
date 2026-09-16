@@ -328,7 +328,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     expect(target.searchParams.get('redirect_uri')).toBe('https://tunnel.example/connect/slack/oidc/callback');
     // The state round-trips the initiating tenant and Factory, plus the nonce
     // the callback burns to keep the binding single-use.
-    expect(tenantSigner.verify(target.searchParams.get('state') ?? undefined)).toEqual({
+    await expect(tenantSigner.verify(target.searchParams.get('state') ?? undefined)).resolves.toEqual({
       orgId: 'org-9',
       userId: 'user-9',
       factoryProjectId: 'fp-1',
@@ -363,7 +363,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const { routes, saveAccountLink } = oidcRoutes();
-    const c = fakeCtx(tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'code-1' });
+    const c = fakeCtx(await tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'code-1' });
 
     await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
 
@@ -390,7 +390,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
       vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, id_token: makeIdToken(validClaims) }) }),
     );
     const { routes } = oidcRoutes();
-    const state = tenantSigner.sign('org-9', 'user-9', { factoryProjectId: 'fp-1' });
+    const state = await tenantSigner.sign('org-9', 'user-9', { factoryProjectId: 'fp-1' });
     const c = fakeCtx(state, undefined, { code: 'code-1' });
 
     await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
@@ -406,7 +406,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
       vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, id_token: makeIdToken(validClaims) }) }),
     );
     const { routes, saveAccountLink } = oidcRoutes({ auth: fakeAuth({ userId: 'solo' }) });
-    const c = fakeCtx(tenantSigner.sign('', 'solo'), undefined, { code: 'code-1' });
+    const c = fakeCtx(await tenantSigner.sign('', 'solo'), undefined, { code: 'code-1' });
 
     await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
 
@@ -425,7 +425,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const { routes, saveAccountLink } = oidcRoutes();
-    const c = fakeCtx(tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'code-1' });
+    const c = fakeCtx(await tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'code-1' });
 
     await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
 
@@ -454,7 +454,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const { routes, saveAccountLink } = oidcRoutes();
-    const c = fakeCtx(tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'code-1' });
+    const c = fakeCtx(await tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'code-1' });
 
     await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
 
@@ -470,7 +470,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const { routes, saveAccountLink } = oidcRoutes();
-    const c = fakeCtx(tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'code-1' });
+    const c = fakeCtx(await tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'code-1' });
 
     await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
 
@@ -488,7 +488,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     const handler = getHandler(routes, 'GET', '/connect/slack/oidc/callback');
     // One state, captured and replayed — the second run carries an attacker's
     // own fresh code and must not bind anything to the initiating tenant.
-    const state = tenantSigner.sign('org-9', 'user-9');
+    const state = await tenantSigner.sign('org-9', 'user-9');
 
     await handler(fakeCtx(state, undefined, { code: 'code-1' }));
     const replay = fakeCtx(state, undefined, { code: 'code-2' });
@@ -504,7 +504,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
       .mockRejectedValue(Object.assign(new Error('The operation was aborted'), { name: 'TimeoutError' }));
     vi.stubGlobal('fetch', fetchMock);
     const { routes, saveAccountLink } = oidcRoutes();
-    const c = fakeCtx(tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'code-1' });
+    const c = fakeCtx(await tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'code-1' });
 
     await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
 
@@ -523,7 +523,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const { routes, saveAccountLink } = oidcRoutes();
-    const c = fakeCtx(tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'code-1' });
+    const c = fakeCtx(await tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'code-1' });
 
     await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
 
@@ -538,7 +538,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const { routes, saveAccountLink } = oidcRoutes();
-    const c = fakeCtx(tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'bad' });
+    const c = fakeCtx(await tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'bad' });
 
     await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
 

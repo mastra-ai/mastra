@@ -637,7 +637,7 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
                 expiresAt: result.tokens.expiresAt,
                 organizationId: resultUser.organizationId,
               });
-              for (const [key, value] of Object.entries(provider.getSessionHeaders(session))) {
+              for (const [key, value] of Object.entries(await provider.getSessionHeaders(session))) {
                 c.header(key, value, { append: true });
               }
             }

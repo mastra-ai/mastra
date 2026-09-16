@@ -22,7 +22,21 @@ import {
   readSessionWorkspaceDiff,
   readSessionWorkspaceFile,
   readWorkspaceFile,
+  resolveCodebase,
 } from './fs.js';
+
+describe('resolveCodebase', () => {
+  it('returns the async TUI-compatible project identity', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-resolve-codebase-'));
+    const resolution = resolveCodebase(root);
+
+    await expect(resolution).resolves.toMatchObject({
+      rootPath: root,
+      name: root.split('/').at(-1),
+      resourceId: expect.stringMatching(/-[0-9a-f]{12}$/),
+    });
+  });
+});
 
 describe('listArtifacts', () => {
   it('returns an empty list when .artifacts does not exist', async () => {

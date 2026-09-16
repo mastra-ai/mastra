@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   applyStageTransition,
   factoryDecisionAttentionIdentity,
+  factoryDecisionHash,
   isAgentActor,
   WorkItemRelationError,
   WorkItemsStorage,
@@ -33,6 +34,14 @@ async function makeStorage(): Promise<WorkItemsStorage> {
   await backend.init();
   return domain;
 }
+
+describe('factoryDecisionHash', () => {
+  it('produces the SHA-256 hex digest of canonical decision JSON', async () => {
+    await expect(factoryDecisionHash({ a: 1 })).resolves.toBe(
+      '015abd7f5cc57a2dd94b7590f04ad8084273905ee33ec5cebeae62276a97f862',
+    );
+  });
+});
 
 function deferred() {
   let resolve = () => {};

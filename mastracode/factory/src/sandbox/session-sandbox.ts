@@ -253,9 +253,9 @@ export function createSessionSetupHook(
   repoFullName: string,
   setupCommand: string | undefined,
 ): SandboxStartHook {
-  // No command, no marker: nothing to gate.
-  const marker = setupCommand?.trim() ? setupMarkerContent(setupCommand) : undefined;
   return async ({ sandbox }) => {
+    // No command, no marker: nothing to gate.
+    const marker = setupCommand?.trim() ? await setupMarkerContent(setupCommand) : undefined;
     if (!sandbox.executeCommand) {
       throw new Error(`Sandbox '${sandbox.id}' cannot run the session setup: no executeCommand implementation`);
     }

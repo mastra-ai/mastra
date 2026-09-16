@@ -276,7 +276,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
-        const state = stateSigner.sign(resolved.tenant.orgId, resolved.tenant.userId);
+        const state = await stateSigner.sign(resolved.tenant.orgId, resolved.tenant.userId);
         return c.redirect(linear.buildAuthorizeUrl(state, redirectUri));
       },
     }),
@@ -294,7 +294,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
 
         // CSRF / cross-tenant linking protection: the signed state must belong
         // to the same logged-in user *and* their current org.
-        const stateTenant = stateSigner.verify(c.req.query('state'));
+        const stateTenant = await stateSigner.verify(c.req.query('state'));
         if (!stateTenant || stateTenant.userId !== userId || stateTenant.orgId !== orgId) {
           console.warn('[Linear] OAuth callback rejected: state/tenant mismatch.');
           return c.redirect('/?linear=error');
