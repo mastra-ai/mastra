@@ -1,43 +1,69 @@
-function toolGateCallId(part: unknown): string | undefined {
-  if (!part || typeof part !== 'object' || !('type' in part)) return;
-  if (part.type !== 'tool-call-approval' && part.type !== 'tool-call-suspended') return;
-  if (!('payload' in part)) return;
-  const payload = part.payload;
-  if (!payload || typeof payload !== 'object' || !('toolCallId' in payload)) return;
-  return typeof payload.toolCallId === 'string' ? payload.toolCallId : undefined;
+export interface ThreadStreamRegistration {
+  readonly streamId: string;
+  readonly resumedToolCallId?: string;
+  readonly previousStream?: ThreadStreamRegistration;
+}
+
+export function hasLaterToolCallResume(
+  latestStream: ThreadStreamRegistration | null | undefined,
+  streamId: string,
+  toolCallId: string | undefined,
+): boolean {
+  for (let stream = latestStream; stream && stream.streamId !== streamId; stream = stream.previousStream) {
+    if (!stream.resumedToolCallId || stream.resumedToolCallId === toolCallId) return true;
+  }
+  return false;
+}
+
+interface RegisteredThreadRun {
+  latestStream: ThreadStreamRegistration | null;
+  registeredStreamIds: Set<string>;
 }
 
 export class ThreadStreamToolGates {
-  readonly #latestStreamByRun = new Map<string, string>();
-  readonly #pendingByRun = new Map<string, Map<string, string>>();
+  readonly #runs = new Map<string, RegisteredThreadRun>();
 
   registerStream(runId: string, streamId: string, resumedToolCallId?: string): void {
-    if (this.#latestStreamByRun.get(runId) === streamId) return;
-    this.#latestStreamByRun.set(runId, streamId);
-    const pending = this.#pendingByRun.get(runId);
-    if (!pending) return;
-    for (const [toolCallId, gateStreamId] of pending) {
-      const wasAnswered = !resumedToolCallId || toolCallId === resumedToolCallId;
-      if (gateStreamId !== streamId && wasAnswered) pending.delete(toolCallId);
+    const run = this.#runs.get(runId);
+    if (run?.registeredStreamIds.has(streamId)) return;
+    const registration: ThreadStreamRegistration = {
+      streamId,
+      resumedToolCallId,
+      previousStream: run?.latestStream ?? undefined,
+    };
+    if (run) {
+      run.registeredStreamIds.add(streamId);
+      run.latestStream = registration;
+    } else {
+      this.#runs.set(runId, {
+        latestStream: registration,
+        registeredStreamIds: new Set([streamId]),
+      });
     }
   }
 
-  registerGate(runId: string, streamId: string, part: unknown): void {
-    const toolCallId = toolGateCallId(part);
-    if (!toolCallId) return;
-    const pending = this.#pendingByRun.get(runId) ?? new Map<string, string>();
-    pending.set(toolCallId, streamId);
-    this.#pendingByRun.set(runId, pending);
-  }
-
   finishRun(runId: string, streamId?: string): void {
-    const latestStreamId = this.#latestStreamByRun.get(runId);
-    if (streamId && latestStreamId && streamId !== latestStreamId) return;
-    this.#pendingByRun.delete(runId);
-    this.#latestStreamByRun.delete(runId);
+    const run = this.#runs.get(runId);
+    if (!run) {
+      this.#runs.set(runId, {
+        latestStream: null,
+        registeredStreamIds: new Set(streamId ? [streamId] : []),
+      });
+      return;
+    }
+    if (streamId) run.registeredStreamIds.add(streamId);
+    if (streamId && run.latestStream?.streamId !== streamId) return;
+    run.latestStream = null;
   }
 
-  hasPendingGate(runId: string, streamId: string, toolCallId: string): boolean {
-    return this.#pendingByRun.get(runId)?.get(toolCallId) === streamId;
+  hasStream(runId: string, streamId: string): boolean {
+    return this.#runs.get(runId)?.registeredStreamIds.has(streamId) ?? false;
+  }
+
+  isToolCallUnanswered(runId: string, streamId: string, toolCallId: string): boolean {
+    const run = this.#runs.get(runId);
+    if (run?.latestStream === null) return false;
+    if (!run?.registeredStreamIds.has(streamId)) return true;
+    return !hasLaterToolCallResume(run.latestStream, streamId, toolCallId);
   }
 }

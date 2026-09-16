@@ -52,13 +52,20 @@ class RetainingLeasePubSub extends LeasePubSub {
 class PausedBroadcastPubSub extends RetainingLeasePubSub {
   readonly startedPublishing = new DelayedPromise<void>();
   readonly continuePublishing = new DelayedPromise<void>();
+  readonly resumedRegistered = new DelayedPromise<void>();
+  readonly firstSuspended = new DelayedPromise<void>();
+  #firstStreamId: string | undefined;
 
   override async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
-    if (event.data?.type === 'stream-part' && event.data.part?.type === 'start') {
+    const data = event.data;
+    if (data?.type === 'run-registered') this.#firstStreamId ??= data.streamId;
+    if (data?.type === 'stream-part' && data.part?.type === 'start' && data.streamId === this.#firstStreamId) {
       this.startedPublishing.resolve();
       await this.continuePublishing.promise;
     }
     await super.publish(topic, event);
+    if (data?.type === 'run-registered' && data.streamId !== this.#firstStreamId) this.resumedRegistered.resolve();
+    if (data?.type === 'run-suspended' && data.streamId === this.#firstStreamId) this.firstSuspended.resolve();
   }
 }
 
@@ -109,7 +116,13 @@ const suspendedPart = {
   },
 };
 
-async function createSessionOn(pubsub: LeasePubSub, storage = new InMemoryStore(), requestTool = false) {
+async function createSessionOn(
+  pubsub: LeasePubSub,
+  storage = new InMemoryStore(),
+  requestTool = false,
+  continuation?: { entered: DelayedPromise<void>; released: DelayedPromise<void> },
+) {
+  let modelCalls = 0;
   const transition = createTool({
     id: TOOL_NAME,
     description: 'Request a governed stage transition.',
@@ -122,27 +135,34 @@ async function createSessionOn(pubsub: LeasePubSub, storage = new InMemoryStore(
     name: 'Code Agent',
     instructions: 'Triage the work item.',
     model: new MastraLanguageModelV2Mock({
-      doStream: async () => ({
-        stream: new ReadableStream({
-          start(controller) {
-            if (requestTool) {
+      doStream: async () => {
+        const asksForTool = requestTool && modelCalls++ === 0;
+        if (!asksForTool && continuation) {
+          continuation.entered.resolve();
+          await continuation.released.promise;
+        }
+        return {
+          stream: new ReadableStream({
+            start(controller) {
               controller.enqueue({ type: 'stream-start', warnings: [] });
-              controller.enqueue({
-                type: 'tool-call',
-                toolCallId: 'call-pending',
-                toolName: TOOL_NAME,
-                input: '{"stage":"Planning"}',
-              });
+              if (asksForTool) {
+                controller.enqueue({
+                  type: 'tool-call',
+                  toolCallId: 'call-pending',
+                  toolName: TOOL_NAME,
+                  input: '{"stage":"Planning"}',
+                });
+              }
               controller.enqueue({
                 type: 'finish',
-                finishReason: 'tool-calls',
+                finishReason: asksForTool ? 'tool-calls' : 'stop',
                 usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
               });
-            }
-            controller.close();
-          },
-        }),
-      }),
+              controller.close();
+            },
+          }),
+        };
+      },
     }),
     tools: { [TOOL_NAME]: transition },
     pubsub,
@@ -241,58 +261,104 @@ describe('run engine: replayed tool gates', () => {
     expect(events.filter(event => event.type === 'error')).toEqual([]);
   });
 
-  it('ignores an answered approval while the same run continues in a new stream', async () => {
-    const pubsub = new RetainingLeasePubSub();
-    const origin = await createSessionOn(pubsub, undefined, true);
-    const output = await origin.agent.stream('Request a transition', {
-      memory: { thread: threadId, resource: resourceId },
-    });
-    await output.consumeStream();
-    expect((await origin.agent.listSuspendedRuns({ threadId, resourceId })).runs).toHaveLength(1);
-    await pubsub.publish(threadTopic, {
-      type: 'agent.thread-stream',
-      runId: output.runId,
-      data: {
-        type: 'run-registered',
-        runId: output.runId,
-        streamId: 'resumed-stream',
-        streamSeq: 2,
-        sourceId: 'instance-b',
-        resumedToolCallId: 'call-pending',
-      },
-    });
-    const { session, events, firstAgentEnd } = await createSessionOn(pubsub.fork(), origin.storage);
+  it.each(['ordinary', 'delayed'])(
+    'ignores an answered approval during its held continuation (%s broadcast)',
+    async order => {
+      const pubsub = new PausedBroadcastPubSub();
+      const continuation = { entered: new DelayedPromise<void>(), released: new DelayedPromise<void>() };
+      const origin = await createSessionOn(pubsub, undefined, true, continuation);
+      if (order === 'ordinary') pubsub.continuePublishing.resolve();
+      const initial = await origin.agent.stream('Request a transition', {
+        memory: { thread: threadId, resource: resourceId },
+      });
+      try {
+        await pubsub.startedPublishing.promise;
+        await initial._waitUntilFinished();
+        expect(initial.status).toBe('suspended');
+        if (order === 'ordinary') await pubsub.firstSuspended.promise;
+        const resumed = await origin.agent.approveToolCall({
+          runId: initial.runId,
+          toolCallId: 'call-pending',
+          memory: { thread: threadId, resource: resourceId },
+        });
+        try {
+          await pubsub.resumedRegistered.promise;
+          await continuation.entered.promise;
+          pubsub.continuePublishing.resolve();
+          await pubsub.firstSuspended.promise;
+          const storedRuns = await origin.agent.listSuspendedRuns({ threadId, resourceId });
+          expect(storedRuns.runs.find(run => run.runId === initial.runId)?.toolCalls).toContainEqual(
+            expect.objectContaining({ toolCallId: 'call-pending' }),
+          );
+          const observer = await createSessionOn(pubsub.fork(), origin.storage);
+          await observer.session.thread.create({ id: threadId });
+          const outcome = await Promise.race([
+            observer.firstAgentEnd.then(() => 'ignored'),
+            observer.approvalRequired.then(() => 'asked-again'),
+          ]);
+          expect(outcome).toBe('ignored');
+          expect(observer.session.displayState.get().isRunning).toBe(false);
+          expect(observer.events.filter(event => event.type === 'error')).toEqual([]);
+          await expect(
+            origin.agent.sendStreamResume({
+              runId: initial.runId,
+              threadId,
+              resourceId,
+              toolCallId: 'call-pending',
+              resumeData: { approved: true },
+            }),
+          ).rejects.toMatchObject({ id: 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN' });
+        } finally {
+          continuation.released.resolve();
+          await resumed.consumeStream();
+        }
+      } finally {
+        pubsub.continuePublishing.resolve();
+        await initial.consumeStream();
+      }
+    },
+  );
 
-    await session.thread.create({ id: threadId });
-    await firstAgentEnd;
+  it.each(['delivered', 'missing'])(
+    'settles an answered suspension after its resume fails (old terminal %s)',
+    async terminal => {
+      const pubsub = new RetainingLeasePubSub();
+      await publishFromAnotherInstance(pubsub, [
+        terminal === 'delivered' ? [suspendedPart, { type: 'run-suspended' }] : [suspendedPart],
+        [
+          { type: 'stream-part', part: { type: 'error', runId, payload: { error: 'Resume failed' } } },
+          { type: 'run-completed', persisted: false },
+        ],
+      ]);
+      if (terminal === 'missing') {
+        await pubsub.acquireLease(threadKey, runId);
+        cleanups.push(async () => {
+          await pubsub.releaseLease(threadKey, runId);
+        });
+      }
+      const { session, events, firstAgentEnd } = await createSessionOn(pubsub);
 
-    expect(events.some(event => event.type === 'tool_approval_required')).toBe(false);
-    expect(session.displayState.get().isRunning).toBe(false);
-  });
+      await session.thread.create({ id: threadId });
+      await firstAgentEnd;
 
-  it('settles replay of a suspension whose later resume failed', async () => {
-    const pubsub = new RetainingLeasePubSub();
-    await publishFromAnotherInstance(pubsub, [
-      [suspendedPart, { type: 'run-suspended' }],
-      [
-        { type: 'stream-part', part: { type: 'error', runId, payload: { error: 'Resume failed' } } },
-        { type: 'run-completed', persisted: false },
-      ],
-    ]);
-    const { session, events, firstAgentEnd } = await createSessionOn(pubsub);
-
-    await session.thread.create({ id: threadId });
-    await firstAgentEnd;
-
-    expect(session.displayState.get().isRunning).toBe(false);
-    expect(events.some(event => event.type === 'tool_suspended')).toBe(false);
-  });
+      expect(session.displayState.get().isRunning).toBe(false);
+      expect(events.some(event => event.type === 'tool_suspended')).toBe(false);
+    },
+  );
 
   it('recovers a genuinely pending approval from another runtime state', async () => {
     const publisher = new RetainingLeasePubSub();
     const origin = await createSessionOn(publisher, undefined, true);
     const output = await origin.agent.stream('Request a transition', {
       memory: { thread: threadId, resource: resourceId },
+    });
+    cleanups.push(async () => {
+      const declined = await origin.agent.declineToolCall({
+        runId: output.runId,
+        toolCallId: 'call-pending',
+        memory: { thread: threadId, resource: resourceId },
+      });
+      await declined.consumeStream();
     });
     await output.consumeStream();
     expect((await origin.agent.listSuspendedRuns({ threadId, resourceId })).runs).toHaveLength(1);
@@ -318,18 +384,29 @@ describe('run engine: replayed tool gates', () => {
     const output = await agent.stream('Request a transition', {
       memory: { thread: threadId, resource: resourceId },
     });
-    await pubsub.startedPublishing.promise;
-    await output._waitUntilFinished();
-    pubsub.continuePublishing.resolve();
-    await approvalRequired;
+    try {
+      await pubsub.startedPublishing.promise;
+      await output._waitUntilFinished();
+      pubsub.continuePublishing.resolve();
+      await approvalRequired;
 
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: 'tool_approval_required',
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: 'tool_approval_required',
+          toolCallId: 'call-pending',
+          toolName: TOOL_NAME,
+        }),
+      );
+      expect(events.filter(event => event.type === 'error')).toEqual([]);
+    } finally {
+      pubsub.continuePublishing.resolve();
+      await output.consumeStream();
+      const declined = await agent.declineToolCall({
+        runId: output.runId,
         toolCallId: 'call-pending',
-        toolName: TOOL_NAME,
-      }),
-    );
-    expect(events.filter(event => event.type === 'error')).toEqual([]);
+        memory: { thread: threadId, resource: resourceId },
+      });
+      await declined.consumeStream();
+    }
   }, 5_000);
 });

@@ -19,7 +19,8 @@ import type { MessageListInput } from './message-list';
 import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
-import { ThreadStreamToolGates } from './thread-stream-tool-gates';
+import { hasLaterToolCallResume, ThreadStreamToolGates } from './thread-stream-tool-gates';
+import type { ThreadStreamRegistration } from './thread-stream-tool-gates';
 import type {
   AgentClaimThreadPeerOptions,
   AgentSignal,
@@ -159,11 +160,10 @@ type AgentThreadRunSuspension = {
   kind: 'approval' | 'generic-tool';
 };
 
-type AgentThreadRunRecord<OUTPUT = unknown> = {
+interface AgentThreadRunRecord<OUTPUT = unknown> extends ThreadStreamRegistration {
   agent: Agent<any, any, any, any>;
   output: MastraModelOutput<OUTPUT>;
   runId: string;
-  streamId: string;
   streamSeq: number;
   lifecycle: AgentThreadRunLifecycle;
   suspensions?: Map<string | undefined, AgentThreadRunSuspension>;
@@ -175,7 +175,7 @@ type AgentThreadRunRecord<OUTPUT = unknown> = {
   createSubscriberStream?: () => ReadableStream<unknown>;
   /** Settles once every stream-part broadcast publish for this run completed. */
   broadcastFinished?: Promise<void>;
-};
+}
 
 type PreparedThreadRun = {
   abortController: AbortController;
@@ -645,15 +645,23 @@ export class AgentThreadStreamRuntime {
   #nextStreamIdentity(state: AgentThreadRuntimeState, runId: string) {
     const streamSeq = (state.streamSeqByRunId.get(runId) ?? 0) + 1;
     state.streamSeqByRunId.set(runId, streamSeq);
-    return { streamId: randomUUID(), streamSeq };
+    const previousRecord = state.threadRunsById.get(runId);
+    const previousStream: ThreadStreamRegistration | undefined = previousRecord && {
+      streamId: previousRecord.streamId,
+      resumedToolCallId: previousRecord.resumedToolCallId,
+      previousStream: previousRecord.previousStream,
+    };
+    return { streamId: randomUUID(), streamSeq, previousStream };
   }
 
   #markRunSuspending(state: AgentThreadRuntimeState, runId: string, suspension: AgentThreadRunSuspension) {
+    const currentRecord = state.threadRunsById.get(runId);
+    if (!currentRecord || hasLaterToolCallResume(currentRecord, suspension.streamId, suspension.toolCallId)) return;
     state.suspendedRunIds.add(runId);
     const suspensions = state.suspensionMetadataByRunId.get(runId) ?? new Map();
     suspensions.set(suspension.toolCallId, suspension);
     state.suspensionMetadataByRunId.set(runId, suspensions);
-    const record = state.threadRunsByStreamId.get(suspension.streamId) ?? state.threadRunsById.get(runId);
+    const record = state.threadRunsByStreamId.get(suspension.streamId);
     if (record) {
       record.lifecycle = 'suspending';
       record.suspensions = suspensions;
@@ -1819,7 +1827,7 @@ export class AgentThreadStreamRuntime {
   registerRun<OUTPUT>(
     agent: Agent<any, any, any, any>,
     output: MastraModelOutput<OUTPUT>,
-    streamOptions: AgentExecutionOptions<OUTPUT>,
+    streamOptions: AgentExecutionOptions<OUTPUT> & { toolCallId?: string },
     pubsub?: PubSub,
     registrationOptions?: AgentThreadStrictRegistrationOptions,
   ): Promise<void | AgentThreadRunRegistration> | undefined {
@@ -1833,14 +1841,14 @@ export class AgentThreadStreamRuntime {
     const state = this.#getState(pubsub);
     this.#sweepStaleSuspendedRecords(state, pubsub);
     const key = this.#threadKey(resourceId, threadId);
-    const { streamId, streamSeq } = this.#nextStreamIdentity(state, output.runId);
+    const { streamId, streamSeq, previousStream } = this.#nextStreamIdentity(state, output.runId);
     const {
       output: outputForSubscribers,
       createSubscriberStream,
       startBroadcast,
       broadcastFinished,
     } = this.#withBroadcastStream(output, pubsub, key, streamId);
-    const resumedToolCallId = (streamOptions as AgentExecutionOptions<OUTPUT> & { toolCallId?: string }).toolCallId;
+    const { toolCallId: resumedToolCallId } = streamOptions;
     if (resumedToolCallId) {
       this.#clearSuspendedToolCall(state, output.runId, resumedToolCallId);
     } else {
@@ -1853,10 +1861,12 @@ export class AgentThreadStreamRuntime {
       runId: output.runId,
       streamId,
       streamSeq,
+      resumedToolCallId,
+      previousStream,
       lifecycle: 'running',
       threadId,
       resourceId,
-      streamOptions: streamOptions as AgentThreadRunRecord<OUTPUT>['streamOptions'],
+      streamOptions,
       createSubscriberStream,
       suspensions: state.suspensionMetadataByRunId.get(output.runId),
       broadcastFinished,
@@ -1911,7 +1921,7 @@ export class AgentThreadStreamRuntime {
   async #registerRunStrict<OUTPUT>(
     agent: Agent<any, any, any, any>,
     output: MastraModelOutput<OUTPUT>,
-    streamOptions: AgentExecutionOptions<OUTPUT>,
+    streamOptions: AgentExecutionOptions<OUTPUT> & { toolCallId?: string },
     pubsub: PubSub | undefined,
     threadId: string,
     resourceId: string | undefined,
@@ -1940,7 +1950,8 @@ export class AgentThreadStreamRuntime {
     await registrationOptions.validate?.();
 
     this.#startLeaseRenewal(resolvedPubSub, key, output.runId);
-    const { streamId, streamSeq } = this.#nextStreamIdentity(state, output.runId);
+    const { streamId, streamSeq, previousStream } = this.#nextStreamIdentity(state, output.runId);
+    const { toolCallId: resumedToolCallId } = streamOptions;
     const {
       output: outputForSubscribers,
       createSubscriberStream,
@@ -1954,10 +1965,12 @@ export class AgentThreadStreamRuntime {
       runId: output.runId,
       streamId,
       streamSeq,
+      resumedToolCallId,
+      previousStream,
       lifecycle: 'running',
       threadId,
       resourceId,
-      streamOptions: streamOptions as AgentThreadRunRecord<OUTPUT>['streamOptions'],
+      streamOptions,
       createSubscriberStream,
       suspensions: state.suspensionMetadataByRunId.get(output.runId),
       broadcastFinished,
@@ -2015,7 +2028,6 @@ export class AgentThreadStreamRuntime {
     state.threadKeysByRunId.set(output.runId, key);
     state.activeThreadRunIds.set(key, output.runId);
     state.activeThreadStreamIds.set(key, streamId);
-    const resumedToolCallId = (streamOptions as AgentExecutionOptions<OUTPUT> & { toolCallId?: string }).toolCallId;
 
     try {
       await this.#publishAndWait(pubsub, key, {
@@ -2076,7 +2088,7 @@ export class AgentThreadStreamRuntime {
     void Promise.allSettled(registered ? [finished, registered] : [finished]).then(() => {
       state.watchedThreadStreamIds.delete(record.streamId);
       if (isDisabled?.()) return;
-      this.#cleanupPreparedRun(state, record.runId);
+      if (state.threadRunsById.get(record.runId) === record) this.#cleanupPreparedRun(state, record.runId);
 
       if (record.output.status === 'suspended') {
         record.lifecycle = 'suspended';
@@ -2089,9 +2101,9 @@ export class AgentThreadStreamRuntime {
       }
 
       record.lifecycle = 'completed';
-      this.#clearSuspendedRun(state, record.runId);
       state.threadRunsByStreamId.delete(record.streamId);
       if (state.threadRunsById.get(record.runId) === record) {
+        this.#clearSuspendedRun(state, record.runId);
         state.threadRunsById.delete(record.runId);
         state.threadKeysByRunId.delete(record.runId);
       }
@@ -2128,6 +2140,7 @@ export class AgentThreadStreamRuntime {
           // persisted message and safe to replay to fresh subscribers.
           persisted: record.output.status === 'success',
         });
+        if (state.threadRunsById.has(record.runId)) return;
         if (this.#hasPendingThreadWork(state, key)) {
           void this.#drainPendingSignals(state, pubsub, key, record);
         } else {
@@ -2962,23 +2975,25 @@ export class AgentThreadStreamRuntime {
       }
     };
 
-    const isRemoteToolGateUnanswered = (run: AgentThreadRunRecord<OUTPUT>, toolCallId: string): boolean => {
-      return !done && toolGates.hasPendingGate(run.runId, run.streamId, toolCallId);
+    const isToolGateUnanswered = (run: AgentThreadRunRecord<OUTPUT>, toolCallId: string): boolean => {
+      return !done && toolGates.isToolCallUnanswered(run.runId, run.streamId, toolCallId);
     };
 
     const isCurrentToolGatePending = async (toolCallId: string): Promise<boolean> => {
       const run = currentRunRecord;
-      if (!run || done) return false;
-      if (localStreamIds.has(run.streamId)) return isLocalToolGatePending(run, toolCallId);
-
+      if (!run) return false;
       await caughtUp.promise;
-      if (!isRemoteToolGateUnanswered(run, toolCallId)) return false;
+      if (done) return false;
+      if (toolGates.hasStream(run.runId, run.streamId) && !isToolGateUnanswered(run, toolCallId)) return false;
+      if (localStreamIds.has(run.streamId)) {
+        return isLocalToolGatePending(run, toolCallId);
+      }
 
       await run.output._waitUntilFinished();
-      if (!isRemoteToolGateUnanswered(run, toolCallId)) return false;
+      if (!isToolGateUnanswered(run, toolCallId)) return false;
 
       const persisted = await hasSuspendedToolCall(run.runId, toolCallId);
-      return persisted && isRemoteToolGateUnanswered(run, toolCallId);
+      return persisted && isToolGateUnanswered(run, toolCallId);
     };
 
     const handleEvent = async (event: Parameters<EventCallback>[0]) => {
@@ -3032,7 +3047,6 @@ export class AgentThreadStreamRuntime {
         return;
       }
       if (data.type === 'stream-part') {
-        toolGates.registerGate(data.runId, data.streamId, data.part);
         if (
           data.sourceId === this.#id &&
           (localStreamIds.has(data.streamId) || !replayedStreamIds.has(data.streamId))
@@ -3163,15 +3177,17 @@ export class AgentThreadStreamRuntime {
             discardDeferredRun(eventStreamId);
           }
         }
+        const currentRecord = state.threadRunsById.get(data.runId);
+        const canUpdateSuspension = !currentRecord || !data.streamId || currentRecord.streamId === data.streamId;
         if (data.type === 'run-suspended') {
-          state.suspendedRunIds.add(data.runId);
-          const record = state.threadRunsByStreamId.get(eventStreamId) ?? state.threadRunsById.get(data.runId);
+          if (canUpdateSuspension) state.suspendedRunIds.add(data.runId);
+          const record = data.streamId ? state.threadRunsByStreamId.get(data.streamId) : currentRecord;
           if (record) record.lifecycle = 'suspended';
         } else {
           toolGates.finishRun(data.runId, data.streamId);
           clearActiveIfCurrent(data.runId, data.streamId);
         }
-        if (data.type !== 'run-suspended') {
+        if (data.type !== 'run-suspended' && canUpdateSuspension) {
           this.#clearSuspendedRun(state, data.runId);
         }
         const remoteRun = remoteRuns.get(eventStreamId);
