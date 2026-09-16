@@ -216,4 +216,69 @@ describe('skillResultFilter', () => {
     expect(result?.messages).toHaveLength(1);
     expect(resultOf(result!.messages[0]!.content.parts[0]!)).not.toContain('secret');
   });
+
+  it('redacts the legacy toolInvocations array alongside parts', async () => {
+    // `AIV5Adapter` falls back to `content.toolInvocations` when `parts` holds
+    // no tool invocation, so a redacted result would otherwise be resurrected
+    // from that array downstream.
+    const message = createMessage([skillResult('skill', 'SECRET_SKILL_INSTRUCTIONS')]);
+    message.content.toolInvocations = [
+      {
+        state: 'result',
+        toolCallId: 'skill',
+        toolName: 'skill',
+        args: { name: 'skill' },
+        result: 'SECRET_SKILL_INSTRUCTIONS',
+      },
+    ] as MastraMessageContentV2['toolInvocations'];
+
+    const filtered = skillResultFilter()({ messages: [message] })?.messages ?? [message];
+
+    expect(filtered[0]!.content.toolInvocations).toEqual([
+      expect.objectContaining({ toolName: 'skill', result: '[tool result omitted]' }),
+    ]);
+    expect(JSON.stringify(filtered[0]!.content)).not.toContain('SECRET_SKILL_INSTRUCTIONS');
+    // The stored message keeps the full result.
+    expect(JSON.stringify(message.content)).toContain('SECRET_SKILL_INSTRUCTIONS');
+  });
+
+  it('redacts a legacy-only message that has no parts', async () => {
+    const message: MastraDBMessage = {
+      id: 'legacy-1',
+      role: 'assistant',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      content: {
+        format: 2,
+        parts: [],
+        toolInvocations: [
+          {
+            state: 'result',
+            toolCallId: 'skill',
+            toolName: 'skill',
+            args: { name: 'skill' },
+            result: 'SECRET_SKILL_INSTRUCTIONS',
+          },
+        ],
+      } as MastraMessageContentV2,
+    };
+
+    const filtered = skillResultFilter()({ messages: [message] })?.messages;
+
+    expect(filtered).toBeDefined();
+    expect(JSON.stringify(filtered![0]!.content)).not.toContain('SECRET_SKILL_INSTRUCTIONS');
+    expect(filtered![0]!.content.toolInvocations![0]).toMatchObject({ result: '[tool result omitted]' });
+  });
+
+  it('leaves a message with no matching legacy entries untouched by reference', () => {
+    const message = createMessage([skillResult('skill', 'secret')]);
+    message.content.toolInvocations = [
+      { state: 'result', toolCallId: 'other', toolName: 'other', args: {}, result: 'keep me' },
+    ] as MastraMessageContentV2['toolInvocations'];
+
+    const filtered = skillResultFilter()({ messages: [message] })?.messages ?? [message];
+
+    // Untouched legacy array keeps its identity; the redaction only rebuilt parts.
+    expect(filtered[0]!.content.toolInvocations).toBe(message.content.toolInvocations);
+    expect(JSON.stringify(filtered[0]!.content.toolInvocations)).toContain('keep me');
+  });
 });

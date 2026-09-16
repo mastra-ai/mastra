@@ -8,6 +8,9 @@ type ToolInvocationPart = Extract<MessagePart, { type: 'tool-invocation' }>;
 
 type BeforeObservationHook = NonNullable<ObserveTransformHooks['beforeObservation']>;
 
+type ToolInvocations = NonNullable<MastraDBMessage['content']['toolInvocations']>;
+type StoredToolInvocation = ToolInvocations[number];
+
 /**
  * Tool ids of the built-in Agent Skills tools created by `createSkillTools()`
  * in `@mastra/core` (`packages/core/src/workspace/skills/tools.ts`).
@@ -53,6 +56,37 @@ function hasStoredModelOutput(part: MessagePart): boolean {
   if (part?.type !== 'tool-invocation') return false;
   const mastra = part.providerMetadata?.mastra;
   return !!mastra && typeof mastra === 'object' && 'modelOutput' in mastra;
+}
+
+/**
+ * Legacy messages carry tool calls in a second `toolInvocations` array, which
+ * `AIV5Adapter` falls back to when `parts` holds no tool invocation
+ * (`AIV5Adapter.ts:264`). Leave it alone and a redacted result can be
+ * resurrected from that array downstream. Only rewritten when it actually
+ * holds a matching result, so non-legacy messages keep their array by
+ * reference.
+ */
+function redactLegacyToolInvocations(
+  toolInvocations: ToolInvocations | undefined,
+  toolNames: Set<string>,
+): { toolInvocations: ToolInvocations | undefined; changed: boolean } {
+  if (!Array.isArray(toolInvocations)) return { toolInvocations, changed: false };
+
+  let changed = false;
+  const next: ToolInvocations = toolInvocations.map(invocation => {
+    if (
+      invocation?.state !== 'result' ||
+      typeof invocation.toolName !== 'string' ||
+      !toolNames.has(invocation.toolName) ||
+      invocation.result === undefined
+    ) {
+      return invocation;
+    }
+    changed = true;
+    return { ...invocation, result: REDACTED_TOOL_RESULT } as StoredToolInvocation;
+  });
+
+  return changed ? { toolInvocations: next, changed: true } : { toolInvocations, changed: false };
 }
 
 /**
@@ -127,19 +161,30 @@ export function skillResultFilter(options?: SkillResultFilterOptions): ObserverM
 
     const filtered = messages.map(message => {
       const parts = message.content?.parts;
-      if (!Array.isArray(parts)) return message;
 
       let messageChanged = false;
-      const nextParts = parts.map(part => {
-        if (!isRedactableToolResult(part, toolNames)) return part;
-        messageChanged = true;
-        return redactToolResult(part);
-      });
+
+      // Legacy-only messages carry no `parts` at all, so this runs before the
+      // parts check rather than being skipped by it.
+      const legacy = redactLegacyToolInvocations(message.content?.toolInvocations, toolNames);
+      if (legacy.changed) messageChanged = true;
+
+      let nextParts = parts;
+      if (Array.isArray(parts)) {
+        nextParts = parts.map(part => {
+          if (!isRedactableToolResult(part, toolNames)) return part;
+          messageChanged = true;
+          return redactToolResult(part);
+        });
+      }
 
       if (!messageChanged) return message;
 
       changed = true;
-      return { ...message, content: { ...message.content, parts: nextParts } };
+      return {
+        ...message,
+        content: { ...message.content, parts: nextParts, toolInvocations: legacy.toolInvocations },
+      };
     });
 
     // `undefined` means "pass through unchanged", so leave untouched payloads alone.
