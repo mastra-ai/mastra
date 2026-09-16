@@ -199,7 +199,7 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
 
 A plugin that boots another controller in the same process must borrow the host's storage instead of opening the same database files with its own native SQLite library.
 
-### `context.getSharedStorage()`
+### `context.getStorage()`
 
 The optional accessor on `MastraCodePluginContext` returns the host's `storage` (`MastraCompositeStore`), `storageBackend` (`'libsql' | 'pg'`), and optional `vector` (`MastraVector`). Call it when the tool runs, then pass the returned object to `bootLocalAgentController()`:
 
@@ -208,7 +208,7 @@ import { bootLocalAgentController } from '@mastra/code-sdk'
 import type { MastraCodePluginContext } from '@mastra/code-sdk/plugin'
 
 async function bootNestedController(context: MastraCodePluginContext) {
-  const sharedStorage = context.getSharedStorage?.()
+  const sharedStorage = context.getStorage?.()
   if (!sharedStorage) {
     throw new Error('This plugin requires host-provided shared storage.')
   }

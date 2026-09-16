@@ -134,7 +134,7 @@ export type MastraCodePluginRuntime = {
    * these instances or run storage maintenance on them; the host owns their lifetime.
    * Opening the same SQLite files with a plugin-local native library is unsafe.
    */
-  getSharedStorage?: () => {
+  getStorage?: () => {
     storage: MastraCompositeStore;
     storageBackend: 'libsql' | 'pg';
     vector?: MastraVector;

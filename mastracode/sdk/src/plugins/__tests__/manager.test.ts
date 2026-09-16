@@ -180,7 +180,7 @@ describe('PluginManager', () => {
         tools: context => ({
           runtime_tool: {
             tool: { id: 'runtime_tool', description: context.getController?.()?.id ?? 'no-controller',
-              execute: () => context.getSharedStorage?.() }
+              execute: () => context.getStorage?.() }
           }
         })
       };`,
@@ -194,7 +194,7 @@ describe('PluginManager', () => {
     const manager = new PluginManager({
       projectRoot,
       homeDir,
-      runtime: { getController: () => controller as never, getSharedStorage: () => sharedStorage },
+      runtime: { getController: () => controller as never, getStorage: () => sharedStorage },
     });
 
     await manager.installLocal(pluginDir, 'project');
