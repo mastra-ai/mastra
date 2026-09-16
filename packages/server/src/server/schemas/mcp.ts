@@ -102,6 +102,8 @@ export const resourceContentSchema = z.object({
   uri: z.string(),
   text: z.string().optional(),
   blob: z.string().optional(),
+  mimeType: z.string().optional(),
+  _meta: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const readResourceResponseSchema = z.object({
