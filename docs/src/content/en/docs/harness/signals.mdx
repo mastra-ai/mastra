@@ -120,7 +120,7 @@ const { cancelledSignalIds } = agent.cancelQueuedMessages({
 console.log(cancelledSignalIds)
 ```
 
-Only IDs removed by this call appear in `cancelledSignalIds`. Input already handed to execution or another owner can't be cancelled this way. Cancellation doesn't delete saved messages, notification records, or state updates. It doesn't revoke an earlier acceptance acknowledgement.
+Only IDs removed locally by this call appear in `cancelledSignalIds`. Mastra publishes those IDs through PubSub so other processes subscribed to the thread can cancel matching pending copies, but this asynchronous propagation doesn't confirm remote cancellation. IDs missing locally aren't published, and input already handed to execution can't be cancelled this way. Cancellation doesn't delete saved messages, notification records, or state updates. It doesn't revoke an earlier acceptance acknowledgement.
 
 ### Stop the run and clear pending input
 
@@ -132,7 +132,7 @@ subscription.abort({ clearPendingSignals: true })
 
 Without a subscription, use `agent.abortThreadStream({ ...thread, clearPendingSignals: true })`. Existing listeners stay subscribed after cancellation, and later messages can still start a new run.
 
-Selected-ID cancellation only affects the current process. Clear-on-abort also sends the clear flag to a remote active owner through PubSub, but it doesn't clear every process's local queues. Neither operation cancels continuations created by `continueWithMessages()`.
+Cross-process cancellation requires a shared PubSub backend. Clear-on-abort sends the clear flag to a remote active owner through PubSub, but it doesn't clear every process's local queues. Neither operation cancels continuations created by `continueWithMessages()`.
 
 ## Signal context
 

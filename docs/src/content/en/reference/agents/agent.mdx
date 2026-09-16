@@ -404,9 +404,9 @@ const { cancelledSignalIds } = agent.cancelQueuedMessages({
 ]}
 />
 
-Returns `{ cancelledSignalIds: string[] }`, containing each ID actually cancelled by this call once. An empty array means none of the selected signals were still pending locally. A signal waiting to acquire or transfer its lease remains cancellable. Once execution or forwarding starts, cancellation no longer applies.
+Returns `{ cancelledSignalIds: string[] }`, containing each ID actually cancelled by this call once. An empty array means none of the selected signals were still pending locally. A signal waiting to acquire or transfer its lease remains cancellable. Once execution or forwarding starts, the local copy is no longer cancellable.
 
-Cancellation is local to this runtime and PubSub instance, with no requests sent to remote owners. It leaves continuations from `continueWithMessages()`, saved messages, state updates, and notification records unchanged. Accepted acknowledgements remain settled.
+For `signalIds`, Mastra publishes locally cancelled IDs through PubSub. Other processes subscribed to the thread cancel matching pending copies, including signals waiting on a lease. Propagation is best-effort and asynchronous, without remote acknowledgements. IDs not found locally aren't published, so send the request to a process holding a pending copy. Owner-group cancellation remains local to the calling Agent. It leaves continuations from `continueWithMessages()`, saved messages, state updates, and notification records unchanged. Accepted acknowledgements remain settled.
 
 ### `sendSignal(signal, options)`
 

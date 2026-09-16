@@ -2256,7 +2256,7 @@ export const CANCEL_AGENT_PENDING_SIGNALS_ROUTE = createRoute({
   bodySchema: cancelPendingAgentSignalsBodySchema,
   responseSchema: cancelPendingAgentSignalsResponseSchema,
   summary: 'Cancel pending thread signals',
-  description: 'Cancels selected process-local pending signals across Agents sharing the memory thread',
+  description: 'Cancels selected pending thread signals and propagates locally cancelled IDs through PubSub',
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agents:execute',

@@ -25,4 +25,4 @@ agent.abortThreadStream({ ...thread, clearPendingSignals: true });
 agent.abortThreadStream(thread);
 ```
 
-Selected-ID cancellation is process-local. Clear-on-abort forwards the clear flag to the active owner, but doesn't clear every process's queues. Neither operation cancels `continueWithMessages()` continuations or undoes persisted effects.
+Selected-ID cancellation publishes locally cancelled IDs through PubSub so other processes subscribed to the thread can remove matching pending copies. Propagation is asynchronous and best-effort. The result reports only local cancellations, without remote acknowledgements. IDs missing locally aren't published. Clear-on-abort forwards the clear flag to the active owner, but doesn't clear every process's queues. Neither operation cancels `continueWithMessages()` continuations or undoes persisted effects.

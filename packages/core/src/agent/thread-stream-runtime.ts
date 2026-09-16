@@ -294,6 +294,7 @@ type AgentThreadStreamRuntimeEvent =
   | { type: 'run-suspended'; runId: string; streamId?: string }
   | { type: 'run-discarded'; runId: string; streamId: string }
   | { type: 'run-abort-requested'; runId: string; streamId: string; clearPendingSignals?: boolean }
+  | { type: 'signals-cancelled'; signalIds: string[] }
   | { type: 'run-aborted'; runId: string; streamId?: string }
   | { type: 'run-failed'; runId: string; streamId?: string; error: string }
   | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string; preRun?: boolean }
@@ -1067,7 +1068,8 @@ export class AgentThreadStreamRuntime {
     const topic = this.#threadTopic(key);
     await resolvedPubSub.publish(topic, {
       type: event.type,
-      runId: event.runId,
+      // Thread-scoped control events use the thread key as their envelope correlation ID.
+      runId: 'runId' in event ? event.runId : key,
       data: event,
     });
   }
@@ -3095,6 +3097,11 @@ export class AgentThreadStreamRuntime {
         signalsByThread.set(key, queue);
         return;
       }
+      if (data.type === 'signals-cancelled') {
+        this.#cancelPendingSignals(state, key, new Set(data.signalIds));
+        this.#notifyThreadEvents(state);
+        return;
+      }
       if (data.type === 'run-abort-requested') {
         if (
           state.preparedRunsById.has(data.runId) &&
@@ -3400,7 +3407,10 @@ export class AgentThreadStreamRuntime {
     }
     if (hasSignalIds) {
       const result = this.#cancelPendingSignals(state, key, new Set(target.signalIds));
-      if (result.cancelledSignalIds.length) this.#notifyThreadEvents(state);
+      if (result.cancelledSignalIds.length) {
+        this.#publish(pubsub, key, { type: 'signals-cancelled', signalIds: [...result.cancelledSignalIds] });
+        this.#notifyThreadEvents(state);
+      }
       return result;
     }
     const matches = (pending: PendingIdleSignal<any>) =>

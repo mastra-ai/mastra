@@ -972,7 +972,7 @@ export class Agent extends BaseResource {
     });
   }
 
-  /** @experimental Cancels process-local pending signals across Agents sharing the thread. */
+  /** @experimental Cancels pending thread signals and propagates locally cancelled IDs through shared PubSub. */
   cancelQueuedMessages(params: CancelQueuedAgentMessagesParams): Promise<CancelQueuedAgentMessagesResponse> {
     const { resourceId, threadId, signalIds } = params;
     return this.request<CancelQueuedAgentMessagesResponse>(`/agents/${this.agentId}/threads/signals/cancel`, {
