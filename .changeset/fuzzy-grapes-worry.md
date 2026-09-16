@@ -1,10 +1,5 @@
 ---
 '@mastra/server': minor
-'@mastra/client-js': patch
-'@mastra/memory': patch
-'@mastra/core': patch
-'mastra': patch
-'@mastra/mysql': patch
 ---
 
 Added authenticated HTTP APIs for creating and inspecting shared-history conversation branches.
