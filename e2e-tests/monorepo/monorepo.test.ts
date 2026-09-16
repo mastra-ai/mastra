@@ -243,6 +243,37 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         ['calculatorTool', 'lodashTool', 'hello-world', 'generate-password', 'compare-password'].sort(),
       );
     });
+
+    it('should list a registered MCP server and execute its tool', async () => {
+      const listRes = await fetch(`http://localhost:${port}/api/mcp/v0/servers`);
+      const list = await listRes.json();
+      expect(listRes.status).toBe(200);
+      expect(list.servers.map((server: { id: string }) => server.id)).toContain('calculator');
+
+      const toolsRes = await fetch(`http://localhost:${port}/api/mcp/calculator/tools`);
+      const tools = await toolsRes.json();
+      expect(toolsRes.status).toBe(200);
+      expect(tools.tools.map((tool: { id: string }) => tool.id)).toEqual(['calculatorTool']);
+
+      const execRes = await fetch(`http://localhost:${port}/api/mcp/calculator/tools/calculatorTool/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: { a: 2, b: 3 } }),
+      });
+      const executed = await execRes.json();
+      expect(execRes.status).toBe(200);
+      expect(executed).toEqual({ result: 5 });
+    });
+
+    it('should answer invalid MCP tool input with 400', async () => {
+      const res = await fetch(`http://localhost:${port}/api/mcp/calculator/tools/calculatorTool/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: { a: 'two', b: 3 } }),
+      });
+      const body = await res.json();
+      expect({ status: res.status, body }).toEqual({ status: 400, body: { error: expect.stringContaining('calculatorTool') } });
+    });
   }
 
   describe.sequential('dev', async () => {

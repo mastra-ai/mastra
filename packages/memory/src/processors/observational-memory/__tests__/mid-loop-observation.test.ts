@@ -427,6 +427,12 @@ describe('Mid-Loop Observation', () => {
         );
         messageList.add(msg, 'memory');
       }
+      const activeRequest = createTestMessage(
+        'Revise the plan using these validation requirements',
+        'user',
+        'active-request',
+      );
+      messageList.add(activeRequest, 'input');
 
       await processorWithBuffering.processInputStep({
         messageList,
@@ -493,6 +499,7 @@ describe('Mid-Loop Observation', () => {
       expect(recordAfterStep1?.activeObservations).toBeTruthy();
       expect(recordAfterStep1?.activeObservations).toContain('*');
       expect(recordAfterStep1?.lastObservedAt).toBeDefined();
+      expect(messageList.get.all.db().some(message => message.id === activeRequest.id)).toBe(true);
 
       // Note: We don't assert that buffered chunks are empty because new buffering
       // can legitimately trigger during the same step for unbuffered messages.

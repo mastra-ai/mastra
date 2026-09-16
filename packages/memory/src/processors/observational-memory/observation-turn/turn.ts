@@ -97,6 +97,7 @@ export class ObservationTurn {
     this.threadId = opts.threadId;
     this.resourceId = opts.resourceId;
     this.messageList = opts.messageList;
+    this.inFlightInputMessageIds = new Set(opts.messageList.get.input.db().map(message => message.id));
     this.agent = opts.agent;
     this.sendSignal = opts.sendSignal;
     this.sendStateSignal = opts.sendStateSignal;
@@ -109,6 +110,8 @@ export class ObservationTurn {
   readonly threadId: string;
   readonly resourceId: string | undefined;
   readonly messageList: MessageList;
+  /** Input messages that started this turn must remain live until the actor responds. */
+  readonly inFlightInputMessageIds: ReadonlySet<string>;
 
   /** The current cached record. Refreshed after mutations (activate/observe/reflect). */
   get record(): ObservationalMemoryRecord {

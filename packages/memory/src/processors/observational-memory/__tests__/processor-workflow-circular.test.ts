@@ -223,7 +223,7 @@ describe('ObservationTurn/ObservationStep serialization contract', () => {
       om: { scope: 'thread' } as any,
       threadId: 'thread-1',
       resourceId: 'resource-1',
-      messageList: {} as any,
+      messageList: { get: { input: { db: () => [] } } } as any,
     });
     // Reproduce the real cycle: turn._currentStep -> step.turn -> turn.
     const step = new ObservationStep(turn, 2);
