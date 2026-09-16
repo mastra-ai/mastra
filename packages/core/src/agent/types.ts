@@ -186,6 +186,12 @@ export type AgentClaimThreadPeerOptions = {
   metadata?: Record<string, unknown>;
 };
 
+export type AgentUpdateThreadPeerOptions = {
+  label?: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+};
+
 export type AgentThreadPeerAdvertisement = AgentThreadPeerInfo & {
   sourceId: string;
   discoveredAt: Date;

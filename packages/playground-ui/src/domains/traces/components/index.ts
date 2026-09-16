@@ -1,7 +1,6 @@
 export { formatHierarchicalSpans } from './format-hierarchical-spans';
 export { getSpanTypeUi, spanTypePrefixes } from './shared';
 export { SpanTokenUsage, type TokenUsage } from './span-token-usage';
-export { TimelineExpandCol } from './timeline-expand-col';
 export { TimelineNameCol } from './timeline-name-col';
 export { TimelineStructureSign } from './timeline-structure-sign';
 export { TimelineTimingCol } from './timeline-timing-col';
@@ -10,8 +9,7 @@ export { TraceTimelineSpan } from './trace-timeline-span';
 export { TraceTimeline } from './trace-timeline';
 export { SpanRows, type SpanRowsProps, type SpanRowContext, type SpanRowExpansion } from './span-rows';
 export { SpanTreeRow, type SpanTreeRowProps } from './span-tree-row';
-export { SpanTimelineCol, type SpanTimelineColProps } from './span-timeline-col';
-export { SpanDurationCol } from './span-duration-col';
+export { SpanTimelineRow, type SpanTimelineRowProps } from './span-timeline-row';
 export { SpanTimingHoverCard } from './span-timing-hover-card';
 export { SpanTypeLegend } from './span-type-legend';
 export { TraceSpanTree, type TraceSpanTreeProps } from './trace-span-tree';

@@ -22,6 +22,7 @@ import { emptyHistory, liveChunks, staleHistory } from './fixtures/thread-recove
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import {
   emptyThreadTracesList,
+  queryPageFromList,
   threadTracesList,
   traceASpans,
   traceBSpans,
@@ -809,6 +810,9 @@ describe('Standalone thread page', () => {
   describe('with ?variant=advanced', () => {
     const installTraceHandlers = () => {
       server.use(
+        http.post(`${BASE_URL}/api/observability/traces/query`, () =>
+          HttpResponse.json(queryPageFromList(threadTracesList)),
+        ),
         http.get(`${BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(threadTracesList)),
         http.get(`${BASE_URL}/api/observability/traces`, () => HttpResponse.json(threadTracesList)),
         http.get(`${BASE_URL}/api/observability/traces/:traceId`, ({ params }) =>

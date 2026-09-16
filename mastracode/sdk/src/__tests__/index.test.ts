@@ -73,6 +73,8 @@ function resolveOutputProcessors(): Array<{ id?: string }> {
 const controllerConstructorMock = vi.fn();
 const controllerOnSessionCreatedMock = vi.fn();
 const controllerOnSessionDeletedMock = vi.fn();
+const claimThreadOwnershipMock = vi.fn();
+const updateThreadPeerAdvertisementMock = vi.fn();
 const loadSettingsMock = vi.fn();
 const getAvailableModePacksMock = vi.fn(() => []);
 const getAvailableOmPacksMock = vi.fn(() => []);
@@ -171,6 +173,12 @@ vi.mock('@mastra/core/agent-controller', () => ({
     async init() {}
     getMastra() {
       return mastraStub;
+    }
+    getCurrentAgent() {
+      return {
+        claimThreadOwnership: claimThreadOwnershipMock,
+        updateThreadPeerAdvertisement: updateThreadPeerAdvertisementMock,
+      };
     }
     onSessionCreated(listener: unknown, options?: unknown) {
       controllerOnSessionCreatedMock(listener, options);
@@ -475,6 +483,10 @@ describe('createMastraCode', () => {
     controllerConstructorMock.mockReset();
     controllerOnSessionCreatedMock.mockReset();
     controllerOnSessionDeletedMock.mockReset();
+    claimThreadOwnershipMock.mockReset();
+    claimThreadOwnershipMock.mockResolvedValue({ claimed: true, unsubscribe: vi.fn() });
+    updateThreadPeerAdvertisementMock.mockReset();
+    updateThreadPeerAdvertisementMock.mockReturnValue(true);
     streamErrorRetryProcessorConstructorMock.mockReset();
     getAvailableModePacksMock.mockClear();
     getAvailableOmPacksMock.mockClear();
@@ -784,7 +796,8 @@ describe('createMastraCode', () => {
       getPluginSignalProviders: vi.fn(() => []),
     };
 
-    await createMastraCode({ pluginManager: pluginManager as any });
+    createStorageMock.mockReturnValue({ storage: {}, backend: 'pg' });
+    const built = await createMastraCode({ pluginManager: pluginManager as any });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
       | { modes?: Array<{ id: string; availableTools?: string[] }>; initialState?: Record<string, unknown> }
@@ -792,6 +805,10 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.modes?.find(mode => mode.id === 'plan')?.availableTools).toContain('plugin_tool');
     expect(agentControllerConfig?.modes?.find(mode => mode.id === 'fast')?.availableTools).toContain('plugin_tool');
     expect(agentControllerConfig?.initialState?.pluginInstructions).toEqual(['Use plugin policy.']);
+    const shared = pluginManager.setRuntime.mock.calls[0]?.[0].getStorage();
+    expect(shared.storage).toBe(built.storage);
+    expect(shared.vector).toBe(createVectorStoreMock.mock.results[0]?.value);
+    expect(shared.storageBackend).toBe('pg');
   });
 
   it('registers the built-in state signal providers on the code agent', async () => {
@@ -820,6 +837,105 @@ describe('createMastraCode', () => {
     ]);
     expect(controllerOnSessionCreatedMock).toHaveBeenCalledWith(expect.any(Function), { blocking: true });
     expect(controllerOnSessionDeletedMock).toHaveBeenCalledWith(expect.any(Function));
+  });
+
+  it('refreshes peer advertisements when observational memory updates a thread title', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ crossAgentSignals: true });
+
+    const onSessionCreated = controllerOnSessionCreatedMock.mock.calls.find(call => call[1]?.blocking)?.[0] as
+      | ((session: any) => Promise<void>)
+      | undefined;
+    expect(onSessionCreated).toBeDefined();
+
+    let handleSessionEvent: ((event: any) => void) | undefined;
+    await onSessionCreated!({
+      subscribe: (handler: (event: any) => void) => {
+        handleSessionEvent = handler;
+        return vi.fn();
+      },
+      identity: { getResourceId: () => 'project-resource' },
+      thread: { getId: () => null },
+    });
+
+    handleSessionEvent!({
+      type: 'om_thread_title_updated',
+      cycleId: 'cycle-1',
+      threadId: 'thread-1',
+      newTitle: 'Observational memory title',
+    });
+
+    expect(updateThreadPeerAdvertisementMock).toHaveBeenCalledWith({
+      resourceId: 'project-resource',
+      threadId: 'thread-1',
+      peer: { title: 'Observational memory title' },
+    });
+  });
+
+  it('re-applies only title updates that arrive during the current ownership claim', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ crossAgentSignals: true });
+
+    const onSessionCreated = controllerOnSessionCreatedMock.mock.calls.find(call => call[1]?.blocking)?.[0] as
+      | ((session: any) => Promise<void>)
+      | undefined;
+    expect(onSessionCreated).toBeDefined();
+
+    let resolveClaim!: (claim: { claimed: boolean; unsubscribe: () => void }) => void;
+    claimThreadOwnershipMock.mockReturnValueOnce(
+      new Promise(resolve => {
+        resolveClaim = resolve;
+      }),
+    );
+    updateThreadPeerAdvertisementMock.mockReturnValueOnce(false).mockReturnValue(true);
+
+    let handleSessionEvent: ((event: any) => void) | undefined;
+    await onSessionCreated!({
+      subscribe: (handler: (event: any) => void) => {
+        handleSessionEvent = handler;
+        return vi.fn();
+      },
+      identity: { getResourceId: () => 'project-resource' },
+      machinery: { buildStreamOptions: vi.fn(async () => ({})) },
+      thread: {
+        getId: () => null,
+        getById: vi
+          .fn()
+          .mockResolvedValueOnce({ id: 'thread-1', title: 'Original title' })
+          .mockResolvedValue({ id: 'thread-1', title: 'Fresh title from storage' }),
+      },
+    });
+
+    handleSessionEvent!({ type: 'thread_created', thread: { id: 'thread-1' } });
+    await vi.waitFor(() => expect(claimThreadOwnershipMock).toHaveBeenCalledOnce());
+
+    handleSessionEvent!({ type: 'thread_title_updated', threadId: 'thread-1', title: 'Renamed during claim' });
+    expect(updateThreadPeerAdvertisementMock).toHaveBeenLastCalledWith({
+      resourceId: 'project-resource',
+      threadId: 'thread-1',
+      peer: { title: 'Renamed during claim' },
+    });
+
+    resolveClaim({ claimed: true, unsubscribe: vi.fn() });
+    await vi.waitFor(() => expect(updateThreadPeerAdvertisementMock).toHaveBeenCalledTimes(2));
+    expect(updateThreadPeerAdvertisementMock).toHaveBeenLastCalledWith({
+      resourceId: 'project-resource',
+      threadId: 'thread-1',
+      peer: { title: 'Renamed during claim' },
+    });
+
+    handleSessionEvent!({ type: 'thread_changed', threadId: 'thread-1' });
+    await vi.waitFor(() => expect(claimThreadOwnershipMock).toHaveBeenCalledTimes(2));
+    expect(claimThreadOwnershipMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        threadId: 'thread-1',
+        peer: expect.objectContaining({ title: 'Fresh title from storage' }),
+      }),
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(updateThreadPeerAdvertisementMock).toHaveBeenCalledTimes(2);
   });
 
   it('omits cross-agent signals unless experimental cross-agent communication is enabled', async () => {

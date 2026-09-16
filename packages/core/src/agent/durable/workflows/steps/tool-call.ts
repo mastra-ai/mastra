@@ -20,6 +20,7 @@ import { stopGoalActivity } from '../../../goal';
 import type { MessageList } from '../../../message-list';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
+import { resolveSuspendedToolRunId } from '../../../utils';
 import { DurableStepIds } from '../../constants';
 import { globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
@@ -824,6 +825,17 @@ export function createDurableToolCallStep() {
         cleanedArgs.resourceId = state?.resourceId;
       }
 
+      // The model authors the optional `suspendedToolRunId` arg, and some models emit
+      // sentinel strings like "null" for it. Drop sentinels so the back-fill below can
+      // restore the framework-persisted id from the suspend payload (#23739). The
+      // suspendData-side value is framework-written and stays unfiltered.
+      const resolvedArgsSuspendedToolRunId = resolveSuspendedToolRunId(cleanedArgs.suspendedToolRunId);
+      if (resolvedArgsSuspendedToolRunId === undefined) {
+        delete cleanedArgs.suspendedToolRunId;
+      } else {
+        cleanedArgs.suspendedToolRunId = resolvedArgsSuspendedToolRunId;
+      }
+
       // When resuming a delegated sub-agent/workflow tool, recover the inner
       // suspended run id from this tool call's workflow suspend payload. The
       // payload is partitioned by resumeLabel, so parallel calls to the same
@@ -899,6 +911,14 @@ export function createDurableToolCallStep() {
         // Delegated approval decisions must also flow to the wrapper tool: it only
         // resumes the inner suspended run when resumeData is present.
         resumeData: isResumingFromSuspension || isDelegatedApprovalResume ? resumeData : undefined,
+        // The payload this tool call suspended with (see `toolCallSuspended` below), so a
+        // resumed tool can continue from its own state — mirrors the non-durable step.
+        ...(isResumingFromSuspension &&
+        suspendData != null &&
+        typeof suspendData === 'object' &&
+        'toolCallSuspended' in suspendData
+          ? { suspendPayload: (suspendData as { toolCallSuspended?: unknown }).toolCallSuspended }
+          : {}),
         ...(toolAbortSignal ? { abortSignal: toolAbortSignal } : {}),
         // Provide outputWriter so context.writer.write() / context.writer.custom()
         // emit chunks through pubsub (matching the regular agent's tool streaming).

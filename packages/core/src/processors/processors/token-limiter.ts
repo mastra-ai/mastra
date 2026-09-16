@@ -1,10 +1,11 @@
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
-import { estimateTokenCount, sliceByTokens } from 'tokenx';
+import { estimateTokenCount } from 'tokenx';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { parseDataUri, resolveFilePartMediaTypeAndData } from '../../agent/message-list/prompt/image-utils';
 import { TripWire } from '../../agent/trip-wire';
 import { groupLinkedToolMessages } from '../../memory/load-message-history';
 import type { ChunkType } from '../../stream';
+import { sliceByTokensSafe } from '../../utils/slice-by-tokens';
 import type { ProcessInputArgs, ProcessInputStepArgs, ProcessOutputStreamArgs, Processor } from '../index';
 
 /**
@@ -516,7 +517,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
             } else {
               // Truncate the text to fit within the remaining token limit
               const remainingTokens = Math.max(0, limit - cumulativeTokens);
-              const truncatedText = remainingTokens > 0 ? sliceByTokens(textContent, 0, remainingTokens) : '';
+              const truncatedText = remainingTokens > 0 ? sliceByTokensSafe(textContent, 0, remainingTokens) : '';
               cumulativeTokens += this.countTokens(truncatedText);
 
               return {
