@@ -2589,40 +2589,37 @@ export class MemoryMySQL extends MemoryStorage {
     const conditions = [`${omCol('archive')} IS NOT NULL`, `${omCol('resourceId')} = ?`];
     const params: any[] = [input.resourceId];
     const projectedThreadId = input.scope === 'thread' ? input.threadId : input.filterThreadId;
-    if (input.scope === 'thread') {
-      conditions.push(
-        `(${omCol('scope')} = 'resource' OR (${omCol('scope')} = 'thread' AND ${omCol('threadId')} = ?))`,
-      );
-      params.push(input.threadId!);
-    }
     const groupConditions: string[] = [];
-    if (projectedThreadId) {
-      groupConditions.push(
-        `(${omCol('scope')} = 'thread' AND ${omCol('threadId')} = ? OR ${omCol('scope')} = 'resource' AND group_row.sourceThreadId = ?)`,
-      );
-      params.push(projectedThreadId, projectedThreadId);
-    }
+    const groupParams: any[] = [];
     if (input.from) {
       groupConditions.push('group_row.observedTo >= ?');
-      params.push(input.from.toISOString());
+      groupParams.push(input.from.toISOString());
     }
     if (input.to) {
       groupConditions.push('group_row.observedFrom <= ?');
-      params.push(input.to.toISOString());
+      groupParams.push(input.to.toISOString());
     }
     if (input.text) {
       groupConditions.push('LOCATE(?, group_row.searchText) > 0');
-      params.push(normalizeArchiveSearchText(input.text));
+      groupParams.push(normalizeArchiveSearchText(input.text));
     }
-    if (groupConditions.length > 0) {
-      conditions.push(`EXISTS (
-        SELECT 1 FROM JSON_TABLE(${omCol('archive')}, '$.groups[*]' COLUMNS(
-          sourceThreadId VARCHAR(255) PATH '$.sourceThreadId' NULL ON EMPTY,
-          searchText TEXT PATH '$.searchText' NULL ON EMPTY,
-          observedFrom VARCHAR(40) PATH '$.observedAt.from' NULL ON EMPTY,
-          observedTo VARCHAR(40) PATH '$.observedAt.to' NULL ON EMPTY
-        )) AS group_row WHERE ${groupConditions.join(' AND ')}
+    const groupExists = (extraCondition?: string) => `EXISTS (
+      SELECT 1 FROM JSON_TABLE(${omCol('archive')}, '$.groups[*]' COLUMNS(
+        sourceThreadId VARCHAR(255) PATH '$.sourceThreadId' NULL ON EMPTY,
+        searchText TEXT PATH '$.searchText' NULL ON EMPTY,
+        observedFrom VARCHAR(40) PATH '$.observedAt.from' NULL ON EMPTY,
+        observedTo VARCHAR(40) PATH '$.observedAt.to' NULL ON EMPTY
+      )) AS group_row WHERE ${[extraCondition, ...groupConditions].filter(Boolean).join(' AND ') || '1 = 1'}
+    )`;
+    if (projectedThreadId) {
+      conditions.push(`(
+        (${omCol('scope')} = 'thread' AND ${omCol('threadId')} = ? AND ${groupExists()}) OR
+        (${omCol('scope')} = 'resource' AND ${groupExists('group_row.sourceThreadId = ?')})
       )`);
+      params.push(projectedThreadId, ...groupParams, projectedThreadId, ...groupParams);
+    } else if (groupConditions.length > 0) {
+      conditions.push(groupExists());
+      params.push(...groupParams);
     }
     if (input.cursor) {
       const cursor = this.decodeObservationArchiveCursor(input.cursor);
