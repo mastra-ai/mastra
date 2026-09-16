@@ -72,11 +72,29 @@ export type ThreadOMMetadata = {
  * Stored on thread.metadata.mastra
  */
 export type ThreadMastraMetadata = {
+  /** Preserve a manually chosen title instead of replacing it with an observer-generated title. */
+  titlePinned?: boolean;
   om?: ThreadOMMetadata;
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Whether the thread title has been explicitly pinned. Older threads default to unpinned. */
+export function isThreadTitlePinned(threadMetadata?: Record<string, unknown>): boolean {
+  const mastra = threadMetadata?.mastra;
+  return isPlainObject(mastra) && mastra.titlePinned === true;
+}
+
+/** Set the title pin without mutating or discarding other thread metadata. */
+export function setThreadTitlePinned(
+  threadMetadata: Record<string, unknown> | undefined,
+  pinned: boolean,
+): Record<string, unknown> {
+  const existing = threadMetadata ?? {};
+  const existingMastra = isPlainObject(existing.mastra) ? existing.mastra : {};
+  return { ...existing, mastra: { ...existingMastra, titlePinned: pinned } };
 }
 
 /**
