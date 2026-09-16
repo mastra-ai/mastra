@@ -79,6 +79,8 @@ Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes
 
 `/models` also configures **fallback packs**: select a pack and choose **Set fallback…** from its action menu. When every account serving the active pack's provider is unavailable, either rate-limited or down after retries, the turn hops to the fallback pack's model for that mode. Fallbacks work for built-in and custom packs, and chains are allowed (A → B → C). Cycles are capped at one revisit per cascade (A → B → A), then the error surfaces. Every hop renders a notice in the transcript and is saved in the thread history. After a hop, the thread stays on the landed pack until you switch back with `/models`. There is no automatic recovery.
 
+When packs define an [observational memory model](#om-model-settings), the same chain also covers observational memory: if the active pack's OM provider is unavailable, the observer and reflector fall back to the next pack's OM model in chain order.
+
 If the selected model needs a provider key, Mastra Code prompts for the key and displays its environment variable name, such as `ANTHROPIC_API_KEY`.
 
 - **Enter a key**: The key is stored in `auth.json` and set in the current process environment. The model becomes available immediately.
@@ -718,6 +720,14 @@ Configure the scope through:
 ### OM model settings
 
 The observer and reflector models default to `google/gemini-2.5-flash`. Set them through the `/om` panel or in the controller state.
+
+Custom model packs can carry an optional OM model. When creating or editing a pack in `/models`, the OM step lets you choose a model or skip it. OM models resolve in this order:
+
+1. Explicit observer/reflector overrides from the `/om` panel
+1. The active pack's OM model, followed by the OM models of its fallback packs in chain order
+1. The standalone OM settings, then the default model
+
+Packs without an OM model keep using your standalone OM configuration unchanged.
 
 ### OM thresholds
 

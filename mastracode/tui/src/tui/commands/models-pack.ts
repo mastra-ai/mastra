@@ -44,13 +44,18 @@ const SHARE_PREFIX = 'mastra-pack:';
 
 interface SharedPackPayload {
   name: string;
-  models: { build: string; plan: string; fast: string };
+  models: { build: string; plan: string; fast: string; om?: string };
 }
 
 export function serializePack(pack: ModePack): string {
   const payload: SharedPackPayload = {
     name: pack.name,
-    models: { build: pack.models.build, plan: pack.models.plan, fast: pack.models.fast },
+    models: {
+      build: pack.models.build,
+      plan: pack.models.plan,
+      fast: pack.models.fast,
+      ...(pack.models.om ? { om: pack.models.om } : {}),
+    },
   };
   return SHARE_PREFIX + Buffer.from(JSON.stringify(payload), 'utf-8').toString('base64');
 }
@@ -71,13 +76,14 @@ export function deserializePack(input: string): ModePack | null {
     const build = typeof models.build === 'string' ? models.build : '';
     const plan = typeof models.plan === 'string' ? models.plan : '';
     const fast = typeof models.fast === 'string' ? models.fast : '';
+    const om = typeof models.om === 'string' && models.om.trim() ? models.om.trim() : undefined;
     if (!build || !plan || !fast) return null;
 
     return {
       id: `custom:${name}`,
       name,
       description: 'Imported custom pack',
-      models: { build, plan, fast },
+      models: { build, plan, fast, ...(om ? { om } : {}) },
     };
   } catch {
     return null;
@@ -166,6 +172,8 @@ function packRoutingEntries(
   pack: ModePack,
 ): Array<{ modelId: string; modes: string[]; providerId: string | undefined }> {
   const byModel = new Map<string, string[]>();
+  // OM is excluded: OM observer/reflector agents bypass the main-agent
+  // processors, so a per-OM-model account preference would never be consumed.
   for (const mode of ['plan', 'build', 'fast'] as const) {
     const modelId = pack.models[mode];
     if (!modelId) continue;
@@ -415,21 +423,78 @@ async function askModifiedBuiltinPackAction(
 async function askCustomPackEditTarget(
   ctx: SlashCommandContext,
   pack: ModePack,
-): Promise<'rename' | 'plan' | 'build' | 'fast' | 'save' | null> {
+): Promise<'rename' | 'plan' | 'build' | 'fast' | 'om' | 'om-clear' | 'save' | null> {
   return new Promise(resolve => {
     const container = new Box(4, 2, text => theme.bg('overlayBg', text));
     container.addChild(new Text(theme.bold(theme.fg('accent', `Edit custom pack: ${pack.name}`)), 0, 0));
     container.addChild(new Spacer(1));
 
+    const items: SelectItem[] = [
+      { value: 'rename', label: `  Rename → ${theme.fg('text', pack.name)}` },
+      { value: 'plan', label: `  ${chalk.hex(mastra.purple)('plan')} → ${theme.fg('text', pack.models.plan)}` },
+      { value: 'build', label: `  ${chalk.hex(mastra.green)('build')} → ${theme.fg('text', pack.models.build)}` },
+      { value: 'fast', label: `  ${chalk.hex(mastra.orange)('fast')} → ${theme.fg('text', pack.models.fast)}` },
+      {
+        value: 'om',
+        label: `  ${chalk.hex(mastra.pink)('om')} → ${
+          pack.models.om ? theme.fg('text', pack.models.om) : theme.fg('dim', 'not set (uses standalone OM config)')
+        }`,
+      },
+    ];
+    if (pack.models.om) {
+      items.push({ value: 'om-clear', label: `  ${theme.fg('warning', 'Clear OM model')}` });
+    }
+    items.push({ value: 'save', label: `  ${theme.fg('success', 'Save')}` });
+
+    const selectList = new SelectList(items, items.length, getSelectListTheme());
+
+    const closeOverlay = () => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+    };
+
+    selectList.onSelect = item => {
+      closeOverlay();
+      resolve(item.value as 'rename' | 'plan' | 'build' | 'fast' | 'om' | 'om-clear' | 'save');
+    };
+
+    selectList.onCancel = () => {
+      closeOverlay();
+      resolve(null);
+    };
+
+    container.addChild(selectList);
+    container.addChild(new Spacer(1));
+    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
+    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+      selectList.handleInput(data);
+
+    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+  });
+}
+
+async function askOptionalOmChoice(ctx: SlashCommandContext): Promise<'choose' | 'skip' | null> {
+  return new Promise(resolve => {
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
+    container.addChild(new Text(theme.bold(theme.fg('accent', 'Observational memory model (optional)')), 0, 0));
+    container.addChild(
+      new Text(
+        theme.fg(
+          'dim',
+          'Drives the OM observer/reflector for this pack. Skipped packs fall back to your standalone OM configuration.',
+        ),
+        0,
+        0,
+      ),
+    );
+    container.addChild(new Spacer(1));
+
     const selectList = new SelectList(
       [
-        { value: 'rename', label: `  Rename → ${theme.fg('text', pack.name)}` },
-        { value: 'plan', label: `  ${chalk.hex(mastra.purple)('plan')} → ${theme.fg('text', pack.models.plan)}` },
-        { value: 'build', label: `  ${chalk.hex(mastra.green)('build')} → ${theme.fg('text', pack.models.build)}` },
-        { value: 'fast', label: `  ${chalk.hex(mastra.orange)('fast')} → ${theme.fg('text', pack.models.fast)}` },
-        { value: 'save', label: `  ${theme.fg('success', 'Save')}` },
+        { value: 'choose', label: `  ${chalk.hex(mastra.pink)('Choose model…')}` },
+        { value: 'skip', label: `  ${theme.fg('dim', 'Skip — use standalone OM config')}` },
       ],
-      5,
+      2,
       getSelectListTheme(),
     );
 
@@ -440,7 +505,7 @@ async function askCustomPackEditTarget(
 
     selectList.onSelect = item => {
       closeOverlay();
-      resolve(item.value as 'rename' | 'plan' | 'build' | 'fast' | 'save');
+      resolve(item.value as 'choose' | 'skip');
     };
 
     selectList.onCancel = () => {
@@ -478,6 +543,7 @@ async function runCustomFlow(
     build: existing.build ?? '',
     plan: existing.plan ?? '',
     fast: existing.fast ?? '',
+    om: existing.om ?? '',
   };
 
   for (const mode of modes) {
@@ -491,11 +557,25 @@ async function runCustomFlow(
     models[mode.id] = modelId;
   }
 
+  const omChoice = await askOptionalOmChoice(ctx);
+  if (omChoice === null) return null;
+  if (omChoice === 'choose') {
+    const omModelId = await selectModel(ctx, 'Select observational memory model', mastra.pink, models.om || undefined);
+    if (!omModelId) return null;
+    models.om = omModelId;
+  }
+
   return {
     id: `custom:${name}`,
     name,
     description: 'Saved custom pack',
-    models: models as ModePack['models'],
+    // The mode loop above either returns null or assigns each mode model.
+    models: {
+      build: models.build!,
+      plan: models.plan!,
+      fast: models.fast!,
+      ...(models.om ? { om: models.om } : {}),
+    },
   };
 }
 
@@ -521,6 +601,20 @@ async function runCustomPackEditFlow(
       };
       if (renamedPack.id !== pack.id && !previousPackId) previousPackId = pack.id;
       workingPack = renamedPack;
+      continue;
+    }
+
+    if (editTarget === 'om-clear') {
+      const models = { ...workingPack.models };
+      delete models.om;
+      workingPack = { ...workingPack, models };
+      continue;
+    }
+
+    if (editTarget === 'om') {
+      const omModelId = await selectModel(ctx, 'Select observational memory model', mastra.pink, workingPack.models.om);
+      if (!omModelId) continue;
+      workingPack = { ...workingPack, models: { ...workingPack.models, om: omModelId } };
       continue;
     }
 
@@ -678,6 +772,7 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
     const modelId = (pack.models as Record<string, string>)[mode.id];
     if (modelId) modeDefaults[mode.id] = modelId;
   }
+  if (pack.models.om) modeDefaults.om = pack.models.om;
 
   if (pack.id.startsWith('custom:')) {
     upsertCustomPackInSettings(s, pack, modeDefaults, previousPackId);
@@ -721,22 +816,34 @@ function getModifiedPackDetail(pack: ModePack, builtinPack: ModePack): string {
       ? theme.fg('warning', `${pack.models[mode]} (overridden)`)
       : theme.fg('text', pack.models[mode]);
 
-  return [
+  const lines = [
     `  ${chalk.hex(mastra.purple)('plan')}  → ${modelText('plan')}`,
     `  ${chalk.hex(mastra.green)('build')} → ${modelText('build')}`,
     `  ${chalk.hex(mastra.orange)('fast')}  → ${modelText('fast')}`,
-  ].join('\n');
+  ];
+  if (pack.models.om) {
+    const omText =
+      pack.models.om !== builtinPack.models.om
+        ? theme.fg('warning', `${pack.models.om} (overridden)`)
+        : theme.fg('text', pack.models.om);
+    lines.push(`  ${chalk.hex(mastra.pink)('om')}    → ${omText}`);
+  }
+  return lines.join('\n');
 }
 
 function getPackDetail(pack: ModePack): string {
   if (pack.id === 'custom') {
     return theme.fg('dim', '  Create a named custom pack and pick a model for each mode.');
   }
-  return [
+  const lines = [
     `  ${chalk.hex(mastra.purple)('plan')}  → ${theme.fg('text', pack.models.plan)}`,
     `  ${chalk.hex(mastra.green)('build')} → ${theme.fg('text', pack.models.build)}`,
     `  ${chalk.hex(mastra.orange)('fast')}  → ${theme.fg('text', pack.models.fast)}`,
-  ].join('\n');
+  ];
+  if (pack.models.om) {
+    lines.push(`  ${chalk.hex(mastra.pink)('om')}    → ${theme.fg('text', pack.models.om)}`);
+  }
+  return lines.join('\n');
 }
 
 async function saveCustomPackEdits(ctx: SlashCommandContext, pack: ModePack, previousPackId?: string): Promise<void> {
@@ -752,6 +859,7 @@ async function saveCustomPackEdits(ctx: SlashCommandContext, pack: ModePack, pre
     plan: pack.models.plan,
     build: pack.models.build,
     fast: pack.models.fast,
+    ...(pack.models.om ? { om: pack.models.om } : {}),
   };
 
   upsertCustomPackInSettings(settings, pack, modeDefaults, previousPackId, false);

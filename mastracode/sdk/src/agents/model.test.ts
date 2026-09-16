@@ -16,9 +16,10 @@ import { RequestContext } from '@mastra/core/request-context';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { setRequestAccountSelection } from '../auth/account-routing-context.js';
 import type { CredentialStore } from '../auth/types.js';
+import { loadSettings } from '../onboarding/settings.js';
 import { setCredentialStoreProvider } from './credential-resolver.js';
 import { MastraCodeGateway } from './mastracode-gateway.js';
-import { createRequestScopedCredentialStore, getDynamicModel, resolveModel } from './model.js';
+import { createRequestScopedCredentialStore, getDynamicModel, resolveModel, resolvePackOmModelChain } from './model.js';
 
 afterEach(() => {
   if (previousEnv.kimiApiKey === undefined) delete process.env.KIMI_API_KEY;
@@ -287,6 +288,106 @@ describe('getDynamicModel fallback chain', () => {
 
     expect(Array.isArray(model)).toBe(true);
     expect((model as Array<{ id?: string }>).map(entry => entry.id)).toEqual(['anthropic', 'openai']);
+  });
+});
+
+describe('resolvePackOmModelChain', () => {
+  function seedOmSettings({
+    packFallbacks = {},
+    customModelPacks = [],
+    modePackOverrides = {},
+  }: {
+    packFallbacks?: Record<string, string>;
+    customModelPacks?: Array<{ name: string; models: Record<string, string>; createdAt?: string }>;
+    modePackOverrides?: Record<string, Record<string, string>>;
+  }) {
+    mkdirSync(appDataDir, { recursive: true });
+    writeFileSync(
+      join(appDataDir, 'settings.json'),
+      JSON.stringify({
+        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
+        models: { packFallbacks, modePackOverrides },
+        customModelPacks: customModelPacks.map(pack => ({ createdAt: '2026-01-01T00:00:00.000Z', ...pack })),
+      }),
+      'utf-8',
+    );
+    return loadSettings();
+  }
+
+  it('returns undefined when no pack in the chain defines an OM model', () => {
+    const settings = seedOmSettings({ packFallbacks: { anthropic: 'openai' } });
+
+    expect(resolvePackOmModelChain(settings, 'anthropic', undefined)).toBeUndefined();
+  });
+
+  it('returns undefined for an unknown start pack', () => {
+    const settings = seedOmSettings({});
+
+    expect(resolvePackOmModelChain(settings, 'custom:missing', undefined)).toBeUndefined();
+  });
+
+  it('returns a bare model for a single pack OM entry', () => {
+    const settings = seedOmSettings({
+      customModelPacks: [
+        {
+          name: 'Work',
+          models: { build: 'anthropic/claude-fable-5', om: 'anthropic/claude-haiku-4-5' },
+        },
+      ],
+    });
+
+    const model = resolvePackOmModelChain(settings, 'custom:Work', undefined);
+
+    expect(Array.isArray(model)).toBe(false);
+    expect((model as { modelId?: string }).modelId).toBe('claude-haiku-4-5');
+  });
+
+  it('collects OM models along the fallback chain, skipping packs without one', () => {
+    const settings = seedOmSettings({
+      packFallbacks: { 'custom:A': 'custom:B', 'custom:B': 'custom:C' },
+      customModelPacks: [
+        { name: 'A', models: { build: 'anthropic/claude-fable-5', om: 'anthropic/claude-haiku-4-5' } },
+        { name: 'B', models: { build: 'openai/gpt-5.6-sol' } },
+        { name: 'C', models: { build: 'openai/gpt-5.6-sol', om: 'openai/gpt-5.4-mini' } },
+      ],
+    });
+
+    const model = resolvePackOmModelChain(settings, 'custom:A', undefined);
+    const entries = model as Array<{ id: string; model: { modelId?: string } }>;
+
+    expect(entries.map(entry => entry.id)).toEqual(['custom:A:om', 'custom:C:om']);
+    expect(entries.map(entry => entry.model.modelId)).toEqual(['claude-haiku-4-5', 'gpt-5.4-mini']);
+  });
+
+  it('collapses duplicate OM models so a cycle never retries an identical model', () => {
+    const settings = seedOmSettings({
+      packFallbacks: { 'custom:A': 'custom:B', 'custom:B': 'custom:A' },
+      customModelPacks: [
+        { name: 'A', models: { build: 'anthropic/claude-fable-5', om: 'anthropic/claude-haiku-4-5' } },
+        { name: 'B', models: { build: 'openai/gpt-5.6-sol', om: 'anthropic/claude-haiku-4-5' } },
+      ],
+    });
+
+    const model = resolvePackOmModelChain(settings, 'custom:A', undefined);
+
+    expect(Array.isArray(model)).toBe(false);
+    expect((model as { modelId?: string }).modelId).toBe('claude-haiku-4-5');
+  });
+
+  it('reads a builtin pack OM model from modePackOverrides', () => {
+    const settings = seedOmSettings({
+      packFallbacks: { anthropic: 'openai' },
+      modePackOverrides: {
+        anthropic: { om: 'anthropic/claude-haiku-4-5' },
+        openai: { om: 'openai/gpt-5.4-mini' },
+      },
+    });
+
+    const model = resolvePackOmModelChain(settings, 'anthropic', undefined);
+    const entries = model as Array<{ id: string; model: { modelId?: string } }>;
+
+    expect(entries.map(entry => entry.id)).toEqual(['anthropic:om', 'openai:om']);
+    expect(entries.map(entry => entry.model.modelId)).toEqual(['claude-haiku-4-5', 'gpt-5.4-mini']);
   });
 });
 

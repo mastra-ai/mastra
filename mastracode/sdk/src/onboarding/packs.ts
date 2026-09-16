@@ -18,6 +18,12 @@ export interface ModePack {
     build: string;
     plan: string;
     fast: string;
+    /**
+     * Optional observational-memory model. When set, OM observer/reflector
+     * resolve from the pack (and its fallback chain) instead of the standalone
+     * OM settings, unless an explicit OM role override exists.
+     */
+    om?: string;
   };
 }
 
@@ -238,6 +244,7 @@ export function getAvailableModePacks(
         build: cp.models.build ?? '',
         plan: cp.models.plan ?? '',
         fast: cp.models.fast ?? '',
+        ...(typeof cp.models.om === 'string' && cp.models.om.length > 0 ? { om: cp.models.om } : {}),
       },
     });
   }

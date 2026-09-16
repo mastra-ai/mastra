@@ -694,4 +694,17 @@ describe('serializePack / deserializePack', () => {
     expect(deserialized).not.toBeNull();
     expect(deserialized!.name).toBe('Alpha');
   });
+
+  it('round-trips the optional OM model', () => {
+    const pack: ModePack = {
+      ...alphaPack,
+      models: { ...alphaPack.models, om: 'anthropic/claude-haiku-4-5' },
+    };
+
+    const deserialized = deserializePack(serializePack(pack));
+    expect(deserialized!.models.om).toBe('anthropic/claude-haiku-4-5');
+
+    const withoutOm = deserializePack(serializePack(alphaPack));
+    expect(withoutOm!.models.om).toBeUndefined();
+  });
 });
