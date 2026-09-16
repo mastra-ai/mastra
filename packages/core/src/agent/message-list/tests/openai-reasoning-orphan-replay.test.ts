@@ -124,4 +124,43 @@ describe('OpenAI reasoning — orphaned message-item replay (#24052)', () => {
     const reasoningPart = allParts.find((p: any) => p.type === 'reasoning');
     expect((reasoningPart as any)?.providerOptions?.openai?.itemId).toBe('rs_001ba7b2523b3aed0069de7872a800');
   });
+
+  it('strips an orphaned message itemId through the prompt-with-suspended path', () => {
+    // filterIncompleteToolCalls: false routes conversion through the `prompt-with-suspended`
+    // mode, which wires the same sanitizer as the default `prompt` branch.
+    const list = new MessageList({ filterIncompleteToolCalls: false });
+
+    list.add(
+      {
+        id: 'mem-assistant-1',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'text',
+              text: 'Hello there.',
+              providerMetadata: {
+                openai: { itemId: 'msg_0bef001122334455667788990011' },
+              },
+            },
+          ],
+        },
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        threadId: 'thread-1',
+      },
+      'memory',
+    );
+
+    list.add({ role: 'user', content: 'Follow-up question.' }, 'input');
+
+    const prompt = list.get.all.aiV5.prompt();
+    const assistant = prompt.filter(m => m.role === 'assistant');
+    const textParts = assistant
+      .flatMap(m => (Array.isArray(m.content) ? m.content : []))
+      .filter((p: any) => p.type === 'text');
+
+    expect(textParts.length).toBeGreaterThan(0);
+    expect((textParts[0] as any).providerOptions?.openai?.itemId).toBeUndefined();
+  });
 });
