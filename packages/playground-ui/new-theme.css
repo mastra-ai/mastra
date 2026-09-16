@@ -29,11 +29,3 @@ html.light .new-theme {
   --color-sidebar-accent: var(--sidebar-accent);
   --color-selected: var(--selected);
 }
-
-.sidebar-new-theme {
-  --neutral3: var(--muted-foreground);
-  --neutral5: var(--foreground);
-  --neutral6: var(--foreground);
-  --sidebar-nav-active: var(--selected);
-  --sidebar-nav-hover: var(--sidebar-accent);
-}

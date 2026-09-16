@@ -23,7 +23,7 @@ export function SaveButton() {
 
 ### Opt-in semantic theme
 
-`SidebarNew` imports `new-theme.css` and applies `new-theme` to its root, including the mobile drawer. Keep importing `style.css` once in the app: it provides the compiled utilities. The theme import only adds scoped token values.
+`MainSidebar` and `SidebarNew` use the same root, which imports `new-theme.css` and applies `new-theme`, including in the mobile drawer. Their navigation uses semantic utilities directly; no legacy token aliases are needed. Mobile triggers and portalled tooltips apply their own scope. Keep importing `style.css` once in the app: it provides the compiled utilities. The theme import only adds scoped token values.
 
 For other components, import the theme and apply its scope where semantic colors are needed:
 

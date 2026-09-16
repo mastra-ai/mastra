@@ -129,7 +129,6 @@ describe('SidebarNew colors', () => {
 
     const sidebar = container.querySelector('aside[aria-label="Sidebar"] > div');
     expect(sidebar?.classList.contains('new-theme')).toBe(true);
-    expect(sidebar?.className).toContain('sidebar-new-theme');
     expect(sidebar?.className).toContain('bg-sidebar');
     expect(sidebar?.className).toContain('text-foreground');
     expect(sidebar?.className).not.toContain('[--');
