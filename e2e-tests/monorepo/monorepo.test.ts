@@ -930,9 +930,9 @@ export const mastra = new Mastra({
     });
   });
 
-  describe.sequential('subpath-only externals', () => {
+  describe.sequential('workspace subpath externals', () => {
     it(
-      'should build transitive workspace dependencies with subpath-only exports and externals true',
+      'should build a workspace subpath imported transitively when the app imports the package root',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-subpath-test-${pkgManager}-`));
         await setupMonorepo(isolatedFixturePath, pkgManager);
@@ -988,7 +988,7 @@ export const mastra = new Mastra({
           const res = await fetch(`http://localhost:${port}/transitive-workspace`);
           const body = await res.json();
           expect(res.status).toBe(200);
-          expect(body).toEqual({ value: 'a -> b -> c', app: 'App value is BEFORE.' });
+          expect(body).toEqual({ value: 'a -> b -> c', root: 'root', app: 'App value is BEFORE.' });
         } finally {
           if (proc) {
             try {
