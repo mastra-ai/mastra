@@ -7,6 +7,32 @@ type ListTracesResponse = Awaited<ReturnType<MastraClient['listTraces']>>;
 type GetTraceResponse = Awaited<ReturnType<MastraClient['getTrace']>>;
 type GetSpanResponse = Awaited<ReturnType<MastraClient['getSpan']>>;
 
+export function queryPageFromList(list: ListTracesLightResponse): Awaited<ReturnType<MastraClient['queryTraces']>> {
+  return {
+    traces: [...list.spans]
+      .sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime())
+      .map(span => ({
+        traceId: span.traceId,
+        rootSpanId: span.spanId,
+        name: span.name,
+        startedAt: new Date(span.startedAt).toISOString(),
+        endedAt: span.endedAt ? new Date(span.endedAt).toISOString() : null,
+        createdAt: new Date(span.createdAt).toISOString(),
+        status: 'success',
+        entityId: span.entityId ?? null,
+        entityName: span.entityName ?? null,
+        entityType: span.entityType ?? null,
+        parentSpanId: span.parentSpanId ?? null,
+        metadata: span.metadata ?? null,
+        inputPreview: span.inputPreview ?? null,
+        threadId: span.threadId ?? null,
+        resourceId: span.resourceId ?? null,
+        environment: span.environment ?? null,
+      })),
+    page: { next: null },
+  };
+}
+
 export const THREAD_ID = 'thread-1';
 
 const baseTrace = {

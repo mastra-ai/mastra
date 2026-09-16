@@ -3,6 +3,7 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { ReasoningPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/reasoning-part-renderer';
 import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
 
@@ -132,16 +133,9 @@ export function MessageBubble({
         </MarkdownRenderer>
       );
     },
-    Reasoning: (part: ReasoningPart) => {
-      if (!part.reasoning.trim()) return null;
-      return (
-        <div className="border-border1 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
-          <MarkdownRenderer className="text-ui-sm text-icon3" streaming={entry.streaming}>
-            {part.reasoning}
-          </MarkdownRenderer>
-        </div>
-      );
-    },
+    Reasoning: (part: ReasoningPart) => (
+      <ReasoningPartRenderer part={{ ...part, state: part.state ?? (entry.streaming ? 'streaming' : 'done') }} />
+    ),
     ToolInvocation: (part: ToolInvocationPart) => {
       const toolCallId = part.toolInvocation.toolCallId;
       const group = toolGroups.byFirstKey.get(toolCallId);

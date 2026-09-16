@@ -8,8 +8,12 @@ import type { ClickhouseReplicationConfig } from './db/replication';
 import { MemoryStorageClickhouse } from './domains/memory';
 import { ObservabilityStorageClickhouse } from './domains/observability';
 import { ObservabilityStorageClickhouseVNext } from './domains/observability/v-next';
-import type { VNextObservabilityOptions } from './domains/observability/v-next';
-export { TABLE_DELETION_REQUESTS, recordDeletionRequest } from './domains/observability/v-next';
+import type { RetentionConfig, VNextObservabilityOptions } from './domains/observability/v-next';
+export {
+  applyClickHouseRetention,
+  TABLE_DELETION_REQUESTS,
+  recordDeletionRequest,
+} from './domains/observability/v-next';
 export type {
   VNextObservabilityConfig,
   VNextObservabilityOptions,
@@ -106,6 +110,8 @@ type ClickhouseCredentialsConfig = Omit<ClickHouseClientConfigOptions, 'url' | '
 export type ClickhouseConfig = {
   id: string;
   ttl?: ClickhouseTtlConfig;
+  /** Per-signal retention periods for the vNext observability schema. */
+  retention?: RetentionConfig;
   /**
    * Opt into replicated MergeTree engines for Mastra-owned ClickHouse tables.
    * Set `cluster` to also emit ON CLUSTER for table and materialized-view DDL.
@@ -225,7 +231,16 @@ export class ClickhouseStore extends MastraCompositeStore {
       }
 
       // Extract Mastra-specific config, pass rest to ClickHouse client
-      const { id, ttl, disableInit, replication, traceQueryTimeoutMs, clickhouse_settings, ...clientOptions } = config;
+      const {
+        id,
+        ttl,
+        retention: _retention,
+        disableInit,
+        replication,
+        traceQueryTimeoutMs: _traceQueryTimeoutMs,
+        clickhouse_settings,
+        ...clientOptions
+      } = config;
 
       // Create client with all provided options
       this.db = createClient({
@@ -356,7 +371,7 @@ export class ClickhouseStoreVNext extends ClickhouseStore {
     const observability = new ObservabilityStorageClickhouseVNext({
       client: this.db,
       replication: config.replication,
-      retention: observabilityConfig?.retention,
+      retention: observabilityConfig?.retention ?? config.retention,
       traceQuery: observabilityConfig?.traceQuery,
       traceQueryTimeoutMs: config.traceQueryTimeoutMs,
     });
