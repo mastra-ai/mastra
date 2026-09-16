@@ -124,6 +124,26 @@ describe('materializeRepo', () => {
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
+  it('clones a self-hosted GitLab subgroup URL with provider credentials and scrubs it', async () => {
+    const sandbox = new FakeSandbox();
+    await materializeRepo(
+      makeRow({ materializedAt: null }),
+      makeRepoInfo({
+        repoFullName: 'acme/platform/app',
+        cloneUrl: 'https://gitlab.example.com/acme/platform/app.git',
+        authUsername: 'oauth2',
+      }),
+      sandbox,
+      'glpat-secret@value',
+    );
+
+    const joined = sandbox.calls.join('\n');
+    expect(joined).toContain('https://oauth2:glpat-secret%40value@gitlab.example.com/acme/platform/app.git');
+    const scrub = sandbox.calls.filter(call => call.includes('remote set-url origin')).at(-1);
+    expect(scrub).toContain('https://gitlab.example.com/acme/platform/app.git');
+    expect(scrub).not.toContain('glpat-secret');
+  });
+
   it('leaves an existing checkout of this repo untouched on re-open, whatever it is on', async () => {
     // A repo template image sits detached at its pinned sha; a resumed session
     // sits on its branch. Neither gets a fetch or a pull here: the branch

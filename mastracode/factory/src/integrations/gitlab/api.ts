@@ -109,6 +109,17 @@ export interface GitLabDiscussionPosition {
   new_path: string;
   old_line?: number | null;
   new_line?: number | null;
+  line_range?: {
+    start: GitLabDiscussionLine;
+    end: GitLabDiscussionLine;
+  };
+}
+
+export interface GitLabDiscussionLine {
+  line_code: string;
+  type: 'old' | 'new';
+  old_line?: number | null;
+  new_line?: number | null;
 }
 
 export interface GitLabDiscussionNote extends GitLabNote {
@@ -403,15 +414,26 @@ export class GitLabApiClient {
     );
   }
 
+  async getMergeRequestDiscussion(
+    projectId: string,
+    mergeRequestIid: number,
+    discussionId: string,
+  ): Promise<GitLabDiscussion> {
+    return this.#request<GitLabDiscussion>(
+      'GET',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}/discussions/${encodeURIComponent(discussionId)}`,
+    );
+  }
+
   async createMergeRequestDiscussion(
     projectId: string,
     mergeRequestIid: number,
-    input: { body: string; position?: GitLabDiscussionPosition },
+    input: { body: string; commitId?: string; position?: GitLabDiscussionPosition },
   ): Promise<GitLabDiscussion> {
     return this.#request<GitLabDiscussion>(
       'POST',
       `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}/discussions`,
-      { body: input },
+      { body: { body: input.body, commit_id: input.commitId, position: input.position } },
     );
   }
 

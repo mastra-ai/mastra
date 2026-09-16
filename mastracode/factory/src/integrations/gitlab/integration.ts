@@ -38,6 +38,8 @@ interface GitLabConnectionContext {
   api: GitLabApiClient;
   connection: IntegrationConnection;
   host: string;
+  /** Raw provider token for git-over-HTTPS. Platform proxy selectors deliberately omit this. */
+  repositoryAccessToken?: string;
 }
 
 interface GitLabSourceReference {
@@ -416,6 +418,7 @@ export class GitLabIntegration extends GitLabIntegrationBase {
       api,
       connection: { type: 'oauth', accessToken: this.#accessToken },
       host: new URL(this.#baseUrl).host,
+      repositoryAccessToken: this.#accessToken,
     };
   }
 
