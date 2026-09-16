@@ -1,5 +1,6 @@
 import { createSandboxLifecycleTests } from '@internal/workspace-test-utils';
-import { SandboxUnsupportedFeatureError } from '@mastra/core/workspace';
+import type { WorkspaceFilesystem } from '@mastra/core/workspace';
+import { SandboxUnsupportedFeatureError, Workspace } from '@mastra/core/workspace';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { CloudflareSandbox } from './sandbox';
@@ -241,6 +242,129 @@ describe('CloudflareSandbox', () => {
     await expect(sandbox.persistWorkspace()).rejects.toThrow(/has not been started/);
     await expect(sandbox.hydrateWorkspace(new Uint8Array([1]))).rejects.toThrow(/has not been started/);
   });
+
+  describe('mounts', () => {
+    function fakeFilesystem(config: unknown, id = 'r2-fs'): WorkspaceFilesystem {
+      return {
+        id,
+        name: id,
+        provider: 's3',
+        getMountConfig: () => config,
+      } as unknown as WorkspaceFilesystem;
+    }
+
+    const r2Config = {
+      type: 's3',
+      bucket: 'agent-data',
+      endpoint: 'https://acct.r2.cloudflarestorage.com',
+      accessKeyId: 'AK',
+      secretAccessKey: 'SK',
+      prefix: 'tenant-1',
+      readOnly: false,
+    };
+
+    it('translates an S3-compatible mount config into a bridge mount request', async () => {
+      const bridge = createFakeBridge({ apiToken: 'secret' });
+      const sandbox = createSandbox(bridge, { id: 'mount-1' });
+      await sandbox._start();
+
+      const result = await sandbox.mount(fakeFilesystem(r2Config), '/workspace/data');
+
+      expect(result).toEqual({ success: true, mountPath: '/workspace/data' });
+      expect(bridge.mounts).toEqual([
+        {
+          bucket: 'agent-data',
+          mountPath: '/workspace/data',
+          options: {
+            endpoint: 'https://acct.r2.cloudflarestorage.com',
+            prefix: 'tenant-1',
+            readOnly: false,
+            credentials: { accessKeyId: 'AK', secretAccessKey: 'SK' },
+          },
+        },
+      ]);
+      expect(sandbox.mounts.get('/workspace/data')?.state).toBe('mounted');
+      expect(sandbox.getInstructions()).toContain('/workspace/data');
+    });
+
+    it('unmount removes the bridge mount and the tracked entry', async () => {
+      const bridge = createFakeBridge({ apiToken: 'secret' });
+      const sandbox = createSandbox(bridge, { id: 'mount-2' });
+      await sandbox._start();
+      await sandbox.mount(fakeFilesystem(r2Config), '/workspace/data');
+
+      await sandbox.unmount('/workspace/data');
+
+      expect(bridge.unmounts).toEqual([{ mountPath: '/workspace/data' }]);
+      expect(sandbox.mounts.has('/workspace/data')).toBe(false);
+    });
+
+    it('mounts end-to-end through Workspace mounts on start, like other providers', async () => {
+      const bridge = createFakeBridge({ apiToken: 'secret' });
+      const sandbox = createSandbox(bridge, { id: 'mount-3' });
+      new Workspace({ sandbox, mounts: { '/workspace/data': fakeFilesystem(r2Config) } });
+
+      await sandbox._start();
+
+      expect(bridge.mounts).toHaveLength(1);
+      expect(sandbox.mounts.get('/workspace/data')?.state).toBe('mounted');
+    });
+
+    it('rejects mount types the bridge cannot serve without calling the bridge', async () => {
+      const bridge = createFakeBridge({ apiToken: 'secret' });
+      const sandbox = createSandbox(bridge, { id: 'mount-4' });
+      await sandbox._start();
+
+      const gcs = await sandbox.mount(fakeFilesystem({ type: 'gcs', bucket: 'b' }, 'gcs-fs'), '/workspace/gcs');
+      const sts = await sandbox.mount(fakeFilesystem({ ...r2Config, sessionToken: 'tmp' }, 'sts-fs'), '/workspace/sts');
+      const noConfig = await sandbox.mount(
+        { id: 'plain', name: 'plain', provider: 'x' } as WorkspaceFilesystem,
+        '/workspace/plain',
+      );
+
+      expect(gcs).toMatchObject({ success: false, error: expect.stringContaining('S3-compatible') });
+      expect(sts).toMatchObject({ success: false, error: expect.stringContaining('sessionToken') });
+      expect(noConfig).toMatchObject({ success: false, error: expect.stringContaining('mount config') });
+      expect(bridge.mounts).toEqual([]);
+      expect(sandbox.mounts.get('/workspace/gcs')?.state).toBe('error');
+    });
+
+    it('records a bridge mount failure as an error entry', async () => {
+      const bridge = createFakeBridge({ apiToken: 'secret' });
+      const failingFetch: typeof fetch = async (input, init) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (url.endsWith('/mount')) return Response.json({ error: 's3fs: 403 AccessDenied' }, { status: 500 });
+        return bridge.fetch(input, init);
+      };
+      const sandbox = createSandbox(bridge, { id: 'mount-5', fetch: failingFetch });
+      await sandbox._start();
+
+      const result = await sandbox.mount(fakeFilesystem(r2Config), '/workspace/data');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/AccessDenied/);
+      expect(sandbox.mounts.get('/workspace/data')?.state).toBe('error');
+    });
+
+    it('rejects unsafe mount paths and requires start', async () => {
+      const bridge = createFakeBridge({ apiToken: 'secret' });
+      const sandbox = createSandbox(bridge, { id: 'mount-6' });
+
+      await expect(sandbox.mount(fakeFilesystem(r2Config), 'relative/path')).rejects.toThrow(/Invalid mount path/);
+      await expect(sandbox.mount(fakeFilesystem(r2Config), '/workspace/data')).rejects.toThrow(/has not been started/);
+    });
+  });
+
+  it('tells the model /workspace is scratch space when nothing is mounted', () => {
+    const sandbox = createSandbox(createFakeBridge({ apiToken: 'secret' }));
+    expect(sandbox.getInstructions()).toMatch(/do NOT survive/);
+    expect(sandbox.getInstructions()).not.toMatch(/persistent project files/);
+  });
+
+  it('lets a custom instructions override win', () => {
+    const sandbox = createSandbox(createFakeBridge({ apiToken: 'secret' }), { instructions: 'custom text' });
+    expect(sandbox.getInstructions()).toBe('custom text');
+  });
 });
 
 describe('CloudflareSandbox conformance', () => {
@@ -259,7 +383,7 @@ describe('CloudflareSandbox conformance', () => {
   createSandboxLifecycleTests(() => ({
     sandbox,
     capabilities: {
-      supportsMounting: false,
+      supportsMounting: true,
       supportsReconnection: true,
       supportsConcurrency: true,
       supportsEnvVars: true,

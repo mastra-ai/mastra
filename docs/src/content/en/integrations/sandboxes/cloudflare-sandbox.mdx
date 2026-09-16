@@ -87,9 +87,41 @@ const bytes = await workspace.sandbox?.readFile?.('src/index.ts')
 const source = new TextDecoder().decode(bytes)
 ```
 
+## Keep files across container sleep
+
+Cloudflare stops an idle container after `sleepAfter` (10 minutes by default). The next command starts a fresh container, so anything written under `/workspace` is gone. Treat `/workspace` as scratch space, and put files that must survive on a mounted bucket.
+
+Mount an S3-compatible bucket such as Cloudflare R2 through the Workspace `mounts` option. The sandbox mounts it on `start()`, and the Cloudflare Sandbox re-establishes the mount when a slept container wakes.
+
+```typescript
+import { Workspace } from '@mastra/core/workspace'
+import { S3Filesystem } from '@mastra/s3'
+import { CloudflareSandbox } from '@mastra/cloudflare-sandbox'
+
+const workspace = new Workspace({
+  sandbox: new CloudflareSandbox({
+    baseUrl: process.env.CLOUDFLARE_SANDBOX_BRIDGE_URL!,
+    apiToken: process.env.CLOUDFLARE_SANDBOX_BRIDGE_TOKEN!,
+  }),
+  mounts: {
+    '/workspace/data': new S3Filesystem({
+      bucket: 'agent-data',
+      region: 'auto',
+      endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      accessKeyId: process.env.R2_ACCESS_KEY_ID,
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    }),
+  },
+})
+```
+
+The bridge mounts buckets with s3fs, so only `type: 's3'` mount configs are accepted. GCS and Azure filesystems, and S3 credentials that include a `sessionToken`, return a failed `MountResult` without contacting the bridge.
+
+The default `getInstructions()` text tells the model that `/workspace` does not survive between commands and lists the mounted paths to write to instead.
+
 ## Persist and restore the workspace
 
-`persistWorkspace()` archives `/workspace` and returns the raw tar bytes; `hydrateWorkspace()` restores it from those bytes. Store the archive between sessions to resume work after a container sleeps or is recreated.
+`persistWorkspace()` archives `/workspace` and returns the raw tar bytes; `hydrateWorkspace()` restores it from those bytes. Use this for one-off backups. It is not a substitute for mounts: restoring must happen before the first command after a wake, and a persist taken from a freshly woken container overwrites the archive with an empty workspace.
 
 ```typescript
 // Back up before the container can sleep
@@ -101,7 +133,7 @@ const archive = await myStorage.get('workspace-backup')
 await workspace.sandbox?.hydrateWorkspace?.(archive)
 ```
 
-For bucket mounts and execution sessions, use the corresponding `CloudflareSandboxBridgeClient` methods (`mountBucket`, `unmountBucket`, `createSession`, `deleteSession`) directly.
+For execution sessions, use the `CloudflareSandboxBridgeClient` methods (`createSession`, `deleteSession`) directly.
 
 ## Constructor parameters
 
@@ -168,10 +200,10 @@ For bucket mounts and execution sessions, use the corresponding `CloudflareSandb
 
 ## Lifecycle behavior
 
-- `start()`: Reconnects to `sandboxId` or creates a remote sandbox.
+- `start()`: Reconnects to `sandboxId` or creates a remote sandbox, then mounts any Workspace `mounts`.
 - `stop()`: Detaches the Mastra lifecycle without deleting the remote sandbox because the bridge doesn't expose a suspend operation.
 - `destroy()`: Deletes the remote sandbox.
 
 ## Limitations
 
-The provider surfaces command execution, streamed output, file reads and writes, and workspace persistence directly on the sandbox. Bucket mounts and sessions are available on the bridge client (`CloudflareSandboxBridgeClient`) but not on the `CloudflareSandbox` surface. PTY terminals are not exposed, and the provider doesn't support background process management, stdin, snapshots, or port URLs.
+The provider surfaces command execution, streamed output, file reads and writes, S3-compatible bucket mounts, and workspace persistence directly on the sandbox. Sessions are available on the bridge client (`CloudflareSandboxBridgeClient`) but not on the `CloudflareSandbox` surface. PTY terminals are not exposed, and the provider doesn't support background process management, stdin, snapshots, or port URLs.
