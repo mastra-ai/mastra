@@ -440,6 +440,11 @@ UNION ALL
 SELECT
   '' AS traceId,
   '' AS rootSpanId,
+  '' AS name,
+  CAST(NULL, 'Nullable(String)') AS entityId,
+  CAST(NULL, 'Nullable(String)') AS parentSpanId,
+  CAST(NULL, 'Nullable(String)') AS metadata,
+  CAST(NULL, 'Nullable(String)') AS input,
   CAST(NULL, 'Nullable(String)') AS threadId,
   CAST(NULL, 'Nullable(String)') AS resourceId,
   toDateTime64(0, 3, 'UTC') AS startedAt,

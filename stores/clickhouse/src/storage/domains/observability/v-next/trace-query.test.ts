@@ -334,6 +334,9 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query).toContain('LIMIT {trace_query_3:UInt64} OFFSET {trace_query_4:UInt64}');
     expect(compiled.query).toContain('SELECT count() AS total\n  FROM candidates');
     expect(compiled.query).toContain('UNION ALL');
+    expect(compiled.query).toContain("'' AS name");
+    expect(compiled.query).toContain("CAST(NULL, 'Nullable(String)') AS metadata");
+    expect(compiled.query).toContain("CAST(NULL, 'Nullable(String)') AS input");
     expect(compiled.query).toContain('1 AS __metadata');
     expect(compiled.query_params).toMatchObject({ trace_query_3: 25, trace_query_4: 50 });
     expect(compiled.sharedSnapshot).toBe(true);
