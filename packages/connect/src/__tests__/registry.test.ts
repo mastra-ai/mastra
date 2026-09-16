@@ -8,16 +8,26 @@ import { PROVIDERS } from '../index.js';
 describe('shipped provider registry', () => {
   it('collects every provider whose directory exists under src/providers', () => {
     const integrationIds = PROVIDERS.map(p => p.integrationId).sort();
-    // Generated providers ship in stacked PRs. Extend this list when those
-    // provider branches land.
-    expect(integrationIds).toEqual([]);
+    // Extend this list when generated provider branches land.
+    expect(integrationIds).toEqual([
+      'anthropic',
+      'clerk',
+      'incident-io',
+      'linear',
+      'notion',
+      'openai',
+      'resend',
+      'supabase',
+      'workos',
+    ]);
   });
 
   it('gives every provider the required registration fields', () => {
     for (const provider of PROVIDERS) {
       expect(provider.integrationId).toMatch(/^[a-z0-9][a-z0-9-]*$/);
       expect(provider.envVar).toMatch(/^MASTRA_[A-Z0-9_]+_CONNECTION_ID$/);
-      expect(typeof provider.createTools).toBe('function');
+      expect(provider.transport).not.toBe('mcp');
+      if (provider.transport !== 'mcp') expect(typeof provider.createTools).toBe('function');
     }
   });
 });

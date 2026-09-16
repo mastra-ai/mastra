@@ -533,19 +533,27 @@ async function executeWorkflow(
       const suspendedPaths: string[][] = result.suspended ?? [];
       if (suspendedPaths.length === 0) break;
 
-      // For each suspended step, look up resume data
-      const firstSuspendedStep = suspendedPaths[0]?.[0];
-      if (!firstSuspendedStep) break;
+      // An earlier branch without data must not block a later branch with data.
+      // Prefer per-step data over the flat fallback, preserving falsy payloads.
+      let stepToResume: string | undefined;
+      let stepResumeData: unknown;
+      for (const suspendedPath of suspendedPaths) {
+        const suspendedStep = suspendedPath?.[0];
+        if (!suspendedStep) continue;
 
-      // Resolve resume data: per-step map takes precedence, then flat fallback.
-      // Use explicit undefined check so falsy values (null, false, 0) are forwarded.
-      const perStepValue = perStep?.[firstSuspendedStep];
-      const stepResumeData = perStepValue !== undefined ? perStepValue : flat;
-      if (stepResumeData === undefined) break; // No data for this step, stop resuming
+        const perStepValue = perStep?.[suspendedStep];
+        const candidate = perStepValue !== undefined ? perStepValue : flat;
+        if (candidate === undefined) continue;
+
+        stepToResume = suspendedStep;
+        stepResumeData = candidate;
+        break;
+      }
+      if (stepToResume === undefined) break; // No data for any suspended step, stop resuming
 
       result = await run.resume({
         resumeData: stepResumeData,
-        step: firstSuspendedStep,
+        step: stepToResume,
         ...(reqCtx ? { requestContext: reqCtx } : {}),
         ...observabilityContext,
       });

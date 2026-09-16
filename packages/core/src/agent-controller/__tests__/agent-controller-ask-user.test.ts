@@ -164,18 +164,18 @@ describe('AgentController: ask_user native suspension', () => {
       expect(events.find(event => event.type === 'agent_end')?.reason).toBe('complete');
     });
 
-    const replies = events
-      .filter(event => event.type === 'message_end')
-      .filter(event => event.message.content.parts.some(part => part.type === 'text' && part.text === 'Thanks!'));
     const persisted = await session.thread.listMessages({ threadId: session.thread.requireId() });
     const savedReplies = persisted.filter(
       message =>
         message.role === 'assistant' &&
         message.content.parts.some(part => part.type === 'text' && part.text === 'Thanks!'),
     );
-    expect(replies).toHaveLength(1);
+    const replies = events
+      .filter(event => event.type === 'message_end')
+      .filter(event => savedReplies.some(message => message.id === event.id));
     expect(savedReplies).toHaveLength(1);
-    expect(replies[0]!.message.id).toBe(savedReplies[0]!.id);
+    expect(replies).toHaveLength(1);
+    expect(replies[0]!.id).toBe(savedReplies[0]!.id);
     expect(events.some(event => event.type === 'tool_end' && event.toolCallId === 'call-1')).toBe(true);
     expect(session.displayState.get().pendingSuspensions.size).toBe(0);
     expect(events.some(event => event.type === 'error')).toBe(false);

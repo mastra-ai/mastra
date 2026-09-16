@@ -46,6 +46,24 @@ export function resolveBoardToolRule(
   return boards.get(boardId)?.tools[toolName]?.onResult;
 }
 
+/**
+ * Whether a persisted card has finished, judged by the board it sits on: the installed
+ * board's phase kind first, then the built-in Work and Review names for rows whose board is
+ * not installed. Unknown boards or phases are never terminal, so a card is only ever
+ * released from ownership on the board's own say-so.
+ */
+export function isTerminalWorkItem(
+  boards: BoardRegistry,
+  item: Pick<WorkItemRow, 'board' | 'externalSource' | 'stages'>,
+): boolean {
+  const semantics = workItemPhaseSemantics(boards, item);
+  if (semantics) return semantics.kind === 'terminal';
+  const board = boardForWorkItem(item);
+  if (board !== 'work' && board !== 'review') return false;
+  const stage = item.stages.length === 1 ? item.stages[0] : undefined;
+  return stage === 'done' || stage === 'canceled';
+}
+
 /** Semantics of the single stage a work item currently occupies; undefined for multi-stage rows. */
 export function workItemPhaseSemantics(
   boards: BoardRegistry,

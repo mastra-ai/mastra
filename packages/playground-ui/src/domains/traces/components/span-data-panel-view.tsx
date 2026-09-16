@@ -85,12 +85,13 @@ export function SpanDataPanelView({
         </div>
         <ButtonsGroup className="ml-auto shrink-0 self-start">
           <DataPanel.NextPrevNav
+            variant="ghost"
             onPrevious={onPrevious}
             onNext={onNext}
             previousLabel="Previous span"
             nextLabel="Next span"
           />
-          <DataPanel.CloseButton onClick={onClose} />
+          <DataPanel.CloseButton variant="ghost" onClick={onClose} />
         </ButtonsGroup>
       </DataPanel.Header>
 

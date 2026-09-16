@@ -37,9 +37,10 @@ export interface ScoreDataPanelProps {
   onClose: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
+  className?: string;
 }
 
-export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreDataPanelProps) {
+export function ScoreDataPanel({ score, onClose, onPrevious, onNext, className }: ScoreDataPanelProps) {
   const { Link } = useLinkComponent();
   const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
   const isCodeBased = isCodeBasedScorer(score);
@@ -47,19 +48,21 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreData
 
   return (
     <>
-      <DataPanel>
-        <DataPanel.Header>
-          <DataPanel.Heading>
+      <DataPanel className={className}>
+        {/* Matches SpanDataPanelView's header height so neighbouring panel headers stay level. */}
+        <DataPanel.Header className="min-h-16 py-2">
+          <DataPanel.Heading className="items-center whitespace-nowrap">
             Score <b># {score.id}</b>
           </DataPanel.Heading>
-          <ButtonsGroup className="ml-auto shrink-0">
+          <ButtonsGroup className="ml-auto shrink-0 self-start">
             <DataPanel.NextPrevNav
+              variant="ghost"
               onPrevious={onPrevious}
               onNext={onNext}
               previousLabel="Previous score"
               nextLabel="Next score"
             />
-            <DataPanel.CloseButton onClick={onClose} />
+            <DataPanel.CloseButton variant="ghost" onClick={onClose} />
           </ButtonsGroup>
         </DataPanel.Header>
 

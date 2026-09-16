@@ -36,6 +36,8 @@ export interface ListIntakeSourcesInput {
 export interface ListIntakeItemsInput extends ListIntakeSourcesInput {
   sourceIds: string[];
   cursor?: string;
+  /** Full source set used to resolve precedence when only a subset is fetched. */
+  attributionSourceIds?: string[];
 }
 
 /** Provider-neutral issue returned by every Intake integration. */
@@ -79,6 +81,8 @@ export interface ListIntakeIssuesInput {
   connection: IntegrationConnection;
   /** Provider-defined source ids: repositories for GitHub, projects for Linear. */
   sourceIds: string[];
+  /** Full source set used to resolve precedence when only a subset is fetched. */
+  attributionSourceIds?: string[];
   /** Provider label names used to filter the issue listing. */
   labels?: string[];
   cursor?: string;

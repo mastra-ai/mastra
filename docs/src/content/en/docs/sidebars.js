@@ -309,20 +309,9 @@ const sidebars = {
           },
           items: [
             {
-              type: 'category',
-              label: 'Tools & MCP',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'connections/mcp',
-                  label: 'MCP',
-                },
-                {
-                  type: 'doc',
-                  id: 'connections/connect-mcp-client',
-                  label: 'Connect your MCP client to Mastra (draft)',
-                },
-              ],
+              type: 'doc',
+              id: 'connections/mcp',
+              label: 'MCP',
             },
             {
               type: 'doc',
@@ -687,6 +676,14 @@ const sidebars = {
               type: 'doc',
               id: 'guides/streaming',
               label: 'Streaming',
+            },
+            {
+              type: 'doc',
+              id: 'guides/build-an-eval-loop',
+              label: 'Build an eval loop',
+              customProps: {
+                tags: ['new'],
+              },
             },
           ],
         },
