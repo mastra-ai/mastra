@@ -3,15 +3,18 @@ import { buildRetentionDDL, TABLE_DELETION_REQUESTS, TABLE_LOG_EVENTS, TABLE_SCO
 import { applyClickHouseRetention } from '.';
 
 describe('buildRetentionDDL', () => {
-  it('keeps trace deletion requests longer than every cascaded signal', () => {
-    expect(buildRetentionDDL({ tracing: 30, logs: 365 })).toContain(
-      'ALTER TABLE mastra_deletion_requests MODIFY TTL requestedAt + INTERVAL 395 DAY',
+  it.each([
+    { tracing: 30, logs: 365 },
+    { scores: 30, feedback: 45 },
+  ])('keeps deletion requests unbounded when any trace-covered signal is unbounded', retention => {
+    expect(buildRetentionDDL(retention)).not.toContain(
+      expect.stringContaining('ALTER TABLE mastra_deletion_requests MODIFY TTL'),
     );
   });
 
-  it('ignores unrelated signal retention for item deletion requests', () => {
-    expect(buildRetentionDDL({ scores: 30, logs: 365 })).toContain(
-      'ALTER TABLE mastra_deletion_requests MODIFY TTL requestedAt + INTERVAL 60 DAY',
+  it('keeps deletion requests longer than every signal when all signals are bounded', () => {
+    expect(buildRetentionDDL({ tracing: 30, logs: 365, metrics: 14, scores: 90, feedback: 60 })).toContain(
+      'ALTER TABLE mastra_deletion_requests MODIFY TTL requestedAt + INTERVAL 395 DAY',
     );
   });
 });
@@ -123,8 +126,8 @@ describe('applyClickHouseRetention', () => {
 
     await expect(
       applyClickHouseRetention({ client: { query, command } as any, retention: { scores: 30 } }),
-    ).resolves.toHaveLength(2);
-    expect(command).toHaveBeenCalledTimes(2);
+    ).resolves.toHaveLength(1);
+    expect(command).toHaveBeenCalledOnce();
   });
 
   it('confirms a matching TTL on every cluster host before suppressing an ALTER conflict', async () => {
@@ -148,7 +151,8 @@ describe('applyClickHouseRetention', () => {
         retention: { scores: 30 },
         replication: { cluster: 'retention-cluster' },
       }),
-    ).resolves.toHaveLength(2);
+    ).resolves.toHaveLength(1);
+    expect(command).toHaveBeenCalledOnce();
     expect(query.mock.calls[3]?.[0]).toMatchObject({
       query_params: { cluster: 'retention-cluster', tables: [TABLE_SCORE_EVENTS] },
     });

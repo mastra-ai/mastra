@@ -4586,20 +4586,23 @@ LIMIT 1`,
 
     it('buildRetentionDDL generates tracing TTL for span_events, trace_roots, and trace_branches', () => {
       const stmts = buildRetentionDDL({ tracing: 30 });
-      expect(stmts).toHaveLength(4);
+      expect(stmts).toHaveLength(3);
       expect(stmts[0]).toBe('ALTER TABLE mastra_span_events MODIFY TTL endedAt + INTERVAL 30 DAY');
       expect(stmts[1]).toBe('ALTER TABLE mastra_trace_roots MODIFY TTL endedAt + INTERVAL 30 DAY');
       expect(stmts[2]).toBe('ALTER TABLE mastra_trace_branches MODIFY TTL endedAt + INTERVAL 30 DAY');
-      expect(stmts[3]).toBe('ALTER TABLE mastra_deletion_requests MODIFY TTL requestedAt + INTERVAL 60 DAY');
     });
 
     it('buildRetentionDDL generates per-signal TTL statements', () => {
       const stmts = buildRetentionDDL({ logs: 7, metrics: 14, scores: 90, feedback: 60 });
-      expect(stmts).toHaveLength(5);
+      expect(stmts).toHaveLength(4);
       expect(stmts).toContain('ALTER TABLE mastra_log_events MODIFY TTL timestamp + INTERVAL 7 DAY');
       expect(stmts).toContain('ALTER TABLE mastra_metric_events MODIFY TTL timestamp + INTERVAL 14 DAY');
       expect(stmts).toContain('ALTER TABLE mastra_score_events MODIFY TTL timestamp + INTERVAL 90 DAY');
       expect(stmts).toContain('ALTER TABLE mastra_feedback_events MODIFY TTL timestamp + INTERVAL 60 DAY');
+    });
+
+    it('buildRetentionDDL adds a deletion-request TTL when every signal is bounded', () => {
+      const stmts = buildRetentionDDL({ tracing: 30, logs: 7, metrics: 14, scores: 90, feedback: 60 });
       expect(stmts).toContain('ALTER TABLE mastra_deletion_requests MODIFY TTL requestedAt + INTERVAL 120 DAY');
     });
 
@@ -4611,9 +4614,7 @@ LIMIT 1`,
         scores: undefined,
         feedback: 10,
       } as any);
-      expect(stmts).toHaveLength(2);
-      expect(stmts[0]).toBe('ALTER TABLE mastra_feedback_events MODIFY TTL timestamp + INTERVAL 10 DAY');
-      expect(stmts[1]).toBe('ALTER TABLE mastra_deletion_requests MODIFY TTL requestedAt + INTERVAL 40 DAY');
+      expect(stmts).toEqual(['ALTER TABLE mastra_feedback_events MODIFY TTL timestamp + INTERVAL 10 DAY']);
     });
 
     it('buildRetentionDDL floors fractional days', () => {
@@ -4694,12 +4695,17 @@ LIMIT 1`,
         const expectedTTLs: Record<string, string> = {
           [TABLE_SCORE_EVENTS]: 'timestamp + toIntervalDay(30)',
           [TABLE_FEEDBACK_EVENTS]: 'timestamp + toIntervalDay(45)',
-          [TABLE_DELETION_REQUESTS]: 'requestedAt + toIntervalDay(75)',
         };
-        for (const table of [TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS, TABLE_DELETION_REQUESTS]) {
+        for (const table of [TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS]) {
           const result = await client.query({ query: `SHOW CREATE TABLE ${table}`, format: 'TabSeparatedRaw' });
           expect(await result.text(), `${table} should use configured retention`).toContain(expectedTTLs[table]!);
         }
+
+        const deletionRequestsResult = await client.query({
+          query: `SHOW CREATE TABLE ${TABLE_DELETION_REQUESTS}`,
+          format: 'TabSeparatedRaw',
+        });
+        expect(await deletionRequestsResult.text()).not.toContain('TTL requestedAt');
       } finally {
         await client.close();
         await adminClient.command({ query: `DROP DATABASE IF EXISTS ${database}` });

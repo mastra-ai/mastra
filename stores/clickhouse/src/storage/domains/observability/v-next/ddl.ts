@@ -1283,6 +1283,7 @@ export interface RetentionEntry {
 export const RETENTION_MANAGED_TABLES = [...Object.keys(SIGNAL_TTL_COLUMNS), TABLE_DELETION_REQUESTS];
 
 const DELETION_REQUEST_RETENTION_MARGIN_DAYS = 30;
+const RETENTION_SIGNALS: (keyof RetentionConfig)[] = ['tracing', 'logs', 'metrics', 'scores', 'feedback'];
 
 export function buildRetentionEntries(retention: RetentionConfig): RetentionEntry[] {
   const entries: RetentionEntry[] = [];
@@ -1310,16 +1311,12 @@ export function buildRetentionEntries(retention: RetentionConfig): RetentionEntr
     }
   }
 
-  // A trace deletion request covers every signal row linked to the trace, so it
-  // must outlive the longest configured signal retention period.
-  const deletionSignalRetentionDays = signalRetentionDays.has('tracing')
-    ? [...signalRetentionDays.values()]
-    : [signalRetentionDays.get('scores'), signalRetentionDays.get('feedback')].filter(
-        (days): days is number => days !== undefined,
-      );
-
-  if (deletionSignalRetentionDays.length > 0) {
-    const days = Math.max(...deletionSignalRetentionDays) + DELETION_REQUEST_RETENTION_MARGIN_DAYS;
+  // Trace deletion requests cover every signal type and share a table-level TTL
+  // with item deletion requests. Any unbounded signal therefore makes the safe
+  // request lifetime unbounded. A request-kind-specific TTL could retire item
+  // requests independently if that distinction is needed later.
+  if (RETENTION_SIGNALS.every(signal => signalRetentionDays.has(signal))) {
+    const days = Math.max(...signalRetentionDays.values()) + DELETION_REQUEST_RETENTION_MARGIN_DAYS;
     entries.push({
       operation: 'modify',
       table: TABLE_DELETION_REQUESTS,

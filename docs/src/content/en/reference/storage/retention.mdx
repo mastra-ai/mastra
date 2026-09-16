@@ -36,7 +36,7 @@ Storage adapters use the shared core retention contract for `prune()`, or a data
 | Oracle Database | `prune()` | Observability spans and logs |
 | Amazon Aurora DSQL | `prune()` | Observability spans |
 | Google Cloud Spanner | `prune()` | Observability spans, plus metrics when metrics storage is enabled |
-| ClickHouse | Native TTL | Observability spans, metrics, logs, scores, and feedback. Deletion-request records expire after the longest configured deletion-capable signal retention plus 30 days |
+| ClickHouse | Native TTL | Observability spans, metrics, logs, scores, and feedback. When all five signals have finite retention, deletion-request records expire after the longest signal retention plus 30 days |
 
 ## Storage-specific maintenance
 
@@ -307,7 +307,7 @@ const observability = new ObservabilityStorageClickhouseVNext({
 await observability.applyRetention()
 ```
 
-Deletion requests are retained long enough to keep enforcing erasure after signal rows expire. When `tracing` retention is configured, the `mastra_deletion_requests` TTL is the longest configured signal retention period plus 30 days because trace deletion cascades to linked metrics, logs, scores, and feedback. Without `tracing` retention, the TTL is the longer configured `scores` or `feedback` period plus 30 days. For example, a 90-day score retention period produces a 120-day deletion-request TTL.
+Deletion requests are retained long enough to keep enforcing erasure after signal rows expire. Mastra applies a TTL to `mastra_deletion_requests` only when tracing, logs, metrics, scores, and feedback all have finite retention. The deletion-request TTL is the longest of those periods plus 30 days. For example, if score retention is the longest period at 90 days, deletion requests expire after 120 days. When any signal is unbounded, deletion requests remain unbounded because trace deletion requests cover rows across all five signals.
 
 ## MongoDB TTL indexes (alternative to prune)
 
