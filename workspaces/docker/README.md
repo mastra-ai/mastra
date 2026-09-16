@@ -62,6 +62,69 @@ const workspace = new Workspace({
 > starts, otherwise the mount fails. Provision it ahead of time (for example,
 > with a one-off container that creates `conversations/abc123` in the volume).
 
+## Templates
+
+`DockerTemplate` prepares a reusable environment once — a base image plus ordered
+setup commands, env vars, and package installs — then spawns multiple disposable
+sandboxes from it. Each sandbox is a fresh container with its own writable layer
+over the shared read-only image, so their filesystems are independent. The image
+is produced by synthesizing a `Dockerfile` and running `docker build` (not
+`docker commit`), so setup is baked into reproducible, cached, content-addressed
+layers.
+
+```typescript
+import { DockerTemplate } from '@mastra/docker';
+
+const template = new DockerTemplate({ baseImage: 'node:22-slim' })
+  .runCmd('git clone --depth=1 https://example.com/repo /workspace/app')
+  .setWorkdir('/workspace/app')
+  .runCmd('npm ci');
+
+const result = await template.build();
+if (result.status !== 'ready') throw new Error(result.error);
+
+// Prepare once, spawn many — each has an independent writable filesystem.
+const a = await template.createSandbox();
+const b = await template.createSandbox();
+
+// Remove the built image when done (independent of any sandbox's destroy()).
+await template.dispose();
+```
+
+Builder methods (`from`, `setWorkdir`, `setEnvs`, `runCmd`, `aptInstall`,
+`npmInstall`) are immutable and chainable — each returns a new template. The
+image tag is content-addressed (`mastra-template:<hash>`), so `build()` is
+idempotent and reuses an existing image unless you pass `{ force: true }`.
+
+Build-time secrets can be supplied as ephemeral env vars — passed only as build
+args and excluded from the template identity:
+
+```typescript
+const template = new DockerTemplate()
+  .setEnvs({ NPM_TOKEN: process.env.NPM_TOKEN! }, { ephemeral: true })
+  .runCmd('npm ci');
+```
+
+### Repository templates
+
+`createDockerRepoTemplate` is a convenience that prepares a repository checkout
+at an exact commit (or branch) plus setup commands. A private-repo token is read
+from the named env var and injected as an ephemeral build arg:
+
+```typescript
+import { createDockerRepoTemplate } from '@mastra/docker';
+
+const template = createDockerRepoTemplate({
+  repoUrl: 'https://github.com/acme/app.git',
+  commit: 'a1b2c3d',
+  setupCommands: ['npm ci', 'npm run build'],
+  tokenEnv: 'GITHUB_TOKEN', // optional, for private repos
+});
+
+await template.build();
+const sandbox = await template.createSandbox();
+```
+
 ## Documentation
 
 - [Docker Sandbox integration guide](https://mastra.ai/integrations/sandboxes/docker)

@@ -1,0 +1,86 @@
+import { describe, expect, it } from 'vitest';
+import { type DockerTemplateDefinition, synthesizeDockerfile, templateIdentity, templateImageTag } from './dockerfile';
+
+function def(overrides: Partial<DockerTemplateDefinition> = {}): DockerTemplateDefinition {
+  return {
+    baseImage: 'node:22-slim',
+    operations: [],
+    buildArgNames: [],
+    ...overrides,
+  };
+}
+
+describe('synthesizeDockerfile', () => {
+  it('emits FROM for the base image', () => {
+    expect(synthesizeDockerfile(def())).toBe('FROM node:22-slim\n');
+  });
+
+  it('declares ephemeral build args after FROM', () => {
+    const dockerfile = synthesizeDockerfile(def({ buildArgNames: ['GIT_TOKEN'] }));
+    expect(dockerfile).toBe('FROM node:22-slim\nARG GIT_TOKEN\n');
+  });
+
+  it('renders operations in order', () => {
+    const dockerfile = synthesizeDockerfile(
+      def({
+        operations: [
+          { method: 'setWorkdir', args: ['/app'] },
+          { method: 'runCmd', args: ['echo hi'] },
+        ],
+      }),
+    );
+    expect(dockerfile).toBe('FROM node:22-slim\nWORKDIR /app\nRUN echo hi\n');
+  });
+
+  it('joins array runCmd with &&', () => {
+    const dockerfile = synthesizeDockerfile(def({ operations: [{ method: 'runCmd', args: [['a', 'b']] }] }));
+    expect(dockerfile).toContain('RUN a && b');
+  });
+
+  it('renders env vars deterministically sorted', () => {
+    const dockerfile = synthesizeDockerfile(def({ operations: [{ method: 'setEnvs', args: [{ B: '2', A: '1' }] }] }));
+    expect(dockerfile).toContain('ENV A="1" B="2"');
+  });
+
+  it('renders apt install with cleanup and flags', () => {
+    const dockerfile = synthesizeDockerfile(
+      def({ operations: [{ method: 'aptInstall', args: [['git', 'curl'], { noInstallRecommends: true }] }] }),
+    );
+    expect(dockerfile).toContain('RUN apt-get update && apt-get install -y --no-install-recommends git curl');
+    expect(dockerfile).toContain('rm -rf /var/lib/apt/lists/*');
+  });
+
+  it('renders npm install variants', () => {
+    expect(synthesizeDockerfile(def({ operations: [{ method: 'npmInstall', args: [] }] }))).toContain(
+      'RUN npm install\n',
+    );
+    expect(
+      synthesizeDockerfile(def({ operations: [{ method: 'npmInstall', args: [undefined, { dev: true }] }] })),
+    ).toContain('RUN npm install --include=dev');
+    expect(
+      synthesizeDockerfile(def({ operations: [{ method: 'npmInstall', args: ['typescript', { g: true }] }] })),
+    ).toContain('RUN npm install -g typescript');
+  });
+});
+
+describe('templateIdentity', () => {
+  it('is stable for identical definitions', () => {
+    expect(templateIdentity(def())).toBe(templateIdentity(def()));
+  });
+
+  it('changes when operations change', () => {
+    const a = templateIdentity(def());
+    const b = templateIdentity(def({ operations: [{ method: 'runCmd', args: ['echo hi'] }] }));
+    expect(a).not.toBe(b);
+  });
+
+  it('ignores ephemeral build arg names (secrets do not change identity)', () => {
+    const a = templateIdentity(def());
+    const b = templateIdentity(def({ buildArgNames: ['GIT_TOKEN'] }));
+    expect(a).toBe(b);
+  });
+
+  it('produces a mastra-template tag', () => {
+    expect(templateImageTag(def())).toMatch(/^mastra-template:[0-9a-f]{24}$/);
+  });
+});

@@ -37,6 +37,7 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@internal/workspace": "workspace:*",
     "@internal/workspace-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/dockerode": "^4.0.1",
