@@ -98,7 +98,7 @@ idempotent and reuses an existing image unless you pass `{ force: true }`.
 
 Never put secrets in `setEnvs` — they are baked into the image. For a step that
 needs a credential, use `runWithSecrets`: the command runs in a throwaway build
-stage, the named variables are read from the building process's `process.env`
+stage forked from the steps before it, the named variables are read from the building process's `process.env`
 at `build()` time, and only `output` is copied into the image. The built image's
 layers, config, and history never contain the values (the local daemon's build
 cache still does until you `docker image prune`).

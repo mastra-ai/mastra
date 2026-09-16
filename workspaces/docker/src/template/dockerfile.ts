@@ -102,54 +102,67 @@ function secretStageName(index: number): string {
   return `mastra-secret-${index}`;
 }
 
+function mainStageName(index: number): string {
+  return `mastra-main-${index}`;
+}
+
 /**
  * Render a deterministic Dockerfile from a template definition.
  *
- * Every `runWithSecrets` operation becomes its own throwaway stage that starts
- * from the base image, declares the secret names as `ARG`s, and runs the
- * command. The final stage then `COPY --from`s only the declared output path.
- * Build args are recorded in the history of the layers they touch, so keeping
- * them in a stage the final image never inherits is what keeps the values out
- * of the template image.
+ * Operations accumulate in a chain of "main" stages. Every `runWithSecrets`
+ * operation forks a throwaway stage from the main stage as it stands at that
+ * point (so it sees earlier WORKDIR/ENV/installs), declares the secret names as
+ * `ARG`s, and runs the command. The next main stage then starts from the same
+ * pre-secret snapshot and `COPY --from`s only the declared output path. Build
+ * args are recorded in the history of the layers they touch, so keeping them
+ * in a stage the final image never inherits is what keeps the values out of
+ * the template image.
  */
 export function synthesizeDockerfile(definition: DockerTemplateDefinition): string {
-  const stages: string[] = [];
-  const main: string[] = [`FROM ${definition.baseImage}`];
+  const lines: string[] = [];
+  let mainIndex = 0;
+  const openMain = (from: string) => {
+    lines.push(`FROM ${from} AS ${mainStageName(mainIndex)}`);
+  };
+  openMain(definition.baseImage);
 
   definition.operations.forEach((operation, index) => {
     switch (operation.method) {
       case 'setWorkdir':
-        main.push(`WORKDIR ${operation.args[0]}`);
+        lines.push(`WORKDIR ${operation.args[0]}`);
         break;
       case 'setEnvs': {
         const line = renderEnvLine(operation.args[0]);
-        if (line) main.push(line);
+        if (line) lines.push(line);
         break;
       }
       case 'runCmd':
-        main.push(`RUN ${toCommandList(operation.args[0]).join(' && ')}`);
+        lines.push(`RUN ${toCommandList(operation.args[0]).join(' && ')}`);
         break;
       case 'runWithSecrets': {
         const [command, { secrets, output }] = operation.args;
+        const snapshot = mainStageName(mainIndex);
         const stage = secretStageName(index);
-        stages.push(
-          `FROM ${definition.baseImage} AS ${stage}`,
+        lines.push(
+          `FROM ${snapshot} AS ${stage}`,
           ...[...secrets].sort().map(name => `ARG ${name}`),
           `RUN ${toCommandList(command).join(' && ')}`,
         );
-        main.push(`COPY --from=${stage} ${output} ${output}`);
+        mainIndex += 1;
+        openMain(snapshot);
+        lines.push(`COPY --from=${stage} ${output} ${output}`);
         break;
       }
       case 'aptInstall':
-        main.push(renderAptInstall(operation.args[0], operation.args[1]));
+        lines.push(renderAptInstall(operation.args[0], operation.args[1]));
         break;
       case 'npmInstall':
-        main.push(renderNpmInstall(operation.args[0], operation.args[1]));
+        lines.push(renderNpmInstall(operation.args[0], operation.args[1]));
         break;
     }
   });
 
-  return `${[...stages, ...main].join('\n')}\n`;
+  return `${lines.join('\n')}\n`;
 }
 
 /** Names of every secret referenced by `runWithSecrets` operations, deduplicated and sorted. */

@@ -133,8 +133,9 @@ export class DockerTemplate {
   /**
    * Run a command that needs build-time secrets, without persisting them.
    *
-   * The command runs in a throwaway build stage that starts from the base
-   * image (earlier steps of this template do not apply to it). The named
+   * The command runs in a throwaway build stage forked from the template as it
+   * stands at that point, so earlier WORKDIR/ENV/installs apply and later
+   * steps see the copied `output`. The named
    * secrets are read from `process.env` when `build()` runs and exposed to the
    * command as environment variables. Only `output` is copied into the template
    * image; the values never appear in the image's layers, config, or history.
@@ -206,7 +207,6 @@ export class DockerTemplate {
   async build(options: DockerTemplateBuildOptions = {}): Promise<DockerTemplateBuildResult> {
     const docker = this.#getDocker();
     const tag = this.templateId;
-    const buildargs = this.#resolveSecrets();
 
     if (!options.force) {
       try {
@@ -217,6 +217,10 @@ export class DockerTemplate {
         if (!isImageNotFoundError(error)) throw error;
       }
     }
+
+    // Only a real build needs the secret values; reusing a cached image must not
+    // require the original credentials to still be present.
+    const buildargs = this.#resolveSecrets();
 
     const context = tarPack();
     context.entry({ name: 'Dockerfile' }, this.dockerfile);

@@ -54,16 +54,16 @@ describe('DockerTemplate builder', () => {
     const base = new DockerTemplate({ baseImage: 'node:22-slim' });
     const next = base.runCmd('echo hi');
     expect(next).not.toBe(base);
-    expect(base.dockerfile).toBe('FROM node:22-slim\n');
+    expect(base.dockerfile).toBe('FROM node:22-slim AS mastra-main-0\n');
     expect(next.dockerfile).toContain('RUN echo hi');
   });
 
   it('defaults the base image to node:22-slim', () => {
-    expect(new DockerTemplate().dockerfile).toBe('FROM node:22-slim\n');
+    expect(new DockerTemplate().dockerfile).toBe('FROM node:22-slim AS mastra-main-0\n');
   });
 
   it('supports .from() to override the base image', () => {
-    expect(new DockerTemplate().from('ubuntu:24.04').dockerfile).toBe('FROM ubuntu:24.04\n');
+    expect(new DockerTemplate().from('ubuntu:24.04').dockerfile).toBe('FROM ubuntu:24.04 AS mastra-main-0\n');
   });
 
   it('runs secret steps in a throwaway stage and keeps values out of the Dockerfile', () => {
@@ -73,10 +73,11 @@ describe('DockerTemplate builder', () => {
     });
     expect(template.dockerfile).toBe(
       [
-        'FROM node:22-slim AS mastra-secret-0',
+        'FROM node:22-slim AS mastra-main-0',
+        'FROM mastra-main-0 AS mastra-secret-0',
         'ARG GIT_TOKEN',
         'RUN git clone x /workspace/app',
-        'FROM node:22-slim',
+        'FROM mastra-main-0 AS mastra-main-1',
         'COPY --from=mastra-secret-0 /workspace/app /workspace/app',
         '',
       ].join('\n'),
@@ -142,10 +143,20 @@ describe('DockerTemplate.build', () => {
   });
 
   it('throws before building when a secret is missing from the environment', async () => {
+    mockImage.inspect.mockRejectedValueOnce(new Error('no such image'));
     vi.stubEnv('GIT_TOKEN', undefined as never);
     delete process.env.GIT_TOKEN;
     const template = new DockerTemplate().runWithSecrets('echo hi', { secrets: ['GIT_TOKEN'], output: '/out' });
     await expect(template.build()).rejects.toThrow(/GIT_TOKEN/);
+    expect(mockDocker.buildImage).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
+
+  it('reuses a cached image without requiring the secrets to still be set', async () => {
+    vi.stubEnv('GIT_TOKEN', undefined as never);
+    delete process.env.GIT_TOKEN;
+    const template = new DockerTemplate().runWithSecrets('echo hi', { secrets: ['GIT_TOKEN'], output: '/out' });
+    await expect(template.build()).resolves.toEqual({ status: 'ready', templateId: template.templateId });
     expect(mockDocker.buildImage).not.toHaveBeenCalled();
     vi.unstubAllEnvs();
   });

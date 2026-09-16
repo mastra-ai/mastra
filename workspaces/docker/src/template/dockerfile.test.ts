@@ -12,7 +12,7 @@ function def(overrides: Partial<DockerTemplateDefinition> = {}): DockerTemplateD
 
 describe('synthesizeDockerfile', () => {
   it('emits FROM for the base image', () => {
-    expect(synthesizeDockerfile(def())).toBe('FROM node:22-slim\n');
+    expect(synthesizeDockerfile(def())).toBe('FROM node:22-slim AS mastra-main-0\n');
   });
 
   it('renders runWithSecrets as a throwaway stage plus COPY --from', () => {
@@ -25,7 +25,52 @@ describe('synthesizeDockerfile', () => {
       }),
     );
     expect(dockerfile).toBe(
-      'FROM node:22-slim AS mastra-secret-1\nARG A\nARG B\nRUN fetch\nFROM node:22-slim\nRUN echo before\nCOPY --from=mastra-secret-1 /out /out\n',
+      [
+        'FROM node:22-slim AS mastra-main-0',
+        'RUN echo before',
+        'FROM mastra-main-0 AS mastra-secret-1',
+        'ARG A',
+        'ARG B',
+        'RUN fetch',
+        'FROM mastra-main-0 AS mastra-main-1',
+        'COPY --from=mastra-secret-1 /out /out',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it('secret stages inherit prior state and later operations continue from the copied output', () => {
+    const dockerfile = synthesizeDockerfile(
+      def({
+        operations: [
+          { method: 'aptInstall', args: ['git'] },
+          { method: 'setWorkdir', args: ['/w'] },
+          { method: 'runWithSecrets', args: ['git clone x /w/a', { secrets: ['T'], output: '/w/a' }] },
+          { method: 'runWithSecrets', args: ['cat /w/a/x > /w/b', { secrets: ['T'], output: '/w/b' }] },
+          { method: 'runCmd', args: ['ls /w/a /w/b'] },
+        ],
+      }),
+    );
+    expect(dockerfile).toBe(
+      [
+        'FROM node:22-slim AS mastra-main-0',
+        'RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*',
+        'WORKDIR /w',
+        // First secret step forks the main stage after git + WORKDIR.
+        'FROM mastra-main-0 AS mastra-secret-2',
+        'ARG T',
+        'RUN git clone x /w/a',
+        'FROM mastra-main-0 AS mastra-main-1',
+        'COPY --from=mastra-secret-2 /w/a /w/a',
+        // Second secret step forks after the first output was copied in.
+        'FROM mastra-main-1 AS mastra-secret-3',
+        'ARG T',
+        'RUN cat /w/a/x > /w/b',
+        'FROM mastra-main-1 AS mastra-main-2',
+        'COPY --from=mastra-secret-3 /w/b /w/b',
+        'RUN ls /w/a /w/b',
+        '',
+      ].join('\n'),
     );
   });
 
@@ -38,7 +83,7 @@ describe('synthesizeDockerfile', () => {
         ],
       }),
     );
-    expect(dockerfile).toBe('FROM node:22-slim\nWORKDIR /app\nRUN echo hi\n');
+    expect(dockerfile).toBe('FROM node:22-slim AS mastra-main-0\nWORKDIR /app\nRUN echo hi\n');
   });
 
   it('joins array runCmd with &&', () => {

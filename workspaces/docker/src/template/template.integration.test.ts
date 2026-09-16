@@ -76,10 +76,17 @@ describe('DockerTemplate (integration)', () => {
   it('exposes secrets to runWithSecrets steps without leaving them in the image', async () => {
     const secret = `tok-${Date.now()}`;
     process.env.MASTRA_TEST_SECRET = secret;
-    const template = new DockerTemplate({ baseImage: 'alpine:3.20' }).runWithSecrets(
-      'mkdir -p /out && echo "len=${#MASTRA_TEST_SECRET}" > /out/proof',
-      { secrets: ['MASTRA_TEST_SECRET'], output: '/out' },
-    );
+    const template = new DockerTemplate({ baseImage: 'alpine:3.20' })
+      // State set before the secret step must be visible inside it.
+      .setEnvs({ MARKER: 'from-env' })
+      .runCmd('ln -s /bin/hostname /usr/local/bin/marker-tool')
+      .setWorkdir('/out')
+      .runWithSecrets('echo "len=${#MASTRA_TEST_SECRET} $MARKER $(command -v marker-tool) $(pwd)" > /out/proof', {
+        secrets: ['MASTRA_TEST_SECRET'],
+        output: '/out',
+      })
+      // Steps after the secret step must see its output.
+      .runCmd('cp /out/proof /out/proof-copy');
     templates.push(template);
     try {
       const result = await template.build({ force: true });
@@ -94,8 +101,8 @@ describe('DockerTemplate (integration)', () => {
       const sandbox = await template.createSandbox();
       sandboxes.push(sandbox);
       await sandbox.start();
-      const { stdout } = await sandbox.executeCommand('cat /out/proof');
-      expect(stdout.trim()).toBe(`len=${secret.length}`);
+      const { stdout } = await sandbox.executeCommand('cat /out/proof-copy');
+      expect(stdout.trim()).toBe(`len=${secret.length} from-env /usr/local/bin/marker-tool /out`);
     } finally {
       delete process.env.MASTRA_TEST_SECRET;
     }

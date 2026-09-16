@@ -39,8 +39,9 @@ describe('createDockerRepoTemplate', () => {
     expect(dockerfile).toContain('$GH_TOKEN');
     expect(dockerfile).not.toMatch(/ENV .*GH_TOKEN/);
     expect(dockerfile).toContain("COPY --from=mastra-secret-0 '/workspace/repo' '/workspace/repo'".replace(/'/g, ''));
-    // The final stage never declares the ARG, so nothing after the COPY can see it.
-    expect(dockerfile.split('\nFROM ')[1]).not.toContain('ARG GH_TOKEN');
+    // Only the secret stage declares the ARG; no main stage can see it.
+    const stages = dockerfile.split('\nFROM ').filter(stage => !stage.includes('AS mastra-secret-'));
+    expect(stages.join('\n')).not.toContain('ARG GH_TOKEN');
   });
 
   it('runs setup commands and writes the completion marker last', () => {
