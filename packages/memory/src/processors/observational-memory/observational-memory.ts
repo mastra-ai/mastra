@@ -9,13 +9,19 @@ import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { MemoryStorage, ObservationalMemoryRecord, ObservationalMemoryHistoryOptions } from '@mastra/core/storage';
+import type {
+  MemoryStorage,
+  ObservationArchiveEntry,
+  ObservationalMemoryRecord,
+  ObservationalMemoryHistoryOptions,
+} from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../..';
 import { WORKING_MEMORY_STATE_ID } from '../working-memory-state/processor';
 import { resolveActivationTTL } from './activation-ttl';
+import { canRenderObservationArchiveCatalog, renderObservationArchiveCatalog } from './archive-catalog';
 import { planObservationArchive } from './archive-lifecycle';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { composeObservationExtractors, composeReflectionExtractors } from './built-in-extractors';
@@ -1791,6 +1797,7 @@ export class ObservationalMemory {
     unobservedContextBlocks?: string,
     currentDate?: Date,
     retrieval = false,
+    archivedObservations?: string,
   ): string[] {
     // Optimize observations to save tokens unless retrieval mode needs durable group metadata preserved.
     let optimized = retrieval
@@ -1811,6 +1818,10 @@ export class ObservationalMemory {
       messages.push(
         `The following content is from OTHER conversations different from the current conversation, they're here for reference,  but they're not necessarily your focus:\nSTART_OTHER_CONVERSATIONS_BLOCK\n${unobservedContextBlocks}\nEND_OTHER_CONVERSATIONS_BLOCK`,
       );
+    }
+
+    if (archivedObservations) {
+      messages.push(archivedObservations);
     }
 
     const observationChunks = this.splitObservationContextChunks(optimized);
@@ -2756,6 +2767,55 @@ ${formattedMessages}
     }
   }
 
+  private async buildArchivedObservationsCatalog({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<string | undefined> {
+    const archiveConfig = this.observationConfig.archive;
+    if (!archiveConfig) return undefined;
+
+    const countTokens = (text: string) => this.tokenCounter.countObservations(text);
+    if (!canRenderObservationArchiveCatalog(archiveConfig.maxCatalogTokens, countTokens)) {
+      return undefined;
+    }
+
+    const limits = [20, 20, 10] as const;
+    const archives: ObservationArchiveEntry[] = [];
+    let cursor: string | undefined;
+
+    for (const limit of limits) {
+      const page = await this.storage.listObservationArchives({
+        scope: this.retrievalScope,
+        threadId: this.retrievalScope === 'thread' ? threadId : undefined,
+        resourceId,
+        cursor,
+        limit,
+      });
+      archives.push(...page.archives);
+
+      const rendered = renderObservationArchiveCatalog({
+        archives,
+        hasMore: Boolean(page.nextCursor),
+        maxTokens: archiveConfig.maxCatalogTokens,
+        countTokens,
+      });
+      if (rendered.budgetFull || !page.nextCursor) {
+        return rendered.text;
+      }
+      cursor = page.nextCursor;
+    }
+
+    return renderObservationArchiveCatalog({
+      archives,
+      hasMore: Boolean(cursor),
+      maxTokens: archiveConfig.maxCatalogTokens,
+      countTokens,
+    }).text;
+  }
+
   /**
    * Build the observation system message string for injection into an LLM prompt.
    *
@@ -2800,8 +2860,12 @@ ${formattedMessages}
   }): Promise<string[] | undefined> {
     const { threadId, resourceId, unobservedContextBlocks } = opts;
     const record = opts.record ?? (await this.getOrCreateRecord(threadId, resourceId));
+    const archivedObservations = await this.buildArchivedObservationsCatalog({
+      threadId,
+      resourceId: resourceId ?? record.resourceId,
+    });
 
-    if (!record.activeObservations) {
+    if (!record.activeObservations && !archivedObservations) {
       // Resource-scoped recall can browse and search other threads even before any
       // observation group exists, so the actor still needs to know how to use it.
       if (this.retrieval && this.retrievalScope === 'resource') {
@@ -2825,13 +2889,14 @@ ${formattedMessages}
     const currentDate = opts.currentDate ?? new Date();
 
     return this.formatObservationsForContext(
-      record.activeObservations,
+      record.activeObservations ?? '',
       currentTask,
       suggestedResponse,
       omMetadata?.extracted,
       unobservedContextBlocks,
       currentDate,
       this.retrieval,
+      archivedObservations,
     );
   }
 
