@@ -996,5 +996,170 @@ describe('hydrateProcessorGraph', () => {
       expect(runResult.result.phase).toBe('input');
       expect(defaultCalled).toHaveBeenCalled();
     }, 10000);
+
+    it('should NOT run the default branch when an explicit rule matches', async () => {
+      const matchedCalled = vi.fn();
+      const defaultCalled = vi.fn();
+
+      const provMatched: ProcessorProvider = {
+        info: { id: 'prov-matched', name: 'Matched' },
+        configSchema: z.object({}),
+        availablePhases: ['processInput'] as ProcessorPhase[],
+        createProcessor(): Processor {
+          return {
+            id: 'matched-instance',
+            name: 'Matched',
+            processInput: async ({ messages }) => {
+              matchedCalled();
+              return messages;
+            },
+          };
+        },
+      };
+
+      const provDefault: ProcessorProvider = {
+        info: { id: 'prov-default', name: 'Default' },
+        configSchema: z.object({}),
+        availablePhases: ['processInput'] as ProcessorPhase[],
+        createProcessor(): Processor {
+          return {
+            id: 'default-instance',
+            name: 'Default',
+            processInput: async ({ messages }) => {
+              defaultCalled();
+              return messages;
+            },
+          };
+        },
+      };
+
+      const graph: StoredProcessorGraph = {
+        steps: [
+          {
+            type: 'conditional',
+            conditions: [
+              {
+                rules: {
+                  operator: 'AND' as const,
+                  conditions: [{ field: 'phase', operator: 'equals' as const, value: 'input' }],
+                },
+                steps: [
+                  {
+                    type: 'step',
+                    step: { id: 'cm', providerId: 'prov-matched', config: {}, enabledPhases: ['processInput'] },
+                  },
+                ],
+              },
+              {
+                // Default branch (no rules)
+                steps: [
+                  {
+                    type: 'step',
+                    step: { id: 'cd', providerId: 'prov-default', config: {}, enabledPhases: ['processInput'] },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const providers = { 'prov-matched': provMatched, 'prov-default': provDefault };
+      const result = hydrateProcessorGraph(graph, 'input', { providers });
+      expect(result).toHaveLength(1);
+
+      const workflow = result![0]! as ProcessorWorkflow;
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'test-msg-1',
+          role: 'user' as const,
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text' as const, text: 'Hello' }] },
+        },
+      ];
+      const ml = new MessageList();
+      ml.add(messages, 'input');
+
+      const run = await workflow.createRun();
+      const runResult = await run.start({
+        inputData: { phase: 'input', messages, messageList: ml },
+      });
+
+      if (runResult.status !== 'success') {
+        throw new Error(`Workflow failed with status: ${runResult.status}`);
+      }
+      expect(runResult.result.phase).toBe('input');
+      expect(matchedCalled).toHaveBeenCalled();
+      expect(defaultCalled).not.toHaveBeenCalled();
+    }, 10000);
+
+    it('should run the pass-through (returning input unchanged) when no rule matches and there is no default', async () => {
+      const neverCalled = vi.fn();
+
+      const provNever: ProcessorProvider = {
+        info: { id: 'prov-never', name: 'Never' },
+        configSchema: z.object({}),
+        availablePhases: ['processInput'] as ProcessorPhase[],
+        createProcessor(): Processor {
+          return {
+            id: 'never-instance',
+            name: 'Never',
+            processInput: async ({ messages }) => {
+              neverCalled();
+              return messages;
+            },
+          };
+        },
+      };
+
+      const graph: StoredProcessorGraph = {
+        steps: [
+          {
+            type: 'conditional',
+            conditions: [
+              {
+                rules: {
+                  operator: 'AND' as const,
+                  conditions: [{ field: 'phase', operator: 'equals' as const, value: 'nonexistent' }],
+                },
+                steps: [
+                  {
+                    type: 'step',
+                    step: { id: 'cn', providerId: 'prov-never', config: {}, enabledPhases: ['processInput'] },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const providers = { 'prov-never': provNever };
+      const result = hydrateProcessorGraph(graph, 'input', { providers });
+      expect(result).toHaveLength(1);
+
+      const workflow = result![0]! as ProcessorWorkflow;
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'test-msg-1',
+          role: 'user' as const,
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text' as const, text: 'Hello' }] },
+        },
+      ];
+      const ml = new MessageList();
+      ml.add(messages, 'input');
+
+      const run = await workflow.createRun();
+      const runResult = await run.start({
+        inputData: { phase: 'input', messages, messageList: ml },
+      });
+
+      if (runResult.status !== 'success') {
+        throw new Error(`Workflow failed with status: ${runResult.status}`);
+      }
+      expect(runResult.result.phase).toBe('input');
+      expect(neverCalled).not.toHaveBeenCalled();
+    }, 10000);
   });
 });
