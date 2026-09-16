@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { __clearSessionSandboxesForTests, getSessionSandbox } from '../sandbox/session-sandbox.js';
+import { CustomProviderPresets } from '../storage/domains/custom-providers/presets.js';
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -1331,6 +1332,33 @@ describe('custom provider routes', () => {
 
   it('rejects unauthenticated access when web auth is enabled', async () => {
     expect((await buildApp(null).request('/web/config/custom-providers')).status).toBe(401);
+  });
+
+  it('lists deployment presets as read-only and refuses to change them', async () => {
+    seed.customProviders.usePresets(
+      new CustomProviderPresets([{ name: 'Team Proxy', url: 'https://proxy.example.com/v1', models: ['fast'] }]),
+    );
+    const app = buildApp(userA);
+
+    const { providers } = await (await app.request('/web/config/custom-providers')).json();
+    expect(providers).toEqual([
+      {
+        id: 'team-proxy',
+        name: 'Team Proxy',
+        url: 'https://proxy.example.com/v1',
+        hasApiKey: false,
+        models: ['fast'],
+        readOnly: true,
+      },
+    ]);
+
+    const overwrite = await postProvider(app, { ...providerBody, name: 'Team Proxy' });
+    expect(overwrite.status).toBe(409);
+    const renameOnto = await postProvider(app, { ...providerBody, previousId: 'team-proxy' });
+    expect(renameOnto.status).toBe(409);
+    const removed = await app.request('/web/config/custom-providers/team-proxy', { method: 'DELETE' });
+    expect(removed.status).toBe(409);
+    expect(onCustomProvidersChanged).not.toHaveBeenCalled();
   });
 
   it('persists providers in the org-scoped domain with keys redacted', async () => {

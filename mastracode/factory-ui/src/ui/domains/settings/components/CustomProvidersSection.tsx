@@ -182,6 +182,7 @@ export function CustomProvidersSection() {
                       Key saved
                     </Badge>
                   )}
+                  {p.readOnly && <Badge size="sm">Deployment</Badge>}
                 </div>
                 <Txt as="span" variant="ui-xs" className="text-icon3 truncate">
                   {p.url}
@@ -192,14 +193,16 @@ export function CustomProvidersSection() {
                   </Txt>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <Button size="sm" disabled={busy} onClick={() => startEdit(p)}>
-                  Edit
-                </Button>
-                <Button variant="outline" size="sm" disabled={busy} onClick={() => void remove(p.id)}>
-                  Remove
-                </Button>
-              </div>
+              {!p.readOnly && (
+                <div className="flex items-center gap-2">
+                  <Button size="sm" disabled={busy} onClick={() => startEdit(p)}>
+                    Edit
+                  </Button>
+                  <Button variant="outline" size="sm" disabled={busy} onClick={() => void remove(p.id)}>
+                    Remove
+                  </Button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
