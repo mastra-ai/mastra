@@ -213,6 +213,7 @@ type Shared_Type_0 = {
   description?: string | undefined;
   inputSchema?: string | undefined;
   outputSchema?: string | undefined;
+  requestContextSchema?: string | undefined;
   requireApproval?: boolean | undefined;
 };
 
