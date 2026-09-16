@@ -9,7 +9,6 @@
  * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization
  */
 
-import { timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
 
@@ -147,10 +146,19 @@ export function getCallbackUrlCandidates(redirectUrl: string | URL): URL[] {
  * forged local request matched. (Length is still observable, which is fine —
  * the state's entropy is what protects it.)
  */
-function stateMatches(receivedState: string, expectedState: string): boolean {
-  const received = Buffer.from(receivedState);
-  const expected = Buffer.from(expectedState);
-  return received.length === expected.length && timingSafeEqual(received, expected);
+const stateComparisonKey = globalThis.crypto.subtle.importKey(
+  'raw',
+  new TextEncoder().encode('mastra:mcp:oauth-state-comparison:v1'),
+  { name: 'HMAC', hash: 'SHA-256' },
+  false,
+  ['sign', 'verify'],
+);
+
+async function stateMatches(receivedState: string, expectedState: string): Promise<boolean> {
+  const key = await stateComparisonKey;
+  const expected = new TextEncoder().encode(expectedState);
+  const signature = await globalThis.crypto.subtle.sign('HMAC', key, expected);
+  return globalThis.crypto.subtle.verify('HMAC', key, signature, new TextEncoder().encode(receivedState));
 }
 
 function listen(server: HttpServer, port: number, hostname: string): Promise<NodeJS.ErrnoException | null> {
@@ -226,7 +234,7 @@ export async function createOAuthCallbackServer(options: OAuthCallbackServerOpti
     }
   };
 
-  const server = createServer((req, res) => {
+  const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '', 'http://localhost');
     if (url.pathname !== callbackPath) {
       res.statusCode = 404;
@@ -251,7 +259,7 @@ export async function createOAuthCallbackServer(options: OAuthCallbackServerOpti
     // without the expected state are not this flow's redirect and must not
     // settle the one-shot outcome.
     const state = url.searchParams.get('state');
-    if (state === null || !stateMatches(state, options.state)) {
+    if (state === null || !(await stateMatches(state, options.state))) {
       respond(400, ERROR_HTML);
       return;
     }

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { Buffer } from 'node:buffer';
 import { createServer } from 'node:http';
 import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node:http';
 import { describe, it, expect, afterEach } from 'vitest';
@@ -140,7 +140,9 @@ async function startFakeAuthorizationServer(port: number): Promise<FakeAuthoriza
       if (grantType === 'authorization_code') {
         const pending = pendingCodes.get(params.get('code') ?? '');
         const verifier = params.get('code_verifier') ?? '';
-        const challenge = createHash('sha256').update(verifier).digest('base64url');
+        const challenge = Buffer.from(
+          await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)),
+        ).toString('base64url');
         if (!pending || pending.codeChallenge !== challenge) {
           sendJson(res, 400, { error: 'invalid_grant' });
           return;
