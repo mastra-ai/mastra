@@ -73,6 +73,19 @@ describe('branch logical message queries', () => {
     expect(nestedMessages.map(item => item.threadId)).toEqual(['root', nested.thread.id]);
   });
 
+  it('loads inherited history when recall is limited by tokens', async () => {
+    await seedRoot([message('a', 'root', 0), message('b', 'root', 1), message('parent-tail', 'root', 2)]);
+    const branch = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'b' });
+    await memory.saveMessages({ messages: [message('child-tail', branch.thread.id, 3)] });
+
+    const result = await memory.recall({
+      threadId: branch.thread.id,
+      threadConfig: { messageHistory: { maxTokens: 10_000 } },
+    });
+
+    expect(result.messages.map(item => item.id)).toEqual(['a', 'b', 'child-tail']);
+  });
+
   it('applies filters, deterministic pagination, exact totals, and both order directions', async () => {
     await seedRoot([
       message('a', 'root', 0, { kind: 'keep' }),
