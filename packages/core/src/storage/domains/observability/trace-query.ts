@@ -1,8 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod/v4';
 import { paginationArgsSchema, paginationInfoSchema } from '../shared';
-import type { FeedbackRecord } from './feedback';
-import type { ScoreRecord } from './scores';
 import type { SpanRecord } from './tracing';
 
 export const TRACE_QUERY_MAX_DEPTH = 12;
@@ -12,6 +10,9 @@ export const TRACE_QUERY_MAX_RELATED_CLAUSES = 8;
 export const TRACE_QUERY_MAX_LITERAL_UNITS = 1000;
 export const TRACE_QUERY_MAX_STRING_BYTES = 4096;
 export const TRACE_QUERY_MAX_PATH_BYTES = 128;
+export const TRACE_QUERY_DISCOVERY_DEFAULT_LIMIT = 25;
+export const TRACE_QUERY_DISCOVERY_MAX_LIMIT = 100;
+export const TRACE_QUERY_DISCOVERY_MAX_SEARCH_LENGTH = 256;
 export const TRACE_QUERY_DEFAULT_TIMEOUT_MS = 15_000;
 export const TRACE_QUERY_MAX_TIMEOUT_MS = 300_000;
 
@@ -119,6 +120,102 @@ export const traceQueryTimeRangeSchema = z
   .object({
     from: z.string().datetime({ offset: true }),
     to: z.string().datetime({ offset: true }),
+  })
+  .strict();
+
+export const traceQueryPredicateScopeSchema = z.enum(['trace', 'spans', 'scores', 'feedback']);
+export const traceQueryOperatorSchema = z.enum([
+  'eq',
+  'ne',
+  'lt',
+  'lte',
+  'gt',
+  'gte',
+  'in',
+  'notIn',
+  'exists',
+  'notExists',
+]);
+export const traceQueryValueKindSchema = z.enum(['string', 'number', 'stringOrNumber', 'timestamp', 'presence']);
+
+const traceQueryDiscoveryTimeRangeSchema = traceQueryTimeRangeSchema.superRefine((timeRange, context) => {
+  const from = new Date(timeRange.from);
+  const to = new Date(timeRange.to);
+  if (from >= to) {
+    context.addIssue({ code: 'custom', path: [], message: '`from` must be earlier than `to`' });
+  } else if (to.getTime() - from.getTime() > 31 * 24 * 60 * 60 * 1000) {
+    context.addIssue({ code: 'custom', path: [], message: 'The time range cannot exceed 31 days' });
+  }
+});
+const traceQueryDiscoverySearchSchema = z.string().trim().max(TRACE_QUERY_DISCOVERY_MAX_SEARCH_LENGTH).optional();
+const traceQueryDiscoveryLimitSchema = z
+  .number()
+  .int()
+  .min(1)
+  .max(TRACE_QUERY_DISCOVERY_MAX_LIMIT)
+  .default(TRACE_QUERY_DISCOVERY_DEFAULT_LIMIT);
+
+export const getTraceQueryFieldsArgsSchema = z
+  .object({
+    timeRange: traceQueryDiscoveryTimeRangeSchema,
+    predicateScope: traceQueryPredicateScopeSchema,
+    search: traceQueryDiscoverySearchSchema,
+    limit: traceQueryDiscoveryLimitSchema,
+  })
+  .strict();
+
+export const getTraceQueryValuesArgsSchema = z
+  .object({
+    timeRange: traceQueryDiscoveryTimeRangeSchema,
+    predicateScope: traceQueryPredicateScopeSchema,
+    path: predicatePathSchema.transform(path => normalizePath(path)),
+    search: traceQueryDiscoverySearchSchema,
+    limit: traceQueryDiscoveryLimitSchema,
+  })
+  .strict()
+  .superRefine((args, context) => {
+    if (!isTraceQueryValueSuggestionsPath(args.predicateScope, args.path)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['path'],
+        message: 'Value suggestions are not available for this path',
+      });
+    }
+  });
+
+export const traceQueryCanonicalFieldDescriptorSchema = z
+  .object({
+    path: z.string(),
+    valueKind: traceQueryValueKindSchema,
+    operators: z.array(traceQueryOperatorSchema),
+    valueSuggestions: z.boolean(),
+  })
+  .strict();
+export const traceQueryObservedFieldDescriptorSchema = z
+  .object({
+    path: z
+      .string()
+      .startsWith('metadata.')
+      .refine(path => isTraceQueryMetadataPath(path), 'Invalid metadata path'),
+    valueKind: z.literal('string'),
+    operators: z.array(z.enum(['eq', 'ne', 'in', 'notIn', 'exists', 'notExists'])),
+    valueSuggestions: z.literal(true),
+    occurrences: z.number().int().nonnegative(),
+  })
+  .strict();
+export const getTraceQueryFieldsResponseSchema = z
+  .object({
+    canonicalFields: z.array(traceQueryCanonicalFieldDescriptorSchema),
+    observedFields: z.array(traceQueryObservedFieldDescriptorSchema).max(TRACE_QUERY_DISCOVERY_MAX_LIMIT),
+    observedFieldsTruncated: z.boolean(),
+  })
+  .strict();
+export const getTraceQueryValuesResponseSchema = z
+  .object({
+    values: z
+      .array(z.object({ value: literalStringSchema, count: z.number().int().nonnegative() }).strict())
+      .max(TRACE_QUERY_DISCOVERY_MAX_LIMIT),
+    valuesTruncated: z.boolean(),
   })
   .strict();
 
@@ -292,20 +389,102 @@ export type TraceQueryPaginatedTraceResponse = z.infer<typeof traceQueryPaginate
 export type TraceQueryGroupResponse = z.infer<typeof traceQueryGroupResponseSchema>;
 export type TraceQueryResponse = z.infer<typeof traceQueryResponseSchema>;
 
-export type TraceQueryField =
-  | 'traceId'
-  | 'threadId'
-  | 'resourceId'
-  | 'startedAt'
-  | 'endedAt'
-  | 'entityName'
-  | 'entityType'
-  | 'environment'
-  | 'status';
-type TraceQueryDerivedSpanField = 'model' | 'provider' | 'durationMs' | 'status';
-export type TraceQuerySpanField = keyof typeof SPAN_FIELD_RULES;
-export type TraceQueryScoreField = keyof typeof SCORE_FIELD_RULES;
-export type TraceQueryFeedbackField = keyof typeof FEEDBACK_FIELD_RULES;
+export type TraceQueryOperator = z.infer<typeof traceQueryOperatorSchema>;
+export type TraceQueryValueKind = z.infer<typeof traceQueryValueKindSchema>;
+export type TraceQueryPredicateScope = z.infer<typeof traceQueryPredicateScopeSchema>;
+
+interface FieldRule {
+  valueKind: TraceQueryValueKind;
+  operators: readonly TraceQueryOperator[];
+  valueSuggestions: boolean;
+  nonEmpty?: boolean;
+}
+
+export const TRACE_QUERY_STRING_OPERATORS = ['eq', 'ne', 'in', 'notIn', 'exists', 'notExists'] as const;
+export const TRACE_QUERY_ORDERED_OPERATORS = [...TRACE_QUERY_STRING_OPERATORS, 'lt', 'lte', 'gt', 'gte'] as const;
+export const TRACE_QUERY_PRESENCE_OPERATORS = ['exists', 'notExists'] as const;
+
+const stringField = (valueSuggestions: boolean): FieldRule => ({
+  valueKind: 'string',
+  operators: TRACE_QUERY_STRING_OPERATORS,
+  valueSuggestions,
+});
+const orderedField = (valueKind: 'number' | 'stringOrNumber' | 'timestamp'): FieldRule => ({
+  valueKind,
+  operators: TRACE_QUERY_ORDERED_OPERATORS,
+  valueSuggestions: false,
+});
+const presenceField = (): FieldRule => ({
+  valueKind: 'presence',
+  operators: TRACE_QUERY_PRESENCE_OPERATORS,
+  valueSuggestions: false,
+});
+
+export const TRACE_QUERY_FIELD_REGISTRY = {
+  trace: {
+    traceId: stringField(false),
+    threadId: stringField(false),
+    resourceId: stringField(false),
+    startedAt: orderedField('timestamp'),
+    endedAt: orderedField('timestamp'),
+    entityName: stringField(true),
+    entityType: stringField(true),
+    environment: stringField(true),
+    status: stringField(true),
+  },
+  spans: {
+    name: stringField(true),
+    spanType: stringField(true),
+    model: stringField(true),
+    provider: stringField(true),
+    startedAt: orderedField('timestamp'),
+    endedAt: orderedField('timestamp'),
+    durationMs: orderedField('number'),
+    status: stringField(true),
+    error: presenceField(),
+    entityType: stringField(true),
+    entityId: stringField(false),
+    entityName: stringField(true),
+    entityVersionId: stringField(false),
+    parentEntityVersionId: stringField(false),
+    rootEntityVersionId: stringField(false),
+  },
+  scores: {
+    scorerId: stringField(true),
+    scorerVersion: stringField(true),
+    scoreSource: stringField(true),
+    score: orderedField('number'),
+    timestamp: orderedField('timestamp'),
+    spanId: presenceField(),
+    entityVersionId: stringField(false),
+    parentEntityVersionId: stringField(false),
+    rootEntityVersionId: stringField(false),
+  },
+  feedback: {
+    feedbackType: stringField(true),
+    feedbackSource: stringField(true),
+    feedbackUserId: stringField(false),
+    sourceId: stringField(false),
+    entityVersionId: stringField(false),
+    parentEntityVersionId: stringField(false),
+    rootEntityVersionId: stringField(false),
+    value: orderedField('stringOrNumber'),
+    timestamp: orderedField('timestamp'),
+    comment: presenceField(),
+  },
+} as const satisfies Record<TraceQueryPredicateScope, Record<string, FieldRule>>;
+
+const METADATA_FIELD_RULE: FieldRule = {
+  valueKind: 'string',
+  operators: TRACE_QUERY_STRING_OPERATORS,
+  valueSuggestions: true,
+  nonEmpty: true,
+};
+
+export type TraceQueryField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['trace'];
+export type TraceQuerySpanField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['spans'];
+export type TraceQueryScoreField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['scores'];
+export type TraceQueryFeedbackField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['feedback'];
 export type TraceQueryCanonicalField =
   | TraceQueryField
   | TraceQuerySpanField
@@ -317,6 +496,15 @@ export type TraceQueryPredicateField = TraceQueryCanonicalField | TraceQueryMeta
 export type TraceQueryComparisonOperator = 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
 export type TraceQueryMembershipOperator = 'in' | 'notIn';
 export type TraceQueryPresenceOperator = 'exists' | 'notExists';
+
+export type GetTraceQueryFieldsArgs = z.input<typeof getTraceQueryFieldsArgsSchema>;
+export type NormalizedGetTraceQueryFieldsArgs = z.output<typeof getTraceQueryFieldsArgsSchema>;
+export type GetTraceQueryValuesArgs = z.input<typeof getTraceQueryValuesArgsSchema>;
+export type NormalizedGetTraceQueryValuesArgs = z.output<typeof getTraceQueryValuesArgsSchema>;
+export type TraceQueryCanonicalFieldDescriptor = z.infer<typeof traceQueryCanonicalFieldDescriptorSchema>;
+export type TraceQueryObservedFieldDescriptor = z.infer<typeof traceQueryObservedFieldDescriptorSchema>;
+export type GetTraceQueryFieldsResponse = z.infer<typeof getTraceQueryFieldsResponseSchema>;
+export type GetTraceQueryValuesResponse = z.infer<typeof getTraceQueryValuesResponseSchema>;
 
 export type TrustedTraceQueryScalarPredicate =
   | {
@@ -408,6 +596,22 @@ export interface TrustedThreadQueryPlan {
   cursor?: { threadId: string };
 }
 
+export interface TrustedTraceQueryObservedFieldsPlan {
+  timeRange: { from: string; to: string };
+  predicateScope: TraceQueryPredicateScope;
+  search?: string;
+  limit: number;
+}
+
+export interface TrustedTraceQueryValuesPlan extends TrustedTraceQueryObservedFieldsPlan {
+  path: string;
+}
+
+export interface TraceQueryObservedFieldsResult {
+  observedFields: TraceQueryObservedFieldDescriptor[];
+  observedFieldsTruncated: boolean;
+}
+
 export type TraceQueryCursorPlan =
   | TrustedTraceQueryKeysetTracesPlan
   | TrustedTraceQueryGroupsPlan
@@ -478,73 +682,7 @@ export function resolveTraceQueryTimeoutMs(timeoutMs = TRACE_QUERY_DEFAULT_TIMEO
   return timeoutMs;
 }
 
-interface FieldRule {
-  type: 'string' | 'number' | 'stringOrNumber' | 'timestamp' | 'presence';
-  operators: ReadonlySet<string>;
-  nonEmpty?: boolean;
-}
-
-const STRING_OPERATORS = new Set(['eq', 'ne', 'in', 'notIn', 'exists', 'notExists']);
-const ORDERED_OPERATORS = new Set([...STRING_OPERATORS, 'lt', 'lte', 'gt', 'gte']);
-const PRESENCE_OPERATORS = new Set(['exists', 'notExists']);
-const METADATA_FIELD_RULE: FieldRule = { type: 'string', operators: STRING_OPERATORS, nonEmpty: true };
-
-const TRACE_FIELD_RULES: Record<TraceQueryField, FieldRule> = {
-  traceId: { type: 'string', operators: STRING_OPERATORS },
-  threadId: { type: 'string', operators: STRING_OPERATORS },
-  resourceId: { type: 'string', operators: STRING_OPERATORS },
-  startedAt: { type: 'timestamp', operators: ORDERED_OPERATORS },
-  endedAt: { type: 'timestamp', operators: ORDERED_OPERATORS },
-  entityName: { type: 'string', operators: STRING_OPERATORS },
-  entityType: { type: 'string', operators: STRING_OPERATORS },
-  environment: { type: 'string', operators: STRING_OPERATORS },
-  status: { type: 'string', operators: STRING_OPERATORS },
-};
-
-const SPAN_FIELD_RULES = {
-  name: { type: 'string', operators: STRING_OPERATORS },
-  spanType: { type: 'string', operators: STRING_OPERATORS },
-  model: { type: 'string', operators: STRING_OPERATORS },
-  provider: { type: 'string', operators: STRING_OPERATORS },
-  startedAt: { type: 'timestamp', operators: ORDERED_OPERATORS },
-  endedAt: { type: 'timestamp', operators: ORDERED_OPERATORS },
-  durationMs: { type: 'number', operators: ORDERED_OPERATORS },
-  status: { type: 'string', operators: STRING_OPERATORS },
-  error: { type: 'presence', operators: PRESENCE_OPERATORS },
-  entityType: { type: 'string', operators: STRING_OPERATORS },
-  entityId: { type: 'string', operators: STRING_OPERATORS },
-  entityName: { type: 'string', operators: STRING_OPERATORS },
-  entityVersionId: { type: 'string', operators: STRING_OPERATORS },
-  parentEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
-  rootEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
-} as const satisfies Partial<Record<Extract<keyof SpanRecord, string> | TraceQueryDerivedSpanField, FieldRule>>;
-
-const SCORE_FIELD_RULES = {
-  scorerId: { type: 'string', operators: STRING_OPERATORS },
-  scorerVersion: { type: 'string', operators: STRING_OPERATORS },
-  scoreSource: { type: 'string', operators: STRING_OPERATORS },
-  score: { type: 'number', operators: ORDERED_OPERATORS },
-  timestamp: { type: 'timestamp', operators: ORDERED_OPERATORS },
-  spanId: { type: 'presence', operators: PRESENCE_OPERATORS },
-  entityVersionId: { type: 'string', operators: STRING_OPERATORS },
-  parentEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
-  rootEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
-} as const satisfies Partial<Record<Extract<keyof ScoreRecord, string>, FieldRule>>;
-
-const FEEDBACK_FIELD_RULES = {
-  feedbackType: { type: 'string', operators: STRING_OPERATORS },
-  feedbackSource: { type: 'string', operators: STRING_OPERATORS },
-  feedbackUserId: { type: 'string', operators: STRING_OPERATORS },
-  sourceId: { type: 'string', operators: STRING_OPERATORS },
-  entityVersionId: { type: 'string', operators: STRING_OPERATORS },
-  parentEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
-  rootEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
-  value: { type: 'stringOrNumber', operators: ORDERED_OPERATORS },
-  timestamp: { type: 'timestamp', operators: ORDERED_OPERATORS },
-  comment: { type: 'presence', operators: PRESENCE_OPERATORS },
-} as const satisfies Partial<Record<Extract<keyof FeedbackRecord, string>, FieldRule>>;
-
-type PredicateContext = 'trace' | 'spans' | 'scores' | 'feedback';
+type PredicateContext = TraceQueryPredicateScope;
 
 interface PlannerState {
   nodes: number;
@@ -613,6 +751,80 @@ function findPredicateComplexityIssue(
   }
 
   return undefined;
+}
+
+function getTraceQueryFieldRule(scope: TraceQueryPredicateScope, path: string): FieldRule | undefined {
+  if (scope === 'trace' && isTraceQueryMetadataPath(path)) return METADATA_FIELD_RULE;
+  const registry: Record<string, FieldRule> = TRACE_QUERY_FIELD_REGISTRY[scope];
+  return Object.hasOwn(registry, path) ? registry[path] : undefined;
+}
+
+export function isTraceQueryMetadataPath(path: string): path is TraceQueryMetadataField {
+  if (!path.startsWith('metadata.') || !hasMaxUtf8Bytes(path, TRACE_QUERY_MAX_PATH_BYTES)) return false;
+  const key = path.slice('metadata.'.length);
+  return key.length > 0 && !key.includes('.');
+}
+
+export function isTraceQueryValueSuggestionsPath(scope: TraceQueryPredicateScope, path: string): boolean {
+  return getTraceQueryFieldRule(scope, normalizePath(path))?.valueSuggestions === true;
+}
+
+export function getTraceQueryCanonicalFieldDescriptors(
+  scope: TraceQueryPredicateScope,
+  search?: string,
+): TraceQueryCanonicalFieldDescriptor[] {
+  const normalizedSearch = search?.trim().toLowerCase();
+  return Object.entries(TRACE_QUERY_FIELD_REGISTRY[scope])
+    .filter(([path]) => !normalizedSearch || path.toLowerCase().includes(normalizedSearch))
+    .map(([path, rule]) => ({
+      path,
+      valueKind: rule.valueKind,
+      operators: [...rule.operators],
+      valueSuggestions: rule.valueSuggestions,
+    }));
+}
+
+export function createTraceQueryObservedFieldDescriptor(
+  path: string,
+  occurrences: number,
+): TraceQueryObservedFieldDescriptor {
+  return traceQueryObservedFieldDescriptorSchema.parse({
+    path,
+    valueKind: 'string',
+    operators: [...TRACE_QUERY_STRING_OPERATORS],
+    valueSuggestions: true,
+    occurrences,
+  });
+}
+
+export function parseGetTraceQueryFieldsArgs(input: unknown): NormalizedGetTraceQueryFieldsArgs {
+  const result = getTraceQueryFieldsArgsSchema.safeParse(input);
+  if (!result.success) throw new TraceQueryValidationError(formatTraceQuerySchemaIssues(result.error));
+  return result.data;
+}
+
+export function parseGetTraceQueryValuesArgs(input: unknown): NormalizedGetTraceQueryValuesArgs {
+  const result = getTraceQueryValuesArgsSchema.safeParse(input);
+  if (!result.success) throw new TraceQueryValidationError(formatTraceQuerySchemaIssues(result.error));
+  return result.data;
+}
+
+export function planTraceQueryObservedFields(
+  args: NormalizedGetTraceQueryFieldsArgs,
+): TrustedTraceQueryObservedFieldsPlan {
+  return {
+    timeRange: {
+      from: new Date(args.timeRange.from).toISOString(),
+      to: new Date(args.timeRange.to).toISOString(),
+    },
+    predicateScope: args.predicateScope,
+    search: args.search,
+    limit: args.limit,
+  };
+}
+
+export function planTraceQueryValues(args: NormalizedGetTraceQueryValuesArgs): TrustedTraceQueryValuesPlan {
+  return { ...planTraceQueryObservedFields(args), path: args.path };
 }
 
 export function formatTraceQuerySchemaIssues(error: z.ZodError): TraceQueryIssue[] {
@@ -934,7 +1146,7 @@ function planPredicate(
     const field = normalizePath(predicate.path);
     const rule = getRule(field, context, rules, [...path, 'path'], state);
     if (!rule) return undefined;
-    if (!rule.operators.has(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
+    if (!rule.operators.includes(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
     return { type: 'presence', field: field as TraceQueryPredicateField, operator: predicate.op };
   }
 
@@ -958,7 +1170,7 @@ function planPredicate(
     const field = normalizePath(predicate.value.path);
     const rule = getRule(field, context, rules, [...path, 'value', 'path'], state);
     if (!rule) return undefined;
-    if (!rule.operators.has(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
+    if (!rule.operators.includes(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
     const values = normalizeSet(predicate.set, rule);
     if (!values) {
       state.issues.push({
@@ -996,7 +1208,7 @@ function planPredicate(
   const field = normalizePath(comparison.left.path);
   const rule = getRule(field, context, rules, [...path, 'left', 'path'], state);
   if (!rule) return undefined;
-  if (!rule.operators.has(comparison.op)) addOperatorIssue(comparison.op, field, [...path, 'op'], state);
+  if (!rule.operators.includes(comparison.op)) addOperatorIssue(comparison.op, field, [...path, 'op'], state);
   const value = normalizeLiteral(comparison.right.literal, rule, comparison.op);
   if (value === undefined) {
     state.issues.push({
@@ -1010,10 +1222,7 @@ function planPredicate(
 }
 
 function rulesForContext(context: PredicateContext): Record<string, FieldRule> {
-  if (context === 'spans') return SPAN_FIELD_RULES;
-  if (context === 'scores') return SCORE_FIELD_RULES;
-  if (context === 'feedback') return FEEDBACK_FIELD_RULES;
-  return TRACE_FIELD_RULES;
+  return TRACE_QUERY_FIELD_REGISTRY[context];
 }
 
 function getRule(
@@ -1066,18 +1275,18 @@ function normalizeLiteral(
   rule: FieldRule,
   operator?: TraceQueryComparisonOperator,
 ): string | number | undefined {
-  if (rule.type === 'number') return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-  if (rule.type === 'stringOrNumber') {
-    if (operator && !STRING_OPERATORS.has(operator)) {
+  if (rule.valueKind === 'number') return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  if (rule.valueKind === 'stringOrNumber') {
+    if (operator && !TRACE_QUERY_STRING_OPERATORS.some(candidate => candidate === operator)) {
       return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
     }
     return typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value)) ? value : undefined;
   }
-  if (rule.type === 'timestamp') {
+  if (rule.valueKind === 'timestamp') {
     const timestamp = timestampLiteralSchema.safeParse(value);
     return timestamp.success ? new Date(timestamp.data).toISOString() : undefined;
   }
-  if (rule.type === 'string') {
+  if (rule.valueKind === 'string') {
     return typeof value === 'string' && (!rule.nonEmpty || value.trim().length > 0) ? value : undefined;
   }
   return undefined;
@@ -1086,7 +1295,7 @@ function normalizeLiteral(
 function normalizeSet(values: TraceQueryLiteral[], rule: FieldRule): Array<string | number> | undefined {
   const normalized = values.map(value => normalizeLiteral(value, rule));
   if (normalized.some(value => value === undefined)) return undefined;
-  if (rule.type === 'stringOrNumber' && normalized.some(value => typeof value !== typeof normalized[0]))
+  if (rule.valueKind === 'stringOrNumber' && normalized.some(value => typeof value !== typeof normalized[0]))
     return undefined;
   return normalized as Array<string | number>;
 }

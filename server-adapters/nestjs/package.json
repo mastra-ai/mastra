@@ -27,7 +27,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@fastify/busboy": "^3.2.0",
+    "@fastify/busboy": "^3.2.2",
     "@mastra/server": "workspace:*"
   },
   "devDependencies": {
@@ -57,7 +57,7 @@
     "supertest": "^7.1.1",
     "tsdown": "0.22.9",
     "typescript": "catalog:",
-    "vitest": "^4.1.10",
+    "vitest": "^4.1.11",
     "zod": "^3.25.0"
   },
   "peerDependencies": {

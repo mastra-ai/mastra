@@ -13,7 +13,7 @@
   "dependencies": {
     "@mastra/client-js": "^1.35.0",
     "@mastra/mcp": "^1.15.0",
-    "hono": "^4.12.34",
+    "hono": "4.13.7",
     "octokit": "^5.0.5"
   },
   "overrides": {

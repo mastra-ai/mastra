@@ -1155,6 +1155,7 @@ export type ProviderModelsMap = {
     'alibaba/deepseek-v4.1-flash',
     'alibaba/glm-5',
     'alibaba/glm-5.2',
+    'alibaba/glm-5.3',
     'alibaba/kimi-k2.5',
     'alibaba/kimi-k3',
     'alibaba/qwen-coder-plus',
@@ -3571,6 +3572,8 @@ export type ProviderModelsMap = {
     'inclusionai/ling-3.0-flash-sante-free',
     'inclusionai/ling-3.0-flash-vl',
     'inclusionai/ling-3.0-flash-vl-free',
+    'inference-net/schematron-v2-small',
+    'inference-net/schematron-v2-turbo',
     'interfaze/interfaze-beta',
     'klingai/kling-v2.5-turbo-i2v',
     'klingai/kling-v2.5-turbo-t2v',
@@ -3687,6 +3690,7 @@ export type ProviderModelsMap = {
     'openai/gpt-image-2',
     'openai/gpt-image-2.5-flare',
     'openai/gpt-image-2.5-sunburst',
+    'openai/gpt-live-1',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
     'openai/gpt-oss-safeguard-120b',
@@ -6999,7 +7003,6 @@ export type ProviderModelsMap = {
   ];
   readonly tinfoil: readonly [
     'deepseek-v4-1-flash',
-    'deepseek-v4-flash',
     'gemma4-31b',
     'glm-5-3-flash',
     'gpt-oss-120b',

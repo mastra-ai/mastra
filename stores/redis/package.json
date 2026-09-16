@@ -44,7 +44,7 @@
     "@vitest/ui": "catalog:",
     "dotenv": "^17.4.2",
     "eslint": "^10.7.0",
-    "ioredis": "^5.11.1",
+    "ioredis": "^6.0.0",
     "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",

@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getConnectionContext, getCredential, listProjectConnections, proxyRequest, resolveClient } from '../client.js';
+import {
+  getConnectionContext,
+  getCredential,
+  listIntegrations,
+  listProjectConnections,
+  proxyRequest,
+  resolveClient,
+} from '../client.js';
 import { MastraConnectError } from '../errors.js';
 
 const TOKEN = 'fake-test-token';
@@ -160,6 +167,36 @@ describe('listProjectConnections', () => {
       expect((error as Error).message).not.toContain(TOKEN);
       expect((error as Error).message).toContain('[REDACTED]');
     }
+  });
+});
+
+describe('listIntegrations', () => {
+  it('returns the MCP capability from the public catalog', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        integrations: [
+          {
+            id: 'catalog-mcp',
+            provider: 'generic',
+            displayName: 'Catalog MCP',
+            logoUrl: null,
+            authType: 'MCP_OAUTH2_GENERIC',
+            capabilities: { proxy: true, webhooks: false, mcp: true },
+          },
+        ],
+      }),
+    );
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+
+    await expect(listIntegrations(client)).resolves.toEqual([{ id: 'catalog-mcp', capabilities: { mcp: true } }]);
+    expect(fetchMock.mock.calls[0]![0]).toBe('https://example.test/v2/integrations');
+  });
+
+  it('rejects a malformed integration catalog', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ integrations: [{ id: 'broken' }] }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+
+    await expect(listIntegrations(client)).rejects.toMatchObject({ code: 'platform_error' });
   });
 });
 
