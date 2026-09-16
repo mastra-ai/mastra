@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 /** Immutable, approved instruction to place one month of credit on a
  * customer's billing balance. It deliberately names the subscription and
@@ -21,6 +21,4 @@ export const retainedSubscriptionCreditCommandReferenceSchema = z.object({
   idempotencyKey: z.string().min(1).optional(),
 });
 
-export type PersistedSubscriptionCreditCommand = z.infer<
-  typeof persistedSubscriptionCreditCommandSchema
->;
+export type PersistedSubscriptionCreditCommand = z.infer<typeof persistedSubscriptionCreditCommandSchema>;

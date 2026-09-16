@@ -3,10 +3,10 @@
   "runner": "deterministic-native-observed-runtime-v4",
   "executionMode": "deterministic-scripted-transport-no-paid-routes",
   "implementationSha": "d3b4cf983e3e6ce5d66affb2fc3a0c514ffde130",
-  "runnerSourceHash": "8d179fbbeffbccadc700dc44e446599b5b66dbcb67fa50a6b38ae7d1fa412f95",
+  "runnerSourceHash": "15ddffa07c2d8ee19cf4bc9d949f08c4a09ab95154f0f5db5c29ec99db07f221",
   "scorerSourceHashes": {
-    "test/eval/support/dataset-scorers.ts": "3d212d35c4701029c6363a98ad7d5115a70a9d3a0da73ff37a4419255ef5667c",
-    "test/eval/support/deterministic-semantics.js": "0608fd88d0ffc8069ccaf40ba1a781e0647640317a8eb61b0ede67c47411dae5"
+    "test/eval/support/dataset-scorers.ts": "eeffbf5bbec9d7531614dbc8791f4c379c7b13fce46278e749241e6041a4b1c0",
+    "test/eval/support/deterministic-semantics.js": "cc9ca5ed874c69768e8db2392020d04fb83168f571cd24332c02e6131f8bba2a"
   },
   "datasetHashes": {
     "groundedness.v1.json": "204385f1588c7846c631afd6233400950a632cb0f285d21562e564249d6d1dfc",
@@ -1342,7 +1342,26 @@
   "pricing": "not-applicable-deterministic-transport",
   "evidenceHash": "5208a921e0add12801b7714069f26e8a809b54e65283b9988fec81a8cdfe7642",
   "regression": "compare-against-fixed-initial-reference",
-  "reportHash": "9a0791cf78c576d150413ea7f0cb770f993e14b09d08cc8a7104943ca6eb9f66",
+  "reportHash": "0262b6abfc4b68382556f0eed336b1db05e4254cb01713e186df29c1237fb269",
   "initialReference": true,
-  "historicalComparison": null
+  "historicalComparison": null,
+  "sourceHashMigrations": [
+    {
+      "reason": "Migrate runner and scorer source hashes after Oxfmt formatting. Original measurements, datasets, execution evidence, and thresholds are unchanged.",
+      "previousReportHash": "9a0791cf78c576d150413ea7f0cb770f993e14b09d08cc8a7104943ca6eb9f66",
+      "previousRunnerSourceHash": "8d179fbbeffbccadc700dc44e446599b5b66dbcb67fa50a6b38ae7d1fa412f95",
+      "previousScorerSourceHashes": {
+        "test/eval/support/dataset-scorers.ts": "3d212d35c4701029c6363a98ad7d5115a70a9d3a0da73ff37a4419255ef5667c",
+        "test/eval/support/deterministic-semantics.js": "0608fd88d0ffc8069ccaf40ba1a781e0647640317a8eb61b0ede67c47411dae5"
+      },
+      "candidateReportHash": "5f4d0fba8a658044829d808e98aeda9f3dcf5f25371479b3650aaade0b4c91d3",
+      "candidateImplementationSha": "29f5c09a31c43b37f7d201b7415c96193ed7eb5914841391b3906b6e04fc1b1a",
+      "candidateImplementationIdentityKind": "distributable-content-sha256",
+      "comparedCaseCount": 16,
+      "comparedCriticalCaseCount": 12,
+      "identicalPerCaseMeasurements": true,
+      "identicalDatasetHashes": true,
+      "identicalEvidenceHash": true
+    }
+  ]
 }

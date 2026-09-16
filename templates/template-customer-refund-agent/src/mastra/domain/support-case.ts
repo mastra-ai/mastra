@@ -1,28 +1,17 @@
-import { z } from "zod";
-import { persistedRefundCommandSchema } from "./refund-command.ts";
+import { z } from 'zod';
+import { persistedRefundCommandSchema } from './refund-command.ts';
 import {
   persistedSubscriptionCreditCommandSchema,
   retainedSubscriptionCreditCommandReferenceSchema,
-} from "./subscription-credit-command.ts";
+} from './subscription-credit-command.ts';
 
-export const caseSourceSchema = z.enum([
-  "mock-email",
-  "chat",
-  "intercom-conversation",
-]);
+export const caseSourceSchema = z.enum(['mock-email', 'chat', 'intercom-conversation']);
 export type CaseSource = z.infer<typeof caseSourceSchema>;
 
-export const caseStatusSchema = z.enum([
-  "new",
-  "processing",
-  "waiting_approval",
-  "resolved",
-  "escalated",
-  "failed",
-]);
+export const caseStatusSchema = z.enum(['new', 'processing', 'waiting_approval', 'resolved', 'escalated', 'failed']);
 export type CaseStatus = z.infer<typeof caseStatusSchema>;
 
-export const messageAuthorSchema = z.enum(["customer", "agent", "internal"]);
+export const messageAuthorSchema = z.enum(['customer', 'agent', 'internal']);
 
 export const caseMessageSchema = z.object({
   id: z.string(),
@@ -40,23 +29,21 @@ export const customerRefSchema = z.object({
 
 export const triageResultSchema = z.object({
   intent: z.enum([
-    "refund_request",
-    "duplicate_charge",
-    "order_status",
-    "cancellation",
-    "damaged_item",
-    "account_issue",
-    "service_problem",
-    "other",
+    'refund_request',
+    'duplicate_charge',
+    'order_status',
+    'cancellation',
+    'damaged_item',
+    'account_issue',
+    'service_problem',
+    'other',
   ]),
-  urgency: z.enum(["low", "normal", "high", "critical"]),
-  sentiment: z.enum(["positive", "neutral", "negative", "angry"]),
+  urgency: z.enum(['low', 'normal', 'high', 'critical']),
+  sentiment: z.enum(['positive', 'neutral', 'negative', 'angry']),
   requiresHumanReview: z.boolean(),
   confidence: z.number().min(0).max(1),
   rationale: z.string(),
-  accountIssueSubtype: z
-    .enum(["informational_credit_status", "account_change", "unknown"])
-    .optional(),
+  accountIssueSubtype: z.enum(['informational_credit_status', 'account_change', 'unknown']).optional(),
 });
 export type TriageResult = z.infer<typeof triageResultSchema>;
 
@@ -85,13 +72,7 @@ export const orderLookupSchema = z.object({
       product: z.string(),
       amount: z.number(),
       currency: z.string(),
-      status: z.enum([
-        "fulfilled",
-        "shipped",
-        "processing",
-        "cancelled",
-        "refunded",
-      ]),
+      status: z.enum(['fulfilled', 'shipped', 'processing', 'cancelled', 'refunded']),
       chargeCount: z.number(),
       placedAt: z.string(),
     })
@@ -107,12 +88,12 @@ export const subscriptionLookupSchema = z.object({
       customerId: z.string().optional(),
       customerEmail: z.email(),
       plan: z.string(),
-      recurringInterval: z.enum(["month", "year"]).optional(),
+      recurringInterval: z.enum(['month', 'year']).optional(),
       recurringIntervalCount: z.number().int().positive().optional(),
       quantity: z.number().int().positive().optional(),
       amount: z.number(),
       currency: z.string(),
-      status: z.enum(["active", "cancelled", "past_due"]),
+      status: z.enum(['active', 'cancelled', 'past_due']),
       renewsAt: z.string(),
       cancelAtPeriodEnd: z.literal(true).optional(),
       cancelsAt: z.string().optional(),
@@ -138,10 +119,8 @@ export const refundHistorySchema = z.object({
 export type RefundHistory = z.infer<typeof refundHistorySchema>;
 
 export const draftResolutionSchema = z.object({
-  draftResponse: z.string().describe("The grounded, customer-facing reply."),
-  citedSources: z
-    .array(z.string())
-    .describe("Titles/sources of policy documents actually used."),
+  draftResponse: z.string().describe('The grounded, customer-facing reply.'),
+  citedSources: z.array(z.string()).describe('Titles/sources of policy documents actually used.'),
   selectedPolicyExcerpts: z
     .array(
       z.object({
@@ -152,14 +131,12 @@ export const draftResolutionSchema = z.object({
     .max(3)
     .default([])
     .describe(
-      "Exact, relevant excerpts from cited policy documents. These are rendered as policy guidance, never as a completed account effect.",
+      'Exact, relevant excerpts from cited policy documents. These are rendered as policy guidance, never as a completed account effect.',
     ),
   recommendRefund: z.boolean(),
   /** Explicit action selection for new financial resolutions. The legacy
    * refund fields remain readable while earlier turns complete. */
-  resolutionAction: z
-    .enum(["none", "refund", "subscription_credit"])
-    .optional(),
+  resolutionAction: z.enum(['none', 'refund', 'subscription_credit']).optional(),
   subscriptionCreditAmount: z.number().optional(),
   subscriptionCreditCurrency: z.string().optional(),
   subscriptionCreditReason: z.string().optional(),
@@ -180,7 +157,7 @@ export const approvalDecisionSchema = z.object({
 export type ApprovalDecision = z.infer<typeof approvalDecisionSchema>;
 
 export const caseFeedbackSchema = z.object({
-  rating: z.enum(["up", "down"]),
+  rating: z.enum(['up', 'down']),
   comment: z.string().optional(),
   submittedAt: z.string(),
   actorId: z.string().optional(),
@@ -195,7 +172,7 @@ export const refundResultSchema = z.object({
   orderId: z.string(),
   amount: z.number(),
   currency: z.string(),
-  status: z.enum(["executed", "skipped", "pending", "failed"]),
+  status: z.enum(['executed', 'skipped', 'pending', 'failed']),
   idempotencyKey: z.string(),
   executedAt: z.string(),
 });
@@ -206,18 +183,16 @@ export const subscriptionCreditResultSchema = z.object({
   subscriptionId: z.string(),
   amount: z.number(),
   currency: z.string(),
-  status: z.enum(["executed", "skipped", "pending", "failed"]),
+  status: z.enum(['executed', 'skipped', 'pending', 'failed']),
   idempotencyKey: z.string(),
   executedAt: z.string(),
 });
-export type SubscriptionCreditResult = z.infer<
-  typeof subscriptionCreditResultSchema
->;
+export type SubscriptionCreditResult = z.infer<typeof subscriptionCreditResultSchema>;
 
 /** The binding is selected when a case is accepted and is immutable thereafter. */
 export const providerBindingSchema = z.object({
   tenantId: z.string().min(1),
-  providerKind: z.enum(["local", "intercom", "stripe"]),
+  providerKind: z.enum(['local', 'intercom', 'stripe']),
   providerAccountId: z.string().min(1),
   externalConversationId: z.string().min(1),
 });
@@ -229,18 +204,14 @@ export const caseProviderBindingsSchema = z.object({
   transactions: providerBindingSchema,
   knowledge: providerBindingSchema,
 });
-export type PersistedCaseProviderBindings = z.infer<
-  typeof caseProviderBindingsSchema
->;
+export type PersistedCaseProviderBindings = z.infer<typeof caseProviderBindingsSchema>;
 
 /** This is a reference only. It can never be used to execute a refund. */
 export const retainedRefundCommandReferenceSchema = z.object({
   fingerprint: z.string().min(1),
   idempotencyKey: z.string().min(1).optional(),
 });
-export type RetainedRefundCommandReference = z.infer<
-  typeof retainedRefundCommandReferenceSchema
->;
+export type RetainedRefundCommandReference = z.infer<typeof retainedRefundCommandReferenceSchema>;
 
 export const nativeApprovalSchema = z.object({
   runId: z.string().min(1),
@@ -257,9 +228,7 @@ export const subscriptionCancellationEffectSchema = z.object({
   idempotencyKey: z.string().min(1),
   replayed: z.boolean(),
 });
-export type PersistedSubscriptionCancellationEffect = z.infer<
-  typeof subscriptionCancellationEffectSchema
->;
+export type PersistedSubscriptionCancellationEffect = z.infer<typeof subscriptionCancellationEffectSchema>;
 
 /**
  * Known metadata is checked at persistence and API boundaries. `catchall`
@@ -272,55 +241,39 @@ const knownCaseMetadataSchema = z
     activeTurnId: z.string().min(1).optional(),
     providerBinding: providerBindingSchema.optional(),
     providerBindings: caseProviderBindingsSchema.optional(),
-    refundCommand: z
-      .union([
-        persistedRefundCommandSchema,
-        retainedRefundCommandReferenceSchema,
-      ])
-      .optional(),
+    refundCommand: z.union([persistedRefundCommandSchema, retainedRefundCommandReferenceSchema]).optional(),
     subscriptionCreditCommand: z
-      .union([
-        persistedSubscriptionCreditCommandSchema,
-        retainedSubscriptionCreditCommandReferenceSchema,
-      ])
+      .union([persistedSubscriptionCreditCommandSchema, retainedSubscriptionCreditCommandReferenceSchema])
       .optional(),
     nativeApproval: nativeApprovalSchema.optional(),
     cancellationEffect: subscriptionCancellationEffectSchema.optional(),
     refundEffects: z.record(z.string(), refundResultSchema).optional(),
-    subscriptionCreditEffects: z
-      .record(z.string(), subscriptionCreditResultSchema)
-      .optional(),
+    subscriptionCreditEffects: z.record(z.string(), subscriptionCreditResultSchema).optional(),
     retentionRedactedAt: z.string().optional(),
   })
   .catchall(z.unknown());
-export const caseMetadataSchema = knownCaseMetadataSchema.superRefine(
-  (metadata, context) => {
-    if (
-      metadata.refundCommand &&
-      !persistedRefundCommandSchema.safeParse(metadata.refundCommand).success &&
-      metadata.retentionRedactedAt === undefined
-    )
-      context.addIssue({
-        code: "custom",
-        path: ["refundCommand"],
-        message:
-          "A partial refund command is valid only on a marked retention tombstone.",
-      });
-    if (
-      metadata.subscriptionCreditCommand &&
-      !persistedSubscriptionCreditCommandSchema.safeParse(
-        metadata.subscriptionCreditCommand,
-      ).success &&
-      metadata.retentionRedactedAt === undefined
-    )
-      context.addIssue({
-        code: "custom",
-        path: ["subscriptionCreditCommand"],
-        message:
-          "A partial subscription-credit command is valid only on a marked retention tombstone.",
-      });
-  },
-);
+export const caseMetadataSchema = knownCaseMetadataSchema.superRefine((metadata, context) => {
+  if (
+    metadata.refundCommand &&
+    !persistedRefundCommandSchema.safeParse(metadata.refundCommand).success &&
+    metadata.retentionRedactedAt === undefined
+  )
+    context.addIssue({
+      code: 'custom',
+      path: ['refundCommand'],
+      message: 'A partial refund command is valid only on a marked retention tombstone.',
+    });
+  if (
+    metadata.subscriptionCreditCommand &&
+    !persistedSubscriptionCreditCommandSchema.safeParse(metadata.subscriptionCreditCommand).success &&
+    metadata.retentionRedactedAt === undefined
+  )
+    context.addIssue({
+      code: 'custom',
+      path: ['subscriptionCreditCommand'],
+      message: 'A partial subscription-credit command is valid only on a marked retention tombstone.',
+    });
+});
 export type CaseMetadata = z.infer<typeof caseMetadataSchema>;
 
 /** The API has its own deliberately minimal financial metadata view. */
@@ -389,22 +342,13 @@ export type PublicSupportCase = z.infer<typeof publicSupportCaseSchema>;
 export const customerFinancialRequestSchema = z.object({
   caseId: z.string(),
   turnId: z.string(),
-  type: z.enum(["refund", "subscription_credit"]),
+  type: z.enum(['refund', 'subscription_credit']),
   amount: z.number().positive(),
   currency: z.string().min(1),
-  status: z.enum([
-    "pending_approval",
-    "rejected",
-    "processing",
-    "executed",
-    "failed",
-    "unknown",
-  ]),
+  status: z.enum(['pending_approval', 'rejected', 'processing', 'executed', 'failed', 'unknown']),
   requestedAt: z.string(),
 });
-export type CustomerFinancialRequest = z.infer<
-  typeof customerFinancialRequestSchema
->;
+export type CustomerFinancialRequest = z.infer<typeof customerFinancialRequestSchema>;
 
 /** Create the application-owned identifier before a normalized case is saved. */
 export function generateCaseId(): string {

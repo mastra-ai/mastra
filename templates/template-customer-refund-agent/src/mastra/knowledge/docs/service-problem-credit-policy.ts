@@ -1,8 +1,8 @@
-import type { PolicyDocument } from "../types.ts";
+import type { PolicyDocument } from '../types.ts';
 
 export const serviceProblemCreditPolicy: PolicyDocument = {
-  title: "Service Problem Credit Policy",
-  source: "service-problem-credit-policy",
+  title: 'Service Problem Credit Policy',
+  source: 'service-problem-credit-policy',
   text: `# Service Problem Credit Policy
 
 - For a verified service problem on one active monthly subscription, support may propose one credit equal to that subscription's single monthly charge.

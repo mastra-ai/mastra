@@ -1,44 +1,37 @@
-import type { LanguageModelV2 } from "@ai-sdk/provider";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { rm } from "node:fs/promises";
-import { temporaryDatabasePath } from "../support/temp-path";
+import type { LanguageModelV2 } from '@ai-sdk/provider';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { rm } from 'node:fs/promises';
+import { temporaryDatabasePath } from '../support/temp-path';
 
 const files: string[] = [];
 
-function deterministicRefundModel(
-  input: Record<string, unknown>,
-): LanguageModelV2 {
+function deterministicRefundModel(input: Record<string, unknown>): LanguageModelV2 {
   let called = false;
   return {
-    specificationVersion: "v2",
-    provider: "phase003-test",
-    modelId: "deterministic-refund",
+    specificationVersion: 'v2',
+    provider: 'phase003-test',
+    modelId: 'deterministic-refund',
     supportedUrls: {},
     async doGenerate(options) {
-      if (
-        !called &&
-        options.tools?.some(
-          (tool) => tool.type === "function" && tool.name === "issue_refund",
-        )
-      ) {
+      if (!called && options.tools?.some(tool => tool.type === 'function' && tool.name === 'issue_refund')) {
         called = true;
         return {
           content: [
             {
-              type: "tool-call" as const,
-              toolCallId: "native-tool-call",
-              toolName: "issue_refund",
+              type: 'tool-call' as const,
+              toolCallId: 'native-tool-call',
+              toolName: 'issue_refund',
               input: JSON.stringify(input),
             },
           ],
-          finishReason: "tool-calls" as const,
+          finishReason: 'tool-calls' as const,
           usage: { inputTokens: 1, outputTokens: 1 },
           warnings: [],
         };
       }
       return {
-        content: [{ type: "text" as const, text: "done" }],
-        finishReason: "stop" as const,
+        content: [{ type: 'text' as const, text: 'done' }],
+        finishReason: 'stop' as const,
         usage: { inputTokens: 1, outputTokens: 1 },
         warnings: [],
       };
@@ -47,17 +40,17 @@ function deterministicRefundModel(
       return {
         stream: new ReadableStream({
           start(controller) {
-            controller.enqueue({ type: "stream-start", warnings: [] });
-            controller.enqueue({ type: "text-start", id: "done" });
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({ type: 'text-start', id: 'done' });
             controller.enqueue({
-              type: "text-delta",
-              id: "done",
-              delta: "done",
+              type: 'text-delta',
+              id: 'done',
+              delta: 'done',
             });
-            controller.enqueue({ type: "text-end", id: "done" });
+            controller.enqueue({ type: 'text-end', id: 'done' });
             controller.enqueue({
-              type: "finish",
-              finishReason: "stop",
+              type: 'finish',
+              finishReason: 'stop',
               usage: { inputTokens: 1, outputTokens: 1 },
             });
             controller.close();
@@ -70,154 +63,135 @@ function deterministicRefundModel(
 
 afterEach(async () => {
   vi.resetModules();
-  await Promise.all(files.splice(0).map((file) => rm(file, { force: true })));
+  await Promise.all(files.splice(0).map(file => rm(file, { force: true })));
 });
 
-describe("native issue_refund approval", () => {
-  it("suspends the real Agent before one authenticated approval creates one effect", async () => {
-    const path = temporaryDatabasePath("phase003-native");
+describe('native issue_refund approval', () => {
+  it('suspends the real Agent before one authenticated approval creates one effect', async () => {
+    const path = temporaryDatabasePath('phase003-native');
     files.push(path, `${path}-shm`, `${path}-wal`);
     process.env.DATABASE_URL = `file:${path}`;
     process.env.LOCAL_DEMO_DATABASE_URL = `file:${path}`;
-    process.env.SUPPORT_SOURCE = "mock";
-    const { mastra } = await import("../../src/mastra/index");
-    const { caseStore } = await import("../../src/mastra/lib/case-store");
-    const { money, refundFingerprint } =
-      await import("../../src/mastra/lib/money");
-    const { defaultLocalBinding, localRuntime } =
-      await import("../../src/mastra/runtime/local-runtime");
-    const binding = defaultLocalBinding("conversation-native");
+    process.env.SUPPORT_SOURCE = 'mock';
+    const { mastra } = await import('../../src/mastra/index');
+    const { caseStore } = await import('../../src/mastra/lib/case-store');
+    const { money, refundFingerprint } = await import('../../src/mastra/lib/money');
+    const { defaultLocalBinding, localRuntime } = await import('../../src/mastra/runtime/local-runtime');
+    const binding = defaultLocalBinding('conversation-native');
     const base = {
-      approvalCaseId: "native-case",
+      approvalCaseId: 'native-case',
       binding,
-      orderId: "ORD-1001",
-      amount: money("USD", 2000),
-      reason: "duplicate",
-      idempotencyKey: "native-case",
+      orderId: 'ORD-1001',
+      amount: money('USD', 2000),
+      reason: 'duplicate',
+      idempotencyKey: 'native-case',
     };
     const fingerprint = refundFingerprint(base);
     await localRuntime.seed(binding);
     await caseStore.create({
-      id: "native-case",
-      externalId: "native-event",
-      source: "mock-email",
-      customer: { email: "alex@example.com" },
-      subject: "Duplicate",
+      id: 'native-case',
+      externalId: 'native-event',
+      source: 'mock-email',
+      customer: { email: 'alex@example.com' },
+      subject: 'Duplicate',
       messages: [
         {
-          id: "native-message",
-          author: "customer",
-          body: "refund",
+          id: 'native-message',
+          author: 'customer',
+          body: 'refund',
           createdAt: new Date().toISOString(),
         },
       ],
-      status: "waiting_approval",
+      status: 'waiting_approval',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       metadata: {
-        ownerId: "customer-alex",
+        ownerId: 'customer-alex',
         providerBinding: binding,
         refundCommand: {
-          approvalCaseId: "native-case",
-          orderId: "ORD-1001",
+          approvalCaseId: 'native-case',
+          orderId: 'ORD-1001',
           amount: 20,
-          currency: "USD",
-          reason: "duplicate",
-          idempotencyKey: "native-case",
+          currency: 'USD',
+          reason: 'duplicate',
+          idempotencyKey: 'native-case',
           fingerprint,
         },
         nativeApproval: {
-          runId: "native-run-pending",
-          toolCallId: "native-call-pending",
+          runId: 'native-run-pending',
+          toolCallId: 'native-call-pending',
           fingerprint,
-          turnId: "legacy:native-case",
+          turnId: 'legacy:native-case',
         },
       },
     });
-    await caseStore.saveAction("native-case", "refund-command", fingerprint, {
+    await caseStore.saveAction('native-case', 'refund-command', fingerprint, {
       ...base,
       fingerprint,
     });
-    const { publishKnowledge } =
-      await import("../../src/mastra/lib/publish-knowledge");
-    const { knowledgePublicationStore } =
-      await import("../../src/mastra/lib/knowledge-publications");
+    const { publishKnowledge } = await import('../../src/mastra/lib/publish-knowledge');
+    const { knowledgePublicationStore } = await import('../../src/mastra/lib/knowledge-publications');
     await publishKnowledge(binding);
-    const [citation] = await knowledgePublicationStore.search(
-      binding,
-      "duplicate charge",
-      1,
-    );
-    await caseStore.saveAction(
-      "native-case",
-      "refund-policy-evidence",
-      fingerprint,
-      {
-        turnId: "legacy:native-case",
-        binding: {
-          tenantId: binding.tenantId,
-          providerKind: binding.providerKind,
-          providerAccountId: binding.providerAccountId,
-        },
-        citations: [citation],
+    const [citation] = await knowledgePublicationStore.search(binding, 'duplicate charge', 1);
+    await caseStore.saveAction('native-case', 'refund-policy-evidence', fingerprint, {
+      turnId: 'legacy:native-case',
+      binding: {
+        tenantId: binding.tenantId,
+        providerKind: binding.providerKind,
+        providerAccountId: binding.providerAccountId,
       },
-    );
-    const agent = mastra.getAgent("refundExecutionAgent");
+      citations: [citation],
+    });
+    const agent = mastra.getAgent('refundExecutionAgent');
     const model = deterministicRefundModel({
-      caseId: "native-case",
-      orderId: "ORD-1001",
+      caseId: 'native-case',
+      orderId: 'ORD-1001',
       amount: 20,
-      currency: "USD",
-      reason: "duplicate",
-      idempotencyKey: "native-case",
+      currency: 'USD',
+      reason: 'duplicate',
+      idempotencyKey: 'native-case',
       fingerprint,
     });
     const suspended = await agent.generate(
-      `Call issue_refund once with exactly this immutable command JSON: ${JSON.stringify({ caseId: "native-case", orderId: "ORD-1001", amount: 20, currency: "USD", reason: "duplicate", idempotencyKey: "native-case", fingerprint })}`,
+      `Call issue_refund once with exactly this immutable command JSON: ${JSON.stringify({ caseId: 'native-case', orderId: 'ORD-1001', amount: 20, currency: 'USD', reason: 'duplicate', idempotencyKey: 'native-case', fingerprint })}`,
       {
         model: model as never,
       },
     );
-    expect(suspended.finishReason).toBe("suspended");
+    expect(suspended.finishReason).toBe('suspended');
     const call = suspended.suspendPayload!;
-    await caseStore.update("native-case", {
-      approval: { approved: true, approverId: "approver-demo" },
+    await caseStore.update('native-case', {
+      approval: { approved: true, approverId: 'approver-demo' },
       metadata: {
-        ...(await caseStore.get("native-case"))!.metadata,
+        ...(await caseStore.get('native-case'))!.metadata,
         nativeApproval: {
           runId: suspended.runId,
           toolCallId: call.toolCallId,
           fingerprint,
-          turnId: "legacy:native-case",
+          turnId: 'legacy:native-case',
         },
       },
     });
     await caseStore.recordApprovalDecision({
-      caseId: "native-case",
+      caseId: 'native-case',
       commandFingerprint: fingerprint,
-      principalId: "approver-demo",
+      principalId: 'approver-demo',
       approved: true,
       nativeRunId: suspended.runId,
       nativeToolCallId: call.toolCallId,
-      turnId: "legacy:native-case",
+      turnId: 'legacy:native-case',
     });
-    await caseStore.update("native-case", {
-      workflowRunId: "native-workflow-run",
+    await caseStore.update('native-case', {
+      workflowRunId: 'native-workflow-run',
     });
-    const dispatch = await caseStore.claimDispatchForResume(
-      "native-case",
-      "native-workflow-run",
-      "legacy:native-case",
-    );
-    const { withDispatchLeaseScope } =
-      await import("../../src/mastra/lib/dispatch-lease-scope");
-    const { resumeApprovedNativeTool } =
-      await import("../../src/mastra/providers/native-execution");
+    const dispatch = await caseStore.claimDispatchForResume('native-case', 'native-workflow-run', 'legacy:native-case');
+    const { withDispatchLeaseScope } = await import('../../src/mastra/lib/dispatch-lease-scope');
+    const { resumeApprovedNativeTool } = await import('../../src/mastra/providers/native-execution');
     const approved = await withDispatchLeaseScope(
       {
         dispatchId: dispatch!.id,
-        caseId: "native-case",
-        turnId: "legacy:native-case",
+        caseId: 'native-case',
+        turnId: 'legacy:native-case',
         leaseToken: dispatch!.leaseToken!,
       },
       () =>
@@ -225,8 +199,8 @@ describe("native issue_refund approval", () => {
           mastra,
           approved: true,
           scope: {
-            caseId: "native-case",
-            turnId: "legacy:native-case",
+            caseId: 'native-case',
+            turnId: 'legacy:native-case',
             nativeRunId: suspended.runId!,
             nativeToolCallId: call.toolCallId!,
             commandFingerprint: fingerprint,
@@ -236,9 +210,9 @@ describe("native issue_refund approval", () => {
           model: model as never,
         }),
     );
-    expect(approved.finishReason).toBe("stop");
-    expect((await caseStore.get("native-case"))?.refundResult).toMatchObject({
-      status: "executed",
+    expect(approved.finishReason).toBe('stop');
+    expect((await caseStore.get('native-case'))?.refundResult).toMatchObject({
+      status: 'executed',
       amount: 20,
     });
     await expect(
@@ -251,86 +225,84 @@ describe("native issue_refund approval", () => {
     await mastra.shutdown();
   });
 
-  it("suspends the real Agent and a recorded rejection creates no effect", async () => {
-    const path = temporaryDatabasePath("phase003-native");
+  it('suspends the real Agent and a recorded rejection creates no effect', async () => {
+    const path = temporaryDatabasePath('phase003-native');
     files.push(path, `${path}-shm`, `${path}-wal`);
     process.env.DATABASE_URL = `file:${path}`;
     process.env.LOCAL_DEMO_DATABASE_URL = `file:${path}`;
-    process.env.SUPPORT_SOURCE = "mock";
-    const { mastra } = await import("../../src/mastra/index");
-    const { caseStore } = await import("../../src/mastra/lib/case-store");
-    const { money, refundFingerprint } =
-      await import("../../src/mastra/lib/money");
-    const { defaultLocalBinding, localRuntime } =
-      await import("../../src/mastra/runtime/local-runtime");
-    const caseId = "native-decline";
-    const binding = defaultLocalBinding("conversation-native-decline");
+    process.env.SUPPORT_SOURCE = 'mock';
+    const { mastra } = await import('../../src/mastra/index');
+    const { caseStore } = await import('../../src/mastra/lib/case-store');
+    const { money, refundFingerprint } = await import('../../src/mastra/lib/money');
+    const { defaultLocalBinding, localRuntime } = await import('../../src/mastra/runtime/local-runtime');
+    const caseId = 'native-decline';
+    const binding = defaultLocalBinding('conversation-native-decline');
     const base = {
       approvalCaseId: caseId,
       binding,
-      orderId: "ORD-1001",
-      amount: money("USD", 2000),
-      reason: "duplicate",
+      orderId: 'ORD-1001',
+      amount: money('USD', 2000),
+      reason: 'duplicate',
       idempotencyKey: caseId,
     };
     const fingerprint = refundFingerprint(base);
     await localRuntime.seed(binding);
     await caseStore.create({
       id: caseId,
-      externalId: "native-decline-event",
-      source: "mock-email",
-      customer: { email: "alex@example.com" },
-      subject: "Duplicate",
+      externalId: 'native-decline-event',
+      source: 'mock-email',
+      customer: { email: 'alex@example.com' },
+      subject: 'Duplicate',
       messages: [
         {
-          id: "native-decline-message",
-          author: "customer",
-          body: "refund",
+          id: 'native-decline-message',
+          author: 'customer',
+          body: 'refund',
           createdAt: new Date().toISOString(),
         },
       ],
-      status: "waiting_approval",
+      status: 'waiting_approval',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       metadata: {
-        ownerId: "customer-alex",
+        ownerId: 'customer-alex',
         providerBinding: binding,
         refundCommand: {
           approvalCaseId: caseId,
-          orderId: "ORD-1001",
+          orderId: 'ORD-1001',
           amount: 20,
-          currency: "USD",
-          reason: "duplicate",
+          currency: 'USD',
+          reason: 'duplicate',
           idempotencyKey: caseId,
           fingerprint,
         },
         nativeApproval: {
-          runId: "native-run-pending",
-          toolCallId: "native-call-pending",
+          runId: 'native-run-pending',
+          toolCallId: 'native-call-pending',
           fingerprint,
           turnId: `legacy:${caseId}`,
         },
       },
     });
-    await caseStore.saveAction(caseId, "refund-command", fingerprint, {
+    await caseStore.saveAction(caseId, 'refund-command', fingerprint, {
       ...base,
       fingerprint,
     });
     const model = deterministicRefundModel({
       caseId,
-      orderId: "ORD-1001",
+      orderId: 'ORD-1001',
       amount: 20,
-      currency: "USD",
-      reason: "duplicate",
+      currency: 'USD',
+      reason: 'duplicate',
       idempotencyKey: caseId,
       fingerprint,
     });
-    const agent = mastra.getAgent("refundExecutionAgent");
+    const agent = mastra.getAgent('refundExecutionAgent');
     const suspended = await agent.generate(
-      `Call issue_refund once with exactly this immutable command JSON: ${JSON.stringify({ caseId, orderId: "ORD-1001", amount: 20, currency: "USD", reason: "duplicate", idempotencyKey: caseId, fingerprint })}`,
+      `Call issue_refund once with exactly this immutable command JSON: ${JSON.stringify({ caseId, orderId: 'ORD-1001', amount: 20, currency: 'USD', reason: 'duplicate', idempotencyKey: caseId, fingerprint })}`,
       { model: model as never },
     );
-    expect(suspended.finishReason).toBe("suspended");
+    expect(suspended.finishReason).toBe('suspended');
     const call = suspended.suspendPayload!;
     await caseStore.update(caseId, {
       metadata: {
@@ -346,7 +318,7 @@ describe("native issue_refund approval", () => {
     await caseStore.recordApprovalDecision({
       caseId,
       commandFingerprint: fingerprint,
-      principalId: "approver-demo",
+      principalId: 'approver-demo',
       approved: false,
       nativeRunId: suspended.runId,
       nativeToolCallId: call.toolCallId,
@@ -356,11 +328,11 @@ describe("native issue_refund approval", () => {
       runId: suspended.runId,
       toolCallId: call.toolCallId,
       model: model as never,
-      reason: "Rejected in authenticated approval route.",
+      reason: 'Rejected in authenticated approval route.',
     });
-    expect(declined.finishReason).toBe("stop");
+    expect(declined.finishReason).toBe('stop');
     expect((await caseStore.get(caseId))?.refundResult).toBeUndefined();
-    expect(await localRuntime.refunds(binding, "ORD-1001")).toEqual([]);
+    expect(await localRuntime.refunds(binding, 'ORD-1001')).toEqual([]);
     await mastra.shutdown();
   });
 });

@@ -1,21 +1,16 @@
-import { z } from "zod";
-import type {
-  DeliveryReceipt,
-  ProviderBinding,
-  ProviderMutationFence,
-  SupportChannelProvider,
-} from "../contracts";
-import { ProviderEffectFenceRejectedError } from "../contracts";
-import { IntercomClient } from "./client";
-import { type IntercomDevelopmentConfig } from "./config";
-import type { VerifiedIntercomConversationWebhook } from "./webhook";
+import { z } from 'zod';
+import type { DeliveryReceipt, ProviderBinding, ProviderMutationFence, SupportChannelProvider } from '../contracts';
+import { ProviderEffectFenceRejectedError } from '../contracts';
+import { IntercomClient } from './client';
+import { type IntercomDevelopmentConfig } from './config';
+import type { VerifiedIntercomConversationWebhook } from './webhook';
 
 const providerId = z.union([
   z
     .string()
     .refine(
-      (id) => id.trim().length > 0,
-      "Intercom mutation response cannot unambiguously identify its created conversation part.",
+      id => id.trim().length > 0,
+      'Intercom mutation response cannot unambiguously identify its created conversation part.',
     ),
   z.number(),
 ]);
@@ -52,17 +47,14 @@ const fullContactResponse = z
   })
   .passthrough();
 function record(value: unknown) {
-  return value && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : undefined;
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
 }
 function stringValue(value: unknown) {
-  return typeof value === "string" ? value : undefined;
+  return typeof value === 'string' ? value : undefined;
 }
 function usableProviderPartId(value: unknown): value is string | number {
   return (
-    (typeof value === "string" && value.trim().length > 0) ||
-    (typeof value === "number" && Number.isFinite(value))
+    (typeof value === 'string' && value.trim().length > 0) || (typeof value === 'number' && Number.isFinite(value))
   );
 }
 /** Preserve a provider identifier's type and bytes while comparing snapshots.
@@ -76,18 +68,18 @@ function escapedParagraph(body: string) {
   // Accept only that one byte-for-byte rendering; do not parse or normalize
   // arbitrary HTML, because visually similar markup can carry different
   // message content.
-  return `<p>${body.replace(/[&<>"']/g, (character) => {
+  return `<p>${body.replace(/[&<>"']/g, character => {
     switch (character) {
-      case "&":
-        return "&amp;";
-      case "<":
-        return "&lt;";
-      case ">":
-        return "&gt;";
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
       case '"':
-        return "&quot;";
+        return '&quot;';
       case "'":
-        return "&#39;";
+        return '&#39;';
       default:
         return character;
     }
@@ -105,14 +97,12 @@ function customerAuthor(value: unknown) {
   // events); both resolve through the Contact API. A visitor reply is signed
   // but does not establish a stable Contact identity here, so we deliberately
   // reject it rather than borrowing a participant or inventing an email.
-  return id && ["contact", "user", "lead"].includes(type ?? "")
-    ? { id, author }
-    : undefined;
+  return id && ['contact', 'user', 'lead'].includes(type ?? '') ? { id, author } : undefined;
 }
 function eventTimestamp(value: unknown, fallback: number) {
   const timestamp = Number(value ?? fallback);
   if (!Number.isFinite(timestamp) || timestamp <= 0)
-    throw new Error("Intercom customer event lacks a valid occurrence time.");
+    throw new Error('Intercom customer event lacks a valid occurrence time.');
   return new Date(timestamp * 1_000).toISOString();
 }
 
@@ -124,19 +114,12 @@ function eventTimestamp(value: unknown, fallback: number) {
  * source would attach an old message (and potentially its owner) to a new
  * event.
  */
-function inboundCustomerMessage(
-  topic: string,
-  item: Record<string, unknown>,
-  eventCreatedAt: number,
-) {
-  if (topic === "conversation.user.created") {
+function inboundCustomerMessage(topic: string, item: Record<string, unknown>, eventCreatedAt: number) {
+  if (topic === 'conversation.user.created') {
     const source = record(item.source);
     const customer = customerAuthor(source?.author);
     const body = stringValue(source?.body);
-    if (!customer || !body)
-      throw new Error(
-        "Intercom created conversation lacks a customer source author or body.",
-      );
+    if (!customer || !body) throw new Error('Intercom created conversation lacks a customer source author or body.');
     return {
       contactId: customer.id,
       author: customer.author,
@@ -146,13 +129,10 @@ function inboundCustomerMessage(
     };
   }
 
-  if (topic !== "conversation.user.replied")
-    throw new Error("Intercom event is not a customer conversation event.");
+  if (topic !== 'conversation.user.replied') throw new Error('Intercom event is not a customer conversation event.');
   const parts = record(item.conversation_parts)?.conversation_parts;
   if (!Array.isArray(parts) || parts.length === 0)
-    throw new Error(
-      "Intercom reply event lacks a conversation-part snapshot to identify the reply.",
-    );
+    throw new Error('Intercom reply event lacks a conversation-part snapshot to identify the reply.');
   // Intercom returns the Conversation part list in conversation order. The
   // notification can be safely accepted only when the final snapshot part is
   // the actual customer reply; choosing an earlier customer part would make a
@@ -161,10 +141,7 @@ function inboundCustomerMessage(
   const customer = customerAuthor(part?.author);
   const id = stringValue(part?.id);
   const body = stringValue(part?.body);
-  if (!customer || !id || !body)
-    throw new Error(
-      "Intercom reply event lacks an unambiguous customer reply part.",
-    );
+  if (!customer || !id || !body) throw new Error('Intercom reply event lacks an unambiguous customer reply part.');
   return {
     contactId: customer.id,
     author: customer.author,
@@ -177,7 +154,7 @@ function inboundCustomerMessage(
 /** Maps only normalized domain fields.  Neither workflow nor domain sees a
  * vendor payload; the verified event identity remains the durable dedup key. */
 export class IntercomSupportProvider implements SupportChannelProvider {
-  readonly kind = "intercom" as const;
+  readonly kind = 'intercom' as const;
   constructor(
     private readonly config: IntercomDevelopmentConfig,
     private readonly client = new IntercomClient(config),
@@ -185,42 +162,30 @@ export class IntercomSupportProvider implements SupportChannelProvider {
   async normalizeInbound(payload: unknown) {
     const event = payload as VerifiedIntercomConversationWebhook;
     const item = event?.data?.item;
-    if (
-      !item ||
-      typeof item !== "object" ||
-      event.binding.providerKind !== "intercom"
-    )
-      throw new Error(
-        "Intercom inbound was not verified by the webhook boundary.",
-      );
+    if (!item || typeof item !== 'object' || event.binding.providerKind !== 'intercom')
+      throw new Error('Intercom inbound was not verified by the webhook boundary.');
     const itemRecord = item as Record<string, unknown>;
     // Contacts are participants, not authenticated message authors. The
     // topic-specific source/part selection above is the sole owner input.
-    const message = inboundCustomerMessage(
-      event.topic,
-      itemRecord,
-      event.created_at,
-    );
+    const message = inboundCustomerMessage(event.topic, itemRecord, event.created_at);
     const sender = fullContactResponse.safeParse(message.author).success
       ? fullContactResponse.parse(message.author)
       : await this.client.request(
           `/contacts/${encodeURIComponent(message.contactId)}`,
-          { method: "GET" },
+          { method: 'GET' },
           fullContactResponse,
         );
     if (String(sender.id) !== message.contactId)
-      throw new Error(
-        "Intercom contact enrichment did not match the event author.",
-      );
+      throw new Error('Intercom contact enrichment did not match the event author.');
     return {
       binding: event.binding,
       externalId: event.id,
-      source: "intercom-conversation" as const,
+      source: 'intercom-conversation' as const,
       customer: { email: sender.email, name: sender.name },
-      subject: stringValue(itemRecord.title) ?? "Intercom conversation",
+      subject: stringValue(itemRecord.title) ?? 'Intercom conversation',
       message: {
         id: `intercom_part_${message.id ?? event.id}`,
-        author: "customer" as const,
+        author: 'customer' as const,
         authorName: sender.name,
         body: message.body,
         createdAt: message.createdAt,
@@ -236,127 +201,97 @@ export class IntercomSupportProvider implements SupportChannelProvider {
   }
   private assert(binding: ProviderBinding) {
     if (
-      binding.providerKind !== "intercom" ||
+      binding.providerKind !== 'intercom' ||
       binding.tenantId !== this.config.tenantId ||
       binding.providerAccountId !== this.config.accountId
     )
-      throw new Error("Intercom delivery binding is not configured.");
+      throw new Error('Intercom delivery binding is not configured.');
   }
-  planFinalizationOutbox(input: {
-    status: "resolved" | "escalated";
-    subject: string;
-    escalationReason?: string;
-  }) {
+  planFinalizationOutbox(input: { status: 'resolved' | 'escalated'; subject: string; escalationReason?: string }) {
     const operations: Array<{
-      operation: "note" | "status" | "ticket";
+      operation: 'note' | 'status' | 'ticket';
       body: string;
       status: string;
     }> = [
       {
-        operation: "status",
-        body: "",
+        operation: 'status',
+        body: '',
         status: input.status,
       },
     ];
-    if (input.status !== "escalated") return operations;
-    const reason =
-      input.escalationReason?.trim() ||
-      "Support escalation requires staff review.";
+    if (input.status !== 'escalated') return operations;
+    const reason = input.escalationReason?.trim() || 'Support escalation requires staff review.';
     operations.unshift({
-      operation: "note",
+      operation: 'note',
       body: reason,
       status: input.status,
     });
     if (this.config.ticketTypeId)
       operations.push({
-        operation: "ticket",
+        operation: 'ticket',
         body: reason,
         status: input.subject,
       });
     return operations;
   }
-  private assertConversation(
-    binding: ProviderBinding,
-    response: z.infer<typeof conversationResponse>,
-  ) {
+  private assertConversation(binding: ProviderBinding, response: z.infer<typeof conversationResponse>) {
     if (String(response.id) !== binding.externalConversationId)
-      throw new Error(
-        "Intercom mutation response does not match the bound Conversation.",
-      );
+      throw new Error('Intercom mutation response does not match the bound Conversation.');
   }
-  private conversationParts(
-    response: z.infer<typeof conversationResponse>,
-    context: "read" | "mutation",
-  ) {
+  private conversationParts(response: z.infer<typeof conversationResponse>, context: 'read' | 'mutation') {
     const parts = response.conversation_parts?.conversation_parts;
-    if (!parts)
-      throw new Error(
-        `Intercom ${context} response lacks a conversation-part snapshot.`,
-      );
+    if (!parts) throw new Error(`Intercom ${context} response lacks a conversation-part snapshot.`);
     return parts;
   }
-  private assertPreMutationConversation(
-    binding: ProviderBinding,
-    response: z.infer<typeof conversationResponse>,
-  ) {
+  private assertPreMutationConversation(binding: ProviderBinding, response: z.infer<typeof conversationResponse>) {
     this.assertConversation(binding, response);
-    this.conversationParts(response, "read");
+    this.conversationParts(response, 'read');
   }
-  private partWasAuthoredByConfiguredAdmin(
-    part: z.infer<typeof conversationPartResponse>,
-  ) {
+  private partWasAuthoredByConfiguredAdmin(part: z.infer<typeof conversationPartResponse>) {
     const author = record(part.author);
     return (
-      author?.type === "admin" &&
+      author?.type === 'admin' &&
       (author.id === this.config.adminId ||
-        (typeof author.id === "number" &&
-          Number.isFinite(author.id) &&
-          String(author.id) === this.config.adminId))
+        (typeof author.id === 'number' && Number.isFinite(author.id) && String(author.id) === this.config.adminId))
     );
   }
   private matchesOperation(
     part: z.infer<typeof conversationPartResponse>,
-    operation: "reply" | "note" | "status",
+    operation: 'reply' | 'note' | 'status',
     body: string,
-    status?: "open" | "closed",
+    status?: 'open' | 'closed',
   ) {
     if (!this.partWasAuthoredByConfiguredAdmin(part)) return false;
-    if (operation === "reply")
+    if (operation === 'reply')
       // An initial reply can be represented as an automatic assignment. It is
       // still only safe when it carries this exact reply body and admin.
-      return (
-        (part.part_type === "comment" || part.part_type === "assignment") &&
-        matchesSentBody(part.body, body)
-      );
-    if (operation === "note")
-      return part.part_type === "note" && matchesSentBody(part.body, body);
+      return (part.part_type === 'comment' || part.part_type === 'assignment') && matchesSentBody(part.body, body);
+    if (operation === 'note') return part.part_type === 'note' && matchesSentBody(part.body, body);
     return (
-      part.part_type === (status === "closed" ? "close" : "open") &&
-      (part.body === undefined || part.body === null || part.body === "")
+      part.part_type === (status === 'closed' ? 'close' : 'open') &&
+      (part.body === undefined || part.body === null || part.body === '')
     );
   }
   private receipt(
     binding: ProviderBinding,
     before: z.infer<typeof conversationResponse>,
     response: z.infer<typeof conversationResponse>,
-    operation: "reply" | "note" | "status",
+    operation: 'reply' | 'note' | 'status',
     body: string,
-    status?: "open" | "closed",
+    status?: 'open' | 'closed',
   ): DeliveryReceipt {
     this.assertConversation(binding, before);
     this.assertConversation(binding, response);
-    if (operation === "status" && response.state !== status)
-      throw new Error(
-        "Intercom status mutation response does not demonstrate the desired Conversation state.",
-      );
+    if (operation === 'status' && response.state !== status)
+      throw new Error('Intercom status mutation response does not demonstrate the desired Conversation state.');
     const knownPartIds = new Set(
-      this.conversationParts(before, "read")
-        .map((part) => part.id)
+      this.conversationParts(before, 'read')
+        .map(part => part.id)
         .filter(usableProviderPartId)
         .map(providerIdKey),
     );
-    const candidates = this.conversationParts(response, "mutation").filter(
-      (part) =>
+    const candidates = this.conversationParts(response, 'mutation').filter(
+      part =>
         usableProviderPartId(part.id) &&
         !knownPartIds.has(providerIdKey(part.id)) &&
         this.matchesOperation(part, operation, body, status),
@@ -365,14 +300,10 @@ export class IntercomSupportProvider implements SupportChannelProvider {
     // Never pick by list position or body alone: only one novel, semantic
     // candidate is a receipt for this particular POST.
     if (candidates.length !== 1 || candidates[0]?.id === undefined)
-      throw new Error(
-        "Intercom mutation response cannot unambiguously identify its created conversation part.",
-      );
+      throw new Error('Intercom mutation response cannot unambiguously identify its created conversation part.');
     const id = candidates[0].id;
     if (!usableProviderPartId(id))
-      throw new Error(
-        "Intercom mutation response cannot unambiguously identify its created conversation part.",
-      );
+      throw new Error('Intercom mutation response cannot unambiguously identify its created conversation part.');
     return {
       receiptId: `intercom:${operation}:${id}`,
       providerMessageId: String(id),
@@ -382,46 +313,39 @@ export class IntercomSupportProvider implements SupportChannelProvider {
   private async conversation(binding: ProviderBinding) {
     return this.client.request(
       `/conversations/${encodeURIComponent(binding.externalConversationId)}`,
-      { method: "GET" },
+      { method: 'GET' },
       conversationResponse,
     );
   }
-  async currentConversationState(
-    binding: ProviderBinding,
-  ): Promise<{ id: string; state: "open" | "closed" }> {
+  async currentConversationState(binding: ProviderBinding): Promise<{ id: string; state: 'open' | 'closed' }> {
     this.assert(binding);
     const response = await this.conversation(binding);
     this.assertConversation(binding, response);
-    if (response.state !== "open" && response.state !== "closed")
-      throw new Error("Intercom conversation has an unsupported state.");
+    if (response.state !== 'open' && response.state !== 'closed')
+      throw new Error('Intercom conversation has an unsupported state.');
     return {
       id: String(response.id),
-      state: response.state === "closed" ? "closed" : "open",
+      state: response.state === 'closed' ? 'closed' : 'open',
     };
   }
-  async deliver(
-    binding: ProviderBinding,
-    body: string,
-    _status: string,
-    _idempotencyKey?: string,
-  ) {
+  async deliver(binding: ProviderBinding, body: string, _status: string, _idempotencyKey?: string) {
     this.assert(binding);
     const before = await this.conversation(binding);
     this.assertPreMutationConversation(binding, before);
     const response = await this.client.request(
       `/conversations/${encodeURIComponent(binding.externalConversationId)}/reply`,
       {
-        method: "POST",
+        method: 'POST',
         body: JSON.stringify({
-          message_type: "comment",
-          type: "admin",
+          message_type: 'comment',
+          type: 'admin',
           admin_id: this.config.adminId,
           body,
         }),
       },
       conversationResponse,
     );
-    return this.receipt(binding, before, response, "reply", body);
+    return this.receipt(binding, before, response, 'reply', body);
   }
   async addInternalNote(
     binding: ProviderBinding,
@@ -432,22 +356,21 @@ export class IntercomSupportProvider implements SupportChannelProvider {
     this.assert(binding);
     const before = await this.conversation(binding);
     this.assertPreMutationConversation(binding, before);
-    if (beforeMutation && !(await beforeMutation()))
-      throw new ProviderEffectFenceRejectedError();
+    if (beforeMutation && !(await beforeMutation())) throw new ProviderEffectFenceRejectedError();
     const response = await this.client.request(
       `/conversations/${encodeURIComponent(binding.externalConversationId)}/reply`,
       {
-        method: "POST",
+        method: 'POST',
         body: JSON.stringify({
-          message_type: "note",
-          type: "admin",
+          message_type: 'note',
+          type: 'admin',
           admin_id: this.config.adminId,
           body,
         }),
       },
       conversationResponse,
     );
-    return this.receipt(binding, before, response, "note", body);
+    return this.receipt(binding, before, response, 'note', body);
   }
   async updateStatus(
     binding: ProviderBinding,
@@ -456,7 +379,7 @@ export class IntercomSupportProvider implements SupportChannelProvider {
     beforeMutation?: ProviderMutationFence,
   ) {
     this.assert(binding);
-    const state = status === "resolved" ? "closed" : "open";
+    const state = status === 'resolved' ? 'closed' : 'open';
     const before = await this.conversation(binding);
     this.assertPreMutationConversation(binding, before);
     if (before.state === state)
@@ -466,23 +389,22 @@ export class IntercomSupportProvider implements SupportChannelProvider {
         receiptId: `intercom:status:no-op:${binding.externalConversationId}`,
         deliveredAt: new Date().toISOString(),
       };
-    if (beforeMutation && !(await beforeMutation()))
-      throw new ProviderEffectFenceRejectedError();
-    const messageType = state === "open" ? "open" : "close";
+    if (beforeMutation && !(await beforeMutation())) throw new ProviderEffectFenceRejectedError();
+    const messageType = state === 'open' ? 'open' : 'close';
     const response = await this.client.request(
       `/conversations/${encodeURIComponent(binding.externalConversationId)}/parts`,
       {
-        method: "POST",
+        method: 'POST',
         body: JSON.stringify({
           message_type: messageType,
-          type: "admin",
+          type: 'admin',
           admin_id: this.config.adminId,
-          body: "",
+          body: '',
         }),
       },
       conversationResponse,
     );
-    return this.receipt(binding, before, response, "status", "", state);
+    return this.receipt(binding, before, response, 'status', '', state);
   }
   async convertToTicket(
     binding: ProviderBinding,
@@ -490,17 +412,14 @@ export class IntercomSupportProvider implements SupportChannelProvider {
     _idempotencyKey: string,
   ) {
     this.assert(binding);
-    if (!this.config.ticketTypeId)
-      throw new Error("Intercom ticket conversion is not configured.");
+    if (!this.config.ticketTypeId) throw new Error('Intercom ticket conversion is not configured.');
     const response = await this.client.request(
       `/conversations/${encodeURIComponent(binding.externalConversationId)}/convert`,
       {
-        method: "POST",
+        method: 'POST',
         body: JSON.stringify({
           ticket_type_id: this.config.ticketTypeId,
-          ...(this.config.ticketStateId
-            ? { ticket_state_id: this.config.ticketStateId }
-            : {}),
+          ...(this.config.ticketStateId ? { ticket_state_id: this.config.ticketStateId } : {}),
           attributes: {
             _default_title_: input.title,
             _default_description_: input.description,

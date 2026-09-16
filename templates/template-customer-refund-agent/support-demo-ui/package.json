@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "format:check": "prettier --check . --ignore-path ../.prettierignore",
+    "format:check": "oxfmt --check -c ../.oxfmtrc.json .",
     "lint": "oxlint --deny-warnings src",
     "typecheck": "tsc -b --pretty false",
     "test:unit": "vitest run --root .. --config vitest.config.ts --project web-unit",

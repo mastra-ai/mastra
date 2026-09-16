@@ -1,15 +1,11 @@
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import {
-  lookupCustomerRefundHistoryTool,
-  lookupOrderTool,
-  lookupSubscriptionTool,
-} from "../tools/lookup-order";
-import { searchSupportKnowledgeTool } from "../tools/search-support-knowledge";
-import { responseAgent } from "./response-agent";
-import { triageAgent } from "./triage-agent";
+import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+import { lookupCustomerRefundHistoryTool, lookupOrderTool, lookupSubscriptionTool } from '../tools/lookup-order';
+import { searchSupportKnowledgeTool } from '../tools/search-support-knowledge';
+import { responseAgent } from './response-agent';
+import { triageAgent } from './triage-agent';
 
-export const supportSupervisorModel = "openai/gpt-5.6-luna";
+export const supportSupervisorModel = 'openai/gpt-5.6-luna';
 export const supportSupervisorInstructions = `You are the supervisor for a customer support team made up of specialist agents:
 
 - **triageAgent** - classifies a customer message by intent, urgency, sentiment, and confidence. Delegate to it when you need to classify a message before deciding how to handle it.
@@ -22,10 +18,10 @@ Never issue a refund yourself - you have no tool to do so. Refunds only happen t
 When a user pastes a raw customer message, delegate to triageAgent first, then to responseAgent for a draft. Summarize both results clearly.`;
 
 export const supportSupervisorAgent = new Agent({
-  id: "support-supervisor",
-  name: "Support Supervisor",
+  id: 'support-supervisor',
+  name: 'Support Supervisor',
   description:
-    "Coordinates the triage and response specialist agents, and can look up orders, subscriptions, and policy directly.",
+    'Coordinates the triage and response specialist agents, and can look up orders, subscriptions, and policy directly.',
   instructions: supportSupervisorInstructions,
   model: supportSupervisorModel,
   agents: { triageAgent, responseAgent },

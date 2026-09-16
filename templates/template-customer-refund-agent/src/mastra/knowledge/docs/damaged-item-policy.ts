@@ -1,8 +1,8 @@
-import type { PolicyDocument } from "../types.ts";
+import type { PolicyDocument } from '../types.ts';
 
 export const damagedItemPolicy: PolicyDocument = {
-  title: "Damaged or Defective Item Policy",
-  source: "damaged-item-policy",
+  title: 'Damaged or Defective Item Policy',
+  source: 'damaged-item-policy',
   text: `# Damaged or Defective Item Policy
 
 - If a customer reports an item arrived damaged or defective, offer either a **full refund** or a **free replacement** - let the customer choose if they haven't already stated a preference.

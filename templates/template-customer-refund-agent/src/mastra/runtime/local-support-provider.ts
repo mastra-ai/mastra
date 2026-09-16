@@ -1,20 +1,14 @@
-import type { Client } from "@libsql/client";
-import { createHash } from "node:crypto";
-import type {
-  DeliveryReceipt,
-  ProviderBinding,
-  SupportChannelProvider,
-} from "../providers/contracts";
+import type { Client } from '@libsql/client';
+import { createHash } from 'node:crypto';
+import type { DeliveryReceipt, ProviderBinding, SupportChannelProvider } from '../providers/contracts';
 
-const LOCAL = "local" as const;
+const LOCAL = 'local' as const;
 
 /** The local adapter's binding is a fixture boundary, not a workflow concern. */
-export const defaultLocalBinding = (
-  externalConversationId = "local",
-): ProviderBinding => ({
-  tenantId: "local-demo",
+export const defaultLocalBinding = (externalConversationId = 'local'): ProviderBinding => ({
+  tenantId: 'local-demo',
   providerKind: LOCAL,
-  providerAccountId: "local-demo",
+  providerAccountId: 'local-demo',
   externalConversationId,
 });
 
@@ -37,18 +31,17 @@ export class LocalSupportProvider implements SupportChannelProvider {
       receivedAt?: string;
       conversationId?: string;
     };
-    if (!value?.externalId || !value.from || !value.body)
-      throw new Error("Invalid local inbound payload.");
+    if (!value?.externalId || !value.from || !value.body) throw new Error('Invalid local inbound payload.');
     const createdAt = value.receivedAt ?? new Date().toISOString();
     return {
       binding: defaultLocalBinding(value.conversationId ?? value.externalId),
       externalId: value.externalId,
-      source: "mock-email" as const,
+      source: 'mock-email' as const,
       customer: { email: value.from, name: value.fromName },
-      subject: value.subject || "(no subject)",
+      subject: value.subject || '(no subject)',
       message: {
         id: `msg_${crypto.randomUUID().slice(0, 8)}`,
-        author: "customer" as const,
+        author: 'customer' as const,
         authorName: value.fromName ?? value.from,
         body: value.body,
         createdAt,
@@ -65,7 +58,7 @@ export class LocalSupportProvider implements SupportChannelProvider {
   ): Promise<DeliveryReceipt> {
     await this.ready;
     const key = idempotencyKey ?? `direct_${crypto.randomUUID()}`;
-    const payloadFingerprint = createHash("sha256")
+    const payloadFingerprint = createHash('sha256')
       .update(
         JSON.stringify({
           tenantId: binding.tenantId,
@@ -76,16 +69,14 @@ export class LocalSupportProvider implements SupportChannelProvider {
           status,
         }),
       )
-      .digest("hex");
+      .digest('hex');
     const existing = await this.client.execute({
-      sql: "SELECT payload_fingerprint, receipt FROM local_deliveries WHERE tenant_id = ? AND provider_account_id = ? AND idempotency_key = ?",
+      sql: 'SELECT payload_fingerprint, receipt FROM local_deliveries WHERE tenant_id = ? AND provider_account_id = ? AND idempotency_key = ?',
       args: [binding.tenantId, binding.providerAccountId, key],
     });
     if (existing.rows[0]) {
       if (String(existing.rows[0].payload_fingerprint) !== payloadFingerprint)
-        throw new Error(
-          "Delivery idempotency key was reused with different content.",
-        );
+        throw new Error('Delivery idempotency key was reused with different content.');
       return JSON.parse(String(existing.rows[0].receipt)) as DeliveryReceipt;
     }
     const receipt: DeliveryReceipt = {
@@ -95,43 +86,27 @@ export class LocalSupportProvider implements SupportChannelProvider {
     };
     try {
       await this.client.execute({
-        sql: "INSERT INTO local_deliveries(tenant_id, provider_account_id, idempotency_key, payload_fingerprint, receipt) VALUES (?, ?, ?, ?, ?)",
-        args: [
-          binding.tenantId,
-          binding.providerAccountId,
-          key,
-          payloadFingerprint,
-          JSON.stringify(receipt),
-        ],
+        sql: 'INSERT INTO local_deliveries(tenant_id, provider_account_id, idempotency_key, payload_fingerprint, receipt) VALUES (?, ?, ?, ?, ?)',
+        args: [binding.tenantId, binding.providerAccountId, key, payloadFingerprint, JSON.stringify(receipt)],
       });
     } catch (error) {
       const raced = await this.client.execute({
-        sql: "SELECT payload_fingerprint, receipt FROM local_deliveries WHERE tenant_id = ? AND provider_account_id = ? AND idempotency_key = ?",
+        sql: 'SELECT payload_fingerprint, receipt FROM local_deliveries WHERE tenant_id = ? AND provider_account_id = ? AND idempotency_key = ?',
         args: [binding.tenantId, binding.providerAccountId, key],
       });
       if (!raced.rows[0]) throw error;
       if (String(raced.rows[0].payload_fingerprint) !== payloadFingerprint)
-        throw new Error(
-          "Delivery idempotency key was reused with different content.",
-        );
+        throw new Error('Delivery idempotency key was reused with different content.');
       return JSON.parse(String(raced.rows[0].receipt)) as DeliveryReceipt;
     }
     return receipt;
   }
 
-  async addInternalNote(
-    binding: ProviderBinding,
-    body: string,
-    idempotencyKey: string,
-  ) {
-    return this.deliver(binding, body, "note", idempotencyKey);
+  async addInternalNote(binding: ProviderBinding, body: string, idempotencyKey: string) {
+    return this.deliver(binding, body, 'note', idempotencyKey);
   }
 
-  async updateStatus(
-    binding: ProviderBinding,
-    status: string,
-    idempotencyKey: string,
-  ) {
-    return this.deliver(binding, "", status, idempotencyKey);
+  async updateStatus(binding: ProviderBinding, status: string, idempotencyKey: string) {
+    return this.deliver(binding, '', status, idempotencyKey);
   }
 }

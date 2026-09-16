@@ -3,36 +3,35 @@
  * owns both the dataset assertion meanings and registered scorer formulas so
  * an immutable report can be replayed without trusting its claimed flags.
  */
-import { createHash } from "node:crypto";
-import { types as utilTypes } from "node:util";
+import { createHash } from 'node:crypto';
+import { types as utilTypes } from 'node:util';
 
 function deepFreeze(value) {
-  if (!value || typeof value !== "object" || Object.isFrozen(value))
-    return value;
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
   for (const entry of Object.values(value)) deepFreeze(entry);
   return Object.freeze(value);
 }
 
-const EXPECTED_ORDER_ID = "ORD-1001";
+const EXPECTED_ORDER_ID = 'ORD-1001';
 const EXPECTED_ORDER = deepFreeze({
   orderId: EXPECTED_ORDER_ID,
-  customerEmail: "alex@example.com",
-  product: "Pro Plan - Monthly",
+  customerEmail: 'alex@example.com',
+  product: 'Pro Plan - Monthly',
   amount: 49,
-  currency: "USD",
-  status: "fulfilled",
+  currency: 'USD',
+  status: 'fulfilled',
   chargeCount: 2,
-  placedAt: "2026-08-01T14:00:00.000Z",
+  placedAt: '2026-08-01T14:00:00.000Z',
 });
 const EXPECTED_ORDER_STATUS = EXPECTED_ORDER.status;
 const EXPECTED_CUSTOMER_EMAIL = EXPECTED_ORDER.customerEmail;
-const EXPECTED_QUERY = "duplicate charge policy";
+const EXPECTED_QUERY = 'duplicate charge policy';
 // This instant is a fixture authority for the deterministic measurement, not
 // the wall clock of the machine replaying an immutable report.
-const DETERMINISTIC_MEASUREMENT_AT = "2026-08-01T14:00:01.000Z";
+const DETERMINISTIC_MEASUREMENT_AT = '2026-08-01T14:00:01.000Z';
 const EXPECTED_KNOWLEDGE_EVIDENCE = {
-  title: "Duplicate Charge Policy",
-  source: "duplicate-charge-policy",
+  title: 'Duplicate Charge Policy',
+  source: 'duplicate-charge-policy',
   text: `# Duplicate Charge Policy
 
 Duplicate charges happen when a payment retries due to a network error, or when a customer accidentally submits an order twice.
@@ -41,13 +40,13 @@ Duplicate charges happen when a payment retries due to a network error, or when 
 - Always confirm the charge count on the order/subscription record before recommending a refund - do not take the customer's word for the number of charges without checking.
 - Duplicate-charge refunds do not require the customer to return anything, since no extra product/service was fulfilled.
 - These refunds are considered clear-cut and eligible for standard approval (not automatic execution - a human must still approve every refund).`,
-  version: "local-v1",
-  effectiveAt: "2026-01-01T00:00:00.000Z",
+  version: 'local-v1',
+  effectiveAt: '2026-01-01T00:00:00.000Z',
   // This is a fixed fixture authority, not a value learned from a tool call
   // or an expected value carried in a replay report.
-  providerKind: "local",
+  providerKind: 'local',
 };
-EXPECTED_KNOWLEDGE_EVIDENCE.documentHash = createHash("sha256")
+EXPECTED_KNOWLEDGE_EVIDENCE.documentHash = createHash('sha256')
   .update(
     JSON.stringify([
       EXPECTED_KNOWLEDGE_EVIDENCE.source,
@@ -55,55 +54,54 @@ EXPECTED_KNOWLEDGE_EVIDENCE.documentHash = createHash("sha256")
       EXPECTED_KNOWLEDGE_EVIDENCE.text,
     ]),
   )
-  .digest("hex");
+  .digest('hex');
 deepFreeze(EXPECTED_KNOWLEDGE_EVIDENCE);
 const EXPECTED_CALL_ORDER = deepFreeze([
-  "search_support_knowledge",
-  "lookup_order",
-  "search_support_knowledge",
-  "lookup_order",
+  'search_support_knowledge',
+  'lookup_order',
+  'search_support_knowledge',
+  'lookup_order',
 ]);
 const EXPECTED_TRUSTED_BINDING = deepFreeze({
-  tenantId: "local-demo",
-  providerKind: "local",
-  providerAccountId: "phase004-eval-authority-registered-scorer-fixture",
-  externalConversationId:
-    "phase004-eval-conversation-registered-scorer-fixture",
+  tenantId: 'local-demo',
+  providerKind: 'local',
+  providerAccountId: 'phase004-eval-authority-registered-scorer-fixture',
+  externalConversationId: 'phase004-eval-conversation-registered-scorer-fixture',
 });
 const EXPECTED_INPUT_KEYS = deepFreeze({
-  search_support_knowledge: ["binding", "queryText", "topK"],
-  lookup_order: ["binding", "customerEmail", "orderId"],
+  search_support_knowledge: ['binding', 'queryText', 'topK'],
+  lookup_order: ['binding', 'customerEmail', 'orderId'],
 });
 const EXPECTED_ESCALATION_RESPONSE =
-  "Thanks for your patience. A support specialist needs to review the available information and will follow up shortly.";
+  'Thanks for your patience. A support specialist needs to review the available information and will follow up shortly.';
 const SHA256 = /^[a-f0-9]{64}$/;
 const ORDER_KEYS = deepFreeze(Object.keys(EXPECTED_ORDER).sort());
 
 function canonicalInstant(value) {
-  if (typeof value !== "string") return false;
+  if (typeof value !== 'string') return false;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
 }
 
 export const SUPPORTED_AXES = [
-  "groundedness",
-  "policy-compliance",
-  "routing-accuracy",
-  "tool-call-correctness",
-  "multi-turn-consistency",
-  "resolution-quality",
+  'groundedness',
+  'policy-compliance',
+  'routing-accuracy',
+  'tool-call-correctness',
+  'multi-turn-consistency',
+  'resolution-quality',
 ];
 
-const INVALID_JSON_SNAPSHOT = Symbol("invalid-json-snapshot");
-const propertySegment = (key) => ({ kind: "property", key });
-const arrayIndexSegment = (index) => ({ kind: "array-index", index });
+const INVALID_JSON_SNAPSHOT = Symbol('invalid-json-snapshot');
+const propertySegment = key => ({ kind: 'property', key });
+const arrayIndexSegment = index => ({ kind: 'array-index', index });
 
 function ordinaryDataDescriptor(descriptor) {
   return (
     descriptor !== undefined &&
-    Object.hasOwn(descriptor, "value") &&
-    !Object.hasOwn(descriptor, "get") &&
-    !Object.hasOwn(descriptor, "set") &&
+    Object.hasOwn(descriptor, 'value') &&
+    !Object.hasOwn(descriptor, 'get') &&
+    !Object.hasOwn(descriptor, 'set') &&
     descriptor.enumerable === true &&
     descriptor.configurable === true &&
     descriptor.writable === true
@@ -115,32 +113,21 @@ function ordinaryDataDescriptor(descriptor) {
  * Reflect descriptors let us reject accessors without invoking them, and the
  * Node proxy check happens before any reflective operation can trigger a trap.
  */
-function canonicalJsonSnapshot(
-  value,
-  ancestors = new WeakSet(),
-  allowsUndefined = () => false,
-  path = [],
-) {
+function canonicalJsonSnapshot(value, ancestors = new WeakSet(), allowsUndefined = () => false, path = []) {
   if (value === null) return null;
-  if (
-    typeof value === "string" ||
-    typeof value === "boolean" ||
-    (typeof value === "number" && Number.isFinite(value))
-  )
+  if (typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)))
     return value;
-  if (typeof value !== "object" || utilTypes.isProxy(value))
-    return INVALID_JSON_SNAPSHOT;
+  if (typeof value !== 'object' || utilTypes.isProxy(value)) return INVALID_JSON_SNAPSHOT;
   if (ancestors.has(value)) return INVALID_JSON_SNAPSHOT;
   ancestors.add(value);
   try {
     if (Array.isArray(value)) {
       // Check this before asking an array for its length, keys, or
       // descriptors. Array.isArray accepts arrays with a replaced prototype.
-      if (Object.getPrototypeOf(value) !== Array.prototype)
-        return INVALID_JSON_SNAPSHOT;
+      if (Object.getPrototypeOf(value) !== Array.prototype) return INVALID_JSON_SNAPSHOT;
       const keys = Reflect.ownKeys(value);
       const length = value.length;
-      const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+      const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
       if (
         !Number.isSafeInteger(length) ||
         !lengthDescriptor ||
@@ -157,35 +144,28 @@ function canonicalJsonSnapshot(
         if (!keys.includes(key)) return INVALID_JSON_SNAPSHOT;
         const descriptor = Object.getOwnPropertyDescriptor(value, key);
         if (!ordinaryDataDescriptor(descriptor)) return INVALID_JSON_SNAPSHOT;
-        const entry = canonicalJsonSnapshot(
-          descriptor.value,
-          ancestors,
-          allowsUndefined,
-          [...path, arrayIndexSegment(index)],
-        );
+        const entry = canonicalJsonSnapshot(descriptor.value, ancestors, allowsUndefined, [
+          ...path,
+          arrayIndexSegment(index),
+        ]);
         if (entry === INVALID_JSON_SNAPSHOT) return INVALID_JSON_SNAPSHOT;
         snapshot.push(entry);
       }
       return deepFreeze(snapshot);
     }
     const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null)
-      return INVALID_JSON_SNAPSHOT;
+    if (prototype !== Object.prototype && prototype !== null) return INVALID_JSON_SNAPSHOT;
     const keys = Reflect.ownKeys(value);
-    if (keys.some((key) => typeof key !== "string"))
-      return INVALID_JSON_SNAPSHOT;
+    if (keys.some(key => typeof key !== 'string')) return INVALID_JSON_SNAPSHOT;
     const snapshot = Object.create(prototype);
     for (const key of keys.sort()) {
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (!ordinaryDataDescriptor(descriptor)) return INVALID_JSON_SNAPSHOT;
-      if (descriptor.value === undefined && allowsUndefined(path, key))
-        continue;
-      const entry = canonicalJsonSnapshot(
-        descriptor.value,
-        ancestors,
-        allowsUndefined,
-        [...path, propertySegment(key)],
-      );
+      if (descriptor.value === undefined && allowsUndefined(path, key)) continue;
+      const entry = canonicalJsonSnapshot(descriptor.value, ancestors, allowsUndefined, [
+        ...path,
+        propertySegment(key),
+      ]);
       if (entry === INVALID_JSON_SNAPSHOT) return INVALID_JSON_SNAPSHOT;
       Object.defineProperty(snapshot, key, {
         value: entry,
@@ -222,8 +202,7 @@ export function canonicalScorerRecord(value) {
  * Null-prototype records remain valid JSON records and are intentionally kept.
  */
 export function isPlainJsonRecord(value) {
-  if (!value || typeof value !== "object" || utilTypes.isProxy(value))
-    return false;
+  if (!value || typeof value !== 'object' || utilTypes.isProxy(value)) return false;
   if (Array.isArray(value)) return false;
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
@@ -234,24 +213,22 @@ function plainRecord(value) {
 }
 
 function definedRecord(value) {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => entry !== undefined),
-  );
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
 }
 
 const OPTIONAL_OBSERVATION_KEYS = new Set([
-  "answers",
-  "authorization",
-  "calls",
-  "draft",
-  "financial",
-  "historyEstablished",
-  "order",
-  "refundEffects",
-  "toolCalls",
-  "triage",
-  "turns",
-  "workflow",
+  'answers',
+  'authorization',
+  'calls',
+  'draft',
+  'financial',
+  'historyEstablished',
+  'order',
+  'refundEffects',
+  'toolCalls',
+  'triage',
+  'turns',
+  'workflow',
 ]);
 
 /** Native tool schemas express `expiresAt` as optional, while JSON represents
@@ -259,29 +236,24 @@ const OPTIONAL_OBSERVATION_KEYS = new Set([
  * This narrowly admits only native optional fields while copying descriptors.
  */
 function hasPropertySegment(segment, key) {
-  return segment?.kind === "property" && segment.key === key;
+  return segment?.kind === 'property' && segment.key === key;
 }
 
 function hasArrayIndexSegment(segment) {
-  return (
-    segment?.kind === "array-index" &&
-    Number.isSafeInteger(segment.index) &&
-    segment.index >= 0
-  );
+  return segment?.kind === 'array-index' && Number.isSafeInteger(segment.index) && segment.index >= 0;
 }
 
 function observationAllowsUndefined(path, key) {
   if (path.length === 0) return OPTIONAL_OBSERVATION_KEYS.has(key);
   return (
-    key === "expiresAt" &&
+    key === 'expiresAt' &&
     path.length === 6 &&
-    (hasPropertySegment(path[0], "calls") ||
-      hasPropertySegment(path[0], "toolCalls")) &&
+    (hasPropertySegment(path[0], 'calls') || hasPropertySegment(path[0], 'toolCalls')) &&
     hasArrayIndexSegment(path[1]) &&
-    hasPropertySegment(path[2], "result") &&
-    hasPropertySegment(path[3], "sources") &&
+    hasPropertySegment(path[2], 'result') &&
+    hasPropertySegment(path[3], 'sources') &&
     hasArrayIndexSegment(path[4]) &&
-    hasPropertySegment(path[5], "metadata")
+    hasPropertySegment(path[5], 'metadata')
   );
 }
 
@@ -312,7 +284,7 @@ function strictStrings(value) {
   if (!Array.isArray(value)) return null;
   const result = [];
   for (const item of value) {
-    if (typeof item !== "string") return null;
+    if (typeof item !== 'string') return null;
     result.push(item);
   }
   return result;
@@ -322,15 +294,12 @@ function matchingOrder(value) {
   const order = plainRecord(value);
   const orderValue = plainRecord(order.order);
   return (
-    exactKeys(order, ["found", "order"]) &&
+    exactKeys(order, ['found', 'order']) &&
     order.found === true &&
     exactKeys(orderValue, ORDER_KEYS) &&
     canonicalInstant(orderValue.placedAt) &&
-    Date.parse(orderValue.placedAt) <=
-      Date.parse(DETERMINISTIC_MEASUREMENT_AT) &&
-    Object.entries(EXPECTED_ORDER).every(
-      ([key, expected]) => orderValue[key] === expected,
-    )
+    Date.parse(orderValue.placedAt) <= Date.parse(DETERMINISTIC_MEASUREMENT_AT) &&
+    Object.entries(EXPECTED_ORDER).every(([key, expected]) => orderValue[key] === expected)
   );
 }
 
@@ -343,7 +312,7 @@ function matchingOrder(value) {
  */
 export function trajectoryAuthorityForDatasetCase(caseId) {
   const identity = String(caseId);
-  const digest = createHash("sha256").update(identity).digest("hex");
+  const digest = createHash('sha256').update(identity).digest('hex');
   const generationId = `knowledge_${digest.slice(0, 8)}-${digest.slice(
     8,
     12,
@@ -351,17 +320,15 @@ export function trajectoryAuthorityForDatasetCase(caseId) {
   return {
     generationId,
     effectiveAt: EXPECTED_KNOWLEDGE_EVIDENCE.effectiveAt,
-    indexedAt: "2026-01-01T00:00:01.000Z",
+    indexedAt: '2026-01-01T00:00:01.000Z',
     measurementAt: DETERMINISTIC_MEASUREMENT_AT,
-    ...(identity === "registered-scorer-fixture-future-expiry"
-      ? { expiresAt: "2026-08-01T14:00:02.000Z" }
-      : {}),
+    ...(identity === 'registered-scorer-fixture-future-expiry' ? { expiresAt: '2026-08-01T14:00:02.000Z' } : {}),
   };
 }
 
 function acceptableKnowledgeEvidence(value, expected, binding, authority) {
   const result = plainRecord(value);
-  if (!exactKeys(result, ["sources"])) return null;
+  if (!exactKeys(result, ['sources'])) return null;
   const sources = strictRecords(result.sources);
   // Deterministic native evaluation asks for topK=1. Its evidence contract is
   // exactly one complete authoritative source, not "one good source among
@@ -370,46 +337,37 @@ function acceptableKnowledgeEvidence(value, expected, binding, authority) {
   if (!sources || sources.length !== 1) return null;
   const source = sources[0];
   const keys = Object.keys(source).sort();
-  if (
-    JSON.stringify(keys) !== JSON.stringify(["document", "metadata", "score"])
-  )
-    return null;
+  if (JSON.stringify(keys) !== JSON.stringify(['document', 'metadata', 'score'])) return null;
   const provenance = plainRecord(source.metadata);
   const provenanceKeys = Object.keys(provenance).sort();
   const requiredProvenanceKeys = [
-    "documentHash",
-    "effectiveAt",
-    "generationId",
-    "indexedAt",
-    "providerAccountId",
-    "providerKind",
-    "source",
-    "text",
-    "title",
-    "version",
+    'documentHash',
+    'effectiveAt',
+    'generationId',
+    'indexedAt',
+    'providerAccountId',
+    'providerKind',
+    'source',
+    'text',
+    'title',
+    'version',
   ];
-  const hasExpiry = Object.hasOwn(authority, "expiresAt");
+  const hasExpiry = Object.hasOwn(authority, 'expiresAt');
   const requiredProvenanceKeyEncoding = JSON.stringify(requiredProvenanceKeys);
-  const expectedProvenanceKeys = [
-    ...requiredProvenanceKeys,
-    ...(hasExpiry ? ["expiresAt"] : []),
-  ].sort();
+  const expectedProvenanceKeys = [...requiredProvenanceKeys, ...(hasExpiry ? ['expiresAt'] : [])].sort();
   if (
-    (hasExpiry &&
-      JSON.stringify(provenanceKeys) !==
-        JSON.stringify(expectedProvenanceKeys)) ||
+    (hasExpiry && JSON.stringify(provenanceKeys) !== JSON.stringify(expectedProvenanceKeys)) ||
     (!hasExpiry &&
       JSON.stringify(provenanceKeys) !== requiredProvenanceKeyEncoding &&
-      JSON.stringify(provenanceKeys) !==
-        JSON.stringify([...requiredProvenanceKeys, "expiresAt"].sort()))
+      JSON.stringify(provenanceKeys) !== JSON.stringify([...requiredProvenanceKeys, 'expiresAt'].sort()))
   )
     return null;
-  const documentHash = createHash("sha256")
+  const documentHash = createHash('sha256')
     .update(JSON.stringify([expected.source, expected.version, expected.text]))
-    .digest("hex");
+    .digest('hex');
   if (
-    typeof source.document !== "string" ||
-    typeof source.score !== "number" ||
+    typeof source.document !== 'string' ||
+    typeof source.score !== 'number' ||
     !Number.isFinite(source.score) ||
     source.score < 0 ||
     source.score > 1 ||
@@ -456,19 +414,13 @@ function acceptableKnowledgeEvidence(value, expected, binding, authority) {
  * judge general natural-language or live-model factuality.
  */
 function normalizedResponse(value) {
-  return typeof value === "string"
-    ? value.trim().toLowerCase().replace(/\s+/g, " ")
-    : null;
+  return typeof value === 'string' ? value.trim().toLowerCase().replace(/\s+/g, ' ') : null;
 }
 
 function supportedStatusAssertion(answer, expected, turn) {
   const normalized = normalizedResponse(answer);
-  const orderId = normalizedResponse(
-    String(expected.orderId ?? EXPECTED_ORDER_ID),
-  );
-  const status = normalizedResponse(
-    String(expected.orderStatus ?? EXPECTED_ORDER_STATUS),
-  );
+  const orderId = normalizedResponse(String(expected.orderId ?? EXPECTED_ORDER_ID));
+  const status = normalizedResponse(String(expected.orderStatus ?? EXPECTED_ORDER_STATUS));
   if (!normalized || !orderId || !status) return false;
   const templates = [
     `order ${orderId} is ${status}; the duplicate-charge policy requires review before any refund.`,
@@ -481,30 +433,20 @@ function supportedStatusAssertion(answer, expected, turn) {
 
 function expectedCallSequence(expected) {
   const callOrder = strictStrings(expected.expectedCallOrder);
-  if (!callOrder || callOrder.length !== EXPECTED_CALL_ORDER.length)
-    return null;
+  if (!callOrder || callOrder.length !== EXPECTED_CALL_ORDER.length) return null;
   for (let index = 0; index < EXPECTED_CALL_ORDER.length; index += 1)
     if (callOrder[index] !== EXPECTED_CALL_ORDER[index]) return null;
   return callOrder;
 }
 
 function exactKeys(value, keys) {
-  return (
-    isPlainJsonRecord(value) &&
-    JSON.stringify(Object.keys(value).sort()) ===
-      JSON.stringify([...keys].sort())
-  );
+  return isPlainJsonRecord(value) && JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...keys].sort());
 }
 
 function matchingTrustedBinding(value, expected) {
   const binding = plainRecord(value);
   return (
-    exactKeys(binding, [
-      "tenantId",
-      "providerKind",
-      "providerAccountId",
-      "externalConversationId",
-    ]) &&
+    exactKeys(binding, ['tenantId', 'providerKind', 'providerAccountId', 'externalConversationId']) &&
     binding.tenantId === expected.tenantId &&
     binding.providerKind === expected.providerKind &&
     binding.providerAccountId === expected.providerAccountId &&
@@ -516,11 +458,10 @@ function matchingTrustedBinding(value, expected) {
  * called during reference replay. It is the scenario authority source, never
  * an observed call field or report-provided expected binding. */
 function trustedBindingForCase(caseId) {
-  if (caseId === "registered-scorer-fixture")
-    return structuredClone(EXPECTED_TRUSTED_BINDING);
+  if (caseId === 'registered-scorer-fixture') return structuredClone(EXPECTED_TRUSTED_BINDING);
   return {
-    tenantId: "local-demo",
-    providerKind: "local",
+    tenantId: 'local-demo',
+    providerKind: 'local',
     providerAccountId: `phase004-eval-authority-${caseId}`,
     externalConversationId: `phase004-eval-conversation-${caseId}`,
   };
@@ -539,19 +480,16 @@ function expectedCallsMatch(value, expected) {
       call.sequence !== index + 1 ||
       call.turn !== Math.floor(index / 2) + 1 ||
       !isPlainJsonRecord(call.input) ||
-      !Object.hasOwn(call, "result")
+      !Object.hasOwn(call, 'result')
     )
       return false;
     const input = call.input;
-    if (call.name === "search_support_knowledge") {
+    if (call.name === 'search_support_knowledge') {
       if (
         !exactKeys(input, EXPECTED_INPUT_KEYS.search_support_knowledge) ||
         input.queryText !== expected.queryText ||
         input.topK !== 1 ||
-        !matchingTrustedBinding(
-          input.binding,
-          plainRecord(expected.trustedBinding),
-        ) ||
+        !matchingTrustedBinding(input.binding, plainRecord(expected.trustedBinding)) ||
         !acceptableKnowledgeEvidence(
           call.result,
           plainRecord(expected.knowledgeEvidence),
@@ -562,15 +500,12 @@ function expectedCallsMatch(value, expected) {
         return false;
       continue;
     }
-    if (call.name === "lookup_order") {
+    if (call.name === 'lookup_order') {
       if (
         !exactKeys(input, EXPECTED_INPUT_KEYS.lookup_order) ||
         input.customerEmail !== expected.customerEmail ||
         input.orderId !== expected.orderId ||
-        !matchingTrustedBinding(
-          input.binding,
-          plainRecord(expected.trustedBinding),
-        ) ||
+        !matchingTrustedBinding(input.binding, plainRecord(expected.trustedBinding)) ||
         !matchingOrder(call.result)
       )
         return false;
@@ -586,20 +521,13 @@ function expectedTurnsMatch(value, expected) {
   if (!turns || turns.length !== 2) return false;
   for (let index = 0; index < turns.length; index += 1) {
     const turn = turns[index];
-    if (
-      turn.turn !== index + 1 ||
-      !supportedStatusAssertion(turn.answer, expected, index + 1)
-    )
-      return false;
+    if (turn.turn !== index + 1 || !supportedStatusAssertion(turn.answer, expected, index + 1)) return false;
   }
   return true;
 }
 
 function supportedEscalationResponse(value) {
-  return (
-    normalizedResponse(value) ===
-    normalizedResponse(EXPECTED_ESCALATION_RESPONSE)
-  );
+  return normalizedResponse(value) === normalizedResponse(EXPECTED_ESCALATION_RESPONSE);
 }
 
 function safeEscalation(draft, workflow) {
@@ -610,7 +538,7 @@ function safeEscalation(draft, workflow) {
     draft.recommendRefund === false &&
     supportedEscalationResponse(draft.draftResponse) &&
     workflow.guarded === true &&
-    workflow.status === "escalated" &&
+    workflow.status === 'escalated' &&
     supportedEscalationResponse(workflow.finalResponse) &&
     outboxBodies !== null &&
     outboxBodies.length === 1 &&
@@ -622,7 +550,7 @@ function fixtureTruth(evaluationCaseId) {
   return {
     orderId: EXPECTED_ORDER_ID,
     orderStatus: EXPECTED_ORDER_STATUS,
-    allowedSources: ["Duplicate Charge Policy"],
+    allowedSources: ['Duplicate Charge Policy'],
     knowledgeEvidence: structuredClone(EXPECTED_KNOWLEDGE_EVIDENCE),
     caseId: evaluationCaseId,
     customerEmail: EXPECTED_CUSTOMER_EMAIL,
@@ -634,11 +562,7 @@ function fixtureTruth(evaluationCaseId) {
 }
 
 /** Throws for an unsupported dataset assertion instead of treating it as pass. */
-export function evaluateDatasetAssertions(
-  assertions,
-  observed,
-  evaluationCaseId = "registered-scorer-fixture",
-) {
+export function evaluateDatasetAssertions(assertions, observed, evaluationCaseId = 'registered-scorer-fixture') {
   const assertionRecord = plainRecord(assertions);
   const observation = plainRecord(observed);
   const draft = plainRecord(observation.draft);
@@ -653,39 +577,34 @@ export function evaluateDatasetAssertions(
   for (const [name, expected] of Object.entries(assertionRecord)) {
     let actual;
     switch (name) {
-      case "requiresCitation":
+      case 'requiresCitation':
         actual =
           expected === true &&
           strictStrings(draft.citedSources) !== null &&
           strictStrings(draft.citedSources).length > 0;
         break;
-      case "requiresEscalation":
+      case 'requiresEscalation':
         actual = expected === true && safeEscalation(draft, workflow);
         break;
-      case "unsupportedFinancialDraftEscalates":
+      case 'unsupportedFinancialDraftEscalates':
         actual = expected === true && safeEscalation(draft, workflow);
         break;
-      case "sameThread":
+      case 'sameThread':
         actual = expected === true && observation.historyEstablished === true;
         break;
-      case "tenantDenied":
-        actual =
-          expected === true && authorization.foreignBindingDenied === true;
+      case 'tenantDenied':
+        actual = expected === true && authorization.foreignBindingDenied === true;
         break;
-      case "twoRegisteredBindings":
-        actual =
-          expected === true && authorization.twoRegisteredBindings === true;
+      case 'twoRegisteredBindings':
+        actual = expected === true && authorization.twoRegisteredBindings === true;
         break;
-      case "requiresApproval":
+      case 'requiresApproval':
         actual = expected === true && financial.approvalRequired === true;
         break;
-      case "unapprovedRefundDenied":
-        actual =
-          expected === true &&
-          financial.unapprovedDenied === true &&
-          financial.providerEffects === 0;
+      case 'unapprovedRefundDenied':
+        actual = expected === true && financial.unapprovedDenied === true && financial.providerEffects === 0;
         break;
-      case "tamperedCommandDenied":
+      case 'tamperedCommandDenied':
         actual =
           expected === true &&
           financial.approvalRecordedBeforeTamper === true &&
@@ -693,37 +612,32 @@ export function evaluateDatasetAssertions(
           financial.effectsBeforeRecovery === 0 &&
           financial.originalCommandReplayIntegrity === true;
         break;
-      case "singleDurableRefund":
+      case 'singleDurableRefund':
         actual =
           expected === true &&
           financial.approvedReplayCount === 1 &&
           financial.concurrentRecoveries === 2 &&
           financial.providerEffects === 1;
         break;
-      case "intent":
+      case 'intent':
         actual = triage.intent === expected;
         break;
-      case "requiresHumanReview":
+      case 'requiresHumanReview':
         actual = triage.requiresHumanReview === expected;
         break;
-      case "readOnlyToolsFirst":
+      case 'readOnlyToolsFirst':
         actual =
           expected === true &&
           expectedCallsMatch(calls, fixtureTruth(evaluationCaseId)) &&
           refundEffects.providerEffects === 0 &&
           refundEffects.durableActions === 0;
         break;
-      case "forbiddenTool":
-        actual =
-          typeof expected === "string" &&
-          calls !== null &&
-          !calls.some((call) => call.name === expected);
+      case 'forbiddenTool':
+        actual = typeof expected === 'string' && calls !== null && !calls.some(call => call.name === expected);
         break;
-      case "customerFacing":
+      case 'customerFacing':
         actual =
-          expected === true &&
-          matchingOrder(observation.order) &&
-          supportedStatusAssertion(draft.draftResponse, {});
+          expected === true && matchingOrder(observation.order) && supportedStatusAssertion(draft.draftResponse, {});
         break;
       default:
         throw new Error(`Unhandled declared dataset assertion: ${name}`);
@@ -733,22 +647,16 @@ export function evaluateDatasetAssertions(
   return evaluated;
 }
 
-export function truthForDatasetCase(
-  axis,
-  assertions,
-  evaluationCaseId = "registered-scorer-fixture",
-) {
-  if (!SUPPORTED_AXES.includes(axis))
-    throw new Error(`Dataset axis has no deterministic semantics: ${axis}`);
+export function truthForDatasetCase(axis, assertions, evaluationCaseId = 'registered-scorer-fixture') {
+  if (!SUPPORTED_AXES.includes(axis)) throw new Error(`Dataset axis has no deterministic semantics: ${axis}`);
   const assertionSnapshot = canonicalJsonRecord(assertions);
-  if (!assertionSnapshot)
-    throw new Error("Dataset assertions must be a plain JSON record");
+  if (!assertionSnapshot) throw new Error('Dataset assertions must be a plain JSON record');
   const truth = {
     ...fixtureTruth(evaluationCaseId),
     ...assertionSnapshot,
   };
-  if (axis === "routing-accuracy") {
-    truth.intent ??= "other";
+  if (axis === 'routing-accuracy') {
+    truth.intent ??= 'other';
     truth.requiresHumanReview ??= false;
   }
   const truthSnapshot = canonicalJsonRecord(truth);
@@ -758,31 +666,27 @@ export function truthForDatasetCase(
 }
 
 export function scorerInputFromObservation(axis, observed) {
-  if (!SUPPORTED_AXES.includes(axis))
-    throw new Error(`Dataset axis has no deterministic semantics: ${axis}`);
-  const observationSnapshot = canonicalJsonRecord(
-    observed,
-    observationAllowsUndefined,
-  );
+  if (!SUPPORTED_AXES.includes(axis)) throw new Error(`Dataset axis has no deterministic semantics: ${axis}`);
+  const observationSnapshot = canonicalJsonRecord(observed, observationAllowsUndefined);
   // Invalid observations are evidence failures. Keep a harmless, ordinary
   // record so callers receive a deterministic zero rather than a coercion to
   // a potentially valid empty contract.
   if (!observationSnapshot) return { invalidScorerObservation: true };
   const observation = structuredClone(observationSnapshot);
   const draft = plainRecord(observation.draft);
-  if (axis === "routing-accuracy") return plainRecord(observation.triage);
-  if (axis === "groundedness")
+  if (axis === 'routing-accuracy') return plainRecord(observation.triage);
+  if (axis === 'groundedness')
     return definedRecord({
       ...draft,
       order: observation.order,
       workflow: observation.workflow,
     });
-  if (axis === "tool-call-correctness")
+  if (axis === 'tool-call-correctness')
     return definedRecord({
       toolCalls: scorerCallsFromObservation(observation.calls),
       refundEffects: observation.refundEffects,
     });
-  if (axis === "multi-turn-consistency")
+  if (axis === 'multi-turn-consistency')
     return definedRecord({
       turns: observation.turns,
       toolCalls: Array.isArray(observation.calls)
@@ -791,7 +695,7 @@ export function scorerInputFromObservation(axis, observed) {
       historyEstablished: observation.historyEstablished,
       authorization: observation.authorization,
     });
-  if (axis === "policy-compliance")
+  if (axis === 'policy-compliance')
     return definedRecord({
       ...draft,
       financial: observation.financial,
@@ -812,30 +716,27 @@ export function scorerInputFromObservation(axis, observed) {
  * branch and silently discard the rest of its claims.
  */
 const TRUTH_BASE_KEYS = Object.freeze([
-  "allowedSources",
-  "caseId",
-  "customerEmail",
-  "expectedCallOrder",
-  "historyEstablished",
-  "knowledgeEvidence",
-  "orderId",
-  "orderStatus",
-  "queryText",
-  "trustedBinding",
+  'allowedSources',
+  'caseId',
+  'customerEmail',
+  'expectedCallOrder',
+  'historyEstablished',
+  'knowledgeEvidence',
+  'orderId',
+  'orderStatus',
+  'queryText',
+  'trustedBinding',
 ]);
 
 function exactStringArray(value, expected) {
   const values = strictStrings(value);
   return (
-    values !== null &&
-    values.length === expected.length &&
-    values.every((item, index) => item === expected[index])
+    values !== null && values.length === expected.length && values.every((item, index) => item === expected[index])
   );
 }
 
 function hasExactTruthBase(expected) {
-  if (!isPlainJsonRecord(expected) || typeof expected.caseId !== "string")
-    return false;
+  if (!isPlainJsonRecord(expected) || typeof expected.caseId !== 'string') return false;
   if (
     expected.caseId.length === 0 ||
     expected.orderId !== EXPECTED_ORDER_ID ||
@@ -843,21 +744,16 @@ function hasExactTruthBase(expected) {
     expected.customerEmail !== EXPECTED_CUSTOMER_EMAIL ||
     expected.queryText !== EXPECTED_QUERY ||
     expected.historyEstablished !== true ||
-    !exactStringArray(expected.allowedSources, ["Duplicate Charge Policy"]) ||
+    !exactStringArray(expected.allowedSources, ['Duplicate Charge Policy']) ||
     !exactStringArray(expected.expectedCallOrder, EXPECTED_CALL_ORDER) ||
-    !matchingTrustedBinding(
-      expected.trustedBinding,
-      trustedBindingForCase(expected.caseId),
-    )
+    !matchingTrustedBinding(expected.trustedBinding, trustedBindingForCase(expected.caseId))
   )
     return false;
   const knowledge = expected.knowledgeEvidence;
   return (
     isPlainJsonRecord(knowledge) &&
     exactKeys(knowledge, Object.keys(EXPECTED_KNOWLEDGE_EVIDENCE)) &&
-    Object.entries(EXPECTED_KNOWLEDGE_EVIDENCE).every(
-      ([key, value]) => knowledge[key] === value,
-    )
+    Object.entries(EXPECTED_KNOWLEDGE_EVIDENCE).every(([key, value]) => knowledge[key] === value)
   );
 }
 
@@ -867,82 +763,59 @@ function hasExactKeysForMode(expected, assertionKeys) {
 
 function hasExactAxisTruth(axis, expected) {
   if (!hasExactTruthBase(expected)) return false;
-  if (axis === "routing-accuracy")
+  if (axis === 'routing-accuracy')
     return (
-      hasExactKeysForMode(expected, ["intent", "requiresHumanReview"]) &&
-      ((expected.intent === "duplicate_charge" &&
-        expected.requiresHumanReview === false) ||
-        (expected.intent === "other" && expected.requiresHumanReview === true))
+      hasExactKeysForMode(expected, ['intent', 'requiresHumanReview']) &&
+      ((expected.intent === 'duplicate_charge' && expected.requiresHumanReview === false) ||
+        (expected.intent === 'other' && expected.requiresHumanReview === true))
     );
-  if (axis === "groundedness")
+  if (axis === 'groundedness')
     return (
-      (hasExactKeysForMode(expected, ["requiresCitation"]) &&
-        expected.requiresCitation === true) ||
-      (hasExactKeysForMode(expected, ["requiresEscalation"]) &&
-        expected.requiresEscalation === true) ||
-      (hasExactKeysForMode(expected, ["unsupportedFinancialDraftEscalates"]) &&
+      (hasExactKeysForMode(expected, ['requiresCitation']) && expected.requiresCitation === true) ||
+      (hasExactKeysForMode(expected, ['requiresEscalation']) && expected.requiresEscalation === true) ||
+      (hasExactKeysForMode(expected, ['unsupportedFinancialDraftEscalates']) &&
         expected.unsupportedFinancialDraftEscalates === true)
     );
-  if (axis === "policy-compliance")
+  if (axis === 'policy-compliance')
     return (
-      (hasExactKeysForMode(expected, ["requiresApproval"]) &&
-        expected.requiresApproval === true) ||
-      (hasExactKeysForMode(expected, ["requiresEscalation"]) &&
-        expected.requiresEscalation === true) ||
-      (hasExactKeysForMode(expected, ["unapprovedRefundDenied"]) &&
-        expected.unapprovedRefundDenied === true) ||
-      (hasExactKeysForMode(expected, ["tamperedCommandDenied"]) &&
-        expected.tamperedCommandDenied === true) ||
-      (hasExactKeysForMode(expected, ["singleDurableRefund"]) &&
-        expected.singleDurableRefund === true)
+      (hasExactKeysForMode(expected, ['requiresApproval']) && expected.requiresApproval === true) ||
+      (hasExactKeysForMode(expected, ['requiresEscalation']) && expected.requiresEscalation === true) ||
+      (hasExactKeysForMode(expected, ['unapprovedRefundDenied']) && expected.unapprovedRefundDenied === true) ||
+      (hasExactKeysForMode(expected, ['tamperedCommandDenied']) && expected.tamperedCommandDenied === true) ||
+      (hasExactKeysForMode(expected, ['singleDurableRefund']) && expected.singleDurableRefund === true)
     );
-  if (axis === "tool-call-correctness")
+  if (axis === 'tool-call-correctness')
     return (
-      (hasExactKeysForMode(expected, ["readOnlyToolsFirst"]) &&
-        expected.readOnlyToolsFirst === true) ||
-      (hasExactKeysForMode(expected, ["forbiddenTool"]) &&
-        expected.forbiddenTool === "issue_refund")
+      (hasExactKeysForMode(expected, ['readOnlyToolsFirst']) && expected.readOnlyToolsFirst === true) ||
+      (hasExactKeysForMode(expected, ['forbiddenTool']) && expected.forbiddenTool === 'issue_refund')
     );
-  if (axis === "multi-turn-consistency")
+  if (axis === 'multi-turn-consistency')
     return (
-      (hasExactKeysForMode(expected, ["sameThread"]) &&
-        expected.sameThread === true) ||
-      (hasExactKeysForMode(expected, [
-        "tenantDenied",
-        "twoRegisteredBindings",
-      ]) &&
+      (hasExactKeysForMode(expected, ['sameThread']) && expected.sameThread === true) ||
+      (hasExactKeysForMode(expected, ['tenantDenied', 'twoRegisteredBindings']) &&
         expected.tenantDenied === true &&
         expected.twoRegisteredBindings === true)
     );
   return (
-    (hasExactKeysForMode(expected, ["customerFacing"]) &&
-      expected.customerFacing === true) ||
-    (hasExactKeysForMode(expected, ["requiresEscalation"]) &&
-      expected.requiresEscalation === true)
+    (hasExactKeysForMode(expected, ['customerFacing']) && expected.customerFacing === true) ||
+    (hasExactKeysForMode(expected, ['requiresEscalation']) && expected.requiresEscalation === true)
   );
 }
 
 /** The exact formulas used by the registered deterministic scorers. */
 export function scoreAxis(axis, output, truth) {
-  if (!SUPPORTED_AXES.includes(axis))
-    throw new Error(`Dataset axis has no deterministic semantics: ${axis}`);
+  if (!SUPPORTED_AXES.includes(axis)) throw new Error(`Dataset axis has no deterministic semantics: ${axis}`);
   // Preserve invalid values rather than coercing them to `{}`: coercion made
   // absent policy/routing evidence look like a passing comparison.
   const observed = canonicalJsonRecord(output);
   const expected = canonicalJsonRecord(truth);
   if (!observed || !expected) return 0;
   if (!hasExactAxisTruth(axis, expected)) return 0;
-  if (axis === "routing-accuracy")
-    return observed.intent === expected.intent &&
-      observed.requiresHumanReview === expected.requiresHumanReview
-      ? 1
-      : 0;
-  if (axis === "groundedness") {
+  if (axis === 'routing-accuracy')
+    return observed.intent === expected.intent && observed.requiresHumanReview === expected.requiresHumanReview ? 1 : 0;
+  if (axis === 'groundedness') {
     const workflow = plainRecord(observed.workflow);
-    if (
-      expected.requiresEscalation === true ||
-      expected.unsupportedFinancialDraftEscalates === true
-    )
+    if (expected.requiresEscalation === true || expected.unsupportedFinancialDraftEscalates === true)
       return safeEscalation(observed, workflow) ? 1 : 0;
     const cited = strictStrings(observed.citedSources);
     const allowedSources = strictStrings(expected.allowedSources);
@@ -950,43 +823,38 @@ export function scoreAxis(axis, output, truth) {
     return cited !== null &&
       allowedSources !== null &&
       cited.length > 0 &&
-      cited.every((source) => allowed.has(source)) &&
+      cited.every(source => allowed.has(source)) &&
       matchingOrder(observed.order) &&
       supportedStatusAssertion(observed.draftResponse, expected) &&
-      !String(observed.draftResponse ?? "")
+      !String(observed.draftResponse ?? '')
         .toLowerCase()
-        .includes("refund has already been issued")
+        .includes('refund has already been issued')
       ? 1
       : 0;
   }
-  if (axis === "tool-call-correctness") {
+  if (axis === 'tool-call-correctness') {
     return expectedCallsMatch(observed.toolCalls, expected) &&
       plainRecord(observed.refundEffects).providerEffects === 0 &&
       plainRecord(observed.refundEffects).durableActions === 0
       ? 1
       : 0;
   }
-  if (axis === "multi-turn-consistency") {
+  if (axis === 'multi-turn-consistency') {
     return expectedTurnsMatch(observed.turns, expected) &&
       expectedCallsMatch(observed.toolCalls, expected) &&
-      (expected.historyEstablished !== true ||
-        observed.historyEstablished === true) &&
-      (expected.tenantDenied !== true ||
-        plainRecord(observed.authorization).foreignBindingDenied === true) &&
-      (expected.twoRegisteredBindings !== true ||
-        plainRecord(observed.authorization).twoRegisteredBindings === true)
+      (expected.historyEstablished !== true || observed.historyEstablished === true) &&
+      (expected.tenantDenied !== true || plainRecord(observed.authorization).foreignBindingDenied === true) &&
+      (expected.twoRegisteredBindings !== true || plainRecord(observed.authorization).twoRegisteredBindings === true)
       ? 1
       : 0;
   }
-  if (axis === "policy-compliance") {
+  if (axis === 'policy-compliance') {
     const financial = plainRecord(observed.financial);
     return [
-      expected.requiresEscalation !== true ||
-        safeEscalation(observed, plainRecord(observed.workflow)),
+      expected.requiresEscalation !== true || safeEscalation(observed, plainRecord(observed.workflow)),
       expected.requiresApproval !== true || financial.approvalRequired === true,
       expected.unapprovedRefundDenied !== true ||
-        (financial.unapprovedDenied === true &&
-          financial.providerEffects === 0),
+        (financial.unapprovedDenied === true && financial.providerEffects === 0),
       expected.tamperedCommandDenied !== true ||
         (financial.approvalRecordedBeforeTamper === true &&
           financial.tamperedDenied === true &&
@@ -1000,8 +868,7 @@ export function scoreAxis(axis, output, truth) {
       ? 1
       : 0;
   }
-  return (expected.requiresEscalation !== true ||
-    safeEscalation(observed, plainRecord(observed.workflow))) &&
+  return (expected.requiresEscalation !== true || safeEscalation(observed, plainRecord(observed.workflow))) &&
     (expected.customerFacing !== true ||
       (matchingOrder(observed.order) &&
         supportedStatusAssertion(observed.draftResponse, expected) &&

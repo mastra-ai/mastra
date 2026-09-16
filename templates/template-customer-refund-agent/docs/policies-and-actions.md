@@ -11,12 +11,12 @@ A policy tells support what it may recommend. It does not create an action, gran
 Editing a source document does not replace an already-published index; reindex after each change. Existing cases retain their knowledge binding.
 
 ```ts
-import type { PolicyDocument } from "../types.ts";
+import type { PolicyDocument } from '../types.ts';
 
 export const billingPolicy: PolicyDocument = {
-  title: "Billing policy",
-  source: "billing-policy",
-  text: "Eligible purchases may be reviewed for a refund.",
+  title: 'Billing policy',
+  source: 'billing-policy',
+  text: 'Eligible purchases may be reviewed for a refund.',
 };
 ```
 

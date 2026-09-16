@@ -1,9 +1,5 @@
-import { z } from "zod";
-import {
-  caseFeedbackSchema,
-  customerFinancialRequestSchema,
-  publicSupportCaseSchema,
-} from "../domain/support-case";
+import { z } from 'zod';
+import { caseFeedbackSchema, customerFinancialRequestSchema, publicSupportCaseSchema } from '../domain/support-case';
 
 export const mockEmailPayloadSchema = z
   .object({
@@ -20,7 +16,7 @@ export const mockEmailPayloadSchema = z
 export const inboundSupportResponseSchema = z.object({
   caseId: z.string(),
   workflowRunId: z.string().optional(),
-  status: z.literal("processing"),
+  status: z.literal('processing'),
 });
 
 export const caseListResponseSchema = z.object({
@@ -76,7 +72,7 @@ export const loginResponseSchema = z.object({
     id: z.string(),
     email: z.email(),
     tenantId: z.string(),
-    roles: z.array(z.enum(["customer", "support-agent", "approver", "admin"])),
+    roles: z.array(z.enum(['customer', 'support-agent', 'approver', 'admin'])),
   }),
 });
 export const feedbackRequestSchema = caseFeedbackSchema
@@ -85,16 +81,14 @@ export const feedbackRequestSchema = caseFeedbackSchema
     comment: true,
   })
   .extend({ responseMessageId: z.string().min(1) });
-export const errorResponseSchema = z
-  .object({ error: z.string(), result: z.unknown().optional() })
-  .passthrough();
+export const errorResponseSchema = z.object({ error: z.string(), result: z.unknown().optional() }).passthrough();
 export const reindexResponseSchema = z.object({
   indexed: z.number().int().nonnegative(),
 });
 export const validationRequestSchema = z.object({
   // This is intentionally an explicit alternate execution mode. Ordinary
   // application requests do not inherit validation accounting.
-  mode: z.literal("sandbox"),
+  mode: z.literal('sandbox'),
 });
 export const supervisorExecutionRequestSchema = z.object({
   message: z.string().min(1).max(10_000),
@@ -140,9 +134,7 @@ export const monitoringSummarySchema = z.object({
     approvalRate: z.number().nullable(),
     executed: z.number().int().nonnegative(),
     failed: z.number().int().nonnegative(),
-    executedTotals: z.array(
-      z.object({ currency: z.string(), minor: z.number().int().nonnegative() }),
-    ),
+    executedTotals: z.array(z.object({ currency: z.string(), minor: z.number().int().nonnegative() })),
   }),
   feedback: z.object({
     totalResponses: z.number().int().nonnegative(),
@@ -153,7 +145,7 @@ export const monitoringSummarySchema = z.object({
       z.object({
         caseId: z.string(),
         subject: z.string(),
-        rating: z.enum(["up", "down"]),
+        rating: z.enum(['up', 'down']),
         submittedAt: z.iso.datetime(),
         turnId: z.string().optional(),
         runId: z.string().optional(),
@@ -210,439 +202,437 @@ export const monitoringSummarySchema = z.object({
 });
 
 const caseIdParameter = {
-  name: "caseId",
-  in: "path",
+  name: 'caseId',
+  in: 'path',
   required: true,
-  schema: { type: "string" },
+  schema: { type: 'string' },
 } as const;
 
 const jsonSchema = (schema: z.core.$ZodType) => z.toJSONSchema(schema);
 const errorResponse = (description: string) => ({
   description,
   content: {
-    "application/json": { schema: jsonSchema(errorResponseSchema) },
+    'application/json': { schema: jsonSchema(errorResponseSchema) },
   },
 });
 
 /** A derived OpenAPI 3.1 document used by the local route and contract checks. */
 export const supportOpenApiDocument = {
-  openapi: "3.1.0",
-  info: { title: "Support demo API", version: "0.1.0" },
+  openapi: '3.1.0',
+  info: { title: 'Support demo API', version: '0.1.0' },
   components: {
     securitySchemes: {
       bearerAuth: {
-        type: "http",
-        scheme: "bearer",
-        bearerFormat: "Local session",
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'Local session',
       },
     },
   },
   security: [{ bearerAuth: [] }],
   paths: {
-    "/support/auth/login": {
+    '/support/auth/login': {
       post: {
         security: [],
         requestBody: {
           required: true,
           content: {
-            "application/json": { schema: jsonSchema(loginRequestSchema) },
+            'application/json': { schema: jsonSchema(loginRequestSchema) },
           },
         },
         responses: {
-          "200": {
-            description: "Authenticated local session",
+          '200': {
+            description: 'Authenticated local session',
             content: {
-              "application/json": { schema: jsonSchema(loginResponseSchema) },
+              'application/json': { schema: jsonSchema(loginResponseSchema) },
             },
           },
-          "401": {
-            ...errorResponse("Invalid credentials"),
+          '401': {
+            ...errorResponse('Invalid credentials'),
           },
-          "400": {
-            ...errorResponse("Invalid JSON or credentials payload"),
+          '400': {
+            ...errorResponse('Invalid JSON or credentials payload'),
           },
         },
       },
     },
-    "/support/inbound": {
+    '/support/inbound': {
       post: {
         requestBody: {
           required: true,
           content: {
-            "application/json": { schema: jsonSchema(mockEmailPayloadSchema) },
+            'application/json': { schema: jsonSchema(mockEmailPayloadSchema) },
           },
         },
         responses: {
-          "200": {
-            description: "Ingestion accepted",
+          '200': {
+            description: 'Ingestion accepted',
             content: {
-              "application/json": {
+              'application/json': {
                 schema: jsonSchema(inboundSupportResponseSchema),
               },
             },
           },
-          "400": {
-            ...errorResponse("Invalid inbound payload"),
+          '400': {
+            ...errorResponse('Invalid inbound payload'),
           },
-          "401": {
-            ...errorResponse("Authentication required"),
+          '401': {
+            ...errorResponse('Authentication required'),
           },
-          "403": {
-            ...errorResponse("Caller cannot create this case"),
+          '403': {
+            ...errorResponse('Caller cannot create this case'),
           },
-          "410": {
-            ...errorResponse("Expired case cannot accept new content"),
+          '410': {
+            ...errorResponse('Expired case cannot accept new content'),
           },
-          "500": {
-            ...errorResponse("Ingestion could not complete"),
+          '500': {
+            ...errorResponse('Ingestion could not complete'),
           },
         },
       },
     },
-    "/support/webhooks/intercom": {
+    '/support/webhooks/intercom': {
       post: {
         security: [],
         requestBody: {
           required: true,
-          content: { "application/json": { schema: { type: "object" } } },
+          content: { 'application/json': { schema: { type: 'object' } } },
         },
         responses: {
-          "200": {
-            description: "Verified provider event accepted or ignored",
-            content: { "application/json": { schema: { type: "object" } } },
+          '200': {
+            description: 'Verified provider event accepted or ignored',
+            content: { 'application/json': { schema: { type: 'object' } } },
           },
-          "401": {
-            ...errorResponse("Invalid webhook signature or payload"),
+          '401': {
+            ...errorResponse('Invalid webhook signature or payload'),
           },
-          "400": {
-            ...errorResponse("Malformed webhook body"),
+          '400': {
+            ...errorResponse('Malformed webhook body'),
           },
-          "404": {
-            ...errorResponse("Intercom adapter is not enabled"),
+          '404': {
+            ...errorResponse('Intercom adapter is not enabled'),
           },
-          "413": {
-            ...errorResponse("Webhook body exceeds the accepted size"),
+          '413': {
+            ...errorResponse('Webhook body exceeds the accepted size'),
           },
-          "500": {
-            ...errorResponse("Webhook transport is unavailable"),
+          '500': {
+            ...errorResponse('Webhook transport is unavailable'),
           },
-          "503": {
-            ...errorResponse("Verified event could not be persisted"),
+          '503': {
+            ...errorResponse('Verified event could not be persisted'),
           },
         },
       },
     },
-    "/support/webhooks/stripe": {
+    '/support/webhooks/stripe': {
       post: {
         security: [],
         requestBody: {
           required: true,
-          content: { "application/json": { schema: { type: "object" } } },
+          content: { 'application/json': { schema: { type: 'object' } } },
         },
         responses: {
-          "200": {
-            description: "Verified Stripe event accepted or ignored",
-            content: { "application/json": { schema: { type: "object" } } },
+          '200': {
+            description: 'Verified Stripe event accepted or ignored',
+            content: { 'application/json': { schema: { type: 'object' } } },
           },
-          "401": {
-            ...errorResponse("Invalid Stripe webhook signature or payload"),
+          '401': {
+            ...errorResponse('Invalid Stripe webhook signature or payload'),
           },
-          "400": {
-            ...errorResponse("Malformed webhook body"),
+          '400': {
+            ...errorResponse('Malformed webhook body'),
           },
-          "404": {
-            ...errorResponse("Stripe adapter is not enabled"),
+          '404': {
+            ...errorResponse('Stripe adapter is not enabled'),
           },
-          "413": {
-            ...errorResponse("Webhook body exceeds the accepted size"),
+          '413': {
+            ...errorResponse('Webhook body exceeds the accepted size'),
           },
-          "500": {
-            ...errorResponse("Webhook transport is unavailable"),
+          '500': {
+            ...errorResponse('Webhook transport is unavailable'),
           },
-          "503": {
-            ...errorResponse("Verified Stripe event could not be reconciled"),
+          '503': {
+            ...errorResponse('Verified Stripe event could not be reconciled'),
           },
         },
       },
     },
-    "/support/cases": {
+    '/support/cases': {
       get: {
         responses: {
-          "200": {
-            description: "Case inbox",
+          '200': {
+            description: 'Case inbox',
             content: {
-              "application/json": {
+              'application/json': {
                 schema: jsonSchema(caseListResponseSchema),
               },
             },
           },
-          "401": {
-            ...errorResponse("Authentication required"),
+          '401': {
+            ...errorResponse('Authentication required'),
           },
         },
       },
     },
-    "/support/customer/financial-requests": {
+    '/support/customer/financial-requests': {
       get: {
         responses: {
-          "200": {
-            description:
-              "Customer-scoped historical refund and subscription-credit request statuses",
+          '200': {
+            description: 'Customer-scoped historical refund and subscription-credit request statuses',
             content: {
-              "application/json": {
+              'application/json': {
                 schema: jsonSchema(customerFinancialRequestsResponseSchema),
               },
             },
           },
-          "401": {
-            ...errorResponse("Authentication required"),
+          '401': {
+            ...errorResponse('Authentication required'),
           },
-          "403": {
-            ...errorResponse("Only a customer may read this projection"),
+          '403': {
+            ...errorResponse('Only a customer may read this projection'),
           },
         },
       },
     },
-    "/support/cases/{caseId}": {
+    '/support/cases/{caseId}': {
       get: {
         parameters: [caseIdParameter],
         responses: {
-          "200": {
-            description: "Support case",
+          '200': {
+            description: 'Support case',
             content: {
-              "application/json": {
+              'application/json': {
                 schema: jsonSchema(publicSupportCaseSchema),
               },
             },
           },
-          "404": {
-            ...errorResponse("Case was not found"),
+          '404': {
+            ...errorResponse('Case was not found'),
           },
-          "401": {
-            ...errorResponse("Authentication required"),
+          '401': {
+            ...errorResponse('Authentication required'),
           },
-          "403": {
-            ...errorResponse("Caller cannot access this case"),
+          '403': {
+            ...errorResponse('Caller cannot access this case'),
           },
         },
       },
     },
-    "/support/cases/{caseId}/approve": {
+    '/support/cases/{caseId}/approve': {
       post: {
         parameters: [caseIdParameter],
         requestBody: {
           required: true,
           content: {
-            "application/json": { schema: jsonSchema(approvalRequestSchema) },
+            'application/json': { schema: jsonSchema(approvalRequestSchema) },
           },
         },
         responses: {
-          "200": {
-            description: "Updated support case",
+          '200': {
+            description: 'Updated support case',
             content: {
-              "application/json": {
+              'application/json': {
                 schema: jsonSchema(publicSupportCaseSchema),
               },
             },
           },
-          "400": {
-            ...errorResponse("Invalid approval payload"),
+          '400': {
+            ...errorResponse('Invalid approval payload'),
           },
-          "401": {
-            ...errorResponse("Authentication required"),
+          '401': {
+            ...errorResponse('Authentication required'),
           },
-          "403": {
-            ...errorResponse("Caller is not an authorized approver"),
+          '403': {
+            ...errorResponse('Caller is not an authorized approver'),
           },
-          "404": {
-            ...errorResponse("Case was not found"),
+          '404': {
+            ...errorResponse('Case was not found'),
           },
-          "409": {
-            ...errorResponse("Approval command or workflow state is stale"),
+          '409': {
+            ...errorResponse('Approval command or workflow state is stale'),
           },
-          "500": {
-            ...errorResponse("Approval resume failed"),
+          '500': {
+            ...errorResponse('Approval resume failed'),
           },
         },
       },
     },
-    "/support/cases/{caseId}/reject": {
+    '/support/cases/{caseId}/reject': {
       post: {
         parameters: [caseIdParameter],
         requestBody: {
           required: true,
           content: {
-            "application/json": { schema: jsonSchema(approvalRequestSchema) },
+            'application/json': { schema: jsonSchema(approvalRequestSchema) },
           },
         },
         responses: {
-          "200": {
-            description: "Updated support case",
+          '200': {
+            description: 'Updated support case',
             content: {
-              "application/json": {
+              'application/json': {
                 schema: jsonSchema(publicSupportCaseSchema),
               },
             },
           },
-          "400": {
-            ...errorResponse("Invalid approval payload"),
+          '400': {
+            ...errorResponse('Invalid approval payload'),
           },
-          "401": {
-            ...errorResponse("Authentication required"),
+          '401': {
+            ...errorResponse('Authentication required'),
           },
-          "403": {
-            ...errorResponse("Caller is not an authorized approver"),
+          '403': {
+            ...errorResponse('Caller is not an authorized approver'),
           },
-          "404": {
-            ...errorResponse("Case was not found"),
+          '404': {
+            ...errorResponse('Case was not found'),
           },
-          "409": {
-            ...errorResponse("Approval command or workflow state is stale"),
+          '409': {
+            ...errorResponse('Approval command or workflow state is stale'),
           },
-          "500": {
-            ...errorResponse("Approval resume failed"),
+          '500': {
+            ...errorResponse('Approval resume failed'),
           },
         },
       },
     },
-    "/support/cases/{caseId}/supervisor": {
+    '/support/cases/{caseId}/supervisor': {
       post: {
         parameters: [caseIdParameter],
         requestBody: {
           required: true,
           content: {
-            "application/json": {
+            'application/json': {
               schema: jsonSchema(supervisorExecutionRequestSchema),
             },
           },
         },
         responses: {
-          "200": {
-            description: "Authenticated read-only supervisor response",
+          '200': {
+            description: 'Authenticated read-only supervisor response',
             content: {
-              "application/json": {
+              'application/json': {
                 schema: jsonSchema(supervisorExecutionResponseSchema),
               },
             },
           },
-          "400": {
-            ...errorResponse("Invalid supervisor request"),
+          '400': {
+            ...errorResponse('Invalid supervisor request'),
           },
-          "401": {
-            ...errorResponse("Authentication required"),
+          '401': {
+            ...errorResponse('Authentication required'),
           },
-          "403": {
-            ...errorResponse("Caller cannot run the supervisor for this case"),
+          '403': {
+            ...errorResponse('Caller cannot run the supervisor for this case'),
           },
-          "404": {
-            ...errorResponse("Case was not found"),
+          '404': {
+            ...errorResponse('Case was not found'),
           },
-          "409": {
-            ...errorResponse("Case is missing verified owner evidence"),
+          '409': {
+            ...errorResponse('Case is missing verified owner evidence'),
           },
-          "422": {
-            ...errorResponse("Validation budget blocked the supervisor run"),
+          '422': {
+            ...errorResponse('Validation budget blocked the supervisor run'),
           },
-          "503": {
-            ...errorResponse("Supervisor trace correlation was unavailable"),
+          '503': {
+            ...errorResponse('Supervisor trace correlation was unavailable'),
           },
         },
       },
     },
-    "/support/cases/{caseId}/feedback": {
+    '/support/cases/{caseId}/feedback': {
       post: {
         parameters: [caseIdParameter],
         requestBody: {
           required: true,
           content: {
-            "application/json": { schema: jsonSchema(feedbackRequestSchema) },
+            'application/json': { schema: jsonSchema(feedbackRequestSchema) },
           },
         },
         responses: {
-          "200": {
-            description: "Updated support case",
+          '200': {
+            description: 'Updated support case',
             content: {
-              "application/json": {
+              'application/json': {
                 schema: jsonSchema(publicSupportCaseSchema),
               },
             },
           },
-          "400": {
-            ...errorResponse("Invalid feedback payload"),
+          '400': {
+            ...errorResponse('Invalid feedback payload'),
           },
-          "401": {
-            ...errorResponse("Authentication required"),
+          '401': {
+            ...errorResponse('Authentication required'),
           },
-          "403": {
-            ...errorResponse("Caller cannot access this case"),
+          '403': {
+            ...errorResponse('Caller cannot access this case'),
           },
-          "404": {
-            ...errorResponse("Case or response message was not found"),
+          '404': {
+            ...errorResponse('Case or response message was not found'),
           },
-          "410": {
-            ...errorResponse("Expired case cannot accept new content"),
+          '410': {
+            ...errorResponse('Expired case cannot accept new content'),
           },
         },
       },
     },
-    "/support/cases/{caseId}/follow-ups": {
+    '/support/cases/{caseId}/follow-ups': {
       post: {
         parameters: [caseIdParameter],
         requestBody: {
           required: true,
           content: {
-            "application/json": { schema: jsonSchema(followUpRequestSchema) },
+            'application/json': { schema: jsonSchema(followUpRequestSchema) },
           },
         },
         responses: {
-          "200": {
-            description: "Appended authorized customer follow-up",
+          '200': {
+            description: 'Appended authorized customer follow-up',
             content: {
-              "application/json": {
+              'application/json': {
                 schema: jsonSchema(publicSupportCaseSchema),
               },
             },
           },
-          "400": {
-            ...errorResponse("Invalid follow-up payload"),
+          '400': {
+            ...errorResponse('Invalid follow-up payload'),
           },
-          "401": {
-            ...errorResponse("Authentication required"),
+          '401': {
+            ...errorResponse('Authentication required'),
           },
-          "403": {
-            ...errorResponse("Caller cannot append to this case"),
+          '403': {
+            ...errorResponse('Caller cannot append to this case'),
           },
-          "404": {
-            ...errorResponse("Case was not found"),
+          '404': {
+            ...errorResponse('Case was not found'),
           },
-          "409": {
-            ...errorResponse("Follow-up dispatch lease was lost"),
+          '409': {
+            ...errorResponse('Follow-up dispatch lease was lost'),
           },
-          "410": {
-            ...errorResponse("Expired case cannot accept new content"),
+          '410': {
+            ...errorResponse('Expired case cannot accept new content'),
           },
-          "500": {
-            ...errorResponse("Follow-up resolution failed"),
+          '500': {
+            ...errorResponse('Follow-up resolution failed'),
           },
         },
       },
     },
-    "/support/cases/{caseId}/manual-resolution": {
+    '/support/cases/{caseId}/manual-resolution': {
       get: {
         parameters: [caseIdParameter],
         responses: {
-          "200": {
-            description:
-              "Manual-resolution delivery receipt and active version",
+          '200': {
+            description: 'Manual-resolution delivery receipt and active version',
             content: {
-              "application/json": {
+              'application/json': {
                 schema: jsonSchema(manualResolutionContextSchema),
               },
             },
           },
-          "401": { ...errorResponse("Authentication required") },
-          "403": { ...errorResponse("Caller is not authorized staff") },
-          "404": { ...errorResponse("Case was not found") },
+          '401': { ...errorResponse('Authentication required') },
+          '403': { ...errorResponse('Caller is not authorized staff') },
+          '404': { ...errorResponse('Case was not found') },
         },
       },
       post: {
@@ -650,89 +640,89 @@ export const supportOpenApiDocument = {
         requestBody: {
           required: true,
           content: {
-            "application/json": {
+            'application/json': {
               schema: jsonSchema(manualResolutionRequestSchema),
             },
           },
         },
         responses: {
-          "200": {
-            description: "Manually resolved case and Intercom delivery receipt",
+          '200': {
+            description: 'Manually resolved case and Intercom delivery receipt',
             content: {
-              "application/json": {
+              'application/json': {
                 schema: jsonSchema(manualResolutionResponseSchema),
               },
             },
           },
-          "400": { ...errorResponse("Invalid manual-resolution payload") },
-          "401": { ...errorResponse("Authentication required") },
-          "403": { ...errorResponse("Caller is not authorized staff") },
-          "404": { ...errorResponse("Case was not found") },
-          "409": { ...errorResponse("Case version or active turn is stale") },
+          '400': { ...errorResponse('Invalid manual-resolution payload') },
+          '401': { ...errorResponse('Authentication required') },
+          '403': { ...errorResponse('Caller is not authorized staff') },
+          '404': { ...errorResponse('Case was not found') },
+          '409': { ...errorResponse('Case version or active turn is stale') },
         },
       },
     },
-    "/support/knowledge/reindex": {
+    '/support/knowledge/reindex': {
       post: {
         requestBody: {
           required: false,
           content: {
-            "application/json": { schema: jsonSchema(reindexRequestSchema) },
+            'application/json': { schema: jsonSchema(reindexRequestSchema) },
           },
         },
         responses: {
-          "200": {
-            description: "Knowledge indexed",
+          '200': {
+            description: 'Knowledge indexed',
             content: {
-              "application/json": { schema: jsonSchema(reindexResponseSchema) },
+              'application/json': { schema: jsonSchema(reindexResponseSchema) },
             },
           },
-          "500": {
-            ...errorResponse("Indexing failed"),
+          '500': {
+            ...errorResponse('Indexing failed'),
           },
-          "400": {
-            ...errorResponse("Invalid reindex request"),
+          '400': {
+            ...errorResponse('Invalid reindex request'),
           },
-          "401": {
-            ...errorResponse("Authentication required"),
+          '401': {
+            ...errorResponse('Authentication required'),
           },
-          "403": {
-            ...errorResponse("Caller is not an administrator"),
+          '403': {
+            ...errorResponse('Caller is not an administrator'),
           },
         },
       },
     },
-    "/support/monitoring/summary": {
+    '/support/monitoring/summary': {
       get: {
         responses: {
-          "200": {
-            description: "Support monitoring summary",
+          '200': {
+            description: 'Support monitoring summary',
             content: {
-              "application/json": {
+              'application/json': {
                 schema: jsonSchema(monitoringSummarySchema),
               },
             },
           },
-          "401": {
-            ...errorResponse("Authentication required"),
+          '401': {
+            ...errorResponse('Authentication required'),
           },
-          "403": {
-            ...errorResponse("Caller is not an administrator"),
+          '403': {
+            ...errorResponse('Caller is not an administrator'),
           },
         },
       },
     },
-    "/support/openapi.json": {
+    '/support/openapi.json': {
       get: {
         responses: {
-          "200": {
-            description: "OpenAPI document",
+          '200': {
+            description: 'OpenAPI document',
             content: {
-              "application/json": { schema: jsonSchema(z.unknown()) },
+              'application/json': { schema: jsonSchema(z.unknown()) },
             },
           },
-          "401": {
-            ...errorResponse("Authentication required"),
+          '401': {
+            ...errorResponse('Authentication required'),
           },
         },
       },
@@ -743,7 +733,5 @@ export const supportOpenApiDocument = {
 export type MockEmailPayload = z.infer<typeof mockEmailPayloadSchema>;
 export type SupportCaseDto = z.infer<typeof publicSupportCaseSchema>;
 export type CaseListResponse = z.infer<typeof caseListResponseSchema>;
-export type InboundSupportResponse = z.infer<
-  typeof inboundSupportResponseSchema
->;
+export type InboundSupportResponse = z.infer<typeof inboundSupportResponseSchema>;
 export type MonitoringSummaryResponse = z.infer<typeof monitoringSummarySchema>;

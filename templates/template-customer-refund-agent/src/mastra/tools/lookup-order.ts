@@ -1,27 +1,24 @@
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
-import { moneyToLegacyAmount } from "../lib/money";
-import { caseStore } from "../lib/case-store";
-import { requireTrustedCommerceScope } from "../lib/trusted-run-scope";
-import { traceOperationalPort } from "../lib/operational-spans";
-import {
-  providerRegistry,
-  resolveConfiguredBinding,
-} from "../providers/registry";
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+import { moneyToLegacyAmount } from '../lib/money';
+import { caseStore } from '../lib/case-store';
+import { requireTrustedCommerceScope } from '../lib/trusted-run-scope';
+import { traceOperationalPort } from '../lib/operational-spans';
+import { providerRegistry, resolveConfiguredBinding } from '../providers/registry';
 
 const bindingSchema = z
   .object({
     tenantId: z.string(),
-    providerKind: z.enum(["local", "stripe"]),
+    providerKind: z.enum(['local', 'stripe']),
     providerAccountId: z.string(),
     externalConversationId: z.string(),
   })
   .optional();
 const fallbackBinding = {
-  tenantId: "local-demo",
-  providerKind: "local" as const,
-  providerAccountId: "local-demo",
-  externalConversationId: "tool",
+  tenantId: 'local-demo',
+  providerKind: 'local' as const,
+  providerAccountId: 'local-demo',
+  externalConversationId: 'tool',
 };
 const orderSchema = z.object({
   orderId: z.string(),
@@ -29,32 +26,18 @@ const orderSchema = z.object({
   product: z.string(),
   amount: z.number(),
   currency: z.string(),
-  status: z.enum([
-    "fulfilled",
-    "shipped",
-    "processing",
-    "cancelled",
-    "refunded",
-  ]),
+  status: z.enum(['fulfilled', 'shipped', 'processing', 'cancelled', 'refunded']),
   chargeCount: z.number(),
   placedAt: z.string(),
 });
 
-async function verifiedCommerceBinding(
-  binding: z.infer<typeof bindingSchema>,
-  customerEmail?: string,
-) {
+async function verifiedCommerceBinding(binding: z.infer<typeof bindingSchema>, customerEmail?: string) {
   const scope = requireTrustedCommerceScope();
   const supportCase = await caseStore.get(scope.caseId);
-  if (!supportCase)
-    throw new Error(
-      "Trusted commerce scope references a missing support case.",
-    );
+  if (!supportCase) throw new Error('Trusted commerce scope references a missing support case.');
   const metadata = supportCase.metadata;
   const persistedBindings = metadata.providerBindings;
-  const persisted = resolveConfiguredBinding(
-    persistedBindings?.commerce ?? fallbackBinding,
-  );
+  const persisted = resolveConfiguredBinding(persistedBindings?.commerce ?? fallbackBinding);
   if (
     binding &&
     (binding.tenantId !== persisted.tenantId ||
@@ -62,24 +45,20 @@ async function verifiedCommerceBinding(
       binding.providerAccountId !== persisted.providerAccountId ||
       binding.externalConversationId !== persisted.externalConversationId)
   )
-    throw new Error("Commerce lookup binding does not match the durable case.");
+    throw new Error('Commerce lookup binding does not match the durable case.');
   const configured = persisted;
   if (
     metadata.ownerId !== scope.ownerId ||
     configured.tenantId !== scope.tenantId ||
-    (customerEmail &&
-      customerEmail.toLowerCase() !== supportCase.customer.email.toLowerCase())
+    (customerEmail && customerEmail.toLowerCase() !== supportCase.customer.email.toLowerCase())
   )
-    throw new Error(
-      "Commerce lookup scope does not match the verified case owner.",
-    );
+    throw new Error('Commerce lookup scope does not match the verified case owner.');
   return { configured, customerEmail: supportCase.customer.email };
 }
 
 export const lookupOrderTool = createTool({
-  id: "lookup_order",
-  description:
-    "Look up a scoped local commerce order by customer email or explicit id.",
+  id: 'lookup_order',
+  description: 'Look up a scoped local commerce order by customer email or explicit id.',
   inputSchema: z.object({
     customerEmail: z.email().optional(),
     orderId: z.string().optional(),
@@ -92,12 +71,9 @@ export const lookupOrderTool = createTool({
     const order = await traceOperationalPort({
       mastra: context?.mastra,
       tracingContext: context?.tracingContext,
-      kind: "provider",
-      operation: "commerce.find_order",
-      run: () =>
-        providerRegistry(configured)
-          .commerce(configured)
-          .findOrder(configured, scoped.customerEmail, orderId),
+      kind: 'provider',
+      operation: 'commerce.find_order',
+      run: () => providerRegistry(configured).commerce(configured).findOrder(configured, scoped.customerEmail, orderId),
     });
     return order
       ? {
@@ -113,8 +89,8 @@ export const lookupOrderTool = createTool({
 });
 
 export const lookupSubscriptionTool = createTool({
-  id: "lookup_subscription",
-  description: "Look up a scoped local subscription by email.",
+  id: 'lookup_subscription',
+  description: 'Look up a scoped local subscription by email.',
   inputSchema: z.object({ customerEmail: z.email(), binding: bindingSchema }),
   outputSchema: z.object({
     found: z.boolean(),
@@ -124,12 +100,12 @@ export const lookupSubscriptionTool = createTool({
         customerId: z.string().optional(),
         customerEmail: z.email(),
         plan: z.string(),
-        recurringInterval: z.enum(["month", "year"]).optional(),
+        recurringInterval: z.enum(['month', 'year']).optional(),
         recurringIntervalCount: z.number().int().positive().optional(),
         quantity: z.number().int().positive().optional(),
         amount: z.number(),
         currency: z.string(),
-        status: z.enum(["active", "cancelled", "past_due"]),
+        status: z.enum(['active', 'cancelled', 'past_due']),
         renewsAt: z.string(),
         cancelAtPeriodEnd: z.literal(true).optional(),
         cancelsAt: z.string().optional(),
@@ -143,12 +119,9 @@ export const lookupSubscriptionTool = createTool({
     const subscription = await traceOperationalPort({
       mastra: context?.mastra,
       tracingContext: context?.tracingContext,
-      kind: "provider",
-      operation: "commerce.find_subscription",
-      run: () =>
-        providerRegistry(configured)
-          .commerce(configured)
-          .findSubscription(configured, scoped.customerEmail),
+      kind: 'provider',
+      operation: 'commerce.find_subscription',
+      run: () => providerRegistry(configured).commerce(configured).findSubscription(configured, scoped.customerEmail),
     });
     return subscription
       ? {
@@ -157,9 +130,7 @@ export const lookupSubscriptionTool = createTool({
             ...subscription,
             amount: moneyToLegacyAmount(subscription.amount),
             currency: subscription.amount.currency,
-            refundOrderId: subscription.providerRefs?.find(
-              (reference) => reference.type === "invoice",
-            )?.id,
+            refundOrderId: subscription.providerRefs?.find(reference => reference.type === 'invoice')?.id,
           },
         }
       : { found: false };
@@ -167,8 +138,8 @@ export const lookupSubscriptionTool = createTool({
 });
 
 export const lookupCustomerRefundHistoryTool = createTool({
-  id: "lookup_customer_refund_history",
-  description: "List durable local refund effects for an order.",
+  id: 'lookup_customer_refund_history',
+  description: 'List durable local refund effects for an order.',
   inputSchema: z.object({ orderId: z.string(), binding: bindingSchema }),
   outputSchema: z.object({
     refunds: z.array(
@@ -188,29 +159,20 @@ export const lookupCustomerRefundHistoryTool = createTool({
     const order = await traceOperationalPort({
       mastra: context?.mastra,
       tracingContext: context?.tracingContext,
-      kind: "provider",
-      operation: "commerce.find_order",
-      run: () =>
-        providerRegistry(configured)
-          .commerce(configured)
-          .findOrder(configured, scoped.customerEmail, orderId),
+      kind: 'provider',
+      operation: 'commerce.find_order',
+      run: () => providerRegistry(configured).commerce(configured).findOrder(configured, scoped.customerEmail, orderId),
     });
-    if (!order)
-      throw new Error(
-        "Refund history order is outside the verified case owner scope.",
-      );
+    if (!order) throw new Error('Refund history order is outside the verified case owner scope.');
     const refunds = await traceOperationalPort({
       mastra: context?.mastra,
       tracingContext: context?.tracingContext,
-      kind: "provider",
-      operation: "commerce.list_refunds",
-      run: () =>
-        providerRegistry(configured)
-          .commerce(configured)
-          .refunds(configured, orderId),
+      kind: 'provider',
+      operation: 'commerce.list_refunds',
+      run: () => providerRegistry(configured).commerce(configured).refunds(configured, orderId),
     });
     return {
-      refunds: refunds.map((refund) => ({
+      refunds: refunds.map(refund => ({
         ...refund,
         amount: moneyToLegacyAmount(refund.amount),
         currency: refund.amount.currency,

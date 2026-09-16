@@ -1,7 +1,6 @@
 function validInstant(value) {
   const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime()))
-    throw new Error("LOCAL_DEMO_SEED_AT must be a valid ISO instant.");
+  if (Number.isNaN(date.getTime())) throw new Error('LOCAL_DEMO_SEED_AT must be a valid ISO instant.');
   return date;
 }
 
@@ -30,15 +29,14 @@ export function addCalendarMonthClamped(value) {
  * in the backend and client databases. Callers may inject the clock for a
  * reproducible demo run. */
 export function interactiveLocalCommerce(seedAt = new Date()) {
-  const purchaseClock =
-    validInstant(seedAt).getTime() - 5 * 24 * 60 * 60 * 1000;
+  const purchaseClock = validInstant(seedAt).getTime() - 5 * 24 * 60 * 60 * 1000;
   const purchasedAt = new Date(purchaseClock).toISOString();
   return {
     purchase: {
-      orderId: "DEMO-API-CREDITS-001",
-      product: "API Credits",
+      orderId: 'DEMO-API-CREDITS-001',
+      product: 'API Credits',
       amountMinor: 500,
-      currency: "USD",
+      currency: 'USD',
       purchasedAt,
     },
   };

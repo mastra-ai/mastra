@@ -1,12 +1,12 @@
-import type { PolicyDocument } from "./types.ts";
-import { refundPolicy } from "./docs/refund-policy.ts";
-import { duplicateChargePolicy } from "./docs/duplicate-charge-policy.ts";
-import { damagedItemPolicy } from "./docs/damaged-item-policy.ts";
-import { shippingPolicy } from "./docs/shipping-policy.ts";
-import { subscriptionCancellationPolicy } from "./docs/subscription-cancellation-policy.ts";
-import { escalationPolicy } from "./docs/escalation-policy.ts";
-import { serviceProblemCreditPolicy } from "./docs/service-problem-credit-policy.ts";
-import { addressGuidance } from "./docs/address-guidance.ts";
+import type { PolicyDocument } from './types.ts';
+import { refundPolicy } from './docs/refund-policy.ts';
+import { duplicateChargePolicy } from './docs/duplicate-charge-policy.ts';
+import { damagedItemPolicy } from './docs/damaged-item-policy.ts';
+import { shippingPolicy } from './docs/shipping-policy.ts';
+import { subscriptionCancellationPolicy } from './docs/subscription-cancellation-policy.ts';
+import { escalationPolicy } from './docs/escalation-policy.ts';
+import { serviceProblemCreditPolicy } from './docs/service-problem-credit-policy.ts';
+import { addressGuidance } from './docs/address-guidance.ts';
 
 export type { PolicyDocument };
 

@@ -31,7 +31,7 @@
     "local:seed": "node --env-file-if-exists=.env --import ./scripts/database-env.mjs scripts/local-fixtures.mjs seed",
     "local:reset": "node --env-file-if-exists=.env --import ./scripts/database-env.mjs scripts/local-fixtures.mjs reset",
     "local:retention": "node --env-file-if-exists=.env --import ./scripts/database-env.mjs scripts/retention.mjs",
-    "format:check": "prettier --check . --ignore-path .prettierignore",
+    "format:check": "oxfmt --check -c .oxfmtrc.json .",
     "lint": "oxlint --deny-warnings src test",
     "lint:web": "npm run --workspace support-demo-ui lint",
     "typecheck": "tsc --noEmit",
@@ -42,7 +42,8 @@
     "test:eval": "node scripts/require-eval-baseline.mjs && vitest run --project eval",
     "eval:candidate-report": "node scripts/eval-candidate-report.mjs",
     "test:e2e": "npm run test:e2e:demo && playwright test",
-    "test": "npm run test:unit && npm run test:unit:demo && npm run --workspace support-demo-ui test:unit && npm run test:integration && npm run test:integration:demo && npm run --workspace support-demo-ui test:integration && npm run test:contract && npm run --workspace support-demo-ui test:contract && npm run test:eval && npm run --workspace support-demo-ui test:eval"
+    "test": "npm run test:unit && npm run test:unit:demo && npm run --workspace support-demo-ui test:unit && npm run test:integration && npm run test:integration:demo && npm run --workspace support-demo-ui test:integration && npm run test:contract && npm run --workspace support-demo-ui test:contract && npm run test:eval && npm run --workspace support-demo-ui test:eval",
+    "format": "oxfmt -c .oxfmtrc.json ."
   },
   "keywords": [],
   "author": "",
@@ -68,8 +69,8 @@
     "@playwright/test": "1.63.0",
     "@types/node": "24.13.3",
     "mastra": "latest",
+    "oxfmt": "0.59.0",
     "oxlint": "1.81.0",
-    "prettier": "3.9.6",
     "typescript": "6.0.3",
     "vitest": "4.1.11"
   }

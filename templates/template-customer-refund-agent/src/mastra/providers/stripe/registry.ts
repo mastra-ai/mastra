@@ -1,10 +1,7 @@
-import { caseStore } from "../../lib/case-store";
-import { createHash } from "node:crypto";
-import { activeDispatchLeaseScope } from "../../lib/dispatch-lease-scope";
-import {
-  hasNativeRefundExecutionAuthorization,
-  type NativeRefundExecutionAuthorization,
-} from "../native-execution";
+import { caseStore } from '../../lib/case-store';
+import { createHash } from 'node:crypto';
+import { activeDispatchLeaseScope } from '../../lib/dispatch-lease-scope';
+import { hasNativeRefundExecutionAuthorization, type NativeRefundExecutionAuthorization } from '../native-execution';
 import {
   bindingsForCase,
   type CommerceProvider,
@@ -19,38 +16,27 @@ import {
   type SupportChannelProvider,
   type TransactionalActionProvider,
   VerifiedRefundOwnerRejectedError,
-} from "../contracts";
-import { activePrincipalHasRole } from "../../server/auth";
-import { activeTrustedCancellationScope } from "../cancellation-execution";
-import { assertRefundPolicyEvidenceAtFirstEffect } from "../../lib/refund-policy-evidence-persistence";
-import { isRefundPolicyEvidenceError } from "../../lib/refund-policy-evidence";
-import {
-  legacyAmountToMoney,
-  structurallyEqual,
-  subscriptionCreditFingerprint,
-} from "../../lib/money";
-import { exceedsStandardRefundReviewLimit } from "../../domain/refund-review-limit";
-import type { StripeSandboxConfig } from "./config";
-import { StripeClient, StripeHttpError } from "./client";
+} from '../contracts';
+import { activePrincipalHasRole } from '../../server/auth';
+import { activeTrustedCancellationScope } from '../cancellation-execution';
+import { assertRefundPolicyEvidenceAtFirstEffect } from '../../lib/refund-policy-evidence-persistence';
+import { isRefundPolicyEvidenceError } from '../../lib/refund-policy-evidence';
+import { legacyAmountToMoney, structurallyEqual, subscriptionCreditFingerprint } from '../../lib/money';
+import { exceedsStandardRefundReviewLimit } from '../../domain/refund-review-limit';
+import type { StripeSandboxConfig } from './config';
+import { StripeClient, StripeHttpError } from './client';
 
 const PROVIDER_IDEMPOTENCY_WINDOW_MS = 24 * 60 * 60 * 1_000;
 
-function safeRefundFailureDiagnostic(
-  error: unknown,
-  stage: "preflight" | "post",
-) {
+function safeRefundFailureDiagnostic(error: unknown, stage: 'preflight' | 'post') {
   if (!(error instanceof StripeHttpError)) return { stage };
   return {
     stage,
-    ...(error.status >= 100 && error.status <= 599
-      ? { status: error.status }
-      : {}),
+    ...(error.status >= 100 && error.status <= 599 ? { status: error.status } : {}),
     ambiguity: error.ambiguous,
     ...(error.diagnostic?.code ? { code: error.diagnostic.code } : {}),
     ...(error.diagnostic?.type ? { type: error.diagnostic.type } : {}),
-    ...(error.diagnostic?.requestId
-      ? { requestId: error.diagnostic.requestId }
-      : {}),
+    ...(error.diagnostic?.requestId ? { requestId: error.diagnostic.requestId } : {}),
   };
 }
 
@@ -72,22 +58,20 @@ function isDefiniteCreditNoEffect(error: unknown) {
  * overwrite a newer worker's recovery claim as if a POST had happened. */
 class StripeFirstEffectAuthorizationError extends Error {
   constructor() {
-    super("Stripe first-effect authorization is no longer current.");
+    super('Stripe first-effect authorization is no longer current.');
   }
 }
 
 class StripePrePostNoEffectError extends Error {
   constructor() {
-    super("Stripe subscription credit was refused before the provider POST.");
+    super('Stripe subscription credit was refused before the provider POST.');
   }
 }
 
 /** Stripe owns only the commerce and transactional ports. Support and
  * knowledge keep their independently persisted bindings. */
-export class StripeProviderRegistry
-  implements ProviderRegistry, CommerceProvider, TransactionalActionProvider
-{
-  readonly kind = "stripe" as const;
+export class StripeProviderRegistry implements ProviderRegistry, CommerceProvider, TransactionalActionProvider {
+  readonly kind = 'stripe' as const;
   private readonly client: StripeClient;
   constructor(
     private readonly config: StripeSandboxConfig,
@@ -97,13 +81,11 @@ export class StripeProviderRegistry
   }
   private assert(binding: ProviderBinding) {
     if (
-      binding.providerKind !== "stripe" ||
+      binding.providerKind !== 'stripe' ||
       binding.tenantId !== this.config.tenantId ||
       binding.providerAccountId !== this.config.accountId
     )
-      throw new Error(
-        "Stripe binding is not registered for this tenant/account.",
-      );
+      throw new Error('Stripe binding is not registered for this tenant/account.');
   }
   commerce(binding: ProviderBinding): CommerceProvider {
     this.assert(binding);
@@ -114,10 +96,10 @@ export class StripeProviderRegistry
     return this;
   }
   support(_binding: ProviderBinding): SupportChannelProvider {
-    throw new Error("Stripe does not provide a support channel port.");
+    throw new Error('Stripe does not provide a support channel port.');
   }
   knowledge(_binding: ProviderBinding): KnowledgeProvider {
-    throw new Error("Stripe does not provide a knowledge port.");
+    throw new Error('Stripe does not provide a knowledge port.');
   }
   findOrder(binding: ProviderBinding, email: string, orderId?: string) {
     return this.client.findOrder(binding, email, orderId);
@@ -132,32 +114,17 @@ export class StripeProviderRegistry
     const supportCase = await caseStore.get(command.approvalCaseId);
     if (
       !supportCase ||
-      bindingsForCase(supportCase).transactions.providerAccountId !==
-        command.binding.providerAccountId ||
-      bindingsForCase(supportCase).transactions.tenantId !==
-        command.binding.tenantId
+      bindingsForCase(supportCase).transactions.providerAccountId !== command.binding.providerAccountId ||
+      bindingsForCase(supportCase).transactions.tenantId !== command.binding.tenantId
     )
-      throw new Error(
-        "Stripe quote requires the case's persisted transaction binding.",
-      );
+      throw new Error("Stripe quote requires the case's persisted transaction binding.");
     return this.client.quoteRefund(command, supportCase.customer.email);
   }
   async quoteSubscriptionCredit(command: SubscriptionCreditCommand) {
     const supportCase = await caseStore.get(command.approvalCaseId);
-    if (
-      !supportCase ||
-      !structurallyEqual(
-        bindingsForCase(supportCase).transactions,
-        command.binding,
-      )
-    )
-      throw new Error(
-        "Stripe subscription credit requires the case's persisted transaction binding.",
-      );
-    return this.client.quoteSubscriptionCredit(
-      command,
-      supportCase.customer.email,
-    );
+    if (!supportCase || !structurallyEqual(bindingsForCase(supportCase).transactions, command.binding))
+      throw new Error("Stripe subscription credit requires the case's persisted transaction binding.");
+    return this.client.quoteSubscriptionCredit(command, supportCase.customer.email);
   }
   async issueSubscriptionCredit(
     command: SubscriptionCreditCommand,
@@ -180,24 +147,17 @@ export class StripeProviderRegistry
       }))
     )
       throw new Error(
-        "Stripe subscription credit requires the approved native tool context and current dispatch lease.",
+        'Stripe subscription credit requires the approved native tool context and current dispatch lease.',
       );
     const supportCase = await caseStore.get(command.approvalCaseId);
     const native = supportCase?.metadata.nativeApproval;
-    const decision = await caseStore.approvalDecision(
-      command.approvalCaseId,
-      authorization.turnId,
-    );
+    const decision = await caseStore.approvalDecision(command.approvalCaseId, authorization.turnId);
     const immutable = await caseStore.getAction(
       command.approvalCaseId,
-      "subscription-credit-command",
+      'subscription-credit-command',
       command.fingerprint,
     );
-    const evidence = await caseStore.getAction(
-      command.approvalCaseId,
-      "refund-policy-evidence",
-      command.fingerprint,
-    );
+    const evidence = await caseStore.getAction(command.approvalCaseId, 'refund-policy-evidence', command.fingerprint);
     if (
       !supportCase?.approval?.approved ||
       !native ||
@@ -206,25 +166,19 @@ export class StripeProviderRegistry
       native.fingerprint !== command.fingerprint ||
       !decision?.approved ||
       decision.commandFingerprint !== command.fingerprint ||
-      !activePrincipalHasRole(
-        decision.principalId,
-        command.binding.tenantId,
-        "approver",
-      ) ||
+      !activePrincipalHasRole(decision.principalId, command.binding.tenantId, 'approver') ||
       subscriptionCreditFingerprint(command) !== command.fingerprint ||
       !structurallyEqual(immutable, command) ||
       !evidence ||
       supportCase.draft?.requiresEscalation
     )
       throw new Error(
-        "Stripe subscription credit requires the durable authorized decision, immutable command, and policy evidence.",
+        'Stripe subscription credit requires the durable authorized decision, immutable command, and policy evidence.',
       );
     const replay = await caseStore.idempotency(command.idempotencyKey);
     if (replay) {
       if (replay.fingerprint !== command.fingerprint)
-        throw new Error(
-          "Idempotency key was reused with another subscription credit.",
-        );
+        throw new Error('Idempotency key was reused with another subscription credit.');
       const effect = replay.effect as SubscriptionCreditEffect;
       if (
         effect.creditId &&
@@ -232,9 +186,7 @@ export class StripeProviderRegistry
         effect.customerId === command.customerId
       )
         return { ...effect, replayed: true };
-      throw new Error(
-        "Subscription credit replay does not match the immutable command.",
-      );
+      throw new Error('Subscription credit replay does not match the immutable command.');
     }
     const attempt = await caseStore.prepareStripeSubscriptionCreditAttempt({
       caseId: command.approvalCaseId,
@@ -250,24 +202,14 @@ export class StripeProviderRegistry
     });
     const recoverReceipt = async () => {
       const effect = attempt.creditId
-        ? await this.client.retrieveSubscriptionCredit(
-            command,
-            supportCase.customer.email,
-            attempt.creditId,
-          )
-        : await this.client.findSubscriptionCreditReceipt(
-            command,
-            supportCase.customer.email,
-          );
+        ? await this.client.retrieveSubscriptionCredit(command, supportCase.customer.email, attempt.creditId)
+        : await this.client.findSubscriptionCreditReceipt(command, supportCase.customer.email);
       if (effect)
-        await caseStore.updateStripeSubscriptionCreditAttempt(
-          command.idempotencyKey,
-          {
-            status: "succeeded",
-            creditId: effect.creditId,
-            providerStatus: effect.providerStatus,
-          },
-        );
+        await caseStore.updateStripeSubscriptionCreditAttempt(command.idempotencyKey, {
+          status: 'succeeded',
+          creditId: effect.creditId,
+          providerStatus: effect.providerStatus,
+        });
       return effect;
     };
     // A prior durable prepare means this native snapshot has already crossed
@@ -275,10 +217,8 @@ export class StripeProviderRegistry
     // its immutable receipt only; never turn a bounded Stripe key expiry into
     // a fresh POST.
     if (!attempt.inserted) {
-      const persisted = await caseStore.stripeSubscriptionCreditAttempt(
-        command.idempotencyKey,
-      );
-      if (persisted?.providerStatus === "prepost-no-effect") {
+      const persisted = await caseStore.stripeSubscriptionCreditAttempt(command.idempotencyKey);
+      if (persisted?.providerStatus === 'prepost-no-effect') {
         await caseStore.finalizeStripeSubscriptionCreditNoEffectFailure({
           idempotencyKey: command.idempotencyKey,
           fingerprint: command.fingerprint,
@@ -292,10 +232,10 @@ export class StripeProviderRegistry
       }
       const recovered = await recoverReceipt();
       if (recovered) return recovered;
-      await caseStore.updateStripeSubscriptionCreditAttempt(
-        command.idempotencyKey,
-        { status: "unknown", providerStatus: "receipt-not-observed" },
-      );
+      await caseStore.updateStripeSubscriptionCreditAttempt(command.idempotencyKey, {
+        status: 'unknown',
+        providerStatus: 'receipt-not-observed',
+      });
       throw new StripeHttpError(0, true);
     }
     let crossedPostBoundary = false;
@@ -306,22 +246,16 @@ export class StripeProviderRegistry
         async () => {
           let authorized = false;
           try {
-            authorized =
-              await caseStore.authorizeStripeSubscriptionCreditFirstEffect({
-                command,
-                dispatch: {
-                  caseId: command.approvalCaseId,
-                  turnId: authorization.turnId,
-                  dispatchId: authorization.dispatchId,
-                  leaseToken: authorization.leaseToken,
-                },
-                validatePolicy: (tx) =>
-                  assertRefundPolicyEvidenceAtFirstEffect(
-                    tx,
-                    command,
-                    authorization.turnId,
-                  ),
-              });
+            authorized = await caseStore.authorizeStripeSubscriptionCreditFirstEffect({
+              command,
+              dispatch: {
+                caseId: command.approvalCaseId,
+                turnId: authorization.turnId,
+                dispatchId: authorization.dispatchId,
+                leaseToken: authorization.leaseToken,
+              },
+              validatePolicy: tx => assertRefundPolicyEvidenceAtFirstEffect(tx, command, authorization.turnId),
+            });
           } catch (error) {
             if (isRefundPolicyEvidenceError(error)) throw error;
           }
@@ -331,14 +265,11 @@ export class StripeProviderRegistry
           crossedPostBoundary = true;
         },
       );
-      await caseStore.updateStripeSubscriptionCreditAttempt(
-        command.idempotencyKey,
-        {
-          status: "succeeded",
-          creditId: effect.creditId,
-          providerStatus: effect.providerStatus,
-        },
-      );
+      await caseStore.updateStripeSubscriptionCreditAttempt(command.idempotencyKey, {
+        status: 'succeeded',
+        creditId: effect.creditId,
+        providerStatus: effect.providerStatus,
+      });
       return effect;
     } catch (error) {
       if (isRefundPolicyEvidenceError(error)) {
@@ -347,8 +278,8 @@ export class StripeProviderRegistry
         // outcome and recovery must not infer that a remote POST may exist.
         await caseStore
           .updateStripeSubscriptionCreditAttempt(command.idempotencyKey, {
-            status: "quarantined",
-            providerStatus: "pre-dispatch-policy-denied",
+            status: 'quarantined',
+            providerStatus: 'pre-dispatch-policy-denied',
           })
           .catch(() => undefined);
         throw error;
@@ -389,9 +320,8 @@ export class StripeProviderRegistry
       // effect, so recovery must inspect the provider ledger rather than POST.
       await caseStore
         .updateStripeSubscriptionCreditAttempt(command.idempotencyKey, {
-          status: "unknown",
-          providerStatus:
-            error instanceof StripeHttpError ? "transport" : "uncertain",
+          status: 'unknown',
+          providerStatus: error instanceof StripeHttpError ? 'transport' : 'uncertain',
         })
         .catch(() => undefined);
       throw error;
@@ -405,45 +335,23 @@ export class StripeProviderRegistry
     if (effect?.fingerprint === command.fingerprint) {
       const saved = effect.effect as SubscriptionCreditEffect;
       if (saved.creditId)
-        return this.client.retrieveSubscriptionCredit(
-          command,
-          supportCase.customer.email,
-          saved.creditId,
-        );
+        return this.client.retrieveSubscriptionCredit(command, supportCase.customer.email, saved.creditId);
     }
-    const attempt = await caseStore.stripeSubscriptionCreditAttempt(
-      command.idempotencyKey,
-    );
-    if (
-      !attempt ||
-      attempt.caseId !== command.approvalCaseId ||
-      attempt.fingerprint !== command.fingerprint
-    )
+    const attempt = await caseStore.stripeSubscriptionCreditAttempt(command.idempotencyKey);
+    if (!attempt || attempt.caseId !== command.approvalCaseId || attempt.fingerprint !== command.fingerprint)
       return undefined;
     const recovered = attempt.creditId
-      ? await this.client.retrieveSubscriptionCredit(
-          command,
-          supportCase.customer.email,
-          attempt.creditId,
-        )
-      : await this.client.findSubscriptionCreditReceipt(
-          command,
-          supportCase.customer.email,
-        );
+      ? await this.client.retrieveSubscriptionCredit(command, supportCase.customer.email, attempt.creditId)
+      : await this.client.findSubscriptionCreditReceipt(command, supportCase.customer.email);
     if (recovered)
-      await caseStore.updateStripeSubscriptionCreditAttempt(
-        command.idempotencyKey,
-        {
-          status: "succeeded",
-          creditId: recovered.creditId,
-          providerStatus: recovered.providerStatus,
-        },
-      );
+      await caseStore.updateStripeSubscriptionCreditAttempt(command.idempotencyKey, {
+        status: 'succeeded',
+        creditId: recovered.creditId,
+        providerStatus: recovered.providerStatus,
+      });
     return recovered;
   }
-  async scheduleSubscriptionCancellation(
-    command: SubscriptionCancellationCommand,
-  ) {
+  async scheduleSubscriptionCancellation(command: SubscriptionCancellationCommand) {
     this.assert(command.binding);
     const supportCase = await caseStore.get(command.caseId);
     const owner = supportCase
@@ -457,26 +365,22 @@ export class StripeProviderRegistry
       !owner ||
       supportCase.metadata.ownerId !== owner ||
       command.ownerId !== owner ||
-      command.cancellationMode !== "period_end" ||
-      !structurallyEqual(
-        bindingsForCase(supportCase).transactions,
-        command.binding,
-      )
+      command.cancellationMode !== 'period_end' ||
+      !structurallyEqual(bindingsForCase(supportCase).transactions, command.binding)
     )
-      throw new Error("Cancellation requires the verified case owner.");
+      throw new Error('Cancellation requires the verified case owner.');
     const turn = await caseStore.turn(command.caseId, command.turnId);
     if (
       !turn?.message ||
       turn.message.id !== command.sourceMessageId ||
-      createHash("sha256").update(turn.message.body).digest("hex") !==
-        command.sourceMessageHash
+      createHash('sha256').update(turn.message.body).digest('hex') !== command.sourceMessageHash
     )
-      throw new Error("Cancellation requires its immutable source message.");
+      throw new Error('Cancellation requires its immutable source message.');
     const trusted = activeTrustedCancellationScope();
     const lease = activeDispatchLeaseScope();
     const immutable = await caseStore.getAction(
       command.caseId,
-      "subscription-cancellation-command",
+      'subscription-cancellation-command',
       command.fingerprint,
     );
     if (
@@ -490,24 +394,18 @@ export class StripeProviderRegistry
       !(await caseStore.hasDispatchLease(lease)) ||
       !structurallyEqual(immutable, command)
     )
-      throw new Error(
-        "Cancellation requires the trusted current workflow command and lease.",
-      );
+      throw new Error('Cancellation requires the trusted current workflow command and lease.');
     const replay = await caseStore.idempotency(command.idempotencyKey);
     if (replay) {
       if (replay.fingerprint !== command.fingerprint)
-        throw new Error(
-          "Idempotency key was reused with another cancellation.",
-        );
+        throw new Error('Idempotency key was reused with another cancellation.');
       const effect = replay.effect as SubscriptionCancellationEffect;
       if (
         effect.subscriptionId !== command.subscriptionId ||
         effect.idempotencyKey !== command.idempotencyKey ||
         effect.cancelAtPeriodEnd !== true
       )
-        throw new Error(
-          "Cancellation replay does not match its immutable command.",
-        );
+        throw new Error('Cancellation replay does not match its immutable command.');
       return { ...effect, replayed: true };
     }
     // The target/owner checks are preflight reads. Any failure here proves no
@@ -515,50 +413,37 @@ export class StripeProviderRegistry
     // conservatively treated as potentially committed unless Stripe says it
     // was a non-ambiguous rejection.
     try {
-      await this.client.prepareSubscriptionCancellationRequest(
-        command,
-        supportCase.customer.email,
-      );
+      await this.client.prepareSubscriptionCancellationRequest(command, supportCase.customer.email);
     } catch (error) {
       await caseStore.finalizeUnknownSubscriptionCancellation({
         idempotencyKey: command.idempotencyKey,
         fingerprint: command.fingerprint,
-        status: "failed",
+        status: 'failed',
       });
       throw error;
     }
     try {
-      return await this.client.createSubscriptionCancellation(
-        command,
-        async () => {
-          if (
-            !(await caseStore.authorizeSubscriptionCancellationFirstEffect({
-              command,
-              dispatch: lease,
-            }))
-          )
-            throw new StripeFirstEffectAuthorizationError();
-        },
-      );
+      return await this.client.createSubscriptionCancellation(command, async () => {
+        if (
+          !(await caseStore.authorizeSubscriptionCancellationFirstEffect({
+            command,
+            dispatch: lease,
+          }))
+        )
+          throw new StripeFirstEffectAuthorizationError();
+      });
     } catch (error) {
       if (error instanceof StripeFirstEffectAuthorizationError) throw error;
-      if (
-        error instanceof StripeHttpError &&
-        !error.ambiguous &&
-        error.status >= 400 &&
-        error.status < 500
-      )
+      if (error instanceof StripeHttpError && !error.ambiguous && error.status >= 400 && error.status < 500)
         await caseStore.finalizeUnknownSubscriptionCancellation({
           idempotencyKey: command.idempotencyKey,
           fingerprint: command.fingerprint,
-          status: "failed",
+          status: 'failed',
         });
       throw error;
     }
   }
-  async retrieveSubscriptionCancellation(
-    command: SubscriptionCancellationCommand,
-  ) {
+  async retrieveSubscriptionCancellation(command: SubscriptionCancellationCommand) {
     this.assert(command.binding);
     const supportCase = await caseStore.get(command.caseId);
     const owner = supportCase
@@ -570,7 +455,7 @@ export class StripeProviderRegistry
     const turn = await caseStore.turn(command.caseId, command.turnId);
     const immutable = await caseStore.getAction(
       command.caseId,
-      "subscription-cancellation-command",
+      'subscription-cancellation-command',
       command.fingerprint,
     );
     if (
@@ -580,38 +465,26 @@ export class StripeProviderRegistry
       owner !== command.ownerId ||
       !turn?.message ||
       turn.message.id !== command.sourceMessageId ||
-      createHash("sha256").update(turn.message.body).digest("hex") !==
-        command.sourceMessageHash ||
-      !structurallyEqual(
-        bindingsForCase(supportCase).transactions,
-        command.binding,
-      ) ||
+      createHash('sha256').update(turn.message.body).digest('hex') !== command.sourceMessageHash ||
+      !structurallyEqual(bindingsForCase(supportCase).transactions, command.binding) ||
       !structurallyEqual(immutable, command)
     )
-      throw new Error("Cancellation recovery command is no longer authorized.");
-    return this.client.retrieveSubscriptionCancellation(
-      command,
-      supportCase.customer.email,
-    );
+      throw new Error('Cancellation recovery command is no longer authorized.');
+    return this.client.retrieveSubscriptionCancellation(command, supportCase.customer.email);
   }
-  async issueRefund(
-    command: RefundCommand,
-    authorization?: NativeRefundExecutionAuthorization,
-  ) {
+  async issueRefund(command: RefundCommand, authorization?: NativeRefundExecutionAuthorization) {
     this.assert(command.binding);
     if (
       !authorization ||
       !hasNativeRefundExecutionAuthorization(authorization, {
-        nativeRunId: authorization?.nativeRunId ?? "",
-        nativeToolCallId: authorization?.nativeToolCallId ?? "",
+        nativeRunId: authorization?.nativeRunId ?? '',
+        nativeToolCallId: authorization?.nativeToolCallId ?? '',
         commandFingerprint: command.fingerprint,
         caseId: command.approvalCaseId,
       }) ||
       authorization.caseId !== command.approvalCaseId
     )
-      throw new Error(
-        "Stripe refund requires the approved native refund tool context.",
-      );
+      throw new Error('Stripe refund requires the approved native refund tool context.');
     if (
       !(await caseStore.hasDispatchLease({
         caseId: command.approvalCaseId,
@@ -620,22 +493,13 @@ export class StripeProviderRegistry
         leaseToken: authorization.leaseToken,
       }))
     )
-      throw new Error(
-        "Stripe refund requires the current durable workflow dispatch lease.",
-      );
+      throw new Error('Stripe refund requires the current durable workflow dispatch lease.');
     const supportCase = await caseStore.get(command.approvalCaseId);
-    const decision = await caseStore.approvalDecision(
-      command.approvalCaseId,
-      authorization.turnId,
-    );
-    const immutable = await caseStore.getAction(
-      command.approvalCaseId,
-      "refund-command",
-      command.fingerprint,
-    );
+    const decision = await caseStore.approvalDecision(command.approvalCaseId, authorization.turnId);
+    const immutable = await caseStore.getAction(command.approvalCaseId, 'refund-command', command.fingerprint);
     const policy = (await caseStore.getAction(
       command.approvalCaseId,
-      "refund-policy-evidence",
+      'refund-policy-evidence',
       command.fingerprint,
     )) as
       | {
@@ -659,11 +523,7 @@ export class StripeProviderRegistry
       decision.commandFingerprint !== command.fingerprint ||
       decision.nativeRunId !== authorization.nativeRunId ||
       decision.nativeToolCallId !== authorization.nativeToolCallId ||
-      !activePrincipalHasRole(
-        decision.principalId,
-        command.binding.tenantId,
-        "approver",
-      ) ||
+      !activePrincipalHasRole(decision.principalId, command.binding.tenantId, 'approver') ||
       !structurallyEqual(immutable, expected) ||
       policy?.turnId !== authorization.turnId ||
       policy.binding?.tenantId !== command.binding.tenantId ||
@@ -671,7 +531,7 @@ export class StripeProviderRegistry
       policy.citations.length === 0
     )
       throw new Error(
-        "Stripe refund requires the durable authorized decision, immutable command, and policy evidence.",
+        'Stripe refund requires the durable authorized decision, immutable command, and policy evidence.',
       );
     // The ingress-established canonical conversation binding is authority at
     // the first-effect boundary. Email is only a Stripe lookup input.
@@ -681,19 +541,10 @@ export class StripeProviderRegistry
           binding: bindingsForCase(supportCase).support,
         })
       : undefined;
-    if (
-      !supportCase ||
-      !durableOwner ||
-      (supportCase.metadata as Record<string, unknown>).ownerId !== durableOwner
-    )
+    if (!supportCase || !durableOwner || (supportCase.metadata as Record<string, unknown>).ownerId !== durableOwner)
       throw new VerifiedRefundOwnerRejectedError();
-    if (
-      supportCase.draft?.requiresEscalation ||
-      exceedsStandardRefundReviewLimit(command.amount)
-    )
-      throw new Error(
-        "Stripe refund is not permitted by the current deterministic policy.",
-      );
+    if (supportCase.draft?.requiresEscalation || exceedsStandardRefundReviewLimit(command.amount))
+      throw new Error('Stripe refund is not permitted by the current deterministic policy.');
     // Stripe must apply the same publication/hash/freshness checks as the
     // local provider before its first possible POST. Reconciliation of an
     // existing effect intentionally does not re-open an expired policy.
@@ -721,107 +572,68 @@ export class StripeProviderRegistry
         },
       );
       await caseStore.updateStripeRefundAttempt(command.idempotencyKey, {
-        status:
-          effect.status === "failed"
-            ? "failed"
-            : effect.status === "succeeded"
-              ? "succeeded"
-              : "pending",
+        status: effect.status === 'failed' ? 'failed' : effect.status === 'succeeded' ? 'succeeded' : 'pending',
         refundId: effect.refundId,
         providerStatus: effect.providerStatus ?? effect.status,
-        nextAttemptAt:
-          effect.status === "succeeded"
-            ? new Date(Date.now() + 5 * 60_000).toISOString()
-            : undefined,
+        nextAttemptAt: effect.status === 'succeeded' ? new Date(Date.now() + 5 * 60_000).toISOString() : undefined,
       });
       return this.authoritativeEffect(command.idempotencyKey, effect);
     }
-    if (attempt.status !== "prepared" && attempt.status !== "unknown") {
-      throw new Error(
-        "Stripe refund attempt has no provider refund id and requires manual reconciliation.",
-      );
+    if (attempt.status !== 'prepared' && attempt.status !== 'unknown') {
+      throw new Error('Stripe refund attempt has no provider refund id and requires manual reconciliation.');
     }
-    if (
-      Date.now() - Date.parse(attempt.createdAt) >
-      PROVIDER_IDEMPOTENCY_WINDOW_MS
-    ) {
+    if (Date.now() - Date.parse(attempt.createdAt) > PROVIDER_IDEMPOTENCY_WINDOW_MS) {
       await caseStore.updateStripeRefundAttempt(command.idempotencyKey, {
-        status: "quarantined",
-        providerStatus: "idempotency-window-expired",
+        status: 'quarantined',
+        providerStatus: 'idempotency-window-expired',
       });
-      throw new Error(
-        "Stripe refund attempt is past the provider idempotency window and is quarantined.",
-      );
+      throw new Error('Stripe refund attempt is past the provider idempotency window and is quarantined.');
     }
-    let request: Awaited<ReturnType<StripeClient["prepareRefundRequest"]>>;
+    let request: Awaited<ReturnType<StripeClient['prepareRefundRequest']>>;
     try {
       if (!supportCase || supportCase.customer.email.length === 0)
-        throw new Error("Stripe refund requires the verified case owner.");
+        throw new Error('Stripe refund requires the verified case owner.');
       request =
         attempt.stripeRequest ??
-        (attempt.status === "prepared"
-          ? await this.client.prepareRefundRequest(
-              command,
-              supportCase.customer.email,
-            )
+        (attempt.status === 'prepared'
+          ? await this.client.prepareRefundRequest(command, supportCase.customer.email)
           : undefined);
-      if (!request)
-        throw new Error(
-          "Stripe unknown attempt is missing its persisted request target.",
-        );
-      if (!attempt.stripeRequest)
-        await caseStore.persistStripeRefundRequest(
-          command.idempotencyKey,
-          request,
-        );
+      if (!request) throw new Error('Stripe unknown attempt is missing its persisted request target.');
+      if (!attempt.stripeRequest) await caseStore.persistStripeRefundRequest(command.idempotencyKey, request);
     } catch (error) {
       await caseStore.finalizeStripeRefundNoEffectFailure({
         idempotencyKey: command.idempotencyKey,
         fingerprint: command.fingerprint,
-        diagnostic: safeRefundFailureDiagnostic(error, "preflight"),
+        diagnostic: safeRefundFailureDiagnostic(error, 'preflight'),
       });
       throw error;
     }
     try {
-      const effect = await this.client.createRefundForRequest(
-        command,
-        request,
-        async () => {
-          let authorized = false;
-          try {
-            authorized = await caseStore.authorizeStripeRefundFirstEffect({
-              command,
-              request,
-              ownerId: durableOwner,
-              dispatch: {
-                caseId: command.approvalCaseId,
-                turnId: authorization.turnId,
-                dispatchId: authorization.dispatchId,
-                leaseToken: authorization.leaseToken,
-              },
-              validatePolicy: (tx) =>
-                assertRefundPolicyEvidenceAtFirstEffect(
-                  tx,
-                  command,
-                  authorization.turnId,
-                ),
-            });
-          } catch {
-            // Policy or durable-read rejection occurs before the provider
-            // boundary too. Treat it like a lost fence: this worker cannot
-            // close an attempt a later worker may now own.
-            authorized = false;
-          }
-          if (!authorized) throw new StripeFirstEffectAuthorizationError();
-        },
-      );
+      const effect = await this.client.createRefundForRequest(command, request, async () => {
+        let authorized = false;
+        try {
+          authorized = await caseStore.authorizeStripeRefundFirstEffect({
+            command,
+            request,
+            ownerId: durableOwner,
+            dispatch: {
+              caseId: command.approvalCaseId,
+              turnId: authorization.turnId,
+              dispatchId: authorization.dispatchId,
+              leaseToken: authorization.leaseToken,
+            },
+            validatePolicy: tx => assertRefundPolicyEvidenceAtFirstEffect(tx, command, authorization.turnId),
+          });
+        } catch {
+          // Policy or durable-read rejection occurs before the provider
+          // boundary too. Treat it like a lost fence: this worker cannot
+          // close an attempt a later worker may now own.
+          authorized = false;
+        }
+        if (!authorized) throw new StripeFirstEffectAuthorizationError();
+      });
       await caseStore.updateStripeRefundAttempt(command.idempotencyKey, {
-        status:
-          effect.status === "failed"
-            ? "failed"
-            : effect.status === "succeeded"
-              ? "succeeded"
-              : "pending",
+        status: effect.status === 'failed' ? 'failed' : effect.status === 'succeeded' ? 'succeeded' : 'pending',
         refundId: effect.refundId,
         providerStatus: effect.providerStatus ?? effect.status,
       });
@@ -839,12 +651,12 @@ export class StripeProviderRegistry
         await caseStore.finalizeStripeRefundNoEffectFailure({
           idempotencyKey: command.idempotencyKey,
           fingerprint: command.fingerprint,
-          diagnostic: safeRefundFailureDiagnostic(error, "post"),
+          diagnostic: safeRefundFailureDiagnostic(error, 'post'),
         });
       else
         await caseStore.updateStripeRefundAttempt(command.idempotencyKey, {
-          status: "unknown",
-          providerStatus: "unknown",
+          status: 'unknown',
+          providerStatus: 'unknown',
         });
       throw error;
     }
@@ -853,19 +665,13 @@ export class StripeProviderRegistry
    * the native tool's projection. The row is authoritative in that race. */
   private async authoritativeEffect(
     idempotencyKey: string,
-    effect: Awaited<ReturnType<StripeClient["createRefundForRequest"]>>,
+    effect: Awaited<ReturnType<StripeClient['createRefundForRequest']>>,
   ) {
     const attempt = await caseStore.stripeRefundAttempt(idempotencyKey);
-    if (
-      attempt?.refundId === effect.refundId &&
-      ["succeeded", "failed", "quarantined"].includes(attempt.status)
-    )
+    if (attempt?.refundId === effect.refundId && ['succeeded', 'failed', 'quarantined'].includes(attempt.status))
       return {
         ...effect,
-        status:
-          attempt.status === "succeeded"
-            ? ("succeeded" as const)
-            : ("failed" as const),
+        status: attempt.status === 'succeeded' ? ('succeeded' as const) : ('failed' as const),
         providerStatus: attempt.providerStatus ?? effect.providerStatus,
       };
     return effect;
@@ -876,9 +682,7 @@ export class StripeProviderRegistry
   ) {
     this.assert(binding);
     const attempt = await caseStore.stripeRefundAttempt(input.idempotencyKey);
-    const supportCase = attempt
-      ? await caseStore.get(attempt.caseId)
-      : undefined;
+    const supportCase = attempt ? await caseStore.get(attempt.caseId) : undefined;
     const command = attempt?.command as
       | {
           fingerprint?: unknown;
@@ -890,139 +694,87 @@ export class StripeProviderRegistry
       | undefined;
     const immutable =
       attempt && supportCase
-        ? await caseStore.getAction(
-            attempt.caseId,
-            "refund-command",
-            attempt.fingerprint,
-          )
+        ? await caseStore.getAction(attempt.caseId, 'refund-command', attempt.fingerprint)
         : undefined;
     if (
       !attempt ||
       !supportCase ||
-      typeof command?.fingerprint !== "string" ||
-      typeof command.amount?.minor !== "number" ||
-      typeof command.amount.currency !== "string" ||
+      typeof command?.fingerprint !== 'string' ||
+      typeof command.amount?.minor !== 'number' ||
+      typeof command.amount.currency !== 'string' ||
       command.approvalCaseId !== attempt.caseId ||
       command.idempotencyKey !== input.idempotencyKey ||
       command.orderId !== input.orderId ||
       attempt.fingerprint !== command.fingerprint ||
       !structurallyEqual(immutable, command)
     )
-      throw new Error(
-        "Stripe reconciliation has no matching immutable attempt.",
-      );
-    const effect = await this.client.retrieveRefund(
-      binding,
-      input.refundId,
-      input.orderId,
-      input.idempotencyKey,
-      {
-        caseId: attempt.caseId,
-        fingerprint: command.fingerprint,
-        amountMinor: command.amount.minor,
-        currency: command.amount.currency,
-      },
-    );
+      throw new Error('Stripe reconciliation has no matching immutable attempt.');
+    const effect = await this.client.retrieveRefund(binding, input.refundId, input.orderId, input.idempotencyKey, {
+      caseId: attempt.caseId,
+      fingerprint: command.fingerprint,
+      amountMinor: command.amount.minor,
+      currency: command.amount.currency,
+    });
     return effect;
   }
   /** Retry an uncertain POST solely with its persisted Stripe idempotency key.
    * It cannot mint a command, target a different order, or bypass current
    * owner and policy checks at the first possible provider effect. */
-  async recoverUnknownRefund(
-    binding: ProviderBinding,
-    idempotencyKey: string,
-    reconciliationLeaseToken: string,
-  ) {
+  async recoverUnknownRefund(binding: ProviderBinding, idempotencyKey: string, reconciliationLeaseToken: string) {
     this.assert(binding);
     const attempt = await caseStore.stripeRefundAttempt(idempotencyKey);
-    const supportCase = attempt
-      ? await caseStore.get(attempt.caseId)
-      : undefined;
+    const supportCase = attempt ? await caseStore.get(attempt.caseId) : undefined;
     const command = attempt?.command as RefundCommand | undefined;
     const immutable =
       attempt && supportCase
-        ? await caseStore.getAction(
-            attempt.caseId,
-            "refund-command",
-            attempt.fingerprint,
-          )
+        ? await caseStore.getAction(attempt.caseId, 'refund-command', attempt.fingerprint)
         : undefined;
     if (
       !attempt ||
       !supportCase ||
       !command ||
-      (attempt.status !== "prepared" && attempt.status !== "unknown") ||
+      (attempt.status !== 'prepared' && attempt.status !== 'unknown') ||
       command.approvalCaseId !== attempt.caseId ||
       command.idempotencyKey !== attempt.idempotencyKey ||
       command.binding.tenantId !== binding.tenantId ||
       command.binding.providerAccountId !== binding.providerAccountId ||
       !structurallyEqual(immutable, command)
     )
-      throw new Error(
-        "Stripe recovery has no matching immutable unknown attempt.",
-      );
-    if (
-      Date.now() - Date.parse(attempt.createdAt) >
-      PROVIDER_IDEMPOTENCY_WINDOW_MS
-    )
-      throw new Error(
-        "Stripe recovery is past the provider idempotency window.",
-      );
+      throw new Error('Stripe recovery has no matching immutable unknown attempt.');
+    if (Date.now() - Date.parse(attempt.createdAt) > PROVIDER_IDEMPOTENCY_WINDOW_MS)
+      throw new Error('Stripe recovery is past the provider idempotency window.');
     const durableOwner = await caseStore.canonicalConversationOwner({
       caseId: attempt.caseId,
       binding: bindingsForCase(supportCase).support,
     });
-    if (
-      !durableOwner ||
-      (supportCase.metadata as Record<string, unknown>).ownerId !== durableOwner
-    )
-      throw new Error(
-        "Stripe recovery requires the current verified case owner.",
-      );
+    if (!durableOwner || (supportCase.metadata as Record<string, unknown>).ownerId !== durableOwner)
+      throw new Error('Stripe recovery requires the current verified case owner.');
     if (
       supportCase.draft?.requiresEscalation ||
-      command.amount.minor >
-        legacyAmountToMoney(1000, command.amount.currency).minor
+      command.amount.minor > legacyAmountToMoney(1000, command.amount.currency).minor
     )
-      throw new Error(
-        "Stripe recovery is not permitted by the current deterministic policy.",
-      );
-    const request = attempt.stripeRequest as
-      { paymentIntentId?: unknown; providerRefs?: unknown } | undefined;
-    if (
-      !request ||
-      typeof request.paymentIntentId !== "string" ||
-      !Array.isArray(request.providerRefs)
-    )
-      throw new Error("Stripe recovery has no persisted request target.");
+      throw new Error('Stripe recovery is not permitted by the current deterministic policy.');
+    const request = attempt.stripeRequest as { paymentIntentId?: unknown; providerRefs?: unknown } | undefined;
+    if (!request || typeof request.paymentIntentId !== 'string' || !Array.isArray(request.providerRefs))
+      throw new Error('Stripe recovery has no persisted request target.');
     const exactRequest = {
       paymentIntentId: request.paymentIntentId,
-      providerRefs:
-        request.providerRefs as import("../contracts").ProviderRef[],
+      providerRefs: request.providerRefs as import('../contracts').ProviderRef[],
     };
-    return this.client.createRefundForRequest(
-      command,
-      exactRequest,
-      async () => {
-        let authorized = false;
-        try {
-          authorized = await caseStore.authorizeStripeRefundFirstEffect({
-            command,
-            request: exactRequest,
-            ownerId: durableOwner,
-            reconciliationLeaseToken,
-            validatePolicy: (tx) =>
-              assertRefundPolicyEvidenceAtFirstEffect(
-                tx,
-                command,
-                attempt.turnId ?? "",
-              ),
-          });
-        } catch {
-          authorized = false;
-        }
-        if (!authorized) throw new StripeFirstEffectAuthorizationError();
-      },
-    );
+    return this.client.createRefundForRequest(command, exactRequest, async () => {
+      let authorized = false;
+      try {
+        authorized = await caseStore.authorizeStripeRefundFirstEffect({
+          command,
+          request: exactRequest,
+          ownerId: durableOwner,
+          reconciliationLeaseToken,
+          validatePolicy: tx => assertRefundPolicyEvidenceAtFirstEffect(tx, command, attempt.turnId ?? ''),
+        });
+      } catch {
+        authorized = false;
+      }
+      if (!authorized) throw new StripeFirstEffectAuthorizationError();
+    });
   }
 }

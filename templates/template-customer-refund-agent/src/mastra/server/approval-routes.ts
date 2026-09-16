@@ -1,44 +1,32 @@
-import { registerApiRoute, type ContextWithMastra } from "@mastra/core/server";
-import { caseStore } from "../lib/case-store";
-import {
-  renewDispatchLeaseWhileRunning,
-  withDispatchLeaseScope,
-} from "../lib/dispatch-lease-scope";
-import { isRefundPolicyEvidenceError } from "../lib/refund-policy-evidence";
-import { resumeApprovedNativeTool } from "../providers/native-execution";
+import { registerApiRoute, type ContextWithMastra } from '@mastra/core/server';
+import { caseStore } from '../lib/case-store';
+import { renewDispatchLeaseWhileRunning, withDispatchLeaseScope } from '../lib/dispatch-lease-scope';
+import { isRefundPolicyEvidenceError } from '../lib/refund-policy-evidence';
+import { resumeApprovedNativeTool } from '../providers/native-execution';
 import {
   reconcileApprovedRefundEffect,
   reconcileApprovedSubscriptionCreditEffect,
-} from "../runtime/native-approval-recovery";
-import { REQUEST_APPROVAL_STEP_ID } from "../workflows/resolve-support-case";
-import { canAccessCase } from "./auth";
-import { approvalRequestSchema, errorResponseSchema } from "./contracts";
-import { requireRole, scopedCaseDto } from "./route-context";
+} from '../runtime/native-approval-recovery';
+import { REQUEST_APPROVAL_STEP_ID } from '../workflows/resolve-support-case';
+import { canAccessCase } from './auth';
+import { approvalRequestSchema, errorResponseSchema } from './contracts';
+import { requireRole, scopedCaseDto } from './route-context';
 
 async function resumeApproval(c: ContextWithMastra, approved: boolean) {
-  const caseId = c.req.param("caseId");
+  const caseId = c.req.param('caseId');
   if (!caseId) {
-    return c.json(
-      errorResponseSchema.parse({ error: "Missing case id." }),
-      400,
-    );
+    return c.json(errorResponseSchema.parse({ error: 'Missing case id.' }), 400);
   }
   const supportCase = await caseStore.get(caseId);
-  if (!supportCase) return c.json({ error: "Case not found." }, 404);
-  const current = requireRole(c, "approver");
+  if (!supportCase) return c.json({ error: 'Case not found.' }, 404);
+  const current = requireRole(c, 'approver');
   if (current instanceof Response) return current;
   if (!canAccessCase(current, supportCase))
-    return c.json(
-      errorResponseSchema.parse({ error: "Case access denied." }),
-      403,
-    );
+    return c.json(errorResponseSchema.parse({ error: 'Case access denied.' }), 403);
   if (!supportCase.workflowRunId) {
-    return c.json(
-      { error: "This case has no in-flight resolution workflow run." },
-      409,
-    );
+    return c.json({ error: 'This case has no in-flight resolution workflow run.' }, 409);
   }
-  if (supportCase.status !== "waiting_approval") {
+  if (supportCase.status !== 'waiting_approval') {
     return c.json(
       {
         error: `Case is not waiting for approval (status: ${supportCase.status}).`,
@@ -54,62 +42,45 @@ async function resumeApproval(c: ContextWithMastra, approved: boolean) {
   } = {};
   try {
     const rawBody = await c.req.text();
-    const parsed = approvalRequestSchema.safeParse(
-      rawBody.trim() === "" ? {} : JSON.parse(rawBody),
-    );
-    if (!parsed.success)
-      return c.json(
-        errorResponseSchema.parse({ error: "Invalid approval payload." }),
-        400,
-      );
+    const parsed = approvalRequestSchema.safeParse(rawBody.trim() === '' ? {} : JSON.parse(rawBody));
+    if (!parsed.success) return c.json(errorResponseSchema.parse({ error: 'Invalid approval payload.' }), 400);
     body = parsed.data;
   } catch {
-    return c.json(
-      errorResponseSchema.parse({ error: "Invalid approval payload." }),
-      400,
-    );
+    return c.json(errorResponseSchema.parse({ error: 'Invalid approval payload.' }), 400);
   }
 
-  const mastra = c.get("mastra");
-  const resolveWorkflow = mastra.getWorkflow("resolveSupportCaseWorkflow");
-  const command =
-    supportCase.metadata.refundCommand ??
-    supportCase.metadata.subscriptionCreditCommand;
+  const mastra = c.get('mastra');
+  const resolveWorkflow = mastra.getWorkflow('resolveSupportCaseWorkflow');
+  const command = supportCase.metadata.refundCommand ?? supportCase.metadata.subscriptionCreditCommand;
   if (!command?.fingerprint)
     return c.json(
       errorResponseSchema.parse({
-        error: "Immutable refund command is missing.",
+        error: 'Immutable refund command is missing.',
       }),
       409,
     );
   const isSubscriptionCredit = Boolean(
-    supportCase.metadata.subscriptionCreditCommand &&
-    !supportCase.metadata.refundCommand,
+    supportCase.metadata.subscriptionCreditCommand && !supportCase.metadata.refundCommand,
   );
   if (approved && isSubscriptionCredit && !body.serviceProblemConfirmed)
     return c.json(
       errorResponseSchema.parse({
-        error:
-          "Approving a subscription credit requires confirmation of the reported service problem.",
+        error: 'Approving a subscription credit requires confirmation of the reported service problem.',
       }),
       409,
     );
   if (body.commandFingerprint !== command.fingerprint)
     return c.json(
       errorResponseSchema.parse({
-        error: "The displayed approval command is stale.",
+        error: 'The displayed approval command is stale.',
       }),
       409,
     );
   const native = supportCase.metadata.nativeApproval;
-  if (
-    !native?.runId ||
-    !native.toolCallId ||
-    native.fingerprint !== command.fingerprint
-  )
+  if (!native?.runId || !native.toolCallId || native.fingerprint !== command.fingerprint)
     return c.json(
       errorResponseSchema.parse({
-        error: "Native approval binding is missing or stale.",
+        error: 'Native approval binding is missing or stale.',
       }),
       409,
     );
@@ -137,23 +108,18 @@ async function resumeApproval(c: ContextWithMastra, approved: boolean) {
   if (!decision.won)
     return c.json(
       errorResponseSchema.parse({
-        error: "This approval was already submitted.",
+        error: 'This approval was already submitted.',
       }),
       409,
     );
   // Claim the durable workflow lease before changing the native Agent run.
   // A decision commit is recoverable; without this fence an HTTP request and
   // the recovery worker could both resume the same native snapshot.
-  const dispatch = await caseStore.claimDispatchForResume(
-    caseId,
-    supportCase.workflowRunId,
-    native.turnId,
-  );
+  const dispatch = await caseStore.claimDispatchForResume(caseId, supportCase.workflowRunId, native.turnId);
   if (!dispatch)
     return c.json(
       {
-        error:
-          "This approval is already being resumed or is no longer resumable.",
+        error: 'This approval is already being resumed or is no longer resumable.',
       },
       409,
     );
@@ -161,11 +127,7 @@ async function resumeApproval(c: ContextWithMastra, approved: boolean) {
   let nativeResumed = false;
   try {
     await lease.renew();
-    if (lease.lostOwnership)
-      return c.json(
-        { error: "Approval resume lost its dispatch lease; reload the case." },
-        409,
-      );
+    if (lease.lostOwnership) return c.json({ error: 'Approval resume lost its dispatch lease; reload the case.' }, 409);
     lease.start();
     await withDispatchLeaseScope(
       {
@@ -187,7 +149,7 @@ async function resumeApproval(c: ContextWithMastra, approved: boolean) {
             dispatchId: dispatch.id,
             leaseToken: dispatch.leaseToken!,
           },
-          requestContext: c.get("requestContext"),
+          requestContext: c.get('requestContext'),
         }),
     );
     nativeResumed = true;
@@ -198,18 +160,9 @@ async function resumeApproval(c: ContextWithMastra, approved: boolean) {
     // remain recoverable.
     if (isRefundPolicyEvidenceError(error))
       await caseStore
-        .failDispatchAndCase(
-          dispatch.id,
-          caseId,
-          error,
-          dispatch.leaseToken,
-          "escalated",
-        )
+        .failDispatchAndCase(dispatch.id, caseId, error, dispatch.leaseToken, 'escalated')
         .catch(() => undefined);
-    else
-      await caseStore
-        .completeDispatch(dispatch.id, "suspended", error, dispatch.leaseToken)
-        .catch(() => undefined);
+    else await caseStore.completeDispatch(dispatch.id, 'suspended', error, dispatch.leaseToken).catch(() => undefined);
     lease.stop();
     return c.json(
       errorResponseSchema.parse({
@@ -241,16 +194,11 @@ async function resumeApproval(c: ContextWithMastra, approved: boolean) {
           });
       const attempt = !reconciled
         ? isCredit
-          ? await caseStore.stripeSubscriptionCreditAttempt(
-              command.idempotencyKey,
-            )
+          ? await caseStore.stripeSubscriptionCreditAttempt(command.idempotencyKey)
           : await caseStore.stripeRefundAttempt(command.idempotencyKey)
         : undefined;
-      const exactAttempt =
-        attempt &&
-        attempt.caseId === caseId &&
-        attempt.fingerprint === command.fingerprint;
-      const failedStripeAttempt = exactAttempt && attempt.status === "failed";
+      const exactAttempt = attempt && attempt.caseId === caseId && attempt.fingerprint === command.fingerprint;
+      const failedStripeAttempt = exactAttempt && attempt.status === 'failed';
       // The authoritative failure finalizer has already closed the immutable
       // turn and queued its one staff-review reply. An HTTP approval must not
       // turn a superseded success effect into a second native continuation.
@@ -265,17 +213,11 @@ async function resumeApproval(c: ContextWithMastra, approved: boolean) {
           });
           await terminalRun.cancel();
         }
-        const completed = await caseStore.completeDispatch(
-          dispatch.id,
-          "completed",
-          undefined,
-          dispatch.leaseToken,
-        );
+        const completed = await caseStore.completeDispatch(dispatch.id, 'completed', undefined, dispatch.leaseToken);
         if (!completed)
           return c.json(
             {
-              error:
-                "Approval resume lost its dispatch lease; reload the case.",
+              error: 'Approval resume lost its dispatch lease; reload the case.',
             },
             409,
           );
@@ -283,11 +225,8 @@ async function resumeApproval(c: ContextWithMastra, approved: boolean) {
       }
       const awaitingStripeSettlement =
         exactAttempt &&
-        (attempt.status === "unknown" ||
-          (!isCredit &&
-            "refundId" in attempt &&
-            Boolean(attempt.refundId) &&
-            attempt.status === "pending"));
+        (attempt.status === 'unknown' ||
+          (!isCredit && 'refundId' in attempt && Boolean(attempt.refundId) && attempt.status === 'pending'));
       if (awaitingStripeSettlement) {
         // A tool can return normally after recording an unknown provider POST.
         // Do not resume the enclosing workflow into an escalation: retain its
@@ -295,17 +234,16 @@ async function resumeApproval(c: ContextWithMastra, approved: boolean) {
         // project the same immutable receipt without another approval or POST.
         const suspended = await caseStore.completeDispatch(
           dispatch.id,
-          "suspended",
+          'suspended',
           isCredit
-            ? "Subscription credit receipt is awaiting durable provider recovery."
-            : "Refund receipt is awaiting durable provider recovery.",
+            ? 'Subscription credit receipt is awaiting durable provider recovery.'
+            : 'Refund receipt is awaiting durable provider recovery.',
           dispatch.leaseToken,
         );
         if (!suspended)
           return c.json(
             {
-              error:
-                "Approval resume lost its dispatch lease; reload the case.",
+              error: 'Approval resume lost its dispatch lease; reload the case.',
             },
             409,
           );
@@ -320,34 +258,29 @@ async function resumeApproval(c: ContextWithMastra, approved: boolean) {
           dispatch.id,
           caseId,
           isCredit
-            ? "Native approval completed without a durable subscription credit receipt."
-            : "Native approval completed without a durable refund effect.",
+            ? 'Native approval completed without a durable subscription credit receipt.'
+            : 'Native approval completed without a durable refund effect.',
           dispatch.leaseToken,
-          "escalated",
+          'escalated',
         );
         if (!failed)
           return c.json(
             {
-              error:
-                "Approval resume lost its dispatch lease; reload the case.",
+              error: 'Approval resume lost its dispatch lease; reload the case.',
             },
             409,
           );
         return c.json(
           {
             error: isCredit
-              ? "Approval completed without a durable subscription credit receipt."
-              : "Approval completed without a durable refund effect.",
+              ? 'Approval completed without a durable subscription credit receipt.'
+              : 'Approval completed without a durable refund effect.',
           },
           500,
         );
       }
     }
-    if (lease.lostOwnership)
-      return c.json(
-        { error: "Approval resume lost its dispatch lease; reload the case." },
-        409,
-      );
+    if (lease.lostOwnership) return c.json({ error: 'Approval resume lost its dispatch lease; reload the case.' }, 409);
     const run = await resolveWorkflow.createRun({
       runId: supportCase.workflowRunId,
     });
@@ -359,7 +292,7 @@ async function resumeApproval(c: ContextWithMastra, approved: boolean) {
         leaseToken: dispatch.leaseToken!,
       },
       async () => {
-        await caseStore.update(caseId, { status: "processing" });
+        await caseStore.update(caseId, { status: 'processing' });
         return run.resume({
           step: REQUEST_APPROVAL_STEP_ID,
           resumeData: {
@@ -369,39 +302,35 @@ async function resumeApproval(c: ContextWithMastra, approved: boolean) {
             approverId: current.id,
             note: body.note,
           },
-          requestContext: c.get("requestContext"),
+          requestContext: c.get('requestContext'),
         });
       },
     );
-    if (lease.lostOwnership)
-      return c.json(
-        { error: "Approval resume lost its dispatch lease; reload the case." },
-        409,
-      );
+    if (lease.lostOwnership) return c.json({ error: 'Approval resume lost its dispatch lease; reload the case.' }, 409);
 
-    if (result.status === "failed") {
+    if (result.status === 'failed') {
       const failed = await caseStore.failDispatchAndCase(
         dispatch.id,
         caseId,
-        "Resolution failed after approval resume.",
+        'Resolution failed after approval resume.',
         dispatch.leaseToken,
-        "escalated",
+        'escalated',
       );
       if (!failed)
         return c.json(
           {
-            error: "Approval resume lost its dispatch lease; reload the case.",
+            error: 'Approval resume lost its dispatch lease; reload the case.',
           },
           409,
         );
-      return c.json({ error: "Resolution failed after resume.", result }, 500);
+      return c.json({ error: 'Resolution failed after resume.', result }, 500);
     }
 
     const finalState =
-      result.status === "success"
-        ? "completed"
-        : result.status === "suspended" || result.status === "paused"
-          ? "suspended"
+      result.status === 'success'
+        ? 'completed'
+        : result.status === 'suspended' || result.status === 'paused'
+          ? 'suspended'
           : undefined;
     if (!finalState) {
       const failed = await caseStore.failDispatchAndCase(
@@ -409,74 +338,49 @@ async function resumeApproval(c: ContextWithMastra, approved: boolean) {
         caseId,
         `Resolution returned ${result.status} after approval resume.`,
         dispatch.leaseToken,
-        "escalated",
+        'escalated',
       );
       if (!failed)
         return c.json(
           {
-            error: "Approval resume lost its dispatch lease; reload the case.",
+            error: 'Approval resume lost its dispatch lease; reload the case.',
           },
           409,
         );
-      return c.json({ error: "Resolution failed after resume." }, 500);
+      return c.json({ error: 'Resolution failed after resume.' }, 500);
     }
-    if (
-      !(await caseStore.completeDispatch(
-        dispatch.id,
-        finalState,
-        undefined,
-        dispatch.leaseToken,
-      ))
-    )
-      return c.json(
-        { error: "Approval resume lost its dispatch lease; reload the case." },
-        409,
-      );
+    if (!(await caseStore.completeDispatch(dispatch.id, finalState, undefined, dispatch.leaseToken)))
+      return c.json({ error: 'Approval resume lost its dispatch lease; reload the case.' }, 409);
 
     return c.json(scopedCaseDto((await caseStore.get(caseId))!, current));
   } catch (error: any) {
-    if (error?.id === "WORKFLOW_RESUME_ALREADY_CLAIMED") {
-      return c.json({ error: "This approval was already submitted." }, 409);
+    if (error?.id === 'WORKFLOW_RESUME_ALREADY_CLAIMED') {
+      return c.json({ error: 'This approval was already submitted.' }, 409);
     }
     if (!lease.lostOwnership && nativeResumed) {
       const failed = await caseStore
-        .failDispatchAndCase(
-          dispatch.id,
-          caseId,
-          error,
-          dispatch.leaseToken,
-          "escalated",
-        )
+        .failDispatchAndCase(dispatch.id, caseId, error, dispatch.leaseToken, 'escalated')
         .catch(() => false);
       if (!failed)
         return c.json(
           {
-            error: "Approval resume lost its dispatch lease; reload the case.",
+            error: 'Approval resume lost its dispatch lease; reload the case.',
           },
           409,
         );
     }
-    return c.json(
-      { error: error instanceof Error ? error.message : String(error) },
-      500,
-    );
+    return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
   } finally {
     lease.stop();
   }
 }
 
-export const supportCaseApproveRoute = registerApiRoute(
-  "/support/cases/:caseId/approve",
-  {
-    method: "POST",
-    handler: async (c) => resumeApproval(c, true),
-  },
-);
+export const supportCaseApproveRoute = registerApiRoute('/support/cases/:caseId/approve', {
+  method: 'POST',
+  handler: async c => resumeApproval(c, true),
+});
 
-export const supportCaseRejectRoute = registerApiRoute(
-  "/support/cases/:caseId/reject",
-  {
-    method: "POST",
-    handler: async (c) => resumeApproval(c, false),
-  },
-);
+export const supportCaseRejectRoute = registerApiRoute('/support/cases/:caseId/reject', {
+  method: 'POST',
+  handler: async c => resumeApproval(c, false),
+});

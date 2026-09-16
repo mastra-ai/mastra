@@ -1,5 +1,5 @@
-import type { MastraUnion } from "@mastra/core/tools";
-import { SpanType, type TracingContext } from "@mastra/core/observability";
+import type { MastraUnion } from '@mastra/core/tools';
+import { SpanType, type TracingContext } from '@mastra/core/observability';
 
 /**
  * Mastra deliberately does not create a span when application code invokes a
@@ -12,7 +12,7 @@ export async function traceOperationalPort<T>(input: {
   tracingContext?: TracingContext;
   /** Durable owner trace for work performed by a background worker. */
   traceId?: string;
-  kind: "provider" | "tool";
+  kind: 'provider' | 'tool';
   operation: string;
   run: () => Promise<T>;
 }): Promise<T> {

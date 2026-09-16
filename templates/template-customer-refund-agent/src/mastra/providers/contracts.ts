@@ -3,7 +3,7 @@ import {
   providerBindingSchema,
   type PersistedCaseProviderBindings,
   type PersistedProviderBinding,
-} from "../domain/support-case.ts";
+} from '../domain/support-case.ts';
 
 /**
  * Provider-neutral boundaries used by workflows and tools.  A case stores the
@@ -20,8 +20,8 @@ export type ProviderMutationFence = () => Promise<boolean>;
 /** The adapter checked its mutation fence before sending a provider POST. */
 export class ProviderEffectFenceRejectedError extends Error {
   constructor() {
-    super("Provider mutation was superseded before the POST boundary.");
-    this.name = "ProviderEffectFenceRejectedError";
+    super('Provider mutation was superseded before the POST boundary.');
+    this.name = 'ProviderEffectFenceRejectedError';
   }
 }
 
@@ -30,7 +30,7 @@ export class ProviderEffectFenceRejectedError extends Error {
  * confirmed no-effect only when no earlier attempt exists. */
 export class VerifiedRefundOwnerRejectedError extends Error {
   constructor() {
-    super("Refund execution requires the current verified case owner.");
+    super('Refund execution requires the current verified case owner.');
   }
 }
 
@@ -45,28 +45,23 @@ export interface Money {
 }
 
 export interface SupportChannelProvider {
-  readonly kind: ProviderBinding["providerKind"];
+  readonly kind: ProviderBinding['providerKind'];
   normalizeInbound(payload: unknown): Promise<{
     binding: ProviderBinding;
     externalId: string;
-    source: "mock-email" | "chat" | "intercom-conversation";
+    source: 'mock-email' | 'chat' | 'intercom-conversation';
     customer: { email: string; name?: string };
     subject: string;
     message: {
       id: string;
-      author: "customer";
+      author: 'customer';
       authorName?: string;
       body: string;
       createdAt: string;
     };
     rawPayload: Record<string, unknown>;
   }>;
-  deliver(
-    binding: ProviderBinding,
-    body: string,
-    status: string,
-    idempotencyKey?: string,
-  ): Promise<DeliveryReceipt>;
+  deliver(binding: ProviderBinding, body: string, status: string, idempotencyKey?: string): Promise<DeliveryReceipt>;
   addInternalNote(
     binding: ProviderBinding,
     body: string,
@@ -80,17 +75,15 @@ export interface SupportChannelProvider {
     beforeMutation?: ProviderMutationFence,
   ): Promise<DeliveryReceipt>;
   /** Read-only provider state used to fence signed provider close events. */
-  currentConversationState?(
-    binding: ProviderBinding,
-  ): Promise<{ id: string; state: "open" | "closed" }>;
+  currentConversationState?(binding: ProviderBinding): Promise<{ id: string; state: 'open' | 'closed' }>;
   /** Provider-owned follow-up operations for a terminal case. The workflow
    * persists this normalized plan atomically with its canonical reply. */
   planFinalizationOutbox?(input: {
-    status: "resolved" | "escalated";
+    status: 'resolved' | 'escalated';
     subject: string;
     escalationReason?: string;
   }): Array<{
-    operation: "note" | "status" | "ticket";
+    operation: 'note' | 'status' | 'ticket';
     body: string;
     status: string;
   }>;
@@ -104,59 +97,36 @@ export interface SupportChannelProvider {
 }
 
 export interface CommerceProvider {
-  readonly kind: ProviderBinding["providerKind"];
-  findOrder(
-    binding: ProviderBinding,
-    email: string,
-    orderId?: string,
-  ): Promise<CommerceOrder | undefined>;
-  findSubscription(
-    binding: ProviderBinding,
-    email: string,
-  ): Promise<CommerceSubscription | undefined>;
+  readonly kind: ProviderBinding['providerKind'];
+  findOrder(binding: ProviderBinding, email: string, orderId?: string): Promise<CommerceOrder | undefined>;
+  findSubscription(binding: ProviderBinding, email: string): Promise<CommerceSubscription | undefined>;
   refunds(binding: ProviderBinding, orderId: string): Promise<CommerceRefund[]>;
 }
 
 export interface TransactionalActionProvider {
-  readonly kind: ProviderBinding["providerKind"];
+  readonly kind: ProviderBinding['providerKind'];
   quoteRefund(command: RefundCommand): Promise<RefundQuote>;
   issueRefund(
     command: RefundCommand,
-    authorization?: import("./native-execution").NativeRefundExecutionAuthorization,
+    authorization?: import('./native-execution').NativeRefundExecutionAuthorization,
   ): Promise<RefundEffect>;
-  quoteSubscriptionCredit(
-    command: SubscriptionCreditCommand,
-  ): Promise<SubscriptionCreditQuote>;
+  quoteSubscriptionCredit(command: SubscriptionCreditCommand): Promise<SubscriptionCreditQuote>;
   issueSubscriptionCredit(
     command: SubscriptionCreditCommand,
-    authorization?: import("./native-execution").NativeRefundExecutionAuthorization,
+    authorization?: import('./native-execution').NativeRefundExecutionAuthorization,
   ): Promise<SubscriptionCreditEffect>;
-  retrieveSubscriptionCredit(
-    command: SubscriptionCreditCommand,
-  ): Promise<SubscriptionCreditEffect | undefined>;
-  scheduleSubscriptionCancellation(
-    command: SubscriptionCancellationCommand,
-  ): Promise<SubscriptionCancellationEffect>;
+  retrieveSubscriptionCredit(command: SubscriptionCreditCommand): Promise<SubscriptionCreditEffect | undefined>;
+  scheduleSubscriptionCancellation(command: SubscriptionCancellationCommand): Promise<SubscriptionCancellationEffect>;
   retrieveSubscriptionCancellation(
     command: SubscriptionCancellationCommand,
   ): Promise<SubscriptionCancellationEffect | undefined>;
 }
 
 export interface KnowledgeProvider {
-  readonly kind: ProviderBinding["providerKind"];
-  search(
-    binding: ProviderBinding,
-    query: string,
-    topK: number,
-  ): Promise<KnowledgeEvidence[]>;
-  listChanged(
-    binding: ProviderBinding,
-    since?: string,
-  ): Promise<KnowledgeDocumentRef[]>;
-  fetchDocument(
-    binding: ProviderBinding,
-    source: string,
-  ): Promise<KnowledgeEvidence | undefined>;
+  readonly kind: ProviderBinding['providerKind'];
+  search(binding: ProviderBinding, query: string, topK: number): Promise<KnowledgeEvidence[]>;
+  listChanged(binding: ProviderBinding, since?: string): Promise<KnowledgeDocumentRef[]>;
+  fetchDocument(binding: ProviderBinding, source: string): Promise<KnowledgeEvidence | undefined>;
 }
 
 export interface CommerceOrder {
@@ -164,7 +134,7 @@ export interface CommerceOrder {
   customerEmail: string;
   product: string;
   amount: Money;
-  status: "fulfilled" | "shipped" | "processing" | "cancelled" | "refunded";
+  status: 'fulfilled' | 'shipped' | 'processing' | 'cancelled' | 'refunded';
   chargeCount: number;
   placedAt: string;
   /** Provider-owned references are retained for audit/reconciliation without
@@ -180,11 +150,11 @@ export interface CommerceSubscription {
   plan: string;
   /** Provider-normalized billing terms.  A plan nickname is presentation
    * data, never authority to issue a financial credit. */
-  recurringInterval: "month" | "year";
+  recurringInterval: 'month' | 'year';
   recurringIntervalCount: number;
   quantity: number;
   amount: Money;
-  status: "active" | "cancelled" | "past_due";
+  status: 'active' | 'cancelled' | 'past_due';
   renewsAt: string;
   /** A period-end cancellation is a schedule, not an immediate termination. */
   cancelAtPeriodEnd?: true;
@@ -201,7 +171,7 @@ export interface CommerceRefund {
   providerStatus?: string;
 }
 export interface ProviderRef {
-  provider: "stripe";
+  provider: 'stripe';
   type: string;
   id: string;
   apiVersion: string;
@@ -225,7 +195,7 @@ export interface RefundEffect {
   executedAt: string;
   replayed: boolean;
   /** A provider accepting a refund request is not proof of settlement. */
-  status?: "pending" | "succeeded" | "failed" | "unknown";
+  status?: 'pending' | 'succeeded' | 'failed' | 'unknown';
   /** Provider state is retained separately from the conservative local state. */
   providerStatus?: string;
   providerRefs?: ProviderRef[];
@@ -260,7 +230,7 @@ export interface SubscriptionCreditEffect {
   executedAt: string;
   replayed: boolean;
   /** Created means balance credit exists. It is not proof of invoice use. */
-  status?: "pending" | "succeeded" | "failed" | "unknown";
+  status?: 'pending' | 'succeeded' | 'failed' | 'unknown';
   providerStatus?: string;
   providerRefs?: ProviderRef[];
 }
@@ -272,7 +242,7 @@ export interface SubscriptionCancellationCommand {
   ownerId: string;
   binding: ProviderBinding;
   subscriptionId: string;
-  cancellationMode: "period_end";
+  cancellationMode: 'period_end';
   sourceMessageId: string;
   sourceMessageHash: string;
   idempotencyKey: string;
@@ -315,10 +285,7 @@ export interface ProviderRegistry {
   knowledge(binding: ProviderBinding): KnowledgeProvider;
 }
 
-export function sameBinding(
-  left: ProviderBinding,
-  right: ProviderBinding,
-): boolean {
+export function sameBinding(left: ProviderBinding, right: ProviderBinding): boolean {
   return (
     left.tenantId === right.tenantId &&
     left.providerKind === right.providerKind &&
@@ -345,9 +312,9 @@ export function bindingsForCase(case_: {
     case_.metadata.providerBinding !== undefined
       ? providerBindingSchema.parse(case_.metadata.providerBinding)
       : {
-          tenantId: "local-demo",
-          providerKind: "local" as const,
-          providerAccountId: "local-demo",
+          tenantId: 'local-demo',
+          providerKind: 'local' as const,
+          providerAccountId: 'local-demo',
           externalConversationId: case_.externalId,
         };
   return {

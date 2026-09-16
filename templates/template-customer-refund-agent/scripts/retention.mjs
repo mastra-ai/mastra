@@ -1,20 +1,17 @@
-import { createClient } from "@libsql/client";
-import { LibSQLStore } from "@mastra/libsql";
-import { requireLocalDatabaseUrl } from "../src/mastra/lib/database-url.ts";
-import { CaseStoreRetention } from "../src/mastra/lib/case-store-retention.ts";
-import { retentionPolicyFromEnvironment } from "../src/mastra/lib/case-store-shared.ts";
-import { purgeExpiredWorkflowSnapshots } from "../src/mastra/runtime/workflow-snapshot-retention.ts";
+import { createClient } from '@libsql/client';
+import { LibSQLStore } from '@mastra/libsql';
+import { requireLocalDatabaseUrl } from '../src/mastra/lib/database-url.ts';
+import { CaseStoreRetention } from '../src/mastra/lib/case-store-retention.ts';
+import { retentionPolicyFromEnvironment } from '../src/mastra/lib/case-store-shared.ts';
+import { purgeExpiredWorkflowSnapshots } from '../src/mastra/runtime/workflow-snapshot-retention.ts';
 
 function retentionClock() {
   const supplied = process.env.SUPPORT_TEST_RETENTION_NOW;
   if (supplied !== undefined) {
-    if (process.env.NODE_ENV !== "test")
-      throw new Error(
-        "SUPPORT_TEST_RETENTION_NOW is available only under NODE_ENV=test.",
-      );
+    if (process.env.NODE_ENV !== 'test')
+      throw new Error('SUPPORT_TEST_RETENTION_NOW is available only under NODE_ENV=test.');
     const parsed = new Date(supplied);
-    if (Number.isNaN(parsed.getTime()))
-      throw new Error("SUPPORT_TEST_RETENTION_NOW must be an ISO timestamp.");
+    if (Number.isNaN(parsed.getTime())) throw new Error('SUPPORT_TEST_RETENTION_NOW must be an ISO timestamp.');
     return parsed;
   }
   return new Date();
@@ -37,44 +34,41 @@ const client = createClient({ url, timeout: 0 });
 
 try {
   for (const table of [
-    "support_cases",
-    "support_messages",
-    "support_turns",
-    "support_dispatch",
-    "support_outbox",
-    "support_decisions",
-    "support_actions",
-    "support_feedback",
-    "support_audit",
-    "support_supervisor_executions",
-    "support_idempotency",
-    "support_stripe_refund_attempts",
-    "support_subscription_cancellation_attempts",
-    "support_stripe_webhook_receipts",
+    'support_cases',
+    'support_messages',
+    'support_turns',
+    'support_dispatch',
+    'support_outbox',
+    'support_decisions',
+    'support_actions',
+    'support_feedback',
+    'support_audit',
+    'support_supervisor_executions',
+    'support_idempotency',
+    'support_stripe_refund_attempts',
+    'support_subscription_cancellation_attempts',
+    'support_stripe_webhook_receipts',
   ])
     if (!(await tableExists(client, table)))
       throw new Error(
         `Refusing retention cleanup: ${table} is missing. Start the local app once so its supported migrations finish first.`,
       );
-  const caseColumns = await client.execute("PRAGMA table_info(support_cases)");
-  if (!caseColumns.rows.some((column) => column.name === "accepted_at"))
+  const caseColumns = await client.execute('PRAGMA table_info(support_cases)');
+  if (!caseColumns.rows.some(column => column.name === 'accepted_at'))
     throw new Error(
-      "Refusing retention cleanup: support schema v9 acceptance-time migration is missing. Start the local app once so its supported migrations finish first.",
+      'Refusing retention cleanup: support schema v9 acceptance-time migration is missing. Start the local app once so its supported migrations finish first.',
     );
   const feedbackMigration = await client.execute({
-    sql: "SELECT 1 FROM support_schema_migrations WHERE version = 10",
+    sql: 'SELECT 1 FROM support_schema_migrations WHERE version = 10',
   });
   if (!feedbackMigration.rows[0])
     throw new Error(
-      "Refusing retention cleanup: support schema v10 feedback migration is missing. Start the local app once so its supported migrations finish first.",
+      'Refusing retention cleanup: support schema v10 feedback migration is missing. Start the local app once so its supported migrations finish first.',
     );
 
-  const cases = await new CaseStoreRetention(client).enforceRetention(
-    retentionClock,
-    policy,
-  );
+  const cases = await new CaseStoreRetention(client).enforceRetention(retentionClock, policy);
   const storage = new LibSQLStore({
-    id: "support-retention-cli",
+    id: 'support-retention-cli',
     client,
     maxRetries: 5,
     initialBackoffMs: 5,

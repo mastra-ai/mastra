@@ -1,8 +1,8 @@
-import type { PolicyDocument } from "../types.ts";
+import type { PolicyDocument } from '../types.ts';
 
 export const subscriptionCancellationPolicy: PolicyDocument = {
-  title: "Subscription Cancellation Policy",
-  source: "subscription-cancellation-policy",
+  title: 'Subscription Cancellation Policy',
+  source: 'subscription-cancellation-policy',
   text: `# Subscription Cancellation Policy
 
 - Customers can cancel a subscription at any time. Cancellation takes effect at the end of the current billing period unless the customer explicitly asks for an immediate cancellation with a prorated refund.

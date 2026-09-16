@@ -9,8 +9,5 @@ export function isCurrentManualContextSelection(
   current: ManualContextSelection,
   submitted: Required<ManualContextSelection>,
 ) {
-  return (
-    current.generation === submitted.generation &&
-    current.caseId === submitted.caseId
-  );
+  return current.generation === submitted.generation && current.caseId === submitted.caseId;
 }

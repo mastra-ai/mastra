@@ -1,5 +1,5 @@
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 /** A portable per-test SQLite path. */
 export function temporaryDatabasePath(prefix: string) {

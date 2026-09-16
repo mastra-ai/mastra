@@ -1,11 +1,9 @@
-import { AsyncLocalStorage } from "node:async_hooks";
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import type { Mastra } from "@mastra/core/mastra";
-import type { LanguageModelV2 } from "@ai-sdk/provider";
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import type { Mastra } from '@mastra/core/mastra';
+import type { LanguageModelV2 } from '@ai-sdk/provider';
 
-type NativeApprovalOptions = Parameters<
-  Awaited<ReturnType<Mastra["getAgent"]>>["approveToolCallGenerate"]
->[0];
+type NativeApprovalOptions = Parameters<Awaited<ReturnType<Mastra['getAgent']>>['approveToolCallGenerate']>[0];
 
 /**
  * This is intentionally an application-process secret, rather than case
@@ -57,10 +55,10 @@ export function resumeApprovedNativeTool<T>(input: {
   approved: boolean;
   scope: NativeResumeScope;
   model?: LanguageModelV2;
-  requestContext?: NativeApprovalOptions["requestContext"];
+  requestContext?: NativeApprovalOptions['requestContext'];
 }): Promise<T> {
   const { approved, scope, model, requestContext } = input;
-  const agent = input.mastra.getAgent("refundExecutionAgent");
+  const agent = input.mastra.getAgent('refundExecutionAgent');
   return nativeResumeScope.run(
     Object.freeze({ ...scope }),
     () =>
@@ -80,16 +78,12 @@ export function resumeApprovedNativeTool<T>(input: {
   );
 }
 
-function payload(value: Omit<NativeRefundExecutionAuthorization, "signature">) {
+function payload(value: Omit<NativeRefundExecutionAuthorization, 'signature'>) {
   return `${value.issuedAt}:${value.nativeRunId}:${value.nativeToolCallId}:${value.commandFingerprint}:${value.caseId}:${value.turnId}:${value.dispatchId}:${value.leaseToken}`;
 }
 
-function signature(
-  value: Omit<NativeRefundExecutionAuthorization, "signature">,
-) {
-  return createHmac("sha256", signingKey)
-    .update(payload(value))
-    .digest("base64url");
+function signature(value: Omit<NativeRefundExecutionAuthorization, 'signature'>) {
+  return createHmac('sha256', signingKey).update(payload(value)).digest('base64url');
 }
 
 /**
@@ -107,15 +101,13 @@ export async function withNativeRefundExecutionAuthorization<T>(
     nativeResumeScope.getStore()?.nativeRunId !== native?.runId ||
     nativeResumeScope.getStore()?.nativeToolCallId !== native?.toolCallId ||
     nativeResumeScope.getStore()?.commandFingerprint !== commandFingerprint ||
-    context?.agent?.agentId !== "refund-execution-agent" ||
+    context?.agent?.agentId !== 'refund-execution-agent' ||
     !native?.runId ||
     !native.toolCallId ||
     context.agent.toolCallId !== native.toolCallId ||
     native.fingerprint !== commandFingerprint
   )
-    throw new Error(
-      "Refund execution requires the approved native refund agent tool context.",
-    );
+    throw new Error('Refund execution requires the approved native refund agent tool context.');
   const unsigned = {
     issuedAt: Date.now(),
     nativeRunId: native.runId,
@@ -138,19 +130,19 @@ export function hasNativeRefundExecutionAuthorization(
     caseId: string;
   },
 ): value is NativeRefundExecutionAuthorization {
-  if (!value || typeof value !== "object") return false;
+  if (!value || typeof value !== 'object') return false;
   const candidate = value as Partial<NativeRefundExecutionAuthorization>;
   if (
-    typeof candidate.issuedAt !== "number" ||
+    typeof candidate.issuedAt !== 'number' ||
     !Number.isSafeInteger(candidate.issuedAt) ||
-    typeof candidate.signature !== "string" ||
+    typeof candidate.signature !== 'string' ||
     candidate.nativeRunId !== expected.nativeRunId ||
     candidate.nativeToolCallId !== expected.nativeToolCallId ||
     candidate.commandFingerprint !== expected.commandFingerprint ||
     candidate.caseId !== expected.caseId ||
-    typeof candidate.turnId !== "string" ||
-    typeof candidate.dispatchId !== "string" ||
-    typeof candidate.leaseToken !== "string" ||
+    typeof candidate.turnId !== 'string' ||
+    typeof candidate.dispatchId !== 'string' ||
+    typeof candidate.leaseToken !== 'string' ||
     Math.abs(Date.now() - candidate.issuedAt) > MAX_AGE_MS
   )
     return false;
@@ -166,8 +158,5 @@ export function hasNativeRefundExecutionAuthorization(
   };
   const supplied = Buffer.from(candidate.signature);
   const expectedSignature = Buffer.from(signature(unsigned));
-  return (
-    supplied.length === expectedSignature.length &&
-    timingSafeEqual(supplied, expectedSignature)
-  );
+  return supplied.length === expectedSignature.length && timingSafeEqual(supplied, expectedSignature);
 }

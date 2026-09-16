@@ -5,11 +5,11 @@ import type {
   ProviderRegistry,
   SupportChannelProvider,
   TransactionalActionProvider,
-} from "../contracts";
-import { localRuntime } from "../../runtime/local-provider";
-import type { IntercomDevelopmentConfig } from "./config";
-import { IntercomSupportProvider } from "./support";
-import { IntercomKnowledgeProvider } from "./knowledge";
+} from '../contracts';
+import { localRuntime } from '../../runtime/local-provider';
+import type { IntercomDevelopmentConfig } from './config';
+import { IntercomSupportProvider } from './support';
+import { IntercomKnowledgeProvider } from './knowledge';
 
 /** Intercom owns only its support/knowledge ports.  The other ports are not
  * inferred from the active support provider and stay independently selected. */
@@ -22,13 +22,11 @@ export class IntercomProviderRegistry implements ProviderRegistry {
   }
   private assert(binding: ProviderBinding) {
     if (
-      binding.providerKind !== "intercom" ||
+      binding.providerKind !== 'intercom' ||
       binding.tenantId !== this.config.tenantId ||
       binding.providerAccountId !== this.config.accountId
     )
-      throw new Error(
-        "Intercom binding is not registered for this tenant/account.",
-      );
+      throw new Error('Intercom binding is not registered for this tenant/account.');
   }
   support(binding: ProviderBinding): SupportChannelProvider {
     this.assert(binding);

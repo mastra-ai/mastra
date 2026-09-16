@@ -1,49 +1,26 @@
-import { createStep } from "@mastra/core/workflows";
-import {
-  orderLookupSchema,
-  refundHistorySchema,
-  subscriptionLookupSchema,
-} from "../domain/support-case";
-import { caseStore } from "../lib/case-store";
-import { traceOperationalPort } from "../lib/operational-spans";
-import { withTrustedCommerceScope } from "../lib/trusted-run-scope";
-import {
-  ensureProviderFixtures,
-  resolveConfiguredBinding,
-} from "../providers/registry";
-import { bindingsForPersistedCase } from "../runtime/provider-bindings";
-import {
-  getActiveCaseOrThrow,
-  resolveSupportCaseInputSchema,
-} from "./resolve-support-case-context";
+import { createStep } from '@mastra/core/workflows';
+import { orderLookupSchema, refundHistorySchema, subscriptionLookupSchema } from '../domain/support-case';
+import { caseStore } from '../lib/case-store';
+import { traceOperationalPort } from '../lib/operational-spans';
+import { withTrustedCommerceScope } from '../lib/trusted-run-scope';
+import { ensureProviderFixtures, resolveConfiguredBinding } from '../providers/registry';
+import { bindingsForPersistedCase } from '../runtime/provider-bindings';
+import { getActiveCaseOrThrow, resolveSupportCaseInputSchema } from './resolve-support-case-context';
 
 export const inspectOrderStep = createStep({
-  id: "inspect-order",
-  description:
-    "Looks up the customer's order, subscription, and prior refunds.",
+  id: 'inspect-order',
+  description: "Looks up the customer's order, subscription, and prior refunds.",
   inputSchema: resolveSupportCaseInputSchema,
   outputSchema: resolveSupportCaseInputSchema,
   execute: async ({ inputData, mastra, requestContext, tracingContext }) => {
-    const { supportCase, ownerId } = await getActiveCaseOrThrow(
-      inputData.caseId,
-      inputData.turnId,
-    );
+    const { supportCase, ownerId } = await getActiveCaseOrThrow(inputData.caseId, inputData.turnId);
     const bindings = bindingsForPersistedCase(supportCase);
-    if (!mastra)
-      throw new Error(
-        "The resolve workflow must run through a registered Mastra instance.",
-      );
-    const orderTool = mastra.getTool("lookupOrderTool");
-    const subscriptionTool = mastra.getTool("lookupSubscriptionTool");
-    const refundHistoryTool = mastra.getTool("lookupCustomerRefundHistoryTool");
-    if (
-      !orderTool.execute ||
-      !subscriptionTool.execute ||
-      !refundHistoryTool.execute
-    ) {
-      throw new Error(
-        "A registered commerce lookup tool has no execute function.",
-      );
+    if (!mastra) throw new Error('The resolve workflow must run through a registered Mastra instance.');
+    const orderTool = mastra.getTool('lookupOrderTool');
+    const subscriptionTool = mastra.getTool('lookupSubscriptionTool');
+    const refundHistoryTool = mastra.getTool('lookupCustomerRefundHistoryTool');
+    if (!orderTool.execute || !subscriptionTool.execute || !refundHistoryTool.execute) {
+      throw new Error('A registered commerce lookup tool has no execute function.');
     }
     // Fixture setup is an operational workflow concern. Read tools stay pure
     // so a supervisor investigation cannot seed commerce state.
@@ -63,8 +40,8 @@ export const inspectOrderStep = createStep({
           await traceOperationalPort({
             mastra,
             tracingContext,
-            kind: "tool",
-            operation: "tool.lookup_order",
+            kind: 'tool',
+            operation: 'tool.lookup_order',
             run: () =>
               executeOrder(
                 {
@@ -80,8 +57,8 @@ export const inspectOrderStep = createStep({
           await traceOperationalPort({
             mastra,
             tracingContext,
-            kind: "tool",
-            operation: "tool.lookup_subscription",
+            kind: 'tool',
+            operation: 'tool.lookup_subscription',
             run: () =>
               executeSubscription(
                 {
@@ -94,27 +71,23 @@ export const inspectOrderStep = createStep({
         );
 
         if (
-          bindings.commerce.providerKind === "stripe" &&
+          bindings.commerce.providerKind === 'stripe' &&
           orderLookup.found &&
           subscriptionLookup.found &&
-          supportCase.triage?.intent !== "cancellation"
+          supportCase.triage?.intent !== 'cancellation'
         )
-          throw new Error(
-            "Stripe refund target is ambiguous between Checkout and a subscription invoice.",
-          );
+          throw new Error('Stripe refund target is ambiguous between Checkout and a subscription invoice.');
 
         // A renewal's paid Invoice/InvoicePayment is a distinct immutable
         // refund target. Never silently fall back to an initial Checkout.
-        const refundTargetId =
-          orderLookup.order?.orderId ??
-          subscriptionLookup.subscription?.refundOrderId;
+        const refundTargetId = orderLookup.order?.orderId ?? subscriptionLookup.subscription?.refundOrderId;
         const refundHistory = refundTargetId
           ? refundHistorySchema.parse(
               await traceOperationalPort({
                 mastra,
                 tracingContext,
-                kind: "tool",
-                operation: "tool.lookup_customer_refund_history",
+                kind: 'tool',
+                operation: 'tool.lookup_customer_refund_history',
                 run: () =>
                   executeRefundHistory(
                     {

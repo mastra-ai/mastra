@@ -1,18 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
-import { clearSession, currentSession, type SupportSession } from "./api";
+import { useCallback, useEffect, useState } from 'react';
+import { clearSession, currentSession, type SupportSession } from './api';
 
 /** Keeps a route bound to the token it mounted with until that token expires. */
 export function useMountedSession() {
-  const [session, setSession] = useState<SupportSession | undefined>(() =>
-    currentSession(),
-  );
+  const [session, setSession] = useState<SupportSession | undefined>(() => currentSession());
   const invalidateSession = useCallback((expiredSession: SupportSession) => {
     clearSession(expiredSession);
-    setSession((mountedSession) =>
-      mountedSession?.token === expiredSession.token
-        ? undefined
-        : mountedSession,
-    );
+    setSession(mountedSession => (mountedSession?.token === expiredSession.token ? undefined : mountedSession));
   }, []);
 
   useEffect(() => {

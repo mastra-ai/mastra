@@ -1,13 +1,13 @@
-import type { Client } from "@libsql/client";
-import type { SupportCase } from "../domain/support-case.ts";
+import type { Client } from '@libsql/client';
+import type { SupportCase } from '../domain/support-case.ts';
 import {
   parseLegacyCase,
   financialRetentionTombstone,
   caseBinding,
   retentionPolicyFromEnvironment,
   StaleCaseWriteError,
-} from "./case-store-shared.ts";
-import type { RetentionPolicy, RetentionResult } from "./case-store-shared.ts";
+} from './case-store-shared.ts';
+import type { RetentionPolicy, RetentionResult } from './case-store-shared.ts';
 
 export class CaseStoreRetention {
   private readonly client: Client;
@@ -20,8 +20,7 @@ export class CaseStoreRetention {
     policy: RetentionPolicy = retentionPolicyFromEnvironment(),
   ): Promise<RetentionResult> {
     const current = clock();
-    const cutoff = (days: number) =>
-      new Date(current.getTime() - days * 24 * 60 * 60 * 1_000).toISOString();
+    const cutoff = (days: number) => new Date(current.getTime() - days * 24 * 60 * 60 * 1_000).toISOString();
     const rawCutoff = cutoff(policy.rawPayloadDays);
     const traceCutoff = cutoff(policy.traceDays);
     const caseCutoff = cutoff(policy.caseDays);
@@ -32,15 +31,15 @@ export class CaseStoreRetention {
     let supervisorExecutionsDeleted = 0;
     try {
       const deleted = await this.client.execute({
-        sql: "DELETE FROM support_supervisor_executions WHERE created_at < ?",
+        sql: 'DELETE FROM support_supervisor_executions WHERE created_at < ?',
         args: [traceCutoff],
       });
       supervisorExecutionsDeleted = Number(deleted.rowsAffected ?? 0);
     } catch (error) {
-      if (!String(error).includes("no such table")) throw error;
+      if (!String(error).includes('no such table')) throw error;
     }
     const rows = await this.client.execute(
-      "SELECT id, data, version, created_at, accepted_at FROM support_cases WHERE COALESCE(accepted_at, created_at) < ? OR updated_at < ?",
+      'SELECT id, data, version, created_at, accepted_at FROM support_cases WHERE COALESCE(accepted_at, created_at) < ? OR updated_at < ?',
       [rawCutoff, traceCutoff],
     );
     let rawPayloadsRedacted = 0;
@@ -71,7 +70,7 @@ export class CaseStoreRetention {
       if (metadata.retentionRedactedAt !== undefined) expiredCaseIds.add(id);
       let changed = false;
       let deleteMessages = false;
-      if (acceptedAt < rawCutoff && "rawPayload" in metadata) {
+      if (acceptedAt < rawCutoff && 'rawPayload' in metadata) {
         delete metadata.rawPayload;
         rawPayloadsRedacted += 1;
         changed = true;
@@ -106,22 +105,20 @@ export class CaseStoreRetention {
           supportCase.messages.length > 0 ||
           supportCase.approval !== undefined ||
           supportCase.feedback !== undefined ||
-          supportCase.customer.email !== "redacted@invalid.local" ||
-          supportCase.subject !== "Redacted support case" ||
+          supportCase.customer.email !== 'redacted@invalid.local' ||
+          supportCase.subject !== 'Redacted support case' ||
           supportCase.finalResponse !== undefined ||
           supportCase.draft !== undefined ||
           Boolean(residualContent?.rows[0]))
       ) {
         const binding = caseBinding(supportCase);
-        const wasPending = ["new", "processing", "waiting_approval"].includes(
-          supportCase.status,
-        );
+        const wasPending = ['new', 'processing', 'waiting_approval'].includes(supportCase.status);
         const command = metadata.refundCommand;
         const subscriptionCreditCommand = metadata.subscriptionCreditCommand;
         updated = {
           ...updated,
-          customer: { email: "redacted@invalid.local" },
-          subject: "Redacted support case",
+          customer: { email: 'redacted@invalid.local' },
+          subject: 'Redacted support case',
           messages: [],
           approval: undefined,
           ...(wasPending
@@ -129,7 +126,7 @@ export class CaseStoreRetention {
                 // Closing a stale in-flight case fails closed. Keep only a
                 // non-executable fingerprint/replay reference for audit and
                 // reconciliation; the decision route rejects this status.
-                status: "failed" as const,
+                status: 'failed' as const,
               }
             : {}),
           triage: undefined,
@@ -139,9 +136,7 @@ export class CaseStoreRetention {
           refundHistory: undefined,
           draft: undefined,
           finalResponse: undefined,
-          escalationReason: wasPending
-            ? "Pending case expired under DEC-015 before a financial decision."
-            : undefined,
+          escalationReason: wasPending ? 'Pending case expired under DEC-015 before a financial decision.' : undefined,
           feedback: undefined,
           agentUsage: undefined,
           traceId: undefined,
@@ -155,9 +150,7 @@ export class CaseStoreRetention {
                     ? {
                         refundCommand: {
                           fingerprint: command.fingerprint,
-                          ...(command.idempotencyKey
-                            ? { idempotencyKey: command.idempotencyKey }
-                            : {}),
+                          ...(command.idempotencyKey ? { idempotencyKey: command.idempotencyKey } : {}),
                         },
                       }
                     : {}),
@@ -167,8 +160,7 @@ export class CaseStoreRetention {
                           fingerprint: subscriptionCreditCommand.fingerprint,
                           ...(subscriptionCreditCommand.idempotencyKey
                             ? {
-                                idempotencyKey:
-                                  subscriptionCreditCommand.idempotencyKey,
+                                idempotencyKey: subscriptionCreditCommand.idempotencyKey,
                               }
                             : {}),
                         },
@@ -181,54 +173,43 @@ export class CaseStoreRetention {
         if (wasPending) pendingCasesExpired += 1;
         casesRedacted += 1;
         expiredCaseIds.add(id);
-        if (supportCase.workflowRunId)
-          expiredWorkflowRunIds.add(supportCase.workflowRunId);
+        if (supportCase.workflowRunId) expiredWorkflowRunIds.add(supportCase.workflowRunId);
         const nativeApproval = metadata.nativeApproval;
-        if (typeof nativeApproval?.runId === "string")
-          expiredWorkflowRunIds.add(nativeApproval.runId);
+        if (typeof nativeApproval?.runId === 'string') expiredWorkflowRunIds.add(nativeApproval.runId);
         const dispatchedRuns = await this.client.execute({
-          sql: "SELECT run_id FROM support_dispatch WHERE case_id = ?",
+          sql: 'SELECT run_id FROM support_dispatch WHERE case_id = ?',
           args: [id],
         });
-        for (const run of dispatchedRuns.rows)
-          expiredWorkflowRunIds.add(String(run.run_id));
+        for (const run of dispatchedRuns.rows) expiredWorkflowRunIds.add(String(run.run_id));
         const nativeRuns = await this.client.execute({
-          sql: "SELECT native_run_id FROM support_decisions WHERE case_id = ? AND native_run_id IS NOT NULL",
+          sql: 'SELECT native_run_id FROM support_decisions WHERE case_id = ? AND native_run_id IS NOT NULL',
           args: [id],
         });
-        for (const run of nativeRuns.rows)
-          expiredWorkflowRunIds.add(String(run.native_run_id));
+        for (const run of nativeRuns.rows) expiredWorkflowRunIds.add(String(run.native_run_id));
         const turnRuns = await this.client.execute({
-          sql: "SELECT run_id FROM support_turns WHERE case_id = ? AND run_id IS NOT NULL",
+          sql: 'SELECT run_id FROM support_turns WHERE case_id = ? AND run_id IS NOT NULL',
           args: [id],
         });
-        for (const run of turnRuns.rows)
-          expiredWorkflowRunIds.add(String(run.run_id));
+        for (const run of turnRuns.rows) expiredWorkflowRunIds.add(String(run.run_id));
         deleteMessages = true;
         changed = true;
       }
       if (changed) {
-        const tx = await this.client.transaction("write");
+        const tx = await this.client.transaction('write');
         try {
           const write = await tx.execute({
-            sql: "UPDATE support_cases SET data = ?, updated_at = ?, version = version + 1 WHERE id = ? AND version = ?",
-            args: [
-              JSON.stringify(updated),
-              current.toISOString(),
-              id,
-              Number(row.version ?? 1),
-            ],
+            sql: 'UPDATE support_cases SET data = ?, updated_at = ?, version = version + 1 WHERE id = ? AND version = ?',
+            args: [JSON.stringify(updated), current.toISOString(), id, Number(row.version ?? 1)],
           });
-          if (Number(write.rowsAffected ?? 0) !== 1)
-            throw new StaleCaseWriteError(id);
+          if (Number(write.rowsAffected ?? 0) !== 1) throw new StaleCaseWriteError(id);
           if (deleteMessages) {
             const deleted = await tx.execute({
-              sql: "DELETE FROM support_messages WHERE case_id = ?",
+              sql: 'DELETE FROM support_messages WHERE case_id = ?',
               args: [id],
             });
             messagesDeleted += Number(deleted.rowsAffected ?? 0);
             const turns = await tx.execute({
-              sql: "UPDATE support_turns SET message_data = NULL, outcome_data = NULL, updated_at = ? WHERE case_id = ? AND (message_data IS NOT NULL OR outcome_data IS NOT NULL)",
+              sql: 'UPDATE support_turns SET message_data = NULL, outcome_data = NULL, updated_at = ? WHERE case_id = ? AND (message_data IS NOT NULL OR outcome_data IS NOT NULL)',
               args: [current.toISOString(), id],
             });
             turnsRedacted += Number(turns.rowsAffected ?? 0);
@@ -245,7 +226,7 @@ export class CaseStoreRetention {
             });
             outboxRecordsRedacted += Number(outbox.rowsAffected ?? 0);
             const decisions = await tx.execute({
-              sql: "UPDATE support_decisions SET note = NULL WHERE case_id = ? AND note IS NOT NULL",
+              sql: 'UPDATE support_decisions SET note = NULL WHERE case_id = ? AND note IS NOT NULL',
               args: [id],
             });
             decisionsRedacted += Number(decisions.rowsAffected ?? 0);
@@ -257,7 +238,7 @@ export class CaseStoreRetention {
             // Ratings/comments are customer content. Aggregates only include
             // retained feedback; a tombstoned case cannot retain its rating.
             const feedback = await tx.execute({
-              sql: "DELETE FROM support_feedback WHERE case_id = ?",
+              sql: 'DELETE FROM support_feedback WHERE case_id = ?',
               args: [id],
             });
             feedbackDeleted += Number(feedback.rowsAffected ?? 0);
@@ -272,7 +253,7 @@ export class CaseStoreRetention {
       }
     }
     const audits = await this.client.execute({
-      sql: "DELETE FROM support_audit WHERE created_at < ?",
+      sql: 'DELETE FROM support_audit WHERE created_at < ?',
       args: [auditCutoff],
     });
     // LocalRuntime owns the financial table and may not be initialized in a
@@ -285,7 +266,7 @@ export class CaseStoreRetention {
       });
       financialReasonsRedacted += Number(financialReasons.rowsAffected ?? 0);
     } catch (error) {
-      if (!String(error).includes("no such table")) throw error;
+      if (!String(error).includes('no such table')) throw error;
     }
     try {
       const creditReasons = await this.client.execute({
@@ -294,7 +275,7 @@ export class CaseStoreRetention {
       });
       financialReasonsRedacted += Number(creditReasons.rowsAffected ?? 0);
     } catch (error) {
-      if (!String(error).includes("no such table")) throw error;
+      if (!String(error).includes('no such table')) throw error;
     }
     // Stripe attempts retain an immutable command for reconciliation, but its
     // free-form reason is customer content and follows the normal case window.
@@ -339,11 +320,11 @@ export class CaseStoreRetention {
         args: [rawCutoff],
       });
       await this.client.execute({
-        sql: "DELETE FROM support_manual_resolutions WHERE created_at < ?",
+        sql: 'DELETE FROM support_manual_resolutions WHERE created_at < ?',
         args: [caseCutoff],
       });
     } catch (error) {
-      if (!String(error).includes("no such table")) throw error;
+      if (!String(error).includes('no such table')) throw error;
     }
     return {
       rawPayloadsRedacted,
@@ -374,7 +355,7 @@ export class CaseStoreRetention {
    * minimal idempotency tombstone. This covers failed/quarantined attempts
    * whose success effect was already removed by a late provider failure. */
   private async minimizeExpiredTerminalFinancialAttempts(auditCutoff: string) {
-    const tx = await this.client.transaction("write");
+    const tx = await this.client.transaction('write');
     try {
       const candidates = await Promise.all([
         tx.execute({
@@ -395,34 +376,20 @@ export class CaseStoreRetention {
           const key = String(row.idempotency_key);
           const fingerprint = String(row.fingerprint);
           const existing = await tx.execute({
-            sql: "SELECT fingerprint FROM support_idempotency WHERE idempotency_key = ?",
+            sql: 'SELECT fingerprint FROM support_idempotency WHERE idempotency_key = ?',
             args: [key],
           });
-          if (
-            existing.rows[0] &&
-            String(existing.rows[0].fingerprint) !== fingerprint
-          )
-            throw new Error(
-              "Terminal financial attempt conflicts with its idempotency fingerprint.",
-            );
+          if (existing.rows[0] && String(existing.rows[0].fingerprint) !== fingerprint)
+            throw new Error('Terminal financial attempt conflicts with its idempotency fingerprint.');
           if (existing.rows[0])
             await tx.execute({
-              sql: "UPDATE support_idempotency SET effect = ? WHERE idempotency_key = ? AND fingerprint = ?",
-              args: [
-                JSON.stringify(financialRetentionTombstone),
-                key,
-                fingerprint,
-              ],
+              sql: 'UPDATE support_idempotency SET effect = ? WHERE idempotency_key = ? AND fingerprint = ?',
+              args: [JSON.stringify(financialRetentionTombstone), key, fingerprint],
             });
           else
             await tx.execute({
-              sql: "INSERT INTO support_idempotency(idempotency_key, fingerprint, effect, created_at) VALUES (?, ?, ?, ?)",
-              args: [
-                key,
-                fingerprint,
-                JSON.stringify(financialRetentionTombstone),
-                String(row.created_at),
-              ],
+              sql: 'INSERT INTO support_idempotency(idempotency_key, fingerprint, effect, created_at) VALUES (?, ?, ?, ?)',
+              args: [key, fingerprint, JSON.stringify(financialRetentionTombstone), String(row.created_at)],
             });
         }
       await tx.execute({

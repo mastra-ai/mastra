@@ -1,21 +1,17 @@
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { draftResolutionSchema } from "../domain/support-case";
-import { liveResponseAgentScorers } from "../evals";
-import {
-  lookupCustomerRefundHistoryTool,
-  lookupOrderTool,
-  lookupSubscriptionTool,
-} from "../tools/lookup-order";
-import { searchSupportKnowledgeTool } from "../tools/search-support-knowledge";
+import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+import { draftResolutionSchema } from '../domain/support-case';
+import { liveResponseAgentScorers } from '../evals';
+import { lookupCustomerRefundHistoryTool, lookupOrderTool, lookupSubscriptionTool } from '../tools/lookup-order';
+import { searchSupportKnowledgeTool } from '../tools/search-support-knowledge';
 
 export { draftResolutionSchema };
 
 export const responseAgent = new Agent({
-  id: "response-agent",
-  name: "Support Response Drafter",
+  id: 'response-agent',
+  name: 'Support Response Drafter',
   description:
-    "Drafts a grounded, customer-facing reply and recommends whether a refund or escalation is warranted. Never executes a refund itself.",
+    'Drafts a grounded, customer-facing reply and recommends whether a refund or escalation is warranted. Never executes a refund itself.',
   instructions: `You are a senior customer support agent. You are given a customer's case, the relevant policy excerpts, and their order/subscription/refund-history records. Your job is to draft a reply and recommend a resolution - you never take action yourself.
 
 ## Grounding rules (critical)
@@ -41,7 +37,7 @@ Set \`requiresEscalation: true\` and explain why in \`escalationReason\` when: t
 ## Tone
 
 Be warm, specific, and concise. Acknowledge the customer's frustration when present. Reference their actual order/product by name. Never sound like a form letter.`,
-  model: "openai/gpt-5.6-luna",
+  model: 'openai/gpt-5.6-luna',
   scorers: process.env.DISABLE_RUNTIME_SCORERS ? {} : liveResponseAgentScorers,
   tools: {
     search_support_knowledge: searchSupportKnowledgeTool,

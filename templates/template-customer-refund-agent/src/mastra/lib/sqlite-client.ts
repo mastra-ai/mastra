@@ -1,13 +1,8 @@
-import {
-  createClient,
-  type Client,
-  type Transaction,
-  type TransactionMode,
-} from "@libsql/client";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-import { resolveDatabaseUrl } from "./database-url";
+import { createClient, type Client, type Transaction, type TransactionMode } from '@libsql/client';
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { resolveDatabaseUrl } from './database-url';
 
 const writeChains = new WeakMap<object, Promise<void>>();
 const serializedClients = new WeakMap<Client, Client>();
@@ -15,16 +10,16 @@ let sharedLocalClient: Client | undefined;
 let mastraSharedLocalClient: Client | undefined;
 
 function ensureFileDatabaseParent(url: string) {
-  if (!url.startsWith("file:") || url.includes(":memory:")) return;
+  if (!url.startsWith('file:') || url.includes(':memory:')) return;
   mkdirSync(dirname(fileURLToPath(url)), { recursive: true });
 }
 
 function isLockError(error: unknown) {
   const value = error as { code?: string; message?: string };
   return (
-    value.code === "SQLITE_BUSY" ||
-    value.code === "SQLITE_LOCKED" ||
-    /database (is )?locked|database table is locked/i.test(value.message ?? "")
+    value.code === 'SQLITE_BUSY' ||
+    value.code === 'SQLITE_LOCKED' ||
+    /database (is )?locked|database table is locked/i.test(value.message ?? '')
   );
 }
 
@@ -40,7 +35,7 @@ async function retryBusy<T>(operation: () => Promise<T>) {
       // The sqlite3 driver is synchronous. Yielding here lets the holder's
       // pending commit run instead of blocking the JavaScript event loop in a
       // native busy wait.
-      await new Promise<void>((resolve) => setTimeout(resolve, delay));
+      await new Promise<void>(resolve => setTimeout(resolve, delay));
       delay *= 2;
     }
   }
@@ -52,11 +47,11 @@ async function acquireWriteLock(client: object) {
   let release!: () => void;
   const current = previous.then(
     () =>
-      new Promise<void>((resolve) => {
+      new Promise<void>(resolve => {
         release = resolve;
       }),
     () =>
-      new Promise<void>((resolve) => {
+      new Promise<void>(resolve => {
         release = resolve;
       }),
   );
@@ -82,7 +77,7 @@ function releaseWhenFinished(transaction: Transaction, release: () => void) {
       release();
     }
   };
-  const finish = async (method: "commit" | "rollback") => {
+  const finish = async (method: 'commit' | 'rollback') => {
     try {
       const result = await retryBusy(() => transaction[method]());
       unlock();
@@ -90,28 +85,24 @@ function releaseWhenFinished(transaction: Transaction, release: () => void) {
     } catch (error) {
       // A failed commit can leave an open transaction. Keep the client queue
       // fenced until the caller rolls it back or closes it.
-      if (method === "rollback") unlock();
+      if (method === 'rollback') unlock();
       throw error;
     }
   };
   return new Proxy(transaction, {
     get(target, property) {
-      if (property === "commit") return () => finish("commit");
-      if (property === "rollback") return () => finish("rollback");
-      if (property === "execute")
-        return (...args: Parameters<Transaction["execute"]>) =>
-          retryBusy(() =>
-            Reflect.apply(transaction.execute, transaction, args),
-          );
-      if (property === "batch")
-        return (...args: Parameters<Transaction["batch"]>) =>
+      if (property === 'commit') return () => finish('commit');
+      if (property === 'rollback') return () => finish('rollback');
+      if (property === 'execute')
+        return (...args: Parameters<Transaction['execute']>) =>
+          retryBusy(() => Reflect.apply(transaction.execute, transaction, args));
+      if (property === 'batch')
+        return (...args: Parameters<Transaction['batch']>) =>
           retryBusy(() => Reflect.apply(transaction.batch, transaction, args));
-      if (property === "executeMultiple")
-        return (...args: Parameters<Transaction["executeMultiple"]>) =>
-          retryBusy(() =>
-            Reflect.apply(transaction.executeMultiple, transaction, args),
-          );
-      if (property === "close")
+      if (property === 'executeMultiple')
+        return (...args: Parameters<Transaction['executeMultiple']>) =>
+          retryBusy(() => Reflect.apply(transaction.executeMultiple, transaction, args));
+      if (property === 'close')
         return () => {
           try {
             return target.close();
@@ -120,7 +111,7 @@ function releaseWhenFinished(transaction: Transaction, release: () => void) {
           }
         };
       const value = Reflect.get(target, property, target);
-      return typeof value === "function" ? value.bind(target) : value;
+      return typeof value === 'function' ? value.bind(target) : value;
     },
   });
 }
@@ -141,26 +132,15 @@ export function serializeSqliteClient(client: Client): Client {
     },
     protocol: client.protocol,
     execute: (...args) =>
-      withWriteLock(
-        serialized,
-        () =>
-          Reflect.apply(client.execute, client, args) as ReturnType<
-            Client["execute"]
-          >,
-      ),
+      withWriteLock(serialized, () => Reflect.apply(client.execute, client, args) as ReturnType<Client['execute']>),
     batch: (...args) => withWriteLock(serialized, () => client.batch(...args)),
-    executeMultiple: (sql) =>
-      withWriteLock(serialized, () => client.executeMultiple(sql)),
-    migrate: (...args) =>
-      withWriteLock(serialized, () => client.migrate(...args)),
-    transaction: async (mode: TransactionMode = "write") => {
-      if (mode !== "write") return client.transaction(mode);
+    executeMultiple: sql => withWriteLock(serialized, () => client.executeMultiple(sql)),
+    migrate: (...args) => withWriteLock(serialized, () => client.migrate(...args)),
+    transaction: async (mode: TransactionMode = 'write') => {
+      if (mode !== 'write') return client.transaction(mode);
       const release = await acquireWriteLock(serialized);
       try {
-        return releaseWhenFinished(
-          await retryBusy(() => client.transaction("write")),
-          release,
-        );
+        return releaseWhenFinished(await retryBusy(() => client.transaction('write')), release);
       } catch (error) {
         release();
         throw error;
@@ -202,7 +182,7 @@ export function getMastraSharedLocalSqliteClient() {
   const client = getSharedLocalSqliteClient();
   mastraSharedLocalClient = new Proxy(client, {
     get(target, property, receiver) {
-      if (property === "close") return async () => undefined;
+      if (property === 'close') return async () => undefined;
       return Reflect.get(target, property, receiver);
     },
   });

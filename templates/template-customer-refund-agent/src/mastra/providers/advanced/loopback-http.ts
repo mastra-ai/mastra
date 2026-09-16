@@ -18,15 +18,15 @@ import type {
   SubscriptionCancellationEffect,
   SupportChannelProvider,
   TransactionalActionProvider,
-} from "../contracts";
-import type { NativeRefundExecutionAuthorization } from "../native-execution";
-import { sameBinding } from "../contracts";
-import { z } from "zod";
+} from '../contracts';
+import type { NativeRefundExecutionAuthorization } from '../native-execution';
+import { sameBinding } from '../contracts';
+import { z } from 'zod';
 
 const bindingSchema = z
   .object({
     tenantId: z.string().min(1),
-    providerKind: z.enum(["local", "intercom", "stripe"]),
+    providerKind: z.enum(['local', 'intercom', 'stripe']),
     providerAccountId: z.string().min(1),
     externalConversationId: z.string().min(1),
   })
@@ -84,13 +84,7 @@ const orderSchema = z
     customerEmail: z.string().min(1),
     product: z.string().min(1),
     amount: moneySchema,
-    status: z.enum([
-      "fulfilled",
-      "shipped",
-      "processing",
-      "cancelled",
-      "refunded",
-    ]),
+    status: z.enum(['fulfilled', 'shipped', 'processing', 'cancelled', 'refunded']),
     chargeCount: z.number().int().nonnegative(),
     placedAt: z.iso.datetime(),
   })
@@ -101,11 +95,11 @@ const subscriptionSchema = z
     customerId: z.string().min(1).optional(),
     customerEmail: z.string().min(1),
     plan: z.string().min(1),
-    recurringInterval: z.enum(["month", "year"]),
+    recurringInterval: z.enum(['month', 'year']),
     recurringIntervalCount: z.number().int().positive(),
     quantity: z.number().int().positive(),
     amount: moneySchema,
-    status: z.enum(["active", "cancelled", "past_due"]),
+    status: z.enum(['active', 'cancelled', 'past_due']),
     renewsAt: z.iso.datetime(),
     cancelAtPeriodEnd: z.literal(true).optional(),
     cancelsAt: z.iso.datetime().optional(),
@@ -145,15 +139,13 @@ const normalizedInboundSchema = z
   .object({
     binding: bindingSchema,
     externalId: z.string().min(1),
-    source: z.enum(["mock-email", "chat", "intercom-conversation"]),
-    customer: z
-      .object({ email: z.string().min(1), name: z.string().optional() })
-      .strict(),
+    source: z.enum(['mock-email', 'chat', 'intercom-conversation']),
+    customer: z.object({ email: z.string().min(1), name: z.string().optional() }).strict(),
     subject: z.string(),
     message: z
       .object({
         id: z.string().min(1),
-        author: z.literal("customer"),
+        author: z.literal('customer'),
         authorName: z.string().optional(),
         body: z.string(),
         createdAt: z.iso.datetime(),
@@ -192,7 +184,7 @@ const cancellationCommandSchema = z
     ownerId: z.string().min(1),
     binding: bindingSchema,
     subscriptionId: z.string().min(1),
-    cancellationMode: z.literal("period_end"),
+    cancellationMode: z.literal('period_end'),
     sourceMessageId: z.string().min(1),
     sourceMessageHash: z.string().min(1),
     idempotencyKey: z.string().min(1),
@@ -213,36 +205,28 @@ const nativeAuthorizationSchema = z
   })
   .strict();
 
-export type LoopbackFailure = "timeout" | "429" | "500" | "drop-after-commit";
+export type LoopbackFailure = 'timeout' | '429' | '500' | 'drop-after-commit';
 export type LoopbackFetch = (request: Request) => Promise<Response>;
-export type LoopbackFailureSelector = (
-  request: Request,
-) => LoopbackFailure | undefined;
+export type LoopbackFailureSelector = (request: Request) => LoopbackFailure | undefined;
 
 /** Optional in-process HTTP boundary used to prove the local port contract. */
 export function createLocalLoopbackFacade(
   provider: ProviderRegistry,
   failure?: LoopbackFailureSelector,
 ): LoopbackFetch {
-  return async (request) => {
+  return async request => {
     try {
       const injected = failure?.(request);
-      if (injected === "timeout") return new Promise(() => undefined);
-      if (injected === "429")
-        return Response.json({ error: "rate limited" }, { status: 429 });
-      if (injected === "500")
-        return Response.json({ error: "synthetic failure" }, { status: 500 });
+      if (injected === 'timeout') return new Promise(() => undefined);
+      if (injected === '429') return Response.json({ error: 'rate limited' }, { status: 429 });
+      if (injected === '500') return Response.json({ error: 'synthetic failure' }, { status: 500 });
       const parsedBody = z
         .object({ binding: bindingSchema })
         .passthrough()
         .safeParse(await request.json());
-      if (!parsedBody.success)
-        return Response.json(
-          { error: "invalid provider binding" },
-          { status: 400 },
-        );
+      if (!parsedBody.success) return Response.json({ error: 'invalid provider binding' }, { status: 400 });
       const body = parsedBody.data;
-      if (request.url.endsWith("/commerce/orders")) {
+      if (request.url.endsWith('/commerce/orders')) {
         const input = z
           .object({
             binding: bindingSchema,
@@ -251,75 +235,42 @@ export function createLocalLoopbackFacade(
           })
           .strict()
           .safeParse(body);
-        if (!input.success)
-          return Response.json(
-            { error: "invalid commerce order request" },
-            { status: 400 },
-          );
+        if (!input.success) return Response.json({ error: 'invalid commerce order request' }, { status: 400 });
         const order = await provider
           .commerce(input.data.binding)
           .findOrder(input.data.binding, input.data.email, input.data.orderId);
-        if (injected === "drop-after-commit")
-          return new Promise(() => undefined);
-        return Response.json(
-          z.union([orderSchema, z.null()]).parse(order ?? null),
-        );
+        if (injected === 'drop-after-commit') return new Promise(() => undefined);
+        return Response.json(z.union([orderSchema, z.null()]).parse(order ?? null));
       }
-      if (request.url.endsWith("/commerce/subscriptions")) {
-        const input = z
-          .object({ binding: bindingSchema, email: z.string() })
-          .strict()
-          .safeParse(body);
-        if (!input.success)
-          return Response.json(
-            { error: "invalid subscription request" },
-            { status: 400 },
-          );
+      if (request.url.endsWith('/commerce/subscriptions')) {
+        const input = z.object({ binding: bindingSchema, email: z.string() }).strict().safeParse(body);
+        if (!input.success) return Response.json({ error: 'invalid subscription request' }, { status: 400 });
         const subscription = await provider
           .commerce(input.data.binding)
           .findSubscription(input.data.binding, input.data.email);
-        if (injected === "drop-after-commit")
-          return new Promise(() => undefined);
-        return Response.json(
-          z.union([subscriptionSchema, z.null()]).parse(subscription ?? null),
-        );
+        if (injected === 'drop-after-commit') return new Promise(() => undefined);
+        return Response.json(z.union([subscriptionSchema, z.null()]).parse(subscription ?? null));
       }
-      if (request.url.endsWith("/commerce/refunds")) {
+      if (request.url.endsWith('/commerce/refunds')) {
         const input = z
           .object({ binding: bindingSchema, orderId: z.string().min(1) })
           .strict()
           .safeParse(body);
-        if (!input.success)
-          return Response.json(
-            { error: "invalid refunds request" },
-            { status: 400 },
-          );
-        const refunds = await provider
-          .commerce(input.data.binding)
-          .refunds(input.data.binding, input.data.orderId);
-        if (injected === "drop-after-commit")
-          return new Promise(() => undefined);
+        if (!input.success) return Response.json({ error: 'invalid refunds request' }, { status: 400 });
+        const refunds = await provider.commerce(input.data.binding).refunds(input.data.binding, input.data.orderId);
+        if (injected === 'drop-after-commit') return new Promise(() => undefined);
         return Response.json(z.array(refundSchema).parse(refunds));
       }
-      if (request.url.endsWith("/support/normalize")) {
-        const input = z
-          .object({ binding: bindingSchema, payload: z.unknown() })
-          .strict()
-          .safeParse(body);
-        if (!input.success)
-          return Response.json(
-            { error: "invalid normalize request" },
-            { status: 400 },
-          );
+      if (request.url.endsWith('/support/normalize')) {
+        const input = z.object({ binding: bindingSchema, payload: z.unknown() }).strict().safeParse(body);
+        if (!input.success) return Response.json({ error: 'invalid normalize request' }, { status: 400 });
         return Response.json(
           normalizedInboundSchema.parse(
-            await provider
-              .support(input.data.binding)
-              .normalizeInbound(input.data.payload),
+            await provider.support(input.data.binding).normalizeInbound(input.data.payload),
           ),
         );
       }
-      if (request.url.endsWith("/support/deliver")) {
+      if (request.url.endsWith('/support/deliver')) {
         const input = z
           .object({
             binding: bindingSchema,
@@ -329,151 +280,86 @@ export function createLocalLoopbackFacade(
           })
           .strict()
           .safeParse(body);
-        if (!input.success)
-          return Response.json(
-            { error: "invalid delivery request" },
-            { status: 400 },
-          );
+        if (!input.success) return Response.json({ error: 'invalid delivery request' }, { status: 400 });
         return Response.json(
           receiptSchema.parse(
             await provider
               .support(input.data.binding)
-              .deliver(
-                input.data.binding,
-                input.data.body,
-                input.data.status,
-                input.data.idempotencyKey,
-              ),
+              .deliver(input.data.binding, input.data.body, input.data.status, input.data.idempotencyKey),
           ),
         );
       }
-      if (request.url.endsWith("/transactions/quote-refund")) {
+      if (request.url.endsWith('/transactions/quote-refund')) {
         const checked = commandSchema.safeParse(body.command);
-        if (!checked.success)
-          return Response.json(
-            { error: "invalid refund command" },
-            { status: 400 },
-          );
+        if (!checked.success) return Response.json({ error: 'invalid refund command' }, { status: 400 });
         const command = checked.data;
         if (!command?.binding || !sameBinding(body.binding, command.binding))
           return Response.json(
             {
-              error:
-                "transaction command binding does not match request binding",
+              error: 'transaction command binding does not match request binding',
             },
             { status: 400 },
           );
-        return Response.json(
-          quoteSchema.parse(
-            await provider.transactions(body.binding).quoteRefund(command),
-          ),
-        );
+        return Response.json(quoteSchema.parse(await provider.transactions(body.binding).quoteRefund(command)));
       }
-      if (request.url.endsWith("/transactions/issue-refund")) {
+      if (request.url.endsWith('/transactions/issue-refund')) {
         const checked = commandSchema.safeParse(body.command);
-        if (!checked.success)
-          return Response.json(
-            { error: "invalid refund command" },
-            { status: 400 },
-          );
+        if (!checked.success) return Response.json({ error: 'invalid refund command' }, { status: 400 });
         const command = checked.data;
         if (!command?.binding || !sameBinding(body.binding, command.binding))
           return Response.json(
             {
-              error:
-                "transaction command binding does not match request binding",
+              error: 'transaction command binding does not match request binding',
             },
             { status: 400 },
           );
-        const authorization = nativeAuthorizationSchema.safeParse(
-          body.authorization,
-        );
+        const authorization = nativeAuthorizationSchema.safeParse(body.authorization);
         if (!authorization.success)
-          return Response.json(
-            { error: "missing or invalid native refund authorization" },
-            { status: 403 },
-          );
-        const effect = await provider
-          .transactions(body.binding)
-          .issueRefund(command, authorization.data);
-        if (injected === "drop-after-commit")
-          return new Promise(() => undefined);
+          return Response.json({ error: 'missing or invalid native refund authorization' }, { status: 403 });
+        const effect = await provider.transactions(body.binding).issueRefund(command, authorization.data);
+        if (injected === 'drop-after-commit') return new Promise(() => undefined);
         return Response.json(effectSchema.parse(effect));
       }
-      if (request.url.endsWith("/transactions/quote-subscription-credit")) {
+      if (request.url.endsWith('/transactions/quote-subscription-credit')) {
         const checked = subscriptionCreditCommandSchema.safeParse(body.command);
-        if (
-          !checked.success ||
-          !sameBinding(body.binding, checked.data.binding)
-        )
-          return Response.json(
-            { error: "invalid subscription credit command" },
-            { status: 400 },
-          );
+        if (!checked.success || !sameBinding(body.binding, checked.data.binding))
+          return Response.json({ error: 'invalid subscription credit command' }, { status: 400 });
         return Response.json(
           subscriptionCreditQuoteSchema.parse(
-            await provider
-              .transactions(body.binding)
-              .quoteSubscriptionCredit(checked.data),
+            await provider.transactions(body.binding).quoteSubscriptionCredit(checked.data),
           ),
         );
       }
-      if (request.url.endsWith("/transactions/issue-subscription-credit")) {
+      if (request.url.endsWith('/transactions/issue-subscription-credit')) {
         const checked = subscriptionCreditCommandSchema.safeParse(body.command);
-        const authorization = nativeAuthorizationSchema.safeParse(
-          body.authorization,
-        );
-        if (
-          !checked.success ||
-          !authorization.success ||
-          !sameBinding(body.binding, checked.data.binding)
-        )
-          return Response.json(
-            { error: "invalid subscription credit request" },
-            { status: 400 },
-          );
+        const authorization = nativeAuthorizationSchema.safeParse(body.authorization);
+        if (!checked.success || !authorization.success || !sameBinding(body.binding, checked.data.binding))
+          return Response.json({ error: 'invalid subscription credit request' }, { status: 400 });
         const effect = await provider
           .transactions(body.binding)
           .issueSubscriptionCredit(checked.data, authorization.data);
-        if (injected === "drop-after-commit")
-          return new Promise(() => undefined);
+        if (injected === 'drop-after-commit') return new Promise(() => undefined);
         return Response.json(subscriptionCreditEffectSchema.parse(effect));
       }
-      if (request.url.endsWith("/transactions/retrieve-subscription-credit")) {
+      if (request.url.endsWith('/transactions/retrieve-subscription-credit')) {
         const checked = subscriptionCreditCommandSchema.safeParse(body.command);
-        if (
-          !checked.success ||
-          !sameBinding(body.binding, checked.data.binding)
-        )
-          return Response.json(
-            { error: "invalid subscription credit command" },
-            { status: 400 },
-          );
+        if (!checked.success || !sameBinding(body.binding, checked.data.binding))
+          return Response.json({ error: 'invalid subscription credit command' }, { status: 400 });
         return Response.json(
           subscriptionCreditEffectSchema
             .nullable()
-            .parse(
-              (await provider
-                .transactions(body.binding)
-                .retrieveSubscriptionCredit(checked.data)) ?? null,
-            ),
+            .parse((await provider.transactions(body.binding).retrieveSubscriptionCredit(checked.data)) ?? null),
         );
       }
-      if (
-        request.url.endsWith("/transactions/schedule-subscription-cancellation")
-      ) {
+      if (request.url.endsWith('/transactions/schedule-subscription-cancellation')) {
         const checked = cancellationCommandSchema.safeParse(body.command);
         if (!checked.success)
-          return Response.json(
-            { error: "invalid subscription cancellation command" },
-            { status: 400 },
-          );
+          return Response.json({ error: 'invalid subscription cancellation command' }, { status: 400 });
         const command = checked.data;
         if (!sameBinding(body.binding, command.binding))
           return Response.json(
             {
-              error:
-                "transaction command binding does not match request binding",
+              error: 'transaction command binding does not match request binding',
             },
             { status: 400 },
           );
@@ -486,34 +372,22 @@ export function createLocalLoopbackFacade(
               idempotencyKey: z.string(),
               replayed: z.boolean(),
             })
-            .parse(
-              await provider
-                .transactions(body.binding)
-                .scheduleSubscriptionCancellation(command),
-            ),
+            .parse(await provider.transactions(body.binding).scheduleSubscriptionCancellation(command)),
         );
       }
-      if (
-        request.url.endsWith("/transactions/retrieve-subscription-cancellation")
-      ) {
+      if (request.url.endsWith('/transactions/retrieve-subscription-cancellation')) {
         const checked = cancellationCommandSchema.safeParse(body.command);
         if (!checked.success)
-          return Response.json(
-            { error: "invalid subscription cancellation command" },
-            { status: 400 },
-          );
+          return Response.json({ error: 'invalid subscription cancellation command' }, { status: 400 });
         const command = checked.data;
         if (!sameBinding(body.binding, command.binding))
           return Response.json(
             {
-              error:
-                "transaction command binding does not match request binding",
+              error: 'transaction command binding does not match request binding',
             },
             { status: 400 },
           );
-        const effect = await provider
-          .transactions(body.binding)
-          .retrieveSubscriptionCancellation(command);
+        const effect = await provider.transactions(body.binding).retrieveSubscriptionCancellation(command);
         return Response.json(
           z
             .object({
@@ -527,7 +401,7 @@ export function createLocalLoopbackFacade(
             .parse(effect ?? null),
         );
       }
-      if (request.url.endsWith("/knowledge/search")) {
+      if (request.url.endsWith('/knowledge/search')) {
         const input = z
           .object({
             binding: bindingSchema,
@@ -536,11 +410,7 @@ export function createLocalLoopbackFacade(
           })
           .strict()
           .safeParse(body);
-        if (!input.success)
-          return Response.json(
-            { error: "invalid knowledge search request" },
-            { status: 400 },
-          );
+        if (!input.success) return Response.json({ error: 'invalid knowledge search request' }, { status: 400 });
         return Response.json(
           z
             .array(evidenceSchema)
@@ -551,59 +421,40 @@ export function createLocalLoopbackFacade(
             ),
         );
       }
-      if (request.url.endsWith("/knowledge/list-changed")) {
-        const input = z
-          .object({ binding: bindingSchema, since: z.string().optional() })
-          .strict()
-          .safeParse(body);
-        if (!input.success)
-          return Response.json(
-            { error: "invalid knowledge list request" },
-            { status: 400 },
-          );
+      if (request.url.endsWith('/knowledge/list-changed')) {
+        const input = z.object({ binding: bindingSchema, since: z.string().optional() }).strict().safeParse(body);
+        if (!input.success) return Response.json({ error: 'invalid knowledge list request' }, { status: 400 });
         return Response.json(
           z
             .array(knowledgeDocumentRefSchema)
-            .parse(
-              await provider
-                .knowledge(input.data.binding)
-                .listChanged(input.data.binding, input.data.since),
-            ),
+            .parse(await provider.knowledge(input.data.binding).listChanged(input.data.binding, input.data.since)),
         );
       }
-      if (request.url.endsWith("/knowledge/fetch-document")) {
+      if (request.url.endsWith('/knowledge/fetch-document')) {
         const input = z
           .object({ binding: bindingSchema, source: z.string().min(1) })
           .strict()
           .safeParse(body);
-        if (!input.success)
-          return Response.json(
-            { error: "invalid document request" },
-            { status: 400 },
-          );
+        if (!input.success) return Response.json({ error: 'invalid document request' }, { status: 400 });
         return Response.json(
           z
             .union([evidenceSchema, z.null()])
             .parse(
-              (await provider
-                .knowledge(input.data.binding)
-                .fetchDocument(input.data.binding, input.data.source)) ?? null,
+              (await provider.knowledge(input.data.binding).fetchDocument(input.data.binding, input.data.source)) ??
+                null,
             ),
         );
       }
-      return Response.json({ error: "not found" }, { status: 404 });
+      return Response.json({ error: 'not found' }, { status: 404 });
     } catch (error) {
-      return Response.json(
-        { error: error instanceof Error ? error.message : String(error) },
-        { status: 400 },
-      );
+      return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 400 });
     }
   };
 }
 
 /** HTTP adapters for all four local ports, kept opt-in for contract conformance. */
 export class LoopbackHttpProviderRegistry implements ProviderRegistry {
-  readonly kind = "local" as const;
+  readonly kind = 'local' as const;
   constructor(
     private readonly fetcher: LoopbackFetch,
     private readonly timeoutMs = 100,
@@ -623,23 +474,19 @@ export class LoopbackHttpProviderRegistry implements ProviderRegistry {
 }
 
 export class LoopbackHttpCommerceProvider implements CommerceProvider {
-  readonly kind = "local" as const;
+  readonly kind = 'local' as const;
   constructor(
     private readonly fetcher: LoopbackFetch,
     private readonly timeoutMs = 100,
   ) {}
-  async call<T>(
-    path: string,
-    body: unknown,
-    schema?: z.ZodType<T>,
-  ): Promise<T> {
+  async call<T>(path: string, body: unknown, schema?: z.ZodType<T>): Promise<T> {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const request = new Request(`http://loopback${path}`, {
         body: JSON.stringify(body),
-        headers: { "content-type": "application/json" },
-        method: "POST",
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
         signal: controller.signal,
       });
       const response = await Promise.race([
@@ -647,7 +494,7 @@ export class LoopbackHttpCommerceProvider implements CommerceProvider {
         new Promise<Response>((_, reject) => {
           timer = setTimeout(() => {
             controller.abort();
-            reject(new Error("Loopback commerce timeout."));
+            reject(new Error('Loopback commerce timeout.'));
           }, this.timeoutMs);
         }),
       ]);
@@ -655,9 +502,7 @@ export class LoopbackHttpCommerceProvider implements CommerceProvider {
         const error = (await response.json().catch(() => ({}))) as {
           error?: string;
         };
-        throw new Error(
-          `Loopback commerce HTTP ${response.status}: ${error.error ?? "request failed"}`,
-        );
+        throw new Error(`Loopback commerce HTTP ${response.status}: ${error.error ?? 'request failed'}`);
       }
       const payload = await response.json();
       return schema ? schema.parse(payload) : (payload as T);
@@ -667,27 +512,25 @@ export class LoopbackHttpCommerceProvider implements CommerceProvider {
   }
   findOrder(binding: ProviderBinding, email: string, orderId?: string) {
     return this.call<CommerceOrder | undefined>(
-      "/commerce/orders",
+      '/commerce/orders',
       {
         binding,
         email,
         orderId,
       },
-      z.union([orderSchema, z.null()]).transform((value) => value ?? undefined),
+      z.union([orderSchema, z.null()]).transform(value => value ?? undefined),
     );
   }
   findSubscription(binding: ProviderBinding, email: string) {
     return this.call<CommerceSubscription | undefined>(
-      "/commerce/subscriptions",
+      '/commerce/subscriptions',
       { binding, email },
-      z
-        .union([subscriptionSchema, z.null()])
-        .transform((value) => value ?? undefined),
+      z.union([subscriptionSchema, z.null()]).transform(value => value ?? undefined),
     );
   }
   refunds(binding: ProviderBinding, orderId: string) {
     return this.call<CommerceRefund[]>(
-      "/commerce/refunds",
+      '/commerce/refunds',
       {
         binding,
         orderId,
@@ -698,30 +541,27 @@ export class LoopbackHttpCommerceProvider implements CommerceProvider {
 }
 
 class LoopbackHttpSupportProvider implements SupportChannelProvider {
-  readonly kind = "local" as const;
+  readonly kind = 'local' as const;
   private readonly http: LoopbackHttpCommerceProvider;
   constructor(fetcher: LoopbackFetch, timeoutMs: number) {
     this.http = new LoopbackHttpCommerceProvider(fetcher, timeoutMs);
   }
   normalizeInbound(payload: unknown) {
     const binding = {
-      tenantId: "local-demo",
-      providerKind: "local" as const,
-      providerAccountId: "local-demo",
-      externalConversationId: "loopback",
+      tenantId: 'local-demo',
+      providerKind: 'local' as const,
+      providerAccountId: 'local-demo',
+      externalConversationId: 'loopback',
     };
-    return this.http.call<
-      Awaited<ReturnType<SupportChannelProvider["normalizeInbound"]>>
-    >("/support/normalize", { binding, payload }, normalizedInboundSchema);
+    return this.http.call<Awaited<ReturnType<SupportChannelProvider['normalizeInbound']>>>(
+      '/support/normalize',
+      { binding, payload },
+      normalizedInboundSchema,
+    );
   }
-  deliver(
-    binding: ProviderBinding,
-    body: string,
-    status: string,
-    idempotencyKey?: string,
-  ) {
+  deliver(binding: ProviderBinding, body: string, status: string, idempotencyKey?: string) {
     return this.http.call<DeliveryReceipt>(
-      "/support/deliver",
+      '/support/deliver',
       {
         binding,
         body,
@@ -731,31 +571,23 @@ class LoopbackHttpSupportProvider implements SupportChannelProvider {
       receiptSchema,
     );
   }
-  addInternalNote(
-    binding: ProviderBinding,
-    body: string,
-    idempotencyKey: string,
-  ) {
-    return this.deliver(binding, body, "note", idempotencyKey);
+  addInternalNote(binding: ProviderBinding, body: string, idempotencyKey: string) {
+    return this.deliver(binding, body, 'note', idempotencyKey);
   }
-  updateStatus(
-    binding: ProviderBinding,
-    status: string,
-    idempotencyKey: string,
-  ) {
-    return this.deliver(binding, "", status, idempotencyKey);
+  updateStatus(binding: ProviderBinding, status: string, idempotencyKey: string) {
+    return this.deliver(binding, '', status, idempotencyKey);
   }
 }
 
 class LoopbackHttpTransactionalProvider implements TransactionalActionProvider {
-  readonly kind = "local" as const;
+  readonly kind = 'local' as const;
   private readonly http: LoopbackHttpCommerceProvider;
   constructor(fetcher: LoopbackFetch, timeoutMs: number) {
     this.http = new LoopbackHttpCommerceProvider(fetcher, timeoutMs);
   }
   quoteRefund(command: RefundCommand) {
     return this.http.call<RefundQuote>(
-      "/transactions/quote-refund",
+      '/transactions/quote-refund',
       {
         binding: command.binding,
         command,
@@ -763,12 +595,9 @@ class LoopbackHttpTransactionalProvider implements TransactionalActionProvider {
       quoteSchema,
     );
   }
-  issueRefund(
-    command: RefundCommand,
-    authorization?: NativeRefundExecutionAuthorization,
-  ) {
+  issueRefund(command: RefundCommand, authorization?: NativeRefundExecutionAuthorization) {
     return this.http.call<RefundEffect>(
-      "/transactions/issue-refund",
+      '/transactions/issue-refund',
       {
         binding: command.binding,
         command,
@@ -779,33 +608,28 @@ class LoopbackHttpTransactionalProvider implements TransactionalActionProvider {
   }
   quoteSubscriptionCredit(command: SubscriptionCreditCommand) {
     return this.http.call<SubscriptionCreditQuote>(
-      "/transactions/quote-subscription-credit",
+      '/transactions/quote-subscription-credit',
       { binding: command.binding, command },
       subscriptionCreditQuoteSchema,
     );
   }
-  issueSubscriptionCredit(
-    command: SubscriptionCreditCommand,
-    authorization?: NativeRefundExecutionAuthorization,
-  ) {
+  issueSubscriptionCredit(command: SubscriptionCreditCommand, authorization?: NativeRefundExecutionAuthorization) {
     return this.http.call<SubscriptionCreditEffect>(
-      "/transactions/issue-subscription-credit",
+      '/transactions/issue-subscription-credit',
       { binding: command.binding, command, authorization },
       subscriptionCreditEffectSchema,
     );
   }
   retrieveSubscriptionCredit(command: SubscriptionCreditCommand) {
     return this.http.call<SubscriptionCreditEffect | undefined>(
-      "/transactions/retrieve-subscription-credit",
+      '/transactions/retrieve-subscription-credit',
       { binding: command.binding, command },
-      subscriptionCreditEffectSchema
-        .nullable()
-        .transform((value) => value ?? undefined),
+      subscriptionCreditEffectSchema.nullable().transform(value => value ?? undefined),
     );
   }
   scheduleSubscriptionCancellation(command: SubscriptionCancellationCommand) {
     return this.http.call<SubscriptionCancellationEffect>(
-      "/transactions/schedule-subscription-cancellation",
+      '/transactions/schedule-subscription-cancellation',
       { binding: command.binding, command },
       z.object({
         subscriptionId: z.string(),
@@ -818,7 +642,7 @@ class LoopbackHttpTransactionalProvider implements TransactionalActionProvider {
   }
   retrieveSubscriptionCancellation(command: SubscriptionCancellationCommand) {
     return this.http.call<SubscriptionCancellationEffect | undefined>(
-      "/transactions/retrieve-subscription-cancellation",
+      '/transactions/retrieve-subscription-cancellation',
       { binding: command.binding, command },
       z
         .object({
@@ -829,20 +653,20 @@ class LoopbackHttpTransactionalProvider implements TransactionalActionProvider {
           replayed: z.boolean(),
         })
         .nullable()
-        .transform((value) => value ?? undefined),
+        .transform(value => value ?? undefined),
     );
   }
 }
 
 class LoopbackHttpKnowledgeProvider implements KnowledgeProvider {
-  readonly kind = "local" as const;
+  readonly kind = 'local' as const;
   private readonly http: LoopbackHttpCommerceProvider;
   constructor(fetcher: LoopbackFetch, timeoutMs: number) {
     this.http = new LoopbackHttpCommerceProvider(fetcher, timeoutMs);
   }
   search(binding: ProviderBinding, query: string, topK: number) {
     return this.http.call<KnowledgeEvidence[]>(
-      "/knowledge/search",
+      '/knowledge/search',
       {
         binding,
         query,
@@ -852,21 +676,17 @@ class LoopbackHttpKnowledgeProvider implements KnowledgeProvider {
     );
   }
   listChanged(binding: ProviderBinding, since?: string) {
-    return this.http.call<
-      Awaited<ReturnType<KnowledgeProvider["listChanged"]>>
-    >(
-      "/knowledge/list-changed",
+    return this.http.call<Awaited<ReturnType<KnowledgeProvider['listChanged']>>>(
+      '/knowledge/list-changed',
       { binding, since },
       z.array(knowledgeDocumentRefSchema),
     );
   }
   fetchDocument(binding: ProviderBinding, source: string) {
     return this.http.call<KnowledgeEvidence | undefined>(
-      "/knowledge/fetch-document",
+      '/knowledge/fetch-document',
       { binding, source },
-      z
-        .union([evidenceSchema, z.null()])
-        .transform((value) => value ?? undefined),
+      z.union([evidenceSchema, z.null()]).transform(value => value ?? undefined),
     );
   }
 }

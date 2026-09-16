@@ -1,13 +1,13 @@
-import type { Client } from "@libsql/client";
-import { structurallyEqual } from "./money";
+import type { Client } from '@libsql/client';
+import { structurallyEqual } from './money';
 import {
   bindingsForCase,
   type RefundCommand,
   type SubscriptionCancellationCommand,
   type SubscriptionCreditCommand,
-} from "../providers/contracts";
-import { canonicalConversationOwner } from "./case-store-cases";
-import type { DispatchLeaseScope } from "./dispatch-lease-scope";
+} from '../providers/contracts';
+import { canonicalConversationOwner } from './case-store-cases';
+import type { DispatchLeaseScope } from './dispatch-lease-scope';
 import {
   now,
   parse,
@@ -16,7 +16,7 @@ import {
   StaleCaseWriteError,
   DispatchRecord,
   DispatchState,
-} from "./case-store-shared";
+} from './case-store-shared';
 
 export class CaseStoreDispatch {
   constructor(private readonly client: Client) {}
@@ -28,7 +28,7 @@ export class CaseStoreDispatch {
     });
     for (const row of exhausted.rows) {
       const caseId = String(row.case_id);
-      const tx = await this.client.transaction("write");
+      const tx = await this.client.transaction('write');
       try {
         const changed = await tx.execute({
           sql: "UPDATE support_dispatch SET state = 'failed', lease_until = NULL, lease_token = NULL, last_error = COALESCE(last_error, 'Dispatch lease exhausted after three attempts.'), updated_at = ? WHERE case_id = ? AND state IN ('claimed', 'started') AND lease_until < ? AND attempts >= 3 AND NOT EXISTS (SELECT 1 FROM support_stripe_refund_attempts r WHERE r.dispatch_id = support_dispatch.id AND r.reconcile_lease_until > ?)",
@@ -36,40 +36,32 @@ export class CaseStoreDispatch {
         });
         if (Number(changed.rowsAffected) === 1) {
           const caseRow = await tx.execute({
-            sql: "SELECT data, version FROM support_cases WHERE id = ?",
+            sql: 'SELECT data, version FROM support_cases WHERE id = ?',
             args: [caseId],
           });
           if (caseRow.rows[0]) {
             const current = parse(caseRow.rows[0] as Record<string, unknown>);
-            if (current.status !== "waiting_approval") {
+            if (current.status !== 'waiting_approval') {
               const updated = withBindings({
                 ...current,
-                status: "escalated" as const,
-                escalationReason:
-                  "Workflow recovery exhausted its durable lease attempts.",
-                metadata: { ...current.metadata, workflowStatus: "escalated" },
+                status: 'escalated' as const,
+                escalationReason: 'Workflow recovery exhausted its durable lease attempts.',
+                metadata: { ...current.metadata, workflowStatus: 'escalated' },
                 updatedAt: now(),
               });
               const write = await tx.execute({
-                sql: "UPDATE support_cases SET data = ?, updated_at = ?, version = version + 1 WHERE id = ? AND version = ?",
-                args: [
-                  JSON.stringify(updated),
-                  updated.updatedAt,
-                  caseId,
-                  Number(caseRow.rows[0].version ?? 1),
-                ],
+                sql: 'UPDATE support_cases SET data = ?, updated_at = ?, version = version + 1 WHERE id = ? AND version = ?',
+                args: [JSON.stringify(updated), updated.updatedAt, caseId, Number(caseRow.rows[0].version ?? 1)],
               });
-              if (Number(write.rowsAffected) !== 1)
-                throw new StaleCaseWriteError(caseId);
+              if (Number(write.rowsAffected) !== 1) throw new StaleCaseWriteError(caseId);
               await tx.execute({
                 sql: "UPDATE support_turns SET state = 'escalated', outcome_data = json_patch(COALESCE(outcome_data, '{}'), ?), updated_at = ? WHERE id = (SELECT turn_id FROM support_dispatch WHERE id = ?)",
                 args: [
                   JSON.stringify({
-                    status: "escalated",
-                    escalationReason:
-                      "Workflow recovery exhausted its durable lease attempts.",
+                    status: 'escalated',
+                    escalationReason: 'Workflow recovery exhausted its durable lease attempts.',
                     operationalFailure: {
-                      disposition: "escalate",
+                      disposition: 'escalate',
                       recordedAt: now(),
                     },
                   }),
@@ -98,14 +90,7 @@ export class CaseStoreDispatch {
       const leaseToken = crypto.randomUUID();
       const update = await this.client.execute({
         sql: "UPDATE support_dispatch AS candidate SET state = 'claimed', attempts = attempts + 1, lease_until = ?, lease_token = ?, updated_at = ? WHERE id = ? AND (state = 'pending' OR (state IN ('claimed', 'started') AND lease_until < ?)) AND NOT EXISTS (SELECT 1 FROM support_stripe_refund_attempts r WHERE r.dispatch_id = candidate.id AND r.reconcile_lease_until > ?) AND NOT EXISTS (SELECT 1 FROM support_dispatch AS active WHERE active.case_id = candidate.case_id AND active.id <> candidate.id AND active.state IN ('claimed', 'started', 'suspended')) AND NOT EXISTS (SELECT 1 FROM support_dispatch AS earlier JOIN support_turns AS earlier_turn ON earlier_turn.id = earlier.turn_id JOIN support_turns AS candidate_turn ON candidate_turn.id = candidate.turn_id WHERE earlier.case_id = candidate.case_id AND earlier.state = 'pending' AND earlier_turn.sequence < candidate_turn.sequence)",
-        args: [
-          leaseUntil,
-          leaseToken,
-          claimedAt,
-          String(row.id),
-          claimedAt,
-          claimedAt,
-        ],
+        args: [leaseUntil, leaseToken, claimedAt, String(row.id), claimedAt, claimedAt],
       });
       if (Number(update.rowsAffected) === 1)
         claimed.push({
@@ -113,10 +98,9 @@ export class CaseStoreDispatch {
           caseId: String(row.case_id),
           turnId: String(row.turn_id),
           runId: String(row.run_id),
-          state: "claimed",
+          state: 'claimed',
           attempts: Number(row.attempts) + 1,
-          wasStarted:
-            String(row.state) === "started" || String(row.state) === "claimed",
+          wasStarted: String(row.state) === 'started' || String(row.state) === 'claimed',
           leaseToken,
         });
     }
@@ -135,13 +119,7 @@ export class CaseStoreDispatch {
   async hasDispatchLease(scope: DispatchLeaseScope) {
     const result = await this.client.execute({
       sql: "SELECT id FROM support_dispatch WHERE id = ? AND case_id = ? AND turn_id = ? AND lease_token = ? AND state IN ('claimed', 'started') AND lease_until > ?",
-      args: [
-        scope.dispatchId,
-        scope.caseId,
-        scope.turnId,
-        scope.leaseToken,
-        now(),
-      ],
+      args: [scope.dispatchId, scope.caseId, scope.turnId, scope.leaseToken, now()],
     });
     return Boolean(result.rows[0]);
   }
@@ -160,47 +138,33 @@ export class CaseStoreDispatch {
     ownerId: string;
     dispatch?: DispatchLeaseScope;
     reconciliationLeaseToken?: string;
-    validatePolicy: (
-      tx: Awaited<ReturnType<Client["transaction"]>>,
-    ) => Promise<void>;
+    validatePolicy: (tx: Awaited<ReturnType<Client['transaction']>>) => Promise<void>;
   }) {
-    if (
-      (input.dispatch === undefined) ===
-      (input.reconciliationLeaseToken === undefined)
-    )
-      throw new Error(
-        "Refund first-effect authorization requires exactly one current lease.",
-      );
-    const tx = await this.client.transaction("write");
+    if ((input.dispatch === undefined) === (input.reconciliationLeaseToken === undefined))
+      throw new Error('Refund first-effect authorization requires exactly one current lease.');
+    const tx = await this.client.transaction('write');
     try {
       const command = input.command;
       const attemptResult = await tx.execute({
-        sql: "SELECT * FROM support_stripe_refund_attempts WHERE idempotency_key = ? AND command_fingerprint = ?",
+        sql: 'SELECT * FROM support_stripe_refund_attempts WHERE idempotency_key = ? AND command_fingerprint = ?',
         args: [command.idempotencyKey, command.fingerprint],
       });
-      const attempt = attemptResult.rows[0] as
-        Record<string, unknown> | undefined;
+      const attempt = attemptResult.rows[0] as Record<string, unknown> | undefined;
       const caseResult = await tx.execute({
-        sql: "SELECT data FROM support_cases WHERE id = ?",
+        sql: 'SELECT data FROM support_cases WHERE id = ?',
         args: [command.approvalCaseId],
       });
-      const supportCase = caseResult.rows[0]
-        ? parse({ data: caseResult.rows[0].data })
-        : undefined;
+      const supportCase = caseResult.rows[0] ? parse({ data: caseResult.rows[0].data }) : undefined;
       const actionResult = await tx.execute({
         sql: "SELECT data FROM support_actions WHERE case_id = ? AND kind = 'refund-command' AND fingerprint = ?",
         args: [command.approvalCaseId, command.fingerprint],
       });
-      const immutable = actionResult.rows[0]
-        ? JSON.parse(String(actionResult.rows[0].data))
-        : undefined;
+      const immutable = actionResult.rows[0] ? JSON.parse(String(actionResult.rows[0].data)) : undefined;
       const turnResult = await tx.execute({
-        sql: "SELECT command_fingerprint FROM support_turns WHERE id = ? AND case_id = ?",
-        args: [String(attempt?.turn_id ?? ""), command.approvalCaseId],
+        sql: 'SELECT command_fingerprint FROM support_turns WHERE id = ? AND case_id = ?',
+        args: [String(attempt?.turn_id ?? ''), command.approvalCaseId],
       });
-      const request = attempt?.stripe_request_data
-        ? JSON.parse(String(attempt.stripe_request_data))
-        : undefined;
+      const request = attempt?.stripe_request_data ? JSON.parse(String(attempt.stripe_request_data)) : undefined;
       const canonicalOwner = supportCase
         ? await canonicalConversationOwner(tx, {
             caseId: command.approvalCaseId,
@@ -208,32 +172,20 @@ export class CaseStoreDispatch {
           })
         : undefined;
       const ownerCurrent =
-        supportCase &&
-        canonicalOwner === input.ownerId &&
-        supportCase.metadata.ownerId === canonicalOwner;
+        supportCase && canonicalOwner === input.ownerId && supportCase.metadata.ownerId === canonicalOwner;
       const commandCurrent =
         attempt &&
-        ["prepared", "unknown"].includes(String(attempt.status)) &&
+        ['prepared', 'unknown'].includes(String(attempt.status)) &&
         String(attempt.case_id) === command.approvalCaseId &&
         String(attempt.tenant_id) === command.binding.tenantId &&
-        String(attempt.provider_account_id) ===
-          command.binding.providerAccountId &&
+        String(attempt.provider_account_id) === command.binding.providerAccountId &&
         String(attempt.command_fingerprint) === command.fingerprint &&
-        structurallyEqual(
-          attempt.command_data
-            ? JSON.parse(String(attempt.command_data))
-            : undefined,
-          command,
-        ) &&
+        structurallyEqual(attempt.command_data ? JSON.parse(String(attempt.command_data)) : undefined, command) &&
         structurallyEqual(request, input.request) &&
         structurallyEqual(immutable, command) &&
-        String(turnResult.rows[0]?.command_fingerprint ?? "") ===
-          command.fingerprint &&
+        String(turnResult.rows[0]?.command_fingerprint ?? '') === command.fingerprint &&
         supportCase !== undefined &&
-        structurallyEqual(
-          bindingsForCase(supportCase).transactions,
-          command.binding,
-        ) &&
+        structurallyEqual(bindingsForCase(supportCase).transactions, command.binding) &&
         ownerCurrent;
       let leaseCurrent = false;
       if (input.dispatch) {
@@ -249,15 +201,14 @@ export class CaseStoreDispatch {
         });
         leaseCurrent =
           Boolean(dispatch.rows[0]) &&
-          String(attempt?.dispatch_id ?? "") === input.dispatch.dispatchId &&
-          String(attempt?.lease_token ?? "") === input.dispatch.leaseToken &&
-          String(attempt?.turn_id ?? "") === input.dispatch.turnId &&
+          String(attempt?.dispatch_id ?? '') === input.dispatch.dispatchId &&
+          String(attempt?.lease_token ?? '') === input.dispatch.leaseToken &&
+          String(attempt?.turn_id ?? '') === input.dispatch.turnId &&
           supportCase?.metadata.activeTurnId === input.dispatch.turnId;
       } else if (input.reconciliationLeaseToken) {
         leaseCurrent =
-          String(attempt?.reconcile_lease_token ?? "") ===
-            input.reconciliationLeaseToken &&
-          Date.parse(String(attempt?.reconcile_lease_until ?? "")) > Date.now();
+          String(attempt?.reconcile_lease_token ?? '') === input.reconciliationLeaseToken &&
+          Date.parse(String(attempt?.reconcile_lease_until ?? '')) > Date.now();
       }
       if (!commandCurrent || !leaseCurrent) {
         await tx.rollback();
@@ -290,36 +241,29 @@ export class CaseStoreDispatch {
   async authorizeStripeSubscriptionCreditFirstEffect(input: {
     command: SubscriptionCreditCommand;
     dispatch: DispatchLeaseScope;
-    validatePolicy: (
-      tx: Awaited<ReturnType<Client["transaction"]>>,
-    ) => Promise<void>;
+    validatePolicy: (tx: Awaited<ReturnType<Client['transaction']>>) => Promise<void>;
   }) {
-    const tx = await this.client.transaction("write");
+    const tx = await this.client.transaction('write');
     try {
       const command = input.command;
       const attemptResult = await tx.execute({
-        sql: "SELECT * FROM support_stripe_subscription_credit_attempts WHERE idempotency_key = ? AND command_fingerprint = ?",
+        sql: 'SELECT * FROM support_stripe_subscription_credit_attempts WHERE idempotency_key = ? AND command_fingerprint = ?',
         args: [command.idempotencyKey, command.fingerprint],
       });
-      const attempt = attemptResult.rows[0] as
-        Record<string, unknown> | undefined;
+      const attempt = attemptResult.rows[0] as Record<string, unknown> | undefined;
       const caseResult = await tx.execute({
-        sql: "SELECT data FROM support_cases WHERE id = ?",
+        sql: 'SELECT data FROM support_cases WHERE id = ?',
         args: [command.approvalCaseId],
       });
-      const supportCase = caseResult.rows[0]
-        ? parse({ data: caseResult.rows[0].data })
-        : undefined;
+      const supportCase = caseResult.rows[0] ? parse({ data: caseResult.rows[0].data }) : undefined;
       const actionResult = await tx.execute({
         sql: "SELECT data FROM support_actions WHERE case_id = ? AND kind = 'subscription-credit-command' AND fingerprint = ?",
         args: [command.approvalCaseId, command.fingerprint],
       });
-      const immutable = actionResult.rows[0]
-        ? JSON.parse(String(actionResult.rows[0].data))
-        : undefined;
+      const immutable = actionResult.rows[0] ? JSON.parse(String(actionResult.rows[0].data)) : undefined;
       const turnResult = await tx.execute({
-        sql: "SELECT command_fingerprint FROM support_turns WHERE id = ? AND case_id = ?",
-        args: [String(attempt?.turn_id ?? ""), command.approvalCaseId],
+        sql: 'SELECT command_fingerprint FROM support_turns WHERE id = ? AND case_id = ?',
+        args: [String(attempt?.turn_id ?? ''), command.approvalCaseId],
       });
       const dispatch = await tx.execute({
         sql: "SELECT id FROM support_dispatch WHERE id = ? AND case_id = ? AND turn_id = ? AND lease_token = ? AND state IN ('claimed', 'started') AND lease_until > ?",
@@ -333,31 +277,21 @@ export class CaseStoreDispatch {
       });
       const commandCurrent =
         attempt &&
-        String(attempt.status) === "prepared" &&
+        String(attempt.status) === 'prepared' &&
         String(attempt.case_id) === command.approvalCaseId &&
         String(attempt.tenant_id) === command.binding.tenantId &&
-        String(attempt.provider_account_id) ===
-          command.binding.providerAccountId &&
+        String(attempt.provider_account_id) === command.binding.providerAccountId &&
         String(attempt.command_fingerprint) === command.fingerprint &&
-        structurallyEqual(
-          attempt.command_data
-            ? JSON.parse(String(attempt.command_data))
-            : undefined,
-          command,
-        ) &&
+        structurallyEqual(attempt.command_data ? JSON.parse(String(attempt.command_data)) : undefined, command) &&
         structurallyEqual(immutable, command) &&
-        String(turnResult.rows[0]?.command_fingerprint ?? "") ===
-          command.fingerprint &&
+        String(turnResult.rows[0]?.command_fingerprint ?? '') === command.fingerprint &&
         supportCase !== undefined &&
-        structurallyEqual(
-          bindingsForCase(supportCase).transactions,
-          command.binding,
-        );
+        structurallyEqual(bindingsForCase(supportCase).transactions, command.binding);
       const leaseCurrent =
         Boolean(dispatch.rows[0]) &&
-        String(attempt?.dispatch_id ?? "") === input.dispatch.dispatchId &&
-        String(attempt?.lease_token ?? "") === input.dispatch.leaseToken &&
-        String(attempt?.turn_id ?? "") === input.dispatch.turnId &&
+        String(attempt?.dispatch_id ?? '') === input.dispatch.dispatchId &&
+        String(attempt?.lease_token ?? '') === input.dispatch.leaseToken &&
+        String(attempt?.turn_id ?? '') === input.dispatch.turnId &&
         supportCase?.metadata.activeTurnId === input.dispatch.turnId;
       if (
         !commandCurrent ||
@@ -385,31 +319,26 @@ export class CaseStoreDispatch {
     command: SubscriptionCancellationCommand;
     dispatch: DispatchLeaseScope;
   }) {
-    const tx = await this.client.transaction("write");
+    const tx = await this.client.transaction('write');
     try {
       const command = input.command;
       const attemptResult = await tx.execute({
-        sql: "SELECT * FROM support_subscription_cancellation_attempts WHERE idempotency_key = ? AND fingerprint = ?",
+        sql: 'SELECT * FROM support_subscription_cancellation_attempts WHERE idempotency_key = ? AND fingerprint = ?',
         args: [command.idempotencyKey, command.fingerprint],
       });
-      const attempt = attemptResult.rows[0] as
-        Record<string, unknown> | undefined;
+      const attempt = attemptResult.rows[0] as Record<string, unknown> | undefined;
       const caseResult = await tx.execute({
-        sql: "SELECT data FROM support_cases WHERE id = ?",
+        sql: 'SELECT data FROM support_cases WHERE id = ?',
         args: [command.caseId],
       });
-      const supportCase = caseResult.rows[0]
-        ? parse({ data: caseResult.rows[0].data })
-        : undefined;
+      const supportCase = caseResult.rows[0] ? parse({ data: caseResult.rows[0].data }) : undefined;
       const actionResult = await tx.execute({
         sql: "SELECT data FROM support_actions WHERE case_id = ? AND kind = 'subscription-cancellation-command' AND fingerprint = ?",
         args: [command.caseId, command.fingerprint],
       });
-      const immutable = actionResult.rows[0]
-        ? JSON.parse(String(actionResult.rows[0].data))
-        : undefined;
+      const immutable = actionResult.rows[0] ? JSON.parse(String(actionResult.rows[0].data)) : undefined;
       const turnResult = await tx.execute({
-        sql: "SELECT command_fingerprint FROM support_turns WHERE id = ? AND case_id = ?",
+        sql: 'SELECT command_fingerprint FROM support_turns WHERE id = ? AND case_id = ?',
         args: [command.turnId, command.caseId],
       });
       const dispatch = await tx.execute({
@@ -425,22 +354,15 @@ export class CaseStoreDispatch {
       const current =
         Boolean(dispatch.rows[0]) &&
         attempt &&
-        String(attempt.status) === "claimed" &&
+        String(attempt.status) === 'claimed' &&
         String(attempt.case_id) === command.caseId &&
         String(attempt.turn_id) === command.turnId &&
         String(attempt.tenant_id) === command.binding.tenantId &&
-        String(attempt.provider_account_id) ===
-          command.binding.providerAccountId &&
+        String(attempt.provider_account_id) === command.binding.providerAccountId &&
         String(attempt.subscription_id) === command.subscriptionId &&
-        structurallyEqual(
-          attempt.command_data
-            ? JSON.parse(String(attempt.command_data))
-            : undefined,
-          command,
-        ) &&
+        structurallyEqual(attempt.command_data ? JSON.parse(String(attempt.command_data)) : undefined, command) &&
         structurallyEqual(immutable, command) &&
-        String(turnResult.rows[0]?.command_fingerprint ?? "") ===
-          command.fingerprint &&
+        String(turnResult.rows[0]?.command_fingerprint ?? '') === command.fingerprint &&
         supportCase !== undefined &&
         supportCase.metadata.activeTurnId === command.turnId &&
         supportCase.metadata.ownerId === command.ownerId &&
@@ -448,10 +370,7 @@ export class CaseStoreDispatch {
           caseId: command.caseId,
           binding: bindingsForCase(supportCase).support,
         })) === command.ownerId &&
-        structurallyEqual(
-          bindingsForCase(supportCase).transactions,
-          command.binding,
-        );
+        structurallyEqual(bindingsForCase(supportCase).transactions, command.binding);
       if (!current) {
         await tx.rollback();
         return false;
@@ -467,14 +386,14 @@ export class CaseStoreDispatch {
   }
   async completeDispatch(
     id: string,
-    state: Exclude<DispatchState, "pending" | "claimed">,
+    state: Exclude<DispatchState, 'pending' | 'claimed'>,
     error?: unknown,
     leaseToken?: string,
   ) {
-    const tx = await this.client.transaction("write");
+    const tx = await this.client.transaction('write');
     try {
       const transitioned = await tx.execute({
-        sql: `UPDATE support_dispatch SET state = ?, lease_until = NULL, lease_token = NULL, last_error = ?, updated_at = ? WHERE id = ?${leaseToken ? " AND lease_token = ? AND state IN ('claimed', 'started') AND lease_until > ?" : ""}`,
+        sql: `UPDATE support_dispatch SET state = ?, lease_until = NULL, lease_token = NULL, last_error = ?, updated_at = ? WHERE id = ?${leaseToken ? " AND lease_token = ? AND state IN ('claimed', 'started') AND lease_until > ?" : ''}`,
         args: leaseToken
           ? [state, error ? String(error) : null, now(), id, leaseToken, now()]
           : [state, error ? String(error) : null, now(), id],
@@ -505,27 +424,23 @@ export class CaseStoreDispatch {
     caseId: string,
     error: unknown,
     leaseToken?: string,
-    terminalStatus: "failed" | "escalated" = "failed",
+    terminalStatus: 'failed' | 'escalated' = 'failed',
   ) {
-    const tx = await this.client.transaction("write");
+    const tx = await this.client.transaction('write');
     try {
       const transitioned = await tx.execute({
-        sql: `UPDATE support_dispatch SET state = 'failed', lease_until = NULL, lease_token = NULL, last_error = ?, updated_at = ? WHERE id = ? AND case_id = ? AND state IN ('claimed', 'started')${leaseToken ? " AND lease_token = ? AND lease_until > ?" : ""}`,
-        args: leaseToken
-          ? [String(error), now(), id, caseId, leaseToken, now()]
-          : [String(error), now(), id, caseId],
+        sql: `UPDATE support_dispatch SET state = 'failed', lease_until = NULL, lease_token = NULL, last_error = ?, updated_at = ? WHERE id = ? AND case_id = ? AND state IN ('claimed', 'started')${leaseToken ? ' AND lease_token = ? AND lease_until > ?' : ''}`,
+        args: leaseToken ? [String(error), now(), id, caseId, leaseToken, now()] : [String(error), now(), id, caseId],
       });
       if (Number(transitioned.rowsAffected) !== 1) {
         await tx.rollback();
         return false;
       }
       const caseRow = await tx.execute({
-        sql: "SELECT data, version FROM support_cases WHERE id = ?",
+        sql: 'SELECT data, version FROM support_cases WHERE id = ?',
         args: [caseId],
       });
-      const current = caseRow.rows[0]
-        ? parse(caseRow.rows[0] as Record<string, unknown>)
-        : undefined;
+      const current = caseRow.rows[0] ? parse(caseRow.rows[0] as Record<string, unknown>) : undefined;
       await tx.execute({
         sql: "UPDATE support_turns SET state = ?, outcome_data = json_patch(COALESCE(outcome_data, '{}'), ?), updated_at = ? WHERE id = (SELECT turn_id FROM support_dispatch WHERE id = ?) AND case_id = ?",
         args: [
@@ -544,10 +459,10 @@ export class CaseStoreDispatch {
             finalResponse: current?.finalResponse,
             escalationReason: String(error),
             workflowRunId: current?.workflowRunId,
-            ...(terminalStatus === "escalated"
+            ...(terminalStatus === 'escalated'
               ? {
                   operationalFailure: {
-                    disposition: "escalate",
+                    disposition: 'escalate',
                     recordedAt: now(),
                   },
                 }
@@ -567,16 +482,10 @@ export class CaseStoreDispatch {
           updatedAt: now(),
         });
         const write = await tx.execute({
-          sql: "UPDATE support_cases SET data = ?, updated_at = ?, version = version + 1 WHERE id = ? AND version = ?",
-          args: [
-            JSON.stringify(updated),
-            updated.updatedAt,
-            caseId,
-            Number(caseRow.rows[0].version ?? 1),
-          ],
+          sql: 'UPDATE support_cases SET data = ?, updated_at = ?, version = version + 1 WHERE id = ? AND version = ?',
+          args: [JSON.stringify(updated), updated.updatedAt, caseId, Number(caseRow.rows[0].version ?? 1)],
         });
-        if (Number(write.rowsAffected) !== 1)
-          throw new StaleCaseWriteError(caseId);
+        if (Number(write.rowsAffected) !== 1) throw new StaleCaseWriteError(caseId);
       }
       await tx.commit();
       return true;
@@ -590,19 +499,12 @@ export class CaseStoreDispatch {
   /** A provider/tool fault has a bounded durable retry path. The claim counter
    * is incremented before work begins, so this may only restore attempts 1-2;
    * the third failed claim falls through to terminal human escalation. */
-  async retryDispatch(
-    id: string,
-    caseId: string,
-    error: unknown,
-    leaseToken?: string,
-  ) {
-    const tx = await this.client.transaction("write");
+  async retryDispatch(id: string, caseId: string, error: unknown, leaseToken?: string) {
+    const tx = await this.client.transaction('write');
     try {
       const retried = await tx.execute({
-        sql: `UPDATE support_dispatch SET state = 'pending', lease_until = NULL, lease_token = NULL, last_error = ?, updated_at = ? WHERE id = ? AND case_id = ? AND state IN ('claimed', 'started') AND attempts < 3${leaseToken ? " AND lease_token = ?" : ""}`,
-        args: leaseToken
-          ? [String(error), now(), id, caseId, leaseToken]
-          : [String(error), now(), id, caseId],
+        sql: `UPDATE support_dispatch SET state = 'pending', lease_until = NULL, lease_token = NULL, last_error = ?, updated_at = ? WHERE id = ? AND case_id = ? AND state IN ('claimed', 'started') AND attempts < 3${leaseToken ? ' AND lease_token = ?' : ''}`,
+        args: leaseToken ? [String(error), now(), id, caseId, leaseToken] : [String(error), now(), id, caseId],
       });
       if (Number(retried.rowsAffected) !== 1) {
         await tx.rollback();
@@ -612,7 +514,7 @@ export class CaseStoreDispatch {
         sql: "UPDATE support_turns SET state = 'pending', outcome_data = json_patch(COALESCE(outcome_data, '{}'), ?), updated_at = ? WHERE id = (SELECT turn_id FROM support_dispatch WHERE id = ?) AND case_id = ?",
         args: [
           JSON.stringify({
-            operationalFailure: { disposition: "retry", recordedAt: now() },
+            operationalFailure: { disposition: 'retry', recordedAt: now() },
           }),
           now(),
           id,
@@ -630,7 +532,7 @@ export class CaseStoreDispatch {
   }
   async markDispatchStarted(dispatchId: string, leaseToken?: string) {
     await this.client.execute({
-      sql: `UPDATE support_dispatch SET state = 'started', updated_at = ? WHERE id = ? AND state = 'claimed'${leaseToken ? " AND lease_token = ?" : ""}`,
+      sql: `UPDATE support_dispatch SET state = 'started', updated_at = ? WHERE id = ? AND state = 'claimed'${leaseToken ? ' AND lease_token = ?' : ''}`,
       args: leaseToken ? [now(), dispatchId, leaseToken] : [now(), dispatchId],
     });
     await this.client.execute({
@@ -642,32 +544,25 @@ export class CaseStoreDispatch {
    * transaction. A queued turn can never inherit a prior turn's identity. */
   async activateDispatch(dispatch: DispatchRecord) {
     if (!dispatch.leaseToken) return false;
-    const tx = await this.client.transaction("write");
+    const tx = await this.client.transaction('write');
     try {
       const started = await tx.execute({
         sql: "UPDATE support_dispatch SET state = 'started', updated_at = ? WHERE id = ? AND case_id = ? AND turn_id = ? AND state = 'claimed' AND lease_token = ?",
-        args: [
-          now(),
-          dispatch.id,
-          dispatch.caseId,
-          dispatch.turnId,
-          dispatch.leaseToken,
-        ],
+        args: [now(), dispatch.id, dispatch.caseId, dispatch.turnId, dispatch.leaseToken],
       });
       if (Number(started.rowsAffected) !== 1) {
         await tx.rollback();
         return false;
       }
       const row = await tx.execute({
-        sql: "SELECT data, version FROM support_cases WHERE id = ?",
+        sql: 'SELECT data, version FROM support_cases WHERE id = ?',
         args: [dispatch.caseId],
       });
-      if (!row.rows[0])
-        throw new Error(`Support case not found: ${dispatch.caseId}`);
+      if (!row.rows[0]) throw new Error(`Support case not found: ${dispatch.caseId}`);
       const current = parse(row.rows[0] as Record<string, unknown>);
       const previousTurnId = current.metadata.activeTurnId;
       const switchesTurn = previousTurnId !== dispatch.turnId;
-      if (switchesTurn && typeof previousTurnId === "string")
+      if (switchesTurn && typeof previousTurnId === 'string')
         await tx.execute({
           sql: "UPDATE support_turns SET outcome_data = json_patch(COALESCE(outcome_data, '{}'), ?), updated_at = ? WHERE id = ? AND case_id = ?",
           args: [
@@ -693,20 +588,16 @@ export class CaseStoreDispatch {
         });
       const updated = withBindings({
         ...current,
-        status: "processing",
+        status: 'processing',
         triage: switchesTurn ? undefined : current.triage,
         policyMatches: switchesTurn ? undefined : current.policyMatches,
         orderLookup: switchesTurn ? undefined : current.orderLookup,
-        subscriptionLookup: switchesTurn
-          ? undefined
-          : current.subscriptionLookup,
+        subscriptionLookup: switchesTurn ? undefined : current.subscriptionLookup,
         refundHistory: switchesTurn ? undefined : current.refundHistory,
         draft: switchesTurn ? undefined : current.draft,
         approval: switchesTurn ? undefined : current.approval,
         refundResult: switchesTurn ? undefined : current.refundResult,
-        subscriptionCreditResult: switchesTurn
-          ? undefined
-          : current.subscriptionCreditResult,
+        subscriptionCreditResult: switchesTurn ? undefined : current.subscriptionCreditResult,
         finalResponse: switchesTurn ? undefined : current.finalResponse,
         escalationReason: switchesTurn ? undefined : current.escalationReason,
         traceId: switchesTurn ? undefined : current.traceId,
@@ -729,16 +620,10 @@ export class CaseStoreDispatch {
         updatedAt: now(),
       });
       const written = await tx.execute({
-        sql: "UPDATE support_cases SET data = ?, updated_at = ?, version = version + 1 WHERE id = ? AND version = ?",
-        args: [
-          JSON.stringify(updated),
-          updated.updatedAt,
-          dispatch.caseId,
-          Number(row.rows[0].version ?? 1),
-        ],
+        sql: 'UPDATE support_cases SET data = ?, updated_at = ?, version = version + 1 WHERE id = ? AND version = ?',
+        args: [JSON.stringify(updated), updated.updatedAt, dispatch.caseId, Number(row.rows[0].version ?? 1)],
       });
-      if (Number(written.rowsAffected) !== 1)
-        throw new StaleCaseWriteError(dispatch.caseId);
+      if (Number(written.rowsAffected) !== 1) throw new StaleCaseWriteError(dispatch.caseId);
       await tx.execute({
         sql: "UPDATE support_turns SET state = 'processing', updated_at = ? WHERE id = ? AND case_id = ?",
         args: [now(), dispatch.turnId, dispatch.caseId],

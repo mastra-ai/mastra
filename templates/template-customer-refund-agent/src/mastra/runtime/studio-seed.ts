@@ -1,8 +1,8 @@
-import { caseStore } from "../lib/case-store";
-import { defaultLocalBinding, localRuntime } from "./local-provider";
+import { caseStore } from '../lib/case-store';
+import { defaultLocalBinding, localRuntime } from './local-provider';
 
 /** The first native Studio investigation is safe, persisted, and synthetic. */
-export const studioSupervisorDemoCaseId = "studio-demo-order-status";
+export const studioSupervisorDemoCaseId = 'studio-demo-order-status';
 
 export async function ensureStudioSupervisorDemoCase() {
   const existing = await caseStore.get(studioSupervisorDemoCaseId);
@@ -16,24 +16,24 @@ export async function ensureStudioSupervisorDemoCase() {
   const createdAt = new Date().toISOString();
   const supportCase = {
     id: studioSupervisorDemoCaseId,
-    externalId: "studio-demo-order-status-event",
-    source: "mock-email" as const,
-    customer: { email: "alex@example.com", name: "Alex Rivera" },
-    subject: "Where is order ORD-1001?",
+    externalId: 'studio-demo-order-status-event',
+    source: 'mock-email' as const,
+    customer: { email: 'alex@example.com', name: 'Alex Rivera' },
+    subject: 'Where is order ORD-1001?',
     messages: [
       {
-        id: "studio-demo-order-status-message",
-        author: "customer" as const,
-        authorName: "Alex Rivera",
-        body: "Can you check the status of order ORD-1001?",
+        id: 'studio-demo-order-status-message',
+        author: 'customer' as const,
+        authorName: 'Alex Rivera',
+        body: 'Can you check the status of order ORD-1001?',
         createdAt,
       },
     ],
-    status: "new" as const,
+    status: 'new' as const,
     createdAt,
     updatedAt: createdAt,
     metadata: {
-      ownerId: "customer-alex",
+      ownerId: 'customer-alex',
       providerBinding: binding,
     },
   };

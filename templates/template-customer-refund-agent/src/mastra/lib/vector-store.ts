@@ -1,18 +1,12 @@
-import { LibSQLVector } from "@mastra/libsql";
-import { resolveDatabaseUrl } from "./database-url";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
-import { MDocument } from "@mastra/rag";
-import type {
-  KnowledgeEvidence,
-  ProviderBinding,
-} from "../providers/contracts";
-import type { PublishedEvidence } from "./knowledge-publications";
-import { knowledgePublicationStore } from "./knowledge-publications";
-import { createHash } from "node:crypto";
-import {
-  budgetedEmbedding,
-  type ValidationBudgetExecution,
-} from "./eval-budget";
+import { LibSQLVector } from '@mastra/libsql';
+import { resolveDatabaseUrl } from './database-url';
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm';
+import { MDocument } from '@mastra/rag';
+import type { KnowledgeEvidence, ProviderBinding } from '../providers/contracts';
+import type { PublishedEvidence } from './knowledge-publications';
+import { knowledgePublicationStore } from './knowledge-publications';
+import { createHash } from 'node:crypto';
+import { budgetedEmbedding, type ValidationBudgetExecution } from './eval-budget';
 
 function resolveLibsqlConfig() {
   return {
@@ -22,24 +16,21 @@ function resolveLibsqlConfig() {
 }
 
 export const vectorStore = new LibSQLVector({
-  id: "support-vectors",
+  id: 'support-vectors',
   ...resolveLibsqlConfig(),
 });
 
-export const KNOWLEDGE_INDEX = "support_knowledge";
-export const EMBEDDING_MODEL = "openai/text-embedding-3-small";
+export const KNOWLEDGE_INDEX = 'support_knowledge';
+export const EMBEDDING_MODEL = 'openai/text-embedding-3-small';
 export const EMBEDDING_DIMENSION = 1536;
 
 const indexNameForGeneration = (generationId: string) =>
-  `${KNOWLEDGE_INDEX}_${createHash("sha256")
-    .update(generationId)
-    .digest("hex")
-    .slice(0, 32)}`;
+  `${KNOWLEDGE_INDEX}_${createHash('sha256').update(generationId).digest('hex').slice(0, 32)}`;
 
 function chunkId(documentHash: string, chunkIndex: number, text: string) {
-  return createHash("sha256")
+  return createHash('sha256')
     .update(JSON.stringify([documentHash, chunkIndex, text]))
-    .digest("hex");
+    .digest('hex');
 }
 
 async function authoritativeChunks(document: PublishedEvidence) {
@@ -49,7 +40,7 @@ async function authoritativeChunks(document: PublishedEvidence) {
   });
   return (
     await mdoc.chunk({
-      strategy: "recursive",
+      strategy: 'recursive',
       maxSize: 512,
       overlap: 50,
     })
@@ -72,35 +63,27 @@ export async function buildPublishedVectorCandidate(
   await vectorStore.createIndex({
     indexName,
     dimension: EMBEDDING_DIMENSION,
-    metric: "cosine",
+    metric: 'cosine',
   });
   const chunks: Array<{ text: string; metadata: Record<string, unknown> }> = [];
   for (const document of documents) {
-    if (!document.effectiveAt)
-      throw new Error(
-        "Knowledge vector candidate lacks source effective time.",
-      );
-    const documentHash = createHash("sha256")
-      .update(
-        JSON.stringify([document.source, document.version, document.text]),
-      )
-      .digest("hex");
+    if (!document.effectiveAt) throw new Error('Knowledge vector candidate lacks source effective time.');
+    const documentHash = createHash('sha256')
+      .update(JSON.stringify([document.source, document.version, document.text]))
+      .digest('hex');
     const authoritative = await knowledgePublicationStore.document(
       binding,
       generationId,
       document.source,
       documentHash,
     );
-    if (!authoritative)
-      throw new Error(
-        "Knowledge vector candidate lacks publication authority.",
-      );
+    if (!authoritative) throw new Error('Knowledge vector candidate lacks publication authority.');
     const mdoc = MDocument.fromText(document.text, {
       title: document.title,
       source: document.source,
     });
     const pieces = await mdoc.chunk({
-      strategy: "recursive",
+      strategy: 'recursive',
       maxSize: 512,
       overlap: 50,
     });
@@ -118,44 +101,35 @@ export async function buildPublishedVectorCandidate(
           indexedAt: authoritative.indexedAt,
           expiresAt: authoritative.expiresAt,
           chunkIndex,
-          chunkId: chunkId(
-            authoritative.documentHash,
-            chunkIndex,
-            String(piece.text),
-          ),
+          chunkId: chunkId(authoritative.documentHash, chunkIndex, String(piece.text)),
           tenantId: binding.tenantId,
           providerKind: binding.providerKind,
           providerAccountId: binding.providerAccountId,
         },
       });
   }
-  if (chunks.length === 0)
-    throw new Error("Knowledge vector candidate has no chunks.");
+  if (chunks.length === 0) throw new Error('Knowledge vector candidate has no chunks.');
   const model = new ModelRouterEmbeddingModel(EMBEDDING_MODEL);
   const { embeddings } = await budgetedEmbedding({
     execution: validationExecution,
     model: EMBEDDING_MODEL,
-    values: chunks.map((chunk) => chunk.text),
+    values: chunks.map(chunk => chunk.text),
     execute: () =>
       model.doEmbed({
-        values: chunks.map((chunk) => chunk.text),
+        values: chunks.map(chunk => chunk.text),
       }),
   });
   if (
     embeddings.length !== chunks.length ||
     embeddings.some(
-      (embedding) =>
-        embedding.length !== EMBEDDING_DIMENSION ||
-        embedding.some((value) => !Number.isFinite(value)),
+      embedding => embedding.length !== EMBEDDING_DIMENSION || embedding.some(value => !Number.isFinite(value)),
     )
   )
-    throw new Error(
-      "Knowledge vector candidate has invalid embedding dimensions.",
-    );
+    throw new Error('Knowledge vector candidate has invalid embedding dimensions.');
   await vectorStore.upsert({
     indexName,
     vectors: embeddings,
-    metadata: chunks.map((chunk) => chunk.metadata),
+    metadata: chunks.map(chunk => chunk.metadata),
   });
 }
 
@@ -178,9 +152,9 @@ export async function searchPublishedVector(
   if (
     embeddings.length !== 1 ||
     embeddings[0]?.length !== EMBEDDING_DIMENSION ||
-    embeddings[0].some((value) => !Number.isFinite(value))
+    embeddings[0].some(value => !Number.isFinite(value))
   )
-    throw new Error("Knowledge vector query has invalid embedding dimensions.");
+    throw new Error('Knowledge vector query has invalid embedding dimensions.');
   const rows = await vectorStore.query({
     indexName: indexNameForGeneration(generationId),
     queryVector: embeddings[0]!,
@@ -194,24 +168,24 @@ export async function searchPublishedVector(
       metadata.providerKind !== binding.providerKind ||
       metadata.providerAccountId !== binding.providerAccountId ||
       metadata.generationId !== generationId ||
-      typeof metadata.documentHash !== "string" ||
+      typeof metadata.documentHash !== 'string' ||
       !metadata.documentHash ||
       !Number.isFinite(Date.parse(String(metadata.effectiveAt))) ||
       !Number.isFinite(Date.parse(String(metadata.indexedAt)))
     )
-      throw new Error("Knowledge vector result has invalid provenance.");
+      throw new Error('Knowledge vector result has invalid provenance.');
     if (
-      typeof metadata.source !== "string" ||
-      typeof metadata.version !== "string" ||
-      typeof metadata.title !== "string" ||
-      typeof metadata.text !== "string" ||
+      typeof metadata.source !== 'string' ||
+      typeof metadata.version !== 'string' ||
+      typeof metadata.title !== 'string' ||
+      typeof metadata.text !== 'string' ||
       !metadata.text ||
       !Number.isInteger(metadata.chunkIndex) ||
       (metadata.chunkIndex as number) < 0 ||
-      typeof metadata.chunkId !== "string" ||
+      typeof metadata.chunkId !== 'string' ||
       !metadata.chunkId
     )
-      throw new Error("Knowledge vector result has incomplete provenance.");
+      throw new Error('Knowledge vector result has incomplete provenance.');
     const authoritative = await knowledgePublicationStore.document(
       binding,
       generationId,
@@ -222,9 +196,7 @@ export async function searchPublishedVector(
     // source identity and all serving metadata match SQL authority, and its
     // exact generated chunk identity/content match the authoritative source.
     const authoritativeChunk = authoritative
-      ? (await authoritativeChunks(authoritative)).find(
-          (chunk) => chunk.chunkIndex === metadata.chunkIndex,
-        )
+      ? (await authoritativeChunks(authoritative)).find(chunk => chunk.chunkIndex === metadata.chunkIndex)
       : undefined;
     if (
       !authoritative ||
@@ -236,9 +208,7 @@ export async function searchPublishedVector(
       metadata.text !== authoritativeChunk.text ||
       metadata.chunkId !== authoritativeChunk.chunkId
     )
-      throw new Error(
-        "Knowledge vector result does not match the publication.",
-      );
+      throw new Error('Knowledge vector result does not match the publication.');
     const now = Date.now();
     if (
       Date.parse(authoritative.effectiveAt) > now ||

@@ -1,27 +1,11 @@
-import { createHash } from "node:crypto";
-import type {
-  CaseFeedback,
-  CaseMessage,
-  SupportCase,
-} from "../domain/support-case.ts";
-import { supportCaseSchema } from "../domain/support-case.ts";
-import {
-  bindingsForCase,
-  sameBinding,
-  type ProviderBinding,
-} from "../providers/contracts.ts";
+import { createHash } from 'node:crypto';
+import type { CaseFeedback, CaseMessage, SupportCase } from '../domain/support-case.ts';
+import { supportCaseSchema } from '../domain/support-case.ts';
+import { bindingsForCase, sameBinding, type ProviderBinding } from '../providers/contracts.ts';
 
-export type DispatchState =
-  "pending" | "claimed" | "completed" | "suspended" | "failed";
-export type OutboxState =
-  | "pending"
-  | "claimed"
-  | "started"
-  | "delivered"
-  | "failed"
-  | "uncertain"
-  | "superseded";
-export type OutboxOperation = "reply" | "note" | "status" | "ticket";
+export type DispatchState = 'pending' | 'claimed' | 'completed' | 'suspended' | 'failed';
+export type OutboxState = 'pending' | 'claimed' | 'started' | 'delivered' | 'failed' | 'uncertain' | 'superseded';
+export type OutboxOperation = 'reply' | 'note' | 'status' | 'ticket';
 export interface OutboxRecord {
   id: string;
   caseId: string;
@@ -41,7 +25,7 @@ export interface OutboxRecord {
   originatingTurnId?: string;
   originatingRunId?: string;
   originatingTraceId?: string;
-  correlationState?: "known" | "unknown";
+  correlationState?: 'known' | 'unknown';
 }
 export interface DispatchRecord {
   id: string;
@@ -69,7 +53,7 @@ export interface FeedbackRecord {
   id: string;
   caseId: string;
   feedback: CaseFeedback;
-  attributionState?: "known" | "legacy-unknown";
+  attributionState?: 'known' | 'legacy-unknown';
 }
 /**
  * An authenticated staff investigation is observability bookkeeping, not a
@@ -84,7 +68,7 @@ export interface SupervisorExecutionRecord {
   actorId: string;
   runId: string;
   traceId?: string;
-  state: "completed" | "failed";
+  state: 'completed' | 'failed';
   createdAt: string;
 }
 export const retentionDefaults = {
@@ -110,22 +94,14 @@ export function retentionPolicyFromEnvironment(): RetentionPolicy {
   };
   return {
     rawPayloadDays: bounded(
-      "SUPPORT_RETENTION_RAW_PAYLOAD_DAYS",
+      'SUPPORT_RETENTION_RAW_PAYLOAD_DAYS',
       retentionDefaults.rawPayloadDays,
       retentionDefaults.rawPayloadDays,
     ),
-    caseDays: bounded(
-      "SUPPORT_RETENTION_CASE_DAYS",
-      retentionDefaults.caseDays,
-      retentionDefaults.caseDays,
-    ),
-    traceDays: bounded(
-      "SUPPORT_RETENTION_TRACE_DAYS",
-      retentionDefaults.traceDays,
-      retentionDefaults.traceDays,
-    ),
+    caseDays: bounded('SUPPORT_RETENTION_CASE_DAYS', retentionDefaults.caseDays, retentionDefaults.caseDays),
+    traceDays: bounded('SUPPORT_RETENTION_TRACE_DAYS', retentionDefaults.traceDays, retentionDefaults.traceDays),
     financialAuditDays: bounded(
-      "SUPPORT_RETENTION_FINANCIAL_AUDIT_DAYS",
+      'SUPPORT_RETENTION_FINANCIAL_AUDIT_DAYS',
       retentionDefaults.financialAuditDays,
       retentionDefaults.financialAuditDays,
     ),
@@ -171,11 +147,9 @@ export function now() {
 // test-only override lets integration coverage cross that boundary without
 // changing the deployed lifetime.
 export function dispatchLeaseDurationMs() {
-  if (process.env.NODE_ENV !== "test") return 30_000;
+  if (process.env.NODE_ENV !== 'test') return 30_000;
   const configured = Number(process.env.SUPPORT_TEST_DISPATCH_LEASE_MS);
-  return Number.isSafeInteger(configured) && configured > 0
-    ? configured
-    : 30_000;
+  return Number.isSafeInteger(configured) && configured > 0 ? configured : 30_000;
 }
 
 export function dispatchLeaseUntil() {
@@ -192,27 +166,25 @@ export function parse(row: Record<string, unknown>): SupportCase {
  */
 export function parseLegacyCase(row: Record<string, unknown>): SupportCase {
   const value: unknown = JSON.parse(String(row.data));
-  if (value && typeof value === "object") return value as SupportCase;
-  throw new Error("Persisted legacy support case is not an object.");
+  if (value && typeof value === 'object') return value as SupportCase;
+  throw new Error('Persisted legacy support case is not an object.');
 }
 export function scopedEventId(binding: ProviderBinding, eventId: string) {
   // `support_events.id` is the physical primary key as well as the logical
   // event key.  Qualify it too: the logical uniqueness constraint is scoped,
   // and a global physical id must not reintroduce the old collision.
-  return `event_${createHash("sha256")
-    .update(
-      JSON.stringify([binding.tenantId, binding.providerAccountId, eventId]),
-    )
-    .digest("hex")}`;
+  return `event_${createHash('sha256')
+    .update(JSON.stringify([binding.tenantId, binding.providerAccountId, eventId]))
+    .digest('hex')}`;
 }
 
 /** Provider message IDs are only unique within their conversation/account.
  * The app-owned retention mirror has one physical primary key, so qualify its
  * storage key without changing the domain-visible message identity. */
 export function scopedMessageId(caseId: string, messageId: string) {
-  return `message_${createHash("sha256")
+  return `message_${createHash('sha256')
     .update(JSON.stringify([caseId, messageId]))
-    .digest("hex")}`;
+    .digest('hex')}`;
 }
 
 export function isRetentionTombstone(supportCase: SupportCase) {
@@ -226,24 +198,21 @@ export function isRetentionTombstone(supportCase: SupportCase) {
  * refund, or subscription data.
  */
 export const financialRetentionTombstone = Object.freeze({
-  retention: "terminal-financial-effect",
+  retention: 'terminal-financial-effect',
 });
 
 export function isFinancialRetentionTombstone(effect: unknown) {
   return (
     !!effect &&
-    typeof effect === "object" &&
+    typeof effect === 'object' &&
     !Array.isArray(effect) &&
     Object.keys(effect).length === 1 &&
-    (effect as { retention?: unknown }).retention ===
-      financialRetentionTombstone.retention
+    (effect as { retention?: unknown }).retention === financialRetentionTombstone.retention
   );
 }
 
 export function financialRetentionTombstoneError() {
-  return new Error(
-    "A retained terminal financial tombstone blocks replay or a new provider effect.",
-  );
+  return new Error('A retained terminal financial tombstone blocks replay or a new provider effect.');
 }
 
 export function caseBinding(case_: SupportCase): ProviderBinding {
@@ -263,70 +232,38 @@ export function withBindings(case_: SupportCase): SupportCase {
   });
 }
 
-export function assertBindingsUnchanged(
-  current: SupportCase,
-  updated: SupportCase,
-) {
+export function assertBindingsUnchanged(current: SupportCase, updated: SupportCase) {
   const before = bindingsForCase(current);
   const after = bindingsForCase(updated);
-  for (const port of [
-    "support",
-    "commerce",
-    "transactions",
-    "knowledge",
-  ] as const)
-    if (!sameBinding(before[port], after[port]))
-      throw new Error(`Persisted ${port} provider binding is immutable.`);
+  for (const port of ['support', 'commerce', 'transactions', 'knowledge'] as const)
+    if (!sameBinding(before[port], after[port])) throw new Error(`Persisted ${port} provider binding is immutable.`);
 }
 
-export function outboxFingerprint(
-  binding: ProviderBinding,
-  operation: OutboxOperation,
-  body: string,
-  status: string,
-) {
-  return createHash("sha256")
-    .update(JSON.stringify({ binding, operation, body, status }))
-    .digest("hex");
+export function outboxFingerprint(binding: ProviderBinding, operation: OutboxOperation, body: string, status: string) {
+  return createHash('sha256').update(JSON.stringify({ binding, operation, body, status })).digest('hex');
 }
 
-export function outbox(
-  row: Record<string, unknown>,
-  state: OutboxState,
-): OutboxRecord {
+export function outbox(row: Record<string, unknown>, state: OutboxState): OutboxRecord {
   return {
     id: String(row.id),
     caseId: String(row.case_id),
     binding: JSON.parse(String(row.binding)) as ProviderBinding,
     body: String(row.body),
     status: String(row.status),
-    operation: ["reply", "note", "status", "ticket"].includes(
-      String(row.operation),
-    )
+    operation: ['reply', 'note', 'status', 'ticket'].includes(String(row.operation))
       ? (String(row.operation) as OutboxOperation)
-      : "reply",
-    payloadFingerprint: row.payload_fingerprint
-      ? String(row.payload_fingerprint)
-      : undefined,
-    nextAttemptAt: row.next_attempt_at
-      ? String(row.next_attempt_at)
-      : undefined,
+      : 'reply',
+    payloadFingerprint: row.payload_fingerprint ? String(row.payload_fingerprint) : undefined,
+    nextAttemptAt: row.next_attempt_at ? String(row.next_attempt_at) : undefined,
     state,
     attempts: Number(row.attempts) + 1,
     receipt: row.receipt ? JSON.parse(String(row.receipt)) : undefined,
     lastError: row.last_error ? String(row.last_error) : undefined,
     leaseToken: row.lease_token ? String(row.lease_token) : undefined,
-    originatingTurnId: row.originating_turn_id
-      ? String(row.originating_turn_id)
-      : undefined,
-    originatingRunId: row.originating_run_id
-      ? String(row.originating_run_id)
-      : undefined,
-    originatingTraceId: row.originating_trace_id
-      ? String(row.originating_trace_id)
-      : undefined,
-    correlationState:
-      String(row.correlation_state) === "known" ? "known" : "unknown",
+    originatingTurnId: row.originating_turn_id ? String(row.originating_turn_id) : undefined,
+    originatingRunId: row.originating_run_id ? String(row.originating_run_id) : undefined,
+    originatingTraceId: row.originating_trace_id ? String(row.originating_trace_id) : undefined,
+    correlationState: String(row.correlation_state) === 'known' ? 'known' : 'unknown',
   };
 }
 
@@ -340,32 +277,16 @@ export function stripeAttempt(row: Record<string, unknown>) {
     idempotencyKey: String(row.idempotency_key),
     dispatchId: String(row.dispatch_id),
     leaseToken: String(row.lease_token),
-    status: String(row.status) as
-      | "prepared"
-      | "pending"
-      | "succeeded"
-      | "failed"
-      | "unknown"
-      | "quarantined",
+    status: String(row.status) as 'prepared' | 'pending' | 'succeeded' | 'failed' | 'unknown' | 'quarantined',
     refundId: row.refund_id ? String(row.refund_id) : undefined,
-    providerStatus: row.provider_status
-      ? String(row.provider_status)
-      : undefined,
+    providerStatus: row.provider_status ? String(row.provider_status) : undefined,
     turnId: row.turn_id ? String(row.turn_id) : undefined,
-    command: row.command_data
-      ? JSON.parse(String(row.command_data))
-      : undefined,
-    stripeRequest: row.stripe_request_data
-      ? JSON.parse(String(row.stripe_request_data))
-      : undefined,
+    command: row.command_data ? JSON.parse(String(row.command_data)) : undefined,
+    stripeRequest: row.stripe_request_data ? JSON.parse(String(row.stripe_request_data)) : undefined,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
-    nextAttemptAt: row.next_attempt_at
-      ? String(row.next_attempt_at)
-      : undefined,
-    reconcileLeaseToken: row.reconcile_lease_token
-      ? String(row.reconcile_lease_token)
-      : undefined,
+    nextAttemptAt: row.next_attempt_at ? String(row.next_attempt_at) : undefined,
+    reconcileLeaseToken: row.reconcile_lease_token ? String(row.reconcile_lease_token) : undefined,
     terminalAt: row.terminal_at ? String(row.terminal_at) : undefined,
     reconcileAttempts: Number(row.reconcile_attempts ?? 0),
   };

@@ -8,7 +8,7 @@
     "seed": "npm run build && node --env-file-if-exists=../.env dist/seed.js",
     "local:seed": "npm run build && node --env-file-if-exists=../.env dist/local-seed.js",
     "setup": "npm run build && node --env-file-if-exists=../.env dist/setup.js",
-    "format:check": "prettier --check src test package.json tsconfig.json",
+    "format:check": "oxfmt --check -c ../.oxfmtrc.json .",
     "lint": "oxlint --deny-warnings src test",
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run --project unit",

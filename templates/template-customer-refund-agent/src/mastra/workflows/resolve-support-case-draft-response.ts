@@ -1,47 +1,32 @@
-import { createStep } from "@mastra/core/workflows";
+import { createStep } from '@mastra/core/workflows';
 import {
   draftResolutionSchema,
   resourceIdForOwner,
   threadIdForCase,
   subscriptionCreditResultSchema,
-} from "../domain/support-case";
-import { escalationReasonForDraft } from "../domain/resolution-decision";
-import { safeEscalationResponse } from "../domain/customer-response";
-import { caseStore } from "../lib/case-store";
-import { knowledgePublicationStore } from "../lib/knowledge-publications";
-import { withTrustedCommerceScope } from "../lib/trusted-run-scope";
-import { bindingsForPersistedCase } from "../runtime/provider-bindings";
-import {
-  getActiveCaseOrThrow,
-  resolveSupportCaseInputSchema,
-} from "./resolve-support-case-context";
-import { cancellationAuthority } from "./staging-cancellation-authority";
+} from '../domain/support-case';
+import { escalationReasonForDraft } from '../domain/resolution-decision';
+import { safeEscalationResponse } from '../domain/customer-response';
+import { caseStore } from '../lib/case-store';
+import { knowledgePublicationStore } from '../lib/knowledge-publications';
+import { withTrustedCommerceScope } from '../lib/trusted-run-scope';
+import { bindingsForPersistedCase } from '../runtime/provider-bindings';
+import { getActiveCaseOrThrow, resolveSupportCaseInputSchema } from './resolve-support-case-context';
+import { cancellationAuthority } from './staging-cancellation-authority';
 
 export const draftResponseStep = createStep({
-  id: "draft-response",
-  description:
-    "Runs the response agent to draft a grounded reply and refund recommendation.",
+  id: 'draft-response',
+  description: 'Runs the response agent to draft a grounded reply and refund recommendation.',
   inputSchema: resolveSupportCaseInputSchema,
   outputSchema: resolveSupportCaseInputSchema,
   execute: async ({ inputData, mastra, requestContext, tracingContext }) => {
-    const { supportCase, turn, ownerId } = await getActiveCaseOrThrow(
-      inputData.caseId,
-      inputData.turnId,
-    );
+    const { supportCase, turn, ownerId } = await getActiveCaseOrThrow(inputData.caseId, inputData.turnId);
     const latestMessage = turn.message!;
-    if (!mastra)
-      throw new Error(
-        "The resolve workflow must run through a registered Mastra instance.",
-      );
+    if (!mastra) throw new Error('The resolve workflow must run through a registered Mastra instance.');
 
-    const priorCreditReceiptCandidates = (
-      await caseStore.turns(supportCase.id)
-    ).flatMap((entry) => {
-      const result = subscriptionCreditResultSchema.safeParse(
-        entry.outcome?.subscriptionCreditResult,
-      );
-      return result.success &&
-        (result.data.status === "executed" || result.data.status === "skipped")
+    const priorCreditReceiptCandidates = (await caseStore.turns(supportCase.id)).flatMap(entry => {
+      const result = subscriptionCreditResultSchema.safeParse(entry.outcome?.subscriptionCreditResult);
+      return result.success && (result.data.status === 'executed' || result.data.status === 'skipped')
         ? [
             {
               subscriptionId: result.data.subscriptionId,
@@ -76,20 +61,17 @@ export const draftResponseStep = createStep({
         tenantId: bindings.commerce.tenantId,
       },
       () =>
-        mastra.getAgent("responseAgent").generate(
+        mastra.getAgent('responseAgent').generate(
           [
             {
-              role: "user",
+              role: 'user',
               content: `Draft a resolution for this support case. Here is everything retrieved so far as JSON - use only this data, plus your tools if you need to double check something:\n\n${JSON.stringify(context, null, 2)}`,
             },
           ],
           {
             structuredOutput: { schema: draftResolutionSchema },
             memory: {
-              thread: threadIdForCase(
-                supportCase.id,
-                bindings.support.tenantId,
-              ),
+              thread: threadIdForCase(supportCase.id, bindings.support.tenantId),
               resource: resourceIdForOwner(ownerId, bindings.support.tenantId),
             },
             requestContext,
@@ -106,31 +88,22 @@ export const draftResponseStep = createStep({
     // command form; mentioning cancellation or a refund elsewhere is never
     // enough to create an external effect.
     const hasNoRefundCancellationAuthority =
-      supportCase.triage?.intent === "cancellation" &&
-      cancellationAuthority(supportCase, turn);
+      supportCase.triage?.intent === 'cancellation' && cancellationAuthority(supportCase, turn);
     const policyMatches = supportCase.policyMatches ?? [];
-    const validCitations = new Set(
-      policyMatches.flatMap((entry) => [entry.title, entry.source]),
-    );
+    const validCitations = new Set(policyMatches.flatMap(entry => [entry.title, entry.source]));
     const missingEvidence = policyMatches.length === 0;
     const requiresSupportingCitation =
-      hasNoRefundCancellationAuthority ||
-      parsedDraft.recommendRefund ||
-      !parsedDraft.requiresEscalation;
+      hasNoRefundCancellationAuthority || parsedDraft.recommendRefund || !parsedDraft.requiresEscalation;
     const invalidCitation =
       (requiresSupportingCitation && parsedDraft.citedSources.length === 0) ||
-      parsedDraft.citedSources.some(
-        (citation) => !validCitations.has(citation),
-      );
+      parsedDraft.citedSources.some(citation => !validCitations.has(citation));
     // Retrieval is not a decision. Re-read the selected authoritative
     // publication just before committing the draft so expiry, rollback, or a
     // stale/tampered vector result cannot support a customer promise.
     const authoritativeTexts = new Map<string, string>();
     const applicableEvidence = await Promise.all(
-      parsedDraft.citedSources.map(async (citation) => {
-        const match = policyMatches.find(
-          (entry) => entry.title === citation || entry.source === citation,
-        );
+      parsedDraft.citedSources.map(async citation => {
+        const match = policyMatches.find(entry => entry.title === citation || entry.source === citation);
         if (
           !match?.source ||
           !match.documentHash ||
@@ -145,11 +118,7 @@ export const draftResponseStep = createStep({
         )
           return false;
         try {
-          if (
-            (await knowledgePublicationStore.activeGeneration(
-              bindings.knowledge,
-            )) !== match.generationId
-          )
+          if ((await knowledgePublicationStore.activeGeneration(bindings.knowledge)) !== match.generationId)
             return false;
           const authoritative = await knowledgePublicationStore.document(
             bindings.knowledge,
@@ -167,66 +136,55 @@ export const draftResponseStep = createStep({
             authoritative.expiresAt === match.expiresAt &&
             authoritative?.text.includes(match.text) &&
             Date.parse(authoritative.effectiveAt) <= now &&
-            (!authoritative.expiresAt ||
-              Date.parse(authoritative.expiresAt) > now),
+            (!authoritative.expiresAt || Date.parse(authoritative.expiresAt) > now),
           );
-          if (valid && authoritative)
-            authoritativeTexts.set(match.source, authoritative.text);
+          if (valid && authoritative) authoritativeTexts.set(match.source, authoritative.text);
           return valid;
         } catch {
           return false;
         }
       }),
     );
-    const staleOrUnauthoritativeEvidence =
-      requiresSupportingCitation && !applicableEvidence.every(Boolean);
+    const staleOrUnauthoritativeEvidence = requiresSupportingCitation && !applicableEvidence.every(Boolean);
     const invalidPolicySelection =
       !hasNoRefundCancellationAuthority &&
       !parsedDraft.requiresEscalation &&
       (parsedDraft.selectedPolicyExcerpts.length === 0 ||
-        parsedDraft.selectedPolicyExcerpts.some((selection) => {
+        parsedDraft.selectedPolicyExcerpts.some(selection => {
           const match = policyMatches.find(
-            (entry) =>
-              (entry.source === selection.source ||
-                entry.title === selection.source) &&
-              parsedDraft.citedSources.some(
-                (citation) =>
-                  citation === entry.source || citation === entry.title,
-              ),
+            entry =>
+              (entry.source === selection.source || entry.title === selection.source) &&
+              parsedDraft.citedSources.some(citation => citation === entry.source || citation === entry.title),
           );
-          return (
-            !match ||
-            !authoritativeTexts.get(match.source)?.includes(selection.excerpt)
-          );
+          return !match || !authoritativeTexts.get(match.source)?.includes(selection.excerpt);
         }));
     const activeSubscription = supportCase.subscriptionLookup?.subscription;
     const priorCreditForSubscription = priorCreditReceiptCandidates.some(
-      (result) => result.subscriptionId === activeSubscription?.subscriptionId,
+      result => result.subscriptionId === activeSubscription?.subscriptionId,
     );
     const asksForNewFinancialAction =
       /\b(refund|new credit|another credit|additional credit|more credit|issue (?:a )?credit)\b/i.test(
         latestMessage.body,
       );
-    const hasCreditPolicyCitation = parsedDraft.citedSources.some((citation) =>
+    const hasCreditPolicyCitation = parsedDraft.citedSources.some(citation =>
       policyMatches.some(
-        (match) =>
+        match =>
           (match.source === citation || match.title === citation) &&
           /credit/i.test(`${match.title} ${match.text}`) &&
           Boolean(authoritativeTexts.get(match.source)),
       ),
     );
     const qualifyingInformationalCredit =
-      supportCase.triage?.intent === "account_issue" &&
-      supportCase.triage.accountIssueSubtype ===
-        "informational_credit_status" &&
+      supportCase.triage?.intent === 'account_issue' &&
+      supportCase.triage.accountIssueSubtype === 'informational_credit_status' &&
       !supportCase.triage.requiresHumanReview &&
       supportCase.triage.confidence >= 0.8 &&
-      activeSubscription?.status === "active" &&
+      activeSubscription?.status === 'active' &&
       priorCreditForSubscription &&
       !asksForNewFinancialAction &&
       !parsedDraft.requiresEscalation &&
       !parsedDraft.recommendRefund &&
-      parsedDraft.resolutionAction === "none" &&
+      parsedDraft.resolutionAction === 'none' &&
       parsedDraft.subscriptionCreditAmount === undefined &&
       !missingEvidence &&
       !invalidCitation &&
@@ -240,8 +198,7 @@ export const draftResponseStep = createStep({
     // arbitrary model prose. Keep the model's proposed text only in staff
     // metadata: even a non-refund draft can falsely assert that a refund was
     // issued or rely on evidence that expired while it was being generated.
-    const writerRequiresEscalation =
-      !hasNoRefundCancellationAuthority && parsedDraft.requiresEscalation;
+    const writerRequiresEscalation = !hasNoRefundCancellationAuthority && parsedDraft.requiresEscalation;
     const escalationReason =
       escalationReasonForDraft({
         triage: supportCase.triage,
@@ -251,9 +208,8 @@ export const draftResponseStep = createStep({
         writerRequiresEscalation,
         writerReason: parsedDraft.escalationReason,
       }) ??
-      (supportCase.triage?.intent === "account_issue" &&
-      !qualifyingInformationalCredit
-        ? "Account requests require a support specialist with verified account-service access."
+      (supportCase.triage?.intent === 'account_issue' && !qualifyingInformationalCredit
+        ? 'Account requests require a support specialist with verified account-service access.'
         : undefined);
     const mustUseSafeEscalation = escalationReason !== undefined;
     const evidenceSafeDraft = mustUseSafeEscalation
@@ -277,12 +233,12 @@ export const draftResponseStep = createStep({
       ? {
           ...evidenceSafeDraft,
           draftResponse:
-            "An earlier credit receipt is present. Finalization will verify durable evidence before it sends the customer response.",
+            'An earlier credit receipt is present. Finalization will verify durable evidence before it sends the customer response.',
           recommendRefund: false,
           refundAmount: undefined,
           refundCurrency: undefined,
           refundReason: undefined,
-          resolutionAction: "none" as const,
+          resolutionAction: 'none' as const,
           subscriptionCreditAmount: undefined,
           subscriptionCreditCurrency: undefined,
           subscriptionCreditReason: undefined,
@@ -311,14 +267,9 @@ export const draftResponseStep = createStep({
           }
         : supportCase.metadata,
       agentUsage: {
-        inputTokens:
-          (existingUsage?.inputTokens ?? 0) + (responseUsage.inputTokens ?? 0),
-        outputTokens:
-          (existingUsage?.outputTokens ?? 0) +
-          (responseUsage.outputTokens ?? 0),
-        model:
-          (result as { response?: { modelId?: string } }).response?.modelId ??
-          existingUsage?.model,
+        inputTokens: (existingUsage?.inputTokens ?? 0) + (responseUsage.inputTokens ?? 0),
+        outputTokens: (existingUsage?.outputTokens ?? 0) + (responseUsage.outputTokens ?? 0),
+        model: (result as { response?: { modelId?: string } }).response?.modelId ?? existingUsage?.model,
       },
     });
     return { caseId: supportCase.id, turnId: inputData.turnId };

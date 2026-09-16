@@ -1,8 +1,8 @@
-import type { PolicyDocument } from "../types.ts";
+import type { PolicyDocument } from '../types.ts';
 
 export const addressGuidance: PolicyDocument = {
-  title: "Address guidance",
-  source: "address-guidance",
+  title: 'Address guidance',
+  source: 'address-guidance',
   text: `# Address guidance
 
 - Support can explain how an address may affect a future purchase, but it does not change a delivery or billing address in this template.

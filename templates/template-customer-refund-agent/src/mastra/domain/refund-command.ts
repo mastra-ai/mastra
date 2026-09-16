@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 /**
  * The customer-visible metadata projection and the immutable action use the
@@ -15,6 +15,4 @@ export const persistedRefundCommandSchema = z.object({
   fingerprint: z.string().min(1),
 });
 
-export type PersistedRefundCommand = z.infer<
-  typeof persistedRefundCommandSchema
->;
+export type PersistedRefundCommand = z.infer<typeof persistedRefundCommandSchema>;

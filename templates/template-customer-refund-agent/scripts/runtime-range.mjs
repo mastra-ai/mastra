@@ -6,8 +6,7 @@ export function parseVersion(version) {
 
 export function atLeast(version, minimum) {
   for (let index = 0; index < minimum.length; index += 1) {
-    if (version[index] !== minimum[index])
-      return version[index] > minimum[index];
+    if (version[index] !== minimum[index]) return version[index] > minimum[index];
   }
   return true;
 }
@@ -15,10 +14,7 @@ export function atLeast(version, minimum) {
 export function supportsNode(version) {
   const parsed = parseVersion(version);
   if (!parsed) return false;
-  return (
-    (parsed[0] === 22 && atLeast(parsed, [22, 22, 0])) ||
-    (parsed[0] >= 24 && atLeast(parsed, [24, 15, 0]))
-  );
+  return (parsed[0] === 22 && atLeast(parsed, [22, 22, 0])) || (parsed[0] >= 24 && atLeast(parsed, [24, 15, 0]));
 }
 
 export function supportsNpm(version) {

@@ -1,33 +1,24 @@
-import { hasExplicitStagingMode } from "../../../config/app-mode.mjs";
-import { createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-import {
-  subscriptionCreditResultSchema,
-  type SupportCase,
-} from "../domain/support-case";
-import {
-  renderGroundedSupportResponse,
-  safeEscalationResponse,
-} from "../domain/customer-response";
-import { persistedRefundCommandSchema } from "../domain/refund-command";
-import { persistedSubscriptionCreditCommandSchema } from "../domain/subscription-credit-command";
-import { STANDARD_REFUND_REVIEW_LIMIT } from "../domain/refund-review-limit";
-import { triageEscalationReason } from "../domain/resolution-decision";
-import { caseStore } from "../lib/case-store";
-import { legacyAmountToMoney, refundFingerprint } from "../lib/money";
-import { subscriptionCreditFingerprint } from "../lib/money";
-import {
-  resolveConfiguredBinding,
-  providerRegistry,
-} from "../providers/registry";
-import { bindingsForPersistedCase } from "../runtime/provider-bindings";
-import { deliverOutbox } from "../runtime/outbox";
-import { getActiveCaseOrThrow } from "./resolve-support-case-context";
+import { hasExplicitStagingMode } from '../../../config/app-mode.mjs';
+import { createStep } from '@mastra/core/workflows';
+import { z } from 'zod';
+import { subscriptionCreditResultSchema, type SupportCase } from '../domain/support-case';
+import { renderGroundedSupportResponse, safeEscalationResponse } from '../domain/customer-response';
+import { persistedRefundCommandSchema } from '../domain/refund-command';
+import { persistedSubscriptionCreditCommandSchema } from '../domain/subscription-credit-command';
+import { STANDARD_REFUND_REVIEW_LIMIT } from '../domain/refund-review-limit';
+import { triageEscalationReason } from '../domain/resolution-decision';
+import { caseStore } from '../lib/case-store';
+import { legacyAmountToMoney, refundFingerprint } from '../lib/money';
+import { subscriptionCreditFingerprint } from '../lib/money';
+import { resolveConfiguredBinding, providerRegistry } from '../providers/registry';
+import { bindingsForPersistedCase } from '../runtime/provider-bindings';
+import { deliverOutbox } from '../runtime/outbox';
+import { getActiveCaseOrThrow } from './resolve-support-case-context';
 
 const immutableRefundCommandSchema = z.object({
   binding: z.object({
     tenantId: z.string(),
-    providerKind: z.enum(["local", "stripe"]),
+    providerKind: z.enum(['local', 'stripe']),
     providerAccountId: z.string(),
     externalConversationId: z.string(),
   }),
@@ -50,7 +41,7 @@ const durableRefundEffectSchema = z.object({
     minor: z.number().int().positive(),
   }),
   idempotencyKey: z.string(),
-  executedAt: z.string().refine((value) => Number.isFinite(Date.parse(value))),
+  executedAt: z.string().refine(value => Number.isFinite(Date.parse(value))),
   replayed: z.boolean().optional(),
 });
 
@@ -63,7 +54,7 @@ const durableSubscriptionCreditEffectSchema = z.object({
     minor: z.number().int().positive(),
   }),
   idempotencyKey: z.string(),
-  executedAt: z.string().refine((value) => Number.isFinite(Date.parse(value))),
+  executedAt: z.string().refine(value => Number.isFinite(Date.parse(value))),
   replayed: z.boolean().optional(),
   status: z.string().optional(),
 });
@@ -71,33 +62,17 @@ const durableSubscriptionCreditEffectSchema = z.object({
 /** A completed refund message is permitted only when every customer-visible
  * detail is bound back to the same durable effect, immutable command, account,
  * and inbound turn. This intentionally does not inspect model text. */
-async function completedRefundResponse(
-  supportCase: SupportCase,
-  turnId: string,
-) {
+async function completedRefundResponse(supportCase: SupportCase, turnId: string) {
   const metadata = supportCase.metadata;
-  const command = persistedRefundCommandSchema.safeParse(
-    metadata.refundCommand,
-  );
+  const command = persistedRefundCommandSchema.safeParse(metadata.refundCommand);
   const result = supportCase.refundResult;
   const turn = await caseStore.turn(supportCase.id, turnId);
-  if (
-    !command.success ||
-    !result ||
-    !turn ||
-    !["executed", "skipped"].includes(result.status)
-  )
-    return undefined;
+  if (!command.success || !result || !turn || !['executed', 'skipped'].includes(result.status)) return undefined;
 
-  const binding = resolveConfiguredBinding(
-    bindingsForPersistedCase(supportCase).transactions,
-  );
+  const binding = resolveConfiguredBinding(bindingsForPersistedCase(supportCase).transactions);
   let expectedAmount;
   try {
-    expectedAmount = legacyAmountToMoney(
-      command.data.amount,
-      command.data.currency,
-    );
+    expectedAmount = legacyAmountToMoney(command.data.amount, command.data.currency);
   } catch {
     return undefined;
   }
@@ -110,11 +85,7 @@ async function completedRefundResponse(
     idempotencyKey: command.data.idempotencyKey,
   });
   const immutable = immutableRefundCommandSchema.safeParse(
-    await caseStore.getAction(
-      supportCase.id,
-      "refund-command",
-      command.data.fingerprint,
-    ),
+    await caseStore.getAction(supportCase.id, 'refund-command', command.data.fingerprint),
   );
   const idempotency = await caseStore.idempotency(command.data.idempotencyKey);
   const effect = durableRefundEffectSchema.safeParse(idempotency?.effect);
@@ -161,32 +132,22 @@ async function completedRefundResponse(
   return `Your refund of ${result.amount} ${result.currency} has been issued.`;
 }
 
-async function completedSubscriptionCreditResponse(
-  supportCase: SupportCase,
-  turnId: string,
-) {
-  const command = persistedSubscriptionCreditCommandSchema.safeParse(
-    supportCase.metadata.subscriptionCreditCommand,
-  );
+async function completedSubscriptionCreditResponse(supportCase: SupportCase, turnId: string) {
+  const command = persistedSubscriptionCreditCommandSchema.safeParse(supportCase.metadata.subscriptionCreditCommand);
   const result = supportCase.subscriptionCreditResult;
   const turn = await caseStore.turn(supportCase.id, turnId);
   if (
     !command.success ||
     !result ||
     !turn ||
-    !["executed", "skipped"].includes(result.status) ||
+    !['executed', 'skipped'].includes(result.status) ||
     !supportCase.approval?.approved ||
     turn.commandFingerprint !== command.data.fingerprint ||
     supportCase.metadata.activeTurnId !== turnId
   )
     return undefined;
-  const binding = resolveConfiguredBinding(
-    bindingsForPersistedCase(supportCase).transactions,
-  );
-  const amount = legacyAmountToMoney(
-    command.data.amount,
-    command.data.currency,
-  );
+  const binding = resolveConfiguredBinding(bindingsForPersistedCase(supportCase).transactions);
+  const amount = legacyAmountToMoney(command.data.amount, command.data.currency);
   const fingerprint = subscriptionCreditFingerprint({
     binding,
     approvalCaseId: supportCase.id,
@@ -196,11 +157,7 @@ async function completedSubscriptionCreditResponse(
     reason: command.data.reason,
     idempotencyKey: command.data.idempotencyKey,
   });
-  const immutable = await caseStore.getAction(
-    supportCase.id,
-    "subscription-credit-command",
-    command.data.fingerprint,
-  );
+  const immutable = await caseStore.getAction(supportCase.id, 'subscription-credit-command', command.data.fingerprint);
   const effect = await caseStore.idempotency(command.data.idempotencyKey);
   const decision = await caseStore.approvalDecision(supportCase.id, turnId);
   if (
@@ -210,9 +167,7 @@ async function completedSubscriptionCreditResponse(
     !immutable ||
     !effect ||
     effect.fingerprint !== command.data.fingerprint ||
-    JSON.stringify(
-      supportCase.metadata.subscriptionCreditEffects?.[fingerprint],
-    ) !== JSON.stringify(result) ||
+    JSON.stringify(supportCase.metadata.subscriptionCreditEffects?.[fingerprint]) !== JSON.stringify(result) ||
     result.customerId !== command.data.customerId ||
     result.subscriptionId !== command.data.subscriptionId ||
     result.amount !== command.data.amount ||
@@ -226,41 +181,31 @@ async function completedSubscriptionCreditResponse(
  * part of that earlier approval is still present in the immutable ledger. A
  * fresh subscription lookup supplies the current active-state statement; the
  * model draft never supplies a customer-visible financial claim. */
-export async function priorSubscriptionCreditStatusResponse(
-  supportCase: SupportCase,
-) {
+export async function priorSubscriptionCreditStatusResponse(supportCase: SupportCase) {
   const subscription = supportCase.subscriptionLookup?.subscription;
-  if (!subscription || subscription.status !== "active") return undefined;
+  if (!subscription || subscription.status !== 'active') return undefined;
   const turns = await caseStore.turns(supportCase.id);
   for (const turn of [...turns].reverse()) {
-    const result = subscriptionCreditResultSchema.safeParse(
-      turn.outcome?.subscriptionCreditResult,
-    );
+    const result = subscriptionCreditResultSchema.safeParse(turn.outcome?.subscriptionCreditResult);
     const fingerprint = turn.commandFingerprint;
     if (
       !result.success ||
       !fingerprint ||
-      !["executed", "skipped"].includes(result.data.status) ||
+      !['executed', 'skipped'].includes(result.data.status) ||
       result.data.subscriptionId !== subscription.subscriptionId
     )
       continue;
     const command = persistedSubscriptionCreditCommandSchema.safeParse(
-      await caseStore.getAction(
-        supportCase.id,
-        "subscription-credit-command",
-        fingerprint,
-      ),
+      await caseStore.getAction(supportCase.id, 'subscription-credit-command', fingerprint),
     );
     const decision = await caseStore.approvalDecision(supportCase.id, turn.id);
     const receipt = await caseStore.idempotency(result.data.idempotencyKey);
-    const effect = durableSubscriptionCreditEffectSchema.safeParse(
-      receipt?.effect,
-    );
+    const effect = durableSubscriptionCreditEffectSchema.safeParse(receipt?.effect);
     let expectedAmount;
     try {
       expectedAmount = legacyAmountToMoney(
         command.success ? command.data.amount : 0,
-        command.success ? command.data.currency : "USD",
+        command.success ? command.data.currency : 'USD',
       );
     } catch {
       continue;
@@ -301,57 +246,45 @@ const approvalOutputSchema = z.object({
 });
 
 export const resolveCaseStep = createStep({
-  id: "resolve-case",
-  description:
-    "Finalizes a durably executed refund or marks the case resolved/escalated.",
+  id: 'resolve-case',
+  description: 'Finalizes a durably executed refund or marks the case resolved/escalated.',
   inputSchema: approvalOutputSchema,
   outputSchema: z.object({
     caseId: z.string(),
     turnId: z.string(),
-    status: z.enum(["resolved", "escalated"]),
+    status: z.enum(['resolved', 'escalated']),
   }),
   execute: async ({ inputData, mastra }) => {
-    const { supportCase } = await getActiveCaseOrThrow(
-      inputData.caseId,
-      inputData.turnId,
-    );
+    const { supportCase } = await getActiveCaseOrThrow(inputData.caseId, inputData.turnId);
     const draft = supportCase.draft!;
     const triageReason = triageEscalationReason(supportCase.triage);
     let finalResponse =
       draft.requiresEscalation || triageReason
         ? safeEscalationResponse
-        : renderGroundedSupportResponse(
-            supportCase,
-            draft.selectedPolicyExcerpts,
-          );
-    let status: "resolved" | "escalated" = draft.requiresEscalation
-      ? "escalated"
-      : "resolved";
+        : renderGroundedSupportResponse(supportCase, draft.selectedPolicyExcerpts);
+    let status: 'resolved' | 'escalated' = draft.requiresEscalation ? 'escalated' : 'resolved';
     let escalationReason = triageReason ?? draft.escalationReason;
     if (hasExplicitStagingMode()) {
-      escalationReason =
-        escalationReason?.trim() || supportCase.escalationReason?.trim();
+      escalationReason = escalationReason?.trim() || supportCase.escalationReason?.trim();
     }
-    if (triageReason) status = "escalated";
+    if (triageReason) status = 'escalated';
     const mustEscalate = Boolean(triageReason || draft.requiresEscalation);
 
     const informationalCreditStatus =
       !mustEscalate &&
-      supportCase.triage?.intent === "account_issue" &&
-      supportCase.triage.accountIssueSubtype ===
-        "informational_credit_status" &&
+      supportCase.triage?.intent === 'account_issue' &&
+      supportCase.triage.accountIssueSubtype === 'informational_credit_status' &&
       !draft.recommendRefund &&
-      draft.resolutionAction === "none";
+      draft.resolutionAction === 'none';
     if (informationalCreditStatus) {
-      const priorCredit =
-        await priorSubscriptionCreditStatusResponse(supportCase);
+      const priorCredit = await priorSubscriptionCreditStatusResponse(supportCase);
       if (priorCredit) {
-        status = "resolved";
+        status = 'resolved';
         finalResponse = priorCredit;
       } else {
-        status = "escalated";
+        status = 'escalated';
         escalationReason =
-          "The earlier subscription credit could not be verified from durable approval and receipt evidence.";
+          'The earlier subscription credit could not be verified from durable approval and receipt evidence.';
         finalResponse = safeEscalationResponse;
       }
     }
@@ -359,84 +292,65 @@ export const resolveCaseStep = createStep({
     const cancellation = supportCase.metadata.cancellationEffect;
     if (
       !mustEscalate &&
-      supportCase.triage?.intent === "cancellation" &&
+      supportCase.triage?.intent === 'cancellation' &&
       cancellation?.cancelAtPeriodEnd &&
       cancellation.cancelsAt
     ) {
-      status = "resolved";
+      status = 'resolved';
       finalResponse = `Your subscription is scheduled to cancel at the end of the current billing period on ${cancellation.cancelsAt}.`;
-    } else if (
-      !mustEscalate &&
-      supportCase.triage?.intent === "cancellation" &&
-      !cancellation
-    ) {
-      status = "escalated";
+    } else if (!mustEscalate && supportCase.triage?.intent === 'cancellation' && !cancellation) {
+      status = 'escalated';
       finalResponse = safeEscalationResponse;
-      escalationReason ??=
-        "Subscription cancellation was not durably scheduled.";
+      escalationReason ??= 'Subscription cancellation was not durably scheduled.';
     }
 
-    if (draft.resolutionAction === "subscription_credit" && !mustEscalate) {
+    if (draft.resolutionAction === 'subscription_credit' && !mustEscalate) {
       if (!inputData.approved) {
-        status = "escalated";
-        escalationReason = `Subscription credit declined by ${inputData.approverId ?? "reviewer"}${inputData.note ? `: ${inputData.note}` : "."}`;
+        status = 'escalated';
+        escalationReason = `Subscription credit declined by ${inputData.approverId ?? 'reviewer'}${inputData.note ? `: ${inputData.note}` : '.'}`;
         finalResponse = safeEscalationResponse;
       } else {
-        const completed = await completedSubscriptionCreditResponse(
-          supportCase,
-          inputData.turnId,
-        );
+        const completed = await completedSubscriptionCreditResponse(supportCase, inputData.turnId);
         if (completed) {
-          status = "resolved";
+          status = 'resolved';
           finalResponse = completed;
         } else {
-          status = "escalated";
-          escalationReason =
-            "The approved subscription credit has no durable billing-credit receipt.";
+          status = 'escalated';
+          escalationReason = 'The approved subscription credit has no durable billing-credit receipt.';
           finalResponse = safeEscalationResponse;
         }
       }
     } else if (draft.recommendRefund && !mustEscalate) {
       if (!inputData.approved) {
-        status = "escalated";
-        escalationReason = `Refund declined by ${inputData.approverId ?? "reviewer"}${inputData.note ? `: ${inputData.note}` : "."}`;
+        status = 'escalated';
+        escalationReason = `Refund declined by ${inputData.approverId ?? 'reviewer'}${inputData.note ? `: ${inputData.note}` : '.'}`;
         finalResponse =
-          "Thanks for your patience - a specialist is going to take a closer look at your case and follow up shortly.";
+          'Thanks for your patience - a specialist is going to take a closer look at your case and follow up shortly.';
       } else {
         const orderId =
-          supportCase.orderLookup?.order?.orderId ??
-          supportCase.subscriptionLookup?.subscription?.refundOrderId;
+          supportCase.orderLookup?.order?.orderId ?? supportCase.subscriptionLookup?.subscription?.refundOrderId;
         if (!orderId) {
-          status = "escalated";
-          escalationReason =
-            "Refund was approved but no order id was on file - needs manual handling.";
+          status = 'escalated';
+          escalationReason = 'Refund was approved but no order id was on file - needs manual handling.';
         } else if ((draft.refundAmount ?? 0) > STANDARD_REFUND_REVIEW_LIMIT) {
-          status = "escalated";
+          status = 'escalated';
           escalationReason = `Refund amount ${draft.refundAmount} exceeds the ${STANDARD_REFUND_REVIEW_LIMIT} standard review limit and needs a senior approver.`;
         } else {
-          if (!mastra)
-            throw new Error(
-              "The resolve workflow must run through a registered Mastra instance.",
-            );
+          if (!mastra) throw new Error('The resolve workflow must run through a registered Mastra instance.');
           // Phase 003 executes through the native Agent approval lifecycle.
           // The tool writes its durable result before this workflow resumes;
           // never call a requireApproval tool directly from a workflow step.
-          const completed = await completedRefundResponse(
-            supportCase,
-            inputData.turnId,
-          );
+          const completed = await completedRefundResponse(supportCase, inputData.turnId);
           if (completed) {
-            status = "resolved";
+            status = 'resolved';
             finalResponse = completed;
-          } else if (supportCase.refundResult?.status === "failed") {
-            status = "escalated";
-            escalationReason =
-              "Stripe reported that the approved refund failed and requires staff review.";
-            finalResponse =
-              "The refund requires additional review. A support specialist will follow up shortly.";
+          } else if (supportCase.refundResult?.status === 'failed') {
+            status = 'escalated';
+            escalationReason = 'Stripe reported that the approved refund failed and requires staff review.';
+            finalResponse = 'The refund requires additional review. A support specialist will follow up shortly.';
           } else
             throw new Error(
-              "Native approval resumed without a matching durable refund effect; recovery must reconcile the immutable command.",
+              'Native approval resumed without a matching durable refund effect; recovery must reconcile the immutable command.',
             );
         }
       }
@@ -447,28 +361,22 @@ export const resolveCaseStep = createStep({
     // Both paths must use the immutable refund-command/turn identity, so the
     // transaction's INSERT OR IGNORE converges on one customer notification.
     const terminalOutboxKind =
-      draft.recommendRefund && supportCase.refundResult?.status === "skipped"
-        ? "refund-final"
-        : "final";
+      draft.recommendRefund && supportCase.refundResult?.status === 'skipped' ? 'refund-final' : 'final';
     const message = {
       // Deterministic identities make an active-step replay converge on the
       // already finalized message/outbox pair.
       id: `msg_${supportCase.id}_${inputData.turnId}_final`,
-      author: "agent" as const,
-      authorName: "Support Agent",
+      author: 'agent' as const,
+      authorName: 'Support Agent',
       body: finalResponse,
       createdAt: new Date().toISOString(),
     };
-    const supportBinding = resolveConfiguredBinding(
-      bindingsForPersistedCase(supportCase).support,
-    );
-    const providerPlan = providerRegistry(supportBinding)
-      .support(supportBinding)
-      .planFinalizationOutbox?.({
-        status,
-        subject: supportCase.subject,
-        escalationReason,
-      });
+    const supportBinding = resolveConfiguredBinding(bindingsForPersistedCase(supportCase).support);
+    const providerPlan = providerRegistry(supportBinding).support(supportBinding).planFinalizationOutbox?.({
+      status,
+      subject: supportCase.subject,
+      escalationReason,
+    });
     await caseStore.finalizeCaseAndEnqueue({
       caseId: supportCase.id,
       turnId: inputData.turnId,
@@ -483,7 +391,7 @@ export const resolveCaseStep = createStep({
         body: finalResponse,
         status,
       },
-      additionalOutbox: providerPlan?.map((operation) => ({
+      additionalOutbox: providerPlan?.map(operation => ({
         id: `outbox_${supportCase.id}_${inputData.turnId}_${operation.operation}`,
         caseId: supportCase.id,
         binding: supportBinding,
@@ -492,13 +400,11 @@ export const resolveCaseStep = createStep({
         operation: operation.operation,
       })),
     });
-    await deliverOutbox(undefined, 10, caseStore, { mastra }).catch((error) =>
-      mastra
-        ?.getLogger()
-        ?.warn("Local outbox delivery failed; recovery will retry it.", {
-          error,
-          caseId: supportCase.id,
-        }),
+    await deliverOutbox(undefined, 10, caseStore, { mastra }).catch(error =>
+      mastra?.getLogger()?.warn('Local outbox delivery failed; recovery will retry it.', {
+        error,
+        caseId: supportCase.id,
+      }),
     );
 
     return { caseId: supportCase.id, turnId: inputData.turnId, status };

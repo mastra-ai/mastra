@@ -1,24 +1,19 @@
-import type { Client } from "@libsql/client";
-import type { SupportCase } from "../domain/support-case";
-import { now } from "./case-store-shared";
+import type { Client } from '@libsql/client';
+import type { SupportCase } from '../domain/support-case';
+import { now } from './case-store-shared';
 
 /** Shared fail-closed fence for human and provider-originated resolution. It
  * deliberately treats ambiguous attempts and active recovery leases as work in
  * progress; neither resolver may guess whether a financial effect happened. */
 export async function hasResolutionBlocker(
-  tx: Awaited<ReturnType<Client["transaction"]>>,
+  tx: Awaited<ReturnType<Client['transaction']>>,
   caseId: string,
   supportCase: SupportCase,
 ) {
-  if (
-    supportCase.refundResult?.status === "pending" ||
-    supportCase.subscriptionCreditResult?.status === "pending"
-  )
+  if (supportCase.refundResult?.status === 'pending' || supportCase.subscriptionCreditResult?.status === 'pending')
     return true;
   if (
-    (supportCase.metadata.refundCommand &&
-      supportCase.approval?.approved &&
-      !supportCase.refundResult) ||
+    (supportCase.metadata.refundCommand && supportCase.approval?.approved && !supportCase.refundResult) ||
     (supportCase.metadata.subscriptionCreditCommand &&
       supportCase.approval?.approved &&
       !supportCase.subscriptionCreditResult)

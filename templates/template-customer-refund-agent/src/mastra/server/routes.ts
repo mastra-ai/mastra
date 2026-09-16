@@ -1,9 +1,6 @@
-import { supportLoginRoute } from "./authentication-routes";
-import { supportInboundRoute } from "./inbound-routes";
-import {
-  supportCaseApproveRoute,
-  supportCaseRejectRoute,
-} from "./approval-routes";
+import { supportLoginRoute } from './authentication-routes';
+import { supportInboundRoute } from './inbound-routes';
+import { supportCaseApproveRoute, supportCaseRejectRoute } from './approval-routes';
 import {
   supportCaseFeedbackRoute,
   supportCaseFollowUpRoute,
@@ -12,18 +9,10 @@ import {
   supportCaseDetailRoute,
   supportCustomerFinancialRequestsRoute,
   supportCasesListRoute,
-} from "./casework-routes";
-import {
-  supportKnowledgeReindexRoute,
-  supportMonitoringSummaryRoute,
-  supportOpenApiRoute,
-} from "./operations-routes";
-import { supportCaseSupervisorRoute } from "./supervisor-routes";
-import {
-  intercomWebhookRoute,
-  readWebhookBody,
-  stripeWebhookRoute,
-} from "./webhook-routes";
+} from './casework-routes';
+import { supportKnowledgeReindexRoute, supportMonitoringSummaryRoute, supportOpenApiRoute } from './operations-routes';
+import { supportCaseSupervisorRoute } from './supervisor-routes';
+import { intercomWebhookRoute, readWebhookBody, stripeWebhookRoute } from './webhook-routes';
 
 export {
   intercomWebhookRoute,

@@ -1,34 +1,27 @@
-import { createClient, type Client } from "@libsql/client";
-import { waitForMastraStorage } from "../runtime/storage-lifecycle";
-import {
-  getSharedLocalSqliteClient,
-  serializeSqliteClient,
-} from "./sqlite-client";
-import { resolveDatabaseUrl } from "./database-url";
-import { CaseStoreMigrations } from "./case-store-migrations";
-import { CaseStoreCases } from "./case-store-cases";
-import { CaseStoreFinalization } from "./case-store-finalization";
-import { CaseStoreDispatch } from "./case-store-dispatch";
-import { CaseStoreTurns } from "./case-store-turns";
-import { CaseStoreOutbox } from "./case-store-outbox";
-import { CaseStoreActions } from "./case-store-actions";
-import { CaseStoreFinancial } from "./case-store-financial";
-import { CaseStoreRetention } from "./case-store-retention";
-import { CaseStoreCancellation } from "./case-store-cancellation";
-import { CaseStoreManualResolution } from "./case-store-manual-resolution";
-import { CaseStoreIntercomClose } from "./case-store-intercom-close";
-import type {
-  CaseFeedback,
-  CaseMessage,
-  SupportCase,
-} from "../domain/support-case";
+import { createClient, type Client } from '@libsql/client';
+import { waitForMastraStorage } from '../runtime/storage-lifecycle';
+import { getSharedLocalSqliteClient, serializeSqliteClient } from './sqlite-client';
+import { resolveDatabaseUrl } from './database-url';
+import { CaseStoreMigrations } from './case-store-migrations';
+import { CaseStoreCases } from './case-store-cases';
+import { CaseStoreFinalization } from './case-store-finalization';
+import { CaseStoreDispatch } from './case-store-dispatch';
+import { CaseStoreTurns } from './case-store-turns';
+import { CaseStoreOutbox } from './case-store-outbox';
+import { CaseStoreActions } from './case-store-actions';
+import { CaseStoreFinancial } from './case-store-financial';
+import { CaseStoreRetention } from './case-store-retention';
+import { CaseStoreCancellation } from './case-store-cancellation';
+import { CaseStoreManualResolution } from './case-store-manual-resolution';
+import { CaseStoreIntercomClose } from './case-store-intercom-close';
+import type { CaseFeedback, CaseMessage, SupportCase } from '../domain/support-case';
 import type {
   ProviderBinding,
   RefundCommand,
   SubscriptionCancellationCommand,
   SubscriptionCreditCommand,
-} from "../providers/contracts";
-import type { DispatchLeaseScope } from "./dispatch-lease-scope";
+} from '../providers/contracts';
+import type { DispatchLeaseScope } from './dispatch-lease-scope';
 import {
   retentionPolicyFromEnvironment,
   type DispatchRecord,
@@ -39,7 +32,7 @@ import {
   type RetentionResult,
   type SupervisorExecutionRecord,
   type SupportTurnRecord,
-} from "./case-store-shared";
+} from './case-store-shared';
 
 export {
   financialRetentionTombstone,
@@ -48,7 +41,7 @@ export {
   retentionDefaults,
   retentionPolicyFromEnvironment,
   StaleCaseWriteError,
-} from "./case-store-shared";
+} from './case-store-shared';
 export type {
   DispatchRecord,
   DispatchState,
@@ -60,15 +53,13 @@ export type {
   RetentionResult,
   SupervisorExecutionRecord,
   SupportTurnRecord,
-} from "./case-store-shared";
+} from './case-store-shared';
 
 function config(url = resolveDatabaseUrl()) {
   return {
     url,
     authToken: process.env.TURSO_AUTH_TOKEN || undefined,
-    ...(url.startsWith("file:") || url.includes(":memory:")
-      ? { timeout: 0 }
-      : {}),
+    ...(url.startsWith('file:') || url.includes(':memory:') ? { timeout: 0 } : {}),
   };
 }
 
@@ -122,8 +113,8 @@ export class CaseStore {
   private async ensured() {
     this.ready ??= (async () => {
       await waitForMastraStorage();
-      await this.client.execute("PRAGMA journal_mode=WAL;");
-      await this.client.execute("PRAGMA busy_timeout = 0;");
+      await this.client.execute('PRAGMA journal_mode=WAL;');
+      await this.client.execute('PRAGMA busy_timeout = 0;');
       await this.migrate();
     })();
     await this.ready;
@@ -166,20 +157,12 @@ export class CaseStore {
     return this.intercomClose.claim(limit);
   }
 
-  async deferIntercomCloseIntent(
-    id: string,
-    leaseToken: string,
-    error: string,
-  ) {
+  async deferIntercomCloseIntent(id: string, leaseToken: string, error: string) {
     await this.ensured();
     return this.intercomClose.defer(id, leaseToken, error);
   }
 
-  async completeIntercomCloseIntent(
-    id: string,
-    leaseToken: string,
-    state: "applied" | "superseded",
-  ) {
+  async completeIntercomCloseIntent(id: string, leaseToken: string, state: 'applied' | 'superseded') {
     await this.ensured();
     return this.intercomClose.complete(id, leaseToken, state);
   }
@@ -214,22 +197,14 @@ export class CaseStore {
   async findConversation(
     tenantId: string,
     externalConversationId: string,
-    providerKind = "local",
-    providerAccountId = "local-demo",
+    providerKind = 'local',
+    providerAccountId = 'local-demo',
   ): Promise<SupportCase | undefined> {
     await this.ensured();
-    return this.cases.findConversation(
-      tenantId,
-      externalConversationId,
-      providerKind,
-      providerAccountId,
-    );
+    return this.cases.findConversation(tenantId, externalConversationId, providerKind, providerAccountId);
   }
 
-  async canonicalConversationOwner(input: {
-    caseId: string;
-    binding: ProviderBinding;
-  }) {
+  async canonicalConversationOwner(input: { caseId: string; binding: ProviderBinding }) {
     await this.ensured();
     return this.cases.canonicalConversationOwner(input);
   }
@@ -241,12 +216,7 @@ export class CaseStore {
     providerAccountId: string,
   ) {
     await this.ensured();
-    return this.cases.conversationSnapshot(
-      tenantId,
-      externalConversationId,
-      providerKind,
-      providerAccountId,
-    );
+    return this.cases.conversationSnapshot(tenantId, externalConversationId, providerKind, providerAccountId);
   }
 
   async create(case_: SupportCase) {
@@ -254,11 +224,7 @@ export class CaseStore {
     return this.cases.create(case_);
   }
 
-  async update(
-    id: string,
-    patch: Partial<SupportCase>,
-    expectedVersion?: number,
-  ) {
+  async update(id: string, patch: Partial<SupportCase>, expectedVersion?: number) {
     await this.ensured();
     return this.cases.update(id, patch, expectedVersion);
   }
@@ -294,7 +260,7 @@ export class CaseStore {
     return this.cases.acceptInbound(case_, eventId, runId);
   }
 
-  async enqueueDelivery(record: Omit<OutboxRecord, "state" | "attempts">) {
+  async enqueueDelivery(record: Omit<OutboxRecord, 'state' | 'attempts'>) {
     await this.ensured();
     return this.finalization.enqueueDelivery(record);
   }
@@ -302,12 +268,12 @@ export class CaseStore {
   async finalizeCaseAndEnqueue(input: {
     caseId: string;
     turnId: string;
-    status: "resolved" | "escalated";
+    status: 'resolved' | 'escalated';
     finalResponse: string;
     escalationReason?: string;
     message: CaseMessage;
-    outbox: Omit<OutboxRecord, "state" | "attempts">;
-    additionalOutbox?: Array<Omit<OutboxRecord, "state" | "attempts">>;
+    outbox: Omit<OutboxRecord, 'state' | 'attempts'>;
+    additionalOutbox?: Array<Omit<OutboxRecord, 'state' | 'attempts'>>;
   }) {
     await this.ensured();
     return this.finalization.finalizeCaseAndEnqueue(input);
@@ -334,9 +300,7 @@ export class CaseStore {
     ownerId: string;
     dispatch?: DispatchLeaseScope;
     reconciliationLeaseToken?: string;
-    validatePolicy: (
-      tx: Awaited<ReturnType<Client["transaction"]>>,
-    ) => Promise<void>;
+    validatePolicy: (tx: Awaited<ReturnType<Client['transaction']>>) => Promise<void>;
   }) {
     await this.ensured();
     return this.dispatch.authorizeStripeRefundFirstEffect(input);
@@ -345,9 +309,7 @@ export class CaseStore {
   async authorizeStripeSubscriptionCreditFirstEffect(input: {
     command: SubscriptionCreditCommand;
     dispatch: DispatchLeaseScope;
-    validatePolicy: (
-      tx: Awaited<ReturnType<Client["transaction"]>>,
-    ) => Promise<void>;
+    validatePolicy: (tx: Awaited<ReturnType<Client['transaction']>>) => Promise<void>;
   }) {
     await this.ensured();
     return this.dispatch.authorizeStripeSubscriptionCreditFirstEffect(input);
@@ -363,7 +325,7 @@ export class CaseStore {
 
   async completeDispatch(
     id: string,
-    state: Exclude<DispatchState, "pending" | "claimed">,
+    state: Exclude<DispatchState, 'pending' | 'claimed'>,
     error?: unknown,
     leaseToken?: string,
   ) {
@@ -376,24 +338,13 @@ export class CaseStore {
     caseId: string,
     error: unknown,
     leaseToken?: string,
-    terminalStatus: "failed" | "escalated" = "failed",
+    terminalStatus: 'failed' | 'escalated' = 'failed',
   ) {
     await this.ensured();
-    return this.dispatch.failDispatchAndCase(
-      id,
-      caseId,
-      error,
-      leaseToken,
-      terminalStatus,
-    );
+    return this.dispatch.failDispatchAndCase(id, caseId, error, leaseToken, terminalStatus);
   }
 
-  async retryDispatch(
-    id: string,
-    caseId: string,
-    error: unknown,
-    leaseToken?: string,
-  ) {
+  async retryDispatch(id: string, caseId: string, error: unknown, leaseToken?: string) {
     await this.ensured();
     return this.dispatch.retryDispatch(id, caseId, error, leaseToken);
   }
@@ -413,17 +364,12 @@ export class CaseStore {
     return this.turnStore.turns(caseId);
   }
 
-  async turn(
-    caseId: string,
-    turnId: string,
-  ): Promise<SupportTurnRecord | undefined> {
+  async turn(caseId: string, turnId: string): Promise<SupportTurnRecord | undefined> {
     await this.ensured();
     return this.turnStore.turn(caseId, turnId);
   }
 
-  async recordSupervisorExecution(
-    execution: Omit<SupervisorExecutionRecord, "id" | "createdAt">,
-  ) {
+  async recordSupervisorExecution(execution: Omit<SupervisorExecutionRecord, 'id' | 'createdAt'>) {
     await this.ensured();
     return this.turnStore.recordSupervisorExecution(execution);
   }
@@ -448,11 +394,7 @@ export class CaseStore {
     return this.turnStore.feedback(caseIds);
   }
 
-  async recordTurnTelemetry(
-    caseId: string,
-    turnId: string,
-    telemetry: { traceId?: string; workflowRunId?: string },
-  ) {
+  async recordTurnTelemetry(caseId: string, turnId: string, telemetry: { traceId?: string; workflowRunId?: string }) {
     await this.ensured();
     return this.turnStore.recordTurnTelemetry(caseId, turnId, telemetry);
   }
@@ -462,19 +404,12 @@ export class CaseStore {
     return this.turnStore.bindTurnCommand(caseId, turnId, fingerprint);
   }
 
-  async claimDispatchForStart(
-    caseId: string,
-    runId?: string,
-  ): Promise<DispatchRecord | undefined> {
+  async claimDispatchForStart(caseId: string, runId?: string): Promise<DispatchRecord | undefined> {
     await this.ensured();
     return this.turnStore.claimDispatchForStart(caseId, runId);
   }
 
-  async claimDispatchForResume(
-    caseId: string,
-    runId?: string,
-    turnId?: string,
-  ): Promise<DispatchRecord | undefined> {
+  async claimDispatchForResume(caseId: string, runId?: string, turnId?: string): Promise<DispatchRecord | undefined> {
     await this.ensured();
     return this.turnStore.claimDispatchForResume(caseId, runId, turnId);
   }
@@ -499,11 +434,7 @@ export class CaseStore {
     return this.outbox.manualOutboxEffectIsCurrent(id, leaseToken);
   }
 
-  async supersedeManualOutboxAfterFence(
-    id: string,
-    receipt: unknown,
-    reason: string,
-  ) {
+  async supersedeManualOutboxAfterFence(id: string, receipt: unknown, reason: string) {
     await this.ensured();
     return this.outbox.supersedeManualOutboxAfterFence(id, receipt, reason);
   }
@@ -533,19 +464,9 @@ export class CaseStore {
     return this.outbox.markOutboxStarted(id, leaseToken);
   }
 
-  async markOutboxUncertain(
-    id: string,
-    error: unknown,
-    leaseToken?: string,
-    expectedState?: "claimed" | "started",
-  ) {
+  async markOutboxUncertain(id: string, error: unknown, leaseToken?: string, expectedState?: 'claimed' | 'started') {
     await this.ensured();
-    return this.outbox.markOutboxUncertain(
-      id,
-      error,
-      leaseToken,
-      expectedState,
-    );
+    return this.outbox.markOutboxUncertain(id, error, leaseToken, expectedState);
   }
 
   async retryOutbox(
@@ -557,33 +478,17 @@ export class CaseStore {
     rateLimited = false,
   ) {
     await this.ensured();
-    return this.outbox.retryOutbox(
-      id,
-      error,
-      terminal,
-      leaseToken,
-      retryAfterMs,
-      rateLimited,
-    );
+    return this.outbox.retryOutbox(id, error, terminal, leaseToken, retryAfterMs, rateLimited);
   }
 
-  async saveAction(
-    caseId: string,
-    kind: string,
-    fingerprint: string,
-    data: unknown,
-  ) {
+  async saveAction(caseId: string, kind: string, fingerprint: string, data: unknown) {
     await this.ensured();
     return this.actions.saveAction(caseId, kind, fingerprint, data);
   }
 
   async claimStripeWebhookEvent(
     eventId: string,
-  ): Promise<
-    | { state: "claimed"; leaseToken: string }
-    | { state: "completed" }
-    | { state: "in-progress" }
-  > {
+  ): Promise<{ state: 'claimed'; leaseToken: string } | { state: 'completed' } | { state: 'in-progress' }> {
     await this.ensured();
     return this.actions.claimStripeWebhookEvent(eventId);
   }
@@ -658,9 +563,9 @@ export class CaseStore {
     turnId: string;
     fingerprint: string;
     idempotencyKey: string;
-    result: NonNullable<SupportCase["refundResult"]>;
+    result: NonNullable<SupportCase['refundResult']>;
     effect?: unknown;
-  }): Promise<NonNullable<SupportCase["refundResult"]>> {
+  }): Promise<NonNullable<SupportCase['refundResult']>> {
     await this.ensured();
     return this.financial.projectRefundToolExecution(input);
   }
@@ -670,7 +575,7 @@ export class CaseStore {
     turnId: string;
     fingerprint: string;
     idempotencyKey: string;
-    result: NonNullable<SupportCase["subscriptionCreditResult"]>;
+    result: NonNullable<SupportCase['subscriptionCreditResult']>;
     effect: unknown;
   }) {
     await this.ensured();
@@ -712,9 +617,7 @@ export class CaseStore {
     dispatch: { dispatchId: string; leaseToken: string; turnId: string };
   }) {
     await this.ensured();
-    return this.financial.finalizeStripeSubscriptionCreditNoEffectFailure(
-      input,
-    );
+    return this.financial.finalizeStripeSubscriptionCreditNoEffectFailure(input);
   }
   async markStripeSubscriptionCreditPrePostNoEffect(input: {
     idempotencyKey: string;
@@ -728,16 +631,13 @@ export class CaseStore {
   async updateStripeSubscriptionCreditAttempt(
     idempotencyKey: string,
     update: {
-      status: "succeeded" | "unknown" | "failed" | "quarantined";
+      status: 'succeeded' | 'unknown' | 'failed' | 'quarantined';
       creditId?: string;
       providerStatus?: string;
     },
   ) {
     await this.ensured();
-    return this.financial.updateStripeSubscriptionCreditAttempt(
-      idempotencyKey,
-      update,
-    );
+    return this.financial.updateStripeSubscriptionCreditAttempt(idempotencyKey, update);
   }
 
   async stripeSubscriptionCreditAttempt(idempotencyKey: string) {
@@ -748,7 +648,7 @@ export class CaseStore {
   async updateStripeRefundAttempt(
     idempotencyKey: string,
     update: {
-      status: "pending" | "succeeded" | "failed" | "unknown" | "quarantined";
+      status: 'pending' | 'succeeded' | 'failed' | 'unknown' | 'quarantined';
       refundId?: string;
       providerStatus?: string;
       nextAttemptAt?: string;
@@ -769,7 +669,7 @@ export class CaseStore {
   async rescheduleStripeRefundAttempt(input: {
     idempotencyKey: string;
     reconcileLeaseToken: string;
-    status: "pending" | "succeeded" | "unknown" | "quarantined";
+    status: 'pending' | 'succeeded' | 'unknown' | 'quarantined';
     refundId?: string;
     providerStatus?: string;
     nextAttemptAt?: string;
@@ -780,7 +680,7 @@ export class CaseStore {
 
   async finalizeStripeRefundReconciliation(input: {
     idempotencyKey: string;
-    status: "succeeded" | "failed" | "pending" | "quarantined";
+    status: 'succeeded' | 'failed' | 'pending' | 'quarantined';
     refundId: string;
     providerStatus: string;
     effect?: unknown;
@@ -794,7 +694,7 @@ export class CaseStore {
     idempotencyKey: string;
     fingerprint: string;
     diagnostic?: {
-      stage: "preflight" | "post";
+      stage: 'preflight' | 'post';
       status?: number;
       ambiguity?: boolean;
       code?: string;
@@ -847,10 +747,7 @@ export class CaseStore {
     return this.cancellation.prepareSubscriptionCancellationAttempt(input);
   }
 
-  async claimSubscriptionCancellationMutation(input: {
-    idempotencyKey: string;
-    fingerprint: string;
-  }) {
+  async claimSubscriptionCancellationMutation(input: { idempotencyKey: string; fingerprint: string }) {
     await this.ensured();
     return this.cancellation.claimSubscriptionCancellationMutation(input);
   }
@@ -858,7 +755,7 @@ export class CaseStore {
   async finalizeSubscriptionCancellationAttempt(input: {
     idempotencyKey: string;
     fingerprint: string;
-    status: "scheduled" | "unknown" | "failed";
+    status: 'scheduled' | 'unknown' | 'failed';
     cancelsAt?: string;
     effect?: unknown;
   }) {
@@ -868,9 +765,7 @@ export class CaseStore {
 
   async claimUnknownSubscriptionCancellationAttempts(limit = 10) {
     await this.ensured();
-    return this.cancellation.claimUnknownSubscriptionCancellationAttempts(
-      limit,
-    );
+    return this.cancellation.claimUnknownSubscriptionCancellationAttempts(limit);
   }
 
   async rescheduleSubscriptionCancellationRecovery(input: {
@@ -885,7 +780,7 @@ export class CaseStore {
   async finalizeUnknownSubscriptionCancellation(input: {
     idempotencyKey: string;
     fingerprint: string;
-    status: "scheduled" | "quarantined" | "failed";
+    status: 'scheduled' | 'quarantined' | 'failed';
     recoveryClaim?: string;
     effect?: {
       subscriptionId: string;

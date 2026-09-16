@@ -1,8 +1,8 @@
-import type { PolicyDocument } from "../types.ts";
+import type { PolicyDocument } from '../types.ts';
 
 export const duplicateChargePolicy: PolicyDocument = {
-  title: "Duplicate Charge Policy",
-  source: "duplicate-charge-policy",
+  title: 'Duplicate Charge Policy',
+  source: 'duplicate-charge-policy',
   text: `# Duplicate Charge Policy
 
 Duplicate charges happen when a payment retries due to a network error, or when a customer accidentally submits an order twice.

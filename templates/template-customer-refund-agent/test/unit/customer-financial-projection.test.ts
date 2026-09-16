@@ -1,164 +1,157 @@
-import { rm } from "node:fs/promises";
-import { describe, expect, it } from "vitest";
-import { customerReceiptState } from "../../src/mastra/lib/case-store-actions";
-import { CaseStore } from "../../src/mastra/lib/case-store";
-import { temporaryDatabasePath } from "../support/temp-path";
+import { rm } from 'node:fs/promises';
+import { describe, expect, it } from 'vitest';
+import { customerReceiptState } from '../../src/mastra/lib/case-store-actions';
+import { CaseStore } from '../../src/mastra/lib/case-store';
+import { temporaryDatabasePath } from '../support/temp-path';
 
 const command = {
-  binding: { providerKind: "stripe" },
-  orderId: "ord_1",
-  amount: { minor: 500, currency: "USD" },
-  idempotencyKey: "credit_1",
+  binding: { providerKind: 'stripe' },
+  orderId: 'ord_1',
+  amount: { minor: 500, currency: 'USD' },
+  idempotencyKey: 'credit_1',
 };
 
-describe("customer financial receipt projection", () => {
-  it("marks only a matching settled Stripe receipt as executed", () => {
+describe('customer financial receipt projection', () => {
+  it('marks only a matching settled Stripe receipt as executed', () => {
     expect(
-      customerReceiptState("refund-command", command, {
-        status: "succeeded",
-        orderId: "ord_1",
-        amount: { minor: 500, currency: "USD" },
-        idempotencyKey: "credit_1",
+      customerReceiptState('refund-command', command, {
+        status: 'succeeded',
+        orderId: 'ord_1',
+        amount: { minor: 500, currency: 'USD' },
+        idempotencyKey: 'credit_1',
       }),
-    ).toBe("executed");
+    ).toBe('executed');
   });
 
-  it("does not present pending, unknown, failed, retained, or mismatched receipts as successful", () => {
+  it('does not present pending, unknown, failed, retained, or mismatched receipts as successful', () => {
     for (const receipt of [
-      { status: "pending" },
-      { status: "unknown" },
-      { status: "failed" },
-      { retention: "terminal-financial-effect" },
+      { status: 'pending' },
+      { status: 'unknown' },
+      { status: 'failed' },
+      { retention: 'terminal-financial-effect' },
       {
-        status: "succeeded",
-        orderId: "ord_other",
-        amount: { minor: 500, currency: "USD" },
-        idempotencyKey: "credit_1",
+        status: 'succeeded',
+        orderId: 'ord_other',
+        amount: { minor: 500, currency: 'USD' },
+        idempotencyKey: 'credit_1',
       },
     ])
-      expect(customerReceiptState("refund-command", command, receipt)).not.toBe(
-        "executed",
-      );
+      expect(customerReceiptState('refund-command', command, receipt)).not.toBe('executed');
   });
 
-  it("accepts the matching synchronous local receipt without a provider status", () => {
+  it('accepts the matching synchronous local receipt without a provider status', () => {
     expect(
       customerReceiptState(
-        "refund-command",
-        { ...command, binding: { providerKind: "local" } },
+        'refund-command',
+        { ...command, binding: { providerKind: 'local' } },
         {
-          orderId: "ord_1",
-          amount: { minor: 500, currency: "USD" },
-          idempotencyKey: "credit_1",
+          orderId: 'ord_1',
+          amount: { minor: 500, currency: 'USD' },
+          idempotencyKey: 'credit_1',
         },
       ),
-    ).toBe("executed");
+    ).toBe('executed');
   });
 
-  it("uses the supported currency exponent for legacy JPY and KWD receipts", () => {
+  it('uses the supported currency exponent for legacy JPY and KWD receipts', () => {
     expect(
       customerReceiptState(
-        "refund-command",
+        'refund-command',
         {
-          binding: { providerKind: "local" },
-          orderId: "ord_jpy",
+          binding: { providerKind: 'local' },
+          orderId: 'ord_jpy',
           amount: 5000,
-          currency: "JPY",
-          idempotencyKey: "jpy_1",
+          currency: 'JPY',
+          idempotencyKey: 'jpy_1',
         },
         {
-          orderId: "ord_jpy",
-          amount: { minor: 5000, currency: "JPY" },
-          idempotencyKey: "jpy_1",
+          orderId: 'ord_jpy',
+          amount: { minor: 5000, currency: 'JPY' },
+          idempotencyKey: 'jpy_1',
         },
       ),
-    ).toBe("executed");
+    ).toBe('executed');
     expect(
       customerReceiptState(
-        "subscription-credit-command",
+        'subscription-credit-command',
         {
-          binding: { providerKind: "local" },
-          customerId: "cus_kwd",
-          subscriptionId: "sub_kwd",
+          binding: { providerKind: 'local' },
+          customerId: 'cus_kwd',
+          subscriptionId: 'sub_kwd',
           amount: 1.23,
-          currency: "KWD",
-          idempotencyKey: "kwd_1",
+          currency: 'KWD',
+          idempotencyKey: 'kwd_1',
         },
         {
-          customerId: "cus_kwd",
-          subscriptionId: "sub_kwd",
-          amount: { minor: 1230, currency: "KWD" },
-          idempotencyKey: "kwd_1",
+          customerId: 'cus_kwd',
+          subscriptionId: 'sub_kwd',
+          amount: { minor: 1230, currency: 'KWD' },
+          idempotencyKey: 'kwd_1',
         },
       ),
-    ).toBe("executed");
+    ).toBe('executed');
   });
 
-  it("returns legacy JPY and KWD amounts from the durable customer read model", async () => {
-    const path = temporaryDatabasePath("customer-financial-projection");
+  it('returns legacy JPY and KWD amounts from the durable customer read model', async () => {
+    const path = temporaryDatabasePath('customer-financial-projection');
     const store = new CaseStore({ url: `file:${path}` });
-    const createdAt = "2026-09-10T00:00:00.000Z";
+    const createdAt = '2026-09-10T00:00:00.000Z';
     const binding = {
-      tenantId: "local-demo",
-      providerKind: "local" as const,
-      providerAccountId: "local-demo",
-      externalConversationId: "projection",
+      tenantId: 'local-demo',
+      providerKind: 'local' as const,
+      providerAccountId: 'local-demo',
+      externalConversationId: 'projection',
     };
     try {
       for (const input of [
         {
-          caseId: "case-jpy",
-          turnId: "turn-jpy",
-          fingerprint: "fingerprint-jpy",
-          kind: "refund-command",
+          caseId: 'case-jpy',
+          turnId: 'turn-jpy',
+          fingerprint: 'fingerprint-jpy',
+          kind: 'refund-command',
           command: {
-            binding: { providerKind: "local" },
-            orderId: "ord_jpy",
+            binding: { providerKind: 'local' },
+            orderId: 'ord_jpy',
             amount: 5000,
-            currency: "JPY",
-            idempotencyKey: "jpy_1",
+            currency: 'JPY',
+            idempotencyKey: 'jpy_1',
           },
         },
         {
-          caseId: "case-kwd",
-          turnId: "turn-kwd",
-          fingerprint: "fingerprint-kwd",
-          kind: "subscription-credit-command",
+          caseId: 'case-kwd',
+          turnId: 'turn-kwd',
+          fingerprint: 'fingerprint-kwd',
+          kind: 'subscription-credit-command',
           command: {
-            binding: { providerKind: "local" },
-            customerId: "cus_kwd",
-            subscriptionId: "sub_kwd",
+            binding: { providerKind: 'local' },
+            customerId: 'cus_kwd',
+            subscriptionId: 'sub_kwd',
             amount: 1.23,
-            currency: "KWD",
-            idempotencyKey: "kwd_1",
+            currency: 'KWD',
+            idempotencyKey: 'kwd_1',
           },
         },
       ]) {
         await store.create({
           id: input.caseId,
           externalId: input.caseId,
-          source: "mock-email",
-          customer: { email: "alex@example.com" },
-          subject: "Financial request",
+          source: 'mock-email',
+          customer: { email: 'alex@example.com' },
+          subject: 'Financial request',
           messages: [
             {
               id: `message-${input.caseId}`,
-              author: "customer",
-              body: "Please help.",
+              author: 'customer',
+              body: 'Please help.',
               createdAt,
             },
           ],
-          status: "waiting_approval",
+          status: 'waiting_approval',
           createdAt,
           updatedAt: createdAt,
           metadata: { providerBinding: binding },
         });
-        await store.saveAction(
-          input.caseId,
-          input.kind,
-          input.fingerprint,
-          input.command,
-        );
+        await store.saveAction(input.caseId, input.kind, input.fingerprint, input.command);
         await store.getClient().execute({
           sql: "INSERT INTO support_turns(id, case_id, event_id, sequence, state, created_at, updated_at, command_fingerprint, message_data) VALUES (?, ?, ?, 1, 'waiting_approval', ?, ?, ?, ?)",
           args: [
@@ -173,19 +166,17 @@ describe("customer financial receipt projection", () => {
         });
       }
 
-      await expect(
-        store.customerFinancialRequests(["case-jpy", "case-kwd"]),
-      ).resolves.toEqual(
+      await expect(store.customerFinancialRequests(['case-jpy', 'case-kwd'])).resolves.toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            caseId: "case-jpy",
+            caseId: 'case-jpy',
             amount: 5000,
-            currency: "JPY",
+            currency: 'JPY',
           }),
           expect.objectContaining({
-            caseId: "case-kwd",
+            caseId: 'case-kwd',
             amount: 1.23,
-            currency: "KWD",
+            currency: 'KWD',
           }),
         ]),
       );

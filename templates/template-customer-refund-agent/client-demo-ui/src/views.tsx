@@ -1,5 +1,5 @@
-import type { Child } from "hono/jsx";
-import type { DemoCustomer } from "./types.js";
+import type { Child } from 'hono/jsx';
+import type { DemoCustomer } from './types.js';
 
 export function Layout(props: {
   title: string;
@@ -28,11 +28,7 @@ export function Layout(props: {
                 <>
                   <span class="muted">{props.customer.name}</span>
                   <form method="post" action="/sair">
-                    <input
-                      type="hidden"
-                      name="csrf"
-                      value={props.csrfToken ?? ""}
-                    />
+                    <input type="hidden" name="csrf" value={props.csrfToken ?? ''} />
                     <button class="button">Sign out</button>
                   </form>
                 </>
@@ -45,9 +41,7 @@ export function Layout(props: {
           </nav>
           {props.children}
         </div>
-        {props.widget ? (
-          <script dangerouslySetInnerHTML={{ __html: props.widget }} />
-        ) : null}
+        {props.widget ? <script dangerouslySetInnerHTML={{ __html: props.widget }} /> : null}
         {props.requestsRefresh ? (
           <script
             dangerouslySetInnerHTML={{
@@ -66,9 +60,7 @@ export function Landing() {
       <main class="hero">
         <div class="eyebrow">Northstar support</div>
         <h1>Your work keeps moving. We take care of the rest.</h1>
-        <p class="lead">
-          Track your requests and contact support in one place.
-        </p>
+        <p class="lead">Track your requests and contact support in one place.</p>
         <div class="actions">
           <a class="button primary" href="/entrar">
             Access my account
@@ -81,24 +73,15 @@ export function Landing() {
       <section class="grid">
         <article class="card">
           <h2>Request status</h2>
-          <p class="muted">
-            See what has already been recorded and the actual status of each
-            request.
-          </p>
+          <p class="muted">See what has already been recorded and the actual status of each request.</p>
         </article>
         <article class="card">
           <h2>Support with context</h2>
-          <p class="muted">
-            Support starts with your authenticated account, without making you
-            repeat information.
-          </p>
+          <p class="muted">Support starts with your authenticated account, without making you repeat information.</p>
         </article>
         <article class="card">
           <h2>Next invoice</h2>
-          <p class="muted">
-            When a credit is approved, it will be available for your next
-            invoice.
-          </p>
+          <p class="muted">When a credit is approved, it will be available for your next invoice.</p>
         </article>
       </section>
     </Layout>
@@ -112,19 +95,14 @@ export function Login(props: { error?: string; next?: string }) {
         <h1>Sign in to track your requests.</h1>
         {props.error ? <p class="error">{props.error}</p> : null}
         <form method="post" action="/entrar">
-          <input type="hidden" name="next" value={props.next ?? "/conta"} />
+          <input type="hidden" name="next" value={props.next ?? '/conta'} />
           <label class="field">
             Email
             <input name="email" type="email" autoComplete="email" required />
           </label>
           <label class="field">
             Password
-            <input
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-            />
+            <input name="password" type="password" autoComplete="current-password" required />
           </label>
           <button class="button primary" type="submit">
             Sign in to your account
@@ -137,33 +115,33 @@ export function Login(props: { error?: string; next?: string }) {
 type SupportCase = {
   caseId: string;
   turnId: string;
-  type: "refund" | "subscription_credit";
+  type: 'refund' | 'subscription_credit';
   amount: number;
   currency: string;
   status: string;
 };
 function money(amountMinor: number, currency: string) {
-  return (amountMinor / 100).toLocaleString("en-US", {
-    style: "currency",
+  return (amountMinor / 100).toLocaleString('en-US', {
+    style: 'currency',
     currency,
   });
 }
 function calendarDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return undefined;
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
   }).format(date);
 }
 const labels: Record<string, string> = {
-  pending_approval: "Awaiting approval",
-  rejected: "Not approved",
-  processing: "Processing",
-  executed: "Completed",
-  failed: "Needs attention",
-  unknown: "Under review",
+  pending_approval: 'Awaiting approval',
+  rejected: 'Not approved',
+  processing: 'Processing',
+  executed: 'Completed',
+  failed: 'Needs attention',
+  unknown: 'Under review',
 };
 export function Account(props: {
   customer: DemoCustomer;
@@ -176,26 +154,22 @@ export function Account(props: {
   const purchases = [
     props.customer.purchasePaid
       ? {
-          title: props.customer.purchase?.product ?? "Purchase",
+          title: props.customer.purchase?.product ?? 'Purchase',
           detail: props.customer.purchase
             ? `One-time purchase · ${money(props.customer.purchase.amountMinor, props.customer.purchase.currency)}`
-            : "Purchase details are unavailable for this historical record.",
-          date: props.customer.purchase
-            ? calendarDate(props.customer.purchase.purchasedAt)
-            : undefined,
-          state: "Payment confirmed",
+            : 'Purchase details are unavailable for this historical record.',
+          date: props.customer.purchase ? calendarDate(props.customer.purchase.purchasedAt) : undefined,
+          state: 'Payment confirmed',
         }
       : undefined,
     props.customer.subscriptionId
       ? {
-          title: props.customer.subscription?.plan ?? "Subscription",
+          title: props.customer.subscription?.plan ?? 'Subscription',
           detail: props.customer.subscription
             ? `${money(props.customer.subscription.amountMinor, props.customer.subscription.currency)} per ${props.customer.subscription.interval}`
-            : "Subscription details are unavailable for this historical record.",
-          date: props.customer.subscription
-            ? calendarDate(props.customer.subscription.renewsAt)
-            : undefined,
-          state: "Active subscription",
+            : 'Subscription details are unavailable for this historical record.',
+          date: props.customer.subscription ? calendarDate(props.customer.subscription.renewsAt) : undefined,
+          state: 'Active subscription',
         }
       : undefined,
   ].filter(Boolean) as Array<{
@@ -225,22 +199,21 @@ export function Account(props: {
         </div>
         {props.chatUnavailable ? (
           <p class="notice">
-            Authenticated chat is not configured in this environment yet. Come
-            back when support is available.
+            Authenticated chat is not configured in this environment yet. Come back when support is available.
           </p>
         ) : null}
         <section class="section">
           <h2>Products</h2>
           <div class="stack">
             {purchases.length ? (
-              purchases.map((purchase) => (
+              purchases.map(purchase => (
                 <article class="card row">
                   <div>
                     <h3>{purchase.title}</h3>
                     <p class="muted">{purchase.detail}</p>
                     {purchase.date ? (
                       <p class="muted">
-                        {purchase.state === "Payment confirmed"
+                        {purchase.state === 'Payment confirmed'
                           ? `Purchased ${purchase.date}`
                           : `Renews ${purchase.date}`}
                       </p>
@@ -250,28 +223,22 @@ export function Account(props: {
                 </article>
               ))
             ) : (
-              <div class="empty">
-                No products are available for this account.
-              </div>
+              <div class="empty">No products are available for this account.</div>
             )}
           </div>
         </section>
         <section class="section">
           <h2>Requests</h2>
           <div id="financial-requests" aria-live="polite">
-            <FinancialRequests
-              requests={props.requests}
-              requestsAvailable={props.requestsAvailable}
-            />
+            <FinancialRequests requests={props.requests} requestsAvailable={props.requestsAvailable} />
           </div>
         </section>
         <section class="section">
           <article class="card">
             <h2>Address</h2>
             <p class="muted">
-              To update your address for future purchases, contact support
-              through the chat. The team will confirm your details and guide you
-              through the next steps.
+              To update your address for future purchases, contact support through the chat. The team will confirm your
+              details and guide you through the next steps.
             </p>
           </article>
         </section>
@@ -279,45 +246,31 @@ export function Account(props: {
     </Layout>
   );
 }
-export function FinancialRequests(props: {
-  requests: SupportCase[];
-  requestsAvailable: boolean;
-}) {
+export function FinancialRequests(props: { requests: SupportCase[]; requestsAvailable: boolean }) {
   return (
     <div class="stack">
       {!props.requestsAvailable ? (
-        <div class="empty">
-          We could not retrieve your requests right now. Try again shortly.
-        </div>
+        <div class="empty">We could not retrieve your requests right now. Try again shortly.</div>
       ) : props.requests.length ? (
-        props.requests.map((request) => (
+        props.requests.map(request => (
           <article class="card row">
             <div>
-              <h3>
-                {request.type === "subscription_credit"
-                  ? "Credit for your next invoice"
-                  : "Refund request"}
-              </h3>
+              <h3>{request.type === 'subscription_credit' ? 'Credit for your next invoice' : 'Refund request'}</h3>
               <p class="muted">
-                {request.amount.toLocaleString("en-US", {
-                  style: "currency",
+                {request.amount.toLocaleString('en-US', {
+                  style: 'currency',
                   currency: request.currency,
                 })}
-                {request.type === "subscription_credit" &&
-                request.status === "executed"
-                  ? " · Credit available for a future invoice."
-                  : ""}
+                {request.type === 'subscription_credit' && request.status === 'executed'
+                  ? ' · Credit available for a future invoice.'
+                  : ''}
               </p>
             </div>
-            <span class="status">
-              {labels[request.status] ?? request.status}
-            </span>
+            <span class="status">{labels[request.status] ?? request.status}</span>
           </article>
         ))
       ) : (
-        <div class="empty">
-          There are no requests recorded for this account yet.
-        </div>
+        <div class="empty">There are no requests recorded for this account yet.</div>
       )}
     </div>
   );

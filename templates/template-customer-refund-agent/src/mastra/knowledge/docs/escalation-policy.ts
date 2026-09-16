@@ -1,8 +1,8 @@
-import type { PolicyDocument } from "../types.ts";
+import type { PolicyDocument } from '../types.ts';
 
 export const escalationPolicy: PolicyDocument = {
-  title: "Escalation Policy",
-  source: "escalation-policy",
+  title: 'Escalation Policy',
+  source: 'escalation-policy',
   text: `# Escalation Policy
 
 Escalate a case to a human specialist (do not attempt to resolve it solely with a drafted response) when any of the following are true:

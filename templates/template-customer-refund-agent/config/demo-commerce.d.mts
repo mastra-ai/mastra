@@ -8,7 +8,5 @@ export interface InteractiveLocalCommerce {
   };
 }
 export function addCalendarMonthClamped(value: Date | string): string;
-export function interactiveLocalCommerce(
-  seedAt?: Date | string,
-): InteractiveLocalCommerce;
+export function interactiveLocalCommerce(seedAt?: Date | string): InteractiveLocalCommerce;
 export function localDemoSeedInstant(environment?: NodeJS.ProcessEnv): string;

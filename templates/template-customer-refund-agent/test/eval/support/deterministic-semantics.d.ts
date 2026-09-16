@@ -1,10 +1,6 @@
 export type DeterministicRecord = Record<string, unknown>;
-export declare function isPlainJsonRecord(
-  value: unknown,
-): value is DeterministicRecord;
-export declare function canonicalScorerRecord(
-  value: unknown,
-): DeterministicRecord | null;
+export declare function isPlainJsonRecord(value: unknown): value is DeterministicRecord;
+export declare function canonicalScorerRecord(value: unknown): DeterministicRecord | null;
 export declare const SUPPORTED_AXES: readonly string[];
 export declare function evaluateDatasetAssertions(
   assertions: DeterministicRecord,
@@ -16,15 +12,6 @@ export declare function truthForDatasetCase(
   assertions: DeterministicRecord,
   evaluationCaseId?: string,
 ): DeterministicRecord;
-export declare function trajectoryAuthorityForDatasetCase(
-  caseId: string,
-): DeterministicRecord;
-export declare function scorerInputFromObservation(
-  axis: string,
-  observed: DeterministicRecord,
-): DeterministicRecord;
-export declare function scoreAxis(
-  axis: string,
-  output: DeterministicRecord,
-  truth: DeterministicRecord,
-): number;
+export declare function trajectoryAuthorityForDatasetCase(caseId: string): DeterministicRecord;
+export declare function scorerInputFromObservation(axis: string, observed: DeterministicRecord): DeterministicRecord;
+export declare function scoreAxis(axis: string, output: DeterministicRecord, truth: DeterministicRecord): number;
