@@ -28,23 +28,13 @@ function getAppResourceUri(meta?: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
-/** Execution failures are shown in the result panel instead of leaving it empty. */
-function describeExecutionError(error: unknown): string {
-  return JSON.stringify({ error: error instanceof Error ? error.message : String(error) }, null, 2);
-}
-
 export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   const { canExecute } = usePermissions();
   const canExecuteTool = canExecute('tools');
   const client = useMastraClient();
 
   const { data: tool, isLoading, error } = useMCPServerTool(serverId, toolId);
-  const {
-    mutateAsync: executeTool,
-    isPending: isExecuting,
-    data: result,
-    error: executionError,
-  } = useExecuteMCPTool(serverId, toolId);
+  const { mutateAsync: executeTool, isPending: isExecuting, data: result } = useExecuteMCPTool(serverId, toolId);
 
   const appResourceUri = tool ? getAppResourceUri(tool._meta) : undefined;
 
@@ -78,8 +68,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   const handleExecuteTool = async (data: any) => {
     if (!tool) return;
 
-    // Failures are rendered in the result panel via `executionError`.
-    return await executeTool(data).catch(() => undefined);
+    return await executeTool(data);
   };
 
   if (isLoading) {
@@ -129,7 +118,6 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
       )}
       <ToolExecutor
         executionResult={result}
-        errorString={executionError ? describeExecutionError(executionError) : undefined}
         isExecutingTool={isExecuting}
         zodInputSchema={zodInputSchema}
         handleExecuteTool={handleExecuteTool}

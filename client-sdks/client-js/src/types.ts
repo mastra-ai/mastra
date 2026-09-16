@@ -15,7 +15,7 @@ import type { BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry } from '
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
 import type { CoreMessage, Provider as ModelProviderId } from '@mastra/core/llm';
 import type { LogLevel } from '@mastra/core/logger';
-import type { MCPToolType, ServerDetailInfo, ServerInfo } from '@mastra/core/mcp';
+import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type {
   AiMessageType,
   MastraMessageV1,
@@ -939,21 +939,8 @@ export interface LoopVNextNetworkResponse {
   steps: WorkflowResult<any, any, any, any>['steps'];
 }
 
-/** Protocol transports the Mastra server exposes for a registered MCP server. */
-export type McpServerTransport = 'streamable-http' | 'sse';
-
-/** MCP server registry entry plus the transports served under `/mcp/:serverId`. */
-export interface McpServerInfo extends ServerInfo {
-  /** MCP v2 servers speak Streamable HTTP only; 1.x servers also serve SSE. */
-  transports: McpServerTransport[];
-}
-
-export interface McpServerDetailInfo extends ServerDetailInfo {
-  transports: McpServerTransport[];
-}
-
 export interface McpServerListResponse {
-  servers: McpServerInfo[];
+  servers: ServerInfo[];
   next: string | null;
   total_count: number;
 }
