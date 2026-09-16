@@ -29,6 +29,7 @@ import {
   GitLabApiError,
 } from './api.js';
 import type { GitLabIssue, GitLabNote, GitLabProject } from './api.js';
+import { buildGitLabRoutes } from './routes.js';
 import { buildGitLabVersionControl } from './version-control.js';
 
 interface GitLabConnectionContext {
@@ -124,8 +125,12 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   protected abstract activeContexts(): Promise<GitLabConnectionContext[]>;
   protected abstract contextById(connectionId: string): Promise<GitLabConnectionContext>;
 
+  protected get webhookSecret(): string | undefined {
+    return undefined;
+  }
+
   routes(_ctx: IntegrationContext): ApiRoute[] {
-    return [];
+    return buildGitLabRoutes({ webhookSecret: this.webhookSecret });
   }
 
   async agentTools(args: { requestContext: RequestContext }): Promise<IntegrationTools> {
@@ -373,18 +378,21 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
 export interface GitLabIntegrationConfig {
   accessToken: string;
   baseUrl?: string;
+  webhookSecret?: string;
   fetchImpl?: typeof fetch;
 }
 
 export class GitLabIntegration extends GitLabIntegrationBase {
   readonly #accessToken: string;
   readonly #baseUrl: string;
+  readonly #webhookSecret: string | undefined;
   readonly #context: GitLabConnectionContext;
 
   constructor(config: GitLabIntegrationConfig) {
     super();
     this.#accessToken = config.accessToken.trim();
     this.#baseUrl = (config.baseUrl ?? 'https://gitlab.com').replace(/\/+$/, '');
+    this.#webhookSecret = config.webhookSecret?.trim() || undefined;
     const api = new GitLabApiClient({
       baseUrl: this.#baseUrl,
       accessToken: this.#accessToken,
@@ -397,6 +405,10 @@ export class GitLabIntegration extends GitLabIntegrationBase {
       connection: { type: 'oauth', accessToken: this.#accessToken },
       host: new URL(this.#baseUrl).host,
     };
+  }
+
+  protected override get webhookSecret(): string | undefined {
+    return this.#webhookSecret;
   }
 
   async hasActiveConnections(): Promise<boolean> {
@@ -419,7 +431,12 @@ export class GitLabIntegration extends GitLabIntegrationBase {
   }
 
   diagnostics(): Record<string, unknown> {
-    return { configured: true, mode: 'direct', endpointHost: new URL(this.#baseUrl).host };
+    return {
+      configured: true,
+      mode: 'direct',
+      endpointHost: new URL(this.#baseUrl).host,
+      webhookConfigured: Boolean(this.#webhookSecret),
+    };
   }
 }
 
