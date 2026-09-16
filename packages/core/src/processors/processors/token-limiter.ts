@@ -51,6 +51,7 @@ type TokenLimiterTripWireMetadata = {
   limit: number;
   remainingBudget?: number;
   messageCount?: number;
+  currentRunTokens?: number;
 };
 
 /**
@@ -202,6 +203,25 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     messageList.removeByIds(removed.map(message => message.id));
   }
 
+  /** Whether a message carries tool traffic the agent loop needs on the next step. */
+  private static hasToolParts(message: MastraDBMessage): boolean {
+    const parts = message.content?.parts;
+    if (!Array.isArray(parts)) return false;
+    return parts.some(part => part.type === 'tool-invocation');
+  }
+
+  /**
+   * Ids of the messages the current run has produced. The live response set is cleared when the
+   * save queue drains mid-run, so the persisted response set is included as well.
+   */
+  private currentRunResponseIds(messageList: NonNullable<ProcessInputStepArgs['messageList']>): Set<string> {
+    const ids = new Set(messageList.makeMessageSourceChecker().output);
+    for (const message of messageList.getPersisted.response.db()) {
+      ids.add(message.id);
+    }
+    return ids;
+  }
+
   private countTokens(text: string): number {
     return estimateTokenCount(text);
   }
@@ -251,14 +271,41 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     // Calculate remaining budget for non-system messages (accounting for conversation overhead)
     const remainingBudget = limit - systemTokens - TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
 
+    // Tool calls and results produced by the current run are never trimmed: the loop needs them for
+    // the next step, the model is not told they were removed, and they are not persisted once removed.
+    const currentRunIds = this.currentRunResponseIds(messageList);
+    const currentRunMessages = messages.filter(
+      message => currentRunIds.has(message.id) && TokenLimiterProcessor.hasToolParts(message),
+    );
+
     // Process non-system messages in reverse order (newest first)
-    const messagesToKeep: MastraDBMessage[] = [];
+    const messagesToKeep: MastraDBMessage[] = [...currentRunMessages];
     let currentTokens = 0;
+    for (const message of currentRunMessages) {
+      currentTokens += await this.countInputMessageTokens(message);
+    }
+
+    if (currentTokens > remainingBudget) {
+      throw new TripWire(
+        "TokenLimiterProcessor: The current run's response messages exceed the remaining token budget. Increase the limit or reduce the size of tool results.",
+        {
+          retry: false,
+          metadata: {
+            systemTokens,
+            limit,
+            remainingBudget,
+            messageCount: messages.length,
+            currentRunTokens: currentTokens,
+          },
+        },
+      );
+    }
 
     // Iterate through messages in reverse to prioritize recent messages
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
       if (!message) continue;
+      if (currentRunIds.has(message.id) && TokenLimiterProcessor.hasToolParts(message)) continue;
 
       const messageTokens = await this.countInputMessageTokens(message);
 
