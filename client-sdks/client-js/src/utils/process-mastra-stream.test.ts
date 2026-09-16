@@ -206,6 +206,177 @@ describe('processMastraStream', () => {
     expect(mockOnChunk).toHaveBeenCalledWith(testChunk);
   });
 
+  it('should process a frame whose data line is preceded by an id field', async () => {
+    const testChunk: ChunkType = {
+      type: 'text-delta',
+      runId: 'run-123',
+      from: ChunkFrom.AGENT,
+      payload: { id: '1', text: 'resumable' },
+    };
+
+    const sseData = `id: 3\ndata: ${JSON.stringify(testChunk)}\n\n`;
+    const stream = createMockStream(sseData);
+
+    await processMastraStream({
+      stream,
+      onChunk: mockOnChunk,
+    });
+
+    expect(mockOnChunk).toHaveBeenCalledTimes(1);
+    expect(mockOnChunk).toHaveBeenCalledWith(testChunk);
+  });
+
+  it('should process a frame carrying event, id and retry fields alongside data', async () => {
+    const testChunk: ChunkType = {
+      type: 'message',
+      runId: 'run-123',
+      from: ChunkFrom.AGENT,
+      payload: { text: 'multi-field frame' },
+    };
+
+    const sseData = `event: message\nid: 4\nretry: 1000\ndata: ${JSON.stringify(testChunk)}\n\n`;
+    const stream = createMockStream(sseData);
+
+    await processMastraStream({
+      stream,
+      onChunk: mockOnChunk,
+    });
+
+    expect(mockOnChunk).toHaveBeenCalledTimes(1);
+    expect(mockOnChunk).toHaveBeenCalledWith(testChunk);
+  });
+
+  it('should ignore a comment line that precedes the data line in the same frame', async () => {
+    const testChunk: ChunkType = {
+      type: 'message',
+      runId: 'run-123',
+      from: ChunkFrom.AGENT,
+      payload: { text: 'commented frame' },
+    };
+
+    const sseData = `: keep-alive\ndata: ${JSON.stringify(testChunk)}\n\n`;
+    const stream = createMockStream(sseData);
+
+    await processMastraStream({
+      stream,
+      onChunk: mockOnChunk,
+    });
+
+    expect(mockOnChunk).toHaveBeenCalledTimes(1);
+    expect(mockOnChunk).toHaveBeenCalledWith(testChunk);
+  });
+
+  it('should join multiple data lines in a single frame before parsing', async () => {
+    const testChunk: ChunkType = {
+      type: 'message',
+      runId: 'run-123',
+      from: ChunkFrom.AGENT,
+      payload: { text: 'split payload' },
+    };
+
+    const json = JSON.stringify(testChunk);
+    const midpoint = Math.floor(json.length / 2);
+    // A JSON payload split across two `data:` lines must be rejoined with `\n`,
+    // which is insignificant whitespace between JSON tokens.
+    const sseData = `data: ${json.slice(0, midpoint)}\ndata: ${json.slice(midpoint)}\n\n`;
+    const stream = createMockStream(sseData);
+
+    await processMastraStream({
+      stream,
+      onChunk: mockOnChunk,
+    });
+
+    expect(mockOnChunk).toHaveBeenCalledTimes(1);
+    expect(mockOnChunk).toHaveBeenCalledWith(testChunk);
+  });
+
+  it('should accept a data line with no space after the colon', async () => {
+    const testChunk: ChunkType = {
+      type: 'message',
+      runId: 'run-123',
+      from: ChunkFrom.AGENT,
+      payload: { text: 'no space' },
+    };
+
+    const sseData = `data:${JSON.stringify(testChunk)}\n\n`;
+    const stream = createMockStream(sseData);
+
+    await processMastraStream({
+      stream,
+      onChunk: mockOnChunk,
+    });
+
+    expect(mockOnChunk).toHaveBeenCalledTimes(1);
+    expect(mockOnChunk).toHaveBeenCalledWith(testChunk);
+  });
+
+  it('should terminate on a [DONE] frame that carries an id field', async () => {
+    const testChunk: ChunkType = {
+      type: 'message',
+      runId: 'run-123',
+      from: ChunkFrom.AGENT,
+      payload: { text: 'before done' },
+    };
+
+    const sseData = `id: 8\ndata: ${JSON.stringify(testChunk)}\n\nid: 9\ndata: [DONE]\n\nid: 10\ndata: ${JSON.stringify(testChunk)}\n\n`;
+    const stream = createMockStream(sseData);
+
+    await processMastraStream({
+      stream,
+      onChunk: mockOnChunk,
+    });
+
+    expect(mockOnChunk).toHaveBeenCalledTimes(1);
+    expect(mockOnChunk).toHaveBeenCalledWith(testChunk);
+  });
+
+  it.each(['\n', '\r\n', '\r'])(
+    'should handle complete events with %j line endings at every transport split',
+    async eol => {
+      const chunk: ChunkType = {
+        type: 'message',
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+        payload: { text: 'complete event' },
+      };
+      const frame = `: heartbeat${eol}id: 1${eol}data: ${JSON.stringify(chunk)}${eol}${eol}`;
+      const input = `${frame}data: [DONE]${eol}${eol}${frame}`;
+      for (let split = 1; split < input.length; split++) {
+        const onChunk = vi.fn();
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(input.slice(0, split)));
+            controller.enqueue(new Uint8Array());
+            controller.enqueue(new TextEncoder().encode(input.slice(split)));
+            controller.close();
+          },
+        });
+        await processMastraStream({ stream, onChunk });
+        expect(onChunk).toHaveBeenCalledExactlyOnceWith(chunk);
+      }
+    },
+  );
+
+  it('should handle CRLF line endings within a frame', async () => {
+    const testChunk: ChunkType = {
+      type: 'message',
+      runId: 'run-123',
+      from: ChunkFrom.AGENT,
+      payload: { text: 'crlf frame' },
+    };
+
+    const sseData = `id: 5\r\ndata: ${JSON.stringify(testChunk)}\n\n`;
+    const stream = createMockStream(sseData);
+
+    await processMastraStream({
+      stream,
+      onChunk: mockOnChunk,
+    });
+
+    expect(mockOnChunk).toHaveBeenCalledTimes(1);
+    expect(mockOnChunk).toHaveBeenCalledWith(testChunk);
+  });
+
   it('should ignore SSE heartbeat comments', async () => {
     const testChunk: ChunkType = {
       type: 'message',
