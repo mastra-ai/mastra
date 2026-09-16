@@ -253,7 +253,7 @@ Per the MCP specification: **clients MUST consider tool annotations to be untrus
 
 The same annotations are also exposed on the tools returned by `listTools()` and `listToolsets()` under `tool.mcp.annotations`, so you can inspect them when wiring tools into an agent.
 
-Each tool also carries `tool.title`, set from the server's tool `title` and falling back to `annotations.title`. This matches the MCP display-name precedence: `title`, then `annotations.title`, then the tool name.
+Each tool also carries `tool.title`, set from the server's tool `title` and falling back to `annotations.title`. When the server provides neither, `tool.title` is `undefined` and the tool name is the display fallback, matching the MCP display-name precedence.
 
 ## Server instructions
 
