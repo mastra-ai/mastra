@@ -1,4 +1,9 @@
 import type { MastraMessageContentV2 } from '../../../agent';
+import {
+  getMemoryTokenBoundary,
+  mergeMemoryTokenBoundaries,
+  type MemoryTokenBoundary,
+} from '../../../memory/message-history-config';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
 import type {
   StorageResourceType,
@@ -30,6 +35,18 @@ import { StorageDomain } from '../base';
 function isPlainObj(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
+
+export type AdvanceMemoryTokenBoundaryInput = {
+  id: string;
+  resourceId?: string;
+  candidate: MemoryTokenBoundary;
+};
+
+export type AdvanceMemoryTokenBoundaryResult = {
+  supported: boolean;
+  thread: StorageThreadType | null;
+  boundary: MemoryTokenBoundary | undefined;
+};
 
 // Constants for metadata key validation
 const SAFE_METADATA_KEY_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
@@ -160,6 +177,34 @@ export abstract class MemoryStorage extends StorageDomain {
       release();
       if (this.threadMetadataUpdateQueues.get(id) === current) this.threadMetadataUpdateQueues.delete(id);
     }
+  }
+
+  /**
+   * Persist a memory-token trim boundary only when the adapter can make the merge atomic
+   * across independent storage instances. The compatibility default is observational:
+   * it returns the currently stored boundary without writing the candidate.
+   */
+  async advanceMemoryTokenBoundary({
+    id,
+    resourceId,
+  }: AdvanceMemoryTokenBoundaryInput): Promise<AdvanceMemoryTokenBoundaryResult> {
+    const thread = await this.getThreadById({ threadId: id, resourceId });
+    return {
+      supported: false,
+      thread,
+      boundary: getMemoryTokenBoundary(thread),
+    };
+  }
+
+  protected getMemoryTokenBoundary(thread: Pick<StorageThreadType, 'metadata'> | null | undefined) {
+    return getMemoryTokenBoundary(thread);
+  }
+
+  protected mergeMemoryTokenBoundaries(
+    previous: MemoryTokenBoundary | undefined,
+    candidate: MemoryTokenBoundary,
+  ): MemoryTokenBoundary {
+    return mergeMemoryTokenBoundaries(previous, candidate);
   }
 
   abstract deleteThread({ threadId }: { threadId: string }): Promise<void>;
