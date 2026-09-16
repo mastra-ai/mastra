@@ -45,21 +45,39 @@ export const ComposerBox = forwardRef<HTMLDivElement, ComposerBoxProps>(
 );
 ComposerBox.displayName = 'ComposerBox';
 
+export type ComposerTone = 'default' | 'green' | 'purple' | 'orange';
+
 export interface ComposerRingProps extends ComponentPropsWithoutRef<'div'> {
   busy?: boolean;
-  mode?: string;
+  tone?: ComposerTone;
 }
 
-export const ComposerRing = ({ busy = false, mode = 'build', className, ...props }: ComposerRingProps) => {
-  const ringRef = useComposerPointer(!busy);
+export const ComposerRing = ({
+  busy = false,
+  tone = 'green',
+  className,
+  style,
+  onPointerEnter,
+  onPointerMove,
+  ...props
+}: ComposerRingProps) => {
+  const { trackPointer, pointerStyle } = useComposerPointer(!busy);
 
   return (
     <div
-      ref={ringRef}
       data-slot="composer-ring"
-      data-composer-mode={mode.toLowerCase()}
+      data-composer-tone={tone}
       data-busy={busy ? 'true' : 'false'}
       className={cn('composer-ring relative mx-auto w-full max-w-3xl rounded-[23px] p-px', className)}
+      style={{ ...pointerStyle, ...style }}
+      onPointerEnter={event => {
+        onPointerEnter?.(event);
+        trackPointer(event);
+      }}
+      onPointerMove={event => {
+        onPointerMove?.(event);
+        trackPointer(event);
+      }}
       {...props}
     />
   );
@@ -136,10 +154,10 @@ const ComposerSendingPulse = ({ pulseKey }: { pulseKey: number }) => {
   );
 };
 
-export interface ComposerModeLabelProps extends ComponentPropsWithoutRef<'span'> {
-  mode: string;
+export interface ComposerToneLabelProps extends ComponentPropsWithoutRef<'span'> {
+  tone: ComposerTone;
 }
 
-export function ComposerModeLabel({ mode, className, ...props }: ComposerModeLabelProps) {
-  return <span data-composer-mode={mode.toLowerCase()} className={cn('composer-mode-label', className)} {...props} />;
+export function ComposerToneLabel({ tone, className, ...props }: ComposerToneLabelProps) {
+  return <span data-composer-tone={tone} className={cn('composer-tone-label', className)} {...props} />;
 }

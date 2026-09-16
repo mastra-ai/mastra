@@ -5,14 +5,15 @@ export {
   ComposerBox,
   ComposerInput,
   ComposerRing,
-  ComposerModeLabel,
+  ComposerToneLabel,
 } from './composer';
 export type {
   ComposerBoxProps,
   ComposerInputProps,
   ComposerProps,
   ComposerRingProps,
-  ComposerModeLabelProps,
+  ComposerTone,
+  ComposerToneLabelProps,
 } from './composer';
 export { ComposerSuggestions } from './commands/composer-suggestions';
 export type { ComposerSuggestionItem, ComposerSuggestionsProps } from './commands/composer-suggestions';

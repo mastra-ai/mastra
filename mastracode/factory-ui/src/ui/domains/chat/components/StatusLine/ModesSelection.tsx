@@ -1,8 +1,9 @@
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
-import { ComposerModeLabel } from '@mastra/playground-ui/components/Composer';
+import { ComposerToneLabel } from '@mastra/playground-ui/components/Composer';
 import { Circle, Hammer, Map, Zap } from 'lucide-react';
 import { useState } from 'react';
 
+import { getComposerTone } from '../composer-tone';
 import { useChatModes } from '../../context/useChatModes';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 
@@ -61,9 +62,9 @@ export function ModesSelection() {
         aria-busy={Boolean(pendingModeId)}
         className="w-auto"
       >
-        <ComposerModeLabel mode={selectedMode.id}>
+        <ComposerToneLabel tone={getComposerTone(selectedMode.id)}>
           <ModeLabel modeId={selectedMode.id} name={selectedMode.name ?? selectedMode.id} />
-        </ComposerModeLabel>
+        </ComposerToneLabel>
       </SelectTrigger>
       <SelectContent>
         {modes.map(mode => (

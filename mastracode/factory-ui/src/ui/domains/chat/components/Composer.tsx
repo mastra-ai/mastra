@@ -35,6 +35,7 @@ import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFrom
 import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
 import { commandRequiresReadySession } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { getComposerTone } from './composer-tone';
 import { StatusLine } from './StatusLine';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
 import { useComposerImages } from './useComposerImages';
@@ -257,7 +258,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
-      <ComposerRing busy={busy || chatPreparing} mode={activeModeId ?? modes[0]?.id}>
+      <ComposerRing busy={busy || chatPreparing} tone={getComposerTone(activeModeId ?? modes[0]?.id)}>
         <ComposerBox>
           <ComposerSuggestions {...commandMenu.suggestionsProps} />
           <ComposerImageAttachments images={images} onRemove={removeImage} />

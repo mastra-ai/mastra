@@ -8,16 +8,17 @@ import {
   ComposerBox,
   ComposerInput,
   type ComposerInputProps,
-  ComposerModeLabel,
+  type ComposerTone,
+  ComposerToneLabel,
   ComposerRing,
 } from '@/ds/components/Composer';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/ds/components/Select';
 
 const modes = [
-  { id: 'build', label: 'Build', Icon: Hammer },
-  { id: 'plan', label: 'Plan', Icon: Map },
-  { id: 'fast', label: 'Fast', Icon: Zap },
-];
+  { id: 'build', label: 'Build', Icon: Hammer, tone: 'green' },
+  { id: 'plan', label: 'Plan', Icon: Map, tone: 'purple' },
+  { id: 'fast', label: 'Fast', Icon: Zap, tone: 'orange' },
+] satisfies { id: string; label: string; Icon: typeof Hammer; tone: ComposerTone }[];
 
 export interface ComposerPreviewProps {
   mode?: string;
@@ -39,6 +40,7 @@ export function ComposerPreview({
   const [text, setText] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const modeOption = modes.find(option => option.id === selectedMode);
+  const tone = modeOption?.tone ?? 'default';
 
   function submitMessage() {
     if (disabled || running || !text.trim()) return;
@@ -55,7 +57,7 @@ export function ComposerPreview({
         submitMessage();
       }}
     >
-      <ComposerRing mode={selectedMode} busy={running}>
+      <ComposerRing tone={tone} busy={running}>
         <ComposerBox>
           <ComposerInput
             ref={inputRef}
@@ -76,10 +78,10 @@ export function ComposerPreview({
             {controls === 'mode' ? (
               <Select value={selectedMode} onValueChange={setSelectedMode} disabled={disabled}>
                 <SelectTrigger variant="ghost" size="xs" aria-label="Session mode" className="w-auto">
-                  <ComposerModeLabel mode={selectedMode} className="inline-flex items-center gap-1.5">
+                  <ComposerToneLabel tone={tone} className="inline-flex items-center gap-1.5">
                     {modeOption && <modeOption.Icon size={12} aria-hidden />}
                     {modeOption?.label ?? selectedMode}
-                  </ComposerModeLabel>
+                  </ComposerToneLabel>
                 </SelectTrigger>
                 <SelectContent>
                   {modes.map(option => (

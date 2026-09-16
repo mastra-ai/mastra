@@ -1,35 +1,35 @@
-[data-composer-mode] {
-  --composer-mode-color: var(--accent1);
+[data-composer-tone] {
+  --composer-tone-color: var(--accent1);
 }
 
-.composer-mode-label {
-  --composer-mode-color: var(--neutral4);
+.composer-tone-label {
+  --composer-tone-color: var(--neutral4);
 
-  color: var(--composer-mode-color);
+  color: var(--composer-tone-color);
 }
 
-[data-composer-mode='build'] {
-  --composer-mode-color: #4ade80;
+[data-composer-tone='green'] {
+  --composer-tone-color: #4ade80;
 }
 
-[data-composer-mode='plan'] {
-  --composer-mode-color: #c4b5fd;
+[data-composer-tone='purple'] {
+  --composer-tone-color: #c4b5fd;
 }
 
-[data-composer-mode='fast'] {
-  --composer-mode-color: #fdba74;
+[data-composer-tone='orange'] {
+  --composer-tone-color: #fdba74;
 }
 
-html.light [data-composer-mode='build'] {
-  --composer-mode-color: #087a32;
+html.light [data-composer-tone='green'] {
+  --composer-tone-color: #087a32;
 }
 
-html.light [data-composer-mode='plan'] {
-  --composer-mode-color: #6d28d9;
+html.light [data-composer-tone='purple'] {
+  --composer-tone-color: #6d28d9;
 }
 
-html.light [data-composer-mode='fast'] {
-  --composer-mode-color: #8a4400;
+html.light [data-composer-tone='orange'] {
+  --composer-tone-color: #8a4400;
 }
 
 .composer-box {
@@ -56,7 +56,7 @@ html.light .composer-box {
 .composer-box::before {
   background: radial-gradient(
     200px circle at var(--composer-spotlight-x, 50%) var(--composer-spotlight-y, 50%),
-    color-mix(in srgb, var(--composer-mode-color, var(--accent1)) 5%, transparent),
+    color-mix(in srgb, var(--composer-tone-color, var(--accent1)) 5%, transparent),
     transparent 75%
   );
   filter: blur(12px);

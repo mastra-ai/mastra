@@ -15,7 +15,7 @@ const meta: Meta<typeof Composer> = {
     docs: {
       description: {
         component:
-          'ComposerRing owns the pointer spotlight and busy rotation. Its mode defaults to build; plan and fast select the same light/dark colors used by ComposerModeLabel. Custom mode IDs retain the accent ring and a neutral label. ComposerInput uses the inline height by default, or variant="textarea" for a taller draft; maxHeight remains available. Compose the shared surface, input, and actions with application-owned controls, draft state, attachments, and send/cancel callbacks. Changing mode never implies a running state. The interactive previews simulate sending and stopping; they do not call an agent.',
+          'ComposerRing owns the pointer spotlight and busy rotation. Its typed tone defaults to green; purple and orange select the same light/dark colors used by ComposerToneLabel. The default tone uses the accent ring and a neutral label. Applications map their own modes to tones. ComposerInput uses the inline height by default, or variant="textarea" for a taller draft; maxHeight remains available. Compose the shared surface, input, and actions with application-owned controls, draft state, attachments, and send/cancel callbacks. Changing mode never implies a running state. The interactive previews simulate sending and stopping; they do not call an agent.',
       },
     },
   },
@@ -119,8 +119,8 @@ export const WithModeControls: Story = {
     const label = canvas.getByText('Plan');
     const ring = canvasElement.querySelector('[data-slot="composer-ring"]');
     if (!ring) throw new Error('Composer ring is missing');
-    await expect(getComputedStyle(ring).getPropertyValue('--composer-mode-color')).toBe(
-      getComputedStyle(label).getPropertyValue('--composer-mode-color'),
+    await expect(getComputedStyle(ring).getPropertyValue('--composer-tone-color')).toBe(
+      getComputedStyle(label).getPropertyValue('--composer-tone-color'),
     );
     const input = canvas.getByRole('textbox', { name: 'Message' });
     await userEvent.type(input, 'Review this plan.{shift>}{enter}{/shift}Keep both lines.');
