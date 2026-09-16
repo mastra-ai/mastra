@@ -15,6 +15,7 @@ export interface IntakeSelection {
 
 export interface IntakeConfig {
   github: IntakeSelection;
+  gitlab: IntakeSelection;
   linear: IntakeSelection;
 }
 
@@ -23,12 +24,13 @@ export interface IntakeConfig {
  * only returns the integrations registered in the running deployment, so a key
  * is absent whenever that integration isn't connected. Fill the fixed shape the
  * UI relies on so reads like `config.github.enabled` never touch `undefined`.
- * GitHub defaults to enabled (issues sync once a repo is picked); Linear stays
- * off until it's connected and a project is selected.
+ * GitHub defaults to enabled (issues sync once a repo is picked); GitLab and
+ * Linear stay off until they are connected and a source is selected.
  */
 function normalizeIntakeConfig(raw: Partial<Record<string, IntakeSelection>> | null | undefined): IntakeConfig {
   return {
     github: raw?.github ?? { enabled: true, sourceIds: null },
+    gitlab: raw?.gitlab ?? { enabled: false, sourceIds: null },
     linear: raw?.linear ?? { enabled: false, sourceIds: null },
   };
 }

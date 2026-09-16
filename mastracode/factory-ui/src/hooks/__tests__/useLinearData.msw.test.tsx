@@ -138,6 +138,7 @@ describe('useLinearProjectsQuery', () => {
 describe('useIntakeConfigQuery / useSaveIntakeConfigMutation', () => {
   const config: IntakeConfig = {
     github: { enabled: true, sourceIds: null },
+    gitlab: { enabled: false, sourceIds: null },
     linear: { enabled: true, sourceIds: null },
   };
 
@@ -153,6 +154,7 @@ describe('useIntakeConfigQuery / useSaveIntakeConfigMutation', () => {
   it('given a save, when it succeeds, then the config cache updates and linear issues invalidate', async () => {
     const updated: IntakeConfig = {
       github: { enabled: false, sourceIds: null },
+      gitlab: { enabled: false, sourceIds: null },
       linear: { enabled: true, sourceIds: ['proj-1'] },
     };
     let putBody: unknown;
