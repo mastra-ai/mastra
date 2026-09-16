@@ -62,10 +62,6 @@ export const AgentBadge = ({
     metadata?.mode === 'network' ? (routingDecision?.selectionReason ?? metadata.selectionReason) : undefined;
   const agentNetworkInput = metadata?.mode === 'network' ? (routingDecision ?? metadata.agentInput) : undefined;
 
-  const parentRequireApprovalMetadata =
-    metadata?.mode === 'stream' || metadata?.mode === 'network' || metadata?.mode === 'generate'
-      ? metadata?.requireApprovalMetadata
-      : undefined;
   const parentSuspendedTools =
     metadata?.mode === 'stream' || metadata?.mode === 'network' || metadata?.mode === 'generate'
       ? metadata?.suspendedTools
@@ -85,7 +81,7 @@ export const AgentBadge = ({
       return message.toolOutput !== undefined;
     });
 
-  let toolCalled = allChildToolsComplete;
+  let toolCalled = isComplete && allChildToolsComplete;
 
   if (isNetwork) {
     toolCalled = toolCalledProp ?? allChildToolsComplete;
@@ -144,7 +140,8 @@ export const AgentBadge = ({
               toolCallId={message.toolCallId}
               metadata={{
                 mode: 'stream',
-                requireApprovalMetadata: parentRequireApprovalMetadata,
+                // Delegation approvals belong to this badge, not its child tool cards.
+                requireApprovalMetadata: isNetwork ? metadata?.requireApprovalMetadata : undefined,
                 suspendedTools: parentSuspendedTools,
               }}
             />

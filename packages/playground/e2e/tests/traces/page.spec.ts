@@ -27,8 +27,7 @@ test.describe('Traces page', () => {
       await page.goto('/traces');
 
       // We check that the page has loaded and the traces tools are visible
-      // The date preset dropdown defaults to "Last 24 hours"
-      await expect(page.getByRole('button', { name: 'Last 24 hours' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Last 7 days' })).toBeVisible();
     });
   });
 
