@@ -147,6 +147,29 @@ describe('GitLabIntegration', () => {
     expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({ 'private-token': 'group-token' });
   });
 
+  it('round-trips a listed project-local issue id into an update', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json([issue(10, 42)]))
+      .mockResolvedValueOnce(json({ ...issue(10, 42), state: 'closed' }));
+    const gitlab = direct(fetchMock);
+    const sourceId = encodeSourceId({ connectionId: 'direct', projectId: '10', projectPath: 'mastra/platform' });
+
+    const page = await gitlab.intake.listIssues({
+      connection: { type: 'oauth', accessToken: 'gitlab-direct-access-token' },
+      sourceIds: [sourceId],
+    });
+    expect(page.issues[0]?.id).toBe('42');
+
+    await gitlab.intake.updateIssue({
+      connection: { type: 'oauth', accessToken: 'gitlab-direct-access-token' },
+      sourceId,
+      issueId: page.issues[0]!.id,
+      state: { kind: 'byType', stateType: 'completed' },
+    });
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('/projects/10/issues/42');
+  });
+
   it('fetches issue detail, discussion notes, comments, and state changes directly', async () => {
     const fetchMock = vi
       .fn<typeof fetch>()

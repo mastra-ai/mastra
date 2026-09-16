@@ -370,7 +370,7 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   #toIntakeIssue(issue: GitLabIssue, projectPath: string): IntakeIssue {
     const assignees = issue.assignees?.map(displayName).filter((name): name is string => name !== null) ?? [];
     return {
-      id: String(issue.id),
+      id: String(issue.iid),
       identifier: `${projectPath}#${issue.iid}`,
       title: issue.title,
       url: issue.web_url,
