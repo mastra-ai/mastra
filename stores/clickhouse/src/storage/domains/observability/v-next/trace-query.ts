@@ -275,6 +275,7 @@ function compileThreadPredicate(predicate: TrustedThreadPredicate, parameters: P
 export interface CompiledClickHouseTraceQuery {
   query: string;
   query_params: QueryParams;
+  sharedSnapshot?: boolean;
 }
 
 function compileClickHouseTraceScope(
@@ -378,10 +379,7 @@ function compileClickHouseTraceScope(
   return ctes;
 }
 
-export function compileClickHouseTraceQuery(
-  plan: TrustedTraceQueryPlan,
-  mode: 'data' | 'count' = 'data',
-): CompiledClickHouseTraceQuery {
+export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
   const relationCollections = collectRelationCollections(plan.where);
   const ctes = compileClickHouseTraceScope(plan, relationCollections, parameters);
@@ -393,15 +391,6 @@ export function compileClickHouseTraceQuery(
     WHERE ${predicate}
   )`);
   const candidates = `WITH ${ctes.join(',\n')}`;
-
-  if (plan.paginationMode === 'page' && mode === 'count') {
-    return {
-      query: `${candidates}
-SELECT count() AS total
-FROM candidates`,
-      query_params: parameters.params,
-    };
-  }
 
   if (plan.result === 'groups') {
     const pageCondition = plan.cursor ? `AND threadId > ${parameters.add(plan.cursor.threadId, 'String')}` : '';
@@ -424,12 +413,39 @@ LIMIT ${limit}`,
     const limit = parameters.add(plan.perPage, 'UInt64');
     const offset = parameters.add(plan.page * plan.perPage, 'UInt64');
     return {
-      query: `${candidates}
-SELECT *
-FROM candidates
-ORDER BY ${orderField} ${direction}, traceId ASC
-LIMIT ${limit} OFFSET ${offset}`,
+      query: `${candidates},
+page_rows AS (
+  SELECT *, row_number() OVER (ORDER BY ${orderField} ${direction}, traceId ASC) AS __row_position
+  FROM candidates
+  ORDER BY ${orderField} ${direction}, traceId ASC
+  LIMIT ${limit} OFFSET ${offset}
+),
+page_total AS (
+  SELECT count() AS total
+  FROM candidates
+)
+SELECT page_rows.*, page_total.total, 0 AS __metadata
+FROM page_rows
+CROSS JOIN page_total
+UNION ALL
+SELECT
+  '' AS traceId,
+  '' AS rootSpanId,
+  CAST(NULL, 'Nullable(String)') AS threadId,
+  CAST(NULL, 'Nullable(String)') AS resourceId,
+  toDateTime64(0, 3, 'UTC') AS startedAt,
+  toDateTime64(0, 3, 'UTC') AS endedAt,
+  CAST(NULL, 'Nullable(String)') AS entityName,
+  CAST(NULL, 'Nullable(String)') AS entityType,
+  CAST(NULL, 'Nullable(String)') AS environment,
+  '' AS status,
+  0 AS __row_position,
+  page_total.total,
+  1 AS __metadata
+FROM page_total
+ORDER BY __metadata ASC, __row_position ASC`,
       query_params: parameters.params,
+      sharedSnapshot: true,
     };
   }
 
@@ -514,7 +530,11 @@ export async function runWithClickHouseTraceQueryTimeout(
       query_params: compiled.query_params,
       query_id: queryId,
       format: 'JSONEachRow',
-      clickhouse_settings: { ...CH_SETTINGS, max_execution_time: resolvedTimeoutMs / 1000 },
+      clickhouse_settings: {
+        ...CH_SETTINGS,
+        max_execution_time: resolvedTimeoutMs / 1000,
+        ...(compiled.sharedSnapshot ? { enable_shared_storage_snapshot_in_query: 1 } : {}),
+      },
     });
     return (await result.json()) as Record<string, unknown>[];
   } catch (error) {
@@ -529,25 +549,22 @@ export async function queryTraces(
   timeoutMs: number,
 ): Promise<TraceQueryResponse> {
   if (plan.paginationMode === 'page') {
-    const countRows = await runWithClickHouseTraceQueryTimeout(
-      client,
-      timeoutMs,
-      compileClickHouseTraceQuery(plan, 'count'),
-    );
     const rows = await runWithClickHouseTraceQueryTimeout(client, timeoutMs, compileClickHouseTraceQuery(plan));
-    const total = Number(countRows[0]?.total ?? 0);
-    const traces = rows.map(row => ({
-      traceId: String(row.traceId),
-      rootSpanId: String(row.rootSpanId),
-      threadId: row.threadId == null ? null : String(row.threadId),
-      resourceId: row.resourceId == null ? null : String(row.resourceId),
-      startedAt: asIsoTimestamp(row.startedAt),
-      endedAt: asIsoTimestamp(row.endedAt),
-      entityName: row.entityName == null ? null : String(row.entityName),
-      entityType: row.entityType == null ? null : String(row.entityType),
-      environment: row.environment == null ? null : String(row.environment),
-      status: row.status,
-    }));
+    const total = Number(rows.at(-1)?.total ?? 0);
+    const traces = rows
+      .filter(row => Number(row.__metadata) === 0)
+      .map(row => ({
+        traceId: String(row.traceId),
+        rootSpanId: String(row.rootSpanId),
+        threadId: row.threadId == null ? null : String(row.threadId),
+        resourceId: row.resourceId == null ? null : String(row.resourceId),
+        startedAt: asIsoTimestamp(row.startedAt),
+        endedAt: asIsoTimestamp(row.endedAt),
+        entityName: row.entityName == null ? null : String(row.entityName),
+        entityType: row.entityType == null ? null : String(row.entityType),
+        environment: row.environment == null ? null : String(row.environment),
+        status: row.status,
+      }));
     return coreStorage.traceQueryResponseSchema.parse({
       traces,
       pagination: {
