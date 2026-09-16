@@ -154,7 +154,7 @@ export async function maybeAutoProvisionDatabases(
 }
 
 async function provisionOne(ctx: AutoProvisionContext, provider: DatabaseKind): Promise<ProjectDatabase> {
-  const name = defaultDatabaseName(
+  const name = await defaultDatabaseName(
     provider,
     { name: ctx.projectName, slug: ctx.projectSlug },
     { name: ctx.environment.name, slug: ctx.environment.slug, type: ctx.environment.type },

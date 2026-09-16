@@ -169,7 +169,7 @@ export class LangfuseTraceImportProvider implements TraceImportProvider {
         onRetry: context.onRetry,
       };
       const sourceTrace = await this.reader.readTrace(options);
-      yield mapLangfuseSourceTrace(sourceTrace, {
+      yield await mapLangfuseSourceTrace(sourceTrace, {
         importId: context.importId,
         ...importWindow,
       });
@@ -177,21 +177,23 @@ export class LangfuseTraceImportProvider implements TraceImportProvider {
   }
 }
 
-export function mapLangfuseSourceTrace(
+export async function mapLangfuseSourceTrace(
   sourceTrace: LangfuseSourceTrace,
   options: MapLangfuseTraceOptions,
-): TraceImportRecord {
+): Promise<TraceImportRecord> {
   const ordered = validateAndOrderTrace(sourceTrace, options);
   if ('skipped' in ordered) return { kind: 'skipped', skipped: ordered.skipped };
 
   const unknownTypes = new Set<string>();
   const trace: TraceImportTrace = {
     sourceTraceId: ordered.trace.sourceTraceId,
-    spans: ordered.trace.observations.map((observation, index) => {
-      const mappedType = restoredMastraSpanType(observation) ?? LANGFUSE_TYPE_MAP[observation.type];
-      if (mappedType === undefined) unknownTypes.add(observation.type);
-      return mapObservationToSpan(observation, ordered.trace, options.importId, mappedType ?? 'generic', index);
-    }),
+    spans: await Promise.all(
+      ordered.trace.observations.map(async (observation, index) => {
+        const mappedType = restoredMastraSpanType(observation) ?? LANGFUSE_TYPE_MAP[observation.type];
+        if (mappedType === undefined) unknownTypes.add(observation.type);
+        return await mapObservationToSpan(observation, ordered.trace, options.importId, mappedType ?? 'generic', index);
+      }),
+    ),
   };
 
   const warnings = [...unknownTypes].sort().map(type => `Unknown Langfuse observation type: ${type}`);
@@ -343,20 +345,20 @@ function validateAndOrderTrace(
   };
 }
 
-function mapObservationToSpan(
+async function mapObservationToSpan(
   observation: TimestampedObservation,
   trace: OrderedLangfuseTrace,
   importId: string,
   spanType: TraceImportSpan['spanType'],
   index: number,
-): TraceImportSpan {
+): Promise<TraceImportSpan> {
   const isEvent = observation.type === 'EVENT';
   return {
-    traceId: createLangfuseTraceImportId(trace.projectId, trace.sourceTraceId),
-    spanId: createLangfuseSpanImportId(trace.projectId, observation.id),
+    traceId: await createLangfuseTraceImportId(trace.projectId, trace.sourceTraceId),
+    spanId: await createLangfuseSpanImportId(trace.projectId, observation.id),
     parentSpanId:
       index > 0 && observation.parentObservationId
-        ? createLangfuseSpanImportId(trace.projectId, observation.parentObservationId)
+        ? await createLangfuseSpanImportId(trace.projectId, observation.parentObservationId)
         : null,
     name: observation.name?.trim() || `langfuse:${observation.type.toLowerCase()}`,
     spanType,

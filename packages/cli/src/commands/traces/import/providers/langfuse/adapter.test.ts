@@ -45,7 +45,7 @@ async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
 }
 
 describe('mapLangfuseSourceTrace', () => {
-  it('validates, orders, and maps a complete Langfuse tree into Mastra spans', () => {
+  it('validates, orders, and maps a complete Langfuse tree into Mastra spans', async () => {
     const child = observation({
       id: 'child',
       parentObservationId: 'root',
@@ -70,7 +70,7 @@ describe('mapLangfuseSourceTrace', () => {
       bookmarked: true,
     });
 
-    const record = mapLangfuseSourceTrace(sourceTrace([child, observation({ tags: ['trace-tag'] })]), {
+    const record = await mapLangfuseSourceTrace(sourceTrace([child, observation({ tags: ['trace-tag'] })]), {
       importId: 'import-1',
       ...mappedWindow,
     });
@@ -79,17 +79,17 @@ describe('mapLangfuseSourceTrace', () => {
     if (record.kind !== 'trace') return;
     expect(record.trace.sourceTraceId).toBe('trace-1');
     expect(record.trace.spans.map(span => span.spanId)).toEqual([
-      createLangfuseSpanImportId('project-1', 'root'),
-      createLangfuseSpanImportId('project-1', 'child'),
+      await createLangfuseSpanImportId('project-1', 'root'),
+      await createLangfuseSpanImportId('project-1', 'child'),
     ]);
     expect(record.trace.spans[0]).toMatchObject({
-      traceId: createLangfuseTraceImportId('project-1', 'trace-1'),
+      traceId: await createLangfuseTraceImportId('project-1', 'trace-1'),
       parentSpanId: null,
       spanType: 'generic',
       tags: ['trace-tag'],
     });
     expect(record.trace.spans[1]).toMatchObject({
-      parentSpanId: createLangfuseSpanImportId('project-1', 'root'),
+      parentSpanId: await createLangfuseSpanImportId('project-1', 'root'),
       spanType: 'model_generation',
       input: { question: 'hello' },
       output: { answer: 'hi' },
@@ -134,8 +134,8 @@ describe('mapLangfuseSourceTrace', () => {
     });
   });
 
-  it('orders siblings by their actual time and uses the observation ID to break ties', () => {
-    const record = mapLangfuseSourceTrace(
+  it('orders siblings by their actual time and uses the observation ID to break ties', async () => {
+    const record = await mapLangfuseSourceTrace(
       sourceTrace([
         observation({
           id: 'later',
@@ -163,12 +163,14 @@ describe('mapLangfuseSourceTrace', () => {
     expect(record.kind).toBe('trace');
     if (record.kind !== 'trace') return;
     expect(record.trace.spans.map(span => span.spanId)).toEqual(
-      ['root', 'same-time-a', 'same-time-b', 'later'].map(id => createLangfuseSpanImportId('project-1', id)),
+      await Promise.all(
+        ['root', 'same-time-a', 'same-time-b', 'later'].map(id => createLangfuseSpanImportId('project-1', id)),
+      ),
     );
   });
 
-  it('falls back to valid usage details when direct usage values are malformed', () => {
-    const record = mapLangfuseSourceTrace(
+  it('falls back to valid usage details when direct usage values are malformed', async () => {
+    const record = await mapLangfuseSourceTrace(
       sourceTrace([
         observation({
           type: 'GENERATION',
@@ -187,8 +189,8 @@ describe('mapLangfuseSourceTrace', () => {
     });
   });
 
-  it('does not duplicate a provided model name used as the canonical fallback', () => {
-    const record = mapLangfuseSourceTrace(
+  it('does not duplicate a provided model name used as the canonical fallback', async () => {
+    const record = await mapLangfuseSourceTrace(
       sourceTrace([observation({ type: 'GENERATION', model: null, providedModelName: 'fallback-model' })]),
       { importId: 'import-1', ...mappedWindow },
     );
@@ -199,8 +201,8 @@ describe('mapLangfuseSourceTrace', () => {
     expect(record.trace.spans[0]?.metadata.langfuse).not.toHaveProperty('providedModelName');
   });
 
-  it('keeps model and usage fields in metadata when the span type has no canonical destination', () => {
-    const record = mapLangfuseSourceTrace(
+  it('keeps model and usage fields in metadata when the span type has no canonical destination', async () => {
+    const record = await mapLangfuseSourceTrace(
       sourceTrace([
         observation({
           model: 'custom-model',
@@ -241,8 +243,8 @@ describe('mapLangfuseSourceTrace', () => {
     ['RETRIEVER', 'generic'],
     ['GUARDRAIL', 'generic'],
     ['FUTURE_KIND', 'generic'],
-  ])('maps Langfuse type %s to Mastra span type %s', (langfuseType, spanType) => {
-    const record = mapLangfuseSourceTrace(sourceTrace([observation({ type: langfuseType })]), {
+  ])('maps Langfuse type %s to Mastra span type %s', async (langfuseType, spanType) => {
+    const record = await mapLangfuseSourceTrace(sourceTrace([observation({ type: langfuseType })]), {
       importId: 'import-1',
       ...mappedWindow,
     });
@@ -256,8 +258,8 @@ describe('mapLangfuseSourceTrace', () => {
     );
   });
 
-  it('restores Mastra span types only from recognized Mastra Langfuse exporter metadata', () => {
-    const restored = mapLangfuseSourceTrace(
+  it('restores Mastra span types only from recognized Mastra Langfuse exporter metadata', async () => {
+    const restored = await mapLangfuseSourceTrace(
       sourceTrace([
         observation({
           metadata: { 'scope.name': '@mastra/langfuse', spanType: 'workflow_run' },
@@ -265,10 +267,13 @@ describe('mapLangfuseSourceTrace', () => {
       ]),
       { importId: 'import-1', ...mappedWindow },
     );
-    const ignored = mapLangfuseSourceTrace(sourceTrace([observation({ metadata: { spanType: 'workflow_run' } })]), {
-      importId: 'import-1',
-      ...mappedWindow,
-    });
+    const ignored = await mapLangfuseSourceTrace(
+      sourceTrace([observation({ metadata: { spanType: 'workflow_run' } })]),
+      {
+        importId: 'import-1',
+        ...mappedWindow,
+      },
+    );
 
     expect(restored.kind).toBe('trace');
     expect(ignored.kind).toBe('trace');
@@ -277,8 +282,8 @@ describe('mapLangfuseSourceTrace', () => {
     expect(ignored.trace.spans[0]?.spanType).toBe('generic');
   });
 
-  it('derives Langfuse virtual root end time from the latest child', () => {
-    const record = mapLangfuseSourceTrace(
+  it('derives Langfuse virtual root end time from the latest child', async () => {
+    const record = await mapLangfuseSourceTrace(
       sourceTrace([
         observation({ id: 't-trace-1', endTime: null }),
         observation({
@@ -294,7 +299,7 @@ describe('mapLangfuseSourceTrace', () => {
     expect(record.kind).toBe('trace');
     if (record.kind !== 'trace') return;
     expect(record.trace.spans[0]).toMatchObject({
-      spanId: createLangfuseSpanImportId('project-1', 't-trace-1'),
+      spanId: await createLangfuseSpanImportId('project-1', 't-trace-1'),
       endedAt: '2026-08-20T10:00:05.000Z',
       metadata: {
         langfuse: {
@@ -327,8 +332,8 @@ describe('mapLangfuseSourceTrace', () => {
     ['incomplete_duration', [observation({ endTime: null })]],
     ['completed_after_snapshot', [observation({ endTime: '2026-09-02T00:00:00.000Z' })]],
     ['root_outside_window', [observation({ startTime: '2026-08-01T23:59:59.000Z' })]],
-  ])('skips invalid traces with reason %s', (reason, observations) => {
-    const record = mapLangfuseSourceTrace(sourceTrace(observations), { importId: 'import-1', ...mappedWindow });
+  ])('skips invalid traces with reason %s', async (reason, observations) => {
+    const record = await mapLangfuseSourceTrace(sourceTrace(observations), { importId: 'import-1', ...mappedWindow });
 
     expect(record).toMatchObject({
       kind: 'skipped',
@@ -340,8 +345,8 @@ describe('mapLangfuseSourceTrace', () => {
     });
   });
 
-  it('detaches an imported logical root while keeping the source parent in metadata', () => {
-    const record = mapLangfuseSourceTrace(
+  it('detaches an imported logical root while keeping the source parent in metadata', async () => {
+    const record = await mapLangfuseSourceTrace(
       sourceTrace([observation({ parentObservationId: 'external-parent', isRootObservation: true })]),
       { importId: 'import-1', ...mappedWindow },
     );
@@ -359,8 +364,8 @@ describe('mapLangfuseSourceTrace', () => {
     });
   });
 
-  it('uses start time as event end time and preserves provider warning state as metadata', () => {
-    const record = mapLangfuseSourceTrace(
+  it('uses start time as event end time and preserves provider warning state as metadata', async () => {
+    const record = await mapLangfuseSourceTrace(
       sourceTrace([observation({ type: 'EVENT', endTime: null, level: 'WARNING', statusMessage: 'fallback used' })]),
       { importId: 'import-1', ...mappedWindow },
     );
@@ -375,11 +380,14 @@ describe('mapLangfuseSourceTrace', () => {
     });
   });
 
-  it('ignores an event end time because events use their start time as an instantaneous duration', () => {
-    const record = mapLangfuseSourceTrace(sourceTrace([observation({ type: 'EVENT', endTime: 'not-a-timestamp' })]), {
-      importId: 'import-1',
-      ...mappedWindow,
-    });
+  it('ignores an event end time because events use their start time as an instantaneous duration', async () => {
+    const record = await mapLangfuseSourceTrace(
+      sourceTrace([observation({ type: 'EVENT', endTime: 'not-a-timestamp' })]),
+      {
+        importId: 'import-1',
+        ...mappedWindow,
+      },
+    );
 
     expect(record.kind).toBe('trace');
     if (record.kind !== 'trace') return;
@@ -390,8 +398,8 @@ describe('mapLangfuseSourceTrace', () => {
     });
   });
 
-  it('skips the complete trace when an event occurs after the snapshot', () => {
-    const record = mapLangfuseSourceTrace(
+  it('skips the complete trace when an event occurs after the snapshot', async () => {
+    const record = await mapLangfuseSourceTrace(
       sourceTrace([
         observation(),
         observation({
@@ -415,8 +423,8 @@ describe('mapLangfuseSourceTrace', () => {
     });
   });
 
-  it('turns Langfuse error observations into Mastra span errors', () => {
-    const record = mapLangfuseSourceTrace(
+  it('turns Langfuse error observations into Mastra span errors', async () => {
+    const record = await mapLangfuseSourceTrace(
       sourceTrace([observation({ type: 'GENERATION', level: 'ERROR', statusMessage: 'provider failed' })]),
       { importId: 'import-1', ...mappedWindow },
     );
