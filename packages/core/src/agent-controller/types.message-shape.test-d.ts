@@ -19,6 +19,7 @@ describe('agent-controller message shape contract', () => {
     expectTypeOf<Extract<AgentControllerEvent, { type: 'message_update' }>>().toEqualTypeOf<{
       type: 'message_update';
       id: string;
+      runId?: string;
       event:
         | { type: 'text-delta'; delta: string }
         | { type: 'reasoning-delta'; index: number; delta: string }
