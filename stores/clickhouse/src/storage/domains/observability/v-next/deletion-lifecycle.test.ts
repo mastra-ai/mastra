@@ -1,5 +1,5 @@
 import type { ClickHouseClient } from '@clickhouse/client';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ALL_MIGRATIONS, ALL_TABLE_NAMES, DELETION_REQUESTS_DDL, TABLE_DELETION_REQUESTS } from './ddl';
 import { markDeletionRequestApplied, recordDeletionRequest } from './deletion-requests';
@@ -107,16 +107,23 @@ describe('markDeletionRequestApplied', () => {
     expect(insert.mock.calls[0]?.[0].clickhouse_settings).not.toHaveProperty('insert_quorum');
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('stays strictly newer than a pending version recorded in the same millisecond', async () => {
     const insert = vi.fn().mockResolvedValue(undefined);
-    const now = new Date().toISOString();
+    const now = '2026-09-01T16:00:00.123Z';
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(now));
+
     const applied = await markDeletionRequestApplied({ insert } as unknown as ClickHouseClient, {
       ...pending,
       requestedAt: now,
       updatedAt: now,
     });
 
-    expect(new Date(applied.updatedAt).getTime()).toBeGreaterThan(new Date(now).getTime());
+    expect(applied.updatedAt).toBe('2026-09-01T16:00:00.124Z');
     expect(applied.lastAppliedAt).toBe(applied.updatedAt);
   });
 

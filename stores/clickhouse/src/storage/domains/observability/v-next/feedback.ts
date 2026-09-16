@@ -226,10 +226,16 @@ export async function batchCreateFeedback(client: ClickHouseClient, args: BatchC
  * A durable deletion request is recorded before the lightweight delete and
  * marked applied once the delete succeeds. If the delete fails, the request
  * stays unapplied and does not block updates to the still-visible rows; retry
- * by calling this function again. The delete is immediately visible to
- * subsequent reads; physical purge depends on the table's configured retention
- * TTL. The delta table is intentionally not touched and expires through its
- * fixed two-day TTL.
+ * by calling this function again.
+ *
+ * The delete runs once more after the applied mark. `updateFeedbackReviewStatus`
+ * only re-hides rows for applied requests, so a review-status write that lands
+ * between the first delete and the mark would otherwise survive; the second
+ * delete is the fence that closes that window without cross-client locking.
+ *
+ * The delete is immediately visible to subsequent reads; physical purge depends
+ * on the table's configured retention TTL. The delta table is intentionally not
+ * touched and expires through its fixed two-day TTL.
  */
 export async function deleteFeedback(
   client: ClickHouseClient,
@@ -267,13 +273,16 @@ export async function deleteFeedback(
     params.delResourceId = args.resourceId;
   }
 
-  await client.command({
-    query: `DELETE FROM ${TABLE_FEEDBACK_EVENTS} WHERE ${conditions.join(' AND ')}`,
-    query_params: params,
-    clickhouse_settings: { lightweight_deletes_sync: isReplicationConfigured(replication) ? '2' : '1' },
-  });
+  const hideRows = () =>
+    client.command({
+      query: `DELETE FROM ${TABLE_FEEDBACK_EVENTS} WHERE ${conditions.join(' AND ')}`,
+      query_params: params,
+      clickhouse_settings: { lightweight_deletes_sync: isReplicationConfigured(replication) ? '2' : '1' },
+    });
 
+  await hideRows();
   await markDeletionRequestApplied(client, request, replication);
+  await hideRows();
 }
 
 // ============================================================================

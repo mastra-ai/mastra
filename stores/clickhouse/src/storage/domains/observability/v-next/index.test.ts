@@ -5070,6 +5070,93 @@ LIMIT 1`,
         await client.close();
       }
     });
+
+    it('re-hides a review-status write that lands between the delete and the applied mark', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const gate = () => {
+        let open!: () => void;
+        const opened = new Promise<void>(resolve => (open = resolve));
+        return { open, opened };
+      };
+      // Update pauses at its pre-write guard until the first DELETE has run;
+      // the delete pauses before its applied mark until the update has returned.
+      const updateGuard = gate();
+      const appliedMark = gate();
+      const originalQuery = client.query.bind(client);
+      const originalInsert = client.insert.bind(client);
+      let guardCalls = 0;
+      const querySpy = vi.spyOn(client, 'query').mockImplementation(async args => {
+        const query = (args as { query: string }).query;
+        if (query.includes('has(predicateValues') && guardCalls++ === 0) await updateGuard.opened;
+        return originalQuery(args);
+      });
+      const insertSpy = vi.spyOn(client, 'insert').mockImplementation(async args => {
+        const row = (args as { table: string; values: Array<{ lastAppliedAt?: string }> }).values[0];
+        if (
+          (args as { table: string }).table === TABLE_DELETION_REQUESTS &&
+          row?.lastAppliedAt !== '1970-01-01T00:00:00.000Z'
+        ) {
+          await appliedMark.opened;
+        }
+        return originalInsert(args);
+      });
+
+      try {
+        const racing = new ObservabilityStorageClickhouseVNext({ client });
+        await racing.init();
+        await racing.createFeedback({
+          feedback: {
+            feedbackId: 'race-feedback-1',
+            timestamp: new Date('2026-09-01T12:00:01Z'),
+            traceId: 'race-trace-1',
+            spanId: null,
+            feedbackSource: 'user',
+            feedbackType: 'rating',
+            value: 1,
+            comment: 'racing',
+            experimentId: null,
+            organizationId: 'org-1',
+            resourceId: 'resource-1',
+            metadata: null,
+          },
+        });
+
+        const update = racing.updateFeedbackReviewStatus({ feedbackId: 'race-feedback-1', reviewStatus: 'reviewed' });
+        await vi.waitFor(() => expect(guardCalls).toBe(1));
+        const deletion = racing.deleteFeedback({
+          feedbackIds: ['race-feedback-1'],
+          organizationId: 'org-1',
+          resourceId: 'resource-1',
+        });
+        await vi.waitFor(async () => {
+          const rows = (await originalQuery({
+            query: `SELECT count() AS c FROM ${TABLE_FEEDBACK_EVENTS} WHERE feedbackId = 'race-feedback-1'`,
+            format: 'JSONEachRow',
+          }).then(r => r.json())) as Array<{ c: number | string }>;
+          expect(Number(rows[0]?.c)).toBe(0);
+        });
+
+        updateGuard.open();
+        await expect(update).resolves.toMatchObject({ feedbackId: 'race-feedback-1', reviewStatus: 'reviewed' });
+        // The write revived the row while the request is still unapplied.
+        expect((await racing.listFeedback({})).feedback.map(f => f.feedbackId)).toEqual(['race-feedback-1']);
+
+        appliedMark.open();
+        await deletion;
+        expect((await racing.listFeedback({})).feedback).toEqual([]);
+        await expect(
+          racing.updateFeedbackReviewStatus({ feedbackId: 'race-feedback-1', reviewStatus: 'reviewed' }),
+        ).rejects.toThrow('Feedback record not found');
+      } finally {
+        querySpy.mockRestore();
+        insertSpy.mockRestore();
+        await client.close();
+      }
+    });
   });
 
   // ==========================================================================

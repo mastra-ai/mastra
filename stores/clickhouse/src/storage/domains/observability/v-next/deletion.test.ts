@@ -132,6 +132,16 @@ describe('ClickHouse deletion lifecycle', () => {
     const scoresClient = createClient();
     await deleteScores(scoresClient.client, { scoreIds: ['score-1'] });
 
+    // Feedback re-runs the delete after the applied mark to fence concurrent review-status writes.
+    expect(feedbackClient.command).toHaveBeenCalledTimes(2);
+    expect(feedbackClient.insert.mock.invocationCallOrder[1]).toBeGreaterThan(
+      feedbackClient.command.mock.invocationCallOrder[0]!,
+    );
+    expect(feedbackClient.insert.mock.invocationCallOrder[1]).toBeLessThan(
+      feedbackClient.command.mock.invocationCallOrder[1]!,
+    );
+    expect(scoresClient.command).toHaveBeenCalledTimes(1);
+
     for (const { insert, command } of [feedbackClient, scoresClient]) {
       expect(insert).toHaveBeenCalledTimes(2);
       const pending = insert.mock.calls[0]?.[0].values[0];
