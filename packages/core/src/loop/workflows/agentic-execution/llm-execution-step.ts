@@ -1988,7 +1988,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                         runId,
                         mastra,
                         requestContext,
-                        abortSignal: options?.abortSignal,
                         // The coordinator's own signal, combined with the run's inside the
                         // step, so eager work can be cancelled when its attempt is discarded
                         // without the caller having aborted anything.
@@ -2131,7 +2130,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // emitted are discarded with it. The normal pipeline never runs them, so eager
           // work that has not started must not run either — it would be the one case where
           // eager execution produces a side effect the default path would not.
+          // The attempt is being discarded: cancel and forget its eager work, then open a
+          // fresh turn so the retry or fallback model dispatches eagerly like any other.
           eagerCoordinator?.stop({ cancelRunning: true });
+          eagerCoordinator?.beginTurn();
 
           const provider = model?.provider;
           const modelIdStr = model?.modelId;
