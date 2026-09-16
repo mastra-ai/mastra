@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../agent';
 import { prepareForDurableExecution } from '../../../agent/durable/preparation';
+import { Mastra } from '../../../mastra';
 import { createTool } from '../../../tools';
 import type { ToolCallConcurrency } from '../../types';
 import { EagerToolExecutionCoordinator, eagerToolCallDidNotExecute } from './eager-tool-execution';
@@ -102,9 +103,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
       },
     });
 
-    const chunks = await drain(
-      await agent.stream('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as never),
-    );
+    const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
 
     // Stronger than "it did not execute": `onInputAvailable` fires inside toolCallStep
     // *before* the approval gate is consulted, so an eager dispatch would show up here
@@ -151,7 +150,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
         maxSteps: 1,
         eagerToolExecution: true,
         requireToolApproval: true,
-      } as Record<string, unknown> as never),
+      }),
     );
 
     expect(events.slice(0, 3)).toEqual(['complete-call-a', 'later-output', 'finish']);
@@ -188,9 +187,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
       },
     });
 
-    await drain(
-      await agent.stream('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as never),
-    );
+    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
 
     expect(events.slice(0, 3)).toEqual(['complete-call-a', 'later-output', 'finish']);
     expect(events.indexOf('execute-a')).toBe(-1);
@@ -232,7 +229,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
         maxSteps: 1,
         eagerToolExecution: true,
         activeTools: ['tool-b'],
-      } as Record<string, unknown> as never),
+      }),
     );
 
     // The foreach rejects an inactive call and eager dispatch must not run it first.
@@ -270,9 +267,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
       },
     });
 
-    await drain(
-      await agent.stream('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as never),
-    );
+    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
 
     // Dispatch itself must not happen — see the approval case for why
     // `onInputAvailable` is the discriminating signal.
@@ -312,9 +307,53 @@ describe('eager tool dispatch — excluded tool classes', () => {
       },
     });
 
-    await drain(
-      await agent.stream('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as never),
-    );
+    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
+
+    const finishIndex = events.indexOf('finish');
+    expect(finishIndex).toBeGreaterThan(-1);
+    for (const event of ['input-available-a', 'execute-a']) {
+      const index = events.indexOf(event);
+      expect(index === -1 || index > finishIndex).toBe(true);
+    }
+  });
+
+  it('does not eagerly execute a call that config alone dispatches to the background', async () => {
+    // The `_background` argument is only the highest-priority input to
+    // `resolveBackgroundConfig`. An agent-level `backgroundTasks.tools` entry
+    // dispatches to the background on its own, with the default 'deferred'
+    // disposition and nothing at all in the call arguments. Checking the
+    // argument is therefore not the same check the foreach makes.
+    const { events, record } = createRecorder();
+    const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
+
+    const agent = new Agent({
+      id: 'eager-config-background-agent',
+      name: 'Eager config background agent',
+      instructions: 'Call tool-a once.',
+      model,
+      backgroundTasks: { tools: { 'tool-a': true } },
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Background dispatched by agent config, not by argument',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          onInputAvailable: async () => record('input-available-a'),
+          execute: async ({ value }) => {
+            record('execute-a');
+            return { value };
+          },
+        }),
+      },
+    });
+
+    new Mastra({
+      agents: { 'eager-config-background-agent': agent },
+      backgroundTasks: { enabled: true },
+      logger: false,
+    });
+
+    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
 
     const finishIndex = events.indexOf('finish');
     expect(finishIndex).toBeGreaterThan(-1);
@@ -351,9 +390,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
       },
     });
 
-    await drain(
-      await agent.stream('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as never),
-    );
+    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
 
     const finishIndex = events.indexOf('finish');
     for (const event of ['input-available-a', 'execute-a']) {
@@ -404,7 +441,7 @@ describe('eager tool dispatch — entry points', () => {
       },
     });
 
-    await agent.generate('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as never);
+    await agent.generate('go', { maxSteps: 1, eagerToolExecution: true });
 
     // Honest limitation: generate() resolves through `doGenerate`, so there is no
     // chunk-level window in which an eager dispatch could happen even without the
@@ -459,7 +496,7 @@ describe('eager tool dispatch — concurrency', () => {
         maxSteps: 1,
         eagerToolExecution: true,
         toolCallConcurrency: 1,
-      } as Record<string, unknown> as never),
+      }),
     );
 
     expect(peak.max).toBe(1);
@@ -475,7 +512,7 @@ describe('eager tool dispatch — concurrency', () => {
         maxSteps: 1,
         eagerToolExecution: true,
         toolCallConcurrency: 2,
-      } as Record<string, unknown> as never),
+      }),
     );
 
     expect(peak.max).toBe(2);
@@ -509,7 +546,7 @@ describe('eager tool dispatch — concurrency', () => {
         maxSteps: 1,
         eagerToolExecution: true,
         toolCallConcurrency: { limit: 4, strategy: 'called' } satisfies ToolCallConcurrency,
-      } as Record<string, unknown> as never),
+      }),
     );
 
     // The full called set is unknowable while streaming, so the 'called' strategy
@@ -556,7 +593,7 @@ describe('eager tool dispatch — ordering and exactly-once', () => {
         maxSteps: 1,
         eagerToolExecution: true,
         toolCallConcurrency: 2,
-      } as Record<string, unknown> as never),
+      }),
     );
 
     const resultIds = chunks.filter(chunk => chunk.type === 'tool-result').map(chunk => chunk.payload.toolCallId);
@@ -626,7 +663,7 @@ describe('eager tool dispatch — ordering and exactly-once', () => {
         // construction-time copy of the limit would still run the two safe calls in
         // parallel; reading the limit late keeps one source of truth.
         prepareStep: () => ({ tools: { ...safeTools, gated } }),
-      } as Record<string, unknown> as never),
+      }),
     );
 
     expect(peak.max).toBe(1);
@@ -701,7 +738,7 @@ describe('eager tool dispatch — unsafe terminations', () => {
         maxSteps: 1,
         eagerToolExecution: true,
         toolCallConcurrency: 1,
-      } as Record<string, unknown> as never),
+      }),
     );
 
     const finishIndex = events.indexOf('finish');
@@ -809,9 +846,7 @@ describe('eager tool dispatch — discarded model attempt', () => {
       },
     });
 
-    await drain(
-      await agent.stream('go', { maxSteps: 3, eagerToolExecution } as Record<string, unknown> as never),
-    ).catch(() => {});
+    await drain(await agent.stream('go', { maxSteps: 3, eagerToolExecution })).catch(() => {});
     await new Promise(resolve => setTimeout(resolve, 150));
     // Pins that the retry actually happened, so the assertions below cannot pass because
     // the run died early for some unrelated reason.
@@ -929,7 +964,7 @@ describe('eager tool dispatch — discarded model attempt', () => {
         maxSteps: 1,
         eagerToolExecution,
         toolCallConcurrency: 1,
-      } as Record<string, unknown> as never),
+      }),
     ).catch(() => {});
 
     // Give any leaked eager execution time to surface rather than racing the assertion.
@@ -1026,9 +1061,7 @@ describe('eager tool dispatch across steps', () => {
       },
     });
 
-    await drain(
-      await agent.stream('go', { maxSteps: 3, eagerToolExecution: true } as Record<string, unknown> as never),
-    );
+    await drain(await agent.stream('go', { maxSteps: 3, eagerToolExecution: true }));
 
     // Step 1 dispatched early, which the single-step tests already cover. The load-bearing
     // assertion is the second one: step 2's call also runs before that step's own output.
@@ -1248,7 +1281,7 @@ describe('eager tool dispatch — cancellation', () => {
           // before it is ever dispatched.
           toolCallConcurrency: 1,
           abortSignal: abortController.signal,
-        } as Record<string, unknown> as never),
+        }),
       );
     } catch {
       // An aborted run may surface as a stream error; the assertion below is about
@@ -1292,7 +1325,7 @@ describe('eager tool dispatch — durable boundary', () => {
       prepareForDurableExecution({
         agent,
         messages: 'go',
-        options: { eagerToolExecution: true } as Record<string, unknown> as never,
+        options: { eagerToolExecution: true },
       }),
     ).rejects.toThrow(/eagerToolExecution is not supported by durable agents/);
 
@@ -1323,7 +1356,7 @@ describe('eager tool dispatch — durable boundary', () => {
       prepareForDurableExecution({
         agent,
         messages: 'go',
-        options: { eagerToolExecution: false } as Record<string, unknown> as never,
+        options: { eagerToolExecution: false },
       }),
     ).resolves.toBeDefined();
   });

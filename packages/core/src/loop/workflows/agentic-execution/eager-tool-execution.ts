@@ -1,3 +1,6 @@
+import { isToolBackgroundEligible } from '../../../background-tasks/resolve-config';
+import type { AgentBackgroundConfig, ToolBackgroundConfig } from '../../../background-tasks/types';
+
 type EagerToolResult = unknown;
 
 /**
@@ -233,6 +236,8 @@ export function isEagerlyExecutableToolCall({
   hasPostStreamProcessor,
   isProviderTool,
   getNeedsApprovalFn,
+  backgroundTaskManager,
+  agentBackgroundConfig,
 }: {
   toolCall: { toolName: string; args?: unknown; providerExecuted?: boolean };
   tool: unknown;
@@ -242,6 +247,8 @@ export function isEagerlyExecutableToolCall({
   hasPostStreamProcessor: boolean;
   isProviderTool: (tool: any) => boolean;
   getNeedsApprovalFn: (tool: any) => unknown;
+  backgroundTaskManager: unknown;
+  agentBackgroundConfig: AgentBackgroundConfig | undefined;
 }): boolean {
   // A processor that runs after the stream completes is contractually allowed to
   // rewrite or drop the response before any tool runs, so nothing may start early.
@@ -250,8 +257,22 @@ export function isEagerlyExecutableToolCall({
   // Arguments must be complete. Partial or absent arguments are never executed.
   if (!toolCall.args || typeof toolCall.args !== 'object') return false;
 
-  // Background dispatch has its own lifecycle in the foreach.
+  // Background dispatch has its own lifecycle in the foreach. The `_background`
+  // argument is only the highest-priority input to that decision: agent- or
+  // tool-level config dispatches to the background with nothing in the args at
+  // all. `isToolBackgroundEligible` is the same base-enabled expression the
+  // resolver uses, and exists so these paths cannot disagree.
   if ('_background' in (toolCall.args as Record<string, unknown>)) return false;
+  if (
+    backgroundTaskManager &&
+    isToolBackgroundEligible({
+      toolName: toolCall.toolName,
+      toolConfig: (tool as { backgroundConfig?: ToolBackgroundConfig } | undefined)?.backgroundConfig,
+      agentConfig: agentBackgroundConfig,
+    })
+  ) {
+    return false;
+  }
 
   // Provider-executed and client-side calls are not ours to run.
   if (toolCall.providerExecuted) return false;
