@@ -1,38 +1,9 @@
-import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { compileConsumer } from './__fixtures__/typed-client/compile';
 
-const require = createRequire(import.meta.url);
 const fixture = fileURLToPath(new URL('./__fixtures__/typed-client/consumer.ts', import.meta.url));
-
-export function compileConsumer(rootNames: string[]) {
-  return spawnSync(
-    process.execPath,
-    [
-      resolve(dirname(require.resolve('typescript/package.json')), require('typescript/package.json').bin.tsc),
-      '--ignoreConfig',
-      '--strict',
-      '--noEmit',
-      '--skipLibCheck',
-      '--types',
-      'node',
-      '--target',
-      'ES2022',
-      '--module',
-      'ESNext',
-      '--moduleResolution',
-      'Bundler',
-      '--esModuleInterop',
-      '--pretty',
-      'false',
-      ...rootNames,
-    ],
-    { encoding: 'utf8', timeout: 60_000 },
-  );
-}
 
 describe('typed MCP client consumer', () => {
   it('compiles the documented direct-call example', () => {
