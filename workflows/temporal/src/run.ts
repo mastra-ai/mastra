@@ -90,12 +90,12 @@ export class TemporalRun<
   }
 
   private unsupported(method: string): never {
-    throw new Error(
-      `@mastra/temporal does not support ${method}() yet. Use start() or startAsync() instead.`,
-    );
+    throw new Error(`@mastra/temporal does not support ${method}() yet. Use start() or startAsync() instead.`);
   }
 
-  override stream(..._args: Parameters<Run<TemporalEngineType, TSteps, TState, TInput, TOutput, TRequestContext>['stream']>): never {
+  override stream(
+    ..._args: Parameters<Run<TemporalEngineType, TSteps, TState, TInput, TOutput, TRequestContext>['stream']>
+  ): never {
     return this.unsupported('stream');
   }
 
