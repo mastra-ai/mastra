@@ -853,11 +853,10 @@ This skill helps with endpoint design and API patterns.`;
       expect(content).toBe(REFERENCE_CONTENT);
     });
 
-    it('should return null for paths outside the references/ directory', async () => {
+    it('should resolve paths in non-references subdirectories', async () => {
       const filesystem = createMockFilesystem({
         'skills/test-skill/SKILL.md': VALID_SKILL_MD,
         'skills/test-skill/docs/schema.md': 'schema content',
-        'skills/test-skill/assets/logo.png': Buffer.from('binary'),
       });
 
       const skills = new WorkspaceSkillsImpl({
@@ -865,16 +864,14 @@ This skill helps with endpoint design and API patterns.`;
         skills: ['skills'],
       });
 
-      // getReference is scoped to references/ so binary assets are never decoded
-      // through it — they fall through to getAsset instead.
-      expect(await skills.getReference('test-skill', 'docs/schema.md')).toBeNull();
-      expect(await skills.getReference('test-skill', 'assets/logo.png')).toBeNull();
+      const content = await skills.getReference('test-skill', 'docs/schema.md');
+      expect(content).toBe('schema content');
     });
 
-    it('should resolve ./prefixed paths within references/', async () => {
+    it('should resolve ./prefixed paths relative to skill root', async () => {
       const filesystem = createMockFilesystem({
         'skills/test-skill/SKILL.md': VALID_SKILL_MD,
-        'skills/test-skill/references/doc.md': REFERENCE_CONTENT,
+        'skills/test-skill/config.json': '{}',
       });
 
       const skills = new WorkspaceSkillsImpl({
@@ -882,8 +879,8 @@ This skill helps with endpoint design and API patterns.`;
         skills: ['skills'],
       });
 
-      const content = await skills.getReference('test-skill', './references/doc.md');
-      expect(content).toBe(REFERENCE_CONTENT);
+      const content = await skills.getReference('test-skill', './config.json');
+      expect(content).toBe('{}');
     });
 
     it('should block path traversal attacks', async () => {
@@ -941,20 +938,6 @@ This skill helps with endpoint design and API patterns.`;
       const content = await skills.getScript('test-skill', 'scripts/run.sh');
       expect(content).toBe(SCRIPT_CONTENT);
     });
-
-    it('should return null for paths outside the scripts/ directory', async () => {
-      const filesystem = createMockFilesystem({
-        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
-        'skills/test-skill/references/doc.md': REFERENCE_CONTENT,
-      });
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['skills'],
-      });
-
-      expect(await skills.getScript('test-skill', 'references/doc.md')).toBeNull();
-    });
   });
 
   describe('getAsset()', () => {
@@ -973,39 +956,6 @@ This skill helps with endpoint design and API patterns.`;
       const content = await skills.getAsset('test-skill', 'assets/logo.png');
       expect(content).toBeInstanceOf(Buffer);
       expect(content?.toString()).toBe('PNG image data');
-    });
-
-    it('should preserve exact bytes for binary assets', async () => {
-      // A 2048-byte PNG whose bytes are not valid UTF-8; decoding would change the size.
-      const assetBuffer = Buffer.alloc(2048, 0x89);
-      const filesystem = createMockFilesystem({
-        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
-        'skills/test-skill/assets/logo.png': assetBuffer,
-      });
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['skills'],
-      });
-
-      const content = await skills.getAsset('test-skill', 'assets/logo.png');
-      expect(content).toBeInstanceOf(Buffer);
-      expect(content?.length).toBe(2048);
-      expect(content?.equals(assetBuffer)).toBe(true);
-    });
-
-    it('should return null for paths outside the assets/ directory', async () => {
-      const filesystem = createMockFilesystem({
-        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
-        'skills/test-skill/references/doc.md': REFERENCE_CONTENT,
-      });
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['skills'],
-      });
-
-      expect(await skills.getAsset('test-skill', 'references/doc.md')).toBeNull();
     });
   });
 

@@ -496,7 +496,7 @@ describe('skill_read tool', () => {
     const skill = makeSkill({ name: 'brand-guide', path: 'skills/brand-guide' });
     const skills = createMockWorkspaceSkills({
       get: vi.fn(async () => skill),
-      getReference: vi.fn(async () => '# Color Palette\n\nBlue: #0066CC'),
+      getAsset: vi.fn(async () => Buffer.from('# Color Palette\n\nBlue: #0066CC')),
     });
     const { skill_read: tool } = createSkillTools(skills);
 
@@ -505,12 +505,11 @@ describe('skill_read tool', () => {
     expect(result).toBe('# Color Palette\n\nBlue: #0066CC');
   });
 
-  it('falls through to script reader when reference returns null', async () => {
+  it('reads a script file', async () => {
     const skill = makeSkill({ name: 'deploy-skill', path: 'skills/deploy-skill' });
     const skills = createMockWorkspaceSkills({
       get: vi.fn(async () => skill),
-      getReference: vi.fn(async () => null),
-      getScript: vi.fn(async () => '#!/bin/bash\necho "hello"'),
+      getAsset: vi.fn(async () => Buffer.from('#!/bin/bash\necho "hello"')),
     });
     const { skill_read: tool } = createSkillTools(skills);
 
@@ -519,27 +518,24 @@ describe('skill_read tool', () => {
     expect(result).toBe('#!/bin/bash\necho "hello"');
   });
 
-  it('falls through to asset reader when reference and script return null', async () => {
+  it('reads a file outside the conventional subdirectories', async () => {
+    // SKILL.md may link to any skill-root-relative file (see #13270), so skill_read must not
+    // be limited to references/, scripts/, and assets/.
     const skill = makeSkill({ name: 'my-skill', path: 'skills/my-skill' });
-    const skills = createMockWorkspaceSkills({
-      get: vi.fn(async () => skill),
-      getReference: vi.fn(async () => null),
-      getScript: vi.fn(async () => null),
-      getAsset: vi.fn(async () => Buffer.from('asset content')),
-    });
+    const getAsset = vi.fn(async () => Buffer.from('{"schema": true}'));
+    const skills = createMockWorkspaceSkills({ get: vi.fn(async () => skill), getAsset });
     const { skill_read: tool } = createSkillTools(skills);
 
-    const result = await exec(tool, { skillName: 'my-skill', path: 'assets/data.txt' });
+    const result = await exec(tool, { skillName: 'my-skill', path: 'docs/schema.json' });
 
-    expect(result).toBe('asset content');
+    expect(getAsset).toHaveBeenCalledWith('skills/my-skill', 'docs/schema.json');
+    expect(result).toBe('{"schema": true}');
   });
 
   it('returns error with file list when file is not found in any reader', async () => {
     const skill = makeSkill({ name: 'brand-guide', path: 'skills/brand-guide' });
     const skills = createMockWorkspaceSkills({
       get: vi.fn(async () => skill),
-      getReference: vi.fn(async () => null),
-      getScript: vi.fn(async () => null),
       getAsset: vi.fn(async () => null),
       listReferences: vi.fn(async () => ['colors.md', 'fonts.md']),
       listScripts: vi.fn(async () => ['build.sh']),
@@ -560,8 +556,6 @@ describe('skill_read tool', () => {
     const skill = makeSkill({ name: 'empty-skill', path: 'skills/empty-skill' });
     const skills = createMockWorkspaceSkills({
       get: vi.fn(async () => skill),
-      getReference: vi.fn(async () => null),
-      getScript: vi.fn(async () => null),
       getAsset: vi.fn(async () => null),
     });
     const { skill_read: tool } = createSkillTools(skills);
@@ -588,12 +582,11 @@ describe('skill_read tool', () => {
     expect(result).toContain(`${binaryBuffer.length} bytes`);
   });
 
-  it('detects binary content in string form (null bytes)', async () => {
+  it('detects binary content outside assets/ (null bytes)', async () => {
     const skill = makeSkill({ name: 'my-skill', path: 'skills/my-skill' });
-    const stringWithNullBytes = 'header\0binary\0data';
     const skills = createMockWorkspaceSkills({
       get: vi.fn(async () => skill),
-      getReference: vi.fn(async () => stringWithNullBytes),
+      getAsset: vi.fn(async () => Buffer.from('header\0binary\0data')),
     });
     const { skill_read: tool } = createSkillTools(skills);
 
@@ -647,8 +640,6 @@ describe('skill_read tool', () => {
     const skill = makeSkill({ name: 'design-system', path: 'skills/design-system' });
     const skills = createMockWorkspaceSkills({
       get: vi.fn(async () => skill),
-      getReference: vi.fn(async () => null),
-      getScript: vi.fn(async () => null),
       getAsset: vi.fn(async () => Buffer.from('col1,col2\na,b', 'utf-8')),
     });
     const { skill_read: tool } = createSkillTools(skills);
@@ -658,22 +649,20 @@ describe('skill_read tool', () => {
     expect(result).toBe('col1,col2\na,b');
   });
 
-  it('routes assets to getAsset when getReference declines the path', async () => {
+  it('never reads through the UTF-8-decoding accessors, so bytes are counted exactly', async () => {
     const skill = makeSkill({ name: 'design-system', path: 'skills/design-system' });
+    // 2048 bytes of 0x89: decoding as UTF-8 would turn every byte into U+FFFD (3 bytes each).
     const pngBuffer = Buffer.alloc(2048, 0x89);
-    const getReference = vi.fn(async () => null);
+    const getReference = vi.fn(async () => pngBuffer.toString('utf-8'));
+    const getScript = vi.fn(async () => pngBuffer.toString('utf-8'));
     const getAsset = vi.fn(async () => pngBuffer);
-    const skills = createMockWorkspaceSkills({
-      get: vi.fn(async () => skill),
-      getReference,
-      getAsset,
-    });
+    const skills = createMockWorkspaceSkills({ get: vi.fn(async () => skill), getReference, getScript, getAsset });
     const { skill_read: tool } = createSkillTools(skills);
 
     const result = await exec(tool, { skillName: 'design-system', path: 'assets/logo.png' });
 
-    expect(getReference).toHaveBeenCalled();
-    expect(getAsset).toHaveBeenCalled();
+    expect(getReference).not.toHaveBeenCalled();
+    expect(getScript).not.toHaveBeenCalled();
     expect(result).toBe(`Binary file: skills/design-system/assets/logo.png (2048 bytes)`);
   });
 
@@ -682,7 +671,7 @@ describe('skill_read tool', () => {
     const content = 'line 1\nline 2\nline 3\nline 4\nline 5';
     const skills = createMockWorkspaceSkills({
       get: vi.fn(async () => skill),
-      getReference: vi.fn(async () => content),
+      getAsset: vi.fn(async () => Buffer.from(content)),
     });
     const { skill_read: tool } = createSkillTools(skills);
 
@@ -696,7 +685,7 @@ describe('skill_read tool', () => {
     const content = Array.from({ length: 428 }, (_, i) => `line ${i + 1}`).join('\n');
     const skills = createMockWorkspaceSkills({
       get: vi.fn(async () => skill),
-      getReference: vi.fn(async () => content),
+      getAsset: vi.fn(async () => Buffer.from(content)),
     });
     const { skill_read: tool } = createSkillTools(skills);
 
@@ -717,7 +706,7 @@ describe('skill_read tool', () => {
     const content = Array.from({ length: 428 }, (_, i) => `line ${i + 1}`).join('\n');
     const skills = createMockWorkspaceSkills({
       get: vi.fn(async () => skill),
-      getReference: vi.fn(async () => content),
+      getAsset: vi.fn(async () => Buffer.from(content)),
     });
     const { skill_read: tool } = createSkillTools(skills);
 
@@ -739,7 +728,7 @@ describe('skill_read tool', () => {
     const skill = makeSkill({ name: 'test-skill', path: 'skills/test-skill' });
     const skills = createMockWorkspaceSkills({
       get: vi.fn(async () => skill),
-      getReference: vi.fn(async () => 'line 1\nline 2\nline 3\nline 4\nline 5'),
+      getAsset: vi.fn(async () => Buffer.from('line 1\nline 2\nline 3\nline 4\nline 5')),
     });
     const { skill_read: tool } = createSkillTools(skills);
 
@@ -754,13 +743,44 @@ describe('skill_read tool', () => {
     const content = 'line 1\nline 2\nline 3';
     const skills = createMockWorkspaceSkills({
       get: vi.fn(async () => skill),
-      getReference: vi.fn(async () => content),
+      getAsset: vi.fn(async () => Buffer.from(content)),
     });
     const { skill_read: tool } = createSkillTools(skills);
 
     const result = await exec(tool, { skillName: 'test-skill', path: 'references/file.md' });
 
     expect(result).toBe('line 1\nline 2\nline 3');
+  });
+
+  it('reads text, binary, and out-of-convention files from a real skill on disk', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-skill-read-'));
+
+    try {
+      const skillDir = path.join(tempDir, 'skills', 'design-system');
+      await fs.mkdir(path.join(skillDir, 'assets'), { recursive: true });
+      await fs.mkdir(path.join(skillDir, 'docs'), { recursive: true });
+      await fs.writeFile(path.join(skillDir, 'SKILL.md'), '---\nname: design-system\ndescription: d\n---\n\n# DS');
+      // 2048 bytes of 0x89 — a lossy UTF-8 decode would report 6144 bytes.
+      const png = Buffer.alloc(2048, 0x89);
+      await fs.writeFile(path.join(skillDir, 'assets', 'logo.png'), png);
+      await fs.writeFile(path.join(skillDir, 'assets', 'template.csv'), 'col1,col2\na,b');
+      await fs.writeFile(path.join(skillDir, 'docs', 'schema.md'), '# Schema');
+
+      const skills = new WorkspaceSkillsImpl({
+        source: new LocalSkillSource({ basePath: tempDir }),
+        skills: ['skills'],
+      });
+      const { skill_read: tool } = createSkillTools(skills);
+
+      expect(await exec(tool, { skillName: 'design-system', path: 'assets/logo.png' })).toBe(
+        'Binary file: skills/design-system/assets/logo.png (2048 bytes)',
+      );
+      expect(await exec(tool, { skillName: 'design-system', path: 'assets/template.csv' })).toBe('col1,col2\na,b');
+      expect(await exec(tool, { skillName: 'design-system', path: 'docs/schema.md' })).toBe('# Schema');
+      expect(await exec(tool, { skillName: 'design-system', path: 'SKILL.md' })).toContain('# DS');
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('uses path as fallback when skill lookup returns null for binary metadata', async () => {
