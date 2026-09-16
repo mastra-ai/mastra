@@ -1,53 +1,56 @@
 - heading "Config" [level=2]
-- heading "Agents 1" [level=3]:
+- heading "Agents 1 Agents documentation" [level=3]:
   - text: ""
-  - link:
+  - link "Agents documentation":
     - /url: https://mastra.ai/en/docs/agents/overview
 - list:
   - listitem:
     - link "Sub Agent":
       - /url: /agents/subAgent/threads/new
-      - img
-      - text: ""
-- heading "Tools 2" [level=3]:
+- heading "Tools 2 Using Tools and MCP documentation" [level=3]:
   - text: ""
-  - link:
+  - link "Using Tools and MCP documentation":
     - /url: https://mastra.ai/en/docs/agents/using-tools-and-mcp
 - list:
   - listitem:
     - link "weatherInfo":
       - /url: /agents/weather-agent/tools/weatherInfo
-      - img
-      - text: ""
   - listitem:
     - link "simpleMcpTool":
       - /url: /agents/weather-agent/tools/simpleMcpTool
-      - img
-      - text: ""
-- heading "Workflows 1" [level=3]:
+- heading "Workflows 1 Workflows documentation" [level=3]:
   - text: ""
-  - link:
+  - link "Workflows documentation":
     - /url: https://mastra.ai/en/docs/workflows/overview
 - list:
   - listitem:
     - link "lessComplexWorkflow":
       - /url: /workflows/lessComplexWorkflow
-      - img
-      - text: ""
-- heading "Skills 0" [level=3]:
+- heading "Skills Skills documentation" [level=3]:
   - text: ""
-  - link:
+  - link "Skills documentation":
     - /url: https://mastra.ai/en/docs/workspace/skills
 - paragraph: No skills
 - heading "Scorers" [level=3]
 - paragraph: No Scorers
 - heading "Memory" [level=3]
-- button "General" [expanded]
-- term: Memory Enabled
-- definition: "Yes"
+- term: Status
+- definition: Enabled
 - term: Last Messages
 - definition: /\d+/
 - term: Auto-generate Titles
-- definition: "Yes"
+- definition: Enabled
 - heading "System Prompt" [level=3]
-- textbox
+- tablist:
+  - tab "Read" [selected]
+  - tab "Source"
+- button "Copy system prompt"
+- tabpanel "Read":
+  - paragraph: You are a helpful weather assistant that provides accurate weather information.
+  - paragraph: "Your primary function is to help users get weather details for specific locations. When responding:"
+  - list:
+    - listitem: Always ask for a location if none is provided
+    - listitem: If the location name isn't in English, please translate it
+    - listitem: If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
+    - listitem: Include relevant details like humidity, wind conditions, and precipitation
+    - listitem: Keep responses concise but informative
