@@ -37,15 +37,18 @@ function makeProvider(config: Partial<ConstructorParameters<typeof TelegramProvi
 
 function stubGetMe(token: string, opts: { ok?: boolean; username?: string } = {}) {
   const { ok = true, username = 'my_test_bot' } = opts;
-  mockAgent
-    .get(API_ORIGIN)
-    .intercept({ path: `/bot${token}/getMe`, method: 'GET' })
-    .reply(
-      ok ? 200 : 401,
-      ok
-        ? { ok: true, result: { id: 42, is_bot: true, first_name: 'Test', username } }
-        : { ok: false, error_code: 401, description: 'Unauthorized' },
-    );
+  const status = ok ? 200 : 401;
+  const body = ok
+    ? { ok: true, result: { id: 42, is_bot: true, first_name: 'Test', username } }
+    : { ok: false, error_code: 401, description: 'Unauthorized' };
+  // Persist GET (Mastra control-plane) and POST (chat-sdk 4.40+ telegramFetch).
+  for (const method of ['GET', 'POST'] as const) {
+    mockAgent
+      .get(API_ORIGIN)
+      .intercept({ path: `/bot${token}/getMe`, method })
+      .reply(status, body)
+      .persist();
+  }
 }
 
 /** Stub a Bot API method that returns `{ ok: true }`, capturing the JSON body. */
