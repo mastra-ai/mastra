@@ -755,9 +755,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 if (chunk.payload.observability && !existingSynthetic.payload.observability) {
                   existingSynthetic.payload.observability = chunk.payload.observability;
                 }
-                if (chunk.payload.title && !existingSynthetic.payload.title) {
-                  existingSynthetic.payload.title = chunk.payload.title;
-                }
                 return;
               }
               self.#toolCalls.push(chunk);
