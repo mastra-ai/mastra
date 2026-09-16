@@ -232,17 +232,26 @@ function createSkillReadTool(skills: WorkspaceSkills) {
           return `File "${path}" not found in skill "${skillName}".${fileList}`;
         }
 
-        // Detect binary content — getReference/getScript may return binary as garbled utf-8 strings
-        const textContent = typeof content === 'string' ? content : content.toString('utf-8');
-        if (textContent.slice(0, 1000).includes('\0')) {
+        // Detect binary content from the raw bytes. getAsset (assets/) preserves bytes, so a
+        // Buffer here has not been lossily decoded; classify it as binary when it contains NUL
+        // bytes or is not valid UTF-8 (e.g. PNGs, real PDFs). This reports the exact byte size
+        // and never leaks mojibake into the model context, while still returning genuine text
+        // assets (templates, etc.) as text. String content is already valid UTF-8, so only the
+        // NUL check applies.
+        const bytes = typeof content === 'string' ? Buffer.from(content, 'utf-8') : content;
+        const hasNullByte = bytes.subarray(0, 1000).includes(0);
+        const isValidUtf8 = bytes.equals(Buffer.from(bytes.toString('utf-8'), 'utf-8'));
+        if (hasNullByte || !isValidUtf8) {
           const fullPath = `${resolved.skill.path}/${path}`;
-          const size = typeof content === 'string' ? Buffer.byteLength(content) : content.length;
-          span.end({ success: true }, { bytesTransferred: size });
-          return `Binary file: ${fullPath} (${size} bytes)`;
+          span.end({ success: true }, { bytesTransferred: bytes.length });
+          return `Binary file: ${fullPath} (${bytes.length} bytes)`;
         }
-        content = textContent;
 
-        const result = extractLines(content, startLine, endLine);
+        const result = extractLines(
+          typeof content === 'string' ? content : content.toString('utf-8'),
+          startLine,
+          endLine,
+        );
 
         // An empty range is indistinguishable from a failed read, so the model keeps paginating
         if (result.lines.start === 0 && result.lines.end === 0) {

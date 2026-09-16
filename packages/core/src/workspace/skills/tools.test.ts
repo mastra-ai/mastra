@@ -603,6 +603,62 @@ describe('skill_read tool', () => {
     expect(result).toContain('skills/my-skill/references/weird.bin');
   });
 
+  it('treats a NUL-free binary asset (PDF) as binary via invalid UTF-8', async () => {
+    const skill = makeSkill({ name: 'design-system', path: 'skills/design-system' });
+    // Real PDFs carry binary stream bytes that are invalid UTF-8 but contain no NUL in the
+    // first bytes, so the old null-byte-only heuristic would have leaked mojibake.
+    const pdfBuffer = Buffer.concat([
+      Buffer.from('%PDF-1.4\nstream\n', 'latin1'),
+      Buffer.from([0xff, 0xfe, 0x89, 0xa0, 0xc3, 0x28]), // invalid UTF-8, no NUL
+      Buffer.from('\nendstream\n%%EOF', 'latin1'),
+    ]);
+    expect(pdfBuffer.subarray(0, 1000).includes(0)).toBe(false);
+    const skills = createMockWorkspaceSkills({
+      get: vi.fn(async () => skill),
+      getAsset: vi.fn(async () => pdfBuffer),
+    });
+    const { skill_read: tool } = createSkillTools(skills);
+
+    const result = await exec(tool, { skillName: 'design-system', path: 'assets/doc.pdf' });
+
+    expect(result).toBe(`Binary file: skills/design-system/assets/doc.pdf (${pdfBuffer.length} bytes)`);
+    expect(result).not.toContain('%PDF');
+  });
+
+  it('returns genuine text assets as text', async () => {
+    const skill = makeSkill({ name: 'design-system', path: 'skills/design-system' });
+    const skills = createMockWorkspaceSkills({
+      get: vi.fn(async () => skill),
+      getReference: vi.fn(async () => null),
+      getScript: vi.fn(async () => null),
+      getAsset: vi.fn(async () => Buffer.from('col1,col2\na,b', 'utf-8')),
+    });
+    const { skill_read: tool } = createSkillTools(skills);
+
+    const result = await exec(tool, { skillName: 'design-system', path: 'assets/template.csv' });
+
+    expect(result).toBe('col1,col2\na,b');
+  });
+
+  it('routes assets to getAsset when getReference declines the path', async () => {
+    const skill = makeSkill({ name: 'design-system', path: 'skills/design-system' });
+    const pngBuffer = Buffer.alloc(2048, 0x89);
+    const getReference = vi.fn(async () => null);
+    const getAsset = vi.fn(async () => pngBuffer);
+    const skills = createMockWorkspaceSkills({
+      get: vi.fn(async () => skill),
+      getReference,
+      getAsset,
+    });
+    const { skill_read: tool } = createSkillTools(skills);
+
+    const result = await exec(tool, { skillName: 'design-system', path: 'assets/logo.png' });
+
+    expect(getReference).toHaveBeenCalled();
+    expect(getAsset).toHaveBeenCalled();
+    expect(result).toBe(`Binary file: skills/design-system/assets/logo.png (2048 bytes)`);
+  });
+
   it('extracts lines using startLine and endLine', async () => {
     const skill = makeSkill({ name: 'test-skill', path: 'skills/test-skill' });
     const content = 'line 1\nline 2\nline 3\nline 4\nline 5';

@@ -686,6 +686,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     if (!skill) return null;
 
     const safeRefPath = this.#assertRelativePath(referencePath, 'reference');
+    if (!this.#isUnderDir(safeRefPath, 'references')) return null;
     const refFilePath = this.#joinPath(skill.path, safeRefPath);
 
     if (!(await this.#source.exists(refFilePath))) {
@@ -707,6 +708,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     if (!skill) return null;
 
     const safeScriptPath = this.#assertRelativePath(scriptPath, 'script');
+    if (!this.#isUnderDir(safeScriptPath, 'scripts')) return null;
     const scriptFilePath = this.#joinPath(skill.path, safeScriptPath);
 
     if (!(await this.#source.exists(scriptFilePath))) {
@@ -728,6 +730,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     if (!skill) return null;
 
     const safeAssetPath = this.#assertRelativePath(assetPath, 'asset');
+    if (!this.#isUnderDir(safeAssetPath, 'assets')) return null;
     const assetFilePath = this.#joinPath(skill.path, safeAssetPath);
 
     if (!(await this.#source.exists(assetFilePath))) {
@@ -1496,6 +1499,17 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       throw new Error(`Invalid ${label} path: ${input}`);
     }
     return segments.join('/');
+  }
+
+  /**
+   * Check whether a validated relative path lives under the given top-level
+   * skill subdirectory (e.g. `references`, `scripts`, `assets`). Used to scope
+   * each single-item accessor to its directory so binary assets are only ever
+   * served (byte-preserving) by getAsset and never lossily decoded by
+   * getReference/getScript.
+   */
+  #isUnderDir(safePath: string, dir: string): boolean {
+    return safePath === dir || safePath.startsWith(`${dir}/`);
   }
 
   /**
