@@ -360,7 +360,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         // prepare() already counted the current unobserved window and resource context.
         const finalTotalPending = ctx.status.pendingTokens;
         try {
-          await this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending);
+          await this.engine
+            .getStorage()
+            .setPendingMessageTokens(turnRecord.id, finalTotalPending, turnRecord.writeEpoch ?? 0);
           this.turn.patchRecord({ pendingMessageTokens: finalTotalPending });
         } catch {
           // Token persistence is intentionally non-fatal for streaming UX.

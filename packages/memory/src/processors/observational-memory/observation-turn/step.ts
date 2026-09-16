@@ -100,6 +100,7 @@ export class ObservationStep {
           threadId,
           resourceId,
           recordId: activation.record.id,
+          expectedWriteEpoch: activation.record.writeEpoch ?? 0,
         });
         await this.turn.refreshRecord();
       }
@@ -322,6 +323,7 @@ export class ObservationStep {
               threadId,
               resourceId,
               recordId: obsResult.record.id,
+              expectedWriteEpoch: obsResult.record.writeEpoch ?? 0,
               activatedMessageIds: obsResult.activatedMessageIds,
             });
           }

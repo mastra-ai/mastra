@@ -1572,6 +1572,125 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
       });
     });
 
+    describe('Observation Archives', () => {
+      it('atomically archives retired groups and exposes bounded scoped lookup', async () => {
+        const threadId = `thread-${randomUUID()}`;
+        const resourceId = `resource-${randomUUID()}`;
+        const record = await memoryStorage.initializeObservationalMemory(
+          createSampleOMInput({ threadId, resourceId, scope: 'thread' }),
+        );
+        const archivedAt = new Date();
+        const retiredObservations = 'retired observation';
+        const retiredGroups = [
+          {
+            groupId: `group-${randomUUID()}`,
+            summary: 'Retired summary',
+            searchText: 'retired summary retired observation',
+            messageRange: 'message-a:message-b',
+            sourceThreadId: threadId,
+            observedAt: { from: archivedAt, to: archivedAt },
+            tokenCount: 3,
+            textStart: 0,
+            textEnd: retiredObservations.length,
+          },
+        ];
+        const retainedGroups = [
+          {
+            groupId: `group-${randomUUID()}`,
+            summary: 'Retained summary',
+            searchText: 'retained summary retained observation',
+            messageRange: 'message-c:message-d',
+            sourceThreadId: threadId,
+            observedAt: { from: archivedAt, to: archivedAt },
+            tokenCount: 3,
+          },
+        ];
+        const archiveId = `archive-${randomUUID()}`;
+        const successorId = `om-${randomUUID()}`;
+
+        const successor = await memoryStorage.createObservationArchiveGeneration({
+          currentRecordId: record.id,
+          expectedGenerationCount: record.generationCount,
+          expectedWriteEpoch: record.writeEpoch ?? 0,
+          archiveId,
+          successorId,
+          archivedAt,
+          contentDigest: `digest-${randomUUID()}`,
+          retiredObservations,
+          retiredObservationTokenCount: 3,
+          retiredGroups,
+          retainedObservations: 'retained observation',
+          retainedObservationTokenCount: 3,
+          retainedGroups,
+        });
+
+        expect(successor.id).toBe(successorId);
+        expect(successor.originType).toBe('archive');
+        expect(successor.recordState).toBe('active');
+        expect(successor.activeObservations).toBe('retained observation');
+        expect(successor.observationGroups).toEqual(retainedGroups);
+
+        const page = await memoryStorage.listObservationArchives({
+          scope: 'thread',
+          threadId,
+          resourceId,
+          limit: 1,
+          text: 'RETIRED',
+        });
+        expect(page.archives).toHaveLength(1);
+        expect(page.archives[0]?.archiveId).toBe(archiveId);
+        expect(page.archives[0]?.groups).toEqual(retiredGroups);
+
+        const direct = await memoryStorage.getObservationArchiveById({
+          scope: 'thread',
+          threadId,
+          resourceId,
+          archiveId,
+        });
+        expect(direct?.observations).toBe(retiredObservations);
+        expect(direct?.recordState).toBe('sealed');
+
+        const byGroup = await memoryStorage.getObservationArchivesByGroupIds({
+          scope: 'thread',
+          threadId,
+          resourceId,
+          groupIds: [retiredGroups[0]!.groupId],
+        });
+        expect(byGroup.matches).toHaveLength(1);
+        expect(byGroup.matches[0]?.archiveId).toBe(archiveId);
+      });
+
+      it('fences stale writes and clears buffered reflection atomically', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+        await memoryStorage.updateBufferedReflection({
+          id: record.id,
+          expectedWriteEpoch: record.writeEpoch ?? 0,
+          reflection: 'pending reflection',
+          tokenCount: 2,
+          inputTokenCount: 4,
+          reflectedObservationLineCount: 1,
+        });
+
+        const cleaned = await memoryStorage.clearBufferedReflection({
+          id: record.id,
+          expectedWriteEpoch: record.writeEpoch ?? 0,
+        });
+        expect(cleaned.writeEpoch).toBe((record.writeEpoch ?? 0) + 1);
+        expect(cleaned.bufferedReflection).toBeUndefined();
+
+        await expect(
+          memoryStorage.updateActiveObservations({
+            id: record.id,
+            expectedWriteEpoch: record.writeEpoch ?? 0,
+            observations: 'stale',
+            tokenCount: 1,
+            lastObservedAt: new Date(),
+          }),
+        ).rejects.toThrow();
+      });
+    });
+
     describe('Concurrent Updates', () => {
       it('should tolerate concurrent flag and buffer updates', async () => {
         const input = createSampleOMInput();

@@ -2148,7 +2148,7 @@ ${formattedMessages}
 
     // Set persistent flag so new instances (created per request) know buffering is in progress
     registerOp(record.id, 'bufferingObservation');
-    this.storage.setBufferingObservationFlag(record.id, true, currentTokens).catch(err => {
+    this.storage.setBufferingObservationFlag(record.id, true, currentTokens, record.writeEpoch ?? 0).catch(err => {
       omError('[OM] Failed to set buffering observation flag', err);
     });
 
@@ -2170,7 +2170,7 @@ ${formattedMessages}
         BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
         // Clear persistent flag
         unregisterOp(record.id, 'bufferingObservation');
-        this.storage.setBufferingObservationFlag(record.id, false).catch(err => {
+        this.storage.setBufferingObservationFlag(record.id, false, undefined, record.writeEpoch ?? 0).catch(err => {
           omError('[OM] Failed to clear buffering observation flag', err);
         });
       });
@@ -2624,14 +2624,15 @@ ${formattedMessages}
     threadId: string;
     resourceId?: string;
     recordId: string;
+    expectedWriteEpoch?: number;
     activatedMessageIds?: string[];
   }): Promise<void> {
-    const { threadId, resourceId, recordId, activatedMessageIds } = opts;
+    const { threadId, resourceId, recordId, expectedWriteEpoch, activatedMessageIds } = opts;
     const lockKey = this.buffering.getLockKey(threadId, resourceId);
     const bufKey = this.buffering.getObservationBufferKey(lockKey);
 
     BufferingCoordinator.lastBufferedBoundary.set(bufKey, 0);
-    await this.storage.setBufferingObservationFlag(recordId, false, 0).catch(() => {});
+    await this.storage.setBufferingObservationFlag(recordId, false, 0, expectedWriteEpoch).catch(() => {});
 
     if (activatedMessageIds && activatedMessageIds.length > 0) {
       this.buffering.cleanupStaticMaps(threadId, resourceId, activatedMessageIds);
@@ -3164,7 +3165,9 @@ ${formattedMessages}
 
     // Clear stale flag if it was set by a crashed process (non-blocking)
     if (record.isBufferingObservation) {
-      await this.storage.setBufferingObservationFlag(record.id, false).catch(() => {});
+      await this.storage
+        .setBufferingObservationFlag(record.id, false, undefined, record.writeEpoch ?? 0)
+        .catch(() => {});
     }
 
     // Wait for any existing buffering operation to complete first (mutex behavior).
@@ -3182,7 +3185,7 @@ ${formattedMessages}
     registerOp(record.id, 'bufferingObservation');
     inMemoryRecord.isBufferingObservation = true;
     inMemoryRecord.lastBufferedAtTokens = currentTokens;
-    this.storage.setBufferingObservationFlag(record.id, true, currentTokens).catch(err => {
+    this.storage.setBufferingObservationFlag(record.id, true, currentTokens, record.writeEpoch ?? 0).catch(err => {
       omError('[OM] Failed to set buffering observation flag', err);
     });
 
@@ -3323,7 +3326,9 @@ ${formattedMessages}
       }
 
       // Update the boundary tokens in storage + in-memory cache for interval tracking
-      await this.storage.setBufferingObservationFlag(record.id, false, newTokens).catch(() => {});
+      await this.storage
+        .setBufferingObservationFlag(record.id, false, newTokens, record.writeEpoch ?? 0)
+        .catch(() => {});
       flagCleared = true;
       setBufferingState(false, newTokens);
       BufferingCoordinator.lastBufferedBoundary.set(bufferKey, newTokens);
@@ -3345,7 +3350,9 @@ ${formattedMessages}
       // Only clear the flag if the success path didn't already clear it (with token count)
       if (!flagCleared) {
         setBufferingState(false);
-        await this.storage.setBufferingObservationFlag(record.id, false).catch(() => {});
+        await this.storage
+          .setBufferingObservationFlag(record.id, false, undefined, record.writeEpoch ?? 0)
+          .catch(() => {});
       }
     }
   }
@@ -3410,7 +3417,7 @@ ${formattedMessages}
             `[OM:activate] resetting stale lastBufferedBoundary: dbBoundary=${dbBoundary}, currentContextTokens=${currentContextTokens}`,
           );
           BufferingCoordinator.lastBufferedBoundary.set(bufKey, 0);
-          await this.storage.setBufferingObservationFlag(record.id, false, 0).catch(() => {});
+          await this.storage.setBufferingObservationFlag(record.id, false, 0, record.writeEpoch ?? 0).catch(() => {});
         }
       }
     }
@@ -3512,6 +3519,7 @@ ${formattedMessages}
     // Perform the swap
     const activationResult = await this.storage.swapBufferedToActive({
       id: freshRecord.id,
+      expectedWriteEpoch: freshRecord.writeEpoch ?? 0,
       activationRatio,
       messageTokensThreshold,
       currentPendingTokens,
@@ -3520,7 +3528,9 @@ ${formattedMessages}
     });
 
     // Clear buffering flag
-    await this.storage.setBufferingObservationFlag(freshRecord.id, false).catch(() => {});
+    await this.storage
+      .setBufferingObservationFlag(freshRecord.id, false, undefined, freshRecord.writeEpoch ?? 0)
+      .catch(() => {});
     unregisterOp(freshRecord.id, 'bufferingObservation');
 
     // Fetch updated record for marker emission
@@ -3848,10 +3858,10 @@ ${formattedMessages}
         return { reflected: false, record, usage: undefined };
       }
       omDebug(`[OM:reflect] isReflecting=true but NOT active in this process — stale flag from dead process, clearing`);
-      await this.storage.setReflectingFlag(record.id, false);
+      await this.storage.setReflectingFlag(record.id, false, record.writeEpoch ?? 0);
     }
 
-    await this.storage.setReflectingFlag(record.id, true);
+    await this.storage.setReflectingFlag(record.id, true, record.writeEpoch ?? 0);
     registerOp(record.id, 'reflecting');
 
     const hookContext: ObserveHookContext = { threadId, resourceId, trigger: 'manual' };
@@ -3897,6 +3907,7 @@ ${formattedMessages}
 
       await this.storage.createReflectionGeneration({
         currentRecord: record,
+        expectedWriteEpoch: record.writeEpoch ?? 0,
         reflection: reflectResult.observations,
         tokenCount: reflectionTokenCount,
       });
@@ -3930,7 +3941,10 @@ ${formattedMessages}
       return { reflected: false, record: latestRecord, usage: undefined };
     } finally {
       try {
-        await this.storage.setReflectingFlag(record.id, false);
+        const activeRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+        if (activeRecord?.id === record.id) {
+          await this.storage.setReflectingFlag(record.id, false, record.writeEpoch ?? 0);
+        }
       } finally {
         unregisterOp(record.id, 'reflecting');
       }
@@ -4003,6 +4017,7 @@ ${formattedMessages}
     // pick up the override values, distinct from the initial config snapshot.
     await this.storage.updateObservationalMemoryConfig({
       id: record.id,
+      expectedWriteEpoch: record.writeEpoch ?? 0,
       config: { _overrides: config },
     });
   }

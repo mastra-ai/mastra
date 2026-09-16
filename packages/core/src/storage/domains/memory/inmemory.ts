@@ -25,6 +25,16 @@ import type {
   SwapBufferedToActiveResult,
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
+  CreateObservationArchiveGenerationInput,
+  ListObservationArchivesInput,
+  ListObservationArchivesResult,
+  GetObservationArchiveInput,
+  GetObservationArchiveResult,
+  GetObservationArchivesByGroupIdsInput,
+  GetObservationArchivesByGroupIdsResult,
+  ObservationArchiveEntry,
+  ArchivedObservationGroup,
+  ClearBufferedReflectionInput,
   UpdateObservationalMemoryConfigInput,
 } from '../../types';
 import {
@@ -775,7 +785,7 @@ export class InMemoryMemory extends MemoryStorage {
   async getObservationalMemory(threadId: string | null, resourceId: string): Promise<ObservationalMemoryRecord | null> {
     const key = this.getObservationalMemoryKey(threadId, resourceId);
     const records = this.db.observationalMemory.get(key);
-    return records?.[0] ?? null;
+    return records?.find(record => (record.recordState ?? 'active') === 'active') ?? null;
   }
 
   async getObservationalMemoryHistory(
@@ -810,6 +820,8 @@ export class InMemoryMemory extends MemoryStorage {
       scope,
       threadId,
       resourceId,
+      recordState: 'active',
+      writeEpoch: 0,
       // Timestamps at top level
       createdAt: now,
       updatedAt: now,
@@ -868,12 +880,12 @@ export class InMemoryMemory extends MemoryStorage {
 
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
     const { id, observations, tokenCount, lastObservedAt, observedMessageIds } = input;
-    const record = this.findObservationalMemoryRecordById(id);
-    if (!record) {
-      throw new Error(`Observational memory record not found: ${id}`);
-    }
+    const record = this.getWritableObservationalMemoryRecord(id, input.expectedWriteEpoch);
 
     record.activeObservations = observations;
+    if (input.observationGroups) {
+      record.observationGroups = input.observationGroups;
+    }
     record.observationTokenCount = tokenCount;
     record.totalTokensObserved += tokenCount;
     // Reset pending tokens since we've now observed them
@@ -891,10 +903,7 @@ export class InMemoryMemory extends MemoryStorage {
 
   async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
     const { id, chunk } = input;
-    const record = this.findObservationalMemoryRecordById(id);
-    if (!record) {
-      throw new Error(`Observational memory record not found: ${id}`);
-    }
+    const record = this.getWritableObservationalMemoryRecord(id, input.expectedWriteEpoch);
 
     const existingChunks = Array.isArray(record.bufferedObservationChunks) ? record.bufferedObservationChunks : [];
     if (existingChunks.some(existing => existing.cycleId === chunk.cycleId)) return;
@@ -914,6 +923,7 @@ export class InMemoryMemory extends MemoryStorage {
       threadTitle: chunk.threadTitle,
       extractedValues: chunk.extractedValues,
       extractionFailures: chunk.extractionFailures,
+      observationGroups: chunk.observationGroups,
     };
 
     // Add chunk to the array
@@ -928,10 +938,7 @@ export class InMemoryMemory extends MemoryStorage {
 
   async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<SwapBufferedToActiveResult> {
     const { id, activationRatio, lastObservedAt } = input;
-    const record = this.findObservationalMemoryRecordById(id);
-    if (!record) {
-      throw new Error(`Observational memory record not found: ${id}`);
-    }
+    const record = this.getWritableObservationalMemoryRecord(id, input.expectedWriteEpoch);
 
     // Use caller-provided refreshed chunks (with up-to-date token weights) for
     // activation math, falling back to persisted chunks otherwise.
@@ -1034,6 +1041,10 @@ export class InMemoryMemory extends MemoryStorage {
     } else {
       record.activeObservations = activatedContent;
     }
+    const activatedGroups = activatedChunks.flatMap(chunk => chunk.observationGroups ?? []);
+    if (activatedGroups.length > 0) {
+      record.observationGroups = [...(record.observationGroups ?? []), ...activatedGroups];
+    }
 
     // Update observation token count
     record.observationTokenCount = (record.observationTokenCount ?? 0) + activatedTokens;
@@ -1079,23 +1090,40 @@ export class InMemoryMemory extends MemoryStorage {
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
     const { currentRecord, reflection, tokenCount } = input;
-    const key = this.getObservationalMemoryKey(currentRecord.threadId, currentRecord.resourceId);
+    const record = this.getWritableObservationalMemoryRecord(
+      currentRecord.id,
+      input.expectedWriteEpoch ?? currentRecord.writeEpoch,
+    );
+    if (record.generationCount !== currentRecord.generationCount) {
+      throw new Error(`Observational memory generation changed for record ${currentRecord.id}`);
+    }
+
+    const key = this.getObservationalMemoryKey(record.threadId, record.resourceId);
     const now = new Date();
+    record.recordState = 'sealed';
+    record.updatedAt = now;
+    record.bufferedReflection = undefined;
+    record.bufferedReflectionTokens = undefined;
+    record.bufferedReflectionInputTokens = undefined;
+    record.reflectedObservationLineCount = undefined;
+    record.isReflecting = false;
+    record.isBufferingReflection = false;
 
     const newRecord: ObservationalMemoryRecord = {
       id: crypto.randomUUID(),
-      scope: currentRecord.scope,
-      threadId: currentRecord.threadId,
-      resourceId: currentRecord.resourceId,
-      // Timestamps at top level
+      scope: record.scope,
+      threadId: record.threadId,
+      resourceId: record.resourceId,
+      recordState: 'active',
+      writeEpoch: 0,
       createdAt: now,
       updatedAt: now,
-      lastObservedAt: currentRecord.lastObservedAt ?? now, // Carry over from observation (which always runs before reflection)
+      lastObservedAt: record.lastObservedAt ?? now,
       originType: 'reflection',
-      generationCount: currentRecord.generationCount + 1,
+      generationCount: record.generationCount + 1,
       activeObservations: reflection,
-      config: currentRecord.config,
-      totalTokensObserved: currentRecord.totalTokensObserved,
+      config: record.config,
+      totalTokensObserved: record.totalTokensObserved,
       observationTokenCount: tokenCount,
       pendingMessageTokens: 0,
       isReflecting: false,
@@ -1104,25 +1132,176 @@ export class InMemoryMemory extends MemoryStorage {
       isBufferingReflection: false,
       lastBufferedAtTokens: 0,
       lastBufferedAtTime: null,
-      // Timezone used for observation date formatting
-      observedTimezone: currentRecord.observedTimezone,
-      // Extensible metadata (optional)
+      observedTimezone: record.observedTimezone,
       metadata: {},
     };
 
-    // Add as first record (most recent)
     const existing = this.db.observationalMemory.get(key) ?? [];
     this.db.observationalMemory.set(key, [newRecord, ...existing]);
 
     return newRecord;
   }
 
+  async createObservationArchiveGeneration(
+    input: CreateObservationArchiveGenerationInput,
+  ): Promise<ObservationalMemoryRecord> {
+    const priorArchive = this.findObservationArchiveRecord(input.archiveId);
+    if (priorArchive) {
+      const archive = priorArchive.archive!;
+      const sameTransition =
+        archive.sourceRecordId === input.currentRecordId &&
+        archive.sourceGenerationCount === input.expectedGenerationCount &&
+        archive.sourceWriteEpoch === input.expectedWriteEpoch &&
+        archive.contentDigest === input.contentDigest &&
+        this.haveSameGroupIds(archive.groups, input.retiredGroups);
+      if (!sameTransition) {
+        throw new Error(`Archive ID ${input.archiveId} is already bound to a different transition`);
+      }
+      const successor = this.findObservationalMemoryRecordById(archive.successorRecordId);
+      if (!successor) {
+        throw new Error(`Archive successor not found: ${archive.successorRecordId}`);
+      }
+      return successor;
+    }
+
+    const record = this.getWritableObservationalMemoryRecord(input.currentRecordId, input.expectedWriteEpoch);
+    if (record.generationCount !== input.expectedGenerationCount) {
+      throw new Error(`Observational memory generation changed for record ${input.currentRecordId}`);
+    }
+
+    const key = this.getObservationalMemoryKey(record.threadId, record.resourceId);
+    const successorId = crypto.randomUUID();
+    const mutableSnapshot = structuredClone(record);
+    const archiveMetadata = {
+      archiveId: input.archiveId,
+      archivedAt: input.archivedAt,
+      sourceRecordId: record.id,
+      successorRecordId: successorId,
+      generationCount: record.generationCount,
+      sourceGenerationCount: record.generationCount,
+      sourceWriteEpoch: record.writeEpoch ?? 0,
+      contentDigest: input.contentDigest,
+      observationTokenCount: input.retiredObservationTokenCount,
+      groups: input.retiredGroups,
+    };
+
+    record.recordState = 'sealed';
+    record.updatedAt = input.archivedAt;
+    record.activeObservations = input.retiredObservations;
+    record.observationGroups = input.retiredGroups;
+    record.archive = archiveMetadata;
+    record.observationTokenCount = input.retiredObservationTokenCount;
+    record.pendingMessageTokens = 0;
+    record.bufferedObservationChunks = undefined;
+    record.bufferedReflection = undefined;
+    record.bufferedReflectionTokens = undefined;
+    record.bufferedReflectionInputTokens = undefined;
+    record.reflectedObservationLineCount = undefined;
+    record.isReflecting = false;
+    record.isObserving = false;
+    record.isBufferingObservation = false;
+    record.isBufferingReflection = false;
+
+    const successor: ObservationalMemoryRecord = {
+      ...mutableSnapshot,
+      id: successorId,
+      recordState: 'active',
+      writeEpoch: 0,
+      createdAt: input.archivedAt,
+      updatedAt: input.archivedAt,
+      originType: 'archive',
+      generationCount: record.generationCount + 1,
+      activeObservations: input.retainedObservations,
+      observationGroups: input.retainedGroups,
+      archive: undefined,
+      observationTokenCount: input.retainedObservationTokenCount,
+      bufferedReflection: undefined,
+      bufferedReflectionTokens: undefined,
+      bufferedReflectionInputTokens: undefined,
+      reflectedObservationLineCount: undefined,
+      isReflecting: false,
+      isBufferingReflection: false,
+    };
+
+    const existing = this.db.observationalMemory.get(key) ?? [];
+    this.db.observationalMemory.set(key, [successor, ...existing]);
+    return successor;
+  }
+
+  async listObservationArchives(input: ListObservationArchivesInput): Promise<ListObservationArchivesResult> {
+    const limit = Math.min(Math.max(input.limit ?? 20, 1), 20);
+    const cursor = input.cursor ? this.decodeObservationArchiveCursor(input.cursor) : undefined;
+    const archives = this.getObservationArchiveRecords(input)
+      .map(record => this.toObservationArchiveEntry(record, input))
+      .filter((entry): entry is ObservationArchiveEntry => entry !== null)
+      .filter(entry => {
+        const matchingGroups = entry.groups.filter(group => this.observationArchiveGroupMatches(group, entry, input));
+        entry.groups = matchingGroups;
+        return matchingGroups.length > 0;
+      })
+      .sort((a, b) => this.compareObservationArchiveEntries(a, b))
+      .filter(entry => !cursor || this.isObservationArchiveAfterCursor(entry, cursor));
+
+    const page = archives.slice(0, limit + 1);
+    const hasMore = page.length > limit;
+    const visible = hasMore ? page.slice(0, limit) : page;
+    return {
+      archives: visible,
+      nextCursor: hasMore ? this.encodeObservationArchiveCursor(visible[visible.length - 1]!) : undefined,
+    };
+  }
+
+  async getObservationArchive(input: GetObservationArchiveInput): Promise<GetObservationArchiveResult | null> {
+    const record = this.findObservationArchiveRecord(input.archiveId);
+    if (!record) return null;
+    const entry = this.toObservationArchiveEntry(record, input);
+    if (!entry) return null;
+    const groups = input.groupId ? entry.groups.filter(group => group.groupId === input.groupId) : entry.groups;
+    if (groups.length === 0) return null;
+    entry.groups = groups;
+    const observations = groups
+      .map(group => record.activeObservations.slice(group.textStart, group.textEnd))
+      .join('\n\n');
+    return { archive: entry, observations };
+  }
+
+  async getObservationArchivesByGroupIds(
+    input: GetObservationArchivesByGroupIdsInput,
+  ): Promise<GetObservationArchivesByGroupIdsResult> {
+    const groupIds = Array.from(new Set(input.groupIds));
+    if (groupIds.length > 20) {
+      throw new Error('Observation archive group lookup supports at most 20 group IDs');
+    }
+    const requested = new Set(groupIds);
+    const matches = this.getObservationArchiveRecords(input)
+      .map(record => this.toObservationArchiveEntry(record, input))
+      .filter((entry): entry is ObservationArchiveEntry => entry !== null)
+      .map(entry => {
+        const visible = entry.groups.filter(group => requested.has(group.groupId));
+        entry.groups = visible;
+        return { archive: entry, groupIds: visible.map(group => group.groupId) };
+      })
+      .filter(match => match.groupIds.length > 0)
+      .sort((a, b) => this.compareObservationArchiveEntries(a.archive, b.archive));
+    return { matches };
+  }
+
+  async clearBufferedReflection(input: ClearBufferedReflectionInput): Promise<ObservationalMemoryRecord> {
+    const record = this.getWritableObservationalMemoryRecord(input.id, input.expectedWriteEpoch);
+    record.bufferedReflection = undefined;
+    record.bufferedReflectionTokens = undefined;
+    record.bufferedReflectionInputTokens = undefined;
+    record.reflectedObservationLineCount = undefined;
+    record.isReflecting = false;
+    record.isBufferingReflection = false;
+    record.writeEpoch = (record.writeEpoch ?? 0) + 1;
+    record.updatedAt = new Date();
+    return record;
+  }
+
   async updateBufferedReflection(input: UpdateBufferedReflectionInput): Promise<void> {
     const { id, reflection, tokenCount, inputTokenCount, reflectedObservationLineCount } = input;
-    const record = this.findObservationalMemoryRecordById(id);
-    if (!record) {
-      throw new Error(`Observational memory record not found: ${id}`);
-    }
+    const record = this.getWritableObservationalMemoryRecord(id, input.expectedWriteEpoch);
 
     const existing = record.bufferedReflection || '';
     record.bufferedReflection = existing ? `${existing}\n\n${reflection}` : reflection;
@@ -1134,10 +1313,10 @@ export class InMemoryMemory extends MemoryStorage {
 
   async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
     const { currentRecord } = input;
-    const record = this.findObservationalMemoryRecordById(currentRecord.id);
-    if (!record) {
-      throw new Error(`Observational memory record not found: ${currentRecord.id}`);
-    }
+    const record = this.getWritableObservationalMemoryRecord(
+      currentRecord.id,
+      input.expectedWriteEpoch ?? currentRecord.writeEpoch,
+    );
 
     if (!record.bufferedReflection) {
       throw new Error('No buffered reflection to swap');
@@ -1165,40 +1344,30 @@ export class InMemoryMemory extends MemoryStorage {
       tokenCount: input.tokenCount,
     });
 
-    // Clear buffered state on old record
-    record.bufferedReflection = undefined;
-    record.bufferedReflectionTokens = undefined;
-    record.bufferedReflectionInputTokens = undefined;
-    record.reflectedObservationLineCount = undefined;
-
     return newRecord;
   }
 
-  async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
-    const record = this.findObservationalMemoryRecordById(id);
-    if (!record) {
-      throw new Error(`Observational memory record not found: ${id}`);
-    }
+  async setReflectingFlag(id: string, isReflecting: boolean, expectedWriteEpoch?: number): Promise<void> {
+    const record = this.getWritableObservationalMemoryRecord(id, expectedWriteEpoch);
 
     record.isReflecting = isReflecting;
     record.updatedAt = new Date();
   }
 
-  async setObservingFlag(id: string, isObserving: boolean): Promise<void> {
-    const record = this.findObservationalMemoryRecordById(id);
-    if (!record) {
-      throw new Error(`Observational memory record not found: ${id}`);
-    }
+  async setObservingFlag(id: string, isObserving: boolean, expectedWriteEpoch?: number): Promise<void> {
+    const record = this.getWritableObservationalMemoryRecord(id, expectedWriteEpoch);
 
     record.isObserving = isObserving;
     record.updatedAt = new Date();
   }
 
-  async setBufferingObservationFlag(id: string, isBuffering: boolean, lastBufferedAtTokens?: number): Promise<void> {
-    const record = this.findObservationalMemoryRecordById(id);
-    if (!record) {
-      throw new Error(`Observational memory record not found: ${id}`);
-    }
+  async setBufferingObservationFlag(
+    id: string,
+    isBuffering: boolean,
+    lastBufferedAtTokens?: number,
+    expectedWriteEpoch?: number,
+  ): Promise<void> {
+    const record = this.getWritableObservationalMemoryRecord(id, expectedWriteEpoch);
 
     record.isBufferingObservation = isBuffering;
     if (lastBufferedAtTokens !== undefined) {
@@ -1207,11 +1376,8 @@ export class InMemoryMemory extends MemoryStorage {
     record.updatedAt = new Date();
   }
 
-  async setBufferingReflectionFlag(id: string, isBuffering: boolean): Promise<void> {
-    const record = this.findObservationalMemoryRecordById(id);
-    if (!record) {
-      throw new Error(`Observational memory record not found: ${id}`);
-    }
+  async setBufferingReflectionFlag(id: string, isBuffering: boolean, expectedWriteEpoch?: number): Promise<void> {
+    const record = this.getWritableObservationalMemoryRecord(id, expectedWriteEpoch);
 
     record.isBufferingReflection = isBuffering;
     record.updatedAt = new Date();
@@ -1222,24 +1388,158 @@ export class InMemoryMemory extends MemoryStorage {
     this.db.observationalMemory.delete(key);
   }
 
-  async setPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
-    const record = this.findObservationalMemoryRecordById(id);
-    if (!record) {
-      throw new Error(`Observational memory record not found: ${id}`);
-    }
+  async setPendingMessageTokens(id: string, tokenCount: number, expectedWriteEpoch?: number): Promise<void> {
+    const record = this.getWritableObservationalMemoryRecord(id, expectedWriteEpoch);
 
     record.pendingMessageTokens = tokenCount;
     record.updatedAt = new Date();
   }
 
   async updateObservationalMemoryConfig(input: UpdateObservationalMemoryConfigInput): Promise<void> {
-    const record = this.findObservationalMemoryRecordById(input.id);
-    if (!record) {
-      throw new Error(`Observational memory record not found: ${input.id}`);
-    }
+    const record = this.getWritableObservationalMemoryRecord(input.id, input.expectedWriteEpoch);
 
     record.config = this.deepMergeConfig(record.config as Record<string, unknown>, input.config);
     record.updatedAt = new Date();
+  }
+
+  private getWritableObservationalMemoryRecord(id: string, expectedWriteEpoch?: number): ObservationalMemoryRecord {
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+    if ((record.recordState ?? 'active') !== 'active') {
+      throw new Error(`Observational memory record is sealed: ${id}`);
+    }
+    const expected = expectedWriteEpoch ?? 0;
+    const actual = record.writeEpoch ?? 0;
+    if (actual !== expected) {
+      throw new Error(`Observational memory write epoch mismatch for ${id}: expected ${expected}, received ${actual}`);
+    }
+    return record;
+  }
+
+  private findObservationArchiveRecord(archiveId: string): ObservationalMemoryRecord | null {
+    for (const records of this.db.observationalMemory.values()) {
+      const record = records.find(candidate => candidate.archive?.archiveId === archiveId);
+      if (record) return record;
+    }
+    return null;
+  }
+
+  private haveSameGroupIds(a: ArchivedObservationGroup[], b: ArchivedObservationGroup[]): boolean {
+    return a.length === b.length && a.every((group, index) => group.groupId === b[index]?.groupId);
+  }
+
+  private getObservationArchiveRecords(
+    input: Pick<ListObservationArchivesInput, 'scope' | 'resourceId' | 'threadId' | 'filterThreadId'>,
+  ): ObservationalMemoryRecord[] {
+    if (input.scope === 'thread' && !input.threadId) {
+      throw new Error('threadId is required for thread-scoped observation archive access');
+    }
+    const records: ObservationalMemoryRecord[] = [];
+    for (const candidates of this.db.observationalMemory.values()) {
+      for (const record of candidates) {
+        if (!record.archive || record.resourceId !== input.resourceId) continue;
+        if (input.scope === 'thread' && record.scope === 'thread' && record.threadId !== input.threadId) continue;
+        records.push(record);
+      }
+    }
+    return records;
+  }
+
+  private toObservationArchiveEntry(
+    record: ObservationalMemoryRecord,
+    input: Pick<ListObservationArchivesInput, 'scope' | 'resourceId' | 'threadId' | 'filterThreadId'>,
+  ): ObservationArchiveEntry | null {
+    const archive = record.archive;
+    if (!archive || record.resourceId !== input.resourceId) return null;
+    if (input.scope === 'thread' && record.scope === 'thread' && record.threadId !== input.threadId) return null;
+    const projectedThreadId = input.scope === 'thread' ? input.threadId : input.filterThreadId;
+    const groups = archive.groups.filter(group => {
+      if (!projectedThreadId) return true;
+      if (record.scope === 'thread') return record.threadId === projectedThreadId;
+      return group.sourceThreadId === projectedThreadId;
+    });
+    if (groups.length === 0) return null;
+    return {
+      archiveId: archive.archiveId,
+      recordId: record.id,
+      scope: record.scope,
+      threadId: record.threadId,
+      resourceId: record.resourceId,
+      archivedAt: archive.archivedAt,
+      generationCount: record.generationCount,
+      observationTokenCount: archive.observationTokenCount,
+      groups: groups.map(group => ({ ...group })),
+    };
+  }
+
+  private observationArchiveGroupMatches(
+    group: ArchivedObservationGroup,
+    _entry: ObservationArchiveEntry,
+    input: Pick<ListObservationArchivesInput, 'from' | 'to' | 'text'>,
+  ): boolean {
+    if (input.from || input.to) {
+      const range = group.observedAt;
+      if (!range) return false;
+      if (input.from && range.to < input.from) return false;
+      if (input.to && range.from > input.to) return false;
+    }
+    if (input.text) {
+      const query = input.text.normalize('NFKC').toLowerCase();
+      if (!group.searchText.includes(query)) return false;
+    }
+    return true;
+  }
+
+  private compareObservationArchiveEntries(a: ObservationArchiveEntry, b: ObservationArchiveEntry): number {
+    const archivedAt = b.archivedAt.getTime() - a.archivedAt.getTime();
+    if (archivedAt !== 0) return archivedAt;
+    const generation = b.generationCount - a.generationCount;
+    if (generation !== 0) return generation;
+    return b.archiveId.localeCompare(a.archiveId);
+  }
+
+  private encodeObservationArchiveCursor(entry: ObservationArchiveEntry): string {
+    return Buffer.from(
+      JSON.stringify({
+        archivedAt: entry.archivedAt.toISOString(),
+        generationCount: entry.generationCount,
+        archiveId: entry.archiveId,
+      }),
+    ).toString('base64url');
+  }
+
+  private decodeObservationArchiveCursor(cursor: string): {
+    archivedAt: number;
+    generationCount: number;
+    archiveId: string;
+  } {
+    try {
+      const value = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Record<string, unknown>;
+      const archivedAt = typeof value.archivedAt === 'string' ? new Date(value.archivedAt).getTime() : Number.NaN;
+      if (
+        !Number.isFinite(archivedAt) ||
+        !Number.isInteger(value.generationCount) ||
+        typeof value.archiveId !== 'string' ||
+        !value.archiveId
+      ) {
+        throw new Error('invalid fields');
+      }
+      return { archivedAt, generationCount: value.generationCount as number, archiveId: value.archiveId };
+    } catch {
+      throw new Error('Invalid observation archive cursor');
+    }
+  }
+
+  private isObservationArchiveAfterCursor(
+    entry: ObservationArchiveEntry,
+    cursor: { archivedAt: number; generationCount: number; archiveId: string },
+  ): boolean {
+    const archivedAt = entry.archivedAt.getTime();
+    if (archivedAt !== cursor.archivedAt) return archivedAt < cursor.archivedAt;
+    if (entry.generationCount !== cursor.generationCount) return entry.generationCount < cursor.generationCount;
+    return entry.archiveId.localeCompare(cursor.archiveId) < 0;
   }
 
   /**

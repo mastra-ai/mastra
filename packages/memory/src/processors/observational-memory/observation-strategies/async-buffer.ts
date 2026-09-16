@@ -150,6 +150,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       () =>
         this.storage.updateBufferedObservations({
           id: record.id,
+          expectedWriteEpoch: record.writeEpoch ?? 0,
           chunk: {
             cycleId: this.cycleId,
             observations: processed.observations,
