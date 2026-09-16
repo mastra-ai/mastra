@@ -11,6 +11,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   ChevronDown,
   CirclePause,
+  CircleSlash,
   HourglassIcon,
   Loader2,
   SquareArrowOutUpRight,
@@ -30,6 +31,7 @@ const StepStatusIcon = ({ status }: { status: Step['status'] }) => (
   <Icon>
     {status === 'success' && <CheckIcon className="text-accent1" />}
     {status === 'failed' && <CrossIcon className="text-accent2" />}
+    {status === 'canceled' && <CircleSlash className="text-neutral3" />}
     {(status === 'suspended' || status === 'paused') && <CirclePause className="text-accent3" />}
     {status === 'waiting' && <HourglassIcon className="text-accent5" />}
     {status === 'skipped' && <HourglassIcon className="text-icon3" />}
@@ -40,6 +42,7 @@ const StepStatusIcon = ({ status }: { status: Step['status'] }) => (
 const BAR_TINT: Record<Step['status'], string> = {
   success: 'bg-accent1',
   failed: 'bg-accent2',
+  canceled: 'bg-border1',
   suspended: 'bg-accent3',
   paused: 'bg-accent3',
   waiting: 'bg-accent5',

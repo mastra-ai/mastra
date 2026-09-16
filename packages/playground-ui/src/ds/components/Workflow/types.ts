@@ -2,7 +2,10 @@ import type { SerializedStepFlowEntry, WorkflowStepStatus } from '@mastra/core/w
 import type { ReactNode } from 'react';
 
 export type WorkflowCardDisplayStatus =
-  | Extract<WorkflowStepStatus, 'running' | 'success' | 'failed' | 'suspended' | 'paused' | 'waiting' | 'skipped'>
+  | Extract<
+      WorkflowStepStatus,
+      'running' | 'success' | 'failed' | 'suspended' | 'paused' | 'canceled' | 'waiting' | 'skipped'
+    >
   | 'tripwire'
   | undefined;
 

@@ -1,4 +1,13 @@
-import { CircleCheck, CircleDashed, CircleX, HourglassIcon, Loader2, PauseIcon, ShieldAlert } from 'lucide-react';
+import {
+  CircleCheck,
+  CircleDashed,
+  CircleSlash,
+  CircleX,
+  HourglassIcon,
+  Loader2,
+  PauseIcon,
+  ShieldAlert,
+} from 'lucide-react';
 
 import type { WorkflowCardDisplayStatus } from '../types';
 import { Icon } from '@/ds/icons/Icon';
@@ -15,6 +24,7 @@ export const WorkflowCardStatusIcon = ({ displayStatus, hasStep }: WorkflowCardS
     <Icon size="sm" className="inline-flex size-5 shrink-0 items-center justify-center">
       {displayStatus === 'tripwire' && <ShieldAlert className="text-amber-400" strokeWidth={strokeWidth} />}
       {displayStatus === 'failed' && <CircleX className="text-accent2" strokeWidth={strokeWidth} />}
+      {displayStatus === 'canceled' && <CircleSlash className="text-neutral3" strokeWidth={strokeWidth} />}
       {displayStatus === 'success' && <CircleCheck className="text-accent1" strokeWidth={strokeWidth} />}
       {(displayStatus === 'suspended' || displayStatus === 'paused') && (
         <PauseIcon className="text-accent3" strokeWidth={strokeWidth} />
