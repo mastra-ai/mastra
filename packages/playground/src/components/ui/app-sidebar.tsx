@@ -2,9 +2,11 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import type { NavLink } from '@mastra/playground-ui/components/MainSidebar';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Search, Wrench } from 'lucide-react';
+import { Ellipsis, Search, Wrench } from 'lucide-react';
+import { useId, useState } from 'react';
 import { useLocation } from 'react-router';
 import { useAgentBuilderSidebarVisibility } from '@/domains/agent-builder/hooks/use-agent-builder-sidebar-visibility';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
@@ -23,6 +25,7 @@ import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platfo
 import { getIsLinkActive } from '@/lib/nav/get-is-link-active';
 import { bottomNav, mainNav } from '@/lib/nav/nav-items';
 import type { NavItem } from '@/lib/nav/nav-items';
+import { useFoldableNavItems } from '@/lib/nav/use-foldable-nav-items';
 
 declare global {
   interface Window {
@@ -90,6 +93,66 @@ export function AppSidebar() {
   };
 
   const filteredBottom = bottomNav.filter(filterItem);
+
+  const foldableItems = mainNav.flatMap(section => section.items).filter(item => item.foldable && filterItem(item));
+  const foldable = useFoldableNavItems(foldableItems, pathname);
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const moreListId = useId();
+  const isCollapsed = state === 'collapsed';
+
+  const renderNavItem = (item: NavItem, siblings: NavItem[], level = 0) => (
+    <MainSidebar.NavLink
+      key={item.name}
+      LinkComponent={Link}
+      state={state}
+      level={level}
+      link={toSidebarLink(item)}
+      isActive={getIsLinkActive(item, pathname, siblings)}
+      onClick={item.foldable ? () => foldable.markVisited(item.url) : undefined}
+    >
+      {item.url === '/inbox' && hasInboxItems && !isCollapsed ? (
+        <Badge variant="yellow" size="sm" indicator="dot" className="ml-auto" aria-label="Items need review" />
+      ) : null}
+    </MainSidebar.NavLink>
+  );
+
+  const renderFoldArea = (siblings: NavItem[]) => {
+    if (foldable.isResolving) {
+      return (
+        <li aria-busy="true" data-testid="nav-more-skeleton" className="px-2 py-0.5">
+          <Skeleton className="h-7 w-full" />
+        </li>
+      );
+    }
+
+    const foldedRows = foldable.folded.map(item => renderNavItem(item, siblings, isCollapsed ? 0 : 1));
+
+    return (
+      <>
+        {foldable.promoted.map(item => renderNavItem(item, siblings))}
+        {foldable.folded.length > 0 && (
+          <MainSidebar.NavLink
+            state={state}
+            link={{ name: 'More', url: '#', icon: <Ellipsis /> }}
+            render={
+              <button
+                type="button"
+                aria-expanded={isMoreOpen}
+                aria-controls={isMoreOpen && !isCollapsed ? moreListId : undefined}
+                onClick={() => setIsMoreOpen(open => !open)}
+              >
+                <Ellipsis />
+                <MainSidebar.NavLabel state={state}>More</MainSidebar.NavLabel>
+              </button>
+            }
+            subItems={isMoreOpen ? <MainSidebar.NavList id={moreListId}>{foldedRows}</MainSidebar.NavList> : null}
+          />
+        )}
+        {/* The DS drops `subItems` on the collapsed rail, so folded rows render as siblings there. */}
+        {isCollapsed && isMoreOpen && foldedRows}
+      </>
+    );
+  };
 
   return (
     <MainSidebar>
@@ -200,25 +263,8 @@ export function AppSidebar() {
                 </MainSidebar.NavHeader>
               ) : null}
               <MainSidebar.NavList>
-                {filtered.map(item => (
-                  <MainSidebar.NavLink
-                    key={item.name}
-                    LinkComponent={Link}
-                    state={state}
-                    link={toSidebarLink(item)}
-                    isActive={getIsLinkActive(item, pathname, filtered)}
-                  >
-                    {item.url === '/inbox' && hasInboxItems && state !== 'collapsed' ? (
-                      <Badge
-                        variant="yellow"
-                        size="sm"
-                        indicator="dot"
-                        className="ml-auto"
-                        aria-label="Items need review"
-                      />
-                    ) : null}
-                  </MainSidebar.NavLink>
-                ))}
+                {filtered.filter(item => !item.foldable).map(item => renderNavItem(item, filtered))}
+                {filtered.some(item => item.foldable) && renderFoldArea(filtered)}
               </MainSidebar.NavList>
             </MainSidebar.NavSection>
           );
