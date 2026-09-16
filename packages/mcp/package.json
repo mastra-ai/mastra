@@ -5,6 +5,9 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "mastra-mcp": "dist/cli/index.js"
+  },
   "files": [
     "dist"
   ],
@@ -28,7 +31,8 @@
     "test:client": "vitest run ./src/client/client.test.ts ./src/client/configuration.test.ts ./src/client/error-utils.test.ts ./src/client/oauth.test.ts ./src/client/oauth-callback-server.test.ts ./src/client/oauth-flow.test.ts ./src/client/url-policy.test.ts ./src/client/stdio-env.test.ts ./src/client/typed-client.test.ts",
     "test:server": "vitest run ./src/server",
     "test:integration": "cd integration-tests && pnpm test:mcp",
-    "test": "pnpm test:server && pnpm test:client && pnpm test:integration",
+    "test:typegen": "vitest run src/cli/typegen.test.ts src/cli/generate.test.ts",
+    "test": "pnpm test:server && pnpm test:client && pnpm test:typegen && pnpm test:integration",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix ."
   },
@@ -45,7 +49,8 @@
     "@modelcontextprotocol/server-legacy": "2.0.0",
     "exit-hook": "^5.1.0",
     "fast-deep-equal": "^3.1.3",
-    "json-schema-to-typescript": "16.0.0"
+    "json-schema-to-typescript": "16.0.0",
+    "tsx": "catalog:"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.64.0-0 <2.0.0-0"
@@ -73,7 +78,6 @@
     "hono-mcp-server-sse-transport": "0.0.7",
     "semver": "^7.8.5",
     "tsdown": "0.22.9",
-    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:",

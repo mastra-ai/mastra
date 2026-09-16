@@ -76,6 +76,8 @@ export interface MCPClientOptions<
   servers: { [Server in keyof NoInfer<TServers>]: MastraMCPServerDefinition };
   /** Optional global timeout in milliseconds for all servers (default: 60000ms) */
   timeout?: number;
+  /** Optional output path for the package's generate command, relative to its working directory. */
+  typegen?: { outFile: string };
 }
 
 /**
@@ -107,6 +109,7 @@ export interface MCPClientOptions<
 export class MCPClient<
   TServers extends { [Server in keyof TServers]: MCPServerMap[string] } = MCPServerMap,
 > extends MastraBase {
+  readonly typegen?: Readonly<{ outFile: string }>;
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};
   private id: string;
   private defaultTimeout: number;
@@ -188,6 +191,12 @@ To fix this you have three different options:
       return existingInstance;
     }
 
+    if (args.typegen !== undefined) {
+      if (!args.typegen || typeof args.typegen.outFile !== 'string' || !args.typegen.outFile.trim() || args.typegen.outFile.includes('\0')) {
+        throw new Error('typegen.outFile must be a nonempty file path');
+      }
+      this.typegen = Object.freeze({ outFile: args.typegen.outFile });
+    }
     mcpClientInstances.set(this.id, this);
     this.addToInstanceCache();
     return this;

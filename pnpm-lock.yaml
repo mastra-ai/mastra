@@ -5322,6 +5322,9 @@ importers:
       json-schema-to-typescript:
         specifier: 16.0.0
         version: 16.0.0
+      tsx:
+        specifier: 'catalog:'
+        version: 4.23.1
     devDependencies:
       '@hono/node-server':
         specifier: ^2.0.0
@@ -5389,9 +5392,6 @@ importers:
       tsdown:
         specifier: 0.22.9
         version: 0.22.9(@volar/typescript@2.4.23(typescript@7.0.2))(oxc-resolver@11.20.0)(tsx@4.23.1)(typescript@7.0.2)
-      tsx:
-        specifier: 'catalog:'
-        version: 4.23.1
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

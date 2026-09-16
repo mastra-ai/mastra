@@ -67,6 +67,58 @@ export const assistant = new Agent({
 })
 ```
 
+### Generate types for direct tool calls
+
+For stable server configurations, generate types from published tool schemas instead of redeclaring tool arguments and results. This optional workflow leaves dynamic discovery unchanged.
+
+Export a client with an output path and pass the generated `MCPServers` interface to its constructor:
+
+```typescript title="src/mcp/client.ts"
+import { MCPClient } from '@mastra/mcp'
+import type { MCPServers } from './mcp-types.generated'
+
+export const mcp = new MCPClient<MCPServers>({
+  id: 'weather-client',
+  servers: { weather: { url: new URL(process.env.WEATHER_MCP_URL!) } },
+  typegen: { outFile: 'src/mcp/mcp-types.generated.ts' },
+})
+```
+
+Set `WEATHER_MCP_URL` and configure any required authentication before running the command from your project root:
+
+```bash npm2yarn
+npx @mastra/mcp generate ./src/mcp/client.ts
+```
+
+The generated file can be absent on the first run because its import is type-only. Generation loads TypeScript modules without typechecking and lists schemas without executing tools. Run your project's typecheck afterward.
+
+Call a discovered tool using its generated arguments. The following assumes the server publishes `get_weather` with a string `location` and numeric `temperature`:
+
+```typescript title="src/mcp/call-weather.ts"
+import { mcp } from './client'
+
+try {
+  const tools = await mcp.listTools()
+  const weather = tools.weather_get_weather
+  if (weather?.execute) {
+    const result = await weather.execute({ location: 'Paris' })
+    if (result && 'temperature' in result && typeof result.temperature === 'number') {
+      console.log(result.temperature)
+    }
+  }
+} finally {
+  await mcp.disconnect()
+}
+```
+
+Tools can be absent, and execution can return a protocol envelope, validation error, or `undefined` alongside structured output. Narrow the result before using it. Missing output schemas produce `unknown`.
+
+Pass multiple explicit client files to generate several outputs. Export clients directly as named or default exports, use different output paths, and give independent clients distinct IDs when their server configurations match. Input and output paths resolve from the command's working directory. Repeated exports of the same client are processed once.
+
+Discovery or conversion failures leave existing files unchanged. File replacement is atomic per file, not across the whole set. Regenerate when server schemas change, using equivalent permissions. Before generation, provide credentials and load any environment files yourself. Importing a client executes its module and transitive imports, so choose files without application startup side effects. Interactive authentication isn't part of the command.
+
+See [type generation reference](/reference/tools/mcp-client#generate-client-types) for export selection, instance caching, schema limitations, and failure handling.
+
 ### Static and runtime tools
 
 Choose how to load tools based on whether the server configuration changes between requests:

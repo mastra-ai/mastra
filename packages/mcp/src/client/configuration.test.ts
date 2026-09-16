@@ -14,6 +14,25 @@ describe('MCPClient tool discovery retries', () => {
     clients.length = 0;
   });
 
+  it('retains existing typegen metadata when explicit cache identities alias', () => {
+    const options = { id: `typegen-cache-${++clientId}`, servers: {}, typegen: { outFile: 'first.ts' } };
+    const original = new MCPClient(options);
+    clients.push(original);
+    const alias = new MCPClient({ ...options, typegen: { outFile: 'ignored.ts' } });
+    expect(alias).toBe(original);
+    expect(alias.typegen).toEqual({ outFile: 'first.ts' });
+    options.typegen.outFile = 'mutated.ts';
+    expect(original.typegen?.outFile).toBe('first.ts');
+    expect(Object.isFrozen(original.typegen)).toBe(true);
+    const independent = new MCPClient({ ...options, id: `typegen-cache-${++clientId}` });
+    clients.push(independent);
+    expect(independent).not.toBe(original);
+  });
+
+  it.each(['', '  ', '\0'])('rejects invalid typegen output paths', outFile => {
+    expect(() => new MCPClient({ id: `typegen-invalid-${++clientId}`, servers: {}, typegen: { outFile } })).toThrow('nonempty file path');
+  });
+
   function createClient() {
     const client = new MCPClient({
       id: `configuration-test-${++clientId}`,
