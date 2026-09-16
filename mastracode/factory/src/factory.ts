@@ -141,6 +141,12 @@ export interface MastraFactoryConfig {
    */
   auth?: IMastraAuthProvider | null;
   /**
+   * Trusted auth-provider user IDs allowed to change deployment-wide thinking
+   * defaults for every tenant. Defaults to none; organization-admin roles do
+   * not grant this authority. Configure only on the server, never from requests.
+   */
+  deploymentOperatorUserIds?: readonly string[];
+  /**
    * REQUIRED. Factory storage backend powering BOTH agent storage (threads,
    * messages, memory, OM — via `getMastraStorage()`) and the app tables
    * (projects/source-control/audit/intake — via the generic ops surface). Pass a
@@ -390,7 +396,7 @@ export class MastraFactory {
     const secretEncryption = this.#config.secretEncryption ?? createPlaintextFactorySecretEncryption();
     // One RouteAuth seam per boot, closed over the resolved provider. Every
     // factory route module receives this handle — no service locator.
-    const routeAuth = createFactoryRouteAuth(auth);
+    const routeAuth = createFactoryRouteAuth(auth, this.#config.deploymentOperatorUserIds);
 
     // Explicit integrations win. Platform credentials fill only missing
     // provider slots so callers can override each integration independently.

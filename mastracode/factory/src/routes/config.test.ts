@@ -1413,7 +1413,11 @@ describe('thinking defaults routes', () => {
 
   function buildApp(
     user: { workosId: string; organizationId?: string } | null,
-    opts: { authEnabled?: boolean; isOrganizationAdmin?: (orgId: string, userId: string) => Promise<boolean> } = {},
+    opts: {
+      authEnabled?: boolean;
+      isOrganizationAdmin?: (orgId: string, userId: string) => Promise<boolean>;
+      isDeploymentOperator?: () => Promise<boolean>;
+    } = {},
   ) {
     const app = new Hono();
     app.use('*', async (c, next) => {
@@ -1423,10 +1427,13 @@ describe('thinking defaults routes', () => {
     mountApiRoutes(
       app as any,
       new ConfigRoutes({
-        auth: fakeRouteAuth({
-          enabled: opts.authEnabled !== false,
-          ...(opts.isOrganizationAdmin ? { isOrganizationAdmin: opts.isOrganizationAdmin } : {}),
-        }),
+        auth: {
+          ...fakeRouteAuth({
+            enabled: opts.authEnabled !== false,
+            ...(opts.isOrganizationAdmin ? { isOrganizationAdmin: opts.isOrganizationAdmin } : {}),
+          }),
+          ...(opts.isDeploymentOperator ? { isDeploymentOperator: opts.isDeploymentOperator } : {}),
+        },
         controller,
         settingsPath,
       }).routes(),
@@ -1460,10 +1467,24 @@ describe('thinking defaults routes', () => {
     });
   });
 
-  it('reports the defaults as read-only when authentication is enabled', async () => {
-    const res = await buildApp(userA).request('/web/config/thinking');
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ editable: false });
+  it('reports editable on GET based on deployment authority rather than tenant admin status', async () => {
+    const local = await buildApp(null, { authEnabled: false }).request('/web/config/thinking');
+    expect((await local.json()).editable).toBe(true);
+
+    const signedOut = await buildApp(null).request('/web/config/thinking');
+    expect((await signedOut.json()).editable).toBe(false);
+
+    const nonAdmin = await buildApp(userA, { isOrganizationAdmin: async () => false }).request('/web/config/thinking');
+    expect((await nonAdmin.json()).editable).toBe(false);
+
+    const admin = await buildApp(userA, { isOrganizationAdmin: async () => true }).request('/web/config/thinking');
+    expect((await admin.json()).editable).toBe(false);
+
+    const operator = await buildApp(userA, {
+      isOrganizationAdmin: async () => false,
+      isDeploymentOperator: async () => true,
+    }).request('/web/config/thinking');
+    expect((await operator.json()).editable).toBe(true);
   });
 
   it('round-trips global and per-mode defaults through the settings file', async () => {
@@ -1495,14 +1516,60 @@ describe('thinking defaults routes', () => {
     expect((await putThinking(app, { modeDefaults: ['high'] })).status).toBe(400);
   });
 
-  it('rejects deployment-scoped writes in tenant mode', async () => {
+  it('rejects deployment-scoped writes without explicit operator authority', async () => {
     const nonAdmin = buildApp(userA, { isOrganizationAdmin: async () => false });
     expect((await putThinking(nonAdmin, { globalDefault: 'high' })).status).toBe(403);
 
-    const signedOut = buildApp(null);
-    expect((await putThinking(signedOut, { globalDefault: 'high' })).status).toBe(403);
+    const signedOut = buildApp(null, { isDeploymentOperator: async () => true });
+    expect((await (await signedOut.request('/web/config/thinking')).json()).editable).toBe(false);
+    expect((await putThinking(signedOut, { globalDefault: 'high' })).status).toBe(401);
 
     const admin = buildApp(userA, { isOrganizationAdmin: async () => true });
     expect((await putThinking(admin, { globalDefault: 'high' })).status).toBe(403);
+  });
+
+  it('prevents an organization admin from changing another organization defaults', async () => {
+    await putThinking(buildApp(null, { authEnabled: false }), {
+      globalDefault: 'low',
+      modeDefaults: { plan: 'high' },
+    });
+    const original = await fs.readFile(settingsPath, 'utf8');
+    const admin = buildApp(userA, { isOrganizationAdmin: async () => true });
+    expect((await putThinking(admin, { globalDefault: 'max', modeDefaults: { plan: 'max' } })).status).toBe(403);
+    expect(await fs.readFile(settingsPath, 'utf8')).toBe(original);
+    const other = buildApp({ workosId: 'user-b', organizationId: 'org2' });
+    expect(await (await other.request('/web/config/thinking')).json()).toMatchObject({
+      globalDefault: 'low',
+      modeDefaults: { plan: 'high' },
+      editable: false,
+    });
+  });
+
+  it('allows an authenticated deployment operator to round-trip and clear defaults without an org-admin role', async () => {
+    const app = buildApp(userA, {
+      isOrganizationAdmin: async () => false,
+      isDeploymentOperator: async () => true,
+    });
+    expect((await putThinking(app, { globalDefault: 'high', modeDefaults: { plan: 'max' } })).status).toBe(200);
+    expect(await (await app.request('/web/config/thinking')).json()).toMatchObject({
+      globalDefault: 'high',
+      modeDefaults: { plan: 'max' },
+      editable: true,
+    });
+    expect((await putThinking(app, { modeDefaults: { plan: null } })).status).toBe(200);
+    expect(await (await app.request('/web/config/thinking')).json()).toMatchObject({ modeDefaults: {} });
+    expect((await putThinking(app, { globalDefault: 'ultra' })).status).toBe(400);
+  });
+
+  it.each(['denied', 'failed'] as const)('fails closed when operator authorization is %s', async result => {
+    const app = buildApp(userA, {
+      isDeploymentOperator: async () => {
+        if (result === 'failed') throw new Error('authorization unavailable');
+        return false;
+      },
+    });
+    expect((await (await app.request('/web/config/thinking')).json()).editable).toBe(false);
+    expect((await putThinking(app, { globalDefault: 'max' })).status).toBe(403);
+    await expect(fs.readFile(settingsPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });

@@ -352,12 +352,21 @@ export async function isOrganizationAdmin(
  * by `MastraFactory.prepare()` and handed to factory route modules at
  * construction — they never import the factory auth module directly.
  */
-export function createFactoryRouteAuth(provider: IMastraAuthProvider | undefined): RouteAuth {
+export function createFactoryRouteAuth(
+  provider: IMastraAuthProvider | undefined,
+  deploymentOperatorUserIds: readonly string[] = [],
+): RouteAuth {
+  const operators = new Set(deploymentOperatorUserIds);
   return {
     enabled: () => provider !== undefined,
     ensureUser: (c: Context) => ensureFactoryAuthUser(provider, c),
     tenant: (c: Context) => factoryAuthTenant(c),
     isOrganizationAdmin: (c: Context, organizationId: string) => isOrganizationAdmin(provider, c, organizationId),
+    isDeploymentOperator: async (c: Context) => {
+      if (!provider) return false;
+      const userId = getFactoryAuthUserId(await ensureFactoryAuthUser(provider, c));
+      return !!userId && operators.has(userId);
+    },
   };
 }
 

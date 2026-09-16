@@ -1,13 +1,14 @@
 import type * as authStudioModule from '@mastra/auth-studio';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { RequestContext } from '@mastra/core/request-context';
-import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
+import type { ApiRoute, AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
 
 import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
+import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestBoard } from './boards/test-utils.js';
 import type { VersionControl } from './capabilities/version-control.js';
@@ -16,6 +17,7 @@ import type { FactoryIntegration, IntegrationContext } from './integrations/base
 import type * as projectRoutesModule from './routes/projects.js';
 import type * as surfaceModule from './routes/surface.js';
 import type * as tenantCredentialsModule from './routes/tenant-credentials.js';
+import { mountApiRoutes } from './routes/test-utils.js';
 import type * as dispatcherModule from './rules/dispatcher.js';
 import type * as terminalCleanupModule from './rules/terminal-cleanup.js';
 import type * as transitionServiceModule from './rules/transition-service.js';
@@ -562,6 +564,22 @@ describe('MastraFactory.prepare', () => {
     const auth = fakeProvider({ init: vi.fn(async () => Promise.reject(new Error('provider misconfigured'))) });
     const factory = new MastraFactory({ secretEncryption, storage: fakeStorage(), auth });
     await expect(factory.prepare()).rejects.toThrow('provider misconfigured');
+  });
+
+  it.each([undefined, [], ['operator']])('wires deployment operator allowlist %j into thinking routes', async ids => {
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      auth: fakeProvider({
+        authenticateToken: async () => ({ id: 'operator', organizationId: 'org1' }),
+      }),
+      deploymentOperatorUserIds: ids,
+    });
+    const buildApiRoutes = config.buildApiRoutes as (deps: object) => ApiRoute[];
+    const app = new Hono();
+    mountApiRoutes(app, buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }));
+    const res = await app.request('/web/config/thinking', { headers: { Authorization: 'Bearer test' } });
+    expect(res.status).toBe(200);
+    expect((await res.json()).editable).toBe(ids?.includes('operator') ?? false);
   });
 
   it('folds the provider /auth/* routes into buildApiRoutes when auth is configured', async () => {

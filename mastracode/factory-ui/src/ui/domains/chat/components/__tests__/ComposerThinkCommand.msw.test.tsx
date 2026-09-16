@@ -40,6 +40,7 @@ function useThinkingHandlers({
             globalDefault: 'low',
             modeDefaults: { build: 'medium' },
             modes: ['build'],
+            editable: true,
           }),
     ),
     http.put(`${SESSION_API}/state`, async ({ request }) => {
