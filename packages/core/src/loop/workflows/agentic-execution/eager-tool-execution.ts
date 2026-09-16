@@ -75,7 +75,10 @@ export class EagerToolExecutionCoordinator {
           .then(resolve, reject)
           .finally(() => {
             this.#running--;
-            this.#controllers.delete(toolCallId);
+            // Identity-checked: a discarded attempt and its retry can carry the same
+            // toolCallId, so the late settlement of the old one must not evict the
+            // controller belonging to the live one.
+            if (this.#controllers.get(toolCallId) === controller) this.#controllers.delete(toolCallId);
             this.#queued.shift()?.run();
           });
       };
@@ -104,10 +107,16 @@ export class EagerToolExecutionCoordinator {
   }
 
   /**
-   * Stop dispatching, and drop everything that has not started. Executions already
-   * running are left to settle — their abort signal is the cancellation mechanism,
-   * and the foreach still adopts whatever they produce so a real side effect is
-   * never silently discarded.
+   * Stop dispatching and drop everything that has not started.
+   *
+   * Without `cancelRunning`, executions already in flight are left alone: the step that
+   * follows an unsafe *finish* still runs its foreach, so their results are adopted
+   * exactly as the default pipeline would have produced them.
+   *
+   * With `cancelRunning`, the surrounding model attempt is being thrown away entirely.
+   * Those executions are aborted *and* forgotten, so nothing downstream can adopt work
+   * belonging to an attempt that no longer exists — including a retry that happens to
+   * reuse the same toolCallId, which must execute fresh.
    */
   stop({ permanent = false, cancelRunning = false }: { permanent?: boolean; cancelRunning?: boolean } = {}) {
     this.#stopped = true;
@@ -122,7 +131,11 @@ export class EagerToolExecutionCoordinator {
     // pipeline never runs those calls, so neither may we. After an unsafe *finish* the
     // foreach still runs and adopts, so running work is left alone there.
     if (cancelRunning) {
-      for (const controller of this.#controllers.values()) controller.abort();
+      for (const [toolCallId, controller] of this.#controllers) {
+        this.#executions.delete(toolCallId);
+        controller.abort();
+      }
+      this.#controllers.clear();
     }
   }
 
@@ -133,8 +146,17 @@ export class EagerToolExecutionCoordinator {
    * here so the map cannot grow across a long loop.
    */
   beginTurn() {
-    if (!this.#stoppedPermanently) this.#stopped = false;
+    if (this.#stoppedPermanently) return;
+    this.#stopped = false;
+    // Anything the previous turn's foreach never adopted is unreachable now, so drop it
+    // rather than let the map grow across a long loop. Entries belonging to a cancelled
+    // attempt are already gone; these are merely unclaimed.
     this.#executions.clear();
+  }
+
+  /** Ids currently held for adoption. Exposed for assertions in tests. */
+  get pendingAdoptions() {
+    return this.#executions.size;
   }
 }
 

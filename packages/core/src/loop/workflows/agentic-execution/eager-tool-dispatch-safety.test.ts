@@ -635,12 +635,17 @@ describe('eager tool dispatch — discarded model attempt', () => {
               modelId: 'recovering-model',
               timestamp: new Date(0),
             });
-            controller.enqueue({ type: 'text-start', id: 'text-1' });
-            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'recovered' });
-            controller.enqueue({ type: 'text-end', id: 'text-1' });
+            // Deliberately reuses the discarded attempt's toolCallId. Nothing may adopt
+            // the cancelled execution's promise for it — this call has to run fresh.
+            controller.enqueue({
+              type: 'tool-call',
+              toolCallId: 'call-discarded',
+              toolName: 'tool-a',
+              input: JSON.stringify({ value: 'retried' }),
+            });
             controller.enqueue({
               type: 'finish',
-              finishReason: 'stop',
+              finishReason: 'tool-calls',
               usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
             });
             controller.close();
@@ -666,8 +671,16 @@ describe('eager tool dispatch — discarded model attempt', () => {
           execute: async ({ value }, options) => {
             record(`execute-${value}`);
             const signal = (options as { abortSignal?: AbortSignal } | undefined)?.abortSignal;
-            await new Promise(resolve => setTimeout(resolve, 60));
-            if (signal?.aborted) record(`aborted-${value}`);
+            // Event-driven rather than sleep-then-check, so the assertion turns on the
+            // abort actually arriving and not on how fast CI is.
+            if (signal) {
+              await new Promise<void>(resolve => {
+                if (signal.aborted) return resolve();
+                signal.addEventListener('abort', () => resolve(), { once: true });
+                setTimeout(resolve, 500);
+              });
+              if (signal.aborted) record(`aborted-${value}`);
+            }
             return { value };
           },
         }),
@@ -691,15 +704,43 @@ describe('eager tool dispatch — discarded model attempt', () => {
     const withoutEager = await runFallbackScenario(false);
     const withEager = await runFallbackScenario(true);
 
-    // The normal pipeline never runs the discarded attempt's call at all.
-    expect(withoutEager).toEqual([]);
-    // Eager dispatch had already started it, so the guarantee is cancellation, not
-    // absence: the tool is told to stop the moment the attempt is thrown away.
-    expect(withEager).toEqual(['execute-discarded', 'aborted-discarded']);
+    // The normal pipeline never runs the discarded attempt's call at all — it only runs
+    // the surviving attempt's call, which reuses the same toolCallId.
+    expect(withoutEager).toEqual(['execute-retried']);
+
+    // Eager dispatch had already started the discarded one, so the guarantee is
+    // cancellation rather than absence: it is told to stop the moment its attempt is
+    // thrown away. Crucially the surviving call still executes for real instead of
+    // adopting the cancelled promise that shares its id.
+    expect(withEager).toEqual(['execute-discarded', 'aborted-discarded', 'execute-retried']);
+    expect(withEager).not.toContain('aborted-retried');
   });
 });
 
 describe('EagerToolExecutionCoordinator', () => {
+  it('forgets cancelled work so a reused toolCallId cannot adopt a discarded attempt', async () => {
+    const coordinator = new EagerToolExecutionCoordinator(() => 4);
+    let released!: () => void;
+    const held = new Promise<void>(resolve => {
+      released = resolve;
+    });
+
+    coordinator.start('call-1', async () => {
+      await held;
+      return { result: 'from the discarded attempt' } as never;
+    });
+    expect(coordinator.pendingAdoptions).toBe(1);
+
+    coordinator.stop({ cancelRunning: true });
+
+    // Aborted *and* forgotten: the foreach must execute this call itself rather than
+    // adopt work belonging to an attempt that no longer exists.
+    expect(coordinator.pendingAdoptions).toBe(0);
+    expect(coordinator.take('call-1')).toBeUndefined();
+
+    released();
+  });
+
   it('never starts queued work after stop(), and marks it as not executed', async () => {
     const coordinator = new EagerToolExecutionCoordinator(() => 1);
     const executed: string[] = [];
