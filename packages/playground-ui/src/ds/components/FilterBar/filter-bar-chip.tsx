@@ -13,9 +13,12 @@ import type {
   FilterBarItem,
   FilterBarOperator,
   FilterBarOption,
+  FilterBarScalar,
   FilterBarSegment,
+  FilterBarValue,
 } from './types';
 import { useValueStep } from './use-value-step';
+import { getFieldSuggestions } from './use-value-suggestions';
 import { Button } from '@/ds/components/Button/Button';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
@@ -34,9 +37,10 @@ const editableSegmentClass = cn(
   'focus-visible:bg-neutral6/10 focus-visible:text-neutral6 data-[popup-open]:bg-neutral6/10 data-[popup-open]:text-neutral6',
 );
 
-export const formatValue = (value: string | string[], field: FilterBarField | undefined): string => {
-  const options = Array.isArray(field?.suggestions) ? field.suggestions : undefined;
-  const label = (v: string) => options?.find(o => o.value === v)?.label ?? v;
+export const formatValue = (value: FilterBarValue, field: FilterBarField | undefined): string => {
+  const suggestions = getFieldSuggestions(field);
+  const options = Array.isArray(suggestions) ? suggestions : undefined;
+  const label = (v: FilterBarScalar) => options?.find(o => o.value === String(v))?.label ?? String(v);
   return Array.isArray(value) ? value.map(label).join(', ') : label(value);
 };
 
@@ -391,7 +395,7 @@ function ValueEditor() {
 
   const close = useCallback(() => chip.setOpenSegment(null), [chip]);
   const onCommit = useCallback(
-    (value: string | string[]) => {
+    (value: FilterBarValue) => {
       ctx.updateItem(chip.item.id, { value });
       close();
     },
@@ -421,7 +425,9 @@ function ValueEditor() {
       onQueryChange={setQuery}
       onSelect={step.handleSelect}
       // Prefill free-text values only; with suggestions, the current value is shown as checked instead.
-      onOpen={() => setQuery(typeof chip.item.value === 'string' && !chip.field?.suggestions ? chip.item.value : '')}
+      onOpen={() =>
+        setQuery(!Array.isArray(chip.item.value) && !chip.field?.suggestions ? String(chip.item.value) : '')
+      }
     >
       <ValueInput step={step} onCancel={close} />
     </SegmentCombobox>
@@ -444,7 +450,7 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
           aria-multiselectable={step.isMany || undefined}
           getKey={o => o.value}
           renderOption={o => o.label ?? o.value}
-          isSelected={o => (step.isMany ? step.selected.includes(o.value) : chip.item.value === o.value)}
+          isSelected={o => (step.isMany ? step.selected.includes(o.value) : String(chip.item.value) === o.value)}
           isLoading={step.isLoading}
           error={step.error}
           emptyText={step.allowFreeText ? 'No suggestions — press Enter to use your text.' : 'No matching value.'}

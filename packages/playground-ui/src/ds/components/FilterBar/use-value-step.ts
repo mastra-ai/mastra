@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import type { FilterBarField, FilterBarOperator, FilterBarOption } from './types';
+import type { FilterBarField, FilterBarOperator, FilterBarOption, FilterBarValue } from './types';
+import { parseFieldValue } from './types';
 import { useValueSuggestions } from './use-value-suggestions';
 
 export type UseValueStepOptions = {
@@ -8,9 +9,11 @@ export type UseValueStepOptions = {
   operator: FilterBarOperator | undefined;
   query: string;
   enabled: boolean;
-  initialValue?: string | string[];
-  onCommit: (value: string | string[]) => void;
+  initialValue?: FilterBarValue;
+  onCommit: (value: FilterBarValue) => void;
 };
+
+const toStrings = (value: FilterBarValue | undefined): string[] => (Array.isArray(value) ? value.map(String) : []);
 
 /**
  * Shared value-editing logic for the typeahead value step and the chip value
@@ -21,53 +24,55 @@ export type UseValueStepOptions = {
  */
 export function useValueStep({ field, operator, query, enabled, initialValue, onCommit }: UseValueStepOptions) {
   const isMany = operator?.arity === 'many';
-  const [selected, setSelected] = useState<string[]>(() => (Array.isArray(initialValue) ? initialValue : []));
+  // Selection is tracked as option strings; values are parsed to the field type on commit.
+  const [selected, setSelected] = useState<string[]>(() => toStrings(initialValue));
   const initialValueRef = useRef(initialValue);
   initialValueRef.current = initialValue;
 
   // The editor stays mounted across opens: re-seed from the current value each time it opens.
   useEffect(() => {
-    const initial = initialValueRef.current;
-    setSelected(enabled && Array.isArray(initial) ? initial : []);
+    setSelected(enabled ? toStrings(initialValueRef.current) : []);
   }, [enabled]);
 
   const suggestions = useValueSuggestions({ field, operatorId: operator?.id ?? '', query, enabled });
-  const allowFreeText = !field?.strict && field?.type !== 'boolean';
-  const isNumber = field?.type === 'number';
+  const type = field?.type;
+  const allowFreeText = !field?.strict && type !== 'boolean';
 
   const toggle = useCallback((value: string) => {
     setSelected(current => (current.includes(value) ? current.filter(v => v !== value) : [...current, value]));
   }, []);
 
+  const commit = useCallback(
+    (values: string | string[]) =>
+      onCommit(Array.isArray(values) ? values.map(v => parseFieldValue(type, v)) : parseFieldValue(type, values)),
+    [onCommit, type],
+  );
+
   const handleSelect = useCallback(
     (option: FilterBarOption) => {
       if (isMany) toggle(option.value);
-      else onCommit(option.value);
+      else commit(option.value);
     },
-    [isMany, toggle, onCommit],
+    [isMany, toggle, commit],
   );
 
   const commitSelection = useCallback(() => {
     if (selected.length === 0) return false;
-    onCommit(selected);
+    commit(selected);
     return true;
-  }, [selected, onCommit]);
+  }, [selected, commit]);
 
   const canCommitFreeText = useCallback(
-    (text: string) => allowFreeText && text.length > 0 && (!isNumber || Number.isFinite(Number(text))),
-    [allowFreeText, isNumber],
+    (text: string) => allowFreeText && text.length > 0 && (type !== 'number' || Number.isFinite(Number(text))),
+    [allowFreeText, type],
   );
 
   const commitFreeText = useCallback(() => {
     const text = query.trim();
     if (!canCommitFreeText(text)) return false;
-    if (isMany) {
-      onCommit(selected.includes(text) ? selected : [...selected, text]);
-    } else {
-      onCommit(text);
-    }
+    commit(isMany ? (selected.includes(text) ? selected : [...selected, text]) : text);
     return true;
-  }, [canCommitFreeText, query, isMany, selected, onCommit]);
+  }, [canCommitFreeText, query, isMany, selected, commit]);
 
   /**
    * Enter handling that Base UI does not cover: Ctrl/Meta+Enter commits a

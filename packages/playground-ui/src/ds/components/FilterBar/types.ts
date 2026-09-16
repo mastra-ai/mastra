@@ -31,6 +31,17 @@ export type FilterBarSuggestionsResolver = (
  */
 export type FilterBarFieldType = 'text' | 'number' | 'boolean';
 
+/** A committed scalar value, typed according to the field's `type`. */
+export type FilterBarScalar = string | number | boolean;
+export type FilterBarValue = FilterBarScalar | FilterBarScalar[];
+
+/** Parses raw input text into the field's value type. Suggestion values and free text both go through this. */
+export const parseFieldValue = (type: FilterBarFieldType | undefined, text: string): FilterBarScalar => {
+  if (type === 'number') return Number(text);
+  if (type === 'boolean') return text.toLowerCase() === 'true';
+  return text;
+};
+
 export type FilterBarField = {
   id: string;
   label: string;
@@ -54,7 +65,7 @@ export type FilterBarItem = {
   id: string;
   fieldId: string;
   operatorId: string;
-  value: string | string[];
+  value: FilterBarValue;
 };
 
 export type FilterBarSegment = 'field' | 'operator' | 'value' | 'remove';

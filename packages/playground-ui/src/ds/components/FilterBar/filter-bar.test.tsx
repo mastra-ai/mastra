@@ -166,7 +166,8 @@ describe('FilterBar', () => {
       expect(apply.disabled).toBe(false);
       key('Enter');
       const [items] = onChange.mock.calls[0] as [FilterBarItem[]];
-      expect(items[0]).toMatchObject({ fieldId: 'duration', operatorId: 'gt', value: '1500' });
+      expect(items[0]).toMatchObject({ fieldId: 'duration', operatorId: 'gt', value: 1500 });
+      expect(getChips()[0]?.textContent).toContain('1500');
     });
 
     it('offers strict True/False suggestions on a boolean field', async () => {
@@ -189,7 +190,8 @@ describe('FilterBar', () => {
       await screen.findByRole('option', { name: 'False' });
       key('Enter');
       const [items] = onChange.mock.calls[0] as [FilterBarItem[]];
-      expect(items[0]).toMatchObject({ fieldId: 'hasError', operatorId: 'is', value: 'false' });
+      expect(items[0]).toMatchObject({ fieldId: 'hasError', operatorId: 'is', value: false });
+      expect(getChips()[0]?.textContent).toContain('False');
     });
 
     it('moves the highlight with the arrow keys and mirrors it in aria-activedescendant', async () => {

@@ -9,6 +9,10 @@ const BOOLEAN_OPTIONS: FilterBarOption[] = [
   { value: 'false', label: 'False' },
 ];
 
+/** The field's suggestions, defaulting to True/False for boolean fields. */
+export const getFieldSuggestions = (field: FilterBarField | undefined) =>
+  field?.suggestions ?? (field?.type === 'boolean' ? BOOLEAN_OPTIONS : undefined);
+
 export type UseValueSuggestionsOptions = {
   field: FilterBarField | undefined;
   operatorId: string;
@@ -36,7 +40,7 @@ export function useValueSuggestions({
   query,
   enabled,
 }: UseValueSuggestionsOptions): UseValueSuggestionsResult {
-  const suggestions = field?.suggestions ?? (field?.type === 'boolean' ? BOOLEAN_OPTIONS : undefined);
+  const suggestions = getFieldSuggestions(field);
   const resolver = typeof suggestions === 'function' ? suggestions : undefined;
   const staticOptions = Array.isArray(suggestions) ? suggestions : undefined;
 

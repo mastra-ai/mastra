@@ -5,7 +5,7 @@ import { useFilterBarContext } from './filter-bar-context';
 import { FilterBarDraftChip } from './filter-bar-draft-chip';
 import { FilterBarOptionList } from './filter-bar-option-list';
 import { matchesQueryFilter } from './match-query';
-import type { FilterBarField, FilterBarOperator, FilterBarOption } from './types';
+import type { FilterBarField, FilterBarOperator, FilterBarOption, FilterBarValue } from './types';
 import { useValueStep } from './use-value-step';
 import { Button } from '@/ds/components/Button/Button';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
@@ -68,7 +68,7 @@ export function FilterBarInput({
   }, [reset]);
 
   const commit = useCallback(
-    (fieldId: string, operatorId: string, value: string | string[]) => {
+    (fieldId: string, operatorId: string, value: FilterBarValue) => {
       ctx.addItem({ fieldId, operatorId, value });
       reset();
       inputRef.current?.focus();

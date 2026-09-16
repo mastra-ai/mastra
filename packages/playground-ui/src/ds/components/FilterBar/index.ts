@@ -16,10 +16,13 @@ export { DEFAULT_FILTER_OPERATORS } from './default-operators';
 export type {
   FilterBarArity,
   FilterBarField,
+  FilterBarFieldType,
   FilterBarItem,
   FilterBarOperator,
   FilterBarOption,
+  FilterBarScalar,
   FilterBarSegment,
   FilterBarSuggestionsContext,
   FilterBarSuggestionsResolver,
+  FilterBarValue,
 } from './types';
