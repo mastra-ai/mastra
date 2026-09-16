@@ -38,7 +38,7 @@ afterEach(async () => {
 describe('validateOutput stubbedExternals', () => {
   it('passes normalized and user-configured externals to the validation stub list', async () => {
     await mkdir(tempRoot, { recursive: true });
-    const tempDir = await mkdtemp(join(tempRoot, 'mastra-user-externals-'));
+    const tempDir = await mkdtemp(join(tempRoot, 'mastra-explicit-externals-'));
     tempDirs.push(tempDir);
 
     const entryFile = join(tempDir, 'index.ts');

@@ -554,17 +554,17 @@ export const environmentRoute = registerApiRoute('/environment', {
     });
 
     // This stays in the monorepo E2E suite because it builds the generated fixture and validates its output manifest.
-    it('should keep default and user-configured externals in the output manifest', async () => {
+    it('should keep global and user-configured externals in the output manifest', async () => {
       const packageJsonPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'package.json');
       const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
 
       expect(packageJson.dependencies).toEqual(
         expect.objectContaining({
-          '@mastra/core': expect.any(String),
           bcrypt: expect.any(String),
           typescript: expect.any(String),
         }),
       );
+      expect(packageJson.dependencies?.['date-fns']).toBeUndefined();
     });
 
     it('should preserve workspace externals as runtime dependencies instead of bundling them', async () => {
@@ -577,9 +577,8 @@ export const environmentRoute = registerApiRoute('/environment', {
       ).join('\n');
       const packageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
 
-      expect(packageJson.dependencies?.['@inner/inner-tools']).toBeTruthy();
-      expect(output).not.toContain('generate-password');
-      expect(output).not.toContain('Password hashing utility from nested path');
+      expect(packageJson.dependencies?.['@inner/subpath-only']).toBeTruthy();
+      expect(output).toMatch(/from ["']@inner\/subpath-only["']/);
     });
 
     it('should emit a worker runtime entry with a readiness endpoint', async () => {

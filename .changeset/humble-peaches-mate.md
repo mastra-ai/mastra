@@ -1,6 +1,5 @@
 ---
-'@mastra/deployer': patch
 'mastra': patch
 ---
 
-Fixed a bug where workspace packages listed in `bundler.externals` were still bundled into the build output. If you explicitly listed a workspace dependency as an external, it was converted to a `dynamicPackage` and compiled inline instead of remaining an external runtime dependency. Workspace packages in `bundler.externals` are now preserved as true externals.
+Fixed `mastra build` so an explicit `bundler.externals` array is respected as the complete custom external list, in addition to Mastra's global externals. Workspace packages listed in the array now remain external runtime dependencies instead of being bundled.

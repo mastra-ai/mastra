@@ -637,16 +637,12 @@ export abstract class Bundler extends MastraBundler {
     const additionalEntries = this.getAdditionalEntries();
 
     const bundlerOptions = await this.getUserBundlerOptions(mastraEntryFile, outputDirectory);
-    // BuildBundler (CLI) may stash the user's original externals array here when
-    // converting `externals: ['@org/pkg']` → `externals: true` + `dynamicPackages`.
-    const userExternals: string[] | undefined = (bundlerOptions as { userExternals?: string[] }).userExternals;
     const internalBundlerOptions: BundlerOptions = {
       enableSourcemap: !!bundlerOptions.sourcemap,
       enableMinify: !!bundlerOptions.minify,
       externals: bundlerOptions.externals ?? [],
       enableEsmShim,
       dynamicPackages: bundlerOptions.dynamicPackages,
-      userExternals,
     };
 
     let analyzedBundleInfo;
