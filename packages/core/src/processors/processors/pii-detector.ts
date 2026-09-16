@@ -1089,24 +1089,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
 
       if (hasNewPII) {
         await this.emitDetection(combined, regexResult, true);
-        // Regex caught pattern-based PII — apply strategy to original chunk
-        // (redaction is applied to `combined` then we extract the new portion)
-        const combinedRedacted = regexResult.redacted_content;
-        let effectiveResult: ChunkType | null;
-        if (this.strategy === 'redact' && combinedRedacted) {
-          // Extract only the portion corresponding to the new chunk
-          const redactedNew = combinedRedacted.slice(tail.length);
-          const redactedPart: ChunkType & { type: 'text-delta' } = {
-            ...textPart,
-            payload: { ...textPart.payload, text: redactedNew },
-          };
-          console.info(
-            `[PIIDetector] Redacted PII in streaming content: ${this.getDetectedTypes(regexResult).join(', ')}`,
-          );
-          effectiveResult = redactedPart;
-        } else {
-          effectiveResult = this.applyStreamStrategy(textPart, regexResult, abort);
-        }
+        const effectiveResult = this.applyStreamStrategy(textPart, regexResult, abort);
         // If block/filter returned null or threw, no need to buffer
         if (!effectiveResult) return null;
         // For warn/redact, the chunk passes through (possibly redacted)
