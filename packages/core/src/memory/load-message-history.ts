@@ -33,17 +33,25 @@ export type LoadMessageHistoryResult = {
   overflow: MastraDBMessage[];
 };
 
-function getToolCallIds(message: MastraDBMessage): string[] {
-  const ids = new Set<string>();
+function getToolCallReferences(message: MastraDBMessage): { id: string; state?: string }[] {
+  const references = new Map<string, { id: string; state?: string }>();
   for (const part of message.content.parts) {
     if (part.type === 'tool-invocation' && part.toolInvocation?.toolCallId) {
-      ids.add(part.toolInvocation.toolCallId);
+      const reference = { id: part.toolInvocation.toolCallId, state: part.toolInvocation.state };
+      references.set(`${reference.id}:${reference.state}`, reference);
     }
   }
   for (const invocation of message.content.toolInvocations ?? []) {
-    if (invocation.toolCallId) ids.add(invocation.toolCallId);
+    if (invocation.toolCallId) {
+      const reference = { id: invocation.toolCallId, state: invocation.state };
+      references.set(`${reference.id}:${reference.state}`, reference);
+    }
   }
-  return [...ids];
+  return [...references.values()];
+}
+
+function getToolCallIds(message: MastraDBMessage): string[] {
+  return [...new Set(getToolCallReferences(message).map(reference => reference.id))];
 }
 
 export function groupLinkedToolMessages(messages: MastraDBMessage[]): MastraDBMessage[][] {
@@ -140,8 +148,18 @@ async function partitionMessages(
     .reverse();
   const cutoff = messagesDescending.find(message => !retainedIds.has(message.id));
   const overflowReason = reachedTokenLimit ? 'tokens' : reachedMessageLimit ? 'messages' : undefined;
-  const hasPotentiallyIncompleteLinkedGroup = countWindowGroups.some(
-    group => group.length === 1 && getToolCallIds(group[0]!).length > 0,
+  const loadedToolCallIds = new Set(
+    messagesDescending
+      .flatMap(getToolCallReferences)
+      .filter(reference => reference.state !== 'result')
+      .map(reference => reference.id),
+  );
+  const hasPotentiallyIncompleteLinkedGroup = countWindowGroups.some(group =>
+    group.some(message =>
+      getToolCallReferences(message).some(
+        reference => reference.state === 'result' && !loadedToolCallIds.has(reference.id),
+      ),
+    ),
   );
   return { messages, overflow, cutoff, overflowReason, hasPotentiallyIncompleteLinkedGroup };
 }
