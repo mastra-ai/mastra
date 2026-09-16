@@ -1,7 +1,9 @@
+import type { ToolPartFields } from '@mastra/playground-ui/domains/chat/messages/renderers/tool-part';
+import { isRecord } from '@mastra/playground-ui/domains/chat/messages/signal-data';
+import { isSettledState } from '@mastra/playground-ui/domains/chat/tools/tool-card-kind';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
-import { isSettledState } from './tool-card-kind';
 import { useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
 import {
   isBrowserTool,
@@ -9,8 +11,6 @@ import {
   useBrowserToolCallsSafe,
 } from '@/domains/agents/context/browser-tool-calls-context';
 import type { BrowserSessionProbe } from '@/domains/agents/hooks/use-browser-session-probe';
-import type { ToolPartFields } from '@/lib/ai-ui/messages/renderers/tool-part';
-import { isRecord } from '@/lib/ai-ui/messages/signal-data';
 
 export interface ToolCallEffectsProps extends ToolPartFields {
   readOnly?: boolean;

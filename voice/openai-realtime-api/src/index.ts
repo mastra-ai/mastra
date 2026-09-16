@@ -120,6 +120,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
   private tools?: TTools;
   private debug: boolean;
   private queue: unknown[] = [];
+  private sessionReady = false;
   private transcriber: Realtime.AudioTranscriptionModel;
   private requestContext?: RequestContext;
   private connectionAbort?: AbortController;
@@ -459,6 +460,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
 
     const ws = this.ws;
     this.state = 'close';
+    this.sessionReady = false;
     this.client.removeAllListeners();
     const controller = new AbortController();
     this.connectionAbort = controller;
@@ -475,6 +477,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       this.connectionAbort = undefined;
     }
 
+    this.sessionReady = true;
     const openaiTools = transformTools(this.tools);
     this.updateConfig({
       type: 'realtime',
@@ -570,9 +573,12 @@ export class OpenAIRealtimeVoice extends MastraVoice {
 
   /**
    * Registers an event listener for voice events.
-   * Available events: 'speaking', 'writing, 'error'
-   * Can listen to OpenAI Realtime events by prefixing with 'openAIRealtime:'
-   * Such as 'openAIRealtime:conversation.item.completed', 'openAIRealtime:conversation.updated', etc.
+   * Voice events include 'speaking', 'writing', and 'error'.
+   * Supported native input events use their unprefixed OpenAI names:
+   * 'input_audio_buffer.speech_started', 'input_audio_buffer.speech_stopped',
+   * and 'conversation.item.input_audio_transcription.completed'.
+   * These native events deliver the complete received payload, including transcription usage when present.
+   * Every server event is also emitted as 'openAIRealtime:<event.type>', and the socket emits 'open' and 'close'.
    *
    * @param event - Name of the event to listen for
    * @param callback - Function to call when the event occurs
@@ -651,10 +657,20 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     ws.on('error', error => {
       if (this.ws === ws) this.emit('error', error);
     });
+    ws.on('open', () => {
+      if (this.ws === ws) this.emit('open');
+    });
+    ws.on('close', (code, reason) => {
+      if (this.ws !== ws) return;
+      this.state = 'close';
+      this.sessionReady = false;
+      this.emit('close', { code, reason: reason.toString() });
+    });
     ws.on('message', message => {
       if (this.ws !== ws) return;
       const data = JSON.parse(message.toString());
       this.client.emit(data.type, data);
+      this.emit(`openAIRealtime:${data.type}`, data);
 
       if (this.debug) {
         const { delta, ...fields } = data;
@@ -665,6 +681,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     this.client.on('session.created', ev => {
       this.emit('session.created', ev);
 
+      this.sessionReady = true;
       const queue = this.queue.splice(0, this.queue.length);
       for (const ev of queue) {
         this.ws?.send(JSON.stringify(ev));
@@ -672,6 +689,12 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     });
     this.client.on('session.updated', ev => {
       this.emit('session.updated', ev);
+    });
+    this.client.on('input_audio_buffer.speech_started', ev => {
+      this.emit('input_audio_buffer.speech_started', ev);
+    });
+    this.client.on('input_audio_buffer.speech_stopped', ev => {
+      this.emit('input_audio_buffer.speech_stopped', ev);
     });
     this.client.on('response.created', ev => {
       this.emit('response.created', ev);
@@ -688,6 +711,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       this.emit('writing', { text: ev.delta, response_id: ev.item_id, role: 'user' });
     });
     this.client.on('conversation.item.input_audio_transcription.completed', ev => {
+      this.emit('conversation.item.input_audio_transcription.completed', ev);
       if (!userTranscriptionDeltaItems.has(ev.item_id) && ev.transcript) {
         this.emit('writing', { text: ev.transcript, response_id: ev.item_id, role: 'user' });
       }
@@ -744,7 +768,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
   private async handleFunctionCalls(ev: any) {
     let handledFunctionCall = false;
     for (const output of ev.response?.output ?? []) {
-      if (output.type === 'function_call') {
+      if (output.type === 'function_call' && Object.hasOwn(this.tools ?? {}, output.name)) {
         handledFunctionCall = true;
         await this.handleFunctionCall(output);
       }
@@ -820,14 +844,28 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     return btoa(binary);
   }
 
-  private sendEvent(type: string, data: any) {
-    if (!this.ws || this.ws.readyState !== this.ws.OPEN) {
-      this.queue.push({ type: type, ...data });
+  /**
+   * Sends a raw client event to the OpenAI Realtime session.
+   * Events sent before the session is created are queued and flushed once it is.
+   *
+   * @param type - OpenAI Realtime client event type, such as 'conversation.item.create'
+   * @param data - Event payload merged alongside the type
+   *
+   * @example
+   * ```typescript
+   * voice.sendEvent('conversation.item.create', {
+   *   item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Hello' }] },
+   * });
+   * ```
+   */
+  sendEvent(type: string, data: Record<string, unknown> = {}) {
+    if (!this.sessionReady || !this.ws || this.ws.readyState !== this.ws.OPEN) {
+      this.queue.push({ ...data, type });
     } else {
       this.ws?.send(
         JSON.stringify({
-          type: type,
           ...data,
+          type,
         }),
       );
     }

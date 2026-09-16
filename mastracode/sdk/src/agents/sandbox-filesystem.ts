@@ -19,15 +19,27 @@ import type {
   FileContent,
   FileEntry,
   FileStat,
+  FilesystemGrepMatch,
+  FilesystemGrepOptions,
+  FilesystemGrepResult,
   FilesystemInfo,
   ListOptions,
   ProviderStatus,
   ReadOptions,
   RemoveOptions,
+  WalkEntry,
+  WalkOptions,
   WorkspaceFilesystem,
   WriteOptions,
 } from '@mastra/core/workspace';
-import { FileExistsError, FileNotFoundError, IsDirectoryError } from '@mastra/core/workspace';
+import {
+  DirectoryNotFoundError,
+  FileExistsError,
+  FileNotFoundError,
+  IsDirectoryError,
+  NotDirectoryError,
+  UnsupportedGrepPatternError,
+} from '@mastra/core/workspace';
 
 /**
  * Sentinel exit codes used by guard clauses that run before the real command,
@@ -36,6 +48,7 @@ import { FileExistsError, FileNotFoundError, IsDirectoryError } from '@mastra/co
 const EXIT_NOT_FOUND = 20;
 const EXIT_IS_DIRECTORY = 21;
 const EXIT_EXISTS = 22;
+const EXIT_NOT_DIRECTORY = 23;
 
 /** Minimal command result shape we depend on. */
 export interface SandboxCommandResult {
@@ -477,6 +490,261 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     if (!extension) return true;
     const exts = Array.isArray(extension) ? extension : [extension];
     return exts.some(ext => name.endsWith(ext));
+  }
+
+  // ── Native walk / grep capabilities ────────────────────────────────────
+
+  /**
+   * Walk the tree in a single sandbox command instead of one readdir round
+   * trip per directory. Uses `find` with a portable classification loop
+   * (`find -printf` is GNU-only and fails on macOS/BSD hosts). `find` does
+   * not follow symlinked directories by default, matching the host-side
+   * walker's no-recursion-into-symlinks behavior.
+   */
+  async walk(path: string, options?: WalkOptions): Promise<WalkEntry[]> {
+    const abs = await this.resolveAsync(path);
+    await this.assertContainedRealpath(abs, path);
+    const maxDepth =
+      options?.maxDepth !== undefined && Number.isFinite(options.maxDepth)
+        ? `-maxdepth ${Math.max(0, Math.floor(options.maxDepth))} `
+        : '';
+    // Prune hidden entries in-sandbox when not requested, so a huge hidden
+    // tree (e.g. `.git`) doesn't inflate the response.
+    const hiddenPrune = options?.includeHidden ? '' : `-name '.*' -prune -o `;
+    // Emit "flag\tpath[\ttarget]" — flag is d/f for regular entries, D/F for
+    // symlinks (with the link target as a third field).
+    const script =
+      `root=${shellQuote(abs)}\n` +
+      `[ -e "$root" ] || [ -L "$root" ] || exit ${EXIT_NOT_FOUND}\n` +
+      `[ -d "$root" ] || exit ${EXIT_NOT_DIRECTORY}\n` +
+      `find "$root" -mindepth 1 ${maxDepth}${hiddenPrune}-print 2>/dev/null | while IFS= read -r f; do ` +
+      `if [ -L "$f" ]; then if [ -d "$f" ]; then t=D; else t=F; fi; printf '%s\\t%s\\t%s\\n' "$t" "$f" "$(readlink "$f")"; ` +
+      `elif [ -d "$f" ]; then printf 'd\\t%s\\n' "$f"; else printf 'f\\t%s\\n' "$f"; fi; done`;
+    const result = await this.exec(script);
+    if (result.exitCode === EXIT_NOT_FOUND) throw new DirectoryNotFoundError(path);
+    if (result.exitCode === EXIT_NOT_DIRECTORY) throw new NotDirectoryError(path);
+    if (result.exitCode !== 0) {
+      throw new Error(`walk ${path} failed (exit ${result.exitCode}): ${result.stderr.trim()}`);
+    }
+    const entries: WalkEntry[] = [];
+    for (const line of result.stdout.split('\n')) {
+      if (!line) continue;
+      const tab = line.indexOf('\t');
+      if (tab < 0) continue;
+      const flag = line.slice(0, tab);
+      const isSymlink = flag === 'D' || flag === 'F';
+      let fullPath = line.slice(tab + 1);
+      let symlinkTarget: string | undefined;
+      if (isSymlink) {
+        const tab2 = fullPath.lastIndexOf('\t');
+        if (tab2 >= 0) {
+          symlinkTarget = fullPath.slice(tab2 + 1) || undefined;
+          fullPath = fullPath.slice(0, tab2);
+        }
+      }
+      const rel = posixPath.relative(abs, fullPath);
+      if (!rel || rel.startsWith('..')) continue;
+      entries.push({
+        name: posixPath.basename(rel),
+        type: flag === 'd' || flag === 'D' ? 'directory' : 'file',
+        ...(isSymlink ? { isSymlink: true, ...(symlinkTarget ? { symlinkTarget } : {}) } : {}),
+        path: rel,
+      });
+    }
+    return entries;
+  }
+
+  /**
+   * Content search executed inside the sandbox in one command. Prefers
+   * ripgrep (`rg --json`) when installed; otherwise falls back to
+   * `grep -rnE`. Patterns the ERE fallback can't express (PCRE-style classes,
+   * word boundaries, lookarounds, non-greedy quantifiers) throw
+   * {@link UnsupportedGrepPatternError} so callers use their host-side walk.
+   *
+   * Callers are expected to apply their own gitignore/hidden/glob filtering
+   * to the returned paths; both engines run with ignore rules disabled so
+   * results are a superset of what any host-side filter would keep.
+   */
+  async grep(options: FilesystemGrepOptions): Promise<FilesystemGrepResult[]> {
+    const abs = await this.resolveAsync(options.path);
+    await this.assertContainedRealpath(abs, options.path);
+    if (await this.hasRipgrep()) {
+      return this.grepWithRipgrep(abs, options);
+    }
+    return this.grepWithPosixGrep(abs, options);
+  }
+
+  private rgCheck: Promise<boolean> | undefined;
+
+  private hasRipgrep(): Promise<boolean> {
+    this.rgCheck ??= this.exec('command -v rg >/dev/null 2>&1').then(
+      r => r.exitCode === 0,
+      () => false,
+    );
+    return this.rgCheck;
+  }
+
+  private async grepWithRipgrep(abs: string, options: FilesystemGrepOptions): Promise<FilesystemGrepResult[]> {
+    const args = [
+      'rg --json --no-ignore --hidden',
+      // .git is filtered host-side too; exclude it here so its object files
+      // don't inflate the response.
+      `-g ${shellQuote('!.git/**')}`,
+      options.caseSensitive ? '' : '-i',
+      options.maxCountPerFile !== undefined ? `-m ${Math.max(1, Math.floor(options.maxCountPerFile))}` : '',
+      options.contextLines ? `-C ${Math.max(0, Math.floor(options.contextLines))}` : '',
+      `-e ${shellQuote(options.pattern)}`,
+      shellQuote(abs),
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const result = await this.exec(args);
+    // rg exits 1 when there are no matches, 2 on any error. A bad pattern
+    // produces no output at all, but a per-file error (e.g. an unreadable
+    // file) also yields exit 2 while still emitting matches for every other
+    // file. Keep those partial results; only treat "error with no matches"
+    // as an unsupported pattern so the caller falls back to the host walk.
+    if (result.exitCode === 1) return [];
+    const results = this.parseRipgrepJson(result.stdout, abs, options);
+    if (result.exitCode !== 0 && results.length === 0) {
+      throw new UnsupportedGrepPatternError(options.pattern);
+    }
+    return results;
+  }
+
+  private parseRipgrepJson(stdout: string, abs: string, options: FilesystemGrepOptions): FilesystemGrepResult[] {
+    interface FileState {
+      matches: Array<FilesystemGrepMatch & { lineNumber: number }>;
+      linesByNumber: Map<number, string>;
+    }
+    const files = new Map<string, FileState>();
+    for (const line of stdout.split('\n')) {
+      if (!line) continue;
+      let event: any;
+      try {
+        event = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (event.type !== 'match' && event.type !== 'context') continue;
+      const filePath: string | undefined = event.data?.path?.text;
+      const lineNumber: number | undefined = event.data?.line_number;
+      if (!filePath || !lineNumber) continue;
+      let state = files.get(filePath);
+      if (!state) {
+        state = { matches: [], linesByNumber: new Map() };
+        files.set(filePath, state);
+      }
+      const text: string = (event.data?.lines?.text ?? '').replace(/\r?\n$/, '');
+      state.linesByNumber.set(lineNumber, text);
+      if (event.type === 'match') {
+        // rg submatch offsets are byte offsets into the line; convert to a
+        // UTF-16 (JS string) index for the capability contract.
+        const byteStart: number = event.data?.submatches?.[0]?.start ?? 0;
+        const column = Buffer.from(text, 'utf8').subarray(0, byteStart).toString('utf8').length;
+        state.matches.push({ line: lineNumber, column, text, lineNumber });
+      }
+    }
+    const contextLines = options.contextLines ?? 0;
+    const results: FilesystemGrepResult[] = [];
+    for (const [filePath, state] of files) {
+      if (state.matches.length === 0) continue;
+      const rel = posixPath.relative(abs, filePath) || posixPath.basename(filePath);
+      const matches: FilesystemGrepMatch[] = state.matches.map(({ lineNumber, ...match }) => {
+        if (contextLines <= 0) return match;
+        const before: string[] = [];
+        for (let n = lineNumber - 1; n >= Math.max(1, lineNumber - contextLines); n--) {
+          const t = state.linesByNumber.get(n);
+          if (t === undefined) break;
+          before.unshift(t);
+        }
+        const after: string[] = [];
+        for (let n = lineNumber + 1; n <= lineNumber + contextLines; n++) {
+          const t = state.linesByNumber.get(n);
+          if (t === undefined) break;
+          after.push(t);
+        }
+        return { ...match, before, after };
+      });
+      results.push({ path: rel, matches });
+    }
+    return this.applyTotalCap(results, options.maxTotalMatches);
+  }
+
+  /**
+   * Patterns whose meaning differs between POSIX ERE and JS RegExp. The grep
+   * runs with ERE but match columns are recomputed with JS, so anything that
+   * only one side understands (PCRE classes, lookarounds, lazy quantifiers,
+   * POSIX bracket classes, GNU word anchors) must fall back to the host walk.
+   */
+  private static readonly ERE_UNSUPPORTED = /\\[dDwWsSbB<>]|\(\?|[*+?}]\?|\[:[a-z]+:\]/;
+
+  private async grepWithPosixGrep(abs: string, options: FilesystemGrepOptions): Promise<FilesystemGrepResult[]> {
+    if (SandboxFilesystem.ERE_UNSUPPORTED.test(options.pattern)) {
+      throw new UnsupportedGrepPatternError(options.pattern);
+    }
+    let jsRegex: RegExp;
+    try {
+      jsRegex = new RegExp(options.pattern, options.caseSensitive ? '' : 'i');
+    } catch {
+      throw new UnsupportedGrepPatternError(options.pattern);
+    }
+    // Reconstructing per-match context from `grep -C` text output is not
+    // reliable (separator lines are ambiguous); let the host walk handle it.
+    if (options.contextLines) {
+      throw new UnsupportedGrepPatternError(options.pattern);
+    }
+    const args = [
+      'grep -rnIE',
+      options.caseSensitive ? '' : '-i',
+      options.maxCountPerFile !== undefined ? `-m ${Math.max(1, Math.floor(options.maxCountPerFile))}` : '',
+      '--',
+      shellQuote(options.pattern),
+      shellQuote(abs),
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const result = await this.exec(args);
+    if (result.exitCode === 1) return [];
+    if (result.exitCode !== 0) {
+      throw new UnsupportedGrepPatternError(options.pattern);
+    }
+    // grep -n has no column output; recompute with the JS regex host-side so
+    // columns are UTF-16 indices, consistent with the fallback implementation.
+    const byFile = new Map<string, FilesystemGrepMatch[]>();
+    for (const line of result.stdout.split('\n')) {
+      if (!line) continue;
+      const parsed = /^(.*?):(\d+):(.*)$/.exec(line);
+      if (!parsed) continue;
+      const rel = posixPath.relative(abs, parsed[1]!) || posixPath.basename(parsed[1]!);
+      const text = parsed[3]!;
+      const column = jsRegex.exec(text)?.index;
+      // grep matched this line but the JS regex did not: the two dialects
+      // disagree on this pattern, so the columns would be wrong. Fall back.
+      if (column === undefined) throw new UnsupportedGrepPatternError(options.pattern);
+      let matches = byFile.get(rel);
+      if (!matches) {
+        matches = [];
+        byFile.set(rel, matches);
+      }
+      matches.push({ line: Number(parsed[2]), column, text });
+    }
+    const results = [...byFile.entries()].map(([path, matches]) => ({ path, matches }));
+    return this.applyTotalCap(results, options.maxTotalMatches);
+  }
+
+  private applyTotalCap(results: FilesystemGrepResult[], maxTotal?: number): FilesystemGrepResult[] {
+    if (maxTotal === undefined) return results;
+    const capped: FilesystemGrepResult[] = [];
+    let total = 0;
+    for (const file of results) {
+      if (total >= maxTotal) break;
+      const remaining = maxTotal - total;
+      const matches = file.matches.slice(0, remaining);
+      total += matches.length;
+      capped.push({ path: file.path, matches });
+    }
+    return capped;
   }
 
   // ── Path / metadata ────────────────────────────────────────────────────

@@ -12,6 +12,7 @@ import { GatewayManager } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import { Mastra } from '../mastra';
+import { TITLE_PINNED_THREAD_METADATA_KEY } from '../memory';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
@@ -947,6 +948,7 @@ export class AgentController<TState = {}> {
       this.#internalMastra = new Mastra({
         logger: false,
         ...(this.config.storage ? { storage: this.config.storage } : {}),
+        ...(this.config.backgroundTasks ? { backgroundTasks: this.config.backgroundTasks } : {}),
         ...(this.config.pubsub ? { pubsub: this.config.pubsub } : {}),
         ...(this.config.observability ? { observability: this.config.observability } : {}),
         ...(gateways ? { gateways } : {}),
@@ -1342,7 +1344,13 @@ export class AgentController<TState = {}> {
     )?.trim();
     if (!title) return undefined;
 
-    await this.persistThreadRow({ ...thread, title, updatedAt: new Date() });
+    // An explicit regenerate un-pins the title: auto-naming resumes from here.
+    await this.persistThreadRow({
+      ...thread,
+      title,
+      metadata: { ...thread.metadata, [TITLE_PINNED_THREAD_METADATA_KEY]: false },
+      updatedAt: new Date(),
+    });
     session?.emit({ type: 'thread_title_updated', threadId, title });
     return title;
   }
@@ -1919,25 +1927,38 @@ export class AgentController<TState = {}> {
     requestContext: requestContextInput,
     tracingContext,
     tracingOptions,
+    untilIdle,
+    abortSignal,
   }: {
     session: Session<TState>;
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
+    untilIdle?: boolean | { maxIdleMs?: number };
+    abortSignal?: AbortSignal;
   }): Promise<Record<string, unknown>> {
     const runThreadId = session.thread.getId();
     if (!runThreadId) {
       throw new Error('Cannot build stream options without a current thread');
     }
+    const resourceId = session.identity.getResourceId();
+    const modeId = session.mode.get();
 
-    session.run.clearAbortRequested();
+    if (!abortSignal) {
+      session.run.clearAbortRequested();
+    }
     // Reconcile the in-memory model selection with the persisted per-mode model
     // before snapshotting it into the request context. In multiplayer
     // deployments another process (or a freshly-created Session for an existing
     // thread) may have persisted a different model; the per-instance cache would
     // otherwise run with a stale selection. No-op in the single-player TUI.
-    await session.model.syncFromPersisted({ modeId: session.mode.get() });
-    const requestContext = await this.buildRequestContext(session, requestContextInput);
+    await session.model.syncFromPersisted({ modeId });
+    const requestContext = await this.buildRequestContext(session, requestContextInput, {
+      abortSignal,
+      resourceId,
+      threadId: runThreadId,
+      modeId,
+    });
     // Resolve mode-aware instructions at call time so the agent's own
     // instructions are never mutated by the harness.
     // When mode/harness instructions exist, combine them with the agent's
@@ -1961,13 +1982,13 @@ export class AgentController<TState = {}> {
       ...this.buildSharedRunOptions(session),
       memory: {
         thread: runThreadId,
-        resource: session.identity.getResourceId(),
+        resource: resourceId,
         // Titling outlives the run, so the thread it named is the one captured here,
         // not whichever thread the session happens to hold when the model answers.
         onTitleGenerated: (title: string) =>
           session.emit({ type: 'thread_title_updated', threadId: runThreadId, title }),
       },
-      abortSignal: session.run.ensureAbortController().signal,
+      abortSignal: abortSignal ?? session.run.ensureAbortController().signal,
       requestContext,
       outputWriter: async (chunk: { type?: string; data?: unknown }) => {
         if (chunk.type !== 'data-mastracode-tool-progress') return;
@@ -1982,6 +2003,7 @@ export class AgentController<TState = {}> {
       },
       ...(tracingContext && { tracingContext }),
       ...(tracingOptions && { tracingOptions }),
+      ...(untilIdle !== undefined && { untilIdle }),
       ...(callTimeInstructions && { instructions: callTimeInstructions }),
     };
     streamOptions.toolsets = await this.buildToolsets(session, requestContext);
@@ -2203,7 +2225,9 @@ export class AgentController<TState = {}> {
         cloneThreadForFork: hasMemory
           ? async ({ sourceThreadId, resourceId, title }) => {
               const memory = await this.resolveMemory(session);
-              const result = await memory.cloneThread({
+              // The fork only needs the new thread id, so copy without loading
+              // the message payloads into the Node heap.
+              const result = await memory.copyThread({
                 sourceThreadId,
                 resourceId: resourceId ?? session.identity.getResourceId(),
                 title,
@@ -2273,8 +2297,9 @@ export class AgentController<TState = {}> {
   private async buildRequestContext(
     session: Session<TState>,
     requestContext?: RequestContext,
+    scope?: { abortSignal?: AbortSignal; resourceId?: string; threadId?: string; modeId?: string },
   ): Promise<RequestContext> {
-    requestContext ??= new RequestContext();
+    requestContext = new RequestContext(requestContext?.entries());
     const controllerContext: AgentControllerRequestContext<TState> = {
       controllerId: this.id,
       harnessId: this.id,
@@ -2282,13 +2307,13 @@ export class AgentController<TState = {}> {
       getState: () => session.state.get(),
       setState: updates => session.state.set(updates),
       updateState: updater => session.state.update(updater),
-      threadId: session.thread.getId(),
-      resourceId: session.identity.getResourceId(),
+      threadId: scope?.threadId ?? session.thread.getId(),
+      resourceId: scope?.resourceId ?? session.identity.getResourceId(),
       scope: this.#sessionScopes.get(session),
       session: {
         id: session.identity.getId(),
         ownerId: session.identity.getOwnerId(),
-        modeId: session.mode.get(),
+        modeId: scope?.modeId ?? session.mode.get(),
         modelId: session.model.get(),
         state: {
           get: () => session.state.get(),
@@ -2296,7 +2321,7 @@ export class AgentController<TState = {}> {
           update: updater => session.state.update(updater),
         },
       },
-      abortSignal: session.run.getAbortSignal(),
+      abortSignal: scope?.abortSignal ?? session.run.getAbortSignal(),
       emitEvent: event => session.emit(event),
       getSubagentModelId: params => session.subagents.model.get(params ?? {}),
     };

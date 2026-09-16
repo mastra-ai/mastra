@@ -93,7 +93,7 @@ export function ChatShellColumn({ className, ...props }: ComponentProps<'div'>) 
   return (
     <div
       data-slot="chat-shell-column"
-      className={cn('mx-auto flex w-full max-w-(--chat-column) min-w-0 flex-col px-3 md:px-5', className)}
+      className={cn('mx-auto flex w-full max-w-(--chat-column) min-w-0 flex-col px-3 md:px-4', className)}
       {...props}
     />
   );

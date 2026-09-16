@@ -124,7 +124,7 @@ function createTestSignal(
 // Tests
 // ----------------------------------------------------------------------------
 
-describe('DurableAgent signal drain', () => {
+describe.each([false, true])('DurableAgent signal drain (excluded: %s)', excluded => {
   let pubsub: EventEmitterPubSub;
 
   beforeEach(() => {
@@ -166,7 +166,10 @@ describe('DurableAgent signal drain', () => {
           return entry;
         });
 
-        const { fullStream, cleanup } = await durableAgent.stream('Hello', { maxSteps: 3 });
+        const { fullStream, cleanup } = await durableAgent.stream('Hello', {
+          maxSteps: 3,
+          hideSignals: excluded ? [type] : undefined,
+        });
 
         const chunks: any[] = [];
         for await (const chunk of fullStream) {
@@ -177,7 +180,7 @@ describe('DurableAgent signal drain', () => {
         // Find the signal data parts in the stream — echoed signals should appear
         const signalChunks = chunks.filter((c: any) => c.type === 'data-signal' || c.type === 'data-user-message');
 
-        expect(signalChunks.map(chunk => chunk.data.contents)).toEqual(type === 'user' ? ['echo one', 'echo two'] : []);
+        expect(signalChunks.map(chunk => chunk.data.contents)).toEqual(excluded ? [] : ['echo one', 'echo two']);
       },
     );
   });
@@ -224,7 +227,10 @@ describe('DurableAgent signal drain', () => {
         });
         vi.spyOn(globalRunRegistry, 'get').mockImplementation(getInterceptor);
 
-        const { fullStream, cleanup } = await durableAgent.stream('Hello', { maxSteps: 3 });
+        const { fullStream, cleanup } = await durableAgent.stream('Hello', {
+          maxSteps: 3,
+          hideSignals: excluded ? [type] : undefined,
+        });
 
         const chunks: any[] = [];
         for await (const chunk of fullStream) {
@@ -235,9 +241,8 @@ describe('DurableAgent signal drain', () => {
         // Find the signal data parts in the stream
         const signalChunks = chunks.filter((c: any) => c.type === 'data-signal' || c.type === 'data-user-message');
 
-        // Only visible pre-run signals should appear in the stream
         expect(signalChunks.map(chunk => chunk.data.contents)).toEqual(
-          type === 'user' ? ['prerun signal one', 'prerun signal two'] : [],
+          excluded ? [] : ['prerun signal one', 'prerun signal two'],
         );
         expect(JSON.stringify(model.doStreamCalls[0]?.prompt)).toContain('prerun signal one');
         expect(JSON.stringify(model.doStreamCalls[0]?.prompt)).toContain('prerun signal two');
@@ -246,75 +251,75 @@ describe('DurableAgent signal drain', () => {
   });
 
   describe('inter-iteration signal drain (Bug 5)', () => {
-    it.each(['user', 'reactive', 'system-reminder'] as const)(
-      'drains pending %s signals with matching visibility',
-      async type => {
-        const myTool = {
-          description: 'A tool',
-          parameters: z.object({ x: z.number() }),
-          execute: async ({ x }: { x: number }) => `result-${x}`,
-        };
+    it.each(
+      (['user', 'reactive', 'system-reminder'] as const).flatMap(type => [1, 2].map(drainAt => ({ type, drainAt }))),
+    )('drains pending $type signals at drain $drainAt with matching visibility', async ({ type, drainAt }) => {
+      const myTool = {
+        description: 'A tool',
+        parameters: z.object({ x: z.number() }),
+        execute: async ({ x }: { x: number }) => `result-${x}`,
+      };
 
-        const model = makeToolThenStopModel();
-        const agent = new Agent({
-          id: 'inter-iter-drain-agent',
-          name: 'inter-iter-drain-agent',
-          instructions: 'You are helpful.',
-          model,
-          tools: { myTool },
-        });
+      const model = makeToolThenStopModel();
+      const agent = new Agent({
+        id: 'inter-iter-drain-agent',
+        name: 'inter-iter-drain-agent',
+        instructions: 'You are helpful.',
+        model,
+        tools: { myTool },
+      });
 
-        const durableAgent = createDurableAgent({ agent, pubsub });
+      const durableAgent = createDurableAgent({ agent, pubsub });
 
-        // We need signals to be available when drained between iterations.
-        // We'll inject them via the registry entry after the first iteration.
-        const pendingSignals = [createTestSignal('inter-iter signal', { type })];
+      // We need signals to be available when drained between iterations.
+      // We'll inject them via the registry entry after the first iteration.
+      const pendingSignals = [createTestSignal('inter-iter signal', { type })];
 
-        const originalGet = globalRunRegistry.get.bind(globalRunRegistry);
-        let drainCallCount = 0;
-        vi.spyOn(globalRunRegistry, 'get').mockImplementation((runId: string) => {
-          const entry = originalGet(runId);
-          if (entry) {
-            const originalDrain = entry.drainPendingSignals;
-            entry.drainPendingSignals = (scope?: 'pending' | 'pre-run') => {
-              if (scope === 'pending') {
-                drainCallCount++;
-                // Return signals on the first pending drain (within-iteration
-                // signal-drain step runs first, then predicate). We fire on the
-                // first drain call so the signal is consumed in one of the two
-                // drain sites.
-                if (drainCallCount === 1) {
-                  return pendingSignals;
-                }
+      const originalGet = globalRunRegistry.get.bind(globalRunRegistry);
+      let drainCallCount = 0;
+      let installedDrain = false;
+      vi.spyOn(globalRunRegistry, 'get').mockImplementation((runId: string) => {
+        const entry = originalGet(runId);
+        if (entry && !installedDrain) {
+          installedDrain = true;
+          const originalDrain = entry.drainPendingSignals;
+          entry.drainPendingSignals = (scope?: 'pending' | 'pre-run') => {
+            if (scope === 'pending') {
+              drainCallCount++;
+              // Exercise both producers: the signal-drain step, then the loop predicate.
+              if (drainCallCount === drainAt) {
+                return pendingSignals;
               }
-              return originalDrain?.(scope) ?? [];
-            };
-          }
-          return entry;
-        });
-
-        const { fullStream, cleanup } = await durableAgent.stream('Hello', { maxSteps: 5 });
-
-        const chunks: any[] = [];
-        for await (const chunk of fullStream) {
-          chunks.push(chunk);
+            }
+            return originalDrain?.(scope) ?? [];
+          };
         }
-        await cleanup?.();
+        return entry;
+      });
 
-        // Find the signal data parts in the stream
-        const signalChunks = chunks.filter((c: any) => c.type === 'data-signal' || c.type === 'data-user-message');
+      const { fullStream, cleanup } = await durableAgent.stream('Hello', {
+        maxSteps: 5,
+        hideSignals: excluded ? [type] : undefined,
+      });
 
-        // Only visible inter-iteration signals should appear in the stream
-        expect(signalChunks.map(chunk => chunk.data.contents)).toEqual(type === 'user' ? ['inter-iter signal'] : []);
-        expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('inter-iter signal');
+      const chunks: any[] = [];
+      for await (const chunk of fullStream) {
+        chunks.push(chunk);
+      }
+      await cleanup?.();
 
-        // The drain function should have been called at least once
-        expect(drainCallCount).toBeGreaterThanOrEqual(1);
-      },
-    );
+      // Find the signal data parts in the stream
+      const signalChunks = chunks.filter((c: any) => c.type === 'data-signal' || c.type === 'data-user-message');
+
+      expect(signalChunks.map(chunk => chunk.data.contents)).toEqual(excluded ? [] : ['inter-iter signal']);
+      expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('inter-iter signal');
+
+      // The drain function should have been called at least once
+      expect(drainCallCount).toBeGreaterThanOrEqual(1);
+    });
 
     it.each(['user', 'reactive', 'system-reminder'] as const)(
-      'forces continuation for %s signals without leaking hidden context',
+      'forces continuation for %s signals and emits them',
       async type => {
         // Model always produces text (no tool calls) → normally single iteration
         let callNum = 0;
@@ -372,7 +377,10 @@ describe('DurableAgent signal drain', () => {
           return entry;
         });
 
-        const { fullStream, cleanup } = await durableAgent.stream('Hello', { maxSteps: 5 });
+        const { fullStream, cleanup } = await durableAgent.stream('Hello', {
+          maxSteps: 5,
+          hideSignals: excluded ? [type] : undefined,
+        });
 
         const chunks: any[] = [];
         for await (const chunk of fullStream) {
@@ -384,11 +392,8 @@ describe('DurableAgent signal drain', () => {
         // forced continuation after the first "stop" response.
         expect(callNum).toBeGreaterThanOrEqual(2);
 
-        // Only visible signals should appear in the stream
         const signalChunks = chunks.filter((c: any) => c.type === 'data-signal' || c.type === 'data-user-message');
-        expect(signalChunks.map(chunk => chunk.data.contents)).toEqual(
-          type === 'user' ? ['forced continuation signal'] : [],
-        );
+        expect(signalChunks.map(chunk => chunk.data.contents)).toEqual(excluded ? [] : ['forced continuation signal']);
         expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('forced continuation signal');
       },
     );

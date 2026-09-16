@@ -1270,6 +1270,24 @@ describe('MessageList', () => {
       ]);
     });
 
+    it.each(['https://example.com/leads.csv', 'data:text/csv;base64,bmFtZQpBY21l', 'bmFtZQpBY21l'])(
+      'preserves attachment filenames in UI messages after storage round-trip: %s',
+      data => {
+        const list = new MessageList({ threadId, resourceId }).add(
+          {
+            role: 'user',
+            content: [{ type: 'file', mimeType: 'text/csv', data, filename: 'leads.csv' }],
+          } satisfies VercelCoreMessage,
+          'input',
+        );
+        const restored = new MessageList({ threadId, resourceId }).add(list.get.all.db(), 'memory');
+
+        expect(restored.get.all.aiV5.ui()[0]?.parts).toEqual([
+          expect.objectContaining({ type: 'file', filename: 'leads.csv', mediaType: 'text/csv' }),
+        ]);
+      },
+    );
+
     it('should correctly convert a Mastra V1 MessageType with a file part containing a non-data URL', () => {
       const inputV1Message = {
         id: 'v1-msg-url-1',

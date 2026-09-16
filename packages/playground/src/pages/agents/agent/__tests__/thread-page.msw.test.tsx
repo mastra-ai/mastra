@@ -6,9 +6,19 @@ import { http, HttpResponse } from 'msw';
 import { createContext, useContext, useEffect, useImperativeHandle, useState } from 'react';
 import type { ReactNode, Ref } from 'react';
 import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import AgentSession from '../session';
 import AgentThread from '../thread';
+import {
+  preferenceModelProviders,
+  memoryConfig,
+  workingMemory,
+  voiceSpeakers,
+  mcpServers,
+  preferenceThread,
+} from './fixtures/thread-preferences';
+import { emptyHistory, liveChunks, staleHistory } from './fixtures/thread-recovery';
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import {
   emptyThreadTracesList,
@@ -24,6 +34,11 @@ import { server } from '@/test/msw-server';
 const BASE_URL = 'http://localhost:4111';
 const AGENT_ID = 'chef-agent';
 const THREAD_ID = 'thread-1';
+// Live output travels through a real SSE stream (subscribe → parse → useChat merge)
+// and is then paced word by word by the markdown reveal buffer, which replays when
+// the message row remounts. Both are far slower than a JSON fetch when the whole
+// suite runs in parallel, so those assertions get more than waitFor's 1s default.
+const SSE_TIMEOUT = { timeout: 5000 };
 
 // jsdom has no layout, so react-resizable-panels never resizes anything and
 // `collapse()`/`expand()` are silently ignored. Replace Group/Panel with a
@@ -133,6 +148,7 @@ const LocationProbe = () => {
 const buildRouter = (initialEntry: string) =>
   createMemoryRouter(
     [
+      { path: '/agents', element: <LocationProbe /> },
       {
         // Mirrors App.tsx: the thread page is a child of the agent tabs layout.
         path: '/agents/:agentId',
@@ -150,17 +166,19 @@ const buildRouter = (initialEntry: string) =>
           { path: 'chat/:threadId', loader: legacyAgentChatLoader },
           { path: 'threads', loader: agentThreadsIndexLoader },
           { path: 'threads/:threadId', element: <AgentThread /> },
-          { path: 'overview', element: <div data-testid="overview-page" /> },
+          { path: 'session/:threadId', element: <AgentSession /> },
         ],
       },
     ],
     { initialEntries: [initialEntry] },
   );
 
-const renderAt = (initialEntry: string) => {
-  const queryClient = new QueryClient({
+const renderAt = (
+  initialEntry: string,
+  queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  }),
+) => {
   const router = buildRouter(initialEntry);
 
   render(
@@ -258,6 +276,226 @@ afterEach(() => {
 });
 
 describe('Standalone thread page', () => {
+  describe('when a history response arrives after live output', () => {
+    it.each([
+      { name: 'empty', history: emptyHistory },
+      { name: 'stale', history: staleHistory },
+    ])('preserves the streamed response with $name history', async ({ history }) => {
+      installHandlers();
+      let releaseHistory = () => {};
+      const gate = new Promise<void>(resolve => {
+        releaseHistory = resolve;
+      });
+      let push: (() => void) | undefined;
+      let close = () => {};
+      const historyReturned = vi.fn();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, () => HttpResponse.json([])),
+        http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () =>
+          HttpResponse.json({ workingMemory: null }),
+        ),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId`, () => HttpResponse.json(threadsResponse.threads[0])),
+        http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [] })),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/messages`, async () => {
+          await gate;
+          historyReturned();
+          return HttpResponse.json(history);
+        }),
+        http.post(
+          `${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`,
+          () =>
+            new HttpResponse(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  close = () => controller.close();
+                  push = () => {
+                    for (const chunk of liveChunks)
+                      controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+                  };
+                },
+              }),
+              { headers: { 'Content-Type': 'text/event-stream' } },
+            ),
+        ),
+      );
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`, queryClient);
+      try {
+        await screen.findByText('OpenAI');
+        await waitFor(() => expect(push).toBeDefined());
+        await act(async () => push?.());
+        await waitFor(() => expect(document.body.textContent).toContain('Live response survives'), SSE_TIMEOUT);
+        // Live messages take precedence over the history skeleton.
+        expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
+        await act(async () => releaseHistory());
+        await waitFor(() =>
+          expect(queryClient.getQueryState(['memory', 'messages', THREAD_ID, AGENT_ID, 'requestContext'])?.status).toBe(
+            'success',
+          ),
+        );
+        expect(historyReturned).toHaveBeenCalledOnce();
+        await waitFor(
+          () => expect(document.body.textContent?.split('Live response survives')).toHaveLength(2),
+          SSE_TIMEOUT,
+        );
+        expect(document.body.textContent).not.toContain('Old partial output');
+        if (history.messages.length) expect(document.body.textContent).toContain('Earlier prompt');
+      } finally {
+        releaseHistory();
+        close();
+      }
+    });
+  });
+
+  describe('when opening an existing thread whose history is still loading', () => {
+    it('shows the history skeleton, then the messages once history resolves', async () => {
+      installHandlers();
+      let releaseHistory = () => {};
+      const gate = new Promise<void>(resolve => {
+        releaseHistory = resolve;
+      });
+      server.use(
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/messages`, async () => {
+          await gate;
+          return HttpResponse.json(staleHistory);
+        }),
+      );
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+      try {
+        expect(await screen.findByTestId('thread-history-skeleton')).not.toBeNull();
+        expect(screen.queryByText('How can I help you today?')).toBeNull();
+
+        await act(async () => releaseHistory());
+
+        expect(await screen.findByText('Earlier prompt')).not.toBeNull();
+        expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
+      } finally {
+        releaseHistory();
+      }
+    });
+  });
+
+  describe('when opening a new thread', () => {
+    it('shows the welcome screen immediately without a skeleton', async () => {
+      installHandlers();
+      const messagesRequested = vi.fn();
+      server.use(
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/messages`, () => {
+          messagesRequested();
+          return HttpResponse.json(emptyHistory);
+        }),
+      );
+      renderAt(`/agents/${AGENT_ID}/threads/new`);
+
+      expect(await screen.findByText('How can I help you today?')).not.toBeNull();
+      expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
+      expect(messagesRequested).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the agent has memory disabled', () => {
+    it('shows the welcome screen immediately without a skeleton', async () => {
+      installHandlers();
+      const messagesRequested = vi.fn();
+      server.use(
+        http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json({ result: false })),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/messages`, () => {
+          messagesRequested();
+          return HttpResponse.json(emptyHistory);
+        }),
+      );
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+      expect(await screen.findByText('How can I help you today?')).not.toBeNull();
+      expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
+      expect(messagesRequested).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when a first signal message is accepted', () => {
+    it.each(['stay', 'navigate', 'reload'] as const)(
+      'preserves thread identity and navigation when the user chooses to %s',
+      async action => {
+        installHandlers();
+        const sent = vi.fn();
+        let release = () => {};
+        const gate = new Promise<void>(resolve => {
+          release = resolve;
+        });
+        const acknowledged = vi.fn();
+        const refreshedAfterAck = vi.fn();
+        const ids: string[] = [];
+        const closes: Array<() => void> = [];
+        server.use(
+          http.get(`${BASE_URL}/api/memory/threads`, () => {
+            if (acknowledged.mock.calls.length) refreshedAfterAck();
+            return HttpResponse.json(threadsResponse);
+          }),
+          http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, () => HttpResponse.json([])),
+          http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
+          http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () =>
+            HttpResponse.json({ workingMemory: null }),
+          ),
+          http.get(`${BASE_URL}/api/memory/threads/:threadId`, () => HttpResponse.json(threadsResponse.threads[0])),
+          http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [] })),
+          http.get(`${BASE_URL}/api/memory/threads/:threadId/messages`, () => HttpResponse.json(emptyHistory)),
+          http.post(`${BASE_URL}/api/agents/${AGENT_ID}/send-message`, async ({ request }) => {
+            sent(await request.json());
+            await gate;
+            acknowledged();
+            return HttpResponse.json({ accepted: true, runId: 'recovery-run' });
+          }),
+          http.post(`${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`, async ({ request }) => {
+            const body: unknown = await request.json();
+            if (body && typeof body === 'object' && 'threadId' in body && typeof body.threadId === 'string')
+              ids.push(body.threadId);
+            return new HttpResponse(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  closes.push(() => controller.close());
+                  if (action === 'reload' && ids.length > 1) {
+                    for (const chunk of liveChunks)
+                      controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+                  }
+                },
+              }),
+              { headers: { 'Content-Type': 'text/event-stream' } },
+            );
+          }),
+        );
+        const router = renderAt(`/agents/${AGENT_ID}/threads/new`);
+        try {
+          await waitFor(() => expect(ids.length).toBeGreaterThan(0));
+          const input = await screen.findByRole('textbox');
+          fireEvent.change(input, { target: { value: 'Keep this conversation' } });
+          fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+          await waitFor(() => expect(sent).toHaveBeenCalledOnce());
+          if (action === 'navigate') await act(() => router.navigate(`/agents/${AGENT_ID}/threads/${THREAD_ID}`));
+          await act(async () => release());
+          await waitFor(() => expect(refreshedAfterAck).toHaveBeenCalled());
+          if (action === 'navigate') {
+            expect(router.state.location.pathname).toBe(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+          } else {
+            await waitFor(() => expect(router.state.location.pathname).toBe(`/agents/${AGENT_ID}/threads/${ids[0]}`));
+            expect(router.state.historyAction).toBe('REPLACE');
+            expect(document.body.textContent).toContain('Keep this conversation');
+            if (action === 'reload') {
+              const savedPath = router.state.location.pathname;
+              cleanup();
+              renderAt(savedPath);
+              await waitFor(() => expect(ids).toHaveLength(2));
+              await waitFor(() => expect(document.body.textContent).toContain('Live response survives'), SSE_TIMEOUT);
+            }
+            expect(new Set(ids).size).toBe(1);
+          }
+        } finally {
+          release();
+          for (const close of closes) close();
+        }
+      },
+    );
+  });
   it('shows the thread conversation at /agents/:agentId/threads/:threadId', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
@@ -387,7 +625,7 @@ describe('Standalone thread page', () => {
 
     await screen.findByText('Tonight we cook carbonara.');
     expect(screen.getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('false');
+    expect(screen.queryByRole('tab', { name: 'Overview' })).toBeNull();
   });
 
   it('highlights the Chat tab on /threads/new', async () => {
@@ -419,11 +657,13 @@ describe('Standalone thread page', () => {
     );
   });
 
-  it('redirects bare /agents/:agentId to the overview page', async () => {
+  it('redirects bare /agents/:agentId to the new-thread chat', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}`);
 
-    await waitFor(() => expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/overview`));
+    await waitFor(() =>
+      expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/new`),
+    );
   });
 
   it('redirects the legacy chat URL to /threads/:threadId preserving ?messageId=', async () => {
@@ -622,6 +862,125 @@ describe('Standalone thread page', () => {
     });
   });
 
+  describe('when a thread has saved model preferences', () => {
+    it('retains real composer edits through the first send, navigation, and reload', async () => {
+      installHandlers();
+      const sent = vi.fn();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json(preferenceModelProviders)),
+        http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(memoryConfig)),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => HttpResponse.json(workingMemory)),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId`, ({ params }) =>
+          HttpResponse.json({ ...preferenceThread, id: params.threadId }),
+        ),
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, () => HttpResponse.json(voiceSpeakers)),
+        http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(mcpServers)),
+        http.post(
+          `${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`,
+          () => new HttpResponse('', { headers: { 'content-type': 'text/event-stream' } }),
+        ),
+      );
+      server.use(
+        http.post(`${BASE_URL}/api/agents/${AGENT_ID}/stream`, async ({ request }) => {
+          sent(await request.json());
+          return new HttpResponse('data: {"type":"finish","payload":{}}\n\n', {
+            headers: { 'content-type': 'text/event-stream' },
+          });
+        }),
+      );
+      const router = renderAt(`/agents/${AGENT_ID}/threads/new`);
+      fireEvent.click(await screen.findByText('gpt-5-mini'));
+      fireEvent.click(await screen.findByRole('option', { name: /gpt-4o-mini/ }));
+      fireEvent.click(screen.getByTestId('composer-model-settings-trigger'));
+      fireEvent.click(await screen.findByRole('radio', { name: 'Stream' }));
+      // Base UI hides slider thumbs until layout measurement, which jsdom cannot provide.
+      const temperature = screen.getAllByRole('slider', { hidden: true })[0];
+      fireEvent.change(temperature, { target: { value: '0.2' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Advanced Settings' }));
+      fireEvent.change(await screen.findByLabelText('Max Steps'), { target: { value: '8' } });
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+      fireEvent.keyDown(screen.getByTestId('composer-model-settings-trigger'), { key: 'Escape' });
+      const firstInput = await screen.findByRole('textbox');
+      fireEvent.change(firstInput, { target: { value: 'Save my preferences' } });
+      fireEvent.keyDown(firstInput, { key: 'Enter', code: 'Enter' });
+      await waitFor(() => expect(sent).toHaveBeenCalledOnce());
+      await waitFor(() => expect(router.state.location.pathname).not.toBe(`/agents/${AGENT_ID}/threads/new`));
+      const savedPath = router.state.location.pathname;
+      expect(sent).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          model: 'openai/gpt-4o-mini',
+          maxSteps: 8,
+          modelSettings: expect.objectContaining({ temperature: 0.2 }),
+        }),
+      );
+      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      await act(() => router.navigate(`/agents/${AGENT_ID}/threads/thread-2`));
+      expect(await screen.findByText('gpt-5-mini')).toBeTruthy();
+      await act(() => router.navigate(savedPath));
+      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      cleanup();
+      renderAt(savedPath);
+      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      fireEvent.click(screen.getByTestId('composer-model-settings-trigger'));
+      expect((await screen.findByRole('radio', { name: 'Stream' })).getAttribute('aria-checked')).toBe('true');
+      fireEvent.keyDown(screen.getByTestId('composer-model-settings-trigger'), { key: 'Escape' });
+      const input = await screen.findByRole('textbox');
+      fireEvent.change(input, { target: { value: 'Use my saved settings' } });
+      fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+      await waitFor(() => expect(sent).toHaveBeenCalledTimes(2));
+      expect(sent).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          model: 'openai/gpt-4o-mini',
+          maxSteps: 8,
+          modelSettings: expect.objectContaining({ temperature: 0.2 }),
+        }),
+      );
+    });
+  });
+
+  describe('when the current agent no longer exists', () => {
+    beforeEach(() => {
+      const missingAgent = () => HttpResponse.json({ error: 'Agent not found' }, { status: 404 });
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, missingAgent),
+        http.get(`${BASE_URL}/api/memory/config`, missingAgent),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, missingAgent),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId`, missingAgent),
+        http.post(`${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`, missingAgent),
+      );
+    });
+
+    it.each(['threads', 'session'])('replaces cached %s chat data with actionable recovery', async route => {
+      installHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () =>
+          HttpResponse.json({ error: 'Agent not found' }, { status: 404 }),
+        ),
+      );
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      queryClient.setQueryData(['agent', AGENT_ID, {}], agentResponse);
+      renderAt(`/agents/${AGENT_ID}/${route}/${THREAD_ID}`, queryClient);
+
+      expect(await screen.findByText('Agent not found')).not.toBeNull();
+      expect(screen.getByText(/may have been renamed or removed/)).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Reload' })).not.toBeNull();
+      expect(screen.getByRole('link', { name: 'Choose agent' })).not.toBeNull();
+      expect(screen.queryByPlaceholderText('Enter your message...')).toBeNull();
+    });
+
+    it('lets the user leave the dead chat and choose an agent', async () => {
+      installHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () =>
+          HttpResponse.json({ error: 'Agent not found' }, { status: 404 }),
+        ),
+      );
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+      fireEvent.click(await screen.findByRole('link', { name: 'Choose agent' }));
+      await waitFor(() => expect(screen.getByTestId('location-probe').textContent).toBe('/agents'));
+    });
+  });
+
   it('shows "Agent not found" for an unknown agent', async () => {
     installHandlers();
     server.use(http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json(null)));
@@ -633,7 +992,7 @@ describe('Standalone thread page', () => {
 
 describe('thread link builders', () => {
   it('point to the standalone thread routes', () => {
-    expect(paths.agentLink(AGENT_ID)).toBe(`/agents/${AGENT_ID}/overview`);
+    expect(paths.agentLink(AGENT_ID)).toBe(`/agents/${AGENT_ID}/threads/new`);
     expect(paths.agentNewThreadLink(AGENT_ID)).toBe(`/agents/${AGENT_ID}/threads/new`);
     expect(paths.agentThreadLink(AGENT_ID, THREAD_ID)).toBe(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
     expect(paths.agentThreadLink(AGENT_ID, THREAD_ID, 'msg-1')).toBe(

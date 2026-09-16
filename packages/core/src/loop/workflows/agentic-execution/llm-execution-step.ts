@@ -16,7 +16,6 @@ import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/mo
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
 import type { Mastra } from '../../../mastra';
-import { isSystemReminderSignalType } from '../../../memory/system-reminders';
 import { createObservabilityContext, EntityType, SpanType } from '../../../observability';
 import type {
   AnySpan,
@@ -73,6 +72,7 @@ import {
   MEMORY_KEY,
   RESOURCE_ID_KEY,
   STEP_ACTIVE_TOOLS_KEY,
+  STEP_MODEL_MESSAGES_KEY,
   STEP_TOOLS_KEY,
   STEP_WORKSPACE_KEY,
   THREAD_ID_KEY,
@@ -84,6 +84,7 @@ import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
+import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-message';
 import { isMastraTimeoutError } from '../../timeout';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
@@ -1318,9 +1319,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         const initialSignalEchoes =
           readScoped(scopeCtx, INITIAL_SIGNAL_ECHOES_KEY, 'initialSignalEchoes')?.splice(0) ?? [];
         for (const initialSignal of initialSignalEchoes) {
-          if (!isSystemReminderSignalType(initialSignal.type)) {
-            safeEnqueue(controller, initialSignal.toDataPart());
-          }
+          safeEnqueue(controller, initialSignal.toDataPart());
         }
 
         const shouldDrainBeforeFirstModelRequest = (inputData.output?.steps?.length ?? 0) === 0;
@@ -1336,9 +1335,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
           for (const preRunSignal of preRunSignals) {
             const signalForTranscript = messageList.addSignal(preRunSignal);
-            if (!isSystemReminderSignalType(signalForTranscript.type)) {
-              safeEnqueue(controller, signalForTranscript.toDataPart());
-            }
+            safeEnqueue(controller, signalForTranscript.toDataPart());
           }
         }
 
@@ -1640,6 +1637,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           const requestStepResult = await requestStepRunner.runProcessLLMRequest({
             prompt: inputMessages,
             model: currentStep.model,
+            messageList,
             stepNumber: inputData.output?.steps?.length || 0,
             steps: inputData.output?.steps || [],
             retryCount: inputData.processorRetryCount || 0,
@@ -1671,6 +1669,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           logger?.error('Error in processLLMRequest processors:', error);
           throw error;
         }
+
+        const omContinuation = messageList.get.all.db().find(message => message.id === 'om-continuation');
+        const omContinuationText = omContinuation?.content.parts
+          .filter(part => part.type === 'text')
+          .map(part => part.text)
+          .join('');
+        const delegationMessages = omContinuationText
+          ? inputMessages.filter(message => {
+              if (message.role !== 'user' || !Array.isArray(message.content)) return true;
+              const text = message.content
+                .filter(part => part.type === 'text')
+                .map(part => part.text)
+                .join('');
+              return text !== omContinuationText;
+            })
+          : inputMessages;
+        writeScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages', delegationMessages);
 
         if (cachedResponse) {
           // Short-circuit: replay cached chunks instead of calling the model.
@@ -1817,6 +1832,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           messageId: currentStep.messageId,
           options: {
             runId,
+            logger,
             toolCallStreaming,
             includeRawChunks,
             structuredOutput: currentStep.structuredOutput,
@@ -2176,6 +2192,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         return bailFromExecution();
       }
 
+      // The failed attempt's materialization id, captured before processAPIError
+      // can rotate the active response id. This attempt's partial output was
+      // stored under this id, so a terminal error part has to land on that same
+      // record instead of a fresh one.
+      const attemptMessageId = currentMessageId;
+
       // Handle processAPIError for API rejections
       // This covers two cases:
       // 1. Non-last model: processAPIError was already run in the catch block, result passed via processAPIErrorRetry
@@ -2329,6 +2351,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             logger?.debug?.(`Output processor failed on deferred error chunk: ${processorError}`, { runId });
           }
         }
+
+        // Nothing recovered, so this is the terminal failure for the turn: keep it
+        // in thread history as an `error` part on this attempt's assistant record
+        // (creating one when the attempt produced no output). The streamed chunk,
+        // onError callback and result.error keep the original error identity.
+        recordTerminalErrorMessage({
+          messageList,
+          attemptId: attemptMessageId,
+          activeId: currentMessageId,
+          error: deferredError,
+        });
 
         safeEnqueue(controller, errorChunk);
         await options?.onError?.({ error: deferredError });

@@ -4,7 +4,7 @@ import type { ScoringHookInput } from '../evals/types';
 import { isScorerHookForMastra } from '../hooks/scorer-owner';
 import type { Mastra } from '../mastra';
 import { resolveAgentById } from '../mastra/resolve-agent';
-import { EntityType } from '../observability';
+import { EntityType, resolveExportedSpanId } from '../observability';
 import type { MastraStorage } from '../storage';
 
 function toScorerTargetEntityType(entityType: string): EntityType | undefined {
@@ -64,7 +64,11 @@ export function createOnScorerHook(mastra: Mastra) {
 
       const currentSpan = hookData.tracingContext?.currentSpan;
       const traceId = currentSpan?.isValid ? currentSpan.traceId : undefined;
-      const spanId = currentSpan?.isValid ? currentSpan.id : undefined;
+      // Scores are an observability signal, so they must name a span that reached
+      // exporters. Durable agents run their scorers inside a workflow whose spans
+      // are marked internal and never stored, so referencing the current span's raw
+      // id leaves the score pointing at nothing (#23465).
+      const spanId = currentSpan?.isValid ? resolveExportedSpanId(currentSpan) : undefined;
       const targetCorrelationContext = currentSpan?.isValid ? currentSpan.getCorrelationContext?.() : undefined;
       const targetMetadata = currentSpan?.isValid && currentSpan.metadata ? { ...currentSpan.metadata } : undefined;
       const runResult = await scorerToUse.scorer.run({

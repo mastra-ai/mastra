@@ -2,12 +2,12 @@ import { z } from 'zod';
 import type { PubSub } from '../../../events/pubsub';
 import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
-import { isSystemReminderSignalType } from '../../../memory/system-reminders';
 import { createObservabilityContext, InternalSpans } from '../../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
 import { RequestContext } from '../../../request-context';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { createWorkflow } from '../../../workflows/create';
+import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
@@ -45,7 +45,42 @@ import {
 export interface DurableAgenticWorkflowOptions {
   /** Maximum number of agentic loop iterations */
   maxSteps?: number;
+  /**
+   * Snapshot-persistence policy applied to both the outer agentic-loop
+   * workflow and the inner single-iteration workflow. When omitted, the
+   * factory keeps the historical policy of persisting
+   * `pending | paused | suspended | running`.
+   *
+   * `DurableAgent.createWorkflow()` always injects a policy here — user
+   * provided, or a recovery-aware default that persists `running` only when
+   * `recovery.durableAgents: 'auto'` is configured.
+   */
+  shouldPersistSnapshot?: ShouldPersistSnapshotFn;
 }
+
+/**
+ * Historical default persistence policy for durable agent workflows.
+ *
+ * A persisted snapshot record supports both:
+ *  - `resumeStream()` after a suspend (records with status
+ *    `pending` / `paused` / `suspended`)
+ *  - boot-time recovery of orphaned RUNNING runs after a process restart,
+ *    via `DurableAgent.recoverActiveRuns()` — this requires the row to
+ *    actually be stamped `running` while the loop is in-flight (issue #19056).
+ *
+ * The engine's persist path guards against overwriting a `suspended` /
+ * `paused` snapshot with a later `running` update from the same run (see
+ * `persistStepUpdate` in workflows/handlers/entry.ts), so it is safe to
+ * return true for `running` here.
+ */
+export const defaultShouldPersistSnapshot: ShouldPersistSnapshotFn = params => {
+  return (
+    params.workflowStatus === 'pending' ||
+    params.workflowStatus === 'paused' ||
+    params.workflowStatus === 'suspended' ||
+    params.workflowStatus === 'running'
+  );
+};
 
 /**
  * Input schema for the durable agentic workflow.
@@ -101,6 +136,7 @@ type IterationState = z.infer<typeof iterationStateSchema>;
  */
 export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOptions) {
   const maxSteps = options?.maxSteps ?? DurableAgentDefaults.MAX_STEPS;
+  const shouldPersistSnapshot = options?.shouldPersistSnapshot ?? defaultShouldPersistSnapshot;
 
   // Create the LLM execution step - tools and model are resolved from Mastra at runtime
   const llmExecutionStep = createDurableLLMExecutionStep();
@@ -138,26 +174,17 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
     inputSchema: iterationStateSchema,
     outputSchema: iterationStateSchema,
     options: {
-      shouldPersistSnapshot: params => {
-        // We need a persisted snapshot record to support both:
-        //  - `resumeStream()` after a suspend (records with status
-        //    `pending` / `paused` / `suspended`)
-        //  - boot-time recovery of orphaned RUNNING runs after a process
-        //    restart, via `DurableAgent.recoverActiveRuns()` — this requires
-        //    the row to actually be stamped `running` while the loop is
-        //    in-flight (issue #19056).
-        //
-        // The engine's persist path guards against overwriting a `suspended`
-        // / `paused` snapshot with a later `running` update from the same
-        // run (see `persistStepUpdate` in workflows/handlers/entry.ts), so
-        // it is safe to return true for `running` here.
-        return (
-          params.workflowStatus === 'pending' ||
-          params.workflowStatus === 'paused' ||
-          params.workflowStatus === 'suspended' ||
-          params.workflowStatus === 'running'
-        );
-      },
+      // Injectable persistence policy (see DurableAgenticWorkflowOptions).
+      // The default persists `pending | paused | suspended | running`;
+      // `DurableAgent` injects a recovery-aware policy that persists
+      // `running` only when crash recovery is enabled.
+      shouldPersistSnapshot,
+      // When the effective policy excludes `running`, resume claims cannot
+      // be written, so per-resume de-dup warnings would fire on every HITL
+      // resume. The durable resume path serializes its own resumes, so
+      // acknowledge unclaimed resumes. Harmless when `running` is persisted:
+      // claims still land and de-dup still works.
+      allowUnclaimedResumes: true,
       // Agent-loop snapshots are pure resume artifacts — strip everything a
       // resume never reads before persisting.
       pruneSnapshot: pruneAgentLoopSnapshot,
@@ -293,17 +320,12 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       inputSchema: durableAgenticInputSchema,
       outputSchema: durableAgenticOutputSchema,
       options: {
-        shouldPersistSnapshot: params => {
-          // See the singleIterationWorkflow comment above — same policy for
-          // the outer loop. The persist path guards against overwriting a
-          // suspended snapshot with running.
-          return (
-            params.workflowStatus === 'pending' ||
-            params.workflowStatus === 'paused' ||
-            params.workflowStatus === 'suspended' ||
-            params.workflowStatus === 'running'
-          );
-        },
+        // Same injectable policy as the singleIterationWorkflow above.
+        shouldPersistSnapshot,
+        // See the singleIterationWorkflow comment above — the effective
+        // policy may exclude `running`, in which case resume claims cannot
+        // be de-duplicated.
+        allowUnclaimedResumes: true,
         // Agent-loop snapshots are pure resume artifacts — strip everything a
         // resume never reads before persisting.
         pruneSnapshot: pruneAgentLoopSnapshot,
@@ -433,9 +455,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
 
               for (const pendingSignal of pendingSignals) {
                 const signalForTranscript = drainList.addSignal(pendingSignal);
-                if (!isSystemReminderSignalType(signalForTranscript.type)) {
-                  await emitChunkEvent(pubsub, state.runId, signalForTranscript.toDataPart() as any);
-                }
+                await emitChunkEvent(pubsub, state.runId, signalForTranscript.toDataPart() as any);
               }
 
               state.messageListState = drainList.serialize();

@@ -5,7 +5,7 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
-import { useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
@@ -14,17 +14,20 @@ import {
   AgentChatLoadingSkeleton,
   AgentSidebarLoadingSkeleton,
 } from '@/domains/agents/components/agent-loading-skeletons';
+import { AgentUnavailable } from '@/domains/agents/components/agent-unavailable';
+import { ThreadsPanelShortcuts } from '@/domains/agents/components/threads-panel-shortcuts';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
-import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
 import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import { MemoryTimelineProvider } from '@/domains/agents/context/memory-timeline-context';
+import { ThreadPreferencesProvider } from '@/domains/agents/context/thread-preferences-provider';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
 import { getAgentSuggestedPrompts } from '@/domains/agents/utils/agent-suggested-prompts';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
+import { cleanProviderId } from '@/domains/llm/utils';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
 import { ThreadViewByTrace } from '@/domains/traces/components/thread-view-by-trace';
 
@@ -40,6 +43,14 @@ function AgentThread() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- threadId is intentional: we need a new UUID per thread
   const newThreadId = useMemo(() => uuid(), [threadId]);
+  const newThreadKey = `${agentId}:${newThreadId}`;
+  const activeNewThread = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    activeNewThread.current = isNewThread ? newThreadKey : undefined;
+    return () => {
+      activeNewThread.current = undefined;
+    };
+  }, [isNewThread, newThreadKey]);
 
   const hasMemory = Boolean(memory?.result);
 
@@ -94,7 +105,7 @@ function AgentThread() {
 
   // A 404 is authoritative even if a previous fetch left stale data in the cache.
   if (error && is404NotFoundError(error)) {
-    return <div className="py-4 text-center">Agent not found</div>;
+    return <AgentUnavailable />;
   }
 
   if (error) {
@@ -102,21 +113,27 @@ function AgentThread() {
   }
 
   if (!agent) {
-    return <div className="py-4 text-center">Agent not found</div>;
+    return <AgentUnavailable />;
   }
 
   const actualThreadId = isNewThread ? newThreadId : (threadId ?? newThreadId);
 
   const handleRefreshThreadList = async () => {
-    await refreshThreads();
-
-    if (isNewThread) {
-      void navigate(`/agents/${agentId}/threads/${newThreadId}`);
+    if (isNewThread && activeNewThread.current === newThreadKey) {
+      void navigate(`/agents/${agentId}/threads/${newThreadId}`, { replace: true });
     }
+
+    await refreshThreads();
   };
 
   return (
-    <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
+    <ThreadPreferencesProvider
+      agentId={agentId!}
+      threadId={actualThreadId}
+      defaultProvider={cleanProviderId(agent.provider ?? '')}
+      defaultModel={agent.modelId ?? ''}
+      defaultSettings={defaultSettings}
+    >
       <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId} resourceId={agentId!}>
         <BrowserToolCallsProvider key={`browser-${agentId}-${actualThreadId}`}>
           <BrowserSessionProvider
@@ -129,6 +146,7 @@ function AgentThread() {
               <ObservationalMemoryProvider>
                 <MemoryTimelineProvider key={`memory-timeline-${agentId}-${actualThreadId}`}>
                   <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
+                    <ThreadsPanelShortcuts panel={threadsPanel} />
                     <AgentLayout
                       agentId={agentId!}
                       leftPanel={threadsPanel}
@@ -176,14 +194,14 @@ function AgentThread() {
           </BrowserSessionProvider>
         </BrowserToolCallsProvider>
       </WorkingMemoryProvider>
-    </AgentSettingsProvider>
+    </ThreadPreferencesProvider>
   );
 }
 
 export default AgentThread;
 
 const AgentThreadLoadingSkeleton = () => (
-  <div className="relative grid h-full overflow-y-auto pt-6" data-testid="agent-thread-skeleton" aria-busy="true">
+  <div className="relative grid h-full overflow-y-auto pt-4" data-testid="agent-thread-skeleton" aria-busy="true">
     <AgentChatLoadingSkeleton />
   </div>
 );

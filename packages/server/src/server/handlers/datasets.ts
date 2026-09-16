@@ -18,6 +18,7 @@ import {
   datasetAndItemIdPathParams,
   datasetItemVersionPathParams,
   paginationQuerySchema,
+  listDatasetsQuerySchema,
   tenancyQuerySchema,
   listItemsQuerySchema,
   listExperimentResultsQuerySchema,
@@ -161,17 +162,19 @@ export const LIST_DATASETS_ROUTE = createRoute({
   method: 'GET',
   path: '/datasets',
   responseType: 'json',
-  queryParamSchema: paginationQuerySchema,
+  queryParamSchema: listDatasetsQuerySchema,
   responseSchema: listDatasetsResponseSchema,
   summary: 'List all datasets',
-  description: 'Returns a paginated list of all datasets',
+  description:
+    'Returns a paginated list of all datasets. Optionally filter by target type and/or the target IDs the dataset is attached to',
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { page, perPage } = params;
-      const result = await mastra.datasets.list({ page: page ?? 0, perPage: perPage ?? 10 });
+      const { page, perPage, targetType, targetIds } = params;
+      const filters = targetType || targetIds ? { targetType, targetIds } : undefined;
+      const result = await mastra.datasets.list({ page: page ?? 0, perPage: perPage ?? 10, filters });
       return {
         datasets: result.datasets as any,
         pagination: result.pagination,
@@ -667,7 +670,7 @@ export const LIST_ALL_EXPERIMENTS_ROUTE = createRoute({
   handler: async ({ mastra, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { page, perPage, experimentSetId, comparisonId, variantId, trialIndex } = params;
+      const { page, perPage, experimentSetId, comparisonId, variantId, trialIndex, targetType, targetId } = params;
       const storage = mastra.getStorage();
       if (!storage) {
         throw new HTTPException(500, { message: 'Storage not configured' });
@@ -681,6 +684,8 @@ export const LIST_ALL_EXPERIMENTS_ROUTE = createRoute({
         comparisonId,
         variantId,
         trialIndex,
+        targetType,
+        targetId,
         pagination: { page: page ?? 0, perPage: perPage ?? 20 },
       });
       return { experiments: result.experiments, pagination: result.pagination };
@@ -781,7 +786,7 @@ export const LIST_EXPERIMENTS_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { page, perPage, experimentSetId, comparisonId, variantId, trialIndex } = params;
+      const { page, perPage, experimentSetId, comparisonId, variantId, trialIndex, targetType, targetId } = params;
       const ds = await mastra.datasets.get({ id: datasetId });
       const result = await ds.listExperiments({
         page: page ?? 0,
@@ -790,6 +795,8 @@ export const LIST_EXPERIMENTS_ROUTE = createRoute({
         comparisonId,
         variantId,
         trialIndex,
+        targetType,
+        targetId,
       });
       return { experiments: result.experiments, pagination: result.pagination };
     } catch (error) {

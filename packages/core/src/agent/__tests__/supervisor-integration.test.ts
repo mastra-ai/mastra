@@ -355,7 +355,7 @@ describe('Supervisor Pattern Integration Tests', () => {
       ]);
     });
 
-    it('should report an unsuccessful delegation when stream finishes with an error reason', async () => {
+    it('should fail the delegation when the sub-agent stream finishes with an error reason', async () => {
       let capturedContext: DelegationCompleteContext | undefined;
 
       const subAgent = new Agent({
@@ -442,11 +442,14 @@ describe('Supervisor Pattern Integration Tests', () => {
       });
       await stream.consumeStream();
 
+      // A sub-agent run that ends in error is a failed delegation: the tool throws
+      // (so the parent model sees an error result) and the hook gets the error.
       expect(capturedContext).toBeDefined();
+      expect(capturedContext!.success).toBe(false);
+      expect(capturedContext!.error).toBeInstanceOf(Error);
+      expect(capturedContext!.error!.message).toContain('finishReason "error"');
       expect(capturedContext!.result.text).toBe('Streamed sub-agent answer');
       expect(capturedContext!.result.finishReason).toBe('error');
-      expect(capturedContext!.success).toBe(false);
-      expect(capturedContext!.error).toBeUndefined();
     });
 
     it('should let onDelegationComplete replace the tool result the parent sees in the same run', async () => {
@@ -823,6 +826,81 @@ describe('Supervisor Pattern Integration Tests', () => {
       // The sub-agent's user message should contain the modified prompt
       expect(receivedPrompts.some(p => p.includes('MODIFIED PROMPT'))).toBe(true);
       expect(receivedPrompts.some(p => p.includes('original prompt'))).toBe(false);
+    });
+
+    it('should forward processed supervisor context without leaking processor control messages', async () => {
+      const secret = 'the launch code is 8675309';
+      const observation = `Observed context: ${secret}`;
+      const continuationHint = 'Continue the conversation using the observations above.';
+      let subAgentPrompt: unknown;
+      let filteredMessages: MessageFilterContext['messages'] = [];
+      let observationalRuns = 0;
+
+      const observationalProcessor: Processor = {
+        id: 'observational-memory',
+        processInput: async ({ messages, systemMessages }) => {
+          observationalRuns += 1;
+          return {
+            messages: [
+              ...messages.filter(message => message.role !== 'user'),
+              {
+                id: 'om-continuation',
+                role: 'user',
+                content: { format: 2, parts: [{ type: 'text', text: continuationHint }] },
+                createdAt: new Date(),
+              } as MastraDBMessage,
+            ],
+            systemMessages: [...systemMessages, { role: 'system', content: observation }],
+          };
+        },
+      };
+      const memory = new MockMemory();
+      vi.spyOn(memory, 'getInputProcessors').mockResolvedValue([observationalProcessor]);
+
+      const subAgent = new Agent({
+        id: 'observer-agent',
+        name: 'observer-agent',
+        description: 'Captures delegated context.',
+        instructions: 'Use the provided context.',
+        model: new MockLanguageModelV2({
+          doGenerate: async options => {
+            subAgentPrompt = options.prompt;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+              text: 'done',
+              content: [{ type: 'text', text: 'done' }],
+              warnings: [],
+            };
+          },
+        }),
+      });
+
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'Delegate the task.',
+        model: makeSupervisorModel('observerAgent', 'use remembered context'),
+        agents: { observerAgent: subAgent },
+        memory,
+      });
+
+      await supervisorAgent.generate(secret, {
+        maxSteps: 3,
+        delegation: {
+          messageFilter: ({ messages }) => {
+            filteredMessages = messages;
+            return messages;
+          },
+        },
+      });
+
+      expect(JSON.stringify(filteredMessages)).toContain(secret);
+      expect(JSON.stringify(filteredMessages)).not.toContain(continuationHint);
+      expect(JSON.stringify(subAgentPrompt)).toContain(secret);
+      expect(JSON.stringify(subAgentPrompt)).not.toContain(continuationHint);
+      expect(observationalRuns).toBe(1);
     });
 
     it('should invoke messageFilter callback before delegating to a sub-agent', async () => {

@@ -30,8 +30,7 @@ export const NoPromptBlocksInfo = () => {
         actionSlot={
           <div className="flex flex-col items-center gap-2">
             {canCreate && (
-              <Button as={Link} to={paths.cmsPromptBlockCreateLink()} variant="primary">
-                <Plus />
+              <Button as={Link} to={paths.cmsPromptBlockCreateLink()} variant="primary" icon={<Plus />}>
                 Create Prompt
               </Button>
             )}
@@ -41,8 +40,9 @@ export const NoPromptBlocksInfo = () => {
               href="https://mastra.ai/docs/editor/overview#prompt-blocks"
               target="_blank"
               rel="noopener noreferrer"
+              icon={<ExternalLinkIcon />}
             >
-              Prompts Documentation <ExternalLinkIcon />
+              Prompts Documentation
             </Button>
           </div>
         }

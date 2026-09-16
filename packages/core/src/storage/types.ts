@@ -250,15 +250,22 @@ export type StorageCloneThreadInput = {
 };
 
 /**
+ * Output from copying a thread. Message payloads are copied inside the store and
+ * never returned; only the id mapping is produced.
+ */
+export type StorageCopyThreadOutput = {
+  /** The newly created thread */
+  thread: StorageThreadType;
+  /** Map from source message IDs to copied message IDs (used for OM remapping) */
+  messageIdMap?: Record<string, string>;
+};
+
+/**
  * Output from cloning a thread
  */
-export type StorageCloneThreadOutput = {
-  /** The newly created cloned thread */
-  thread: StorageThreadType;
+export type StorageCloneThreadOutput = StorageCopyThreadOutput & {
   /** The messages that were copied to the new thread */
   clonedMessages: MastraDBMessage[];
-  /** Map from source message IDs to cloned message IDs (used for OM remapping) */
-  messageIdMap?: Record<string, string>;
 };
 
 export type StorageResourceType = {

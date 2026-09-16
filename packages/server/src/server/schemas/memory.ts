@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { paginationInfoSchema, createPagePaginationSchema, successResponseSchema } from './common';
+import { lastMessagesSchema, messageHistorySchema } from './message-history';
 
 // Path parameter schemas
 export const threadIdPathParams = z.object({
@@ -481,7 +482,8 @@ export const memoryConfigResponseSchema = z.object({
   memoryType: z.enum(['local', 'gateway']).optional(),
   config: z
     .object({
-      lastMessages: z.union([z.number(), z.literal(false)]).optional(),
+      lastMessages: lastMessagesSchema.optional(),
+      messageHistory: messageHistorySchema.optional(),
       semanticRecall: z.union([z.boolean(), z.unknown()]).optional(),
       workingMemory: z
         .object({
@@ -557,6 +559,19 @@ export const updateThreadBodySchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
   resourceId: z.string().optional(),
 });
+
+/**
+ * Body schema for POST /memory/threads/:threadId/transfer
+ * Reassigns the thread (and its messages) to a different resource.
+ */
+export const transferThreadBodySchema = z.object({
+  resourceId: z.string().min(1),
+});
+
+/**
+ * Response schema for POST /memory/threads/:threadId/transfer
+ */
+export const transferThreadResponseSchema = threadSchema;
 
 /**
  * Body schema for PUT /memory/threads/:threadId/working-memory

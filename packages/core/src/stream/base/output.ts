@@ -17,6 +17,7 @@ import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { WorkflowRunStatus } from '../../workflows';
 import { DelayedPromise, consumeStream } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
+import { isSignalChunkExcluded } from '../signal-exclusions';
 import type {
   ChunkType,
   LanguageModelUsage,
@@ -357,6 +358,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     initialState?: any;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
+    if (options.logger) {
+      this.__setLogger(options.logger);
+    }
     this.#options = options;
     this.#transportRef = options.transportRef;
     this.#returnScorerData = !!options.returnScorerData;
@@ -957,7 +961,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               if (self.#status !== 'failed' && self.#status !== 'canceled') {
                 self.#status = 'success';
               }
-              if (chunk.payload.stepResult.reason) {
+              // A caller `abortSignal` cancellation bails through the same path processor
+              // tripwires use, so the bail's `finish` chunk carries `reason: 'tripwire'`. The
+              // preceding `abort` chunk already set the status to 'canceled'; preserve the
+              // 'aborted' finish reason instead of overwriting it with the synthetic tripwire.
+              if (self.#status === 'canceled') {
+                self.#finishReason = 'aborted';
+              } else if (chunk.payload.stepResult.reason) {
                 self.#finishReason = chunk.payload.stepResult.reason;
               }
 
@@ -980,12 +990,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 const outputSteps = chunk.payload.output?.steps;
                 const lastStep = outputSteps?.[outputSteps?.length - 1];
                 const stepTripwire = lastStep?.tripwire;
-                self.#tripwire = {
-                  reason: stepTripwire?.reason || 'Processor tripwire triggered',
-                  retry: stepTripwire?.retry,
-                  metadata: stepTripwire?.metadata,
-                  processorId: stepTripwire?.processorId,
-                };
+                // Don't synthesize a tripwire for a caller cancellation: aborts bail through this
+                // same 'tripwire' reason but carry no real step tripwire. Only surface a tripwire
+                // when an actual processor produced one (or when the run wasn't aborted).
+                if (self.#status !== 'canceled' || stepTripwire) {
+                  self.#tripwire = {
+                    reason: stepTripwire?.reason || 'Processor tripwire triggered',
+                    retry: stepTripwire?.retry,
+                    metadata: stepTripwire?.metadata,
+                    processorId: stepTripwire?.processorId,
+                  };
+                }
               }
 
               // Add structured output to the latest assistant message metadata
@@ -1469,6 +1484,20 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    * Stream of all chunks. Provides complete control over stream processing.
    */
   get fullStream() {
+    const stream = this.__getUnfilteredFullStream();
+    const hideSignals = this.#options.hideSignals;
+    if (!hideSignals || (Array.isArray(hideSignals) && hideSignals.length === 0)) return stream;
+    return stream.pipeThrough(
+      new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
+        transform(chunk, controller) {
+          if (!isSignalChunkExcluded(chunk, hideSignals)) controller.enqueue(chunk);
+        },
+      }),
+    );
+  }
+
+  /** @internal Shared fanout must retain signal chunks, with the existing transforms applied. */
+  __getUnfilteredFullStream() {
     const configuredTransforms = this.#options.experimentalTransform;
     if (!configuredTransforms) {
       return this.#createEventedStream();

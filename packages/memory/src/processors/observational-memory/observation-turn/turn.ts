@@ -12,6 +12,7 @@ import type { MemoryContextProvider } from '../processor';
 import type { ObservationModelContext } from '../types';
 
 import { loadMemoryContextMessages } from './load-memory-context';
+import { selectSafeBufferPrefix } from './safe-buffer-prefix';
 import { ObservationStep } from './step';
 import type { ObservationTurnHooks, TurnContext, TurnResult } from './types';
 
@@ -229,13 +230,16 @@ export class ObservationTurn {
       const allMessages = getObservableMessages(this.messageList);
       const record = this._record!;
       const unobservedMessages = this.om.getUnobservedMessages(allMessages, record);
-      if (unobservedMessages.length > 0) {
+      // Buffer only the safe prefix before a tool call still pending on the newest
+      // message; defer when the cut before it is unsafe (see selectSafeBufferPrefix).
+      const idleMessages = selectSafeBufferPrefix(unobservedMessages);
+      if (idleMessages.length > 0) {
         void this.om.trackBackgroundWork(
           this.om
             .buffer({
               threadId: this.threadId,
               resourceId: this.resourceId,
-              messages: unobservedMessages,
+              messages: idleMessages,
               record,
               writer: this.writer,
               agent: this.agent,

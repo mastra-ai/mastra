@@ -5,9 +5,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Comment,
   type CommentVariant,
-  CommentComposer,
-  CommentComposerInput,
-  CommentComposerSend,
   CommentItem,
   CommentItemActions,
   CommentItemAuthor,
@@ -18,9 +15,15 @@ import {
   CommentItemTimestamp,
   CommentList,
 } from '@mastra/playground-ui/components/Comment';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@mastra/playground-ui/components/InputGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { format } from 'date-fns';
-import { Trash2Icon } from 'lucide-react';
+import { ArrowUp, Trash2Icon, Trash2, ChevronRight, ChevronLeft, ClipboardCheck } from 'lucide-react';
 import { useState } from 'react';
 
 import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
@@ -91,6 +94,7 @@ function FeedbackItems({
     const status = <FeedbackReviewStatusBadge status={fb.reviewStatus} />;
     const markReviewed = onMarkReviewed && feedbackId && fb.reviewStatus !== 'reviewed' && (
       <Button
+        icon={<ClipboardCheck />}
         variant="ghost"
         size="sm"
         disabled={pendingFeedbackId === feedbackId}
@@ -193,9 +197,11 @@ export function FeedbackThread({
   };
 
   return (
-    <Comment variant={variant} className="min-h-0 gap-4 px-3">
-      <CommentComposer
+    <Comment variant={variant} className="min-h-0 gap-4">
+      {/* Same size/variant as the timeline search field so switching tabs doesn't shift the layout. */}
+      <form
         aria-label="Leave feedback"
+        className="flex w-full items-center gap-2"
         onSubmit={async event => {
           event.preventDefault();
           if (sendBlocked) return;
@@ -207,15 +213,20 @@ export function FeedbackThread({
           }
         }}
       >
-        <CommentComposerInput
-          aria-label="Leave feedback"
-          placeholder="Leave feedback..."
-          value={text}
-          onChange={event => setText(event.target.value)}
-        >
-          <CommentComposerSend aria-label="Send feedback" disabled={sendBlocked} />
-        </CommentComposerInput>
-      </CommentComposer>
+        <InputGroup size="sm" variant="outline">
+          <InputGroupInput
+            aria-label="Leave feedback"
+            placeholder="Leave feedback..."
+            value={text}
+            onChange={event => setText(event.target.value)}
+          />
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton type="submit" aria-label="Send feedback" disabled={sendBlocked}>
+              <ArrowUp />
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+      </form>
 
       <div className="min-h-0 overflow-y-auto">
         {isLoadingFeedbackData ? (
@@ -241,6 +252,7 @@ export function FeedbackThread({
       {(hasMore || currentPage > 0) && (
         <div className="flex items-center gap-2">
           <Button
+            icon={<ChevronLeft />}
             size="sm"
             variant="ghost"
             disabled={currentPage === 0}
@@ -248,7 +260,13 @@ export function FeedbackThread({
           >
             Previous
           </Button>
-          <Button size="sm" variant="ghost" disabled={!hasMore} onClick={() => onPageChange?.(currentPage + 1)}>
+          <Button
+            icon={<ChevronRight />}
+            size="sm"
+            variant="ghost"
+            disabled={!hasMore}
+            onClick={() => onPageChange?.(currentPage + 1)}
+          >
             Next
           </Button>
         </div>
@@ -269,7 +287,7 @@ export function FeedbackThread({
           </AlertDialog.Header>
           <AlertDialog.Footer>
             <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
-            <Button variant="primary" disabled={isDeleting} onClick={handleDeleteConfirm}>
+            <Button icon={<Trash2 />} variant="primary" disabled={isDeleting} onClick={handleDeleteConfirm}>
               {isDeleting ? 'Deleting…' : 'Delete'}
             </Button>
           </AlertDialog.Footer>

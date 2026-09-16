@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mysql",
-  "version": "0.8.7",
+  "version": "0.9.1-alpha.0",
   "description": "MySQL provider for Mastra - db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "mysql2": "^3.11.3"
+    "mysql2": "^3.24.4"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

@@ -23,6 +23,23 @@ import { evaluateRuleGroup } from './rule-evaluator';
 
 const PASSTHROUGH_STEP_PREFIX = 'passthrough-';
 
+/**
+ * Override a hydrated workflow step's ID so it derives from the unique
+ * `ProcessorGraphStep.id` of the graph node (`processor:<graphStepId>`) rather
+ * than from the resolved processor's stable `id`. Without this, two distinct
+ * graph nodes whose provider returns processors with the same `id` collapse to a
+ * single workflow step (steps are keyed by `step.id`), overwriting configured
+ * nodes and making parallel/branch outputs ambiguous.
+ *
+ * Uses a shallow spread (not core's `cloneStep`) so that every property is
+ * preserved — notably `providesSkillDiscovery` and the bound
+ * `getLoadedToolsForRequestContext`, which `cloneStep` drops — and so the
+ * provider-created processor is never mutated.
+ */
+function withGraphStepId<T extends { id: string }>(step: T, graphStepId: string): T {
+  return { ...step, id: `processor:${graphStepId}` };
+}
+
 interface HydrationContext {
   providers: Record<string, ProcessorProvider>;
   mastra?: Mastra;
@@ -39,7 +56,15 @@ function resolveStep(step: ProcessorGraphStep, ctx: HydrationContext): Processor
     return undefined;
   }
 
-  const processor = provider.createProcessor(step.config);
+  const parsed = provider.configSchema.safeParse(step.config);
+  if (!parsed.success) {
+    throw new Error(
+      `Invalid configuration for processor graph step "${step.id}" ` +
+        `(provider "${step.providerId}"): ${parsed.error.message}`,
+    );
+  }
+
+  const processor = provider.createProcessor(parsed.data as Record<string, unknown>);
 
   // Wrap with phase filtering if only a subset of phases are enabled
   const allProviderPhases = provider.availablePhases;
@@ -148,7 +173,7 @@ function buildWorkflow(
     if (entry.type === 'step') {
       const processor = resolveStep(entry.step, ctx);
       if (!processor) continue;
-      const step = createStep(processor as Parameters<typeof createStep>[0]);
+      const step = withGraphStepId(createStep(processor as Parameters<typeof createStep>[0]), entry.step.id);
       workflow = workflow.then(step);
       hasSteps = true;
     } else if (entry.type === 'parallel') {
@@ -160,7 +185,7 @@ function buildWorkflow(
           if (branchEntries.length === 1 && branchEntries[0]!.type === 'step') {
             const proc = resolveStep(branchEntries[0]!.step, ctx);
             if (!proc) return undefined;
-            return createStep(proc as Parameters<typeof createStep>[0]);
+            return withGraphStepId(createStep(proc as Parameters<typeof createStep>[0]), branchEntries[0]!.step.id);
           }
           // Multi-step branch: build a sub-workflow
           const subWorkflow = buildWorkflow(branchEntries, `${workflowId}-parallel-branch-${branchIdx}`, ctx);
@@ -186,7 +211,10 @@ function buildWorkflow(
         if (condition.steps.length === 1 && condition.steps[0]!.type === 'step') {
           const proc = resolveStep(condition.steps[0]!.step, ctx);
           if (!proc) continue;
-          branchStep = createStep(proc as Parameters<typeof createStep>[0]);
+          branchStep = withGraphStepId(
+            createStep(proc as Parameters<typeof createStep>[0]),
+            condition.steps[0]!.step.id,
+          );
         } else {
           branchStep = buildWorkflow(condition.steps, `${workflowId}-cond-branch-${i}`, ctx);
           if (!branchStep) continue;

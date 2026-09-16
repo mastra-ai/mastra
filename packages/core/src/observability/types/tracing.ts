@@ -548,6 +548,13 @@ export interface ProcessorPipelineAttributes {
   processorExecutor?: 'workflow' | 'legacy';
   /** Processor index in the agent */
   processorIndex?: number;
+  /**
+   * Milliseconds spent inside `processOutputStream`, summed across every
+   * chunk of the stream. Only set on output stream processor spans. The
+   * span's own duration covers the whole stream, model latency included, so
+   * this is what separates a slow processor from a slow model.
+   */
+  hookDurationMs?: number;
   /** MessageList mutations performed by this processor */
   messageListMutations?: Array<{
     type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
@@ -610,6 +617,10 @@ export interface WorkflowRunAttributes extends AIBaseAttributes {
 export interface WorkflowStepAttributes extends AIBaseAttributes {
   /** Step status */
   status?: WorkflowStepStatus;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -622,6 +633,12 @@ export interface WorkflowConditionalAttributes extends AIBaseAttributes {
   truthyIndexes?: number[];
   /** Which steps will be executed */
   selectedSteps?: string[];
+  /** Authored graph entry id for this control-flow operation */
+  entryId?: string;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -642,6 +659,12 @@ export interface WorkflowParallelAttributes extends AIBaseAttributes {
   branchCount: number;
   /** Step IDs being executed in parallel */
   parallelSteps?: string[];
+  /** Authored graph entry id for this control-flow operation */
+  entryId?: string;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -656,6 +679,12 @@ export interface WorkflowLoopAttributes extends AIBaseAttributes {
   totalIterations?: number;
   /** Number of steps to run concurrently in foreach loop */
   concurrency?: number;
+  /** Authored graph entry id for this control-flow operation */
+  entryId?: string;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -668,6 +697,12 @@ export interface WorkflowSleepAttributes extends AIBaseAttributes {
   untilDate?: Date;
   /** Sleep type */
   sleepType?: 'fixed' | 'dynamic';
+  /** Authored graph entry id for this sleep operation */
+  entryId?: string;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -1837,7 +1872,14 @@ export type TracingEvent =
 export interface SpanOutputProcessor {
   /** Processor name */
   name: string;
-  /** Process span before export */
+  /**
+   * Process span before export.
+   *
+   * Mutate the span you receive and return the same instance, or return
+   * `undefined` to drop it. Do not return a copy: `exportSpan` and `isValid`
+   * are instance members of the live span, so a copy cannot be exported and
+   * is dropped with a logged processor error.
+   */
   process(span?: AnySpan): AnySpan | undefined;
   /** Shutdown processor */
   shutdown(): Promise<void>;

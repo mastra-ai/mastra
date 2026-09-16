@@ -7,7 +7,7 @@ description: "Browse Hugging Face model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/huggingface.svg" alt="Hugging Face logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Hugging Face
 
-Access 74 Hugging Face models through Mastra's model router. Authentication is handled automatically using the `HF_TOKEN` environment variable.
+Access 77 Hugging Face models through Mastra's model router. Authentication is handled automatically using the `HF_TOKEN` environment variable.
 
 Learn more in the [Hugging Face documentation](https://huggingface.co).
 
@@ -188,6 +188,42 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 384000,
     "inputCost": 0.3,
     "outputCost": 1.2
+  },
+  {
+    "model": "huggingface/google/gemma-3-12b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.05,
+    "outputCost": 0.15
+  },
+  {
+    "model": "huggingface/google/gemma-3-27b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.08,
+    "outputCost": 0.16
+  },
+  {
+    "model": "huggingface/google/gemma-3-4b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.05,
+    "outputCost": 0.1
   },
   {
     "model": "huggingface/google/gemma-4-26B-A4B-it",

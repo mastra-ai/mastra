@@ -425,7 +425,7 @@ describe('experiment item sub-route', () => {
       expect(dialog.parentElement?.className).toContain('grid-cols-[1fr_1fr]');
 
       fireEvent.click(await screen.findByText('Experiment tool call'));
-      const spanHeading = await screen.findByText(/# span-child/);
+      const spanHeading = await screen.findByRole('heading', { name: /span-child/ });
       const spanSection = spanHeading.closest('section');
       if (!spanSection) throw new Error('Expected span detail section');
 
@@ -451,7 +451,7 @@ describe('experiment item sub-route', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
       fireEvent.click(await screen.findByText('Experiment tool call'));
 
-      expect(await screen.findByText(/# span-child/)).toBeDefined();
+      expect(await screen.findByRole('heading', { name: /span-child/ })).toBeDefined();
       const traceSection = screen.getByText('Experiment agent run').closest('section');
       const panelGrid = traceSection?.parentElement;
       const topLevelPanels = Array.from(panelGrid?.children ?? []).filter(child => child.tagName === 'SECTION');
@@ -466,13 +466,13 @@ describe('experiment item sub-route', () => {
       await screen.findByRole('dialog');
       fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
       fireEvent.click(await screen.findByText('Experiment tool call'));
-      expect(await screen.findByText(/# span-child/)).toBeDefined();
+      expect(await screen.findByRole('heading', { name: /span-child/ })).toBeDefined();
 
       fireEvent.click(screen.getByLabelText('Previous span'));
-      expect(await screen.findByText(/# span-root/)).toBeDefined();
+      expect(await screen.findByRole('heading', { name: /span-root/ })).toBeDefined();
 
       fireEvent.click(screen.getByLabelText('Next span'));
-      expect(await screen.findByText(/# span-child/)).toBeDefined();
+      expect(await screen.findByRole('heading', { name: /span-child/ })).toBeDefined();
     });
 
     it('closes span details without closing the trace card', async () => {
@@ -481,13 +481,13 @@ describe('experiment item sub-route', () => {
       const dialog = await screen.findByRole('dialog');
       fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
       fireEvent.click(await screen.findByText('Experiment tool call'));
-      expect(await screen.findByText(/# span-child/)).toBeDefined();
+      expect(await screen.findByRole('heading', { name: /span-child/ })).toBeDefined();
 
-      const spanSection = screen.getByText(/# span-child/).closest('section');
+      const spanSection = screen.getByRole('heading', { name: /span-child/ }).closest('section');
       if (!spanSection) throw new Error('Expected span detail section');
       fireEvent.click(within(spanSection).getByLabelText('Close Panel'));
 
-      await waitFor(() => expect(screen.queryByText(/# span-child/)).toBeNull());
+      await waitFor(() => expect(screen.queryByRole('heading', { name: /span-child/ })).toBeNull());
       expect(screen.getByText('Experiment agent run')).toBeDefined();
       expect(dialog.isConnected).toBe(true);
     });

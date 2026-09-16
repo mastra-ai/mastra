@@ -7,8 +7,8 @@ import {
 } from '@mastra/playground-ui/components/DataList';
 import { getShortId } from '@mastra/playground-ui/components/Text';
 import { Trash2 } from 'lucide-react';
-import type { MouseEvent } from 'react';
-import { useMemo, useState } from 'react';
+import type { MouseEvent, ReactNode, SyntheticEvent } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { DeleteExperimentDialog } from './delete-experiment-dialog';
 import {
   EXPERIMENT_DATASET_COLUMN,
@@ -30,6 +30,15 @@ export interface ExperimentsListProps {
   datasetFilter?: string;
   /** When provided, rows toggle selection (for comparison) instead of navigating. */
   selection?: ExperimentsListSelection;
+  /** When provided, rows call this instead of navigating (e.g. to open a side panel). */
+  onSelectExperiment?: (experiment: DatasetExperiment) => void;
+  /** Highlights the row matching this id when `onSelectExperiment` is used. */
+  selectedExperimentId?: string;
+  /** Whether keyboard roving is bound globally. Defaults to true. */
+  keyboardGlobal?: boolean;
+  isFetchingNextPage?: boolean;
+  hasNextPage?: boolean;
+  setEndOfListElement?: (element: HTMLDivElement | null) => void;
 }
 
 export interface ExperimentsListSelection {
@@ -55,6 +64,75 @@ const columnHeaders = [
   { label: experimentColumnLabels.date },
 ];
 
+const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();
+
+/**
+ * Wrapper owns focus/roving and activation so the whole row activates; the
+ * link/button and the delete button stop propagation to avoid double activation.
+ */
+function ExperimentRow({
+  experiment: exp,
+  rowProps,
+  onSelect,
+  featured,
+  onDelete,
+  children,
+}: {
+  experiment: DatasetExperiment;
+  rowProps: ReturnType<ReturnType<typeof useDataListKeyboard>['getRowProps']>;
+  onSelect?: () => void;
+  featured?: boolean;
+  onDelete: () => void;
+  children: ReactNode;
+}) {
+  const { paths, Link } = useLinkComponent();
+  const linkRef = useRef<HTMLAnchorElement>(null);
+
+  return (
+    <EntityList.RowWrapper {...rowProps} onSelectRow={onSelect ?? (() => linkRef.current?.click())}>
+      {onSelect ? (
+        <EntityList.RowButton
+          colEnd={-2}
+          featured={featured}
+          tabIndex={-1}
+          onClick={(e: MouseEvent) => {
+            e.stopPropagation();
+            onSelect();
+          }}
+        >
+          {children}
+        </EntityList.RowButton>
+      ) : (
+        <EntityList.RowLink
+          ref={linkRef}
+          colEnd={-2}
+          to={paths.experimentLink(exp.id)}
+          LinkComponent={Link}
+          tabIndex={-1}
+          onClick={stopPropagation}
+        >
+          {children}
+        </EntityList.RowLink>
+      )}
+      <EntityList.ActionsCell className="pl-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          tooltip="Delete experiment"
+          aria-label={`Delete experiment ${exp.name ?? exp.id}`}
+          onClick={(e: MouseEvent) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+        >
+          <Trash2 className="size-4" />
+        </Button>
+      </EntityList.ActionsCell>
+    </EntityList.RowWrapper>
+  );
+}
+
 export function ExperimentsList({
   experiments,
   datasets,
@@ -64,10 +142,14 @@ export function ExperimentsList({
   statusFilter = 'all',
   datasetFilter = 'all',
   selection,
+  onSelectExperiment,
+  selectedExperimentId,
+  keyboardGlobal = true,
+  isFetchingNextPage,
+  hasNextPage,
+  setEndOfListElement,
 }: ExperimentsListProps) {
   const isSelectionActive = selection !== undefined;
-  const { paths, Link } = useLinkComponent();
-
   const datasetMap = useMemo(() => {
     const map = new Map<string, string>();
     datasets?.forEach(ds => map.set(ds.id, ds.name));
@@ -98,7 +180,7 @@ export function ExperimentsList({
     });
   }, [sortedExperiments, search, datasetMap, statusFilter, datasetFilter]);
 
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length });
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: keyboardGlobal });
 
   const [experimentToDelete, setExperimentToDelete] = useState<DatasetExperiment | null>(null);
 
@@ -139,31 +221,16 @@ export function ExperimentsList({
 
         if (!selection) {
           return (
-            <EntityList.RowWrapper key={exp.id}>
-              <EntityList.RowLink
-                colEnd={-2}
-                to={paths.experimentLink(exp.id)}
-                LinkComponent={Link}
-                {...getRowProps(index)}
-              >
-                {rowCells}
-              </EntityList.RowLink>
-              <EntityList.ActionsCell className="pl-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  tooltip="Delete experiment"
-                  aria-label={`Delete experiment ${exp.name ?? exp.id}`}
-                  onClick={(e: MouseEvent) => {
-                    e.stopPropagation();
-                    setExperimentToDelete(exp);
-                  }}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </EntityList.ActionsCell>
-            </EntityList.RowWrapper>
+            <ExperimentRow
+              key={exp.id}
+              experiment={exp}
+              rowProps={getRowProps(index)}
+              onSelect={onSelectExperiment ? () => onSelectExperiment(exp) : undefined}
+              featured={selectedExperimentId === exp.id}
+              onDelete={() => setExperimentToDelete(exp)}
+            >
+              {rowCells}
+            </ExperimentRow>
           );
         }
 
@@ -171,14 +238,20 @@ export function ExperimentsList({
         const toggle = () => selection.onToggleSelection(exp.id);
 
         return (
-          <EntityList.RowWrapper key={exp.id}>
+          <EntityList.RowWrapper key={exp.id} {...getRowProps(index)} onSelectRow={toggle}>
             <EntityList.SelectCell checked={isSelected} onToggle={toggle} aria-label={`Select experiment ${exp.id}`} />
-            <EntityList.RowButton colStart={2} featured={isSelected} onClick={toggle} {...getRowProps(index)}>
+            <EntityList.RowButton colStart={2} featured={isSelected} tabIndex={-1} onClick={stopPropagation}>
               {rowCells}
             </EntityList.RowButton>
           </EntityList.RowWrapper>
         );
       })}
+
+      <EntityList.NextPageLoading
+        isLoading={isFetchingNextPage}
+        hasMore={hasNextPage}
+        setEndOfListElement={setEndOfListElement}
+      />
 
       {experimentToDelete && (
         <DeleteExperimentDialog

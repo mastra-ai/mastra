@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
@@ -7,6 +5,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 
 import { MastraEditor } from '../index';
+import { computeInlineWorkspaceIdentity } from './workspace-identity';
 
 async function createEditorWithStore(agents?: Record<string, Agent>) {
   const storage = new InMemoryStore();
@@ -88,6 +87,59 @@ describe('EditorAgentNamespace.update', () => {
     const record = await agentsStore.getById('published-sdk-agent');
     expect(record?.activeVersionId).toBe(versionOne?.id);
     expect(record?.activeVersionId).not.toBe(versionTwo?.id);
+  });
+
+  it('bypasses the default cache for versionNumber: 0 with warm and cold caches', async () => {
+    const { editor } = await createEditorWithStore();
+
+    await editor.agent.create({
+      id: 'version-zero-agent',
+      name: 'Version Zero Agent',
+      instructions: 'ONE',
+      model: { provider: 'openai', name: 'gpt-4' },
+    });
+
+    // create() populated the namespace's default cache, so this exercises the warm path.
+    const warmResult = await editor.agent.getById('version-zero-agent', { versionNumber: 0 });
+    expect(warmResult).toBeNull();
+
+    // Cold cache should reach version resolution and return the same result.
+    editor.agent.clearCache('version-zero-agent');
+    const coldResult = await editor.agent.getById('version-zero-agent', { versionNumber: 0 });
+    expect(coldResult).toBeNull();
+  });
+
+  it('clearCache() unregisters stored agents hydrated by version-specific requests', async () => {
+    const codeAgent = new Agent({
+      name: 'code-agent',
+      instructions: 'CODE',
+      model: { provider: 'openai', name: 'gpt-4' } as any,
+    });
+    const { editor, mastra } = await createEditorWithStore({ 'code-agent': codeAgent });
+
+    await editor.agent.create({
+      id: 'versioned-stored-agent',
+      name: 'Versioned Stored Agent',
+      instructions: 'ONE',
+      model: { provider: 'openai', name: 'gpt-4' },
+    });
+
+    // Reset all cache/registry state so the version-specific load is the only
+    // thing that registers the stored agent (version requests skip the value cache).
+    editor.agent.clearCache();
+    expect(() => mastra.getAgentById('versioned-stored-agent')).toThrow();
+
+    const versioned = await editor.agent.getById('versioned-stored-agent', { versionNumber: 1 });
+    expect(versioned).not.toBeNull();
+    // Registered with Mastra even though it was never added to the value cache.
+    expect(mastra.getAgentById('versioned-stored-agent')).toBeDefined();
+
+    editor.agent.clearCache();
+
+    // The version-specifically-registered stored agent must be gone after clear-all.
+    expect(() => mastra.getAgentById('versioned-stored-agent')).toThrow();
+    // Code-defined agents must survive clear-all.
+    expect(mastra.getAgentById('code-agent')).toBe(codeAgent);
   });
 
   it('preserves an explicit activeVersionId while creating a new snapshot version', async () => {
@@ -258,10 +310,7 @@ describe('EditorAgentNamespace.update', () => {
       workspace,
     });
 
-    const workspaceId = `inline-${createHash('sha256')
-      .update(JSON.stringify(workspace.config))
-      .digest('hex')
-      .slice(0, 12)}`;
+    const { workspaceId } = computeInlineWorkspaceIdentity(workspace.config);
     const storedWorkspace = await workspaceStore.getByIdResolved(workspaceId);
     expect(storedWorkspace?.name).toBe('Updated Workspace');
   });

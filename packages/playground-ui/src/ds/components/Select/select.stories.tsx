@@ -170,3 +170,24 @@ export const ManyOptions: Story = {
     </Select>
   ),
 };
+
+/** Selected, disabled and grouped items side by side, to compare against the menu components. */
+export const KitchenSink: Story = {
+  render: () => (
+    <Select defaultValue="selected" defaultOpen>
+      <SelectTrigger className="w-56">
+        <SelectValue placeholder="Select option" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
+          <SelectItem value="plain">Plain item</SelectItem>
+          <SelectItem value="selected">Selected item</SelectItem>
+          <SelectItem value="disabled" disabled>
+            Disabled item
+          </SelectItem>
+          <SelectItem value="long">A very long option label that should truncate inside the popup</SelectItem>
+        </SelectGroup>
+      </SelectContent>
+    </Select>
+  ),
+};

@@ -10,6 +10,7 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { WorkflowCardCondition as Condition } from '@mastra/playground-ui/components/Workflow';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Handle, Position } from '@xyflow/react';
@@ -19,7 +20,6 @@ import { Highlight, themes } from 'prism-react-renderer';
 import { Fragment, useState } from 'react';
 
 import { useCurrentRun } from '../context/use-current-run';
-import type { Condition } from './utils';
 import { getConditionIconAndColor } from './workflow-node-badges';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
 
@@ -125,7 +125,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                       {({ className, style, tokens, getLineProps, getTokenProps }) => (
                         <pre
                           className={cn(
-                            'relative font-mono p-3 w-full cursor-pointer rounded-lg text-xs bg-surface4! whitespace-pre-wrap wrap-break-word',
+                            'relative font-mono p-3 w-full cursor-pointer rounded-lg text-ui-sm bg-surface4! whitespace-pre-wrap wrap-break-word',
                             className,
                             previousDisplayStatus === 'success' && nextStep && 'bg-accent1Dark!',
                             previousDisplayStatus === 'failed' && nextStep && 'bg-accent2Dark!',
@@ -161,7 +161,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                             >
                               {({ className, style, tokens, getLineProps, getTokenProps }) => (
                                 <pre
-                                  className={`${className} relative mt-2 w-full overflow-x-auto rounded-lg p-3 font-mono text-sm dark:bg-zinc-800`}
+                                  className={`${className} text-ui-md relative mt-2 w-full overflow-x-auto rounded-lg p-3 font-mono dark:bg-zinc-800`}
                                   style={{
                                     ...style,
                                     backgroundColor: '#121212',

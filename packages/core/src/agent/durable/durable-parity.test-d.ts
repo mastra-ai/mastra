@@ -67,6 +67,8 @@ type ConsumedDuringPreparation =
   | 'onError'
   | 'onAbort'
   | 'experimentalTransform'
+  // Applied to caller-local stream output, never serialized or used to filter generation.
+  | 'hideSignals'
   // AbortSignal is managed via the registry's abortController/abortSignal
   | 'abortSignal'
   // Toolsets and clientTools are resolved into the `tools` record during

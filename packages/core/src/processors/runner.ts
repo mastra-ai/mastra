@@ -22,10 +22,12 @@ import {
 } from '../observability';
 import type { ObservabilityContext, ProcessorSpanType, Span } from '../observability';
 import type { TracingContext } from '../observability/types';
-import type { RequestContext } from '../request-context';
+import { executeWithContext } from '../observability/utils';
+import { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
+import type { OutputWriter } from '../workflows/types';
 import { isProcessorWorkflow } from './is-processor-workflow';
 import { isMaybeAnthropicWithoutAssistantPrefill } from './provider-history-compat';
 import { createProcessorSendSignal } from './send-signal';
@@ -111,6 +113,13 @@ export class ProcessorState<OUTPUT = undefined> {
   public customState: Record<string, unknown> = {};
   public streamParts: ChunkType<OUTPUT>[] = [];
   public span?: Span<ProcessorSpanType>;
+  /**
+   * Milliseconds spent inside `processOutputStream`, summed across every
+   * chunk. The span itself lasts for the whole stream, so its duration is
+   * dominated by the model's inter-chunk latency; this is the processor's own
+   * share of that window.
+   */
+  public hookDurationMs = 0;
 
   constructor(
     options?: {
@@ -189,7 +198,18 @@ export class ProcessorState<OUTPUT = undefined> {
       accumulatedText: this.outputAccumulatedText,
     };
   }
+
+  /** Attributes attached on every end path of the span. */
+  getFinalAttributes(): { hookDurationMs: number } {
+    return { hookDurationMs: this.hookDurationMs };
+  }
 }
+
+/**
+ * Key under which the workflow-processor stream path keeps its accumulated
+ * hook time on the shared processor state, next to `__outputStreamSpan_<id>`.
+ */
+export const OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX = '__outputStreamHookDurationMs_';
 
 /**
  * Union type for processor or workflow that can be used as a processor
@@ -582,7 +602,7 @@ export class ProcessorRunner {
     writer?: ProcessorStreamWriter,
     abortSignal?: AbortSignal,
   ): Promise<ProcessorStepOutput> {
-    // The stream phase runs the whole workflow once per streamed chunk, with the full
+    // Explicit workflows run once per streamed chunk, with the full
     // accumulated `streamParts` as input. Persisting a snapshot (and tracing a public
     // span) for every one of those transient runs makes a stream of n chunks cost O(n²)
     // in storage writes and serialized payload (#19605). Internal processor workflows
@@ -590,6 +610,29 @@ export class ProcessorRunner {
     // user-supplied processor workflow keeps the persisting defaults, so the opt-out is
     // applied per run here — leaving the same workflow's standalone runs untouched.
     const isPerChunkPhase = input.phase === 'outputStream';
+
+    const inputData = {
+      ...input,
+      processorStates: this.processorStates,
+      abortSignal,
+      agent: this.agent,
+    };
+    const outputWriter: OutputWriter | undefined = writer
+      ? (chunk, options) => writer.custom(chunk, options)
+      : undefined;
+    if (isPerChunkPhase && workflow.__executeOutputStream) {
+      const execute = workflow.__executeOutputStream;
+      return executeWithContext({
+        span: observabilityContext?.tracingContext?.currentSpan,
+        fn: () =>
+          execute({
+            inputData,
+            ...observabilityContext,
+            requestContext: requestContext ?? new RequestContext(),
+            outputWriter,
+          }),
+      });
+    }
 
     // Create a run and start the workflow
     const run = await workflow.createRun(
@@ -601,19 +644,10 @@ export class ProcessorRunner {
         : undefined,
     );
     const result = await run.start({
-      // Cast to allow processorStates/abortSignal - passed through to workflow processor steps
-      // but not part of the official ProcessorStepOutput schema
-      inputData: {
-        ...input,
-        // Pass the processorStates map so workflow processor steps can access their state
-        processorStates: this.processorStates,
-        // Pass abortSignal so processors can cancel in-flight work
-        abortSignal,
-        agent: this.agent,
-      } as ProcessorStepOutput,
+      inputData,
       ...observabilityContext,
       requestContext,
-      outputWriter: writer ? chunk => writer.custom(chunk) : undefined,
+      outputWriter,
     });
 
     // Check for tripwire status - this means a processor in the workflow called abort()
@@ -944,20 +978,27 @@ export class ProcessorRunner {
             // Track input chunk (before processor transformation)
             state.addInputPart(processedPart);
 
-            const result = await processor.processOutputStream({
-              part: processedPart as ChunkType,
-              streamParts: state.streamParts as ChunkType[],
-              state: state.customState,
-              agent: this.agent,
-              abort: <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
-                throw new TripWire(reason || `Stream part blocked by ${processor.id}`, options, processor.id);
-              },
-              ...createObservabilityContext({ currentSpan: state.span }),
-              requestContext,
-              messageList,
-              retryCount,
-              writer,
-            });
+            // Timed in a finally so a tripwire or error still reports the time spent so far.
+            const hookStart = performance.now();
+            let result: ChunkType | null | undefined;
+            try {
+              result = await processor.processOutputStream({
+                part: processedPart as ChunkType,
+                streamParts: state.streamParts as ChunkType[],
+                state: state.customState,
+                agent: this.agent,
+                abort: <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+                  throw new TripWire(reason || `Stream part blocked by ${processor.id}`, options, processor.id);
+                },
+                ...createObservabilityContext({ currentSpan: state.span }),
+                requestContext,
+                messageList,
+                retryCount,
+                writer,
+              });
+            } finally {
+              state.hookDurationMs += performance.now() - hookStart;
+            }
 
             // Track output chunk and update processedPart
             processedPart = result as ChunkType<OUTPUT> | null | undefined;
@@ -971,6 +1012,7 @@ export class ProcessorRunner {
               error,
               endSpan: true,
               attributes: {
+                ...state.getFinalAttributes(),
                 tripwireAbort: {
                   reason: error.message,
                   retry: error.options?.retry,
@@ -989,7 +1031,7 @@ export class ProcessorRunner {
           }
           // End span with error
           const state = processorStates.get(processor.id);
-          state?.span?.error({ error: error as Error, endSpan: true });
+          state?.span?.error({ error: error as Error, endSpan: true, attributes: state.getFinalAttributes() });
           // Log error but continue with original part
           this.logger.error('Output processor failed', { agent: this.agentName, processorId: processor.id, error });
         }
@@ -1000,7 +1042,7 @@ export class ProcessorRunner {
         for (const state of processorStates.values()) {
           if (state.span) {
             // Set output with accumulated text and chunk count from processor's output
-            state.span.end({ output: state.getFinalOutput() });
+            state.span.end({ output: state.getFinalOutput(), attributes: state.getFinalAttributes() });
           }
         }
       }
@@ -1010,7 +1052,7 @@ export class ProcessorRunner {
       this.logger.error('Stream part processing failed', { agent: this.agentName, error });
       // End all spans on fatal error
       for (const state of processorStates.values()) {
-        state.span?.error({ error: error as Error, endSpan: true });
+        state.span?.error({ error: error as Error, endSpan: true, attributes: state.getFinalAttributes() });
       }
       return { part, blocked: false };
     }
@@ -1018,15 +1060,20 @@ export class ProcessorRunner {
 
   endStreamProcessorSpans<OUTPUT>(processorStates: Map<string, ProcessorState<OUTPUT>>): void {
     for (const state of processorStates.values()) {
-      state.span?.end({ output: state.getFinalOutput() });
+      state.span?.end({ output: state.getFinalOutput(), attributes: state.getFinalAttributes() });
 
       for (const [key, value] of Object.entries(state.customState)) {
         if (key.startsWith('__outputStreamSpan_')) {
-          (value as Span<SpanType.PROCESSOR_RUN> | undefined)?.end();
+          const durationKey = OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX + key.slice('__outputStreamSpan_'.length);
+          const hookDurationMs = state.customState[durationKey];
+          (value as Span<SpanType.PROCESSOR_RUN> | undefined)?.end(
+            typeof hookDurationMs === 'number' ? { attributes: { hookDurationMs } } : undefined,
+          );
           // Processor state outlives a single LLM step, so a kept reference would
           // leave later steps writing to an already-ended span parented to the
           // previous step - dropping their output and any tripwire abort.
           delete state.customState[key];
+          delete state.customState[durationKey];
         }
       }
     }
@@ -1491,6 +1538,7 @@ export class ProcessorRunner {
             messages: processableMessages,
             messageList,
             stepNumber,
+            runId: args.runId,
             steps,
             systemMessages: currentSystemMessages,
             rotateResponseMessageId: args.rotateResponseMessageId
@@ -1551,6 +1599,7 @@ export class ProcessorRunner {
 
       const inputData = {
         messages: processableMessages,
+        runId: args.runId,
         stepNumber,
         steps,
         messageId: stepInput.messageId,
@@ -1756,6 +1805,7 @@ export class ProcessorRunner {
   async runProcessLLMRequest(args: {
     prompt: LanguageModelV2Prompt;
     model: unknown;
+    messageList?: MessageList;
     stepNumber: number;
     steps: Array<StepResult<any>>;
     requestContext?: RequestContext;
@@ -1810,6 +1860,7 @@ export class ProcessorRunner {
           // the runner accepts the looser `unknown` to match other call paths
           // (e.g. unresolved string ids or function-typed dynamic models).
           model: args.model as never,
+          messageList: args.messageList,
           stepNumber: args.stepNumber,
           steps: args.steps,
           state: processorState.customState,

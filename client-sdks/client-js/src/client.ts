@@ -9,8 +9,7 @@ import type {
   ListTracesArgs,
   ListTracesResponse,
   ListTracesLightResponse,
-  TraceQueryRequest,
-  TraceQueryResponse,
+  TraceQueryTraceResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -102,9 +101,12 @@ import {
   AgentController,
 } from './resources';
 import type {
-  ListScoresBySpanParams,
-  LegacyTracesPaginatedArg,
   LegacyGetTracesResponse,
+  LegacyTracesPaginatedArg,
+  ListScoresBySpanParams,
+  QueryTraceThreadsInput,
+  QueryTraceThreadsResult,
+  QueryTracesInput,
 } from './resources/observability';
 import type {
   ListFeedbackResponse,
@@ -145,6 +147,7 @@ import type {
   ListDynamicWorkflowsResponse,
   UpsertDynamicWorkflowParams,
   UpsertDynamicWorkflowResponse,
+  WorkflowBuilderSettingsResponse,
   ListStoredPromptBlocksParams,
   ListStoredPromptBlocksResponse,
   CreateStoredPromptBlockParams,
@@ -190,6 +193,7 @@ import type {
   DatasetExperimentResult,
   DatasetExperimentResultRow,
   ListExperimentsParams,
+  ListDatasetsParams,
   ExperimentReviewCounts,
   CreateDatasetParams,
   UpdateDatasetParams,
@@ -231,6 +235,25 @@ import type {
 import { base64RequestContext, buildTenancyQuery, parseClientRequestContext, requestContextQueryString } from './utils';
 import { createSseJsonTransform } from './utils/stream-transforms';
 
+/**
+ * Provides typed access to agents, workflows, and other APIs on a running Mastra server.
+ * Point `baseUrl` at your server and configure authentication when required.
+ *
+ * @example
+ * ```typescript
+ * import { MastraClient } from '@mastra/client-js';
+ *
+ * const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/client-js/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Client documentation](https://mastra.ai/reference/client-js/mastra-client)
+ * if packaged docs are unavailable.
+ */
 export class MastraClient extends BaseResource {
   private observability: Observability;
   public readonly conversations: Conversations;
@@ -279,8 +302,8 @@ export class MastraClient extends BaseResource {
    * @param version - Optional version selector for stored agent overrides
    * @returns Agent instance
    */
-  public getAgent(agentId: string, version?: AgentVersionIdentifier) {
-    return new Agent(this.options, agentId, version);
+  public getAgent(agentId: string, version?: AgentVersionIdentifier, routeOverrides?: { stream?: string }) {
+    return new Agent(this.options, agentId, version, routeOverrides);
   }
 
   /**
@@ -1095,8 +1118,13 @@ export class MastraClient extends BaseResource {
   }
 
   /** Queries completed logical traces using recursive trace and related-record predicates. */
-  queryTraces(params: TraceQueryRequest): Promise<TraceQueryResponse> {
+  queryTraces(params: QueryTracesInput): Promise<TraceQueryTraceResponse> {
     return this.observability.queryTraces(params);
+  }
+
+  /** Queries thread identities using eligible-trace and cross-trace predicates. */
+  queryTraceThreads(params: QueryTraceThreadsInput): Promise<QueryTraceThreadsResult> {
+    return this.observability.queryTraceThreads(params);
   }
 
   /**
@@ -1421,6 +1449,13 @@ export class MastraClient extends BaseResource {
    */
   public getDynamicWorkflow(dynamicWorkflowId: string): DynamicWorkflow {
     return new DynamicWorkflow(this.options, dynamicWorkflowId);
+  }
+
+  /**
+   * Retrieves workflow builder settings for UI gating.
+   */
+  public getWorkflowBuilderSettings(): Promise<WorkflowBuilderSettingsResponse> {
+    return this.request('/editor/workflow-builder/settings');
   }
 
   // ============================================================================
@@ -1911,13 +1946,12 @@ export class MastraClient extends BaseResource {
   /**
    * Lists all datasets with optional pagination
    */
-  public listDatasets(pagination?: {
-    page?: number;
-    perPage?: number;
-  }): Promise<{ datasets: DatasetRecord[]; pagination: PaginationInfo }> {
+  public listDatasets(params?: ListDatasetsParams): Promise<{ datasets: DatasetRecord[]; pagination: PaginationInfo }> {
     const searchParams = new URLSearchParams();
-    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
-    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    if (params?.page !== undefined) searchParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    if (params?.targetType !== undefined) searchParams.set('targetType', params.targetType);
+    for (const id of params?.targetIds ?? []) searchParams.append('targetIds', id);
     const qs = searchParams.toString();
     return this.request(`/datasets${qs ? `?${qs}` : ''}`);
   }
@@ -2166,6 +2200,8 @@ export class MastraClient extends BaseResource {
     if (params?.comparisonId !== undefined) searchParams.set('comparisonId', params.comparisonId);
     if (params?.variantId !== undefined) searchParams.set('variantId', params.variantId);
     if (params?.trialIndex !== undefined) searchParams.set('trialIndex', String(params.trialIndex));
+    if (params?.targetType !== undefined) searchParams.set('targetType', params.targetType);
+    if (params?.targetId !== undefined) searchParams.set('targetId', params.targetId);
     const qs = searchParams.toString();
     return this.request(`/experiments${qs ? `?${qs}` : ''}`);
   }
@@ -2191,6 +2227,8 @@ export class MastraClient extends BaseResource {
     if (params?.comparisonId !== undefined) searchParams.set('comparisonId', params.comparisonId);
     if (params?.variantId !== undefined) searchParams.set('variantId', params.variantId);
     if (params?.trialIndex !== undefined) searchParams.set('trialIndex', String(params.trialIndex));
+    if (params?.targetType !== undefined) searchParams.set('targetType', params.targetType);
+    if (params?.targetId !== undefined) searchParams.set('targetId', params.targetId);
     const qs = searchParams.toString();
     return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments${qs ? `?${qs}` : ''}`);
   }

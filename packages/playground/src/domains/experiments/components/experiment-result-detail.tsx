@@ -91,8 +91,6 @@ export function ExperimentResultDetail({
   const { data: traceData, isLoading: isTraceLoading } = useExperimentTrace(featuredTraceId);
   const traceSpans = traceData?.spans;
   const anchorSpan = traceSpans?.find(span => !span.parentSpanId);
-  const anchorSpanEntityType =
-    anchorSpan?.entityType === 'agent' ? 'Agent' : anchorSpan?.entityType === 'workflow_run' ? 'Workflow' : undefined;
   const { data: traceFeedback } = useTraceFeedback({ traceId: featuredTraceId ?? undefined });
   const { data: spanFeedback } = useSpanFeedback({
     traceId: featuredTraceId ?? undefined,
@@ -168,8 +166,6 @@ export function ExperimentResultDetail({
               <TraceScoresTab
                 traceId={traceId}
                 spanId={rootSpanId}
-                isTopLevelSpan={!anchorSpan?.parentSpanId}
-                entityType={anchorSpanEntityType}
                 onScoreSelect={scoreId => {
                   if (scores?.some(score => score.id === scoreId)) {
                     setFeaturedScoreId(scoreId);

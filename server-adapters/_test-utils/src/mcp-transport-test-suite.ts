@@ -3,6 +3,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { MCPServer, MCPClient } from '@mastra/mcp';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { NativeMCPFixture } from './native-mcp-fixture';
 
 /**
  * Configuration for MCP transport test suite
@@ -151,6 +152,7 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
         mcpServers: {
           'test-server-1': mcpServer1,
           'test-server-2': mcpServer2,
+          'native-fixture': new NativeMCPFixture(),
         },
       });
 
@@ -178,6 +180,65 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
       await mcpServer1?.close();
       await mcpServer2?.close();
     }, 30000);
+
+    describe('native MCP v2 adapter dispatch', () => {
+      it('dispatches HTTP through the shared adapter path', async () => {
+        const response = await fetch(`http://localhost:${port}/api/mcp/native-fixture/mcp`, { method: 'POST' });
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({ native: true, httpPath: '/api/mcp/native-fixture/mcp' });
+      });
+
+      it.each([
+        { path: 'sse', method: 'GET' },
+        { path: 'messages', method: 'POST' },
+      ])('rejects the legacy $path route for a native server', async ({ path, method }) => {
+        const response = await fetch(`http://localhost:${port}/api/mcp/native-fixture/${path}`, { method });
+        expect(response.status).toBe(404);
+      });
+
+      it('executes ordinary tools with the v2 request context and reports a suspended tool truthfully', async () => {
+        const base = `http://localhost:${port}/api/mcp/native-fixture/tools`;
+        const init = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: {} }),
+        };
+        const ordinary = await fetch(`${base}/ordinary/execute`, init);
+        expect(ordinary.status).toBe(200);
+        expect(await ordinary.json()).toEqual({
+          result: {
+            protocolVersion: '2026-07-28',
+            elicitation: 'elicitation.sendRequest is not available on a 2026-07-28 server',
+          },
+        });
+        const suspended = await fetch(`${base}/interaction/execute`, init);
+        expect(suspended.status).toBe(200);
+        expect(await suspended.json()).toEqual({
+          status: 'suspended',
+          suspendPayload: { phase: 'confirm' },
+          resumeSchema: expect.objectContaining({ type: 'object', properties: { confirmed: { type: 'boolean' } } }),
+        });
+      });
+
+      it('continues a suspended tool over REST with resumeData and the echoed suspendPayload', async () => {
+        const base = `http://localhost:${port}/api/mcp/native-fixture/tools/interaction/execute`;
+        const post = (body: unknown) =>
+          fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+        const resumed = await post({ data: {}, resumeData: { confirmed: true }, suspendPayload: { phase: 'confirm' } });
+        expect(resumed.status).toBe(200);
+        expect(await resumed.json()).toEqual({ result: 1 });
+
+        // An answer that fails resumeSchema is a failed call, never a completed one.
+        const invalid = await post({
+          data: {},
+          resumeData: { confirmed: 'yes' },
+          suspendPayload: { phase: 'confirm' },
+        });
+        expect(invalid.status).toBe(500);
+        expect(await invalid.json()).not.toMatchObject({ status: 'completed' });
+      });
+    });
 
     describe('HTTP Transport (/api/mcp/:serverId/mcp)', () => {
       describe('Error handling (raw HTTP)', () => {
