@@ -261,6 +261,23 @@ const response = await agentWithTools.generate('Your prompt', {
 
 :::
 
+#### Reduce injected tokens with `instructions`
+
+Prompt injection embeds the serialized JSON schema in every model call, which can cost thousands of tokens per step on a large schema. When `jsonPromptInjection` is active, set `instructions` to inject your own compact description instead of the schema:
+
+```typescript
+const response = await testAgent.generate('Summarize this ticket.', {
+  structuredOutput: {
+    schema: ticketSchema,
+    jsonPromptInjection: 'system',
+    instructions:
+      'Reply with a JSON object: "summary" (one paragraph), "priority" ("low" | "high"), "tags" (up to 5 strings). No markdown.',
+  },
+})
+```
+
+The response is still validated against `schema` — only the injected text changes. Because the model no longer sees the full schema, adherence depends on how explicitly your instructions describe the expected fields; keep the field list complete. Without `instructions`, the generated schema instructions are used as before, and with native structured output (no injection) the field has no effect.
+
 ### Use a separate structuring model
 
 When `model` is provided to the `structuredOutput` property, Mastra uses a separate internal agent to handle the structured output. The main agent will handle all of the steps (including tool calling) and the structured output model will handle only the generation of structured output.
