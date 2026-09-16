@@ -96,9 +96,7 @@ function CompletedRunProbe() {
         Stream another run
       </button>
       <button onClick={() => setResult(null)}>Clear result</button>
-      <button onClick={() => setResult(current => (current ? { ...current, status: 'canceled' } : current))}>
-        Mark canceled
-      </button>
+      <button onClick={() => setResult(result && { ...result, status: 'canceled' })}>Mark canceled</button>
       <button
         onClick={() =>
           void timeTravelWorkflowStream({

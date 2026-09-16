@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { StreamVNextChunkType } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -16,26 +17,44 @@ const BASE_URL = 'http://localhost:4111';
 const run = pausedRunAfterFirstStepState;
 afterEach(cleanup);
 
-function RunPanel({ onSelectRun }: { onSelectRun: () => void }) {
+function RunPanel({ onSelectRun, observed }: { onSelectRun: () => void; observed: boolean }) {
   const context = useContext(WorkflowRunContext);
   return (
     <>
       <button onClick={onSelectRun}>View another run</button>
-      <WorkflowTrigger {...context} paramsRunId={context.runId} observeWorkflowStream={undefined} />
+      <WorkflowTrigger
+        {...context}
+        paramsRunId={context.runId}
+        observeWorkflowStream={observed ? context.observeWorkflowStream : undefined}
+      />
     </>
   );
 }
 
-function RunSelection() {
+function RunSelection({ observed }: { observed: boolean }) {
   const [runId, selectRun] = useState(run.runId);
   return (
     <WorkflowRunProvider workflowId="two-step-workflow" initialRunId={runId}>
-      <RunPanel onSelectRun={() => selectRun('another-run')} />
+      <RunPanel onSelectRun={() => selectRun('another-run')} observed={observed} />
     </WorkflowRunProvider>
   );
 }
 
-function renderPausedRun() {
+const pausedReplay: StreamVNextChunkType[] = [
+  { type: 'workflow-start', runId: run.runId, from: 'WORKFLOW', payload: { workflowId: 'two-step-workflow' } },
+  {
+    type: 'workflow-finish',
+    runId: run.runId,
+    from: 'WORKFLOW',
+    payload: {
+      workflowStatus: 'paused',
+      output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+      metadata: {},
+    },
+  },
+];
+
+function renderPausedRun({ observed = false } = {}) {
   server.use(
     http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({})),
     http.get(`${BASE_URL}/api/workflows/two-step-workflow`, () => HttpResponse.json(twoStepWorkflow)),
@@ -49,7 +68,7 @@ function renderPausedRun() {
   return render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={client}>
-        <RunSelection />
+        <RunSelection observed={observed} />
       </QueryClientProvider>
     </MastraReactProvider>,
   );
@@ -68,6 +87,27 @@ describe('WorkflowTrigger cancellation', () => {
       fireEvent.click(cancel);
       await screen.findByText('Canceled');
       expect(screen.queryByRole('button', { name: 'Run next step' })).toBeNull();
+    });
+  });
+  describe('when the paused run is also observed live', () => {
+    it('replaces the paused controls with the canceled status', async () => {
+      let observed = false;
+      server.use(
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/observe`, () => {
+          observed = true;
+          return new HttpResponse(pausedReplay.map(chunk => JSON.stringify(chunk) + '\x1e').join(''));
+        }),
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/runs/${run.runId}/cancel`, () =>
+          HttpResponse.json({ message: 'Workflow run cancelled' }),
+        ),
+      );
+      renderPausedRun({ observed: true });
+      await waitFor(() => expect(observed).toBe(true));
+      await waitFor(() =>
+        expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Run next step' }).disabled).toBe(false),
+      );
+      fireEvent.click(screen.getByRole('button', { name: /Cancel workflow run/i }));
+      await screen.findByText('Canceled');
     });
   });
   describe('when another run is selected during cancellation', () => {

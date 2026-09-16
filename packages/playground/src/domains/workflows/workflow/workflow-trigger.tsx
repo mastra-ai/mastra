@@ -67,7 +67,6 @@ export interface WorkflowTriggerProps {
     requestContext: Record<string, unknown>;
     perStep?: boolean;
   }) => Promise<void>;
-  streamResult: WorkflowRunStreamResult | null;
   isCancellingWorkflowRun: boolean;
   cancelWorkflowRun: ({ workflowId, runId }: { workflowId: string; runId: string }) => Promise<{
     message: string;
@@ -279,7 +278,7 @@ export function WorkflowTrigger({
       const response = await cancelWorkflowRun({ workflowId, runId: activeRunId });
       setCancelResponse({ ...response, runId: activeRunId });
       // Paused runs have no active stream to publish cancellation.
-      setResult(current => (current && current === pausedResult ? { ...current, status: 'canceled' } : current));
+      if (pausedResult) setResult({ ...pausedResult, status: 'canceled' });
     } catch {
       toast.error('Error cancelling workflow run');
     }

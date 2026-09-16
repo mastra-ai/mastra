@@ -52,6 +52,8 @@ export const useWorkflowRuns = (workflowId: string, { enabled = true }: { enable
   return { ...query, setEndOfListElement };
 };
 
+export const workflowRunQueryKey = (workflowId: string, runId: string) => ['workflow-run', workflowId, runId] as const;
+
 export const useWorkflowRun = (
   workflowId: string,
   runId: string,
@@ -59,7 +61,7 @@ export const useWorkflowRun = (
 ) => {
   const client = useMastraClient();
   return useQuery({
-    queryKey: ['workflow-run', workflowId, runId],
+    queryKey: workflowRunQueryKey(workflowId, runId),
     queryFn: () => client.getWorkflow(workflowId).runById(runId),
     enabled: Boolean(workflowId && runId),
     gcTime: 0,

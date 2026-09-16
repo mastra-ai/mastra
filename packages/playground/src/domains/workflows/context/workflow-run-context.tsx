@@ -35,30 +35,35 @@ export type WorkflowRunStreamResult = {
   suspendPayload?: Extract<WorkflowStreamResult, { status: 'suspended' }>['suspendPayload'];
 };
 
+export type WorkflowRunSnapshot = WorkflowRunState | (GetWorkflowRunByIdResponse & { timestamp?: number });
+
+export type ObserveWorkflowRunParams = {
+  workflowId: string;
+  runId: string;
+  storedStatus?: WorkflowRunStreamResult['status'];
+};
+
+export type TimeTravelWorkflowRunParams = {
+  workflowId: string;
+  runId: string;
+  requestContext: Record<string, unknown>;
+} & Omit<TimeTravelParams, 'requestContext'>;
+
 export type WorkflowRunContextType = {
   result: WorkflowRunStreamResult | null;
-  setResult: Dispatch<SetStateAction<WorkflowRunStreamResult | null>>;
+  setResult: (result: WorkflowRunStreamResult | null) => void;
+  streamResult: WorkflowRunStreamResult | null;
   payload: any;
   setPayload: Dispatch<SetStateAction<any>>;
   clearData: () => void;
   snapshot?: WorkflowRunState;
-  runId?: string;
-  setRunId: Dispatch<SetStateAction<string>>;
+  runId: string;
+  setRunId: (runId: string) => void;
   workflowError: Error | null;
-  observeWorkflowStream?: (params: {
-    workflowId: string;
-    runId: string;
-    storedStatus?: WorkflowRunStreamResult['status'];
-  }) => void;
+  observeWorkflowStream: (params: ObserveWorkflowRunParams) => void;
   closeStreamsAndReset: () => void;
-  timeTravelWorkflowStream: (
-    params: {
-      workflowId: string;
-      requestContext: Record<string, unknown>;
-      runId?: string;
-    } & Omit<TimeTravelParams, 'requestContext'>,
-  ) => Promise<void>;
-  runSnapshot?: WorkflowRunState | (GetWorkflowRunByIdResponse & { timestamp?: number });
+  timeTravelWorkflowStream: (params: TimeTravelWorkflowRunParams) => Promise<void>;
+  runSnapshot?: WorkflowRunSnapshot;
   isLoadingRunExecutionResult?: boolean;
   withoutTimeTravel?: boolean;
   debugMode: boolean;

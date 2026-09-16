@@ -26,7 +26,6 @@ type WorkflowActionProps = Pick<
   | 'createWorkflowRun'
   | 'streamWorkflow'
   | 'resumeWorkflow'
-  | 'streamResult'
   | 'isStreamingWorkflow'
   | 'isCancellingWorkflowRun'
   | 'cancelWorkflowRun'
@@ -134,7 +133,6 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
     createWorkflowRun,
     streamWorkflow,
     resumeWorkflow,
-    streamResult,
     isStreamingWorkflow,
     isCancellingWorkflowRun,
     cancelWorkflowRun,
