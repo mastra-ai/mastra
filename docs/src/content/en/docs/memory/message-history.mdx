@@ -359,22 +359,60 @@ const { messages } = await memory.recall({
 
 Message queries return `MastraDBMessage[]` format. To display messages in a frontend, you may need to convert them to a format your UI library expects. For example, [`toAISdkV5Messages`](/reference/ai-sdk/to-ai-sdk-v5-messages) converts messages to AI SDK UI format.
 
-## Thread cloning
+## Conversation branches
 
-Thread cloning creates a copy of an existing thread with its messages. This is useful for branching conversations or creating checkpoints before a potentially destructive operation, or alternatively testing variations of a conversation.
+A shared-history branch creates a child thread that references its ancestor messages through an inclusive fork point. The child stores only its divergent tail, so branch creation doesn't copy inherited message rows or semantic-recall embeddings.
+
+Use [`branchThread()`](/reference/memory/branchThread) when you want the original path to remain unchanged. Mastra generates the child ID and keeps the source resource ownership.
+
+### Edit an earlier user turn
+
+Fork at the message immediately before the user turn you want to replace. Add the edited user message to the child, then generate the response on the child thread:
 
 ```typescript
-const { thread, clonedMessages } = await memory.cloneThread({
-  sourceThreadId: 'thread-123',
-  title: 'Branched conversation',
+const { thread: editedThread } = await memory.branchThread({
+  threadId: 'thread-123',
+  branchPointMessageId: 'message-before-user-turn',
+  title: 'Edited request',
+})
+
+await agent.generate('Use the annual plan instead', {
+  memory: {
+    thread: editedThread.id,
+    resource: editedThread.resourceId,
+  },
 })
 ```
 
-You can filter cloned messages by count or date range and specify custom thread IDs. Utility methods are also available to inspect clone relationships.
+### Regenerate an assistant response
 
-If you don't need the copied messages returned, for example when forking a long thread, use `copyThread()`. It never returns message payloads, and on LibSQL and PostgreSQL the rows are copied inside the database. When semantic recall is enabled, the copied messages are still read back in batches to generate embeddings.
+Fork at the preceding user message, then generate on the child without adding that user message again:
 
-See [`cloneThread()`](/reference/memory/cloneThread), [`copyThread()`](/reference/memory/copyThread), and [clone utilities](/reference/memory/clone-utilities) for the full API.
+```typescript
+const { thread: regeneratedThread } = await memory.branchThread({
+  threadId: 'thread-123',
+  branchPointMessageId: 'preceding-user-message',
+})
+
+await agent.generate([], {
+  memory: {
+    thread: regeneratedThread.id,
+    resource: regeneratedThread.resourceId,
+  },
+})
+```
+
+Both flows are non-destructive. If branch creation or generation fails, the original thread and its messages remain intact. Mastra doesn't provide promotion, merge, an active-branch pointer, branch-tree UI, or a destructive regenerate helper.
+
+Nested branches are supported. Reads on a child resolve only its root-to-current path, including the exact branch-point message. Parent messages created after the fork and messages from sibling branches aren't reachable.
+
+See [branch navigation](/reference/memory/branch-utilities) for parent, child-list, and root-to-current history APIs.
+
+## Independent thread copies
+
+Use [`cloneThread()`](/reference/memory/cloneThread) or [`copyThread()`](/reference/memory/copyThread) when you need an independent snapshot instead of shared history. Both methods materialize the selected logical path with fresh message IDs and semantic embeddings. This remains true when the source is a shared-history branch.
+
+`cloneThread()` returns the copied messages. `copyThread()` doesn't return message payloads and can copy rows inside supported databases, but it still creates independent message rows. See [clone utilities](/reference/memory/clone-utilities) for clone relationship APIs.
 
 ## Deleting messages
 
