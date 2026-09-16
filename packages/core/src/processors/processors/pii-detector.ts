@@ -569,18 +569,36 @@ export class PIIDetector implements Processor<'pii-detector'> {
   /**
    * Apply redaction method to content
    */
-  private applyRedactionMethod(content: string, detections: PIIDetection[]): string {
-    let redacted = content;
+  private buildRedactionRegions(detections: PIIDetection[]) {
+    const sorted = [...detections].sort((a, b) => a.start - b.start || b.end - b.start - (a.end - a.start));
+    const regions: Array<{ start: number; end: number; owner: PIIDetection }> = [];
 
-    // Sort detections by start position in reverse order to maintain indices
-    const sortedDetections = [...detections].sort((a, b) => b.start - a.start);
+    for (const detection of sorted) {
+      const current = regions[regions.length - 1];
+      if (!current || detection.start >= current.end) {
+        regions.push({ start: detection.start, end: detection.end, owner: detection });
+        continue;
+      }
 
-    for (const detection of sortedDetections) {
-      const redactedValue = this.redactValue(detection.value, detection.type);
-      redacted = redacted.slice(0, detection.start) + redactedValue + redacted.slice(detection.end);
+      current.end = Math.max(current.end, detection.end);
+      if (detection.end - detection.start > current.owner.end - current.owner.start) {
+        current.owner = detection;
+      }
     }
 
-    return redacted;
+    return regions;
+  }
+
+  private applyRedactionMethod(content: string, detections: PIIDetection[]): string {
+    const regions = this.buildRedactionRegions(detections);
+    let cursor = 0;
+    let redacted = '';
+    for (const region of regions) {
+      redacted += content.slice(cursor, region.start);
+      redacted += this.redactValue(content.slice(region.start, region.end), region.owner.type);
+      cursor = region.end;
+    }
+    return redacted + content.slice(cursor);
   }
 
   /**
@@ -768,6 +786,11 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
     return this.detectionTypes.some(t => PIIDetector.LLM_ONLY_TYPES.has(t));
   }
 
+  /** Whether any configured detection type can be detected locally with a regex */
+  private get hasRegexTypes(): boolean {
+    return this.detectionTypes.some(t => !PIIDetector.LLM_ONLY_TYPES.has(t));
+  }
+
   /**
    * Apply the configured strategy to a detection result.
    * Returns the (possibly redacted) chunk, or null if filtered/blocked.
@@ -855,6 +878,123 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
     return combinedPart;
   }
 
+  private appendRegexCarryover(state: Record<string, any>, part: ChunkType & { type: 'text-delta' }): string {
+    const previous: string = state._piiRegexTail || '';
+    if (!previous) state._piiRegexTailPart = part;
+    const combined = previous + part.payload.text;
+    state._piiRegexTail = combined;
+    return combined;
+  }
+
+  private deferNonTextPart(
+    state: Record<string, any>,
+    part: ChunkType,
+    writer?: { custom: (data: ChunkType) => Promise<void> },
+  ) {
+    if (writer) {
+      state[REPROCESS_PART_KEY] = part;
+    } else {
+      if (!state._piiPendingNonText) state._piiPendingNonText = [];
+      state._piiPendingNonText.push(part);
+    }
+  }
+
+  private async processRedactOutputStream(
+    part: ChunkType,
+    state: Record<string, any>,
+    abort: (reason?: string) => never,
+    writer: { custom: (data: ChunkType) => Promise<void> } | undefined,
+    observabilityContext: ObservabilityContext | undefined,
+    requestContext: RequestContext | undefined,
+  ): Promise<ChunkType | null> {
+    if (state._piiPendingNonText?.length) {
+      const pending = state._piiPendingNonText.shift();
+      if (state._piiPendingNonText.length === 0) state._piiPendingNonText = undefined;
+      if (part.type === 'text-delta') {
+        this.appendRegexCarryover(state, part as ChunkType & { type: 'text-delta' });
+      } else {
+        if (!state._piiPendingNonText) state._piiPendingNonText = [];
+        state._piiPendingNonText.push(part);
+      }
+      return pending;
+    }
+
+    if (part.type !== 'text-delta') {
+      const carryover: string = state._piiRegexTail || '';
+      const carryoverPart = state._piiRegexTailPart as (ChunkType & { type: 'text-delta' }) | undefined;
+      state._piiRegexTail = undefined;
+      state._piiRegexTailPart = undefined;
+
+      if (carryover && carryoverPart) {
+        const regexResult = this.detectPIILocal(carryover);
+        const redacted = regexResult.redacted_content ?? carryover;
+        if (this.hasLLMOnlyTypes) {
+          const flushed = await this.flushLLMBuffer(state, abort, observabilityContext, requestContext);
+          if (flushed) {
+            this.deferNonTextPart(state, part, writer);
+            return flushed;
+          }
+        } else {
+          this.deferNonTextPart(state, part, writer);
+          return { ...carryoverPart, payload: { ...carryoverPart.payload, text: redacted } };
+        }
+      } else if (this.hasLLMOnlyTypes && state._piiBuffer) {
+        const flushed = await this.flushLLMBuffer(state, abort, observabilityContext, requestContext);
+        if (flushed) {
+          this.deferNonTextPart(state, part, writer);
+          return flushed;
+        }
+      }
+      return part;
+    }
+
+    const textPart = part as ChunkType & { type: 'text-delta' };
+    if (!textPart.payload.text) return part;
+
+    const previousLength = (state._piiRegexTail as string | undefined)?.length ?? 0;
+    const combined = this.appendRegexCarryover(state, textPart);
+    const regexResult = this.detectPIILocal(combined);
+    const detections = regexResult.detections ?? [];
+    const hasNewPII = detections.some(detection => detection.end > previousLength);
+    if (hasNewPII) await this.emitDetection(combined, regexResult, true);
+
+    if (this.hasLLMOnlyTypes) {
+      const carryoverPart = (state._piiRegexTailPart as typeof textPart | undefined) ?? textPart;
+      if (!state._piiFirstPayloadId) {
+        state._piiFirstPayloadId = carryoverPart.payload.id;
+        state._piiFirstRunId = carryoverPart.runId;
+      }
+      const buffered: string = state._piiBuffer || '';
+      const stablePrefix = previousLength > 0 ? buffered.slice(0, -previousLength) : buffered;
+      state._piiBuffer = stablePrefix + (regexResult.redacted_content ?? combined);
+
+      if (state._piiBuffer.length >= this.bufferSize || /[.!?]\s*$/.test(combined)) {
+        state._piiRegexTail = undefined;
+        state._piiRegexTailPart = undefined;
+        return this.flushLLMBuffer(state, abort, observabilityContext, requestContext);
+      }
+      return null;
+    }
+
+    if (combined.length <= PIIDetector.REGEX_CARRYOVER_SIZE) return null;
+
+    let emitEnd = combined.length - PIIDetector.REGEX_CARRYOVER_SIZE;
+    const regions = this.buildRedactionRegions(detections);
+    for (const region of regions) {
+      if (region.start < emitEnd && region.end > emitEnd) emitEnd = region.start;
+    }
+
+    const emitted = this.applyRedactionMethod(
+      combined.slice(0, emitEnd),
+      detections.filter(detection => detection.end <= emitEnd),
+    );
+    state._piiRegexTail = combined.slice(emitEnd);
+    if (!emitted) return null;
+
+    state._piiRegexTailPart = textPart;
+    return { ...textPart, payload: { ...textPart.payload, text: emitted } };
+  }
+
   /**
    * Process streaming output chunks for PII detection and redaction.
    *
@@ -884,6 +1024,10 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
     const { part, abort, state, writer, requestContext, ...rest } = args;
     const observabilityContext = resolveObservabilityContext(rest);
     try {
+      if (this.strategy === 'redact' && this.hasRegexTypes) {
+        return this.processRedactOutputStream(part, state, abort, writer, observabilityContext, requestContext);
+      }
+
       // Handle non-text chunks: flush any pending LLM buffer first
       if (part.type !== 'text-delta') {
         if (this.hasLLMOnlyTypes && state._piiBuffer) {
