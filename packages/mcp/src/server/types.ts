@@ -104,8 +104,18 @@ export interface MCPServerRequestStateOptions {
 
 /** Request-security options accepted by `startHTTP`. */
 export interface MCPServerHTTPRequestOptions {
+  /**
+   * Check the `Host` header against `allowedHosts` and the `Origin` header against
+   * `allowedOrigins` before handling the request. A check only runs when its list is
+   * non-empty; a rejected request receives a `403` JSON-RPC error.
+   */
   enableDnsRebindingProtection?: boolean;
+  /** Hostnames accepted in the `Host` header. Ports are ignored when matching. */
   allowedHosts?: string[];
+  /**
+   * Origins accepted in the `Origin` header. Only the hostname is compared, and
+   * requests without an `Origin` header pass because non-browser clients don't send one.
+   */
   allowedOrigins?: string[];
 }
 

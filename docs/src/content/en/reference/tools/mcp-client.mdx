@@ -1147,7 +1147,7 @@ const client = new MCPClient({
 })
 ```
 
-The document served at `clientMetadataUrl` must contain the same `client_id`, `client_name`, and `redirect_uris`. For loopback callbacks, include every fallback URL returned by `getCallbackUrlCandidates()` in the hosted document. The URL is sent as the `client_id`; the provider never calls a registration endpoint, so an authorization server that accepts neither the metadata document nor a pre-registered `clientInformation` fails the flow explicitly. When both are configured, `clientInformation` takes priority.
+The document served at `clientMetadataUrl` must contain the same `client_id`, `client_name`, and `redirect_uris`. For loopback callbacks, include every fallback URL returned by `getCallbackUrlCandidates()` in the hosted document. The URL is sent as the `client_id`; the provider never calls a registration endpoint, so an authorization server that accepts neither the metadata document nor a pre-registered `clientInformation` fails the flow explicitly. Configure exactly one identity: the constructor throws when both `clientInformation` and `clientMetadataUrl` are set.
 
 Tokens saved by `MCPOAuthClientProvider` are bound to the authorization server's validated `issuer`, and discovery state is persisted so the code exchange is only sent to the server that issued the redirect. The loopback callback also forwards the RFC 9207 `iss` parameter to the SDK, which rejects a mismatch before exchanging the authorization code.
 

@@ -6,6 +6,27 @@ Rebuilt `@mastra/mcp` on the MCP 2026-07-28 revision. Servers serve that revisio
 
 **Suspend and resume instead of server-initiated elicitation.** A tool that needs input from the caller calls `context.suspend(payload)`; the server returns `input_required` with a signed `requestState`, and when the caller answers, the tool runs again with `context.resumeData` (validated against `resumeSchema`) and `context.suspendPayload`. The same `createTool` definition works for agents, workflows and MCP. Resource and prompt callbacks receive `suspend`, `resumeData` and `suspendPayload` too. `context.mcp` keeps `extra`, `log` and `progress`; `elicitation.sendRequest`, `extra.sendRequest` and `extra.sendNotification` throw on a 2.0 server. `server.executeTool()` and the REST execute route report `{ status: 'suspended', suspendPayload, resumeSchema }` for a suspended tool and `{ status: 'completed', output }` otherwise.
 
+The primary migration is replacing each awaited `context.mcp.elicitation.sendRequest()` with a suspension, and on the client replacing `mcp.elicitation.onRequest()` with a per-server `inputRequests` handler:
+
+```diff
+  execute: async ({ orderId }, context) => {
+-   const answer = await context.mcp!.elicitation.sendRequest({ message: 'Address?', requestedSchema });
+-   if (answer.action !== 'accept') return { confirmed: false };
+-   return { confirmed: await book(orderId, answer.content.address) };
++   if (!context.resumeData) return context.suspend({ phase: 'address' });
++   return { confirmed: await book(orderId, context.resumeData.address) };
+  },
+```
+
+```diff
+- mcp.elicitation.onRequest('returns', async params => askUser(params));
++ const mcp = new MCPClient({
++   servers: { returns: { url, inputRequests: async ({ key, params }) => askUser(key, params) } },
++ });
+```
+
+The full picture, including the server-side `requestState` key:
+
 ```ts
 import { createTool } from '@mastra/core/tools';
 import { MCPClient, MCPServer } from '@mastra/mcp';

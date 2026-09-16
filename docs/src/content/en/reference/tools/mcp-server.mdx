@@ -555,9 +555,9 @@ Every request is self-contained: there is no session to create or resume, so `op
 
 | Option | Behavior |
 | - | - |
-| `enableDnsRebindingProtection` | When `true`, the `Host` and `Origin` headers are checked against `allowedHosts` and `allowedOrigins` before the request is handled. |
-| `allowedHosts` | Hosts (`host[:port]`) accepted when DNS rebinding protection is on. |
-| `allowedOrigins` | Origins accepted when DNS rebinding protection is on. |
+| `enableDnsRebindingProtection` | When `true`, the `Host` header is checked against `allowedHosts` and the `Origin` header against `allowedOrigins` before the request is handled. A check only runs when its list is non-empty. A rejected request receives a `403` JSON-RPC error. |
+| `allowedHosts` | Hostnames accepted in the `Host` header. Matching is port-agnostic: `localhost:3000` in the list allows any port on `localhost`. Write IPv6 addresses with brackets (`[::1]`). |
+| `allowedOrigins` | Origins accepted in the `Origin` header. Only the hostname is compared, so `https://app.example.com:8443` allows every scheme and port on `app.example.com`. Requests without an `Origin` header pass because non-browser MCP clients don't send one. |
 
 Omit `options` when you don't need request guards.
 
@@ -580,7 +580,7 @@ httpServer.listen(PORT, () => {
 })
 ```
 
-Because every request is self-contained, the same call works unchanged in serverless environments (Supabase Edge Functions, Cloudflare Workers, Vercel Edge, AWS Lambda, Deno Deploy). Nothing needs to persist between invocations:
+Because every request is self-contained, nothing needs to persist between invocations, so `startHTTP` works in serverless environments (Supabase Edge Functions, Cloudflare Workers, Vercel Edge, AWS Lambda, Deno Deploy). The method still takes Node-style `http.IncomingMessage` and `http.ServerResponse` objects, so a Fetch-based runtime has to convert its `Request` with an adapter such as `fetch-to-node` and turn the result back into a `Response`:
 
 ```typescript
 // Supabase Edge Function example

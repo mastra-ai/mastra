@@ -152,7 +152,8 @@ async function startFakeAuthorizationServer(port: number): Promise<FakeAuthoriza
         const pending = pendingCodes.get(params.get('code') ?? '');
         const verifier = params.get('code_verifier') ?? '';
         const challenge = createHash('sha256').update(verifier).digest('base64url');
-        if (!pending || pending.codeChallenge !== challenge) {
+        const redirectUri = params.get('redirect_uri');
+        if (!pending || pending.codeChallenge !== challenge || !redirectUri || redirectUri !== pending.redirectUri) {
           sendJson(res, 400, { error: 'invalid_grant' });
           return;
         }
