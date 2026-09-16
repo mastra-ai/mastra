@@ -41,21 +41,17 @@ function formatRelativeTime(ms?: number) {
 }
 
 function getRunDuration(result: WorkflowRunStreamResult | null, status?: WorkflowRunStatus) {
-  const stepTimes: Array<{ startedAt: number; endedAt?: number }> = Object.values(result?.steps ?? {}).flatMap(step => {
-    const startedAt = 'startedAt' in step ? step.startedAt : undefined;
-    if (typeof startedAt !== 'number') return [];
-    const endedAt = 'endedAt' in step ? step.endedAt : undefined;
-    return [{ startedAt, ...(typeof endedAt === 'number' ? { endedAt } : {}) }];
-  });
-
+  const stepTimes = Object.values(result?.steps ?? {}).flatMap(step =>
+    step.startedAt === undefined ? [] : [{ startedAt: step.startedAt, endedAt: step.endedAt }],
+  );
   if (stepTimes.length === 0) return undefined;
 
   const startedAt = Math.min(...stepTimes.map(step => step.startedAt));
-  const endedTimes = stepTimes.flatMap(step => (step.endedAt ? [step.endedAt] : []));
-  const endedAt = endedTimes.length > 0 ? Math.max(...endedTimes) : undefined;
+  const endedTimes = stepTimes.flatMap(step => (step.endedAt === undefined ? [] : [step.endedAt]));
+  const lastEndedAt = endedTimes.length > 0 ? Math.max(...endedTimes) : undefined;
   const isActive = status === 'running' || status === 'suspended' || status === 'waiting';
-  const effectiveEndedAt = endedAt ?? (isActive ? Date.now() : undefined);
-  return effectiveEndedAt === undefined ? undefined : effectiveEndedAt - startedAt;
+  const endedAt = isActive ? Date.now() : lastEndedAt;
+  return endedAt === undefined ? undefined : endedAt - startedAt;
 }
 
 export function InitialWorkflowHeader({ workflow, workflowId }: { workflow: GetWorkflowResponse; workflowId: string }) {
