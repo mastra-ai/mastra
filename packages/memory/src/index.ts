@@ -1114,7 +1114,7 @@ export class Memory extends MastraMemory {
       const generatedIds = new Set(generatedMessageIds);
       const mixedTrustedBatch = generatedIds.size > 0 && generatedIds.size < messages.length;
       const latestTupleByThread = new Map<string, { createdAt: Date; id: string }>();
-      const generatedFloorByThread = new Map<string, number>();
+      const generatedLowerBoundByThread = new Map<string, number>();
       const validatedMessages: MastraDBMessage[] = [];
 
       for (const inputMessage of messages) {
@@ -1149,28 +1149,31 @@ export class Memory extends MastraMemory {
           if (existing) {
             message = { ...message, createdAt: existing.createdAt };
           } else if (participatesInBranchTree || mixedTrustedBatch) {
-            if (!generatedFloorByThread.has(message.threadId)) {
+            if (!generatedLowerBoundByThread.has(message.threadId)) {
               const physical = await memoryStore.listMessages({
                 threadId: message.threadId,
                 perPage: false,
                 orderBy: { field: 'createdAt', direction: 'ASC' },
               });
               const latest = physical.messages.sort(compareMessageTuples).at(-1);
-              let floor = Date.now();
-              if (latest) floor = Math.max(floor, new Date(latest.createdAt).getTime());
-              if (ownerBranch) floor = Math.max(floor, ownerBranch.branchPointCreatedAt.getTime());
+              let lowerBound = latest ? new Date(latest.createdAt).getTime() : -Infinity;
+              if (ownerBranch) lowerBound = Math.max(lowerBound, ownerBranch.branchPointCreatedAt.getTime());
               for (const lineage of readyLineages) {
                 const ownerIndex = lineage.findIndex(entry => entry.thread.id === message.threadId);
                 if (ownerIndex >= 0 && ownerIndex < lineage.length - 1) {
-                  floor = Math.max(floor, lineage[ownerIndex + 1]!.branch!.branchPointCreatedAt.getTime());
+                  lowerBound = Math.max(lowerBound, lineage[ownerIndex + 1]!.branch!.branchPointCreatedAt.getTime());
                 }
               }
-              generatedFloorByThread.set(message.threadId, floor);
+              generatedLowerBoundByThread.set(message.threadId, lowerBound);
             }
-            const generatedFloor = generatedFloorByThread.get(message.threadId)!;
             const previousAccepted = latestTupleByThread.get(message.threadId);
-            const previousTimestamp = Math.max(generatedFloor, previousAccepted?.createdAt.getTime() ?? -Infinity);
-            message = { ...message, createdAt: new Date(previousTimestamp + 1) };
+            const minimumTimestamp = Math.max(
+              generatedLowerBoundByThread.get(message.threadId)! + 1,
+              (previousAccepted?.createdAt.getTime() ?? -Infinity) + 1,
+            );
+            if (message.createdAt.getTime() < minimumTimestamp) {
+              message = { ...message, createdAt: new Date(minimumTimestamp) };
+            }
           }
         }
 
