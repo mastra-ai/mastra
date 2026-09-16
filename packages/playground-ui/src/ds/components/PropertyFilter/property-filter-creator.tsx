@@ -1,4 +1,12 @@
-import { ArrowLeftIcon, ChevronRightIcon, FilterIcon, ListFilterPlusIcon, PlusIcon } from 'lucide-react';
+import {
+  ArrowLeftIcon,
+  ChevronRightIcon,
+  FilterIcon,
+  ListFilterPlusIcon,
+  PlusIcon,
+  ListFilterPlus,
+  X,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PickMultiPanel } from './pick-multi-panel';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
@@ -6,7 +14,11 @@ import { Button } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
 import { Combobox } from '@/ds/components/Combobox/combobox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
+import { MENU_SIDE_OFFSET, menuEmptyClass, menuItemClass, menuItemTrailingIconClass } from '@/ds/primitives/menu-item';
 import { cn } from '@/lib/utils';
+
+// Plain <button>s navigated with roving focus (not Base UI), so the highlight rides on `:focus`.
+const filterItemFocusClass = 'focus:bg-neutral6/5 focus:text-neutral6';
 
 export type PropertyFilterCreatorProps = {
   fields: PropertyFilterField[];
@@ -146,14 +158,14 @@ export function PropertyFilterCreator({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size={size} disabled={disabled}>
-          <ListFilterPlusIcon />
+        <Button variant="outline" size={size} disabled={disabled} icon={<ListFilterPlusIcon />}>
           {label}
         </Button>
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="w-64 p-3"
+        sideOffset={MENU_SIDE_OFFSET}
+        className={cn('w-64', selectedField ? 'p-3' : 'p-1')}
         initialFocus={false}
         finalFocus={() => {
           if (skipCloseFocusRef.current) {
@@ -163,7 +175,7 @@ export function PropertyFilterCreator({
           return true;
         }}
       >
-        <div className="grid gap-3">
+        <div className={cn('grid', selectedField && 'gap-3')}>
           {selectedField && (
             <div className="flex items-center gap-2">
               <button
@@ -222,13 +234,7 @@ export function PropertyFilterCreator({
                       type="button"
                       role="menuitem"
                       data-filter-item=""
-                      className={cn(
-                        'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ui-md transition-colors',
-                        'focus:bg-surface4 focus:text-neutral6 focus:outline-none',
-                        used
-                          ? 'cursor-not-allowed text-neutral2 opacity-70'
-                          : 'text-neutral4 hover:bg-surface4 hover:text-neutral6',
-                      )}
+                      className={cn(menuItemClass, 'group', filterItemFocusClass)}
                       disabled={used}
                       onClick={() => {
                         setError(undefined);
@@ -246,13 +252,20 @@ export function PropertyFilterCreator({
                       {used ? (
                         <span className="text-neutral3 ml-auto">In use</span>
                       ) : (
-                        <PlusIcon className="text-neutral3 ml-auto size-4 opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100" />
+                        <span
+                          className={cn(
+                            menuItemTrailingIconClass,
+                            'text-neutral3 opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100',
+                          )}
+                        >
+                          <PlusIcon />
+                        </span>
                       )}
                     </button>
                   );
                 })
               ) : (
-                <div className="text-ui-sm text-neutral3 px-2 py-1.5">No matching property.</div>
+                <div className={menuEmptyClass}>No matching property.</div>
               )}
             </div>
           )}
@@ -277,10 +290,10 @@ export function PropertyFilterCreator({
 
           {selectedField && (
             <div className="flex items-center justify-end gap-2">
-              <Button variant="ghost" size="md" onClick={() => setOpen(false)}>
+              <Button icon={<X />} variant="ghost" size="md" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button variant="outline" size="md" onClick={commit}>
+              <Button icon={<ListFilterPlus />} variant="outline" size="md" onClick={commit}>
                 Add filter
               </Button>
             </div>
@@ -325,10 +338,7 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
           type="button"
           role="menuitem"
           data-filter-item=""
-          className={cn(
-            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ui-md text-neutral4 transition-colors hover:bg-surface4 hover:text-neutral6',
-            'focus:bg-surface4 focus:text-neutral6 focus:outline-none',
-          )}
+          className={cn(menuItemClass, filterItemFocusClass)}
           onKeyDown={e => {
             if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
             if (!open) onToggle(field.id);
@@ -341,17 +351,21 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
             });
           }}
         >
-          {open && <ChevronRightIcon className="text-neutral3 size-4 shrink-0" />}
+          {open && <ChevronRightIcon className="text-neutral3" />}
           <span className="truncate">{field.label}</span>
-          {!open && <ChevronRightIcon className="text-neutral3 ml-auto size-4 shrink-0" />}
+          {!open && (
+            <span className={cn(menuItemTrailingIconClass, 'text-neutral3')}>
+              <ChevronRightIcon />
+            </span>
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent
         ref={contentRef}
         side="right"
         align="start"
-        sideOffset={8}
-        className="w-64 p-2"
+        sideOffset={MENU_SIDE_OFFSET}
+        className="w-64 p-0"
         initialFocus={false}
         onKeyDown={e => {
           if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;

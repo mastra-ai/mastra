@@ -5,7 +5,12 @@ import { MastraA2AError } from '@mastra/core/a2a';
 import type { AgentConfig } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import { MASTRA_VERSIONS_KEY, RequestContext } from '@mastra/core/request-context';
+import {
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+  MASTRA_VERSIONS_KEY,
+  RequestContext,
+} from '@mastra/core/request-context';
 import type { MastraStorage } from '@mastra/core/storage';
 import canonicalize from 'canonicalize';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -330,6 +335,85 @@ describe('A2A Handler', () => {
     });
   });
 
+  describe.each(['send', 'stream'] as const)('A2A %s memory identity', transport => {
+    it.each([false, true])('uses persisted v1 memory with trusted thread override=%s', async trustedThread => {
+      const taskStore = new InMemoryTaskStore();
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'authenticated-user');
+      if (trustedThread) requestContext.set(MASTRA_THREAD_ID_KEY, 'authenticated-thread');
+      const generate = vi.fn().mockResolvedValue({ text: 'Hello' });
+      const stream = vi.fn().mockImplementation(async () => createStreamResult({ chunks: ['Hello'] }));
+      const resumeGenerate = vi.fn().mockResolvedValue({ text: 'Continued' });
+      const resumeStream = vi.fn().mockImplementation(async () => createStreamResult({ chunks: ['Continued'] }));
+      const agent = { generate, stream, resumeGenerate, resumeStream } as unknown as Agent;
+      const invoke = async (params: MessageSendParams) => {
+        const input = { requestId: 'memory', params, taskStore, agent, agentId: 'test-agent', requestContext };
+        if (transport === 'send') return (await handleMessageSend(input)).result;
+        let initial: Task | undefined;
+        for await (const event of handleMessageStream(input)) {
+          if (event.result.kind === 'task') initial ??= event.result;
+        }
+        return initial!;
+      };
+      const task = await invoke({
+        message: {
+          kind: 'message',
+          messageId: 'initial',
+          role: 'user',
+          parts: [{ kind: 'text', text: 'Hello' }],
+          metadata: { resourceId: 'untrusted-message' },
+        },
+        metadata: { resourceId: 'untrusted-params' },
+      });
+      const memory = { thread: task.contextId, resource: 'authenticated-user' };
+      if (trustedThread) expect(task.contextId).toBe('authenticated-thread');
+      expect(task.contextId).toEqual(expect.any(String));
+      const call = transport === 'send' ? generate : stream;
+      expect(call).toHaveBeenLastCalledWith(expect.any(Array), expect.objectContaining({ memory }));
+      expect(call.mock.calls[0]?.[1]).not.toHaveProperty('threadId');
+      expect(call.mock.calls[0]?.[1]).not.toHaveProperty('resourceId');
+      const stored = (await taskStore.load({ agentId: 'test-agent', taskId: task.id }))!;
+      expect(stored.metadata?.resourceId).toBe(memory.resource);
+      await taskStore.save({ agentId: 'test-agent', data: { ...stored, status: { state: 'input-required' } } });
+      await invoke({
+        message: {
+          kind: 'message',
+          messageId: 'follow-up',
+          role: 'user',
+          taskId: task.id,
+          contextId: 'changed-context',
+          parts: [{ kind: 'text', text: 'Continue' }],
+        },
+        metadata: { resourceId: 'changed-resource' },
+      });
+      const resumeCall = transport === 'send' ? resumeGenerate : resumeStream;
+      expect(resumeCall).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ runId: task.id, requestContext }),
+      );
+      expect(resumeCall.mock.calls[0]?.[1]).not.toHaveProperty('memory');
+      expect((await taskStore.load({ agentId: 'test-agent', taskId: task.id }))?.metadata?.resourceId).toBe(
+        memory.resource,
+      );
+      const before = await taskStore.load({ agentId: 'test-agent', taskId: task.id });
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'different-user');
+      await expect(
+        invoke({
+          message: {
+            kind: 'message',
+            messageId: 'conflict',
+            role: 'user',
+            taskId: task.id,
+            parts: [{ kind: 'text', text: 'No' }],
+          },
+        }),
+      ).rejects.toThrow('Task memory identity conflicts');
+      expect(await taskStore.load({ agentId: 'test-agent', taskId: task.id })).toEqual(before);
+      expect(call).toHaveBeenCalledTimes(1);
+      expect(resumeCall).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('handleMessageSend', () => {
     let mockMastra: Mastra;
     let mockTaskStore: InMemoryTaskStore;
@@ -399,6 +483,7 @@ describe('A2A Handler', () => {
           id: expect.any(String),
           contextId: expect.any(String),
           metadata: {
+            resourceId: 'test-agent',
             execution: {
               toolCalls: undefined,
               toolResults: undefined,
@@ -558,8 +643,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(expect.any(Array), {
         runId: taskId,
         requestContext,
-        threadId: contextId,
-        resourceId: 'test-agent',
+        memory: { thread: contextId, resource: 'test-agent' },
       });
       expect((await mockTaskStore.load({ agentId: 'test-agent', taskId }))?.status.state).toBe('working');
 
@@ -932,8 +1016,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          threadId: contextId,
-          resourceId: agentId,
+          memory: { thread: contextId, resource: agentId },
         }),
       );
     });
@@ -1019,8 +1102,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          threadId: contextId,
-          resourceId: customResourceId,
+          memory: { thread: contextId, resource: customResourceId },
         }),
       );
     });
@@ -1065,8 +1147,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          threadId: contextId,
-          resourceId: customResourceId,
+          memory: { thread: contextId, resource: customResourceId },
         }),
       );
     });
@@ -1115,8 +1196,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          threadId: contextId,
-          resourceId: paramsResourceId,
+          memory: { thread: contextId, resource: paramsResourceId },
         }),
       );
     });
@@ -1161,8 +1241,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          threadId: contextId,
-          resourceId: customResourceId,
+          memory: { thread: contextId, resource: customResourceId },
         }),
       );
     });
@@ -1207,8 +1286,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          threadId: contextId,
-          resourceId: customResourceId,
+          memory: { thread: contextId, resource: customResourceId },
         }),
       );
     });
@@ -1349,6 +1427,7 @@ describe('A2A Handler', () => {
             },
           ],
           metadata: {
+            resourceId: 'test-agent',
             execution: {
               toolCalls: undefined,
               toolResults: undefined,
@@ -1418,6 +1497,7 @@ describe('A2A Handler', () => {
 
       // Verify the execution metadata is stored
       expect(result.result?.metadata).toEqual({
+        resourceId: 'test-agent',
         execution: {
           toolCalls: mockExecutionData.toolCalls,
           toolResults: mockExecutionData.toolResults,
@@ -1433,6 +1513,7 @@ describe('A2A Handler', () => {
       }
       const savedTask = await mockTaskStore.load({ agentId, taskId });
       expect(savedTask?.metadata).toEqual({
+        resourceId: 'test-agent',
         execution: {
           toolCalls: mockExecutionData.toolCalls,
           toolResults: mockExecutionData.toolResults,
@@ -1489,6 +1570,7 @@ describe('A2A Handler', () => {
       // Verify both existing metadata and execution metadata are present
       expect(result.result?.metadata).toEqual({
         ...existingMetadata,
+        resourceId: 'test-agent',
         execution: {
           toolCalls: mockExecutionData.toolCalls,
           toolResults: mockExecutionData.toolResults,
@@ -1794,7 +1876,7 @@ describe('A2A Handler', () => {
           ],
           id: expect.any(String),
           kind: 'task',
-          metadata: undefined,
+          metadata: { resourceId: 'test-agent' },
           status: {
             message: {
               kind: 'message',
@@ -4072,14 +4154,12 @@ describe('A2A Handler', () => {
           .spyOn(versionTwo, 'stream')
           .mockResolvedValue(createStreamResult({ chunks: ['version two'] }) as never);
         let candidate = versionOne;
-        const applyStoredOverrides = vi.fn(
-          async (_agent: Agent, selector: { versionId?: string; label?: string }) => {
-            if (selector.versionId === 'version-1') return versionOne;
-            if (selector.versionId === 'version-2') return versionTwo;
-            if (selector.label === 'candidate') return candidate;
-            return candidate;
-          },
-        );
+        const applyStoredOverrides = vi.fn(async (_agent: Agent, selector: { versionId?: string; label?: string }) => {
+          if (selector.versionId === 'version-1') return versionOne;
+          if (selector.versionId === 'version-2') return versionTwo;
+          if (selector.label === 'candidate') return candidate;
+          return candidate;
+        });
         vi.spyOn(mockMastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
 
         const execute = async ({

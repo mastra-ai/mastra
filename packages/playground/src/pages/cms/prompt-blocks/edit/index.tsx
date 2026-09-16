@@ -7,9 +7,11 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
+import { Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
+import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import type { PromptBlockFormValues } from '@/domains/prompt-blocks';
 import {
   useStoredPromptBlock,
@@ -20,6 +22,7 @@ import {
   PromptBlockEditSidebar,
   PromptBlockVersionCombobox,
   usePromptBlockEditForm,
+  DeletePromptBlockAction,
 } from '@/domains/prompt-blocks';
 import { useLinkComponent } from '@/lib/framework';
 import { RouteHeaderActions } from '@/lib/route-header';
@@ -187,10 +190,11 @@ function CmsPromptBlocksEditForm({
         <Notice variant="info" title="This is a previous version" className="m-4 mb-0">
           <Notice.Message>You are seeing a specific version of the prompt block.</Notice.Message>
           <div className="flex gap-2">
-            <Button type="button" variant="default" size="sm" onClick={onClearVersion}>
+            <Button icon={<Eye />} type="button" variant="default" size="sm" onClick={onClearVersion}>
               View latest version
             </Button>
             <Button
+              icon={<Rocket />}
               type="button"
               variant="default"
               size="sm"
@@ -214,6 +218,7 @@ function CmsPromptBlocksEditPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedVersionId = searchParams.get('versionId');
 
+  const { isCmsAvailable } = useIsCmsAvailable();
   const { data: block, isLoading } = useStoredPromptBlock(blockId, { status: 'draft' });
   const { data: versionsData } = usePromptBlockVersions({
     blockId: blockId ?? '',
@@ -273,7 +278,7 @@ function CmsPromptBlocksEditPage() {
     <MainContentLayout className="grid-rows-[1fr]">
       <RouteHeaderActions owner="cms-prompt-block-edit">
         <div className="flex items-center gap-2">
-          {hasDraft && <Badge variant="info">Unpublished changes</Badge>}
+          {hasDraft && <Badge variant="blue">Unpublished changes</Badge>}
           <PromptBlockVersionCombobox
             blockId={blockId}
             value={selectedVersionId ?? ''}
@@ -281,6 +286,7 @@ function CmsPromptBlocksEditPage() {
             variant="ghost"
             activeVersionId={activeVersionId}
           />
+          {isCmsAvailable && <DeletePromptBlockAction blockId={blockId} blockName={block.name} />}
         </div>
       </RouteHeaderActions>
       <CmsPromptBlocksEditForm

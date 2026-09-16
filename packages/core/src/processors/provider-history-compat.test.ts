@@ -656,6 +656,42 @@ describe('trailing assistant message protection', () => {
     expect((result![3].content as any[]).map(p => p.type)).toEqual(['reasoning', 'reasoning', 'tool-call']);
   });
 
+  it('strips foreign reasoning from a trailing tool continuation after switching to Anthropic', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'do the thing' }] },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'reasoning',
+            text: '',
+            providerOptions: {
+              openai: {
+                itemId: 'rs_123',
+                reasoningEncryptedContent: 'encrypted-reasoning',
+              },
+            },
+          },
+          { type: 'tool-call', toolCallId: 'call-1', toolName: 'doThing', input: {} },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'call-1', toolName: 'doThing', output: { type: 'text', value: 'ok' } },
+        ],
+      },
+    ];
+
+    const result = anthropicStripForeignReasoningContent.applyToPrompt!({
+      prompt,
+      model: anthropicModel,
+    });
+
+    expect(result).toBeDefined();
+    expect((result![1].content as any[]).map(p => p.type)).toEqual(['tool-call']);
+  });
+
   it('empty-signed strip skips the trailing assistant of a tool continuation', () => {
     const prompt = toolContinuationPrompt();
     // Give the historical assistant an empty signed block so the rule has
@@ -1061,5 +1097,194 @@ describe('ProcessorRunner.runProcessLLMRequest', () => {
 
     const assistant = result.prompt.find(m => m.role === 'assistant')!;
     expect((assistant.content as any[]).map(p => p.type)).toEqual(['reasoning', 'text']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// anthropic-strip-foreign-signed-reasoning (reactive cross-provider backstop)
+// ---------------------------------------------------------------------------
+
+describe('anthropicStripForeignSignedReasoning', () => {
+  const KIMI = 'kimi-for-coding';
+  const ANTHROPIC = 'anthropic.messages';
+
+  /** A persisted assistant turn with signed thinking, stamped with the provider that produced it. */
+  const stampedSignedAssistant = (
+    provider: string,
+    options: { signature?: string; redactedData?: string; text?: string } = {},
+  ) => {
+    const anthropic: Record<string, unknown> = {};
+    if (options.signature !== undefined) anthropic.signature = options.signature;
+    if (options.redactedData !== undefined) anthropic.redactedData = options.redactedData;
+    const text = options.text ?? 'thinking that was signed';
+    return {
+      id: `msg-${provider}-${options.signature ?? options.redactedData ?? 'unsigned'}`,
+      role: 'assistant' as const,
+      content: {
+        format: 2 as const,
+        metadata: { provider },
+        parts: [
+          {
+            // Canonical V2 stored reasoning shape (AIV5Adapter writes
+            // `reasoning` + `details`, not `text`).
+            type: 'reasoning' as const,
+            reasoning: text,
+            details: [{ type: 'text' as const, text }],
+            ...(Object.keys(anthropic).length > 0 ? { providerMetadata: { anthropic } } : {}),
+          },
+          { type: 'text' as const, text: 'the visible answer' },
+        ],
+      },
+      createdAt: new Date(),
+    };
+  };
+
+  /** A persisted assistant turn that holds ONLY signed thinking (no visible text). */
+  const thinkingOnlyAssistant = (provider: string, signature: string) => {
+    const message = stampedSignedAssistant(provider, { signature }) as any;
+    message.id = `msg-${provider}-thinking-only-${signature}`;
+    message.content.parts = message.content.parts.filter((p: any) => p.type === 'reasoning');
+    return message;
+  };
+
+  describe('preemptive applyToPrompt', () => {
+    const promptSignatures = (prompt: LanguageModelV2Prompt) =>
+      prompt.flatMap(message =>
+        Array.isArray(message.content)
+          ? message.content
+              .filter(part => part.type === 'reasoning')
+              .map(
+                part =>
+                  (part as { providerOptions?: { anthropic?: { signature?: unknown; redactedData?: unknown } } })
+                    .providerOptions?.anthropic,
+              )
+              .flatMap(anthropic => [anthropic?.signature ?? anthropic?.redactedData])
+          : [],
+      );
+
+    const promptAssistantContent = (prompt: LanguageModelV2Prompt) =>
+      prompt.filter(message => message.role === 'assistant').flatMap(message => message.content as any[]);
+
+    const runRequest = (handler: ProviderHistoryCompat, messageList: MessageList, provider: string) =>
+      handler.processLLMRequest({
+        ...makeRequestArgs(messageList.get.all.aiV5.prompt(), { provider }),
+        messageList,
+      });
+
+    it('drops foreign signed reasoning from the outbound prompt (kimi turn, anthropic target)', async () => {
+      const handler = new ProviderHistoryCompat();
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([stampedSignedAssistant(KIMI, { signature: 'kimi-sig' })], 'response');
+      messageList.add([createUserMessage('continue on claude')], 'input');
+
+      const result = await runRequest(handler, messageList, ANTHROPIC);
+
+      expect(result).toEqual({ prompt: expect.any(Array) });
+      const prompt = (result as { prompt: LanguageModelV2Prompt }).prompt;
+      expect(promptSignatures(prompt)).toEqual([]);
+      // The visible text of the foreign turn is kept.
+      expect(promptAssistantContent(prompt).map(part => part.type)).toEqual(['text']);
+    });
+
+    it('drops foreign signed reasoning in the other direction (anthropic turn, kimi target)', async () => {
+      const handler = new ProviderHistoryCompat();
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([stampedSignedAssistant(ANTHROPIC, { signature: 'anthropic-sig' })], 'response');
+      messageList.add([createUserMessage('continue on kimi')], 'input');
+
+      const result = await runRequest(handler, messageList, KIMI);
+
+      expect(result).toEqual({ prompt: expect.any(Array) });
+      expect(promptSignatures((result as { prompt: LanguageModelV2Prompt }).prompt)).toEqual([]);
+    });
+
+    it('keeps the target provider’s own signed reasoning', async () => {
+      const handler = new ProviderHistoryCompat();
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([stampedSignedAssistant(ANTHROPIC, { signature: 'anthropic-sig' })], 'response');
+      messageList.add([createUserMessage('keep going')], 'input');
+
+      const result = await runRequest(handler, messageList, ANTHROPIC);
+
+      expect(result).toBeUndefined();
+    });
+
+    it('drops only the foreign turn when providers are interleaved', async () => {
+      const handler = new ProviderHistoryCompat();
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([stampedSignedAssistant(KIMI, { signature: 'kimi-sig' })], 'response');
+      messageList.add([createUserMessage('switch to claude')], 'input');
+      messageList.add([stampedSignedAssistant(ANTHROPIC, { signature: 'anthropic-sig' })], 'response');
+      messageList.add([createUserMessage('keep going on claude')], 'input');
+
+      const result = await runRequest(handler, messageList, ANTHROPIC);
+
+      const prompt = (result as { prompt: LanguageModelV2Prompt }).prompt;
+      expect(promptSignatures(prompt)).toEqual(['anthropic-sig']);
+    });
+
+    it('drops foreign redactedData blocks the same way', async () => {
+      const handler = new ProviderHistoryCompat();
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([stampedSignedAssistant(KIMI, { redactedData: 'kimi-redacted' })], 'response');
+      messageList.add([createUserMessage('continue on claude')], 'input');
+
+      const result = await runRequest(handler, messageList, ANTHROPIC);
+
+      expect(promptSignatures((result as { prompt: LanguageModelV2Prompt }).prompt)).toEqual([]);
+    });
+
+    it('drops foreign signed reasoning on the trailing assistant turn too (no protected-index exemption)', async () => {
+      const handler = new ProviderHistoryCompat();
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createUserMessage('do a thing on kimi')], 'input');
+      messageList.add([stampedSignedAssistant(KIMI, { signature: 'kimi-sig' })], 'response');
+
+      const result = await runRequest(handler, messageList, ANTHROPIC);
+
+      expect(promptSignatures((result as { prompt: LanguageModelV2Prompt }).prompt)).toEqual([]);
+    });
+
+    it('removes a turn emptied of all content by the drop (Anthropic rejects empty assistant content)', async () => {
+      const handler = new ProviderHistoryCompat();
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([thinkingOnlyAssistant(KIMI, 'kimi-sig')], 'response');
+      messageList.add([createUserMessage('continue on claude')], 'input');
+
+      const result = await runRequest(handler, messageList, ANTHROPIC);
+
+      const prompt = (result as { prompt: LanguageModelV2Prompt }).prompt;
+      // The thinking-only foreign turn loses its only part; the message itself
+      // must be removed rather than sent with `content: []`.
+      expect(prompt.filter(message => message.role === 'assistant')).toEqual([]);
+    });
+
+    it('leaves unstamped history untouched', async () => {
+      const handler = new ProviderHistoryCompat();
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      const unstamped = stampedSignedAssistant(KIMI, { signature: 'legacy-sig' }) as any;
+      delete unstamped.content.metadata.provider;
+      messageList.add([unstamped], 'response');
+      messageList.add([createUserMessage('continue on claude')], 'input');
+
+      const result = await runRequest(handler, messageList, ANTHROPIC);
+
+      // Nothing provably foreign -> no change from this rule. (Other rules
+      // keep the anthropic-keyed reasoning too.)
+      expect(result).toBeUndefined();
+    });
+
+    it('does nothing without a message list', async () => {
+      const handler = new ProviderHistoryCompat();
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([stampedSignedAssistant(KIMI, { signature: 'kimi-sig' })], 'response');
+      messageList.add([createUserMessage('continue on claude')], 'input');
+
+      const result = await handler.processLLMRequest(
+        makeRequestArgs(messageList.get.all.aiV5.prompt(), { provider: ANTHROPIC }),
+      );
+
+      expect(result).toBeUndefined();
+    });
   });
 });

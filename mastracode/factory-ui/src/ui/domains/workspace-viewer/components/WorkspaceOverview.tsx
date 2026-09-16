@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { FileDiff, NotepadText } from 'lucide-react';
+import { FileDiff, MessageSquare, NotepadText } from 'lucide-react';
 
 import type { WorkspaceChanges, WorkspaceFilesListing } from '../../../../api/types';
 import { WorkspaceOverviewStatus } from './WorkspaceOverviewStatus';
@@ -13,6 +13,9 @@ interface WorkspaceOverviewProps {
   changesError?: Error;
   onShowFiles: () => void;
   onShowChanges: () => void;
+  /** From the board snapshot the thread already polls; absent when the thread has no work item. */
+  commentCount?: number;
+  onShowComments?: () => void;
 }
 
 function fileSummary(count: number) {
@@ -21,7 +24,7 @@ function fileSummary(count: number) {
 }
 
 function changesSummary(changes: WorkspaceChanges | undefined) {
-  if (!changes?.available) return 'Not ready';
+  if (!changes?.available) return 'No sandbox';
   if (changes.changes.length === 0) return 'No changes';
   return `${changes.changes.length} changed`;
 }
@@ -35,6 +38,8 @@ export function WorkspaceOverview({
   changesError,
   onShowFiles,
   onShowChanges,
+  commentCount,
+  onShowComments,
 }: WorkspaceOverviewProps) {
   const fileCount = listing?.files.length ?? 0;
   const changeCount = changes?.changes.length ?? 0;
@@ -55,8 +60,8 @@ export function WorkspaceOverview({
   );
 
   return (
-    <aside className="flex h-full min-h-0 w-full min-w-0 flex-col gap-0.5 p-1.5" aria-label="Workspace">
-      <Button className="w-full justify-start rounded-lg px-2" size="sm" variant="ghost" onClick={onShowChanges}>
+    <aside className="flex min-h-0 w-full min-w-0 grow flex-col gap-0.5 p-1.5" aria-label="Workspace">
+      <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowChanges}>
         <FileDiff />
         <span>Changes</span>
         <span className="text-ui-xs ml-auto font-medium">
@@ -65,7 +70,7 @@ export function WorkspaceOverview({
           </WorkspaceOverviewStatus>
         </span>
       </Button>
-      <Button className="w-full justify-start rounded-lg px-2" size="sm" variant="ghost" onClick={onShowFiles}>
+      <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowFiles}>
         <NotepadText />
         <span>Files</span>
         <span className="text-ui-xs ml-auto font-medium">
@@ -74,6 +79,15 @@ export function WorkspaceOverview({
           </WorkspaceOverviewStatus>
         </span>
       </Button>
+      {onShowComments ? (
+        <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowComments}>
+          <MessageSquare />
+          <span>Comments</span>
+          <span className="text-ui-xs text-icon3 ml-auto font-medium">
+            {commentCount === 0 ? 'None yet' : commentCount}
+          </span>
+        </Button>
+      ) : null}
     </aside>
   );
 }

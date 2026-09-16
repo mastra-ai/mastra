@@ -211,7 +211,7 @@ export function AgentVersionPanel({
                       type="button"
                       onClick={() => onVersionSelect(version.id)}
                       aria-current={isSelected ? 'true' : undefined}
-                      className="w-full px-3 pt-2.5 text-left text-sm"
+                      className="w-full px-3 pt-2.5 text-left text-ui-md"
                     >
                       <Txt variant="ui-sm" className="text-inherit">
                         v{version.versionNumber}
@@ -228,7 +228,7 @@ export function AgentVersionPanel({
                     <div className="flex min-w-0 flex-wrap items-center justify-end gap-1 px-3 pt-1 pb-2.5">
                       <AgentVersionLabelBadges labels={version.labels} versionNumber={version.versionNumber} />
                       {isDraft && (
-                        <Badge size="xs" variant="warning">
+                        <Badge size="xs" variant="blue">
                           Draft
                         </Badge>
                       )}

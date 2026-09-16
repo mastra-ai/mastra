@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useMemo } from 'react';
 import type { MouseEvent, MouseEventHandler, ReactNode } from 'react';
 import Markdown from 'react-markdown';
 import type { Components, ExtraProps, Options } from 'react-markdown';
@@ -7,7 +7,9 @@ import remend from 'remend';
 
 import { rehypeArriving } from './arriving';
 import { splitBlocks } from './blocks';
-import { useReveal } from './use-reveal';
+import { MarkdownTable } from './markdown-table';
+import { remarkTableMarkdown } from './table-markdown';
+import { useSettledWords } from './use-settled';
 import { CodeBlock } from '@/ds/components/CodeBlock';
 import { cn } from '@/lib/utils';
 
@@ -19,8 +21,10 @@ export interface MarkdownRendererProps {
   children: string;
   className?: string;
   externalLinkTarget?: MarkdownExternalLinkTarget;
-  /** The text is still being written: reveal it at a steady pace, word by word. */
+  /** The text is a prefix of one still being written: close the markers the stream has not reached. */
   streaming?: boolean;
+  /** Opt in to table copy/download controls; disabled while this text is streaming. */
+  tableActions?: boolean;
 }
 
 /**
@@ -34,42 +38,36 @@ export interface MarkdownRendererProps {
  * one but the last, and lets a reply settle without remounting what is already
  * on screen.
  *
- * A streamed reply is paced here rather than by the caller, so the text a block
- * parses and the text a reader sees are one and the same string. Only what lands
- * after the reader joined plays an entrance: a reply opened part-written is
- * already there, and fading in what someone is halfway through reading would be
- * both a lie and a screenful of animations at once.
+ * The text is drawn as given: pacing a stream is `useRevealedText`, and belongs to
+ * whoever owns the whole of what is being laid down — a reply is prose, tool rows
+ * and cards, and they have to arrive in the order they were written. Only what
+ * lands after the reader joined plays an entrance, and only while it is still new:
+ * a reply opened part-written is already there, and fading in what someone is
+ * halfway through reading would be both a lie and a screenful of animations at
+ * once.
  */
 export const MarkdownRenderer = memo(function MarkdownRenderer({
   children,
   className,
   externalLinkTarget = 'tab',
   streaming = false,
+  tableActions = false,
 }: MarkdownRendererProps) {
-  const full = decodeEscapedNewlines(children);
-  const shown = useReveal(full, streaming);
+  const shown = decodeEscapedNewlines(children);
   const blocks = useMemo(() => splitBlocks(shown), [shown]);
   const last = blocks.length - 1;
-  const components = externalLinkTarget === 'window' ? WINDOW_COMPONENTS : COMPONENTS;
-  const growing = streaming || shown !== full;
+  const components = (tableActions ? TABLE_COMPONENTS : DEFAULT_COMPONENTS)[externalLinkTarget];
 
-  const [joined] = useState(() =>
-    streaming ? { blocks: blocks.length, words: countWords(blocks[last] ?? '') } : undefined,
-  );
+  const spans = wordSpans(blocks);
+  const settled = useSettledWords(spans.at(-1)?.end ?? 0, streaming);
 
-  // What a block held when the reader joined, and so never animates. A block
-  // already whole by then holds all of itself, which is what `undefined` says:
-  // leave it as plain text, no spans at all. Position decides it, so it never
-  // changes under a word — and counting the source counts its markers too, so
-  // the boundary only ever errs towards leaving a word unanimated.
-  const settledWords = (index: number): number | undefined => {
-    if (!joined || index < joined.blocks - 1) return undefined;
-
-    return index === joined.blocks - 1 ? joined.words : 0;
-  };
+  // A block whose words have all finished their entrance has nothing left to play,
+  // which is what `undefined` says: leave it as plain text, no spans at all.
+  const settledWords = (span: WordSpan | undefined): number | undefined =>
+    !span || settled >= span.end ? undefined : Math.max(0, settled - span.start);
 
   const tail = blocks[last] ?? '';
-  const mended = useMemo(() => (growing ? remend(tail, REMEND_OPTIONS) : tail), [growing, tail]);
+  const mended = useMemo(() => (streaming ? remend(tail, REMEND_OPTIONS) : tail), [streaming, tail]);
 
   return (
     <div className={cn('mastra-markdown', className)}>
@@ -77,8 +75,10 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         <MarkdownBlock
           key={index}
           content={index === last ? mended : block}
-          settledWords={settledWords(index)}
+          settledWords={settledWords(spans[index])}
           components={components}
+          streaming={streaming}
+          tableActions={tableActions}
         />
       ))}
     </div>
@@ -90,10 +90,14 @@ const MarkdownBlock = memo(function MarkdownBlock({
   components,
   content,
   settledWords,
+  streaming,
+  tableActions,
 }: {
   components: Components;
   content: string;
   settledWords?: number;
+  streaming: boolean;
+  tableActions: boolean;
 }) {
   const rehypePlugins = useMemo(
     () => (settledWords === undefined ? SETTLED : [rehypeArriving(settledWords)]),
@@ -101,13 +105,38 @@ const MarkdownBlock = memo(function MarkdownBlock({
   );
 
   return (
-    <Markdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={rehypePlugins} components={components}>
+    <Markdown
+      remarkPlugins={tableActions && !streaming ? COPYABLE_REMARK_PLUGINS : REMARK_PLUGINS}
+      rehypePlugins={rehypePlugins}
+      components={components}
+    >
       {content}
     </Markdown>
   );
 });
 
 const SETTLED: Options['rehypePlugins'] = [];
+
+interface WordSpan {
+  start: number;
+  end: number;
+}
+
+/**
+ * Where each block's words fall in the reply's own count, so one settled count covers
+ * them all. Counting the source counts its markers too, so the boundary only ever errs
+ * towards leaving a word unanimated.
+ */
+function wordSpans(blocks: string[]): WordSpan[] {
+  let read = 0;
+
+  return blocks.map(block => {
+    const span = { start: read, end: read + countWords(block) };
+    read = span.end;
+
+    return span;
+  });
+}
 
 function countWords(text: string): number {
   return text.match(/\S+/g)?.length ?? 0;
@@ -195,6 +224,7 @@ function markdownLink(externalLinkTarget: MarkdownExternalLinkTarget): NonNullab
 }
 
 const REMARK_PLUGINS = [remarkGfm];
+const COPYABLE_REMARK_PLUGINS = [remarkGfm, remarkTableMarkdown];
 
 // Links stay text until their URL lands: remend's placeholder href would render
 // a live anchor to nowhere. No math is rendered here, so pairing `$$` would only
@@ -212,4 +242,10 @@ const COMPONENTS: Components = {
 const WINDOW_COMPONENTS: Components = {
   ...COMPONENTS,
   a: markdownLink('window'),
+};
+
+const DEFAULT_COMPONENTS = { tab: COMPONENTS, window: WINDOW_COMPONENTS };
+const TABLE_COMPONENTS = {
+  tab: { ...COMPONENTS, table: MarkdownTable },
+  window: { ...WINDOW_COMPONENTS, table: MarkdownTable },
 };

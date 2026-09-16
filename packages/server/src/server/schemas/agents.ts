@@ -23,13 +23,6 @@ import { z } from 'zod/v4';
  */
 type StopConditionArg = (event: unknown) => boolean | PromiseLike<boolean>;
 
-/**
- * Structural mirror of the ai-sdk JSONValue type, which is not publicly
- * exported from @mastra/core. Used to keep providerOptions assignable to
- * ProviderOptions (Record<string, JSONObject>) with portable declaration emit.
- */
-type JSONValue = null | string | number | boolean | { [key: string]: JSONValue } | JSONValue[];
-
 type ModelSettings = {
   maxOutputTokens?: number;
   temperature?: number;
@@ -207,6 +200,7 @@ export const serializedToolSchema = z.object({
   description: z.string().optional(),
   inputSchema: z.string().optional(),
   outputSchema: z.string().optional(),
+  requestContextSchema: z.string().optional(),
   requireApproval: z.boolean().optional(),
 });
 
@@ -251,12 +245,21 @@ const systemMessageSchema = typedPermissive<SystemMessage>(
  * Schema for model configuration in model list
  */
 const modelConfigSchema = z.object({
+  id: z.string(),
+  enabled: z.boolean(),
+  maxRetries: z.number(),
   model: z.object({
     modelId: z.string(),
     provider: z.string(),
     modelVersion: z.string(),
   }),
-  // Additional fields from AgentModelManagerConfig can be added here
+});
+
+const serializedSkillSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  license: z.string().optional(),
+  path: z.string(),
 });
 
 const agentEditorConfigSchema = z.union([
@@ -278,6 +281,11 @@ export const serializedAgentSchema = z.object({
   tools: z.record(z.string(), serializedToolSchema),
   agents: z.record(z.string(), serializedAgentDefinitionSchema),
   workflows: z.record(z.string(), serializedWorkflowSchema),
+  skills: z.array(serializedSkillSchema),
+  workspaceTools: z.array(z.string()),
+  browserTools: z.array(z.string()),
+  hasBrowser: z.boolean(),
+  workspaceId: z.string().optional(),
   inputProcessors: z.array(serializedProcessorSchema),
   outputProcessors: z.array(serializedProcessorSchema),
   provider: z.string().optional(),
@@ -288,6 +296,7 @@ export const serializedAgentSchema = z.object({
   defaultOptions: defaultOptionsSchema.optional(),
   defaultGenerateOptionsLegacy: z.record(z.string(), z.unknown()).optional(),
   defaultStreamOptionsLegacy: z.record(z.string(), z.unknown()).optional(),
+  requestContextSchema: z.string().optional(),
   source: z.enum(['code', 'stored', 'fs']).optional(),
   status: z.enum(['draft', 'published', 'archived']).optional(),
   activeVersionId: z.string().optional(),
@@ -413,14 +422,7 @@ export const agentExecutionBodySchema = z
 
     // Model Configuration
     model: z.string().optional(),
-    providerOptions: typedPermissive<Record<string, Record<string, JSONValue>>>(
-      z.object({
-        anthropic: z.record(z.string(), z.unknown()).optional(),
-        google: z.record(z.string(), z.unknown()).optional(),
-        openai: z.record(z.string(), z.unknown()).optional(),
-        xai: z.record(z.string(), z.unknown()).optional(),
-      }),
-    ).optional(),
+    providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
     modelSettings: typedPermissive<ModelSettings>(z.unknown()).optional(),
 
     // Tool Configuration

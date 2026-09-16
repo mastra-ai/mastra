@@ -1,11 +1,10 @@
 {
   "name": "@mastra/voice-openai",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "Mastra OpenAI speech integration",
   "type": "module",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -32,7 +31,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "openai": "^5.23.2"
+    "openai": "^6.49.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

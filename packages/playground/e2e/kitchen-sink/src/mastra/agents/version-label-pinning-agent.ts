@@ -1,8 +1,8 @@
 import { Agent } from '@mastra/core/agent';
-import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { askUserTool } from '@mastra/core/tools';
 
 import { Memory } from '@mastra/memory';
+import { MockLanguageModelV2 } from 'ai/test';
 
 import { storage } from '../storage';
 
@@ -63,7 +63,7 @@ function createCompletionStream(text: string) {
   });
 }
 
-const model = new MastraLanguageModelV2Mock({
+const model = new MockLanguageModelV2({
   provider: 'mock',
   modelId: 'mock-version-label-pinning',
   doStream: async ({ prompt }) => {

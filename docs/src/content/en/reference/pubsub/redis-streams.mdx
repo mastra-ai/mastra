@@ -1,6 +1,6 @@
 ---
 title: 'Reference: RedisStreamsPubSub | PubSub'
-description: API reference for RedisStreamsPubSub, the Redis Streams pub/sub implementation for distributed event delivery.
+description: "RedisStreamsPubSub is a PubSub implementation backed by Redis Streams. It delivers events across processes and hosts, with persistence, consumer groups, and redelivery on failure."
 packages:
   - '@mastra/core'
   - '@mastra/redis-streams'
@@ -22,6 +22,8 @@ Each topic maps to a Redis stream key. Subscriptions with a group use a Redis co
 npm install @mastra/redis-streams
 ```
 
+Requires Redis 7.0 or later. The reclaim loop relies on `XCLAIM` removing trimmed entries from the pending list, which earlier versions don't do.
+
 ## Usage example
 
 Provide a Redis connection URL.
@@ -34,6 +36,36 @@ export const mastra = new Mastra({
   pubsub: new RedisStreamsPubSub({
     url: 'redis://localhost:6379',
   }),
+})
+```
+
+### Redis Cluster
+
+Pass `cluster` instead of `url`/`redisOptions` to connect to a Redis Cluster (for example, AWS ElastiCache with cluster mode enabled). The options are forwarded to `createCluster()` from `redis`.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { RedisStreamsPubSub } from '@mastra/redis-streams'
+
+export const mastra = new Mastra({
+  pubsub: new RedisStreamsPubSub({
+    cluster: {
+      rootNodes: [{ url: 'redis://node-1:6379' }, { url: 'redis://node-2:6379' }],
+    },
+  }),
+})
+```
+
+### Bring your own client
+
+To control client construction yourself (TLS, credential providers, and so on), pass an unconnected `redis` client as `client`. The pubsub uses it as its writer and calls `client.duplicate()` for each subscription's blocking reader, so every connection stays distinct. The pubsub owns the client's lifecycle (it connects on first use and quits it on `close()`), so don't share it with the rest of your app.
+
+```typescript title="src/mastra/index.ts"
+import { RedisStreamsPubSub } from '@mastra/redis-streams'
+import { createClient } from 'redis'
+
+const pubsub = new RedisStreamsPubSub({
+  client: createClient({ url: process.env.REDIS_URL, socket: { tls: true } }),
 })
 ```
 
@@ -66,6 +98,20 @@ export const mastra = new Mastra({
     name: 'redisOptions',
     type: 'RedisClientOptions',
     description: 'Options passed to the underlying `redis` client for advanced configuration.',
+    isOptional: true,
+  },
+  {
+    name: 'cluster',
+    type: 'RedisClusterOptions',
+    description:
+      'Connect to a Redis Cluster. Options are passed to `createCluster()` from `redis`. Mutually exclusive with `url`, `redisOptions`, and `client`.',
+    isOptional: true,
+  },
+  {
+    name: 'client',
+    type: 'RedisClientType | RedisClusterType',
+    description:
+      'A pre-configured, unconnected `redis` client (standalone or cluster) used as the writer; readers are created with `client.duplicate()`. The pubsub owns its lifecycle (connects lazily, quits on `close()`). Mutually exclusive with `url`, `redisOptions`, and `cluster`.',
     isOptional: true,
   },
   {
@@ -106,6 +152,14 @@ export const mastra = new Mastra({
       'Maximum times an event is redelivered through `nack` before it is dropped. Pass `Infinity` to disable the cap.',
     isOptional: true,
     defaultValue: '5',
+  },
+  {
+    name: 'inFlightTimeoutMs',
+    type: 'number',
+    description:
+      'How long a handler may hold an event without acking or nacking before the reclaim loop nacks it on its behalf. The event is republished with an incremented `deliveryAttempt`, so `maxDeliveryAttempts` still applies. Set this to recover hung handlers in single-consumer groups. `0` disables it.',
+    isOptional: true,
+    defaultValue: '0',
   },
   {
     name: 'logger',
@@ -183,6 +237,8 @@ await pubsub.close()
 ## Redelivery and reclaim
 
 When a subscriber calls `nack`, the event is republished with an incremented `deliveryAttempt` and the original is acknowledged. Once an event reaches `maxDeliveryAttempts`, it's dropped instead of redelivered. Separately, each subscription periodically reclaims events that an earlier consumer in the group read but never acknowledged, controlled by `reclaimIntervalMs` and `reclaimIdleMs`.
+
+A subscription never reclaims an event its own handler is still processing, so a slow handler isn't invoked twice for the same event. If a handler hangs, a different consumer in the group reclaims the event once it has been idle for `reclaimIdleMs`. In a single-consumer group there's no sibling to do that, so set `inFlightTimeoutMs` to have the subscription nack the event itself after that long.
 
 ## Distributed leasing
 

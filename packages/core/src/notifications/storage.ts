@@ -7,6 +7,7 @@ import type {
   NotificationRecord,
   NotificationStatus,
   UpdateNotificationInput,
+  UpdateNotificationsStatusInput,
 } from './types';
 
 export abstract class NotificationsStorage extends StorageDomain {
@@ -19,6 +20,38 @@ export abstract class NotificationsStorage extends StorageDomain {
   abstract listDueNotifications(input: ListDueNotificationsInput): Promise<NotificationRecord[]>;
   abstract getNotification(input: { threadId: string; id: string }): Promise<NotificationRecord | null>;
   abstract updateNotification(input: UpdateNotificationInput): Promise<NotificationRecord>;
+
+  /**
+   * Set the same status on many notifications of one thread.
+   * Returns each updated record once — duplicate ids are collapsed and ids that do not
+   * exist are skipped. Implementations must accept arbitrarily long id lists (batching
+   * internally where the backend limits bind parameters).
+   * Adapters should override this with a native bulk update — the default issues one
+   * `updateNotification` per id (omitting any that fail) so existing adapters keep working.
+   */
+  async updateNotificationsStatus(input: UpdateNotificationsStatusInput): Promise<NotificationRecord[]> {
+    const ids = uniqueNotificationIds(input.ids);
+    const updated: NotificationRecord[] = [];
+    // Bounded waves so a long id list cannot open one write per id against the adapter at once.
+    for (let offset = 0; offset < ids.length; offset += FALLBACK_UPDATE_CONCURRENCY) {
+      const results = await Promise.allSettled(
+        ids
+          .slice(offset, offset + FALLBACK_UPDATE_CONCURRENCY)
+          .map(id => this.updateNotification({ threadId: input.threadId, id, status: input.status })),
+      );
+      for (const result of results) {
+        if (result.status === 'fulfilled') updated.push(result.value);
+      }
+    }
+    return updated;
+  }
+}
+
+const FALLBACK_UPDATE_CONCURRENCY = 20;
+
+/** Collapse duplicate ids so bulk updates touch and return each record once. */
+function uniqueNotificationIds(ids: string[]): string[] {
+  return Array.from(new Set(ids));
 }
 
 const cloneDate = (value?: Date) => (value ? new Date(value) : undefined);
@@ -183,6 +216,24 @@ export class InMemoryNotificationsStorage extends NotificationsStorage {
     };
     this.#notifications.set(notificationKey(next.threadId, next.id), next);
     return cloneRecord(next);
+  }
+
+  override async updateNotificationsStatus(input: UpdateNotificationsStatusInput): Promise<NotificationRecord[]> {
+    const now = new Date();
+    const updated: NotificationRecord[] = [];
+    for (const id of uniqueNotificationIds(input.ids)) {
+      const existing = this.#notifications.get(notificationKey(input.threadId, id));
+      if (!existing) continue;
+      const next: NotificationRecord = {
+        ...existing,
+        status: input.status,
+        ...statusTimestamp(input.status, now),
+        updatedAt: now,
+      };
+      this.#notifications.set(notificationKey(next.threadId, next.id), next);
+      updated.push(cloneRecord(next));
+    }
+    return updated;
   }
 
   async dangerouslyClearAll(): Promise<void> {

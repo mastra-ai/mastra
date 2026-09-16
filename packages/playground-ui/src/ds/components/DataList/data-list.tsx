@@ -1,4 +1,5 @@
 import {
+  DataListActionsCell,
   DataListCell,
   DataListTextCell,
   DataListNameCell,
@@ -7,7 +8,6 @@ import {
   DataListRowHeaderCell,
   DataListNumberCell,
   DataListSelectCell,
-  DataListMonoCell,
   DataListDateCell,
   DataListTimeCell,
 } from './data-list-cells';
@@ -19,6 +19,7 @@ import { DataListRowButton } from './data-list-row-button';
 import { DataListRowLink } from './data-list-row-link';
 import { DataListRowStatic } from './data-list-row-static';
 import { DataListRowWrapper } from './data-list-row-wrapper';
+import { DataListSortableTopCell } from './data-list-sortable-top-cell';
 import { DataListSpacer } from './data-list-spacer';
 import { DataListSubheader } from './data-list-subheader';
 import { DataListSubHeading } from './data-list-subheading';
@@ -31,12 +32,14 @@ import {
 } from './data-list-top-cell';
 import { DataListTopCells } from './data-list-top-cells';
 
-export type { DataListRootProps, DataListStickyHeaderBackground, DataListVariant } from './data-list-root';
+export type { DataListRootProps, DataListVariant } from './data-list-root';
+export type { DataListSortableTopCellProps, DataListSortDirection } from './data-list-sortable-top-cell';
 
 export const DataList = Object.assign(DataListRoot, {
   Top: DataListTop,
   TopCells: DataListTopCells,
   TopCell: DataListTopCell,
+  SortableTopCell: DataListSortableTopCell,
   TopCellWithTooltip: DataListTopCellWithTooltip,
   TopCellSmart: DataListTopCellSmart,
   RowWrapper: DataListRowWrapper,
@@ -44,13 +47,13 @@ export const DataList = Object.assign(DataListRoot, {
   RowLink: DataListRowLink,
   RowStatic: DataListRowStatic,
   Cell: DataListCell,
+  ActionsCell: DataListActionsCell,
   TextCell: DataListTextCell,
   NameCell: DataListNameCell,
   DescriptionCell: DataListDescriptionCell,
   IdCell: DataListIdCell,
   RowHeaderCell: DataListRowHeaderCell,
   NumberCell: DataListNumberCell,
-  MonoCell: DataListMonoCell,
   DateCell: DataListDateCell,
   TimeCell: DataListTimeCell,
   SelectCell: DataListSelectCell,

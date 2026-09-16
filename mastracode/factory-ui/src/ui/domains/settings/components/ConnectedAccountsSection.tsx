@@ -7,19 +7,12 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useApiConfig } from '../../../../api/config';
 import { useChannelAccountsQuery } from '../../../../hooks/useChannelAccounts';
 import { connectSlackUrl } from '../services/channelAccounts';
-import { SettingsCard, SettingsRow } from './SettingsCard';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 
-/**
- * Shown when Slack isn't available on this server, instead of a Connect button
- * that would 404. Deliberately says nothing about how to enable it: naming the
- * env vars would be a half-truth, since they only turn Slack on in deployments
- * whose entry actually registers `SlackIntegration`, and the server can't see
- * whether this one does. Link a setup guide here once factory Slack docs exist
- * — the published channels page documents the raw adapter, not this.
- */
+// Env vars alone do not prove the deployment registers SlackIntegration.
 export function SlackNotConfigured() {
   return (
-    <SettingsCard>
+    <SettingsContainer>
       <SettingsRow
         label={
           <span className="flex items-center gap-3">
@@ -44,11 +37,10 @@ export function SlackNotConfigured() {
           Slack is not set up for this factory.
         </Txt>
       </SettingsRow>
-    </SettingsCard>
+    </SettingsContainer>
   );
 }
 
-/** Connected-account overview for the active factory settings surface. */
 export function ConnectedAccountsSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const { baseUrl } = useApiConfig();
@@ -95,7 +87,7 @@ export function ConnectedAccountsSection() {
   );
 
   return (
-    <SettingsCard>
+    <SettingsContainer>
       {slackAccounts.length > 0 && factoryId ? (
         <Link
           to={`/factories/${factoryId}/settings/connections/slack`}
@@ -123,6 +115,6 @@ export function ConnectedAccountsSection() {
           </SettingsRow>
         </button>
       )}
-    </SettingsCard>
+    </SettingsContainer>
   );
 }

@@ -86,22 +86,72 @@ describe('useTraceUrlState.handleSpanChangeWithTab', () => {
 
 const paramsNow = () => new URLSearchParams(currentSearch);
 
+describe('useTraceUrlState.handleHighlightSpans', () => {
+  it('writes the highlighted span ids, selects the first one and resets span-scoped params', () => {
+    render(<Harness initial="traceId=t1&spanId=old&tab=feedback&scoreId=sc1" />);
+
+    act(() => api.handleHighlightSpans(['root', 'tool-1', 'tool-2']));
+
+    const p = paramsNow();
+    expect(p.get('highlightSpanIds')).toBe('root,tool-1,tool-2');
+    expect(p.get('spanId')).toBe('root');
+    expect(p.get('tab')).toBeNull();
+    expect(p.get('scoreId')).toBeNull();
+    expect(setSpy).toHaveBeenCalledTimes(1);
+    expect(lastNavigation()?.replace).toBe(true);
+    expect(api.highlightSpanIdsParam).toEqual(['root', 'tool-1', 'tool-2']);
+  });
+
+  it('clears the highlight for an empty array without touching the selected span', () => {
+    render(<Harness initial="traceId=t1&spanId=root&highlightSpanIds=root,tool-1" />);
+
+    act(() => api.handleHighlightSpans([]));
+
+    const p = paramsNow();
+    expect(p.get('highlightSpanIds')).toBeNull();
+    expect(p.get('spanId')).toBe('root');
+    expect(api.highlightSpanIdsParam).toEqual([]);
+  });
+
+  it('keeps the highlight while navigating between spans inside the panel', () => {
+    render(<Harness initial="traceId=t1&spanId=root&highlightSpanIds=root,tool-1" />);
+
+    act(() => api.handleSpanChange('tool-1'));
+
+    expect(paramsNow().get('highlightSpanIds')).toBe('root,tool-1');
+    expect(api.highlightSpanIdsParam).toEqual(['root', 'tool-1']);
+  });
+
+  it('drops the highlight when another trace is opened or the filters change', () => {
+    render(<Harness initial="traceId=t1&spanId=root&highlightSpanIds=root,tool-1" />);
+
+    act(() => api.handleTraceClick('t2'));
+    expect(paramsNow().get('highlightSpanIds')).toBeNull();
+
+    act(() => api.handleHighlightSpans(['root']));
+    expect(paramsNow().get('highlightSpanIds')).toBe('root');
+
+    act(() => api.handleListModeChange('branches'));
+    expect(paramsNow().get('highlightSpanIds')).toBeNull();
+  });
+});
+
 describe('useTraceUrlState date state', () => {
   // Restored here rather than at the end of each test, so a failing assertion
   // cannot leave fake timers running for every test after it.
   afterEach(() => vi.useRealTimers());
 
-  it('defaults to the last 24 hours without a preset in the URL', () => {
+  it('defaults to the last 7 days without a preset in the URL', () => {
     render(<Harness initial="" />);
 
-    expect(api.datePreset).toBe('last-24h');
-    expect(api.datePresetRef.current).toBe('last-24h');
+    expect(api.datePreset).toBe('last-7d');
+    expect(api.datePresetRef.current).toBe('last-7d');
   });
 
   it('ignores a preset the app does not know', () => {
     render(<Harness initial="datePreset=since-forever" />);
 
-    expect(api.datePreset).toBe('last-24h');
+    expect(api.datePreset).toBe('last-7d');
   });
 
   it.each([
@@ -121,10 +171,11 @@ describe('useTraceUrlState date state', () => {
     expect(api.selectedDateTo).toBeUndefined();
   });
 
-  it('has no start date at all for the "all" preset', () => {
+  it('uses the bounded default for a legacy "all" preset', () => {
     render(<Harness initial="datePreset=all" />);
 
-    expect(api.selectedDateFrom).toBeUndefined();
+    expect(api.datePreset).toBe('last-7d');
+    expect(api.selectedDateFrom).toBeInstanceOf(Date);
     expect(api.selectedDateTo).toBeUndefined();
   });
 
@@ -172,7 +223,7 @@ describe('useTraceUrlState.handleDatePresetChange', () => {
   it('clears every date param when going back to the default', () => {
     render(<Harness initial="datePreset=custom&dateFrom=2026-06-01T00:00:00.000Z&dateTo=2026-06-02T00:00:00.000Z" />);
 
-    act(() => api.handleDatePresetChange('last-24h'));
+    act(() => api.handleDatePresetChange('last-7d'));
 
     const p = paramsNow();
     expect(p.get('datePreset')).toBeNull();
@@ -194,10 +245,10 @@ describe('useTraceUrlState.handleDatePresetChange', () => {
   it('stores only the preset for a rolling window, dropping stale dates', () => {
     render(<Harness initial="datePreset=custom&dateFrom=2026-06-01T00:00:00.000Z&dateTo=2026-06-02T00:00:00.000Z" />);
 
-    act(() => api.handleDatePresetChange('last-7d'));
+    act(() => api.handleDatePresetChange('last-24h'));
 
     const p = paramsNow();
-    expect(p.get('datePreset')).toBe('last-7d');
+    expect(p.get('datePreset')).toBe('last-24h');
     expect(p.get('dateFrom')).toBeNull();
     expect(p.get('dateTo')).toBeNull();
   });
@@ -625,12 +676,12 @@ describe('useTraceUrlState history', () => {
 describe('useTraceUrlState derived state follows the URL', () => {
   it('re-reads the date preset after the URL changes', () => {
     render(<Harness initial="" />);
-    expect(api.datePreset).toBe('last-24h');
-
-    act(() => api.handleDatePresetChange('last-7d'));
-
     expect(api.datePreset).toBe('last-7d');
-    expect(api.datePresetRef.current).toBe('last-7d');
+
+    act(() => api.handleDatePresetChange('last-24h'));
+
+    expect(api.datePreset).toBe('last-24h');
+    expect(api.datePresetRef.current).toBe('last-24h');
   });
 
   it('re-reads the list mode after the URL changes', () => {

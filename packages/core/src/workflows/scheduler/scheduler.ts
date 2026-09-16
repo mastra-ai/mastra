@@ -106,12 +106,7 @@ export class Scheduler extends MastraBase {
         });
       }, this.#config.tickIntervalMs);
 
-      // Don't keep the process alive just because the scheduler is polling.
-      // The process should be able to exit when all other work is done.
-      // Without .unref(), the setInterval prevents clean shutdown in
-      // scripts that create a Mastra instance (which auto-creates the
-      // notification dispatch workflow with a cron schedule) and exit
-      // after a single agent.generate() call.
+      // Don't keep the process alive solely because it has active schedules.
       // Optional call: on runtimes where setInterval returns a number
       // (e.g. Cloudflare Workers) there is no unref and nothing to release.
       this.#intervalHandle.unref?.();
@@ -453,7 +448,7 @@ export class Scheduler extends MastraBase {
   async #publishTargetStart(schedule: Schedule, claimId: string): Promise<void> {
     switch (schedule.target.type) {
       case 'workflow': {
-        const { workflowId, inputData, initialState, requestContext, definitionHash } = schedule.target;
+        const { workflowId, inputData, initialState, requestContext, resourceId, definitionHash } = schedule.target;
         // Claim/execute affinity (#19169). When this process also consumes
         // workflow events, keep the fire local so the instance that proved
         // the target ready and current is the one that runs it. A
@@ -473,6 +468,7 @@ export class Scheduler extends MastraBase {
               prevResult: { status: 'success', output: inputData ?? {} },
               requestContext: requestContext ?? {},
               initialState: initialState ?? {},
+              ...(resourceId ? { resourceId } : {}),
               // Only stamped when the row carries a hash, so legacy and
               // imperative schedules stay unfenced (fail open).
               ...(definitionHash ? { scheduleDefinitionHash: definitionHash } : {}),

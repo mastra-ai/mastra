@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { Server as HttpServer } from 'node:http';
 import * as https from 'node:https';
@@ -6,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
+import type { Agent } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ApiRoute, CorsOptions } from '@mastra/core/server';
 import { Tool } from '@mastra/core/tools';
@@ -13,7 +15,8 @@ import { MastraServer, setupBrowserStream, skipIfFrameworkPublic } from '@mastra
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { findMatchingCustomRoute } from '@mastra/server/auth';
-import type { Context, MiddlewareHandler as HonoMiddlewareHandler } from 'hono';
+import type { ServerRoute } from '@mastra/server/server-adapter';
+import type { MiddlewareHandler as HonoMiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import { cors } from 'hono/cors';
@@ -25,8 +28,8 @@ import { escapeStudioHtmlValue, injectStudioHtmlConfig, normalizeStudioBase } fr
 import { agentLearningProxyHandler } from './handlers/agent-learning';
 import {
   closeRefreshStreams,
-  handleClientsRefresh,
-  handleTriggerClientsRefresh,
+  getTriggerClientsRefreshPayload,
+  handleClientsRefreshRequest,
   isHotReloadDisabled,
 } from './handlers/client';
 import { errorHandler } from './handlers/error';
@@ -248,10 +251,23 @@ export async function createHonoServer(
             // Look up agent and return its browser if configured.
             // First try the runtime registry (code-defined + previously hydrated agents),
             // then fall back to the editor for stored agents (hydrates on first access).
+            // Agent-level SDK browsers live on `agent.browser`; CLI providers
+            // (e.g. @mastra/browser-viewer) live on the agent's workspace.
+            const resolveBrowser = async (agent: Agent | undefined | null) => {
+              if (!agent) return undefined;
+              if (agent.browser) return agent.browser;
+              try {
+                const workspace = await agent.getWorkspace();
+                return workspace?.browser;
+              } catch {
+                return undefined;
+              }
+            };
+
             try {
               const runtimeAgent = mastra.getAgentById(agentId);
               if (runtimeAgent) {
-                return runtimeAgent.browser;
+                return await resolveBrowser(runtimeAgent);
               }
             } catch {
               // Agent not in runtime registry — try stored agents via editor
@@ -259,7 +275,7 @@ export async function createHonoServer(
 
             try {
               const storedAgent = await mastra.getEditor?.()?.agent.getById(agentId);
-              return storedAgent?.browser;
+              return await resolveBrowser(storedAgent);
             } catch {
               return undefined;
             }
@@ -399,39 +415,38 @@ export async function createHonoServer(
 
   const serverOptions = mastra.getServer();
   const studioBasePath = normalizeStudioBase(serverOptions?.studioBase ?? '/');
+  // Production replicas must not be mistaken for dev-server restarts.
+  const devServerInstanceId = options?.isDev ? randomUUID() : undefined;
 
   if (options?.studio) {
-    // SSE endpoint for refresh notifications
-    app.get(
-      `${studioBasePath}/refresh-events`,
-      describeRoute({
-        hide: true,
-      }),
-      handleClientsRefresh,
-    );
-
-    // Trigger refresh for all clients
-    app.post(
-      `${studioBasePath}/__refresh`,
-      describeRoute({
-        hide: true,
-      }),
-      handleTriggerClientsRefresh,
-    );
-
-    // Check hot reload status
-    app.get(
-      `${studioBasePath}/__hot-reload-status`,
-      describeRoute({
-        hide: true,
-      }),
-      (c: Context) => {
-        return c.json({
+    const studioControlRoutes: ServerRoute[] = [
+      {
+        method: 'GET',
+        path: '/refresh-events',
+        responseType: 'datastream-response',
+        handler: async ({ abortSignal }) => handleClientsRefreshRequest(abortSignal, devServerInstanceId),
+      },
+      {
+        method: 'POST',
+        path: '/__refresh',
+        responseType: 'json',
+        handler: async () => getTriggerClientsRefreshPayload(),
+      },
+      {
+        method: 'GET',
+        path: '/__hot-reload-status',
+        responseType: 'json',
+        handler: async () => ({
           disabled: isHotReloadDisabled(),
           timestamp: new Date().toISOString(),
-        });
+        }),
       },
-    );
+    ];
+
+    for (const route of studioControlRoutes) {
+      customRouteAuthConfig.set(`${route.method}:${studioBasePath}${route.path}`, !options.isDev);
+      await honoServerAdapter.registerRoute(app, route, { prefix: studioBasePath });
+    }
 
     // Enable gzip/deflate compression for studio static assets only
     app.use(`${studioBasePath}/assets/*`, compress());
@@ -539,6 +554,7 @@ export async function createHonoServer(
         platformProjectId: `'${escapeStudioHtmlValue(platformProjectId)}'`,
         platformObservabilityEndpoint: `'${escapeStudioHtmlValue(platformObservabilityEndpoint)}'`,
         autoDetectUrl: `'${autoDetectUrl}'`,
+        devServerInstanceId: JSON.stringify(devServerInstanceId ?? ''),
       });
 
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
@@ -667,9 +683,10 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   // held". The drain window is configurable via `server.drainTimeout` so
   // rolling deploys can let long-running agent turns finish.
   if (serverOptions?.handleShutdownSignals !== false) {
-    // Core teardown keeps its historic 5s bound regardless of the drain
-    // window: it must always run (e.g. DuckDB's file lock release), but a
-    // hanging shutdown can't be allowed to block process exit.
+    // Core teardown gets the drain window (for in-flight evented workflow
+    // runs) plus a fixed 5s for the teardown itself: it must always run (e.g.
+    // DuckDB's file lock release), but a hanging shutdown can't be allowed to
+    // block process exit.
     const CORE_SHUTDOWN_TIMEOUT_MS = 5000;
     const timedOut = Symbol('shutdown-timeout');
     const race = async (work: Promise<unknown>, ms: number): Promise<unknown> => {
@@ -728,14 +745,17 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
         logger.error('Error while draining Mastra server', { error });
       }
 
-      // Phase 2: always tear down core (workers, durable runs, storage), even
-      // if draining failed or timed out. Feature-detect for older @mastra/core
-      // versions without shutdown().
+      // Phase 2: always tear down core (in-flight evented runs, workers,
+      // storage), even if draining failed or timed out. The same drain window
+      // bounds how long core waits for in-flight workflow runs before
+      // unsubscribing from pubsub. Feature-detect for older @mastra/core
+      // versions without shutdown() (older versions ignore the options arg).
       try {
-        const lifecycle = mastra as unknown as { shutdown?: () => Promise<void> };
+        const lifecycle = mastra as unknown as { shutdown?: (options?: { drainTimeout?: number }) => Promise<void> };
         if (typeof lifecycle.shutdown === 'function') {
-          if ((await race(lifecycle.shutdown(), CORE_SHUTDOWN_TIMEOUT_MS)) === timedOut) {
-            logger.warn('Mastra shutdown timed out; forcing exit', { timeoutMs: CORE_SHUTDOWN_TIMEOUT_MS });
+          const coreTimeoutMs = drainTimeoutMs + CORE_SHUTDOWN_TIMEOUT_MS;
+          if ((await race(lifecycle.shutdown({ drainTimeout: drainTimeoutMs }), coreTimeoutMs)) === timedOut) {
+            logger.warn('Mastra shutdown timed out; forcing exit', { timeoutMs: coreTimeoutMs });
           }
         }
       } catch (error) {

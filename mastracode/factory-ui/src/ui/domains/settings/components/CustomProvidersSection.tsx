@@ -178,7 +178,7 @@ export function CustomProvidersSection() {
                     {p.name}
                   </Txt>
                   {p.hasApiKey && (
-                    <Badge size="sm" variant="success">
+                    <Badge size="sm" variant="green">
                       Key saved
                     </Badge>
                   )}

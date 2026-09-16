@@ -13,7 +13,7 @@ export type SettingsSection =
 export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   account: 'My account',
   preferences: 'Preferences',
-  factory: 'Factory',
+  factory: 'Manage Factory',
   connections: 'Connections',
   repositories: 'Repositories',
   intake: 'Work Intake',

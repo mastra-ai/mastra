@@ -22,7 +22,7 @@ export function AgentsCmsLayout({ children, currentPath, basePath, versionId, ri
         <AgentCmsSidebar basePath={basePath} currentPath={currentPath} versionId={versionId} />
       </div>
       <div className="flex min-w-0 flex-col overflow-hidden lg:h-full">
-        <div className="w-full max-w-5xl flex-1 overflow-y-auto p-8">{children}</div>
+        <div className="w-full max-w-5xl flex-1 overflow-y-auto p-5">{children}</div>
         <AgentCmsBottomBar basePath={basePath} currentPath={currentPath} />
       </div>
       {rightPanel && (

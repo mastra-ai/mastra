@@ -169,6 +169,27 @@ function createMockLogger(): IMastraLogger {
 }
 
 describe('MastraSandbox Base Class', () => {
+  it('preserves original argv through the process manager env wrapper', async () => {
+    const pm = new ExecuteCommandProcessManager('first second');
+    const sandbox = new ProcessBackedSandbox(pm, { BASE: 'base' });
+    const args = ['-c', 'printf "first" && printf " second"', '', 'a\\b'];
+    const release = vi.spyOn(pm, 'release');
+    const result = await sandbox.executeCommand!('sh', args, { env: { CALL: 'call' } });
+
+    expect(pm.lastOptions?.originalInvocation).toEqual({ command: 'sh', args });
+    expect(pm.lastOptions?.originalInvocation?.args).not.toBe(args);
+    expect(pm.lastOptions?.env).toMatchObject({ BASE: 'base', CALL: 'call' });
+    expect(result.stdout).toBe('first second');
+    expect(result.command).toContain('sh -c');
+    expect(release).toHaveBeenCalledWith('execute-command-process');
+  });
+
+  it.each([undefined, []])('does not add invocation metadata for absent argv: %s', async args => {
+    const pm = new ExecuteCommandProcessManager('');
+    const sandbox = new ProcessBackedSandbox(pm);
+    await sandbox.executeCommand!('echo hello', args);
+    expect(pm.lastOptions).not.toHaveProperty('originalInvocation');
+  });
   describe('MountManager Creation', () => {
     it('constructor creates MountManager if mount() implemented', () => {
       const sandbox = new MountableSandbox();
@@ -717,6 +738,46 @@ describe('MastraSandbox Base Class', () => {
       await sandbox.processes!.spawn('echo hi');
 
       expect(manager.lastOptions?.env).toEqual({ STABLE: 'yes' });
+    });
+  });
+
+  describe('Working directory', () => {
+    class WdSandbox extends MastraSandbox {
+      readonly id = 'wd-sandbox';
+      readonly name = 'WdSandbox';
+      readonly provider = 'test';
+      status: ProviderStatus = 'pending';
+
+      constructor(workingDirectory?: string) {
+        super({ name: 'WdSandbox', workingDirectory });
+      }
+
+      async start(): Promise<void> {}
+
+      /** Test seam for the protected setter (probe-based providers use it). */
+      probeResolved(dir: string): void {
+        this.setWorkingDirectory(dir);
+      }
+    }
+
+    it('stores the constructor option and exposes it via the getter', () => {
+      const sandbox = new WdSandbox('/srv/app');
+      expect(sandbox.workingDirectory).toBe('/srv/app');
+    });
+
+    it('is undefined when the option is omitted', () => {
+      const sandbox = new WdSandbox();
+      expect(sandbox.workingDirectory).toBeUndefined();
+    });
+
+    it('setWorkingDirectory updates the getter', () => {
+      const sandbox = new WdSandbox();
+      sandbox.probeResolved('/home/probe/repo');
+      expect(sandbox.workingDirectory).toBe('/home/probe/repo');
+
+      const configured = new WdSandbox('/srv/app');
+      configured.probeResolved('/srv/other');
+      expect(configured.workingDirectory).toBe('/srv/other');
     });
   });
 });

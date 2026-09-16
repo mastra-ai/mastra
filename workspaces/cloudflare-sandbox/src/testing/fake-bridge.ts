@@ -35,6 +35,24 @@ export interface FakeBridge {
   execs: FakeExecRequest[];
   files: Map<string, string>;
   sandboxes: Set<string>;
+  /** Excludes query recorded per `GET /persist` call. */
+  persists: (string | null)[];
+  /** Raw tar payloads received by `POST /hydrate`. */
+  hydrations: Uint8Array[];
+  /** Bodies received by `POST /mount`. */
+  mounts: unknown[];
+  /** Bodies received by `POST /unmount`. */
+  unmounts: unknown[];
+  /** Mount paths the SDK currently considers active (cleared by {@link FakeBridge.sleep}). */
+  activeMounts: Set<string>;
+  /** Live session ids created via `POST /session`. */
+  sessions: Set<string>;
+  /**
+   * Models `@cloudflare/sandbox` stopping an idle container: scratch files and the
+   * in-memory `activeMounts` are dropped, but the sandbox id survives and boots a
+   * fresh container on next use.
+   */
+  sleep: () => void;
   /** Overrides the default `echo`-only behaviour. */
   onExec?: (request: FakeExecRequest) => FakeExecResult;
 }
@@ -47,12 +65,20 @@ function toBase64(value: string): string {
   return Buffer.from(value, 'utf8').toString('base64');
 }
 
-function defaultExec(request: FakeExecRequest): FakeExecResult {
+function defaultExec(request: FakeExecRequest, activeMounts: Set<string>): FakeExecResult {
   // Strip `env KEY=VALUE ...` assignments the provider prepends.
   const argv = [...request.argv];
   if (argv[0] === 'env') {
     argv.shift();
     while (argv.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(argv[0]!)) argv.shift();
+  }
+  // The provider's re-mount probe: report mount paths that are no longer mountpoints.
+  const script = argv[0] === '/bin/bash' && argv[1] === '-c' ? argv[2] : undefined;
+  if (script?.includes('mountpoint -q')) {
+    const match = /for p in (.+?); do/.exec(script);
+    const paths = match ? match[1]!.split(' ').filter(Boolean) : [];
+    const stale = paths.filter(mountPath => !activeMounts.has(mountPath));
+    return { stdout: stale.length ? `${stale.join('\n')}\n` : '', exitCode: 0 };
   }
   if (argv[0] === 'echo') return { stdout: `${argv.slice(1).join(' ')}\n`, exitCode: 0 };
   return { exitCode: 0 };
@@ -62,11 +88,23 @@ export function createFakeBridge(options: { apiToken?: string; baseUrl?: string 
   const baseUrl = options.baseUrl ?? 'https://bridge.example.com';
   let nextId = 1;
 
+  let nextSession = 1;
+
   const bridge: FakeBridge = {
     requests: [],
     execs: [],
     files: new Map(),
     sandboxes: new Set(),
+    persists: [],
+    hydrations: [],
+    mounts: [],
+    unmounts: [],
+    activeMounts: new Set(),
+    sessions: new Set(),
+    sleep: () => {
+      bridge.files.clear();
+      bridge.activeMounts.clear();
+    },
     fetch: (async (input: Parameters<typeof globalThis.fetch>[0], init: RequestInit = {}) => {
       const url = String(input);
       const method = (init.method ?? 'GET').toUpperCase();
@@ -108,12 +146,65 @@ export function createFakeBridge(options: { apiToken?: string; baseUrl?: string 
         bridge.files.set(filePath, content);
         return Response.json({ ok: true });
       }
+      if (method === 'GET' && file) {
+        const filePath = `/${decodeURIComponent(file[2]!)}`;
+        const content = bridge.files.get(filePath);
+        if (content === undefined) {
+          return Response.json({ error: `not found: ${filePath}`, code: 'workspace_read_not_found' }, { status: 404 });
+        }
+        return new Response(Buffer.from(content, 'utf8'), { headers: { 'content-type': 'application/octet-stream' } });
+      }
+
+      const persist = /^\/v1\/sandbox\/([^/]+)\/persist$/.exec(path);
+      if (method === 'GET' && persist) {
+        bridge.persists.push(requested.searchParams.get('excludes'));
+        return new Response(Buffer.from('fake-tar-archive', 'utf8'), {
+          headers: { 'content-type': 'application/octet-stream' },
+        });
+      }
+
+      const hydrate = /^\/v1\/sandbox\/([^/]+)\/hydrate$/.exec(path);
+      if (method === 'POST' && hydrate) {
+        const body = init.body;
+        bridge.hydrations.push(new Uint8Array(typeof body === 'string' ? Buffer.from(body) : (body as Uint8Array)));
+        return new Response(null, { status: 204 });
+      }
+
+      const mount = /^\/v1\/sandbox\/([^/]+)\/mount$/.exec(path);
+      if (method === 'POST' && mount) {
+        const body = JSON.parse(bodyText ?? '{}') as { mountPath?: string };
+        bridge.mounts.push(body);
+        if (body.mountPath) bridge.activeMounts.add(body.mountPath);
+        return Response.json({ ok: true });
+      }
+
+      const unmount = /^\/v1\/sandbox\/([^/]+)\/unmount$/.exec(path);
+      if (method === 'POST' && unmount) {
+        const body = JSON.parse(bodyText ?? '{}') as { mountPath?: string };
+        bridge.unmounts.push(body);
+        if (body.mountPath) bridge.activeMounts.delete(body.mountPath);
+        return Response.json({ ok: true });
+      }
+
+      const createSession = /^\/v1\/sandbox\/([^/]+)\/session$/.exec(path);
+      if (method === 'POST' && createSession) {
+        const requestBody = JSON.parse(bodyText ?? '{}') as { id?: string };
+        const id = typeof requestBody.id === 'string' && requestBody.id ? requestBody.id : `sess-${nextSession++}`;
+        bridge.sessions.add(id);
+        return Response.json({ id });
+      }
+
+      const deleteSession = /^\/v1\/sandbox\/([^/]+)\/session\/([^/]+)$/.exec(path);
+      if (method === 'DELETE' && deleteSession) {
+        bridge.sessions.delete(decodeURIComponent(deleteSession[2]!));
+        return new Response(null, { status: 204 });
+      }
 
       const exec = /^\/v1\/sandbox\/([^/]+)\/exec$/.exec(path);
       if (method === 'POST' && exec) {
         const request = JSON.parse(bodyText ?? '{}') as FakeExecRequest;
         bridge.execs.push(request);
-        const result = (bridge.onExec ?? defaultExec)(request);
+        const result = bridge.onExec?.(request) ?? defaultExec(request, bridge.activeMounts);
 
         let stream = '';
         const stdout = result.stdout ?? '';

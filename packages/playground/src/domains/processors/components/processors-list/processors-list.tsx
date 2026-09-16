@@ -30,14 +30,14 @@ export function ProcessorsList({ processors, isLoading, search = '' }: Processor
     return processorData.filter(p => p.id.toLowerCase().includes(term) || (p.name || '').toLowerCase().includes(term));
   }, [processorData, search]);
 
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length });
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: true });
 
   if (isLoading) {
     return <EntityListSkeleton columns="auto 1fr auto auto auto auto auto auto" />;
   }
 
   return (
-    <EntityList columns="auto 1fr auto auto auto auto auto auto" variant="striped" scrollRef={containerRef}>
+    <EntityList columns="auto 1fr auto auto auto auto auto auto" scrollRef={containerRef}>
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>

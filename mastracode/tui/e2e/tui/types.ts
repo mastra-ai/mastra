@@ -8,6 +8,10 @@ export type ScenarioName =
   | 'abort-followup'
   | 'branch-context-long-name'
   | 'active-signal-followup'
+  | 'agent-connections-expected-reply-watchdog'
+  | 'agent-connections-tool-flow'
+  | 'agent-connections-notification-signal'
+  | 'agents-md-autoload'
   | 'autocomplete-wrapping-navigation'
   | 'api-key-delete-env'
   | 'api-key-multi-provider-delete'
@@ -16,6 +20,7 @@ export type ScenarioName =
   | 'approval-overlay-focus'
   | 'ask-user-advanced-prompts'
   | 'automated-chat'
+  | 'automated-chat-unix-pubsub'
   | 'browser-active-pending-status'
   | 'browser-model-picker'
   | 'browser-viewport'
@@ -28,6 +33,7 @@ export type ScenarioName =
   | 'browser-wizard-browserbase'
   | 'browser-wizard-export'
   | 'clipboard-image-paste'
+  | 'connect-command'
   | 'commit-attribution-prompt'
   | 'custom-config-dir'
   | 'custom-pack-import-overwrite'
@@ -38,6 +44,7 @@ export type ScenarioName =
   | 'custom-provider-management'
   | 'custom-provider-modal-validation'
   | 'custom-provider-model-selector'
+  | 'cross-agent-settings'
   | 'custom-slash-command'
   | 'ctrlf-queued-custom-slash'
   | 'ctrlf-queued-image-followup'
@@ -47,6 +54,9 @@ export type ScenarioName =
   | 'file-autocomplete'
   | 'first-run-onboarding'
   | 'github-signals-command'
+  | 'github-signals-multi-subscribe'
+  | 'github-signals-legacy-upgrade'
+  | 'github-signals-tool-multi-subscribe'
   | 'github-signals-incremental'
   | 'github-signals-notification-reload'
   | 'github-signals-polling-inbox'
@@ -104,12 +114,14 @@ export type ScenarioName =
   | 'mcp-selector-reconnect'
   | 'mcp-server-config'
   | 'mcp-skipped-validation'
+  | 'model-search'
   | 'model-selection-api-key-prompt'
   | 'model-selection-cancel-env'
   | 'models-pack-activation-persistence'
   | 'notification-inbox-crud-flow'
   | 'notification-inbox-reload'
   | 'notification-inbox-tool-flow'
+  | 'notification-signal-interrupt'
   | 'notification-signal-rendering'
   | 'notify-input-request-hook'
   | 'om-settings'
@@ -151,6 +163,7 @@ export type ScenarioName =
   | 'stream-error-retry'
   | 'streaming-render-stability'
   | 'streaming-tool-args'
+  | 'subagents-command'
   | 'subagent-delegation'
   | 'subagent-plan-execute-tools'
   | 'subagent-model-startup-restore'
@@ -184,6 +197,7 @@ export type McE2eTerminal = {
   keyCtrlC: () => void;
   resize: (columns: number, rows: number) => void;
   serialize: () => { view: string };
+  serializeHistory?: () => { output: string };
   submit: (text: string) => void;
   write: (text: string) => void;
 };

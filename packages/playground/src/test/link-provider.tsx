@@ -30,8 +30,8 @@ const paths: Record<string, (...args: string[]) => string> = {
   agentsLink: () => '/agents',
   agentToolLink: (agentId, toolId) => `/agents/${agentId}/tools/${toolId}`,
   agentSkillLink: (agentId, skillName) => `/agents/${agentId}/skills/${skillName}`,
-  agentThreadLink: (agentId, threadId) => `/agents/${agentId}/chat/${threadId}`,
-  agentNewThreadLink: agentId => `/agents/${agentId}/chat/new`,
+  agentThreadLink: (agentId, threadId) => `/agents/${agentId}/threads/${threadId}`,
+  agentNewThreadLink: agentId => `/agents/${agentId}/threads/new`,
   workflowsLink: () => '/workflows',
   workflowLink: id => `/workflows/${id}`,
   schedulesLink: () => '/schedules',
@@ -60,13 +60,13 @@ const paths: Record<string, (...args: string[]) => string> = {
   workflowRunLink: (workflowId, runId) => `/workflows/${workflowId}/runs/${runId}`,
   datasetLink: id => `/datasets/${id}`,
   datasetItemLink: (datasetId, itemId) => `/datasets/${datasetId}/items/${itemId}`,
-  datasetItemCompareLink: (datasetId, itemId, secondItemId) =>
-    `/datasets/${datasetId}/items/${itemId}/compare/${secondItemId}`,
   // Only used by the base branch's `LinkComponentPaths` (see comment above).
   datasetExperimentLink: (datasetId, experimentId) => `/datasets/${datasetId}/experiments/${experimentId}`,
   experimentLink: id => `/experiments/${id}`,
+  experimentItemLink: (id, itemId) => `/experiments/${id}/items/${itemId}`,
 };
 
+// eslint-disable-next-line react-refresh/only-export-components -- test helper co-located with the provider.
 export const stubLinkPaths = paths as LinkComponentProviderProps['paths'];
 
 /** Wraps children in a `LinkComponentProvider` backed by {@link StubLink}. */

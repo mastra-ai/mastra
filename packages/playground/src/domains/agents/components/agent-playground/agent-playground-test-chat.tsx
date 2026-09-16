@@ -71,8 +71,14 @@ function UnsavedChangesBanner({ ctx }: { ctx: NonNullable<ReturnType<typeof useO
       className="mx-4 mt-3 mb-0"
       action={
         handleSaveDraft && (
-          <Button type="button" variant="default" size="sm" onClick={() => handleSaveDraft()} disabled={isSavingDraft}>
-            <Save className="h-3.5 w-3.5" />
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            onClick={() => handleSaveDraft()}
+            disabled={isSavingDraft}
+            icon={<Save />}
+          >
             {isSavingDraft ? 'Saving...' : saveLabel}
           </Button>
         )
@@ -162,7 +168,7 @@ export function AgentPlaygroundTestChat({
           key={`session-${agentId}-${testThreadId}`}
           agentId={agentId}
           threadId={testThreadId}
-          enabled={Boolean(agent?.browserTools?.length)}
+          enabled={Boolean(agent?.hasBrowser ?? agent?.browserTools?.length)}
         >
           <ThreadInputProvider>
             <ActivatedSkillsProvider key={testThreadId}>

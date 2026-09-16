@@ -98,7 +98,6 @@ function stubThreadRoute({
       HttpResponse.json({ sessions: [userSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
     // The gated fetch: the user-session lookup that resolves the workspace.
     http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, async () => {
       await sessionGate.promise;
@@ -237,29 +236,14 @@ describe('ThreadPage loading shell', () => {
       initialThreadId: 'thread-1',
       threads: [{ id: 'thread-1' }, { id: ROUTE_THREAD_ID }],
     });
-    let resolveEnsureStarted = () => {};
-    const ensureStarted = new Promise<void>(resolve => {
-      resolveEnsureStarted = resolve;
-    });
-    let resolveEnsure = () => {};
-    const ensureReady = new Promise<void>(resolve => {
-      resolveEnsure = resolve;
-    });
-    server.use(
-      http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, async () => {
-        resolveEnsureStarted();
-        await ensureReady;
-        return HttpResponse.json({ ok: true });
-      }),
-    );
     renderThreadRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${ROUTE_THREAD_ID}`);
-    sessionGate.resolve();
 
+    // Thread-switch is gated on `sandboxReady`, which is session metadata
+    // resolving — so hold the session query to hold the switch.
     expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
-    await ensureStarted;
     expect(onSwitchThread).not.toHaveBeenCalled();
 
-    resolveEnsure();
+    sessionGate.resolve();
     await waitFor(() => expect(onSwitchThread).toHaveBeenCalledWith(ROUTE_THREAD_ID));
   });
 });

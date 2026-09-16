@@ -416,6 +416,120 @@ describe('Workflow (Evented Engine Specific)', () => {
     }
   });
 
+  describe('parallel setState merging (issue #22319)', () => {
+    const stateSchema = z.object({ first: z.number(), second: z.number() });
+
+    const makeBranchStep = (id: string, delayMs: number, update: Record<string, number>) =>
+      createStep({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        stateSchema,
+        execute: async ({ setState }) => {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          await setState(update as any);
+          return { value: id };
+        },
+      });
+
+    const runWorkflow = async (workflow: any, id: string) => {
+      const mastra = new Mastra({
+        workflows: { [id]: workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startWorkers();
+      try {
+        const run = await workflow.createRun();
+        return await run.start({
+          inputData: {},
+          initialState: { first: 0, second: 0 },
+          outputOptions: { includeState: true },
+        });
+      } finally {
+        await mastra.stopWorkers();
+      }
+    };
+
+    it.for([
+      ['slow-first', 50, 10],
+      ['fast-first', 10, 50],
+    ] as const)('merges setState updates from both parallel branches (%s)', async ([name, delay1, delay2]) => {
+      const id = `parallel-set-state-${name}`;
+      const step1 = makeBranchStep('branch1', delay1, { first: 1 });
+      const step2 = makeBranchStep('branch2', delay2, { second: 1 });
+
+      const workflow = createWorkflow({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        steps: [step1, step2],
+      });
+      workflow.parallel([step1, step2]).commit();
+
+      const result = await runWorkflow(workflow, id);
+      expect(result.status).toBe('success');
+      expect((result as any).state).toEqual({ first: 1, second: 1 });
+    });
+
+    it('merges setState updates from multiple executed conditional branches', async () => {
+      const id = 'conditional-set-state-merge';
+      const step1 = makeBranchStep('branch1', 30, { first: 1 });
+      const step2 = makeBranchStep('branch2', 5, { second: 1 });
+
+      const workflow = createWorkflow({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        steps: [step1, step2],
+      });
+      workflow
+        .branch([
+          [async () => true, step1],
+          [async () => true, step2],
+        ])
+        .commit();
+
+      const result = await runWorkflow(workflow, id);
+      expect(result.status).toBe('success');
+      expect((result as any).state).toEqual({ first: 1, second: 1 });
+    });
+
+    it('exposes the merged state to the step after the parallel block', async () => {
+      const id = 'parallel-set-state-after';
+      const step1 = makeBranchStep('branch1', 30, { first: 1 });
+      const step2 = makeBranchStep('branch2', 5, { second: 1 });
+      const observedStates: Record<string, number>[] = [];
+      const afterStep = createStep({
+        id: 'after',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        execute: async ({ state }) => {
+          observedStates.push(state as any);
+          return {};
+        },
+      });
+
+      const workflow = createWorkflow({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        steps: [step1, step2, afterStep],
+      });
+      workflow.parallel([step1, step2]).then(afterStep).commit();
+
+      const result = await runWorkflow(workflow, id);
+      expect(result.status).toBe('success');
+      expect(observedStates[0]).toEqual({ first: 1, second: 1 });
+      // Step results must not leak the internal delta bookkeeping
+      expect(JSON.stringify(result.steps)).not.toContain('__stateDelta');
+    });
+  });
+
   describe('terminal snapshot cleanup (issue #22209)', () => {
     const makeStep = (id: string, execute: () => Promise<any>) =>
       createStep({

@@ -1,4 +1,4 @@
-import { Columns3Icon, PlusIcon } from 'lucide-react';
+import { Columns3Icon, PlusIcon, Columns3, X } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { TRACE_USAGE_COLUMNS } from '../trace-list-columns';
 import type { TraceColumnPreferences, TraceOptionalColumn } from '../trace-list-columns';
@@ -77,8 +77,7 @@ export function TraceColumnsMenu({
       <DropdownMenu>
         <DropdownMenu.Trigger
           render={
-            <Button variant="outline" size="md">
-              <Columns3Icon aria-hidden />
+            <Button variant="outline" size="md" icon={<Columns3Icon aria-hidden />}>
               Columns
             </Button>
           }
@@ -165,10 +164,10 @@ export function TraceColumnsMenu({
               )}
             </DialogBody>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => handleDialogOpenChange(false)}>
+              <Button icon={<X />} type="button" variant="outline" onClick={() => handleDialogOpenChange(false)}>
                 Cancel
               </Button>
-              <Button type="submit" variant="primary">
+              <Button icon={<Columns3 />} type="submit" variant="primary">
                 Add column
               </Button>
             </DialogFooter>

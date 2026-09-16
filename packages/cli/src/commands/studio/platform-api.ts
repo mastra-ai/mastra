@@ -1,6 +1,7 @@
-import { writeBarLine } from '../../utils/clack-bar.js';
+import { createBarLogWriter } from '../../utils/clack-bar.js';
+import type { DeployLogWriter, LogCollector } from '../../utils/deploy-log-format.js';
 import { bestEffortCancel, confirmUploadWithRetry } from '../../utils/deploy-upload.js';
-import { withPollingRetries } from '../../utils/polling.js';
+import { abortableDelay, withPollingRetries } from '../../utils/polling.js';
 import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL, platformFetch, throwApiError } from '../auth/client.js';
 import { getToken } from '../auth/credentials.js';
 import type { DeployDiagnosis, DeployDiagnosisLookup } from '../deploy-suggestions.js';
@@ -10,6 +11,8 @@ export interface Project {
   name: string;
   slug: string | null;
   organizationId: string;
+  /** Present on the studio list endpoint; set at creation and never changed by deploys on the unified path. */
+  factoryEnabled?: boolean;
   latestDeployId: string | null;
   latestDeployStatus: string | null;
   latestDeployCreatedAt?: string | null;
@@ -206,9 +209,32 @@ export async function uploadDeploy(
   return { id, status };
 }
 
-async function streamDeployLogs(deployId: string, token: string, orgId: string, signal: AbortSignal): Promise<void> {
+export interface PollDeployOptions {
+  /** Print every log line instead of the rolling tail shown on a TTY. */
+  showAllLogs?: boolean;
+  /** Receives every raw log entry, so a failure excerpt can be printed later. */
+  collectLogs?: LogCollector;
+}
+
+/** Set once the log stream has connected; a connected stream is drained before it is stopped. */
+interface StreamState {
+  connected: boolean;
+}
+
+/** How long a connected stream may keep delivering after the deploy reached a terminal state. */
+const SSE_DRAIN_MS = 500;
+
+async function streamDeployLogs(
+  deployId: string,
+  token: string,
+  orgId: string,
+  signal: AbortSignal,
+  logWriter: DeployLogWriter,
+  state: StreamState,
+): Promise<void> {
   // Small delay to let the deploy pipeline start before requesting logs
-  await new Promise(r => setTimeout(r, 2000));
+  await abortableDelay(2000, signal);
+  if (signal.aborted) return;
 
   const url = `${MASTRA_PLATFORM_API_URL}/v1/studio/deploys/${deployId}/logs/stream`;
 
@@ -218,6 +244,7 @@ async function streamDeployLogs(deployId: string, token: string, orgId: string, 
   });
 
   if (!resp.ok || !resp.body) return;
+  state.connected = true;
 
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
@@ -247,7 +274,7 @@ async function streamDeployLogs(deployId: string, token: string, orgId: string, 
           skipNextUrlMeta = false;
           if (/^(\x1b\[\d+m)*url(\x1b\[\d+m)*:/.test(data)) continue;
         }
-        await writeBarLine(data);
+        logWriter.write(data);
       }
     }
   }
@@ -258,6 +285,7 @@ export async function pollDeploy(
   token: string,
   orgId: string,
   maxWaitMs = 600000,
+  options: PollDeployOptions = {},
 ): Promise<DeployStatus> {
   const start = Date.now();
   let lastStatus = '';
@@ -265,7 +293,11 @@ export async function pollDeploy(
 
   // Start streaming logs in the background via SSE
   const logAbort = new AbortController();
-  streamDeployLogs(deployId, currentToken, orgId, logAbort.signal).catch(() => {});
+  const logWriter = createBarLogWriter({ showAll: options.showAllLogs, collect: options.collectLogs });
+  const streamState: StreamState = { connected: false };
+  const logsTask = streamDeployLogs(deployId, currentToken, orgId, logAbort.signal, logWriter, streamState).catch(
+    () => {},
+  );
 
   let client = createApiClient(currentToken, orgId);
 
@@ -303,6 +335,12 @@ export async function pollDeploy(
 
     throw new Error('Deploy timed out');
   } finally {
+    // Give a connected stream a moment to deliver events already in flight,
+    // stop it, wait for the reader to settle, then draw whatever is queued so
+    // nothing is lost and nothing prints after the outcome message.
+    if (streamState.connected) await Promise.race([logsTask, abortableDelay(SSE_DRAIN_MS)]);
     logAbort.abort();
+    await logsTask;
+    logWriter.flush();
   }
 }

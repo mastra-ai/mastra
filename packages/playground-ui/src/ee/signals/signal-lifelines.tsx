@@ -3,10 +3,11 @@ import { useState } from 'react';
 
 import { LifelineRow } from './lifeline-row';
 import { getSignalHue } from './signal-colors';
-import { formatSignalName, SIGNAL_DESCRIPTIONS } from './signal-formatting';
+import { signalDescription, signalLabel } from './signal-formatting';
 import type { ThemeSelection } from './theme-drilldown-data';
 import { buildThemeLifelines } from './theme-lifelines-data';
 import type { ThemeFlowResponse, ThemeSnapshot, TraceSignalName } from './types';
+import { useTraceIntelligence } from './use-trace-intelligence';
 import { nodeColor } from '@/ds/components/SankeyChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
@@ -23,18 +24,21 @@ export function SignalLifelines({
   positions: number[];
   onThemeSelect: (selection: ThemeSelection, snapshotIndex: number) => void;
 }) {
+  const { signalCatalog } = useTraceIntelligence();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const rows = buildThemeLifelines(flows, signalName);
   const hue = getSignalHue(signalName);
+  const label = signalLabel(signalCatalog, signalName);
 
   return (
-    <section aria-label={`${formatSignalName(signalName)} lifelines`} className="min-w-0">
-      <h3 className="font-mono text-xs font-semibold tracking-widest uppercase" style={{ color: nodeColor(hue) }}>
+    <section aria-label={`${label} lifelines`} className="min-w-0">
+      <h3 className="text-ui-sm font-mono font-semibold tracking-widest uppercase" style={{ color: nodeColor(hue) }}>
         <Tooltip>
           <TooltipTrigger
             render={
               <button
                 aria-expanded={!isCollapsed}
+                aria-label={label}
                 className="flex items-center gap-1.5 transition-opacity hover:opacity-80"
                 onClick={() => setIsCollapsed(previous => !previous)}
                 type="button"
@@ -45,13 +49,13 @@ export function SignalLifelines({
               aria-hidden="true"
               className={`size-3.5 transition-transform ${isCollapsed ? '-rotate-90' : ''}`}
             />
-            {signalName}
+            {label}
           </TooltipTrigger>
-          <TooltipContent>{SIGNAL_DESCRIPTIONS[signalName]}</TooltipContent>
+          <TooltipContent>{signalDescription(signalCatalog, signalName)}</TooltipContent>
         </Tooltip>
       </h3>
       {isCollapsed ? undefined : rows.length === 0 ? (
-        <p className="text-neutral3 mt-2 text-xs">No themes in these landmarks.</p>
+        <p className="text-neutral3 text-ui-sm mt-2">No themes in these landmarks.</p>
       ) : (
         <ul className="mt-2 space-y-0.5">
           {rows.map(row => (

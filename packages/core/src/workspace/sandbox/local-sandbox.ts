@@ -158,23 +158,25 @@ export interface LocalSandboxOptions extends Omit<MastraSandboxOptions, 'process
 }
 
 /**
- * Local sandbox implementation.
- *
- * Executes commands directly on the host machine.
- * This is the recommended sandbox for development and trusted local execution.
+ * Executes workspace commands on the host machine for development and trusted
+ * local execution. Isolation requires explicit configuration.
  *
  * @example
  * ```typescript
- * import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core';
+ * import { Workspace, LocalSandbox } from '@mastra/core/workspace';
  *
  * const workspace = new Workspace({
- *   filesystem: new LocalFilesystem({ basePath: './my-workspace' }),
  *   sandbox: new LocalSandbox({ workingDirectory: './my-workspace' }),
  * });
- *
- * await workspace.init();
- * const result = await workspace.executeCommand('node', ['script.js']);
  * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Local sandbox documentation](https://mastra.ai/reference/workspace/local-sandbox)
+ * if packaged docs are unavailable.
  */
 export class LocalSandbox extends MastraSandbox<string> {
   readonly id: string;
@@ -183,7 +185,6 @@ export class LocalSandbox extends MastraSandbox<string> {
 
   status: ProviderStatus = 'pending';
 
-  readonly workingDirectory: string;
   readonly isolation: IsolationBackend;
   declare readonly processes: LocalProcessManager;
   declare readonly mounts: MountManager;
@@ -217,6 +218,15 @@ export class LocalSandbox extends MastraSandbox<string> {
   /** Chains snapshot() calls so concurrent captures never interleave. */
   private _snapshotChain: Promise<void> = Promise.resolve();
 
+  /**
+   * The effective working directory. Narrowed to `string`: the constructor
+   * always computes a value (the option, expanded, or `<cwd>/.sandbox`), so
+   * unlike the base getter this never returns `undefined`.
+   */
+  override get workingDirectory(): string {
+    return this._workingDirectory!;
+  }
+
   constructor(options: LocalSandboxOptions = {}) {
     // Validate isolation backend before super (fail fast)
     const requestedIsolation = options.isolation ?? 'none';
@@ -233,7 +243,7 @@ export class LocalSandbox extends MastraSandbox<string> {
 
     this.id = options.id ?? this.generateId();
     this._createdAt = new Date();
-    this.workingDirectory = expandTilde(options.workingDirectory ?? path.join(process.cwd(), '.sandbox'));
+    this.setWorkingDirectory(expandTilde(options.workingDirectory ?? path.join(process.cwd(), '.sandbox')));
     this.env = options.env ?? {};
     this._nativeSandboxConfig = {
       ...options.nativeSandbox,

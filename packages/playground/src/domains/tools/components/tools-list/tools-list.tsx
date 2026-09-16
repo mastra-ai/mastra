@@ -27,14 +27,14 @@ export function ToolsList({ tools, agents, isLoading, search = '' }: ToolsListPr
     [toolData, search],
   );
 
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length });
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: true });
 
   if (isLoading) {
     return <EntityListSkeleton columns="auto 1fr auto" />;
   }
 
   return (
-    <EntityList columns="auto 1fr auto" variant="striped" scrollRef={containerRef}>
+    <EntityList columns="auto 1fr auto" scrollRef={containerRef}>
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>

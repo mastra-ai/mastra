@@ -1,6 +1,6 @@
 ---
 title: "Reference: Metric queries | Observability"
-description: "API reference for listing, aggregating, grouping, charting, and discovering Mastra metrics."
+description: "Metric queries read raw and aggregated metric data from the observability storage domain. For exporter and storage setup, see the Metrics overview."
 packages:
   - "@mastra/core"
   - "@mastra/client-js"
@@ -148,7 +148,7 @@ Returns one value across all matching records. The observability store and `Mast
 
 #### Returns
 
-```typescript
+```typescript oxfmt:false
 {
   value: number | null
   previousValue?: number | null
@@ -310,7 +310,7 @@ Returns stored metric observations without aggregating them. This method is avai
 
 Page mode is the default:
 
-```typescript
+```typescript oxfmt:false
 {
   mode?: 'page'
   filters?: MetricsFilter
@@ -327,7 +327,7 @@ Page mode is the default:
 
 Delta mode supports incremental polling:
 
-```typescript
+```typescript oxfmt:false
 {
   mode: 'delta'
   filters?: MetricsFilter
@@ -340,7 +340,7 @@ Delta mode supports incremental polling:
 
 #### Returns
 
-```typescript
+```typescript oxfmt:false
 {
   metrics: MetricRecord[]
   pagination?: {
@@ -359,7 +359,7 @@ Delta mode supports incremental polling:
 
 A `MetricRecord` has this shape:
 
-```typescript
+```typescript oxfmt:false
 {
   metricId?: string | null
   timestamp: Date

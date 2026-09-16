@@ -1,6 +1,6 @@
 # @mastra/loggers
 
-A collection of logging transport implementations for Mastra, extending the `LoggerTransport` class from `@mastra/core`.
+Logger and logging transport implementations for Mastra. The package includes a structured Pino logger plus file, HTTP, and Upstash transports that extend `LoggerTransport` from `@mastra/core/logger`.
 
 ## Installation
 
@@ -8,138 +8,73 @@ A collection of logging transport implementations for Mastra, extending the `Log
 npm install @mastra/loggers
 ```
 
-## Available Transports
+## Usage
 
-### File Transport
-
-A transport that writes logs to a local file system.
-
-```typescript
-import { FileTransport } from '@mastra/loggers';
-
-const fileLogger = new FileTransport({
-  path: '/path/to/logs/app.log',
-});
-```
-
-#### Configuration
-
-- `path`: Absolute path to the log file (must exist)
-
-#### Features
-
-- Append-mode logging
-- Automatic stream cleanup
-- JSON log parsing
-- Query logs by run ID
-- Stream-based implementation
-
-### Upstash Transport
-
-A transport that sends logs to Upstash Redis with batching and auto-trimming capabilities.
-
-```typescript
-import { UpstashTransport } from '@mastra/loggers';
-
-const upstashLogger = new UpstashTransport({
-  upstashUrl: 'https://your-instance.upstash.io',
-  upstashToken: 'your-token',
-  listName: 'application-logs', // optional
-  maxListLength: 10000, // optional
-  batchSize: 100, // optional
-  flushInterval: 10000, // optional
-});
-```
-
-#### Configuration
-
-Required:
-
-- `upstashUrl`: Your Upstash Redis instance URL
-- `upstashToken`: Your Upstash authentication token
-
-Optional:
-
-- `listName`: Redis list name for logs (default: 'application-logs')
-- `maxListLength`: Maximum number of logs to keep (default: 10000)
-- `batchSize`: Number of logs to send in one batch (default: 100)
-- `flushInterval`: Milliseconds between flush attempts (default: 10000)
-
-#### Features
-
-- Batched log writing
-- Automatic log rotation (LTRIM)
-- Configurable buffer size
-- Automatic retry on failure
-- Query logs by run ID
-- JSON log formatting
-- Timestamp auto-injection
-- Graceful shutdown with final flush
-
-## Usage with Mastra Core
-
-Both transports implement the `LoggerTransport` interface from `@mastra/core`:
+Create a logger with one or more named transports and pass it to Mastra:
 
 ```typescript
 import { Logger } from '@mastra/core/logger';
-import { FileTransport, UpstashTransport } from '@mastra/loggers';
+import { Mastra } from '@mastra/core/mastra';
+import { FileTransport } from '@mastra/loggers/file';
+import { UpstashTransport } from '@mastra/loggers/upstash';
 
-// Create transports
-const fileTransport = new FileTransport({
-  path: '/var/log/app.log',
+const logger = new Logger({
+  transports: [
+    new FileTransport({ path: '/var/log/my-app.log' }),
+    new UpstashTransport({
+      upstashUrl: process.env.UPSTASH_URL!,
+      upstashToken: process.env.UPSTASH_TOKEN!,
+    }),
+  ],
 });
+
+export const mastra = new Mastra({ logger });
+```
+
+## Documentation
+
+### Logger
+
+`Logger` combines one or more `LoggerTransport` implementations and can be passed directly to the Mastra configuration. It supports standard log levels and sends each structured log record to the configured transports, which can persist, batch, or forward the data to external systems.
+
+### File transport
+
+`FileTransport` appends structured logs to an existing local file. It can list logs, query by run ID, stream records, and clean up the underlying write stream when destroyed.
+
+```typescript
+import { FileTransport } from '@mastra/loggers/file';
+
+const fileTransport = new FileTransport({ path: '/var/log/my-app.log' });
+const runLogs = await fileTransport.listLogsByRunId({ runId: 'run-123' });
+```
+
+### Upstash transport
+
+`UpstashTransport` batches logs into an Upstash Redis list. Configure the instance URL and token, then optionally set the list name, maximum retained list length, batch size, and flush interval. It trims old records, retries failed batches, and performs a final flush during shutdown.
+
+```typescript
+import { UpstashTransport } from '@mastra/loggers/upstash';
 
 const upstashTransport = new UpstashTransport({
   upstashUrl: process.env.UPSTASH_URL!,
   upstashToken: process.env.UPSTASH_TOKEN!,
+  listName: 'application-logs',
+  maxListLength: 10_000,
+  batchSize: 100,
+  flushInterval: 10_000,
 });
-
-// Create logger with multiple transports
-const logger = new Logger({
-  transports: [fileTransport, upstashTransport],
-});
-
-// Log messages
-logger.info('Hello world', { metadata: 'value' });
-
-// Query logs
-const allLogs = await fileTransport.listLogs();
-const runLogs = await upstashTransport.listLogsByRunId({ runId: 'abc-123' });
 ```
 
-## Log Message Format
+### HTTP transport
 
-Both transports handle log messages in JSON format with the following structure:
+`HttpTransport` sends batches of structured log records to an HTTP endpoint and supports request headers, batching, retry, and flush configuration. Use it for application-specific collectors and hosted logging gateways.
 
-```typescript
-interface BaseLogMessage {
-  time?: number; // Timestamp (auto-injected if not present)
-  level?: string; // Log level
-  msg?: {
-    // Message content
-    runId?: string; // Optional run ID for grouping logs
-    [key: string]: any;
-  };
-  [key: string]: any;
-}
-```
+- [`PinoLogger` reference](https://mastra.ai/reference/logging/pino-logger)
 
-## Error Handling
+## Changelog
 
-Both transports include robust error handling:
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/packages/loggers/CHANGELOG.md) for version history and release notes.
 
-- File Transport:
-  - Validates file path existence
-  - Handles stream errors
-  - Graceful cleanup on destroy
+## Support
 
-- Upstash Transport:
-  - Validates required configuration
-  - Retries failed batches
-  - Buffers logs during outages
-  - Graceful shutdown with final flush
-
-## Related Links
-
-- [Upstash Redis Documentation](https://docs.upstash.com/redis)
-- [Node.js Stream Documentation](https://nodejs.org/api/stream.html)
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

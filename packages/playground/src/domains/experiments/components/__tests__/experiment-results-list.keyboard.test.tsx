@@ -27,10 +27,7 @@ const makeResult = (id: string): DatasetExperimentResult => ({
 
 const results = [makeResult('r-1'), makeResult('r-2'), makeResult('r-3')];
 
-const columns = [
-  { name: 'id', label: 'Item', size: '1fr' },
-  { name: 'status', label: 'Status', size: 'auto' },
-];
+const columns = [{ name: 'id', label: 'Item', size: '1fr' }];
 
 const renderList = (props?: Partial<Parameters<typeof ExperimentResultsList>[0]>) =>
   renderWithProviders(

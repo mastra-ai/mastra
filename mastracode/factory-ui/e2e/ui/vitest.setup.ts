@@ -87,6 +87,9 @@ if (!Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {};
 }
 
+// jsdom's window.scrollTo only logs "Not implemented"; <ScrollRestoration /> calls it on every navigation.
+window.scrollTo = () => {};
+
 if (!Element.prototype.getAnimations) {
   Object.defineProperty(Element.prototype, 'getAnimations', { configurable: true, value: () => [] });
 }

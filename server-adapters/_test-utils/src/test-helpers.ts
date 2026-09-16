@@ -87,6 +87,15 @@ export interface AdapterTestSuiteConfig {
   /** Name for the test suite */
   suiteName?: string;
 
+  /** Values produced by the configured framework parser for an omitted body. */
+  emptyBodyNormalization?: {
+    withoutContentType: 'undefined' | 'empty-object' | 'empty-string';
+    withJsonContentType: 'undefined' | 'empty-object' | 'empty-string';
+  };
+
+  /** Whether the adapter decodes requestContext from POST query parameters. */
+  supportsPostQueryRequestContext?: boolean;
+
   /**
    * Setup adapter and app for testing
    * Called once before all tests
@@ -295,6 +304,8 @@ export function mockAgentMethods(agent: Agent) {
   vi.spyOn(agent, 'getModelList').mockResolvedValue([
     {
       id: 'id1',
+      enabled: true,
+      maxRetries: 3,
       modelId: 'gpt-4o',
       provider: 'openai',
       model: {
@@ -305,6 +316,8 @@ export function mockAgentMethods(agent: Agent) {
     },
     {
       id: 'id2',
+      enabled: true,
+      maxRetries: 3,
       modelId: 'gpt-4o-mini',
       provider: 'openai',
       model: {
@@ -565,6 +578,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       getConfiguration: () => undefined,
       getModelPolicyWarnings: () => [],
     }),
+    hasEnabledWorkflowBuilderConfig: () => true,
+    resolveWorkflowBuilder: async () => ({
+      enabled: true,
+      getAgent: () => agent,
+      getModelPolicy: () => undefined,
+    }),
     prompt: {
       preview: vi.fn().mockResolvedValue('resolved instructions preview'),
       clearCache: vi.fn(),
@@ -622,6 +641,13 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   if (storage) {
     const observability = await storage.getStore('observability');
     if (observability) {
+      vi.spyOn(observability, 'getFeatures').mockReturnValue([
+        ...observability.getFeatures(),
+        'trace-query',
+        'thread-query',
+      ]);
+      vi.spyOn(observability, 'queryTraces').mockResolvedValue({ traces: [], page: { next: null } });
+      vi.spyOn(observability, 'queryThreads').mockResolvedValue({ threads: [], page: { next: null } });
       await observability.createSpan({
         span: {
           spanId: 'test-span',
@@ -631,6 +657,20 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
           startedAt: new Date(),
           endedAt: new Date(),
           isEvent: false,
+        },
+      });
+
+      // Add test feedback for the review-status route
+      await observability.createFeedback({
+        feedback: {
+          feedbackId: 'test-feedback',
+          timestamp: new Date(),
+          traceId: 'test-trace',
+          spanId: 'test-span',
+          feedbackSource: 'user',
+          feedbackType: 'comment',
+          value: 'test feedback',
+          reviewStatus: 'needs-review',
         },
       });
     }

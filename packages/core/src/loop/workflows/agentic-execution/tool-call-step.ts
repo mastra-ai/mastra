@@ -4,11 +4,13 @@ import { z } from 'zod/v4';
 import { normalizeModelOutput } from '../../../agent/durable/workflows/steps/normalize-model-output';
 import { stopGoalActivity } from '../../../agent/goal';
 import { resolveDeclineReason } from '../../../agent/tool-approval';
+import { resolveSuspendedToolRunId } from '../../../agent/utils';
 import { getAgentVersionPins } from '../../../agent/version-pins';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
+import { BACKGROUND_WORK_CONTEXT, notifyBackgroundWorkTerminal } from '../../../processors/background-work-signals';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
@@ -23,7 +25,6 @@ import {
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import { getNeedsApprovalFn } from '../../../tools/toolchecks';
 import type { MastraToolInvocationOptions, ToolApprovalContext } from '../../../tools/types';
-import { noopObserve } from '../../../tools/types';
 import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
 import { createStep } from '../../../workflows/workflow';
@@ -40,6 +41,7 @@ import {
   RESOURCE_ID_KEY,
   SAVE_QUEUE_MANAGER_KEY,
   STEP_ACTIVE_TOOLS_KEY,
+  STEP_MODEL_MESSAGES_KEY,
   STEP_TOOLS_KEY,
   STEP_WORKSPACE_KEY,
   THREAD_EXISTS_KEY,
@@ -688,12 +690,12 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const toolOptions: MastraToolInvocationOptions = {
           abortSignal: options?.abortSignal,
           toolCallId: inputData.toolCallId,
-          // Pass all messages (input + response + memory) so sub-agents (agent-* tools) receive
-          // the full conversation context and can make better decisions. Each sub-agent invocation
-          // uses a fresh unique thread, so storing this context in that thread is scoped and safe.
-          messages: isAgentTool ? messageList.get.all.aiV5.model() : messageList.get.input.aiV5.model(),
+          // Agent tools receive the exact processor-adjusted prompt visible to the parent model.
+          // Regular tools retain the input-only context expected by the AI SDK tool contract.
+          messages: isAgentTool
+            ? (readScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages') ?? messageList.get.all.aiV5.model())
+            : messageList.get.input.aiV5.model(),
           outputWriter,
-          observe: noopObserve,
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),
           // Pass workspace from the run scope (set by llmExecutionStep via prepareStep/processInputStep)
@@ -851,6 +853,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             }
           },
           resumeData: resumeDataToPassToToolOptions,
+          // The payload this tool call suspended with (see `toolCallSuspended` above), so a
+          // resumed tool can continue from its own state instead of re-deriving it.
+          ...(resumeDataToPassToToolOptions != null &&
+          suspendData &&
+          typeof suspendData === 'object' &&
+          'toolCallSuspended' in suspendData
+            ? { suspendPayload: (suspendData as { toolCallSuspended?: unknown }).toolCallSuspended }
+            : {}),
         };
 
         //if resuming a subAgent or workflow tool, we want to find the runId from when it got suspended.
@@ -870,7 +880,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           // metadata / data parts remain as a fallback for page-refresh resumes where the
           // workflow snapshot is unavailable.
           let suspendedToolRunId = (suspendData as any)?.suspendedToolRunId || '';
-          const shouldUsePartsFallback = !isResumeToolCall || !args.suspendedToolRunId;
+          // The model authors the optional `suspendedToolRunId` schema field, and some models
+          // emit sentinel strings like "null" for it (#23739). Resolve it into a local — without
+          // mutating the model-authored args, which are persisted and echoed back verbatim in
+          // auto-resume prompts — so junk doesn't suppress the parts fallback below. Junk that
+          // survives in args when the lookups find nothing is harmless: every execute-side
+          // consumer (workflow/agent delegation seams) sanitizes the field independently.
+          const modelSuppliedSuspendedToolRunId = resolveSuspendedToolRunId(args?.suspendedToolRunId);
+          const shouldUsePartsFallback = !isResumeToolCall || !modelSuppliedSuspendedToolRunId;
           const messages = messageList.get.all.db();
           const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
           for (const message of assistantMessages) {
@@ -1004,6 +1021,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             }
             let backgroundChunkTransformQueue: Promise<void> = Promise.resolve();
             const emittedReplayedToolCalls = new Set<string>();
+            let resolveReconciliation!: (outcome: { error?: unknown }) => void;
+            const reconciliationComplete = new Promise<{ error?: unknown }>(resolve => {
+              resolveReconciliation = resolve;
+            });
 
             // Create a self-contained background task with per-stream hooks
             const bgTask = createBackgroundTask(backgroundTaskManager, {
@@ -1019,7 +1040,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               context: {
                 // Executor — uses the tool from the current closure
                 executor: {
-                  execute: (
+                  execute: async (
                     bgArgs: Record<string, unknown>,
                     opts?: {
                       abortSignal?: AbortSignal;
@@ -1032,8 +1053,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     // would suspend the AGENT run via tool-call-approval) with
                     // the bg-task workflow's, so calling `suspend()` from the
                     // tool pauses the bg-task run instead.
-                    return resolvedTool.execute!(bgArgs, {
+                    const rawResult = await resolvedTool.execute!(bgArgs, {
                       ...toolOptions,
+                      isBackgroundTask: true,
+                      [BACKGROUND_WORK_CONTEXT]: {
+                        originRunId: runId,
+                        originToolCallId: inputData.toolCallId,
+                        taskId: bgTask.task.id,
+                        invocationKind: isAgentTool ? 'agent' : 'tool',
+                        disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
+                      },
                       ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
                       suspend: async (data?: unknown, options?: SuspendOptions) => {
                         await toolOptions.suspend?.(data, options);
@@ -1045,6 +1074,22 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       },
                       abortSignal: opts?.abortSignal,
                     } as any);
+                    const result = ensureSerializable(rawResult);
+
+                    if ('onOutput' in resolvedTool && typeof (resolvedTool as any).onOutput === 'function') {
+                      try {
+                        await (resolvedTool as any).onOutput({
+                          toolCallId: inputData.toolCallId,
+                          toolName: inputData.toolName,
+                          output: result,
+                          abortSignal: opts?.abortSignal,
+                        });
+                      } catch (error) {
+                        logger?.error('Error calling onOutput', error);
+                      }
+                    }
+
+                    return result;
                   },
                 },
 
@@ -1061,7 +1106,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       const bgRunId = chunk.payload.runId;
                       const replayKey = `${bgRunId}:${chunk.payload.toolCallId}`;
                       if (
-                        (bgRunId !== runId || (bgRunId === runId && workflowResumeData)) &&
+                        (bgRunId !== runId || (bgRunId === runId && workflowResumeData != null)) &&
                         !emittedReplayedToolCalls.has(replayKey)
                       ) {
                         safeEnqueue(
@@ -1150,151 +1195,171 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 // the LLM on the next turn would re-dispatch the tool thinking
                 // the research was still running.
                 onResult: async params => {
-                  const result =
-                    params.status === 'failed'
-                      ? `Background task failed: ${params.error?.message ?? 'Unknown error'}`
-                      : params.result;
-                  let transformCarrier = withToolPayloadTransformMetadata(
-                    { metadata: {} as Record<string, any> },
-                    await transformToolPayloadForTargets(
-                      {
-                        phase: 'input-available',
-                        toolName: params.toolName,
-                        toolCallId: params.toolCallId,
-                        input: args,
-                        providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
-                      },
-                      transformSource,
-                      logger,
-                    ),
-                  );
-                  transformCarrier = withToolPayloadTransformMetadata(
-                    transformCarrier,
-                    await transformToolPayloadForTargets(
-                      {
-                        phase: params.status === 'failed' ? 'error' : 'output-available',
-                        toolName: params.toolName,
-                        toolCallId: params.toolCallId,
-                        input: args,
-                        output: params.status === 'failed' ? undefined : params.result,
-                        error: params.status === 'failed' ? params.error : undefined,
-                        providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
-                      },
-                      transformSource,
-                      logger,
-                    ),
-                  );
-                  const transcriptArgsTransform = getTransformedToolPayload(
-                    transformCarrier.metadata,
-                    'transcript',
-                    'input-available',
-                  );
-                  const transcriptResultTransform = getTransformedToolPayload(
-                    transformCarrier.metadata,
-                    'transcript',
-                    params.status === 'failed' ? 'error' : 'output-available',
-                  );
-                  const transcriptArgs = hasTransformedToolPayload(transcriptArgsTransform)
-                    ? transcriptArgsTransform.transformed
-                    : args;
-                  const transcriptResult = hasTransformedToolPayload(transcriptResultTransform)
-                    ? transcriptResultTransform.transformed
-                    : result;
-                  let providerMetadata = withToolPayloadTransformProviderMetadata(
-                    inputData.providerMetadata as ProviderMetadata | undefined,
-                    transformCarrier.metadata,
-                  ) as ProviderMetadata | undefined;
+                  try {
+                    const result =
+                      params.status === 'failed'
+                        ? `Background task failed: ${params.error?.message ?? 'Unknown error'}`
+                        : params.result;
+                    let transformCarrier = withToolPayloadTransformMetadata(
+                      { metadata: {} as Record<string, any> },
+                      await transformToolPayloadForTargets(
+                        {
+                          phase: 'input-available',
+                          toolName: params.toolName,
+                          toolCallId: params.toolCallId,
+                          input: args,
+                          providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
+                        },
+                        transformSource,
+                        logger,
+                      ),
+                    );
+                    transformCarrier = withToolPayloadTransformMetadata(
+                      transformCarrier,
+                      await transformToolPayloadForTargets(
+                        {
+                          phase: params.status === 'failed' ? 'error' : 'output-available',
+                          toolName: params.toolName,
+                          toolCallId: params.toolCallId,
+                          input: args,
+                          output: params.status === 'failed' ? undefined : params.result,
+                          error: params.status === 'failed' ? params.error : undefined,
+                          providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
+                        },
+                        transformSource,
+                        logger,
+                      ),
+                    );
+                    const transcriptArgsTransform = getTransformedToolPayload(
+                      transformCarrier.metadata,
+                      'transcript',
+                      'input-available',
+                    );
+                    const transcriptResultTransform = getTransformedToolPayload(
+                      transformCarrier.metadata,
+                      'transcript',
+                      params.status === 'failed' ? 'error' : 'output-available',
+                    );
+                    const transcriptArgs = hasTransformedToolPayload(transcriptArgsTransform)
+                      ? transcriptArgsTransform.transformed
+                      : args;
+                    const transcriptResult = hasTransformedToolPayload(transcriptResultTransform)
+                      ? transcriptResultTransform.transformed
+                      : result;
+                    let providerMetadata = withToolPayloadTransformProviderMetadata(
+                      inputData.providerMetadata as ProviderMetadata | undefined,
+                      transformCarrier.metadata,
+                    ) as ProviderMetadata | undefined;
 
-                  // Recompute the model-facing output from the *real* result.
-                  //
-                  // The dispatch turn stored `mastra.modelOutput` derived from the
-                  // "Background task started..." placeholder, and `llmPrompt()`
-                  // prefers that field over `toolInvocation.result` when building
-                  // the tool message. Carrying the dispatch metadata through
-                  // unchanged would leave the model reading the placeholder
-                  // forever, so it re-dispatches the tool or answers from nothing.
-                  // Mirrors the synchronous path in llm-mapping-step.
-                  // Every path below overwrites the dispatch's `mastra.modelOutput`, including
-                  // the ones that produce nothing: a tool with no `toModelOutput`, a mapping
-                  // that returns nullish, and a mapping that throws. Leaving the key untouched
-                  // in those cases would preserve the placeholder — the exact bug this fixes.
-                  // A null `modelOutput` is the established "no mapping, use the raw result"
-                  // signal that `MessageList` keys off by value.
-                  const toModelOutput = (resolvedTool as { toModelOutput?: (output: unknown) => unknown } | undefined)
-                    ?.toModelOutput;
-                  let modelOutput: unknown = null;
-                  if (params.status !== 'failed' && toModelOutput && result != null) {
-                    try {
-                      modelOutput = normalizeModelOutput(await toModelOutput(result)) ?? null;
-                    } catch (mappingError) {
-                      // Non-fatal: the real result is still written to `toolInvocation.result`
-                      // below and the model reads that instead. Surface it loudly because the
-                      // tool asked for a mapping and did not get one.
-                      logger?.warn?.(
-                        `toModelOutput failed for background tool "${params.toolName}" — falling back to the raw result`,
-                        { toolCallId: params.toolCallId, error: mappingError },
-                      );
-                      modelOutput = null;
+                    // Recompute the model-facing output from the *real* result.
+                    //
+                    // The dispatch turn stored `mastra.modelOutput` derived from the
+                    // "Background task started..." placeholder, and `llmPrompt()`
+                    // prefers that field over `toolInvocation.result` when building
+                    // the tool message. Carrying the dispatch metadata through
+                    // unchanged would leave the model reading the placeholder
+                    // forever, so it re-dispatches the tool or answers from nothing.
+                    // Mirrors the synchronous path in llm-mapping-step.
+                    // Every path below overwrites the dispatch's `mastra.modelOutput`, including
+                    // the ones that produce nothing: a tool with no `toModelOutput`, a mapping
+                    // that returns nullish, and a mapping that throws. Leaving the key untouched
+                    // in those cases would preserve the placeholder — the exact bug this fixes.
+                    // A null `modelOutput` is the established "no mapping, use the raw result"
+                    // signal that `MessageList` keys off by value.
+                    const toModelOutput = (resolvedTool as { toModelOutput?: (output: unknown) => unknown } | undefined)
+                      ?.toModelOutput;
+                    let modelOutput: unknown = null;
+                    if (params.status !== 'failed' && toModelOutput && result != null) {
+                      try {
+                        modelOutput = normalizeModelOutput(await toModelOutput(result)) ?? null;
+                      } catch (mappingError) {
+                        // Non-fatal: the real result is still written to `toolInvocation.result`
+                        // below and the model reads that instead. Surface it loudly because the
+                        // tool asked for a mapping and did not get one.
+                        logger?.warn?.(
+                          `toModelOutput failed for background tool "${params.toolName}" — falling back to the raw result`,
+                          { toolCallId: params.toolCallId, error: mappingError },
+                        );
+                        modelOutput = null;
+                      }
                     }
-                  }
-                  providerMetadata = {
-                    ...providerMetadata,
-                    mastra: { ...(providerMetadata as any)?.mastra, modelOutput },
-                  } as ProviderMetadata;
+                    providerMetadata = {
+                      ...providerMetadata,
+                      mastra: { ...(providerMetadata as any)?.mastra, modelOutput },
+                    } as ProviderMetadata;
 
-                  const updated = messageList.updateToolInvocation(
-                    {
-                      type: 'tool-invocation',
-                      toolInvocation: {
-                        // A failed background task is recorded as `output-error` with the
-                        // message in `errorText`; a successful one keeps `state: 'result'`.
-                        ...(params.status === 'failed'
-                          ? { state: 'output-error' as const, errorText: result as string }
-                          : { state: 'result' as const, result }),
-                        toolCallId: params.toolCallId,
-                        toolName: params.toolName,
-                        args,
-                        // Preserve the approval decision for an approved approval-gated tool that
-                        // ran in the background so it round-trips on recall, matching the sync path
-                        // and the "started" placeholder above.
-                        ...(approvalGrant ?? {}),
+                    const updated = messageList.updateToolInvocation(
+                      {
+                        type: 'tool-invocation',
+                        toolInvocation: {
+                          // A failed background task is recorded as `output-error` with the
+                          // message in `errorText`; a successful one keeps `state: 'result'`.
+                          ...(params.status === 'failed'
+                            ? { state: 'output-error' as const, errorText: result as string }
+                            : { state: 'result' as const, result }),
+                          toolCallId: params.toolCallId,
+                          toolName: params.toolName,
+                          args,
+                          // Preserve the approval decision for an approved approval-gated tool that
+                          // ran in the background so it round-trips on recall, matching the sync path
+                          // and the "started" placeholder above.
+                          ...(approvalGrant ?? {}),
+                        },
+                        ...(providerMetadata ? { providerMetadata } : {}),
                       },
-                      ...(providerMetadata ? { providerMetadata } : {}),
-                    },
-                    {
-                      mode: 'stream',
-                      backgroundTasks: {
-                        [params.toolCallId]: {
-                          startedAt: params.startedAt,
-                          completedAt: params.completedAt,
-                          taskId: params.taskId,
+                      {
+                        mode: 'stream',
+                        backgroundTasks: {
+                          [params.toolCallId]: {
+                            startedAt: params.startedAt,
+                            completedAt: params.completedAt,
+                            taskId: params.taskId,
+                          },
                         },
                       },
-                    },
-                  );
+                    );
 
-                  // Fallback: no matching tool-invocation was found in the
-                  // current message list (can happen if the initial run's
-                  // message list was cleared, e.g. because the task completed
-                  // after the process restarted and hooks were reattached
-                  // without the original call). Append a standalone tool
-                  // message so memory still records the result, even if it
-                  // means a duplicate entry for that toolCallId.
-                  if (!updated) {
-                    if (params.runId !== runId || (params.runId === runId && workflowResumeData)) {
+                    // Fallback: no matching tool-invocation was found in the
+                    // current message list (can happen if the initial run's
+                    // message list was cleared, e.g. because the task completed
+                    // after the process restarted and hooks were reattached
+                    // without the original call). Append a standalone tool
+                    // message so memory still records the result, even if it
+                    // means a duplicate entry for that toolCallId.
+                    if (!updated) {
+                      if (params.runId !== runId || (params.runId === runId && workflowResumeData != null)) {
+                        messageList.add(
+                          [
+                            {
+                              role: 'tool' as const,
+                              type: 'tool-call',
+                              id: readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? randomUUID(),
+                              createdAt: new Date(),
+                              content: [
+                                {
+                                  type: 'tool-call' as const,
+                                  toolCallId: params.toolCallId,
+                                  toolName: params.toolName,
+                                  args: transcriptArgs,
+                                },
+                              ],
+                            },
+                          ],
+                          'response',
+                        );
+                      }
+
                       messageList.add(
                         [
                           {
                             role: 'tool' as const,
-                            type: 'tool-call',
-                            id: readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? randomUUID(),
-                            createdAt: new Date(),
                             content: [
                               {
-                                type: 'tool-call' as const,
+                                type: 'tool-result' as const,
                                 toolCallId: params.toolCallId,
                                 toolName: params.toolName,
-                                args: transcriptArgs,
+                                result: transcriptResult,
+                                isError: params.status === 'failed',
                               },
                             ],
                           },
@@ -1302,36 +1367,33 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                         'response',
                       );
                     }
-                    messageList.add(
-                      [
-                        {
-                          role: 'tool' as const,
-                          content: [
-                            {
-                              type: 'tool-result' as const,
-                              toolCallId: params.toolCallId,
-                              toolName: params.toolName,
-                              result: transcriptResult,
-                              isError: params.status === 'failed',
-                            },
-                          ],
-                        },
-                      ],
-                      'response',
-                    );
-                  }
 
-                  // Flush to memory if available
-                  {
-                    const sqm = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
-                    const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
-                    if (sqm && tid) {
-                      await sqm.flushMessages(
-                        messageList,
-                        tid,
-                        readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig'),
-                      );
+                    // Flush to memory if available
+                    {
+                      const sqm = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
+                      const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
+                      if (sqm && tid) {
+                        await sqm.flushMessages(
+                          messageList,
+                          tid,
+                          readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig'),
+                        );
+                      }
                     }
+
+                    resolveReconciliation({});
+                    void notifyBackgroundWorkTerminal(mastra, {
+                      originRunId: runId,
+                      originToolCallId: params.toolCallId,
+                      ...(params.runId !== runId ? { executorRunId: params.runId } : {}),
+                      taskId: params.taskId,
+                      invocationKind: isAgentTool ? 'agent' : 'tool',
+                      disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
+                      status: params.status === 'failed' ? 'failed' : 'completed',
+                    });
+                  } catch (error) {
+                    resolveReconciliation({ error });
+                    throw error;
                   }
                 },
                 // Execution injector — records background task lifecycle metadata on the
@@ -1355,6 +1417,23 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               },
             });
 
+            const awaitAuthoritativeBackgroundResult = async () => {
+              const completedTask = await bgTask.waitForCompletion({ abortSignal: options?.abortSignal });
+              if (completedTask.status !== 'completed') {
+                throw new Error(
+                  completedTask.error?.message ??
+                    `Background task ${completedTask.status.replace('_', ' ')}: ${completedTask.id}`,
+                );
+              }
+
+              const reconciliation = await reconciliationComplete;
+              if (reconciliation.error) {
+                throw reconciliation.error;
+              }
+
+              return ensureSerializable(completedTask.result);
+            };
+
             const isSuspended = await bgTask.checkIfSuspended({
               toolCallId: inputData.toolCallId,
               runId,
@@ -1363,8 +1442,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
               toolName: inputData.toolName,
             });
-            if (isSuspended && resumeDataToPassToToolOptions) {
+            // Nullish, not truthy: a tool with a primitive resumeSchema can be resumed with
+            // `false` / `0` / `''`, and treating those as "no resume data" would fall through to
+            // `dispatch()` below, leaving the suspended task stranded and starting a second one.
+            if (isSuspended && resumeDataToPassToToolOptions != null) {
               const task = await bgTask.resume(resumeDataToPassToToolOptions);
+
+              if (bgResolved.disposition === 'awaited') {
+                return {
+                  result: await awaitAuthoritativeBackgroundResult(),
+                  ...inputData,
+                  ...(approvalGrant ?? {}),
+                };
+              }
 
               return {
                 result: `Background task resumed. Task ID: ${task.id}. The tool "${inputData.toolName}" is running in the background. You will be notified when it completes.`,
@@ -1403,6 +1493,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   errorMessage: error instanceof Error ? error.message : undefined,
                   errorStack: error instanceof Error ? error.stack : undefined,
                 });
+              }
+
+              if (bgResolved.disposition === 'awaited') {
+                return {
+                  result: await awaitAuthoritativeBackgroundResult(),
+                  ...inputData,
+                  ...(approvalGrant ?? {}),
+                };
               }
 
               // Return placeholder result so the LLM can continue

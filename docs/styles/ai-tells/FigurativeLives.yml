@@ -1,0 +1,94 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. Say where the item is defined or stored. Disable this rule for biography or housing prose."
+level: error
+nonword: true
+ignorecase: true
+# "Lives" is an AI fingerprint for location by residence: the config "lives
+# in" a file, the logic "lives" upstream, the truth "lives in one place."
+# The subject slot is open on purpose: a curated subject list proved
+# unmaintainable against the open-ended set of nouns agent prose houses
+# somewhere, so the determiner, a required subject word, and the preposition
+# carry the discriminator between them, in the widened-FigurativeSits mold,
+# and the exceptions name the beings that literally reside. Requiring a
+# subject word between the determiner and the verb keeps out "this lives
+# in," which the Go standard library uses fourteen times for code layout.
+# The measured cost that remains is the same idiom with a named subject
+# ("this module lives in," "the package lives in"), eight matches across
+# the Go and Python standard libraries. Those fire anyway: established
+# programmer idiom is still the substitution this rule names, and the
+# maintainer asked for the residence figure flagged over the corpus bar
+# here. Biography or housing writing disables the rule.
+#
+# A documentation-corpus audit (2026-09) found the subject with no
+# determiner at all escaping ("Free-block bloat lives in the file layout,"
+# "Operator mechanics live elsewhere," "Only two fields live there") and
+# the "as" complement ("that split lives as reviewed data"). The bare-noun
+# token below takes the first, refusing the pronouns and demonstratives
+# whose residence the tokens above already decline to read, and "as" joins
+# every preposition list. The bare token adds five corpus hits to the
+# eight above ("code lives in cmd/link," "data lives on the heap"), the
+# same programmer idiom.
+exceptions:
+  # People and households
+  - "(?i)famil(?:y|ies)"
+  - "(?i)couples?"
+  - "(?i)people"
+  - "(?i)person"
+  - "(?i)m[ae]n"
+  - "(?i)wom[ae]n"
+  - "(?i)child(?:ren)?"
+  - "(?i)kids?"
+  - "(?i)boys?"
+  - "(?i)girls?"
+  - "(?i)parents?"
+  - "(?i)neighbou?rs?"
+  - "(?i)residents?"
+  - "(?i)populations?"
+  - "(?i)tribes?"
+  - "(?i)authors?"
+  - "(?i)developers?"
+  - "(?i)users?"
+  - "(?i)maintainers?"
+  # Creatures
+  - "(?i)species"
+  - "(?i)animals?"
+  - "(?i)birds?"
+  - "(?i)fish(?:es)?"
+  - "(?i)insects?"
+  - "(?i)bears?"
+  - "(?i)wol(?:f|ves)"
+  - "(?i)cats?"
+  - "(?i)dogs?"
+  - "(?i)bacteria"
+  - "(?i)organisms?"
+tokens:
+  # --- Determiner-gated residence: an artifact placed by "lives" where
+  # "is defined" or "is stored" would do, with an optional modifier word
+  # between the determiner and the subject ("the vendored payload lives in
+  # two directories").
+  - "\\b(?:a|an|the|this|that|these|those|each|every|its|their|our|your|my|his|her) (?:[a-z]+ )?[a-z]+ liv(?:es|ed|ing) (?:in|at|on|under|inside|within|here|there|upstream|downstream|elsewhere|alongside|as)\\b"
+
+  # --- Determiner-less subjects at a sentence or clause start ("config
+  # lives in mise.toml," "Free-block bloat lives in the file layout,"
+  # "Operator mechanics live elsewhere"). The subject is any word that is
+  # not a pronoun, a demonstrative, or an auxiliary, so "this lives in"
+  # stays out as before and "I live in" never enters the span.
+  - "\\b(?!(?:this|that|it|which|who|they|we|you|i|he|she|these|those|there|what|where|to|will|can|could|should|would|may|might|must|still|also|now|then|all|both|some|most|many|few|one|two|three|and|or|but|not|never|only)\\b)[a-z][a-z-]+ (?:still |also |now |then |already |all )?liv(?:es|ed|ing) (?:in|at|on|under|inside|within|here|there|upstream|downstream|elsewhere|alongside|as)\\b"
+
+  # --- The bare plural with the base verb ("only two fields live
+  # there," "operator mechanics live elsewhere"). The complement set is
+  # the adverbial one only: with "in" and "at" the construction is the
+  # compiler's liveness vocabulary twenty-six times over ("variables live
+  # at block entry," "integer types live in the low portion of
+  # registers"), so those stay with the determiner-gated token.
+  - "\\b(?!(?:goes|is|was|has|does|runs|gets|sets|comes|stays|remains|becomes|works|plays|streams|broadcasts|takes|this|that|it|which|who|they|we|you|these|those|there|what|where|all|both|some|most|many|few|and|or|but|not|never|only|always|still|also|as|its|his|hers|us)\\b)[a-z][a-z-]+s (?:still |also |now |then |already |all )?live (?:here|there|upstream|downstream|elsewhere|alongside|as)\\b"
+
+  # --- The address question ("where the config lives," "where each rule
+  # lives"). Same open subject, same exceptions.
+  - "\\bwhere (?:a|an|the|this|that|each|every|its|their) (?:[a-z]+ )?[a-z]+ lives?\\b"
+
+  # --- Mortality idioms: an artifact with a lifespan ("the pattern lives
+  # and dies with the cache," "the legacy lives on").
+  - "\\bliv(?:es|ed|ing) (?:and|or) di(?:es|ed)\\b"
+  - "\\b(?:legacy|spirit|idea|pattern|convention|name|assumption) lives on\\b"

@@ -11,13 +11,23 @@ const { capture, flush, PostHog } = vi.hoisted(() => {
 
 vi.mock('posthog-node', () => ({ PostHog }));
 
-import type { Mastra } from '../mastra';
+import { Agent } from '../agent';
+import { Mastra } from '../mastra';
 import { InMemoryStore } from '../storage/mock';
 import { FEATURE_USAGE_EVENT, syncFeatureUsageTelemetry, trackFeatureUsage } from './feature-telemetry';
 import { hashTelemetryValue, resetEETelemetryForTests } from './posthog';
 
 class UnknownStore {
   stores = {};
+}
+
+function makeAgent(name: string): Agent {
+  return new Agent({
+    id: name,
+    name,
+    instructions: `You are ${name}`,
+    model: 'openai/gpt-4o',
+  });
 }
 
 function makeMastra(overrides: Partial<Record<keyof Mastra, unknown>> = {}): Mastra {
@@ -116,6 +126,66 @@ describe('feature usage telemetry', () => {
     process.env.MASTRA_TELEMETRY_DISABLED = 'true';
 
     trackFeatureUsage('agent_builder');
+
+    expect(PostHog).not.toHaveBeenCalled();
+    expect(capture).not.toHaveBeenCalled();
+  });
+
+  it('tracks file-based agent usage when an agent is registered', () => {
+    const mastra = new Mastra({});
+
+    mastra.__registerFsAgents({ weather: makeAgent('weather') });
+
+    expect(capture).toHaveBeenCalledTimes(1);
+    expect(capture.mock.calls[0]![0]).toMatchObject({
+      distinctId: 'cli-distinct-id',
+      event: FEATURE_USAGE_EVENT,
+      properties: {
+        feature_name: 'file_based_agents',
+        project_id: hashTelemetryValue('/tmp/feature-telemetry-project').slice(0, 16),
+        command: 'dev',
+        node_env: 'test',
+        fs_agent_count: 1,
+      },
+    });
+  });
+
+  it('tracks file-based agent usage only once per Mastra instance', () => {
+    const mastra = new Mastra({});
+
+    mastra.__registerFsAgents({ weather: makeAgent('weather') });
+    mastra.__registerFsAgents({ support: makeAgent('support') });
+
+    expect(capture).toHaveBeenCalledTimes(1);
+    expect(capture.mock.calls[0]![0].properties.fs_agent_count).toBe(1);
+  });
+
+  it('counts only file-based agents that are actually registered', () => {
+    const mastra = new Mastra({ agents: { weather: makeAgent('weather') } });
+
+    mastra.__registerFsAgents({
+      weather: makeAgent('weather-fs'),
+      missing: null as unknown as Agent,
+      support: makeAgent('support'),
+    });
+
+    expect(capture).toHaveBeenCalledTimes(1);
+    expect(capture.mock.calls[0]![0].properties.fs_agent_count).toBe(1);
+  });
+
+  it('does not track file-based agent usage when every entry collides', () => {
+    const mastra = new Mastra({ agents: { weather: makeAgent('weather') } });
+
+    mastra.__registerFsAgents({ weather: makeAgent('weather-fs') });
+
+    expect(capture).not.toHaveBeenCalled();
+  });
+
+  it('does not track file-based agent usage when telemetry is disabled', () => {
+    process.env.MASTRA_TELEMETRY_DISABLED = 'true';
+    const mastra = new Mastra({});
+
+    mastra.__registerFsAgents({ weather: makeAgent('weather') });
 
     expect(PostHog).not.toHaveBeenCalled();
     expect(capture).not.toHaveBeenCalled();

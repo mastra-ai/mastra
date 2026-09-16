@@ -12,6 +12,7 @@ import { readOnlyAuthCapabilities, storedAgentReaderAuthCapabilities } from './f
 import { systemPackages } from './fixtures/channels';
 import { v2Agent } from './fixtures/composer-model-settings';
 import { LinkComponentProvider } from '@/lib/framework';
+import { RouteHeaderActionsProvider, RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
 import { server } from '@/test/msw-server';
 
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
@@ -53,12 +54,11 @@ const noopPaths = {
   workflowRunLink: () => '',
   datasetLink: () => '',
   datasetItemLink: () => '',
-  datasetItemCompareLink: () => '',
   experimentLink: () => '',
-  cmsAgentEditLink: agentId => `/cms/agents/${agentId}/edit`,
+  cmsAgentEditLink: (agentId: string) => `/cms/agents/${agentId}/edit`,
 } as never;
 
-function renderLayout(initialEntry = '/agents/agent-1/chat/new') {
+function renderLayout(initialEntry = '/agents/agent-1/threads/new') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -68,18 +68,21 @@ function renderLayout(initialEntry = '/agents/agent-1/chat/new') {
       <QueryClientProvider client={queryClient}>
         <LinkComponentProvider Link={StubLink as never} navigate={navigateSpy} paths={noopPaths}>
           <TooltipProvider>
-            <MemoryRouter initialEntries={[initialEntry]}>
-              <Routes>
-                <Route
-                  path="/agents/:agentId/*"
-                  element={
-                    <AgentLayout>
-                      <div data-testid="agent-child" />
-                    </AgentLayout>
-                  }
-                />
-              </Routes>
-            </MemoryRouter>
+            <RouteHeaderActionsProvider>
+              <RouteHeaderActionsSlot />
+              <MemoryRouter initialEntries={[initialEntry]}>
+                <Routes>
+                  <Route
+                    path="/agents/:agentId/*"
+                    element={
+                      <AgentLayout>
+                        <div data-testid="agent-child" />
+                      </AgentLayout>
+                    }
+                  />
+                </Routes>
+              </MemoryRouter>
+            </RouteHeaderActionsProvider>
           </TooltipProvider>
         </LinkComponentProvider>
       </QueryClientProvider>
@@ -92,6 +95,7 @@ function commonHandlers(packagesResponse = systemPackages, authResponse = stored
     http.get(`${BASE_URL}/api/agents/agent-1`, () => HttpResponse.json(v2Agent)),
     http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(packagesResponse)),
     http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authResponse)),
+    http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json({})),
   ];
 }
 
@@ -123,6 +127,49 @@ describe('AgentLayout tool tabs', () => {
     });
   });
 
+  describe('when the editor is unavailable', () => {
+    it('omits the Editor tab', async () => {
+      server.use(...commonHandlers());
+      renderLayout();
+      await screen.findByRole('tab', { name: 'Chat' });
+      expect(screen.queryByRole('tab', { name: 'Editor' })).toBeNull();
+      const editor = screen.getByRole('button', { name: 'Editor' });
+      expect(editor.textContent).toBe('');
+      expect(editor.getAttribute('aria-disabled')).toBe('true');
+    });
+  });
+
+  describe('when the editor is configured', () => {
+    it('renders the selected Editor after Chat, Traces, and Evals', async () => {
+      server.use(...commonHandlers(enabledPackages));
+      renderLayout('/agents/agent-1/editor');
+      const editor = await screen.findByRole('tab', { name: 'Editor' });
+      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat', 'Traces', 'Evals', 'Editor']);
+      expect(editor.getAttribute('aria-selected')).toBe('true');
+      expect(screen.queryByRole('button', { name: 'Editor' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Evals' })).toBeNull();
+    });
+  });
+
+  describe('when observability is unavailable', () => {
+    it('offers Evals as an icon-only setup hint instead of a tab', async () => {
+      server.use(...commonHandlers());
+      renderLayout();
+      const evals = await screen.findByRole('button', { name: 'Evals' });
+      expect(evals.textContent).toBe('');
+      expect(evals.getAttribute('aria-disabled')).toBe('true');
+      expect(screen.queryByRole('tab', { name: 'Evals' })).toBeNull();
+    });
+  });
+
+  describe('when the agent tabs render', () => {
+    it('does not expose Review as a top-level tab', async () => {
+      server.use(...commonHandlers(enabledPackages));
+      renderLayout();
+      await screen.findByRole('tab', { name: 'Chat' });
+      expect(screen.queryByRole('tab', { name: 'Review' })).toBeNull();
+    });
+  });
   it('renders the tool tabs without a Channels tab (channels moved to settings)', async () => {
     const onPlatforms = vi.fn();
     server.use(
@@ -135,33 +182,25 @@ describe('AgentLayout tool tabs', () => {
 
     renderLayout();
 
-    expect(await screen.findByText('Chat')).not.toBeNull();
-    expect(screen.getByText('Traces')).not.toBeNull();
+    expect(await screen.findByText('Traces')).not.toBeNull();
+    expect(screen.getByRole('tab', { name: 'Chat' })).not.toBeNull();
+    // Overview is now a side panel toggled from the header, not a tab.
+    expect(screen.queryByRole('tab', { name: 'Overview' })).toBeNull();
+    expect(screen.getByTestId('agent-overview-panel-toggle')).not.toBeNull();
 
     // Channels is configuration, not a tool: no tab and no platforms fetch from the tab bar.
     await waitFor(() => expect(screen.queryByText('Channels')).toBeNull());
     expect(onPlatforms).not.toHaveBeenCalled();
   });
 
-  it('lets the tab list keep the full row width on mobile by wrapping the right-slot controls', async () => {
-    server.use(...commonHandlers(enabledPackages));
+  it('highlights the Chat tab on the thread routes', async () => {
+    server.use(...commonHandlers());
 
-    renderLayout('/agents/agent-1/evaluate');
+    renderLayout('/agents/agent-1/threads/new');
 
-    // Below lg the right-slot buttons wrap onto their own line, right-aligned,
-    // instead of stealing width from the (scrollable) tab list.
-    const runOptionsTrigger = await screen.findByTestId('agent-top-bar-run-options-trigger');
-    const rightSlot = runOptionsTrigger.parentElement!;
-    expect(rightSlot.className).toContain('ml-auto');
-
-    const tabsRow = rightSlot.parentElement!;
-    expect(tabsRow.className).toContain('max-lg:flex-wrap');
-
-    // flex-1 (basis 0) never wraps; on mobile the tabs need their content-sized
-    // basis back (flex-auto) so the row can decide to wrap the right slot.
-    const tabsRoot = screen.getByRole('tablist').parentElement!.parentElement!;
-    expect(tabsRoot.className).toContain('min-w-0');
-    expect(tabsRoot.className).toContain('max-lg:flex-auto');
+    const chatTab = await screen.findByRole('tab', { name: 'Chat' });
+    expect(chatTab.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: 'Traces' }).getAttribute('aria-selected')).toBe('false');
   });
 
   it('keeps run options out of the Editor tab bar because the editor chat composer owns them', async () => {
@@ -169,16 +208,17 @@ describe('AgentLayout tool tabs', () => {
 
     renderLayout('/agents/agent-1/editor');
 
-    expect(await screen.findByRole('tab', { name: /editor/i })).not.toBeNull();
+    expect(await screen.findByRole('tab', { name: 'Editor' })).not.toBeNull();
     expect(screen.queryByTestId('agent-top-bar-run-options-trigger')).toBeNull();
     expect(screen.queryByTestId('agent-tracing-controls-trigger')).toBeNull();
   });
 
-  it('keeps the top-bar run options control on Evaluate because there is no composer', async () => {
+  it('keeps run options out of the top-level Evaluate tab bar', async () => {
     server.use(...commonHandlers(enabledPackages));
 
     renderLayout('/agents/agent-1/evaluate');
 
-    expect(await screen.findByTestId('agent-top-bar-run-options-trigger')).not.toBeNull();
+    await screen.findByRole('tab', { name: 'Editor' });
+    expect(screen.queryByTestId('agent-top-bar-run-options-trigger')).toBeNull();
   });
 });

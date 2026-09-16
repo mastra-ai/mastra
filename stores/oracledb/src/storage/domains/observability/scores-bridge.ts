@@ -5,6 +5,7 @@ import { createStorageErrorId, listScoresArgsSchema, TABLE_SCORERS } from '@mast
 import type {
   BatchCreateScoresArgs,
   CreateScoreArgs,
+  DeleteScoresArgs,
   ListScoresArgs,
   ListScoresResponse,
   ScoreRecord,
@@ -107,6 +108,46 @@ export async function batchCreateScores(
   }
 }
 
+/**
+ * Delete scores by scoreId, optionally scoped to a tenant (`organizationId` /
+ * `resourceId` are ANDed into the predicate so a scoped caller can never
+ * delete another tenant's rows).
+ */
+export async function deleteScores(
+  db: OracleDB,
+  schemaName: string | undefined,
+  args: DeleteScoresArgs,
+): Promise<void> {
+  if (args.scoreIds.length === 0) return;
+
+  const binds: Record<string, unknown> = {};
+  const placeholders = args.scoreIds.map((scoreId, index) => {
+    binds[`scoreId${index}`] = scoreId;
+    return `:scoreId${index}`;
+  });
+  const conditions = [`${scoreQcol(undefined, 'id')} IN (${placeholders.join(', ')})`];
+  if (args.organizationId !== undefined) {
+    binds.organizationId = args.organizationId;
+    const organizationIdColumn = scoreQcol(undefined, 'organizationId');
+    conditions.push(
+      `(${organizationIdColumn} = :organizationId OR (${organizationIdColumn} IS NULL AND JSON_VALUE(${scoreQcol(
+        undefined,
+        'metadata',
+      )}, '$.organizationId' RETURNING VARCHAR2(4000) NULL ON ERROR) = :organizationId))`,
+    );
+  }
+  if (args.resourceId !== undefined) {
+    binds.resourceId = args.resourceId;
+    conditions.push(`${scoreQcol(undefined, 'resourceId')} = :resourceId`);
+  }
+
+  try {
+    await db.none(`DELETE FROM ${qualifyName(TABLE_SCORERS, schemaName)} WHERE ${conditions.join(' AND ')}`, binds);
+  } catch (error) {
+    throw storageError('DELETE_SCORES', 'FAILED', { count: args.scoreIds.length }, error, ErrorCategory.USER);
+  }
+}
+
 export async function getScoreById(
   db: OracleDB,
   schemaName: string | undefined,
@@ -161,7 +202,7 @@ function transformObservabilityScoreRow(row: ScoreRow): ScoreRecord {
     rootEntityId: optionalString(metadata?.rootEntityId),
     rootEntityName: optionalString(metadata?.rootEntityName),
     userId: optionalString(metadata?.userId),
-    organizationId: optionalString(metadata?.organizationId),
+    organizationId: optionalString(row.organizationId) ?? optionalString(metadata?.organizationId),
     resourceId: optionalString(row.resourceId),
     runId: optionalString(row.runId),
     sessionId: optionalString(metadata?.sessionId),
@@ -253,6 +294,7 @@ function scoreRecordToTableRecord(score: ScoreRecord): Record<string, unknown> {
     entityId: score.entityId,
     source,
     resourceId: score.resourceId,
+    organizationId: score.organizationId,
     threadId: score.threadId,
     createdAt: timestamp,
     updatedAt: timestamp,

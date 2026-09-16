@@ -159,6 +159,12 @@ export function resolveModel(
     routerId,
   });
 
+  if (!auth && credentialStore?.allowEnvironmentFallback === false) {
+    throw new Error(
+      `No usable ${providerId} credential is configured for this signed-in Factory account. Connect the provider or add an organization credential, then try again.`,
+    );
+  }
+
   return gateway.resolveLanguageModel({
     providerId,
     modelId: bareModelId,

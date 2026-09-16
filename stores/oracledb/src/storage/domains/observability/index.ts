@@ -1,4 +1,10 @@
-import { ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
+import {
+  executeRetentionPrune,
+  ObservabilityStorage,
+  resolveRetentionTargets,
+  retentionCutoffMs,
+  TABLE_SPANS,
+} from '@mastra/core/storage';
 import type {
   BatchCreateLogsArgs,
   BatchCreateScoresArgs,
@@ -6,6 +12,7 @@ import type {
   BatchDeleteTracesArgs,
   BatchUpdateSpansArgs,
   CreateScoreArgs,
+  DeleteScoresArgs,
   CreateSpanArgs,
   GetEntityNamesArgs,
   GetEntityNamesResponse,
@@ -34,6 +41,10 @@ import type {
   ScoreRecord,
   TracingStorageStrategy,
   UpdateSpanArgs,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 
 import { indexNameForTable, qualifyName } from '../../../vector/identifiers';
@@ -54,6 +65,11 @@ import * as spansOps from './spans';
 export { getDefaultObservabilityIndexDefinitions, LOG_EVENTS_TABLE, logEventsTableSql } from './schema';
 
 export class ObservabilityOracle extends ObservabilityStorage {
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    spans: { table: TABLE_SPANS, column: 'startedAt', indexed: true },
+    logs: { table: LOG_EVENTS_TABLE, column: 'timestamp', indexed: true },
+  };
+
   static readonly MANAGED_TABLES = [TABLE_SPANS, LOG_EVENTS_TABLE] as const;
 
   private readonly db: OracleDB;
@@ -67,6 +83,22 @@ export class ObservabilityOracle extends ObservabilityStorage {
     this.schemaName = config.schemaName;
     this.skipDefaultIndexes = config.skipDefaultIndexes;
     this.indexes = filterIndexesForTables(config.indexes, ObservabilityOracle.MANAGED_TABLES);
+  }
+
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({
+      policies,
+      descriptor: ObservabilityOracle.retentionTables,
+      order: ['spans', 'logs'],
+    });
+    return executeRetentionPrune({
+      domain: 'observability',
+      targets,
+      options,
+      cutoffFor: (target, now) => new Date(retentionCutoffMs(target.policy, now)),
+      deleteBatch: (target, cutoff, limit) =>
+        this.db.pruneBatch({ tableName: target.table, column: target.column, cutoff, limit }),
+    });
   }
 
   async init(): Promise<void> {
@@ -138,6 +170,10 @@ export class ObservabilityOracle extends ObservabilityStorage {
     return scoresOps.batchCreateScores(this.db, this.schemaName, args);
   }
 
+  async deleteScores(args: DeleteScoresArgs): Promise<void> {
+    return scoresOps.deleteScores(this.db, this.schemaName, args);
+  }
+
   async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
     return scoresOps.getScoreById(this.db, this.schemaName, scoreId);
   }
@@ -176,6 +212,7 @@ export class ObservabilityOracle extends ObservabilityStorage {
   }
 
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
+    this.assertUnscopedBatchDeleteTraces(args);
     return spansOps.batchDeleteTraces(this.db, this.schemaName, args);
   }
 

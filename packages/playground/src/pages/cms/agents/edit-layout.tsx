@@ -3,7 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Download, GitPullRequest, Save } from 'lucide-react';
+import { Download, GitPullRequest, Save, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-shell';
@@ -83,7 +83,7 @@ function EditFormContent({
     <Notice variant="info" title="This is a previous version" className="mb-4">
       <Notice.Message>You are seeing a specific version of the agent.</Notice.Message>
       <div className="flex items-center gap-2">
-        <Button type="button" variant="default" size="sm" onClick={() => setSearchParams({})}>
+        <Button icon={<Eye />} type="button" variant="default" size="sm" onClick={() => setSearchParams({})}>
           View latest version
         </Button>
       </div>
@@ -127,7 +127,7 @@ function EditFormContent({
       rightPanel={rightPanel}
     >
       {isEditorLocked ? (
-        <div className="p-6">
+        <div className="p-4">
           <Notice variant="info" title="Editing disabled">
             <Notice.Message>This code-defined agent has disabled Studio editing.</Notice.Message>
           </Notice>
@@ -273,12 +273,15 @@ function EditLayoutWrapper() {
       {isReady && (
         <RouteHeaderActions owner="cms-agent-edit">
           <div className="flex items-center gap-2">
-            {hasDraft && <Badge variant="info">Unpublished changes</Badge>}
+            {hasDraft && <Badge variant="blue">Unpublished changes</Badge>}
             {showCodeModeActions ? (
               isCodeAgentEditable ? (
                 <>
-                  <Button onClick={() => void handleDownloadJson()} disabled={isSavingDraft || isSubmitting}>
-                    <Download />
+                  <Button
+                    onClick={() => void handleDownloadJson()}
+                    disabled={isSavingDraft || isSubmitting}
+                    icon={<Download />}
+                  >
                     Download JSON
                   </Button>
                   <Button

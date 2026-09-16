@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import type { ListAgentVersionsResponse } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { ChatRunVersionIdentityContext } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { AgentRunVersionIdentity } from '../agent-run-version-identity';
-import { ChatRunVersionIdentityContext } from '@/lib/ai-ui/chat/chat-context';
 
 const LONG_LABEL = 'a'.repeat(64);
 const RESOLVED_VERSION_ID = 'version-without-a-loaded-row';

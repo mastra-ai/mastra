@@ -1,6 +1,6 @@
 ---
 title: "Sandbox | Deploy"
-description: "Deploy a Mastra server into an ephemeral workspace sandbox and get a live public URL."
+description: "Deploy a complete Mastra server and Studio to an ephemeral E2B, Daytona, or Vercel sandbox and receive a public URL for testing and previews."
 packages:
   - "@mastra/deployer-sandbox"
 ---
@@ -74,7 +74,7 @@ Studio: https://<sandbox-id>-4111.vercel.run
 
 The manifest includes `expiresAt` when the sandbox provider reports an expiration time.
 
-Redeploys to the same sandbox skip the dependency install when its inputs are unchanged. These inputs are `package.json`, the bundled lockfiles, and the install command.
+Redeploys to the same sandbox skip dependency installation when its inputs are unchanged. The input hash covers `package.json` and the install command together with the bundled lockfiles.
 
 ### What the URLs serve
 
@@ -333,7 +333,7 @@ jobs:
 
 - The sandbox URL is public. Anyone with the URL can reach your Mastra server, including Studio. Enable [server auth](/docs/auth/overview) for anything beyond throwaway previews.
 - Environment variables from your `.env` files are injected into the remote sandbox VM so the server can run. The deploy logs a warning when this happens. Don't deploy secrets you wouldn't put on a shared preview server.
-- To restrict access to Tier 3 traffic, pass a `secret` to `createSandboxHandler()` or `createSandboxProxy()`. The helpers attach it as the `x-mastra-sandbox-secret` header on forwarded requests. Configure [server auth](/docs/auth/overview) to require that header, and direct hits to the sandbox URL get rejected while traffic through your domain works.
+- To restrict access to Tier 3 traffic, pass a `secret` to `createSandboxHandler()` or `createSandboxProxy()`. These helpers attach the value to forwarded requests in the `x-mastra-sandbox-secret` header. Configure [server auth](/docs/auth/overview) to require the header so direct requests to the sandbox URL are rejected while traffic through your domain continues to work.
 
 ## Related
 

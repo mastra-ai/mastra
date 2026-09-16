@@ -28,7 +28,7 @@ export function getCallerAuthorId(requestContext: RequestContext): string | null
 
   const user = requestContext.get(MASTRA_USER_KEY);
   if (user && typeof user === 'object' && 'id' in user) {
-    const id = (user as { id: unknown }).id;
+    const id = user.id;
     if (typeof id === 'string' && id.length > 0) {
       return id;
     }

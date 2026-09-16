@@ -6,7 +6,6 @@ import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Navigate, useSearchParams } from 'react-router';
-import '@fontsource-variable/mona-sans/standard.css';
 
 import { useApiConfig } from '../../api/config';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
@@ -19,12 +18,7 @@ import {
 import { FactoryHalftoneField } from '../domains/auth/components/FactoryHalftoneField';
 import '../domains/auth/components/sign-in-page.css';
 
-/**
- * Only accept same-origin paths so a crafted `?returnTo=` can't bounce the
- * user to an external site after login. Prefix checks alone are not enough —
- * browsers normalize `/\host` to the protocol-relative `//host` — so the value
- * is resolved against the page origin and rejected when it leaves it.
- */
+// Browsers can normalize backslashes into cross-origin redirects.
 export function safeReturnTo(raw?: string): string {
   if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return '/';
   try {
@@ -36,11 +30,6 @@ export function safeReturnTo(raw?: string): string {
   }
 }
 
-/**
- * Email/password credential form for the self-hosted better-auth provider.
- * Posts to the better-auth endpoints (which set the session cookie), then does
- * a full navigation to `returnTo` so the app boots with the fresh session.
- */
 function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; signUpDisabled: boolean }) {
   const { baseUrl } = useApiConfig();
   const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
@@ -137,12 +126,6 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
   );
 }
 
-/**
- * Dedicated `/signin` route rendered when web auth is enabled and the session
- * is unauthenticated. Provider-aware: hosted-login providers (WorkOS) get the
- * redirect button; the self-hosted better-auth provider gets an email/password
- * form. Both preserve where the user was headed via `?returnTo=`.
- */
 export function SignInPage() {
   const { baseUrl } = useApiConfig();
   const auth = useFactoryAuth();
@@ -157,15 +140,12 @@ export function SignInPage() {
   const hostedLoginLabel = studioAuth ? 'Sign in with Mastra Platform' : 'Continue with GitHub';
   const hostedLoginPendingLabel = studioAuth ? 'Opening Mastra Platform…' : 'Opening GitHub…';
 
-  // Mirror of the root auth guard: signed-in (or auth-disabled) visitors have
-  // nothing to do here, so send them to their destination (or the root landing
-  // when returnTo is absent/unsafe).
   if (!auth.isPending && (!auth.data?.authEnabled || auth.data.authenticated)) {
     return <Navigate to={returnTo} replace />;
   }
 
   return (
-    <main className="factory-signin-theme bg-surface1 font-mona-sans text-neutral6 min-h-dvh">
+    <main className="factory-signin-theme bg-surface1 text-neutral6 min-h-dvh">
       <div className="mx-auto grid min-h-dvh w-full max-w-7xl grid-cols-1 px-6 sm:px-10 lg:grid-cols-[minmax(380px,0.82fr)_minmax(540px,1.18fr)]">
         <section className="relative z-3 flex max-w-xl flex-col justify-center py-11 lg:py-17">
           <h1 className="max-w-xl text-[clamp(2.625rem,5.3vw,4.25rem)] leading-[1.1] font-[520] tracking-[0.015em] text-balance [font-stretch:112%]">
@@ -210,7 +190,7 @@ export function SignInPage() {
               </>
             ) : (
               <Button
-                variant="default"
+                variant="primary"
                 size="lg"
                 className="w-80 max-w-full"
                 disabled={redirecting || auth.isPending}

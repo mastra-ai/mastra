@@ -1,6 +1,6 @@
 ---
 title: "A2A (Agent-to-Agent) | Connections"
-description: "Expose and call remote Mastra agents over the Agent-to-Agent protocol."
+description: "Expose Mastra agents through the Agent-to-Agent protocol and consume remote A2A agents as subagents or call them directly with the client SDK."
 packages:
   - "@mastra/client-js"
   - "@mastra/core"
@@ -72,7 +72,7 @@ Mastra supports A2A Protocol v0.3 and v1.0 on the same agent card and execution 
 - `1.0`: Uses the v1.0 API.
 - Any other value: Returns a `VersionNotSupported` protocol error.
 
-Existing `A2AAgent` and `MastraClient.getA2A()` integrations continue to use v0.3. Use `MastraClient.getA2AV1()` for v1.0 requests. The v1 client sends `A2A-Version: 1.0` automatically and adds the `tasks/list` operation.
+`A2AAgent` and `MastraClient.getA2A()` use v0.3 by default. Set `protocolVersion: '1.0'` on `A2AAgent` for v1.0 subagent delegation, or use `MastraClient.getA2AV1()` for direct v1.0 requests. Both v1.0 clients send `A2A-Version: 1.0` automatically. The direct v1.0 client also adds the `tasks/list` operation.
 
 Import v1.0 protocol types and codecs from `@mastra/core/a2a/v1`. The existing `@mastra/core/a2a/client` export remains on v0.3.
 
@@ -87,7 +87,7 @@ Use `A2AAgent` when another Mastra agent should delegate work to a remote agent.
 
 ## Consume A2A agents as subagents
 
-Use `A2AAgent` to wrap a remote A2A agent, then add it to a parent agent with the [supervisor agents](/docs/subagents) pattern. Pass an explicit agent card URL when the remote server hosts multiple agents or uses a custom well-known path.
+Use `A2AAgent` to wrap a remote A2A agent, then add it to a parent agent with the [supervisor agents](/docs/subagents) pattern. Pass an explicit agent card URL when the remote server hosts multiple agents or uses a custom well-known path. Set `protocolVersion: '1.0'` when the remote agent requires A2A v1.0. Omit it to use v0.3.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -95,6 +95,7 @@ import { A2AAgent } from '@mastra/core/a2a'
 
 const remoteWeatherAgent = new A2AAgent({
   url: 'https://weather.example.com/api/.well-known/weather-agent/agent-card.json',
+  protocolVersion: '1.0',
   headers: {
     Authorization: `Bearer ${process.env.WEATHER_AGENT_TOKEN}`,
   },
@@ -117,7 +118,7 @@ During execution, `A2AAgent`:
 
 - Fetches and caches the remote agent card.
 - Reads the execution URL and capabilities from the card.
-- Calls `message/send` for non-streaming runs or `message/stream` when streaming is supported.
+- Calls `message/send` or `message/stream` with v0.3, and `SendMessage` or `SendStreamingMessage` with v1.0.
 - Converts remote messages, tasks, artifacts, and status updates into Mastra subagent results.
 - Supports `resumeGenerate()` and `resumeStream()` when the remote task requires follow-up input or resubscription.
 
@@ -145,7 +146,7 @@ console.log(card.name, card.capabilities)
 
 Use `sendMessageStream()` to send a message and receive task status and artifact updates over Server-Sent Events (SSE):
 
-```typescript title="src/a2a-client.ts"
+```typescript title="src/a2a-client.ts" oxfmt:false
 const stream = a2a.sendMessageStream({
   message: {
     kind: 'message',
@@ -164,7 +165,7 @@ for await (const event of stream) {
 
 If a stream disconnects while a task is still running, use `resubscribeTask()` to receive live updates for the in-progress task:
 
-```typescript title="src/a2a-client.ts"
+```typescript title="src/a2a-client.ts" oxfmt:false
 const updates = a2a.resubscribeTask({
   id: 'task-123',
 })

@@ -4050,6 +4050,53 @@ describe('Agent - network - tool approval and suspension', () => {
       expect(mockToolExecute).toHaveBeenCalled();
     });
 
+    it('passes { requestContext } to a per-tool requireApproval function on the network tool path', async () => {
+      const contextToolExecute = vi.fn().mockImplementation(async (input: { query: string }) => ({
+        result: `Processed: ${input.query}`,
+      }));
+      const needsApprovalFn = vi.fn((_input: unknown, ctx?: { requestContext?: Record<string, unknown> }) => {
+        // Trusted channels skip approval; anything else (including a missing context) requires it.
+        return (ctx?.requestContext as any)?.channel?.platform !== 'trusted';
+      });
+      const contextTool = createTool({
+        id: 'contextTool',
+        description: 'A tool that processes queries.',
+        inputSchema: z.object({ query: z.string() }),
+        execute: contextToolExecute,
+      });
+      // The network tool step reads the runtime `needsApprovalFn` attached to the
+      // live tool instance (the shape the MCP client and CoreToolBuilder produce).
+      (contextTool as any).needsApprovalFn = needsApprovalFn;
+
+      const mockModel = createRoutingMockModel('contextTool', 'tool', JSON.stringify({ query: 'ctx' }));
+      const networkAgent = new Agent({
+        id: 'context-approval-network-agent',
+        name: 'Context Approval Network Agent',
+        instructions: 'Use contextTool.',
+        model: mockModel,
+        tools: { contextTool },
+        memory,
+      });
+      const mastra = new Mastra({ agents: { networkAgent }, storage, logger: false });
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const requestContext = new RequestContext<unknown>([['channel', { platform: 'trusted' }]]);
+      const anStream = await registeredAgent.network('Process the query "ctx"', {
+        memory: { thread: 'test-thread-ctx-approval', resource: 'test-resource-ctx-approval' },
+        requestContext,
+      });
+
+      const chunkTypes: string[] = [];
+      for await (const chunk of anStream) {
+        chunkTypes.push(chunk.type);
+      }
+
+      expect(needsApprovalFn).toHaveBeenCalledTimes(1);
+      expect(needsApprovalFn.mock.calls[0]![1]?.requestContext).toMatchObject({ channel: { platform: 'trusted' } });
+      expect(chunkTypes).not.toContain('tool-execution-approval');
+      expect(contextToolExecute).toHaveBeenCalled();
+    });
+
     it('should approve a nested agent tool call', async () => {
       mockToolExecute.mockClear();
 

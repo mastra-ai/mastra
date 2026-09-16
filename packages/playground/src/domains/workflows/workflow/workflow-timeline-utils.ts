@@ -32,7 +32,9 @@ export function formatTimelineDuration(durationMs: number) {
  * against `now`, so their bars grow as `now` advances.
  */
 export function buildTimeline(steps: Record<string, Step>, now: number): TimelineRow[] {
-  const entries = Object.entries(steps).filter(([key]) => !isInputKey(key));
+  const entries = Object.entries(steps)
+    .filter(([key]) => !isInputKey(key))
+    .sort(([aId, a], [bId, b]) => a.startedAt - b.startedAt || aId.localeCompare(bId));
 
   if (entries.length === 0) {
     return [];

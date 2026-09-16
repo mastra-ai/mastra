@@ -51,8 +51,8 @@ class PanelResizeObserver implements ResizeObserver {
 }
 
 function ExpansionProbe() {
-  const { expanded } = useWorkspacePanel();
-  return <output data-testid="workspace-panel-size">{expanded ? 'expanded' : 'compact'}</output>;
+  const { size } = useWorkspacePanel();
+  return <output data-testid="workspace-panel-size">{size}</output>;
 }
 
 beforeEach(() => {
@@ -152,7 +152,7 @@ describe('WorkspaceFiles', () => {
       await waitForMutationsIdle(client);
       await user.click(await screen.findByRole('button', { name: /^Changes/ }));
       await waitForMutationsIdle(client);
-      expect(screen.getByTestId('workspace-panel-size')).toHaveTextContent('expanded');
+      expect(screen.getByTestId('workspace-panel-size')).toHaveTextContent('full');
 
       const observer = PanelResizeObserver.instances.find(instance => instance.observed.size > 0);
       const container = observer ? Array.from(observer.observed).at(0) : undefined;

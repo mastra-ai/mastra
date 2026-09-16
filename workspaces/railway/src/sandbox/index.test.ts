@@ -813,5 +813,34 @@ describe('exec cwd/env passthrough', () => {
     const sentOptions = mockSandbox.exec.mock.calls[0]![1] as Record<string, unknown>;
     expect(sentOptions).not.toHaveProperty('cwd');
     expect(sentOptions).not.toHaveProperty('env');
+    expect(sandbox.workingDirectory).toBeUndefined();
+  });
+
+  it('spawn defaults cwd to the configured workingDirectory', async () => {
+    const sandbox = new RailwaySandbox({ token: 't', workingDirectory: '/srv/app' });
+    await sandbox._start();
+    await sandbox.processes.spawn('ls');
+
+    const sentOptions = mockSandbox.exec.mock.calls[0]![1] as { cwd?: string };
+    expect(sentOptions.cwd).toBe('/srv/app');
+    expect(sandbox.workingDirectory).toBe('/srv/app');
+  });
+
+  it('per-spawn cwd wins over the configured workingDirectory', async () => {
+    const sandbox = new RailwaySandbox({ token: 't', workingDirectory: '/srv/app' });
+    await sandbox._start();
+    await sandbox.processes.spawn('ls', { cwd: '/app' });
+
+    const sentOptions = mockSandbox.exec.mock.calls[0]![1] as { cwd?: string };
+    expect(sentOptions.cwd).toBe('/app');
+  });
+
+  it('executeCommand defaults cwd to the configured workingDirectory', async () => {
+    const sandbox = new RailwaySandbox({ token: 't', workingDirectory: '/srv/app' });
+    await sandbox._start();
+    await sandbox.executeCommand('pwd');
+
+    const sentOptions = mockSandbox.exec.mock.calls[0]![1] as { cwd?: string };
+    expect(sentOptions.cwd).toBe('/srv/app');
   });
 });

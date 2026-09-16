@@ -21,7 +21,7 @@ export function SankeyPortalTooltip({
   return createPortal(
     <div
       aria-label={`${title}: ${description}`}
-      className="border-border1 bg-surface5 text-neutral6 shadow-elevated pointer-events-none fixed z-50 rounded-md border p-2 text-xs leading-4"
+      className="border-border1 bg-surface5 text-neutral6 shadow-elevated text-ui-sm pointer-events-none fixed z-50 rounded-md border p-2"
       id={id}
       role="tooltip"
       style={{

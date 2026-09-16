@@ -1,6 +1,6 @@
 ---
 title: "Reference: MCPClient | Tools and MCP"
-description: API Reference for MCPClient - A class for managing multiple Model Context Protocol servers and their tools.
+description: "The MCPClient class provides a way to manage multiple MCP server connections and their tools in a Mastra application."
 packages:
   - "@mastra/core"
   - "@mastra/mcp"
@@ -14,7 +14,7 @@ The `MCPClient` class provides a way to manage multiple MCP server connections a
 
 Creates a new instance of the MCPClient class.
 
-```typescript prettier:false
+```typescript oxfmt:false
 constructor({
   id?: string;
   servers: Record<string, MastraMCPServerDefinition>;
@@ -452,7 +452,7 @@ new Agent({ id: 'agent', tools: await mcp.toolsFromDefinitions({ definitions }) 
 
 Returns the instructions currently known for each configured MCP server. Servers that haven't connected yet, or don't advertise instructions, return `undefined`.
 
-```typescript prettier:false
+```typescript oxfmt:false
 getServerInstructions(): Record<string, string | undefined>
 ```
 
@@ -467,11 +467,11 @@ console.log(instructionsByServer.db)
 
 ### `authenticate()`
 
-Runs the interactive OAuth authorization-code flow for a server configured with an `MCPOAuthClientProvider` whose redirect URL points at a loopback address. Starts a local callback server, delivers the authorization URL through the provider's `onRedirectToAuthorization` callback, waits for the browser to return the authorization code, exchanges it for tokens, and reconnects. See [Interactive browser authentication](#interactive-browser-authentication).
+Runs the interactive OAuth authorization-code flow for a server whose `MCPOAuthClientProvider` uses a loopback redirect URL. A local callback server passes the authorization URL to the provider's `onRedirectToAuthorization` callback and waits for the browser to return the code. It then exchanges the code for tokens and reconnects. See [Interactive browser authentication](#interactive-browser-authentication).
 
 The optional `timeoutMs` bounds how long the flow waits for the browser to return the authorization code before rejecting, and defaults to 5 minutes.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async authenticate(serverName: string, options?: { timeoutMs?: number }): Promise<void>
 ```
 
@@ -479,7 +479,7 @@ async authenticate(serverName: string, options?: { timeoutMs?: number }): Promis
 
 Returns the OAuth authorization state of a configured server: `'needs-auth'` after a connection attempt was rejected with an authorization error, `'authorized'` once the server accepted the provider's credentials, or `undefined` for servers without an `authProvider` or that haven't attempted a connection yet.
 
-```typescript prettier:false
+```typescript oxfmt:false
 getServerAuthState(serverName: string): 'needs-auth' | 'authorized' | undefined
 ```
 
@@ -489,7 +489,7 @@ Cancels an in-progress `authenticate()` flow for a server, so an abandoned brows
 
 The resulting `getServerAuthState()` depends on how far the flow progressed. A flow cancelled after a `401` rejection stays at `'needs-auth'` and can be retried immediately. Cancellation during setup leaves the state unchanged (typically `undefined`) if no connection was attempted.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async cancelAuthentication(serverName: string): Promise<boolean>
 ```
 
@@ -497,7 +497,7 @@ async cancelAuthentication(serverName: string): Promise<boolean>
 
 Disconnects from all MCP servers and cleans up resources.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async disconnect(): Promise<void>
 ```
 
@@ -505,7 +505,7 @@ async disconnect(): Promise<void>
 
 Returns a map of `MCPClientServerProxy` instances, one per configured server. Each proxy wraps the underlying client connection as an `MCPServerBase` instance, allowing external (non-Mastra) MCP servers to be registered in `mcpServers` and appear in Studio.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async toMCPServerProxies(): Promise<Record<string, MCPClientServerProxy>>
 ```
 
@@ -550,7 +550,7 @@ const templatesByServer = await mcpClient.resources.templates()
 
 Retrieves all available resources from all connected MCP servers, grouped by server name.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async list(): Promise<Record<string, Resource[]>>
 ```
 
@@ -579,7 +579,7 @@ console.log(resources, errors, errorDetails, durations)
 
 Retrieves all available resource templates from all connected MCP servers, grouped by server name.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async templates(): Promise<Record<string, ResourceTemplate[]>>
 ```
 
@@ -605,7 +605,7 @@ console.log(templates, errors, errorDetails)
 
 Reads the content of a specific resource from a server.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async read(serverName: string, uri: string): Promise<ReadResourceResult>
 ```
 
@@ -623,7 +623,7 @@ console.log('Current weather:', content.contents[0].text)
 
 Subscribes to updates for a specific resource on a server.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async subscribe(serverName: string, uri: string): Promise<object>
 ```
 
@@ -637,7 +637,7 @@ await mcpClient.resources.subscribe('myWeatherServer', 'weather://current')
 
 Unsubscribes from updates for a specific resource on a server.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async unsubscribe(serverName: string, uri: string): Promise<object>
 ```
 
@@ -651,7 +651,7 @@ await mcpClient.resources.unsubscribe('myWeatherServer', 'weather://current')
 
 Sets a notification handler that will be called when a subscribed resource on a specific server is updated.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async onUpdated(serverName: string, handler: (params: { uri: string }) => void): Promise<void>
 ```
 
@@ -669,7 +669,7 @@ mcpClient.resources.onUpdated('myWeatherServer', params => {
 
 Sets a notification handler that will be called when the list of available resources changes on a specific server.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async onListChanged(serverName: string, handler: () => void): Promise<void>
 ```
 
@@ -841,7 +841,7 @@ const { prompt, messages } = await mcpClient.prompts.get({
 
 Retrieves all available prompts from all connected MCP servers, grouped by server name.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async list(): Promise<Record<string, Prompt[]>>
 ```
 
@@ -867,7 +867,7 @@ console.log(prompts, errors, errorDetails)
 
 Retrieves a specific prompt and its messages from a server.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async get({
   serverName,
   name,
@@ -897,7 +897,7 @@ console.log(messages)
 
 Sets a notification handler that will be called when the list of available prompts changes on a specific server.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async onListChanged(serverName: string, handler: () => void): Promise<void>
 ```
 
@@ -919,7 +919,7 @@ The `MCPClient` instance has a `tools` property for subscribing to tool list cha
 
 Sets a notification handler that will be called when the list of available tools changes on a specific server (for example, when the server adds or removes tools at runtime).
 
-```typescript prettier:false
+```typescript oxfmt:false
 async onListChanged(serverName: string, handler: () => void): Promise<void>
 ```
 
@@ -960,7 +960,7 @@ await mcpClient.progress.onUpdate('myServer', params => {
 
 Registers a handler function to receive progress updates from the specified server.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async onUpdate(
   serverName: string,
   handler: (params: {
@@ -1173,7 +1173,7 @@ try {
 
 Concurrent `authenticate()` calls for the same server join the pending flow. Different servers authenticate independently. With valid stored tokens the call reconnects without opening a browser.
 
-Hosts that drive the flow themselves can capture the authorization code with the exported `createOAuthCallbackServer` helper, which binds a one-shot loopback server and validates the OAuth `state` parameter before resolving with the code. It creates a plain HTTP server, so it's only for local loopback redirects. Web applications that use an HTTPS redirect URL must host their own callback endpoint and drive the provider directly rather than using this helper:
+Hosts that drive the flow can capture the authorization code with the exported `createOAuthCallbackServer` helper. It creates a one-shot loopback server that validates the OAuth `state` parameter before resolving with the code. Because the server uses plain HTTP, use it only for local loopback redirects. Web applications with an HTTPS redirect URL must host their own callback endpoint and drive the provider directly:
 
 ```typescript
 import { createOAuthCallbackServer, getCallbackUrlCandidates } from '@mastra/mcp'

@@ -1,8 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useCallback, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
@@ -208,7 +209,7 @@ function AgentPlayground() {
       <div className="flex h-full items-center justify-center p-6">
         <div role="alert" className="border-border1 bg-surface2 max-w-lg rounded-lg border p-4 text-center">
           <p className="font-medium">Agent versions could not be loaded. Retry before running.</p>
-          <p className="text-neutral3 mt-1 text-sm">Running is disabled to avoid using an unintended version.</p>
+          <p className="text-neutral3 mt-1 text-ui-md">Running is disabled to avoid using an unintended version.</p>
           <Button
             type="button"
             variant="default"
@@ -230,6 +231,15 @@ function AgentPlayground() {
         <Spinner className="h-6 w-6" />
       </div>
     );
+  }
+
+  // A 404 is authoritative even if a previous fetch left stale data in the cache.
+  if (error && is404NotFoundError(error)) {
+    return <div className="py-4 text-center">Agent not found</div>;
+  }
+
+  if (error) {
+    return <ErrorState title="Failed to load agent" message={error.message} />;
   }
 
   if (!codeAgent) {

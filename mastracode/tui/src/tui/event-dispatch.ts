@@ -2,11 +2,10 @@
  * Event dispatcher: maps AgentControllerEvent types to extracted handler functions.
  */
 import { getCurrentGitBranchAsync } from '@mastra/code-sdk/utils/project';
-import type { AgentControllerEvent, AgentControllerThread } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent, AgentControllerThread, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
-import { getMessageText } from './db-message-parts.js';
 import {
   handleAgentStart,
   handleAgentEnd,
@@ -48,6 +47,7 @@ import type { EventHandlerContext } from './handlers/types.js';
 import { flushRender } from './render-scheduler.js';
 import type { TUIState } from './state.js';
 import { getGithubPrSubscriptionsFromMetadata } from './state.js';
+import { setCurrentThreadTitle } from './thread-title.js';
 
 /**
  * Dispatch a AgentControllerEvent to the appropriate handler.
@@ -58,6 +58,30 @@ function trackInteractivePrompt(
   properties?: Record<string, unknown>,
 ): void {
   ectx.analytics?.trackInteractivePrompt(promptType, properties);
+}
+
+function applyMessageUpdate(
+  message: MastraDBMessage,
+  update: Extract<AgentControllerEvent, { type: 'message_update' }>['event'],
+): MastraDBMessage | undefined {
+  if (message.role !== 'assistant' || typeof message.content === 'string') return undefined;
+
+  const parts = [...message.content.parts];
+  if (update.type === 'text-delta') {
+    const textIndex = parts.findLastIndex(part => part.type === 'text');
+    const textPart = parts[textIndex];
+    if (!textPart || textPart.type !== 'text') return undefined;
+    parts[textIndex] = { ...textPart, text: textPart.text + update.delta };
+  } else if (update.type === 'reasoning-delta') {
+    const reasoningPart = parts[update.index];
+    if (!reasoningPart || reasoningPart.type !== 'reasoning') return undefined;
+    const reasoning = reasoningPart.reasoning + update.delta;
+    parts[update.index] = { ...reasoningPart, reasoning, details: [{ type: 'text', text: reasoning }] };
+  } else {
+    parts[update.index] = update.part;
+  }
+
+  return { ...message, content: { ...message.content, parts } };
 }
 
 export async function dispatchEvent(
@@ -112,23 +136,27 @@ export async function dispatchEvent(
       break;
 
     case 'message_update': {
-      // Only open the decode window when an assistant message carries actual
-      // streamed text — tool-result-only updates (e.g. plan approval resume) and
-      // user/system message updates must not count toward tokens/sec.
-      const hasAssistantText = event.message.role === 'assistant' && getMessageText(event.message).trim().length > 0;
-      if (hasAssistantText) {
+      const message = state.streamingMessage;
+      if (!message || message.id !== event.id) break;
+
+      const updated = applyMessageUpdate(message, event.event);
+      if (!updated) break;
+
+      if (event.event.type === 'text-delta') {
         state.agentRunLastStreamPartAt = Date.now();
         if (state.decodeStartedAt === 0) {
           state.decodeStartedAt = state.agentRunLastStreamPartAt;
         }
+        ectx.updateStatusLine();
       }
-      ectx.updateStatusLine();
-      handleMessageUpdate(ectx, event.message);
+      handleMessageUpdate(ectx, updated);
       break;
     }
 
     case 'message_end':
-      handleMessageEnd(ectx, event.message);
+      if (state.streamingMessage?.id === event.id) {
+        handleMessageEnd(ectx, state.streamingMessage);
+      }
       break;
 
     case 'tool_start':
@@ -223,7 +251,7 @@ export async function dispatchEvent(
       const threads = await state.session.thread.list();
       const currentThread = threads.find((t: AgentControllerThread) => t.id === event.threadId);
       if (currentThread) {
-        state.currentThreadTitle = currentThread.title;
+        setCurrentThreadTitle(state, currentThread.title);
         const metadata = currentThread.metadata as Record<string, unknown> | undefined;
         state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
         state.githubPrPollingActive = false;
@@ -242,7 +270,7 @@ export async function dispatchEvent(
       ectx.showInfo(`Created thread: ${event.thread.id}`);
       state.latestRequestPromptTokens = undefined;
       // Update current thread title for status line display
-      state.currentThreadTitle = event.thread.title;
+      setCurrentThreadTitle(state, event.thread.title);
       state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(
         event.thread.metadata as Record<string, unknown> | undefined,
       );
@@ -372,9 +400,15 @@ export async function dispatchEvent(
       break;
     }
 
+    case 'thread_title_updated':
+      if (event.threadId !== state.session.thread.getId()) break;
+      setCurrentThreadTitle(state, event.title);
+      ectx.updateStatusLine();
+      break;
+
     case 'om_thread_title_updated':
       if (event.threadId !== state.session.thread.getId()) break;
-      state.currentThreadTitle = event.newTitle;
+      setCurrentThreadTitle(state, event.newTitle);
       handleOMThreadTitleUpdated(ectx, event.newTitle, event.oldTitle);
       ectx.updateStatusLine();
       break;

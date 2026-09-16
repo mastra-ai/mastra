@@ -1,9 +1,9 @@
 ---
-title: "Feedback | Observability"
-description: "Collect, list, and query human feedback records in Mastra observability."
+title: 'Feedback | Observability'
+description: 'Create, list, aggregate, and export human feedback records in Mastra observability, with ratings and comments linked to specific traces and spans.'
 packages:
-  - "@mastra/core"
-  - "@mastra/observability"
+  - '@mastra/core'
+  - '@mastra/observability'
 ---
 
 # Feedback
@@ -124,6 +124,18 @@ await observability!.listFeedback({
 })
 ```
 
+## Delete feedback
+
+Use `deleteFeedback()` to hide feedback records from reads by id. This is useful when a comment contains sensitive data. Each request accepts at most 1,000 `feedbackIds`, and deletion is idempotent. The optional `organizationId` field filters by organization, and the optional `resourceId` field filters by resource. You can supply either filter independently or use both together. In Studio, each comment on a trace or span Feedback tab has a delete action.
+
+```typescript
+await observability!.deleteFeedback({
+  feedbackIds: ['feedback-1', 'feedback-2'],
+})
+```
+
+Deleted records also disappear from feedback analytics. ClickHouse uses a lightweight delete to hide rows without guaranteeing immediate physical removal, so open-source deployments must configure an [observability retention period](/reference/storage/retention) to physically purge them. Configure retention for every observability signal to expire deletion requests after the signal rows they protect. If any signal is unbounded, deletion requests also remain unbounded to prevent deleted data from being reintroduced. Delete APIs intentionally leave cursor-only delta rows untouched. These rows contain identifiers rather than feedback payloads and expire within two days.
+
 ## Query feedback analytics
 
 OLAP feedback queries operate on numeric `value` fields. Use them for ratings, thumbs encoded as `1` and `-1`, numeric QA scores, or other numeric feedback types.
@@ -159,7 +171,7 @@ The local runtime exposes the list route at `/api/observability/feedback` and an
 
 [`MastraPlatformExporter`](/reference/observability/tracing/exporters/mastra-platform-exporter) forwards emitted feedback events to Mastra Platform automatically because the hosted query API doesn't provide a creation route.
 
-If your application adds feedback after an agent or workflow response using only its `traceId`, configure `MastraStorageExporter` alongside `MastraPlatformExporter`. The storage exporter keeps the trace available for `addFeedback()` to rehydrate, and the Platform exporter forwards the resulting feedback event. Exporting a trace to Platform doesn't make it available to the application's local storage.
+If your application adds feedback after an agent or workflow response using only its `traceId`, configure `MastraStorageExporter` alongside `MastraPlatformExporter`. The storage exporter keeps the trace available for `addFeedback()` to rehydrate, while the Platform exporter forwards the resulting feedback event without adding the trace to the application's local storage.
 
 See [Observability on Mastra Platform](/docs/mastra-platform/observability#store-data-locally) for the combined exporter configuration.
 
@@ -170,7 +182,7 @@ Feedback flows through the observability event bus, so exporters that support fe
 ## Related
 
 - [Observability overview](/docs/observability/overview)
-- [Tracing overview](/docs/observability/tracing/overview)
+- [Traces usage](/docs/observability/tracing/overview)
 - [Metrics overview](/docs/observability/metrics/overview)
 - [Client SDK observability reference](/reference/client-js/observability)
 - [Feedback reference](/reference/observability/feedback)

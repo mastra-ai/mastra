@@ -1,6 +1,6 @@
 ---
 title: "Reference: Workspace class | Workspace"
-description: "Documentation for the Workspace class, the central API for filesystem access, sandbox execution, and search in Mastra."
+description: "The Workspace class combines a filesystem and sandbox to provide agents with file storage and command execution capabilities."
 packages:
   - "@mastra/core"
 ---
@@ -249,7 +249,8 @@ Per-tool overrides accept the following options:
   {
     name: 'requireReadBeforeWrite',
     type: 'boolean | ((context: ToolConfigWithArgsContext) => boolean | Promise<boolean>)',
-    description: 'For write tools, require the agent to read an existing file before changing it.',
+    description:
+      'For write tools, require the agent to read an existing file before changing it. See Read-before-write tracking below.',
     isOptional: true,
     defaultValue: 'false',
   },
@@ -303,6 +304,14 @@ const workspace = new Workspace({
 ```
 
 Tool names must be unique across all workspace tools. Setting a custom name that conflicts with another tool's default or custom name throws an error.
+
+### Read-before-write tracking
+
+When `requireReadBeforeWrite` is enabled, write tools reject changes to files the agent hasn't read. When the agent runs with a memory thread inside a Mastra instance, read records are kept per thread in the `threadState` storage domain, the same store that holds task lists and goal objectives. Records automatically survive suspend/resume cycles (for example, a tool awaiting approval), later turns on the same thread, and process restarts on serverless runtimes when the configured storage adapter persists thread state. No configuration is needed beyond registering the agent with a Mastra instance that has storage.
+
+If a file changes on disk after it was read, the write is still rejected until the agent re-reads it, and a successful write always clears the record so the next edit requires a fresh read. Runs without a memory thread or without Mastra storage track reads per run.
+
+Read records are scoped to the filesystem they were read from, identified by the filesystem's provider and base path. Filesystems without a base path are scoped by provider alone, so same-provider instances share read records. If a thread resolves a different filesystem between requests (for example, a dynamic workspace or filesystem that varies by request context), previously read files must be re-read on the new filesystem before writing. Filesystems with the same configuration (such as two `LocalFilesystem` instances with the same `basePath`) share read records.
 
 ### Tool hooks
 
@@ -433,7 +442,7 @@ Stop the workspace's live resources without destroying them.
 await workspace.stop()
 ```
 
-`stop()` shuts down language servers and closes the browser, then stops the sandbox provider. Remote sandbox providers suspend or pause the sandbox so it can resume later. `LocalSandbox` kills its background processes and unmounts filesystems. Stopping isn't a teardown. The filesystem, search index, and skills keep working, and the next sandbox operation starts the sandbox again.
+`stop()` shuts down language servers and the browser before stopping the sandbox provider. Remote providers suspend or pause the sandbox for later resumption, while `LocalSandbox` kills background processes and unmounts filesystems. Stopping isn't a teardown. The filesystem and search index remain available along with skills, and the next sandbox operation starts the sandbox again.
 
 `mastra.shutdown()` calls `stop()` for registered workspaces, so a process restart suspends remote sandboxes instead of deleting them. To fully tear a workspace down, call `destroy()` or `mastra.removeWorkspace(id, { destroy: true })` explicitly.
 
@@ -628,7 +637,7 @@ if (workspace.hasFilesystemConfig()) {
 
 #### `resolveFilesystem({ requestContext })`
 
-Resolve the filesystem for a request context. When a resolver function is configured, calls it with the provided `requestContext`. When a static filesystem is configured, returns it directly. Returns `undefined` if no filesystem is configured.
+Resolve the filesystem for a request context by calling a configured resolver with `requestContext` or returning a configured static filesystem directly. Returns `undefined` when no filesystem is configured.
 
 ```typescript
 import { RequestContext } from '@mastra/core/request-context'
@@ -667,7 +676,7 @@ if (workspace.hasSandboxConfig()) {
 
 #### `resolveSandbox({ requestContext })`
 
-Resolve the sandbox for a request context. When a resolver function is configured, calls it with the provided `requestContext`. When a static sandbox is configured, returns it directly. Returns `undefined` if no sandbox is configured.
+Resolve the sandbox for a request context by calling a configured resolver with `requestContext` or returning a configured static sandbox directly. Returns `undefined` when no sandbox is configured.
 
 ```typescript
 import { RequestContext } from '@mastra/core/request-context'

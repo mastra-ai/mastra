@@ -75,7 +75,7 @@ export class TypeDetector {
    * Check if a message is an AIV6 UIMessage.
    *
    * At runtime, the v5 and v6 UI shapes overlap heavily. We only treat a
-   * message as distinctly v6 if it uses v6-only parts or tool states.
+   * message as distinctly v6 if it uses v6-only parts, tool states, or fields.
    */
   static isAIV6UIMessage(msg: MessageInput): msg is AIV6Type.UIMessage {
     return (
@@ -123,9 +123,7 @@ export class TypeDetector {
       !TypeDetector.isMastraMessage(msg) &&
       !('parts' in msg) &&
       'content' in msg &&
-      TypeDetector.hasAIV6CoreMessageCharacteristics(
-        msg as CoreMessageV4 | AIV5Type.ModelMessage | AIV6Type.ModelMessage | AIV7Type.ModelMessage | AIV4Message,
-      )
+      TypeDetector.hasAIV6CoreMessageCharacteristics(msg)
     );
   }
 
@@ -153,6 +151,11 @@ export class TypeDetector {
     for (const part of msg.parts) {
       if (part.type === 'source-document') return true;
       if (part.type === 'dynamic-tool') return true;
+
+      // v5 tool parts only ever carry `callProviderMetadata`, so the result half marks v6.
+      // Without this an `output-available` part fell through to the v5 adapter, which
+      // dropped the `mastra.modelOutput` projection riding on it (issue #22012).
+      if ('resultProviderMetadata' in part) return true;
 
       if (
         'toolCallId' in part &&

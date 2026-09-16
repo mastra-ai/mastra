@@ -20,6 +20,8 @@ export {
   SandboxExecutionError,
   SandboxTimeoutError,
   SandboxNotReadyError,
+  SandboxUnsupportedFeatureError,
+  SandboxAbortError,
   IsolationUnavailableError,
   MountError,
   MountNotSupportedError,
@@ -34,6 +36,7 @@ export {
   type WorkspaceToolConfig,
   type WorkspaceToolsConfig,
   type ExecuteCommandToolConfig,
+  type ComputerToolConfig,
   type BackgroundProcessConfig,
   type BackgroundProcessMeta,
   type BackgroundProcessExitMeta,
@@ -77,17 +80,34 @@ export type {
   ListOptions,
   RemoveOptions,
   CopyOptions,
+  WalkEntry,
+  WalkOptions,
+  FilesystemGrepOptions,
+  FilesystemGrepMatch,
+  FilesystemGrepResult,
 } from './filesystem';
 
 // Mount types (provider-specific configs are in their respective packages)
 export type { FilesystemMountConfig, MountResult, FilesystemIcon } from './filesystem';
 
 // Sandbox
-export { MountManager, supportsNetworking } from './sandbox';
+export {
+  MountManager,
+  supportsNetworking,
+  supportsComputer,
+  validateSandboxFileMode,
+  assertModesUnsupported,
+  MAX_SANDBOX_FILE_MODE,
+} from './sandbox';
 export type {
   WorkspaceSandbox,
   SandboxNetworking,
+  SandboxComputer,
+  ComputerScreenshot,
+  ComputerScreenSize,
+  ComputerPosition,
   SandboxFileInput,
+  WriteFilesOptions,
   SandboxCloneOptions,
   SandboxStartOutcome,
   SandboxStartResult,

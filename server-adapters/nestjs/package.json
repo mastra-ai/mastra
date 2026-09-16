@@ -1,6 +1,6 @@
 {
   "name": "@mastra/nestjs",
-  "version": "0.2.19-alpha.10",
+  "version": "0.2.27-alpha.2",
   "description": "Mastra NestJS adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -27,7 +27,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@fastify/busboy": "^3.2.0",
+    "@fastify/busboy": "^3.2.2",
     "@mastra/server": "workspace:*"
   },
   "devDependencies": {
@@ -57,7 +57,7 @@
     "supertest": "^7.1.1",
     "tsdown": "0.22.9",
     "typescript": "catalog:",
-    "vitest": "^4.1.10",
+    "vitest": "^4.1.11",
     "zod": "^3.25.0"
   },
   "peerDependencies": {
@@ -71,8 +71,7 @@
     "node": ">=22.13.0"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

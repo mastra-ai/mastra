@@ -515,7 +515,7 @@ describe('useChat forwards clientTools', () => {
       const metadata = lastMessage?.content?.metadata as MastraDBMessageMetadata | undefined;
       expect(metadata?.mode).toBe('stream');
       if (metadata?.mode !== 'stream') throw new Error('expected stream metadata');
-      expect(metadata.requireApprovalMetadata?.weatherTool).toEqual({
+      expect(metadata.requireApprovalMetadata?.['tool-call-approval-1']).toEqual({
         toolCallId: 'tool-call-approval-1',
         toolName: 'weatherTool',
         args: { city: 'London' },
@@ -620,7 +620,7 @@ describe('useChat forwards clientTools', () => {
       const metadata = lastMessage?.content?.metadata as MastraDBMessageMetadata | undefined;
       expect(metadata?.mode).toBe('stream');
       if (metadata?.mode !== 'stream') throw new Error('expected stream metadata');
-      expect(metadata.requireApprovalMetadata?.weatherTool).toBeDefined();
+      expect(metadata.requireApprovalMetadata?.['tool-call-approval-1']).toBeDefined();
     });
 
     await act(async () => {
@@ -1269,6 +1269,32 @@ describe('useChat forwards clientTools', () => {
     expect(messageCalls[0]?.[0].ifIdle.streamOptions.clientTools).toBe(clientTools);
   });
 
+  it('passes clientToolsResolver to sendMessage ifIdle.streamOptions', async () => {
+    const clientToolsResolver = vi.fn(() => clientTools);
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'hi',
+        threadId: 'thread-1',
+        clientToolsResolver,
+      });
+    });
+
+    const messageCalls = sendMessageMock.mock.calls as unknown as Array<[any]>;
+    expect(messageCalls[0]?.[0].ifIdle.streamOptions.clientToolsResolver).toBe(clientToolsResolver);
+  });
+
   it('keeps per-send clientTools and continuation options on sendMessage', async () => {
     keepSubscriptionOpen = true;
     const perSendClientTools = {
@@ -1298,6 +1324,7 @@ describe('useChat forwards clientTools', () => {
         modelSettings: {
           maxSteps: 3,
           instructions: 'use the hook tool',
+          system: 'current hook state',
         },
         requestContext: { userId: 'user-123' } as any,
       });
@@ -1317,6 +1344,7 @@ describe('useChat forwards clientTools', () => {
         modelSettings: {
           maxSteps: 5,
           instructions: 'use the per-send tool',
+          system: 'current per-send state',
           temperature: 0.2,
         },
         requestContext: { userId: 'user-456' } as any,
@@ -1332,6 +1360,7 @@ describe('useChat forwards clientTools', () => {
       expect.objectContaining({
         maxSteps: 3,
         instructions: 'use the hook tool',
+        system: 'current hook state',
         requestContext: { userId: 'user-123' },
         clientTools,
       }),
@@ -1340,6 +1369,7 @@ describe('useChat forwards clientTools', () => {
       expect.objectContaining({
         maxSteps: 5,
         instructions: 'use the per-send tool',
+        system: 'current per-send state',
         requestContext: { userId: 'user-456' },
         clientTools: perSendClientTools,
       }),
@@ -1443,6 +1473,46 @@ describe('useChat forwards clientTools', () => {
     expect(part.toolName).toBe('askHuman');
     expect(part.state).toBe('output-available');
     expect(part.output).toEqual({ declined: true });
+  });
+
+  it('associates active network messages with their execution until completion', async () => {
+    let complete = () => {};
+    const gate = new Promise<void>(resolve => {
+      complete = resolve;
+    });
+    let respond = () => {};
+    const responseGate = new Promise<void>(resolve => {
+      respond = resolve;
+    });
+    networkMock.mockImplementationOnce(async () => {
+      await responseGate;
+      return {
+        processDataStream: async ({ onChunk }) => {
+          await onChunk(toolExecutionStartChunk('lookupWeather', 'network-tool'));
+          await gate;
+        },
+      };
+    });
+    const { result } = renderHook(() => useChat({ agentId: 'test-agent' }), { wrapper });
+    let sending: Promise<void> | undefined;
+    await act(async () => {
+      sending = result.current.sendMessage({ mode: 'network', message: 'Check weather' });
+    });
+    expect(result.current.isRunning).toBe(true);
+    expect(result.current.activeRunId).toEqual(expect.any(String));
+    const pendingRunId = result.current.activeRunId;
+    expect(result.current.messages.some(message => message.role === 'assistant')).toBe(false);
+    await act(async () => {
+      respond();
+    });
+    expect(result.current.activeRunId).toBe(pendingRunId);
+    const assistant = result.current.messages.find(message => message.role === 'assistant');
+    expect(assistant?.content.metadata?.runId).toBe(result.current.activeRunId);
+    await act(async () => {
+      complete();
+      await sending;
+    });
+    expect(result.current.activeRunId).toBeUndefined();
   });
 
   it('seeds the user message exactly once when sendMessage uses network mode', async () => {

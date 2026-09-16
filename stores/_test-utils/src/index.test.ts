@@ -12,7 +12,7 @@ import { createVersionLabelTests } from './domains/agents/version-labels';
 import { createObservabilityVNextTests } from './domains/observability-vnext';
 
 // Test InMemoryStore (MockStore)
-createTestSuite(new MockStore(), { versionLabels: 'supported' });
+createTestSuite(new MockStore(), { versionLabels: 'supported', scopedTraceDeletion: true });
 
 describe('FilesystemStore version-label conformance', () => {
   const dir = mkdtempSync(join(tmpdir(), 'mastra-version-labels-'));

@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -30,10 +30,14 @@ function userSession(overrides: Partial<FactoryUserSession>): FactoryUserSession
   };
 }
 
-function stubSessions(sessions: FactoryUserSession[], viewerUserId: string) {
+function stubSessions(
+  sessions: FactoryUserSession[],
+  viewerUserId: string,
+  viewerProfile: { name?: string; email?: string; avatarUrl?: string } = {},
+) {
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
-      HttpResponse.json({ authEnabled: true, authenticated: true, user: { userId: viewerUserId } }),
+      HttpResponse.json({ authEnabled: true, authenticated: true, user: { userId: viewerUserId, ...viewerProfile } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra' }] }),
@@ -78,31 +82,53 @@ describe('user session attribution', () => {
     // viewer's own; the sidebar must re-order and attribute it.
     stubSessions(
       [
-        userSession({ id: 'row-other', sessionId: 'sess-other', userId: 'user-owner-1', branch: 'user/alpha' }),
-        userSession({ id: 'row-mine', sessionId: 'sess-mine', userId: 'user-viewer-9', branch: 'user/mine' }),
+        userSession({
+          id: 'row-other',
+          sessionId: 'sess-other',
+          userId: 'user-owner-1',
+          owner: { id: 'user-owner-1', name: 'Grace Hopper', avatarUrl: 'https://example.com/grace.png' },
+          branch: 'user/alpha',
+        }),
+        userSession({
+          id: 'row-mine',
+          sessionId: 'sess-mine',
+          userId: 'user-viewer-9',
+          branch: 'user/mine',
+        }),
       ],
       'user-viewer-9',
+      { name: 'Ada Lovelace', avatarUrl: 'https://example.com/ada.png' },
     );
 
     const { client } = renderSection();
     await waitForMutationsIdle(client);
+    const user = userEvent.setup();
 
-    // The non-owned session carries its owner in the accessible name; the
-    // viewer's own does not.
     const mine = await screen.findByRole('button', { name: 'mine' });
-    const other = screen.getByRole('button', { name: 'alpha, started by user-owner-1' });
-    expect(mine).toBeInTheDocument();
-    expect(other).toBeInTheDocument();
-
+    const other = screen.getByRole('button', { name: 'alpha' });
     const labels = screen
       .getAllByRole('button')
       .map(button => button.getAttribute('aria-label'))
-      .filter(label => label === 'mine' || label === 'alpha, started by user-owner-1');
-    expect(labels).toEqual(['mine', 'alpha, started by user-owner-1']);
+      .filter(label => label === 'mine' || label === 'alpha');
+    expect(labels).toEqual(['mine', 'alpha']);
+    expect(screen.queryByText('Ada Lovelace')).not.toBeInTheDocument();
+    expect(screen.queryByText('Grace Hopper')).not.toBeInTheDocument();
 
-    // The owner is still shown as visible text on the non-owned row only.
-    expect(screen.getByText('user-owner-1')).toBeInTheDocument();
-    expect(screen.queryByText('user-viewer-9')).not.toBeInTheDocument();
+    await user.hover(mine);
+    const mineCard = await screen.findByLabelText('mine session details');
+    expect(within(mineCard).getByText('Ada Lovelace')).toBeInTheDocument();
+    expect(within(mineCard).getByRole('img', { name: 'Ada Lovelace' })).toHaveAttribute(
+      'src',
+      'https://example.com/ada.png',
+    );
+
+    await user.hover(other);
+    const otherCard = await screen.findByLabelText('alpha session details');
+    expect(within(otherCard).getByText('Grace Hopper')).toBeInTheDocument();
+    expect(within(otherCard).getByRole('img', { name: 'Grace Hopper' })).toHaveAttribute(
+      'src',
+      'https://example.com/grace.png',
+    );
   });
 
   it('offers delete only on the viewer-owned session', async () => {
@@ -121,7 +147,13 @@ describe('user session attribution', () => {
     await waitForMutationsIdle(client);
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole('button', { name: 'Session actions for alpha' }));
+    const other = await screen.findByRole('button', { name: 'alpha' });
+    await user.hover(other);
+    const card = await screen.findByLabelText('alpha session details');
+    expect(within(card).getByText('user-owner-1')).toBeInTheDocument();
+    await user.unhover(other);
+
+    await user.click(screen.getByRole('button', { name: 'Session actions for alpha' }));
     expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument();
     await user.keyboard('{Escape}');
 

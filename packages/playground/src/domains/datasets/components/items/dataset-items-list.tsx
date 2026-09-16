@@ -1,10 +1,10 @@
 import type { DatasetItem } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
+import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { format, isThisYear, isToday } from 'date-fns';
-import { Plus, Upload, FileJson } from 'lucide-react';
+import { CircleSlashIcon, ExternalLinkIcon, FileJson, Upload } from 'lucide-react';
 
 export interface DatasetItemsListProps {
   items: DatasetItem[];
@@ -113,7 +113,7 @@ export function DatasetItemsList({
   const gridColumns = [isSelectionActive ? 'auto' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
 
   return (
-    <DataList columns={gridColumns} scrollRef={containerRef}>
+    <DataList columns={gridColumns} scrollRef={containerRef} fit="container">
       <DataList.Top hasLeadingCell={isSelectionActive}>
         {isSelectionActive && (
           <DataList.TopSelectCell
@@ -144,9 +144,11 @@ export function DatasetItemsList({
             const rowCells = (
               <>
                 <DataList.IdCell id={item.id} />
-                <DataList.MonoCell>{truncateValue(item.input, 150)}</DataList.MonoCell>
-                <DataList.MonoCell>{item.groundTruth ? truncateValue(item.groundTruth, 150) : '-'}</DataList.MonoCell>
-                <DataList.Cell height="compact" className="min-w-0">
+                <DataList.TextCell font="mono">{truncateValue(item.input, 150)}</DataList.TextCell>
+                <DataList.TextCell font="mono">
+                  {item.groundTruth ? truncateValue(item.groundTruth, 150) : '-'}
+                </DataList.TextCell>
+                <DataList.Cell className="min-w-0">
                   {item.expectedTrajectory ? (
                     <span className="text-ui-smd text-neutral3">
                       {Array.isArray((item.expectedTrajectory as Record<string, unknown>)?.steps)
@@ -157,7 +159,7 @@ export function DatasetItemsList({
                     <span className="text-neutral4">—</span>
                   )}
                 </DataList.Cell>
-                <DataList.Cell height="compact" className="min-w-0">
+                <DataList.Cell className="min-w-0">
                   <span className="text-ui-smd text-neutral2 block truncate">{formatDate(createdAtDate)}</span>
                 </DataList.Cell>
               </>
@@ -185,7 +187,6 @@ export function DatasetItemsList({
                   aria-label={`Select item ${item.id}`}
                 />
                 <DataList.RowButton
-                  flushLeft
                   colStart={2}
                   featured={isFeatured}
                   data-selected={isFeatured || undefined}
@@ -216,30 +217,44 @@ interface EmptyDatasetItemListProps {
 
 function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: EmptyDatasetItemListProps) {
   return (
-    <div className="flex h-full items-center justify-center py-12">
+    <div className="flex flex-1 items-center justify-center">
       <EmptyState
-        iconSlot={<Plus className="text-neutral3 h-8 w-8" />}
+        iconSlot={<CircleSlashIcon />}
         titleSlot="No items yet"
-        descriptionSlot="Add items to this dataset to use them in experiment runs."
+        descriptionSlot={
+          <>
+            Add items to this dataset to use them <br />
+            in experiment runs.
+          </>
+        }
         actionSlot={
-          <ButtonsGroup>
-            <Button onClick={onAddClick} size="md">
-              <Plus />
-              Add Single Item
+          <div className="flex flex-col items-center gap-2">
+            <ButtonsGroup>
+              <CreateButton variant="primary" onClick={onAddClick} tooltip="Add an item">
+                New item
+              </CreateButton>
+              {onImportClick && (
+                <Button onClick={onImportClick} icon={<Upload />}>
+                  Import CSV
+                </Button>
+              )}
+              {onImportJsonClick && (
+                <Button onClick={onImportJsonClick} icon={<FileJson />}>
+                  Import JSON
+                </Button>
+              )}
+            </ButtonsGroup>
+            <Button
+              variant="ghost"
+              as="a"
+              href="https://mastra.ai/docs/evals/datasets"
+              target="_blank"
+              rel="noopener noreferrer"
+              icon={<ExternalLinkIcon />}
+            >
+              Datasets Documentation
             </Button>
-            {onImportClick && (
-              <Button onClick={onImportClick} size="md">
-                <Upload />
-                Import CSV
-              </Button>
-            )}
-            {onImportJsonClick && (
-              <Button onClick={onImportJsonClick} size="md">
-                <FileJson />
-                Import JSON
-              </Button>
-            )}
-          </ButtonsGroup>
+          </div>
         }
       />
     </div>

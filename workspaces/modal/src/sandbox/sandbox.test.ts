@@ -433,6 +433,47 @@ describe('ModalProcessManager', () => {
     expect(mockSandbox.exec).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ workdir: '/app' }));
   });
 
+  it('spawn() defaults workdir to the configured workingDirectory', async () => {
+    const proc = makeProcess(0);
+    mockSandbox.exec = vi.fn().mockResolvedValue(proc);
+
+    const sandbox = await startedSandbox({ workingDirectory: '/srv/app' });
+    await sandbox.processes.spawn('pwd');
+
+    expect(mockSandbox.exec).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ workdir: '/srv/app' }));
+    expect(sandbox.workingDirectory).toBe('/srv/app');
+  });
+
+  it('per-spawn cwd wins over the configured workingDirectory', async () => {
+    const proc = makeProcess(0);
+    mockSandbox.exec = vi.fn().mockResolvedValue(proc);
+
+    const sandbox = await startedSandbox({ workingDirectory: '/srv/app' });
+    await sandbox.processes.spawn('pwd', { cwd: '/app' });
+
+    expect(mockSandbox.exec).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ workdir: '/app' }));
+  });
+
+  it('workingDirectory wins over the deprecated workdir alias; alias still applies alone', async () => {
+    const both = new ModalSandbox({ workingDirectory: '/srv/app', workdir: '/legacy' });
+    expect(both.workingDirectory).toBe('/srv/app');
+
+    const aliasOnly = new ModalSandbox({ workdir: '/legacy' });
+    expect(aliasOnly.workingDirectory).toBe('/legacy');
+  });
+
+  it('spawn() omits workdir when neither cwd nor workingDirectory is set', async () => {
+    const proc = makeProcess(0);
+    mockSandbox.exec = vi.fn().mockResolvedValue(proc);
+
+    const sandbox = await startedSandbox();
+    await sandbox.processes.spawn('pwd');
+
+    const [, execParams] = mockSandbox.exec.mock.calls[0]!;
+    expect(execParams.workdir).toBeUndefined();
+    expect(sandbox.workingDirectory).toBeUndefined();
+  });
+
   it('spawn() passes per-spawn timeout as timeoutMs', async () => {
     const proc = makeProcess(0);
     mockSandbox.exec = vi.fn().mockResolvedValue(proc);

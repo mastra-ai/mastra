@@ -18,7 +18,7 @@ import { LibSQLStore } from './index';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
-const TEST_DB_URL = 'file::memory:?cache=shared';
+const TEST_DB_URL = process.env.LIBSQL_TEST_URL ?? 'file::memory:?cache=shared';
 
 // Helper to create a fresh client for each test
 const createTestClient = () => createClient({ url: TEST_DB_URL });

@@ -1,9 +1,10 @@
 import type { GetSystemPackagesResponse } from '@mastra/client-js';
 import { serializeTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/trace-list-columns';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TracesPage from '..';
+import { traceQueryPage } from './fixtures/trace-query';
 import {
   branchList,
   emptyEntityNames,
@@ -14,16 +15,15 @@ import {
   emptyTags,
   metricsCapableSystemPackages,
   metricsUnavailableSystemPackages,
-  rootBranchList,
-  rootBranchSpans,
-  subtraceBranchSpans,
-  traceLightSpans,
+  threadedTraceSpans,
+  traceSpans,
   traceList,
   traceListWithTwoTraces,
   traceSpanScores,
   emptyTraceSpanScores,
   traceUsageBreakdown,
 } from './fixtures/traces';
+import { buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -49,6 +49,8 @@ const setTracePageHandlers = (systemPackages: GetSystemPackagesResponse) => {
   server.use(
     http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(systemPackages)),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(emptyScorers)),
+    http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse([]))),
+    http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () => HttpResponse.json(traceQueryPage)),
     http.get(`${TEST_BASE_URL}/api/observability/traces`, () => HttpResponse.json(traceList)),
     // The list fetches the lightweight projection first; serve the same rows there.
     http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(traceList)),
@@ -60,6 +62,9 @@ const setTracePageHandlers = (systemPackages: GetSystemPackagesResponse) => {
     http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/:spanId/scores`, () =>
       HttpResponse.json(emptyTraceSpanScores),
     ),
+    // Opening a trace reads the whole trace. Registered after the literal `traces/light`
+    // so the list's endpoint isn't swallowed by the `:traceId` segment.
+    http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceSpans)),
     http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, () => {
       onBreakdownRequest();
       return HttpResponse.json(traceUsageBreakdown);
@@ -76,6 +81,8 @@ const renderPage = (initialEntry = '/traces') =>
   );
 
 beforeEach(() => {
+  // jsdom has no scrollIntoView; the timeline reveals the selected span row on mount.
+  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
   Object.defineProperty(window, 'localStorage', {
     configurable: true,
     value: createMemoryStorage(),
@@ -99,20 +106,20 @@ describe('Traces page usage columns', () => {
       expect(screen.getByText('Input tokens')).not.toBeNull();
     });
 
-    it('reuses list usage data for a selected trace', async () => {
+    it('keeps usage totals in the trace list when a trace is selected', async () => {
       setTracePageHandlers(metricsCapableSystemPackages);
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/traces`, () => HttpResponse.json(traceListWithTwoTraces)),
         http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(traceListWithTwoTraces)),
-        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/light`, () => HttpResponse.json(traceLightSpans)),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(traceSpans)),
         http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
       );
 
-      const { queryClient } = renderPage('/traces?traceId=trace-a');
+      renderPage('/traces?traceId=trace-a');
 
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(onBreakdownRequest).toHaveBeenCalledTimes(1);
-      expect(screen.getByText('Trace est. cost')).not.toBeNull();
+      await waitFor(() => expect(onBreakdownRequest).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.getAllByText('Input tokens')).toHaveLength(1));
+      expect(screen.queryByText('Est. cost')).toBeNull();
     });
   });
 
@@ -129,7 +136,7 @@ describe('Traces page usage columns', () => {
   });
 
   describe('when a trace is opened from a direct link', () => {
-    it('shows the trace cost when the trace is outside the loaded list', async () => {
+    it('does not request or show usage in the side panel when usage columns are hidden', async () => {
       window.localStorage.setItem(
         TRACE_COLUMN_STORAGE_KEY,
         serializeTraceColumnPreferences({ visibleColumns: [], metadataKeys: [] }),
@@ -142,68 +149,139 @@ describe('Traces page usage columns', () => {
         http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () =>
           HttpResponse.json({ ...traceList, spans: [], pagination: { ...traceList.pagination, total: 0 } }),
         ),
-        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/light`, () => HttpResponse.json(traceLightSpans)),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(traceSpans)),
         http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
       );
 
-      renderPage('/traces?traceId=trace-a');
+      const { queryClient } = renderPage('/traces?traceId=trace-a');
 
-      await waitFor(() => expect(onBreakdownRequest).toHaveBeenCalled());
-      expect(await screen.findByText('Trace est. cost')).not.toBeNull();
-      expect(await screen.findByText('$0.0010')).not.toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(onBreakdownRequest).not.toHaveBeenCalled();
+      expect(screen.queryByText('Input tokens')).toBeNull();
+      expect(screen.queryByText('Est. cost')).toBeNull();
     });
   });
 
-  describe('when Branches mode is selected', () => {
-    it('shows trace totals for a root trace panel', async () => {
+  describe('Messages column', () => {
+    const setThreadedTraceHandlers = () => {
       setTracePageHandlers(metricsCapableSystemPackages);
       server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/branches`, () => HttpResponse.json(rootBranchList)),
-        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/branches/span-a`, () =>
-          HttpResponse.json(rootBranchSpans),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/spans/span-a`, () =>
+          HttpResponse.json({ span: threadedTraceSpans.spans[0] }),
         ),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(threadedTraceSpans)),
         http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
       );
+    };
 
-      renderPage('/traces?listMode=branches&traceId=trace-a&anchorSpanId=span-a');
+    it('given an agent trace with a thread id, when opened, then Messages renders as a column and the panel is wide', async () => {
+      setThreadedTraceHandlers();
 
-      await waitFor(() => expect(onBreakdownRequest).toHaveBeenCalled());
-      expect(await screen.findByText('Trace est. cost')).not.toBeNull();
-      expect(await screen.findByText('$0.0010')).not.toBeNull();
+      const { queryClient } = renderPage('/traces?traceId=trace-a');
+
+      expect(await screen.findByTestId('messages-panel')).not.toBeNull();
+      expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
+      expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-4/5');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
-    it('suppresses usage columns and metric requests', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
+    it('given a span is also selected, then the panel covers the full frame', async () => {
+      setThreadedTraceHandlers();
 
-      const { queryClient } = renderPage('/traces?listMode=branches');
+      const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
 
+      expect(await screen.findByTestId('messages-panel')).not.toBeNull();
+      await waitFor(() => expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-full'));
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.queryByText('Input tokens')).toBeNull();
-      expect(onBreakdownRequest).not.toHaveBeenCalled();
     });
 
-    it('does not show cached trace totals in a subtrace panel', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
-      server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/branches/span-a`, () =>
-          HttpResponse.json(subtraceBranchSpans),
-        ),
-        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
-      );
+    describe('given the thread has another trace', () => {
+      const threadedTraceB = {
+        ...threadedTraceSpans,
+        traceId: 'trace-b',
+        spans: threadedTraceSpans.spans.map(span => ({ ...span, traceId: 'trace-b', spanId: 'span-b' })),
+      };
+      const threadTraceList = {
+        spans: [threadedTraceB.spans[0], threadedTraceSpans.spans[0]],
+        pagination: { total: 2, page: 0, perPage: 25, hasMore: false },
+      };
 
-      const { queryClient } = renderPage('/traces?listMode=branches&traceId=trace-a&anchorSpanId=span-a');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-
-      act(() => {
-        queryClient.setQueryData(
-          ['trace-usage', `${TEST_BASE_URL}:/api`, ['trace-a']],
-          new Map([['trace-a', { inputTokens: 12_500, outputTokens: 405, estimatedCost: 0.01, costUnit: 'usd' }]]),
+      const setMultiTurnThreadHandlers = () => {
+        setThreadedTraceHandlers();
+        server.use(
+          http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+            const body = await request.json();
+            if (JSON.stringify(body).includes('threadId')) {
+              return HttpResponse.json({
+                traces: [
+                  traceQueryPage.traces[0],
+                  { ...traceQueryPage.traces[0], traceId: 'trace-b', rootSpanId: 'span-b' },
+                ],
+                page: { next: null },
+              });
+            }
+            return HttpResponse.json(traceQueryPage);
+          }),
+          // The page list keeps its single row; only thread-scoped requests see both turns.
+          http.get(`${TEST_BASE_URL}/api/observability/traces/light`, ({ request }) =>
+            HttpResponse.json(new URL(request.url).searchParams.get('threadId') ? threadTraceList : traceList),
+          ),
+          http.get(`${TEST_BASE_URL}/api/observability/traces/trace-b`, () => HttpResponse.json(threadedTraceB)),
+          http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
         );
-      });
+      };
 
-      expect(screen.queryByText('Trace est. cost')).toBeNull();
-      expect(screen.queryByText('12.5K')).toBeNull();
-      expect(onBreakdownRequest).not.toHaveBeenCalled();
+      it('when "View full thread" is clicked, then the side panel shows every turn at full width, and "Back to trace" restores the trace', async () => {
+        setMultiTurnThreadHandlers();
+
+        const { queryClient } = renderPage('/traces?traceId=trace-a');
+        const dialog = () => screen.getByRole('dialog', { name: 'Trace details' });
+
+        fireEvent.click(await screen.findByRole('button', { name: 'View full thread' }));
+
+        expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
+        await waitFor(() => expect(dialog().querySelectorAll('[data-trace-id]')).toHaveLength(2));
+        expect(dialog().className).toContain('w-full');
+        expect(screen.queryByTestId('messages-panel')).toBeNull();
+        // The page did not navigate away from the traces list.
+        expect(screen.getByRole('button', { name: 'Back to trace' })).not.toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to trace' }));
+
+        expect(await screen.findByTestId('messages-panel')).not.toBeNull();
+        expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
+        expect(dialog().className).toContain('w-4/5');
+        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      });
+    });
+
+    it('given a trace without a thread id, then no Messages column renders and the panel is half width', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)));
+
+      const { queryClient } = renderPage('/traces?traceId=trace-a');
+
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(screen.queryByTestId('messages-panel')).toBeNull();
+      expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-1/2');
+    });
+  });
+
+  describe('when an old branches URL is opened', () => {
+    it('loads trace queries without requesting branches', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      const branches = vi.fn();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/branches`, () => {
+          branches();
+          return HttpResponse.json(branchList);
+        }),
+      );
+      const { queryClient } = renderPage('/traces?listMode=branches');
+      await waitFor(() => expect(onBreakdownRequest).toHaveBeenCalled());
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(branches).not.toHaveBeenCalled();
+      expect(screen.queryByRole('checkbox', { name: 'Subtraces' })).toBeNull();
     });
   });
 });
@@ -226,27 +304,68 @@ describe('Traces page auto refresh toggle', () => {
     fireEvent.click(toggle);
     expect(toggle.getAttribute('aria-checked')).toBe('true');
 
-    // Subtraces checkbox uses the short label.
-    expect(screen.getByRole('checkbox', { name: 'Subtraces' })).not.toBeNull();
+    expect(screen.queryByRole('checkbox', { name: 'Subtraces' })).toBeNull();
     expect(screen.queryByText('Show subtraces')).toBeNull();
   });
 });
 
 describe('Traces side panel header actions', () => {
+  describe('when a registered scorer is selected', () => {
+    it('submits the selected trace for scoring and opens its scores', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      const onScore = vi.fn();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+        http.get(`${TEST_BASE_URL}/api/scores/scorers`, () =>
+          HttpResponse.json({
+            quality: {
+              scorer: { config: { id: 'quality', name: 'Quality scorer' } },
+              agentIds: [],
+              agentNames: [],
+              workflowIds: [],
+              isRegistered: true,
+              source: 'code',
+            },
+          } satisfies typeof emptyScorers),
+        ),
+        http.post(`${TEST_BASE_URL}/api/observability/traces/score`, async ({ request }) => {
+          onScore(await request.json());
+          return HttpResponse.json({ status: 'success', message: 'Scoring started' });
+        }),
+      );
+      const { queryClient } = renderPage('/traces?traceId=trace-a');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      fireEvent.click(await screen.findByRole('button', { name: 'Score trace' }));
+      fireEvent.click(await screen.findByRole('combobox', { name: 'Select scorer' }));
+      fireEvent.click(await screen.findByRole('option', { name: 'Quality scorer' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Start Scoring' }));
+      await waitFor(() =>
+        expect(onScore).toHaveBeenCalledWith({
+          scorerName: 'quality',
+          targets: [{ traceId: 'trace-a', spanId: 'span-a' }],
+        }),
+      );
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Score trace' })).toBeNull());
+      expect(screen.getByRole('tab', { name: /scores/i }).getAttribute('aria-selected')).toBe('true');
+    });
+  });
   it('shows the trace actions in the panel header when a trace is selected', async () => {
     setTracePageHandlers(metricsCapableSystemPackages);
     server.use(
-      http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/light`, () => HttpResponse.json(traceLightSpans)),
+      http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(traceSpans)),
       http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
     );
 
     const { queryClient } = renderPage('/traces?traceId=trace-a');
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    expect(screen.getByRole('button', { name: 'Evaluate trace' })).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Save as Dataset Item' })).not.toBeNull();
+    expect(await screen.findByRole('button', { name: 'Score trace' })).not.toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Trace actions' }));
+
+    expect(screen.queryByRole('menuitem', { name: 'Evaluate trace' })).toBeNull();
+    expect(screen.getByRole('menuitem', { name: 'Add full trace to dataset' })).not.toBeNull();
     // The parent trace panel is no longer collapsible.
-    expect(screen.queryByRole('button', { name: /collapse panel/i })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /collapse panel/i })).toBeNull();
   });
 });
 
@@ -254,7 +373,7 @@ describe('Traces side panel Scores tab', () => {
   const openScoresTab = async (scoresResponse = emptyTraceSpanScores) => {
     setTracePageHandlers(metricsCapableSystemPackages);
     server.use(
-      http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/light`, () => HttpResponse.json(traceLightSpans)),
+      http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(traceSpans)),
       http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
       http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/:spanId/scores`, () =>
         HttpResponse.json(scoresResponse),
@@ -264,11 +383,26 @@ describe('Traces side panel Scores tab', () => {
     const { queryClient } = renderPage('/traces?traceId=trace-a');
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(screen.getByRole('tab', { name: /evaluations/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /scores/i }));
     return queryClient;
   };
 
   describe('when the trace has scores', () => {
+    it('opens score details in the right-hand trace column and closes them independently', async () => {
+      await openScoresTab(traceSpanScores);
+      fireEvent.click(await screen.findByText('score-1'));
+
+      const heading = await screen.findByRole('heading', { name: /Score # score-1/i });
+      const columns = heading.closest('[data-trace-columns]');
+      expect(columns).not.toBeNull();
+      expect(columns?.lastElementChild?.contains(heading)).toBe(true);
+      const detailColumn = columns?.lastElementChild;
+      if (!(detailColumn instanceof HTMLElement)) throw new Error('Missing score detail column');
+      fireEvent.click(within(detailColumn).getByRole('button', { name: /close/i }));
+      await waitFor(() => expect(screen.queryByRole('heading', { name: /Score # score-1/i })).toBeNull());
+      expect(screen.getByRole('tab', { name: /scores/i }).getAttribute('aria-selected')).toBe('true');
+    });
+
     it('renders the score chart legend above the scores table', async () => {
       await openScoresTab(traceSpanScores);
 
@@ -282,6 +416,28 @@ describe('Traces side panel Scores tab', () => {
       // Table rows still render from the same data.
       expect(screen.getByText('score-1')).not.toBeNull();
       expect(screen.getByText('score-3')).not.toBeNull();
+    });
+  });
+
+  describe('when a span is open', () => {
+    it('closes the span side panel so the scores get the room', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/spans/span-a`, () =>
+          HttpResponse.json({ span: traceSpans.spans[0] }),
+        ),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(traceSpans)),
+        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+      );
+
+      const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
+      expect(await screen.findByRole('heading', { name: /^Span/ })).not.toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      fireEvent.click(screen.getByRole('tab', { name: /scores/i }));
+
+      await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
+      expect(screen.getByRole('tab', { name: /scores/i }).getAttribute('aria-selected')).toBe('true');
     });
   });
 

@@ -50,9 +50,13 @@ async function getAvailablePort(): Promise<number> {
 
 async function startWeatherFixtureServer(): Promise<WeatherFixtureServer> {
   const port = await getAvailablePort();
-  const childProcess = spawn('npx', ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/weather.ts')], {
-    env: { ...process.env, WEATHER_SERVER_HOST: WEATHER_FIXTURE_HOST, WEATHER_SERVER_PORT: String(port) },
-  });
+  const childProcess = spawn(
+    process.execPath,
+    ['--import', import.meta.resolve('tsx'), path.join(__dirname, '..', '__fixtures__/weather.ts')],
+    {
+      env: { ...process.env, WEATHER_SERVER_HOST: WEATHER_FIXTURE_HOST, WEATHER_SERVER_PORT: String(port) },
+    },
+  );
 
   let resolved = false;
   await new Promise<void>((resolve, reject) => {

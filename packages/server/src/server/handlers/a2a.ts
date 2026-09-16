@@ -25,7 +25,7 @@ import { DefaultPushNotificationSender } from '../a2a/push-notification-sender';
 import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
 import { TaskStoreVersionConflictError, type InMemoryTaskStore } from '../a2a/store';
 import { isInterruptedTaskState, isTerminalTaskState } from '../a2a/task-state';
-import { applyUpdateToTask, loadOrCreateTask } from '../a2a/tasks';
+import { applyUpdateToTask, loadOrCreateTask, resolveTaskMemory } from '../a2a/tasks';
 import {
   a2aAgentIdPathParams,
   agentExecutionBodySchema,
@@ -127,11 +127,7 @@ function parseA2AAgentVersionPins(value: unknown, ownerAgentId: string): A2AAgen
       );
     }
   }
-  if (
-    input.defaultStatus !== undefined &&
-    input.defaultStatus !== 'draft' &&
-    input.defaultStatus !== 'published'
-  ) {
+  if (input.defaultStatus !== undefined && input.defaultStatus !== 'draft' && input.defaultStatus !== 'published') {
     throw createVersionLabelApiError(
       'VERSION_LABEL_INTEGRITY_ERROR',
       'The stored A2A task contains invalid agent version pins.',
@@ -169,9 +165,7 @@ function captureA2AAgentVersionPins({
   const selectedLabel = rawConfig?.selectedVersionLabel;
   const versions = requestContext.get(MASTRA_VERSIONS_KEY) as { defaultStatus?: unknown } | undefined;
   const defaultStatus =
-    versions?.defaultStatus === 'draft' || versions?.defaultStatus === 'published'
-      ? versions.defaultStatus
-      : undefined;
+    versions?.defaultStatus === 'draft' || versions?.defaultStatus === 'published' ? versions.defaultStatus : undefined;
   if (typeof resolvedVersionId !== 'string' && !defaultStatus) return undefined;
   return {
     ...(typeof resolvedVersionId === 'string'
@@ -500,7 +494,7 @@ export async function getAgentCardByIdHandler({
 }): Promise<AgentCard> {
   const agent = await getAgentFromSystem({
     mastra,
-    agentId: agentId as string,
+    agentId,
     versionOptions,
     requestContext,
   });
@@ -512,7 +506,7 @@ export async function getAgentCardByIdHandler({
 
   // Extract agent information to create the AgentCard
   const agentCard: AgentCard = {
-    name: agent.id || (agentId as string),
+    name: agent.id || agentId,
     description: convertInstructionsToString(instructions),
     url: executionUrl,
     provider,
@@ -562,7 +556,7 @@ function validateMessageSendParams(params: MessageSendParams) {
     messageSendParamsSchema.parse(params);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      throw MastraA2AError.invalidParams((error as z.ZodError).issues[0]!.message);
+      throw MastraA2AError.invalidParams(error.issues[0]!.message);
     }
 
     throw error;
@@ -1227,7 +1221,6 @@ function getTaskArtifactUpdates({ previous, next }: { previous: Task; next: Task
 async function executeMessageSend({
   requestId,
   message,
-  metadata,
   currentData,
   taskStore,
   pushNotificationSender,
@@ -1239,7 +1232,6 @@ async function executeMessageSend({
 }: {
   requestId: number | string;
   message: MessageSendParams['message'];
-  metadata: MessageSendParams['metadata'];
   currentData: Task;
   taskStore: InMemoryTaskStore;
   pushNotificationSender: DefaultPushNotificationSender;
@@ -1249,12 +1241,11 @@ async function executeMessageSend({
   requestContext: RequestContext;
   resume?: ResumeClaim;
 }) {
-  const { contextId } = message;
-
   try {
-    // Pass contextId as threadId for memory persistence across A2A conversations
-    // Allow user to pass resourceId via metadata, fall back to agentId
-    const resourceId = (metadata?.resourceId as string) ?? (message.metadata?.resourceId as string) ?? agentId;
+    const memory = {
+      ...resolveTaskMemory({ task: currentData, agentId, requestContext }),
+      thread: currentData.contextId,
+    };
     const result = resume
       ? await agent.resumeGenerate(normalizeResumeData(extractResumeData(message), resume.requiresApproval), {
           runId: resume.runId,
@@ -1264,7 +1255,7 @@ async function executeMessageSend({
       : await agent.generate([convertToCoreMessage(message)], {
           runId: currentData.id,
           requestContext,
-          ...(contextId ? { threadId: contextId, resourceId } : {}),
+          memory,
         });
     persistA2AAgentVersionPins({ taskStore, agentId, taskId: currentData.id, agent, requestContext });
 
@@ -1411,6 +1402,7 @@ export async function handleMessageSend({
   if (message.taskId && !existingTask) {
     throw MastraA2AError.taskNotFound(message.taskId);
   }
+  resolveTaskMemory({ task: existingTask, agentId, requestContext, metadata, message });
   if (params.configuration?.blocking === false && existingTask?.status.state === 'working') {
     return createSuccessResponse(requestId, existingTask);
   }
@@ -1445,6 +1437,7 @@ export async function handleMessageSend({
     message,
     contextId,
     metadata,
+    requestContext,
   });
   persistA2AAgentVersionPins({ taskStore, agentId, taskId, agent, requestContext });
 
@@ -1475,7 +1468,6 @@ export async function handleMessageSend({
   const execution = executeMessageSend({
     requestId,
     message,
-    metadata,
     currentData,
     taskStore,
     pushNotificationSender: resolvedPushNotificationSender,
@@ -1739,9 +1731,11 @@ export async function* handleMessageStream({
   const { message, metadata } = params;
   const { contextId } = message;
   const taskId = message.taskId || crypto.randomUUID();
-  if (message.taskId && !taskStore.loadWithVersion({ agentId, taskId })) {
+  const existingTask = taskStore.loadWithVersion({ agentId, taskId })?.task;
+  if (message.taskId && !existingTask) {
     throw MastraA2AError.taskNotFound(message.taskId);
   }
+  resolveTaskMemory({ task: existingTask, agentId, requestContext, metadata, message });
 
   // A follow-up message for an interrupted task resumes the suspended agent
   // run instead of starting a fresh generation (A2A HITL continuation).
@@ -1764,6 +1758,7 @@ export async function* handleMessageStream({
     message,
     contextId,
     metadata,
+    requestContext,
   });
   persistA2AAgentVersionPins({ taskStore, agentId, taskId, agent, requestContext });
 
@@ -1803,7 +1798,10 @@ export async function* handleMessageStream({
   try {
     yield createSuccessResponse(requestId, currentData);
 
-    const resourceId = (metadata?.resourceId as string) ?? (message.metadata?.resourceId as string) ?? agentId;
+    const memory = {
+      ...resolveTaskMemory({ task: currentData, agentId, requestContext }),
+      thread: currentData.contextId,
+    };
     const result = resume
       ? await agent.resumeStream(normalizeResumeData(extractResumeData(message), resume.requiresApproval), {
           runId: resume.runId,
@@ -1815,7 +1813,7 @@ export async function* handleMessageStream({
           runId: taskId,
           requestContext,
           abortSignal: taskAbortController.signal,
-          ...(contextId ? { threadId: contextId, resourceId } : {}),
+          memory,
         });
     persistA2AAgentVersionPins({ taskStore, agentId, taskId, agent, requestContext });
     let sawTextArtifact = false;
@@ -2712,7 +2710,7 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
       { source: 'query' },
     );
     const baseExecutionUrl = getA2AExecutionUrl({
-      agentId: ctx.agentId as string,
+      agentId: ctx.agentId,
       request: (ctx as typeof ctx & { request?: Request }).request,
       routePrefix: ctx.routePrefix,
     });
@@ -2780,7 +2778,7 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
       result = await getAgentExecutionHandler({
         requestId,
         mastra,
-        agentId: agentId as string,
+        agentId,
         requestContext,
         method,
         params,

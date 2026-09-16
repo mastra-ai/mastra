@@ -2,7 +2,7 @@ import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { resolveModelConfig } from '@mastra/core/llm';
+import { modelSupportsTemperature, resolveModelConfig } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
@@ -14,6 +14,7 @@ import type { ProviderMetadata } from '@mastra/core/stream';
 import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../..';
+import { WORKING_MEMORY_STATE_ID } from '../working-memory-state/processor';
 import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { composeObservationExtractors, composeReflectionExtractors } from './built-in-extractors';
@@ -38,10 +39,36 @@ export function getLatestStepParts(parts: MastraDBMessage['content']['parts']): 
 }
 
 /**
- * Returns true when a message contains at least one part with visible user/assistant
- * content (text, tool-invocation, reasoning, image, file).  Messages that only carry
- * internal `data-*` parts (buffering markers, observation markers, etc.) return false.
+ * Returns true for persisted Working Memory state signals (`role: 'signal'`,
+ * `signal.type: 'state'`, `state.id: 'working-memory'`). OM must not observe these:
+ * they mirror memory OM itself manages, and re-observing them creates a self-feedback
+ * loop that can overwrite stored working memory (#21961). Only the working-memory lane
+ * is filtered — other state lanes are outside OM's write path, so re-observing them
+ * cannot corrupt OM-managed state; excluding them broadly is a separate decision.
  */
+function isWorkingMemoryStateSignal(message: MastraDBMessage): boolean {
+  if (message.role !== 'signal') return false;
+
+  const signal = message.content.metadata?.signal;
+  if (!signal || typeof signal !== 'object' || Array.isArray(signal)) return false;
+
+  const signalRecord = signal as Record<string, unknown>;
+  // Mirror core's mastraDBMessageToSignal: signal.type with fallback to top-level message.type
+  const signalType = signalRecord.type ?? (message as { type?: unknown }).type;
+  if (signalType !== 'state') return false;
+
+  const metadata = signalRecord.metadata;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false;
+
+  const state = (metadata as Record<string, unknown>).state;
+  return (
+    !!state &&
+    typeof state === 'object' &&
+    !Array.isArray(state) &&
+    (state as Record<string, unknown>).id === WORKING_MEMORY_STATE_ID
+  );
+}
+
 function messageHasVisibleContent(msg: MastraDBMessage): boolean {
   const content = msg.content as { parts?: Array<{ type?: string }>; content?: string };
   if (content?.parts && Array.isArray(content.parts)) {
@@ -209,6 +236,7 @@ import { ModelByInputTokens } from './model-by-input-tokens';
 import { didProviderChange as hasProviderChanged } from './model-context';
 import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import { ObservationStrategy } from './observation-strategies/index';
+import { resolveThreadTitleUpdate } from './observation-strategies/thread-title';
 import type { ObservationRunResult } from './observation-strategies/types';
 import { ObservationTurn } from './observation-turn/index';
 import type { ObservationTurnHooks } from './observation-turn/types';
@@ -228,14 +256,17 @@ import {
 } from './thresholds';
 import { TokenCounter } from './token-counter';
 import type { TokenCounterModelContext } from './token-counter';
+import { applyTextTransform } from './transform-hooks';
 import type {
   DataOmStatusPart,
   ObservationDebugEvent,
   ObservationalMemoryConfig,
   ObservationalMemoryModel,
+  WidenedObservationalMemoryModel,
   ObserveHookContext,
   ObserveHookUsage,
   ObserveHooks,
+  ObserveLifecycleHooks,
   ObserveTrigger,
   ResolvedObservationConfig,
   ResolvedReflectionConfig,
@@ -324,7 +355,6 @@ export class ObservationalMemory {
   private hasher = xxhash();
   private mastra?: Mastra;
   private memory?: Memory;
-  private curationCadence?: number;
 
   /**
    * Track message IDs observed during this instance's lifetime.
@@ -462,22 +492,28 @@ export class ObservationalMemory {
     this.hookExecution = config.hookExecution ?? 'non-blocking';
     this.mastra = config.mastra;
     this.memory = config.memory;
-    this.curationCadence = config.curationCadence;
+
+    // Read the model fields once into the widened type. Combining values of the public type
+    // (`??` / ternaries below) makes TS subtype-reduce the model-id literal union, which grows
+    // with the provider registry and eventually fails with TS2590 "union type is too complex".
+    const topLevelModel: WidenedObservationalMemoryModel | undefined = config.model;
+    const observationConfigModel: WidenedObservationalMemoryModel | undefined = config.observation?.model;
+    const reflectionConfigModel: WidenedObservationalMemoryModel | undefined = config.reflection?.model;
 
     // Resolve "default" to the model default for the agent being configured.
-    const resolveModel = (model: ObservationalMemoryModel | undefined, defaultModel: string) =>
+    const resolveModel = (model: WidenedObservationalMemoryModel | undefined, defaultModel: string) =>
       model === 'default' ? defaultModel : model;
 
     // Resolution order: top-level model → sub-config model → the other sub-config model → default.
     const observationModel =
-      resolveModel(config.model, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
-      resolveModel(config.observation?.model, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
-      resolveModel(config.reflection?.model, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
+      resolveModel(topLevelModel, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
+      resolveModel(observationConfigModel, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
+      resolveModel(reflectionConfigModel, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
       OBSERVATIONAL_MEMORY_DEFAULTS.observation.model;
     const reflectionModel =
-      resolveModel(config.model, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
-      resolveModel(config.reflection?.model, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
-      resolveModel(config.observation?.model, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
+      resolveModel(topLevelModel, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
+      resolveModel(reflectionConfigModel, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
+      resolveModel(observationConfigModel, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
       OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model;
 
     // Get base thresholds first (needed for shared budget calculation)
@@ -486,21 +522,51 @@ export class ObservationalMemory {
       config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens;
     const isSharedBudget = config.shareTokenBudget ?? false;
 
-    const isDefaultModelSelection = (model: ObservationalMemoryModel | undefined) =>
+    const supportsDefaultTemperature = (model: WidenedObservationalMemoryModel) => {
+      if (model instanceof ModelByInputTokens || typeof model === 'function') return false;
+
+      if (typeof model === 'string') {
+        return modelSupportsTemperature(model) === true;
+      }
+
+      if (
+        model &&
+        typeof model === 'object' &&
+        'provider' in model &&
+        'modelId' in model &&
+        typeof model.provider === 'string' &&
+        typeof model.modelId === 'string'
+      ) {
+        return modelSupportsTemperature(`${model.provider.split('.')[0]}/${model.modelId}`) === true;
+      }
+
+      return false;
+    };
+    const usesDefaultOutputTokenBudget = (model: WidenedObservationalMemoryModel | undefined) =>
       model === undefined || model === 'default' || model instanceof ModelByInputTokens;
 
-    const observationSelectedModel = config.model ?? config.observation?.model ?? config.reflection?.model;
-    const reflectionSelectedModel = config.model ?? config.reflection?.model ?? config.observation?.model;
+    const observationSelectedModel = topLevelModel ?? observationConfigModel ?? reflectionConfigModel;
+    const reflectionSelectedModel = topLevelModel ?? reflectionConfigModel ?? observationConfigModel;
 
+    const observationTemperature =
+      config.observation?.modelSettings?.temperature ??
+      (supportsDefaultTemperature(observationModel)
+        ? OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.temperature
+        : undefined);
     const observationDefaultMaxOutputTokens =
       config.observation?.modelSettings?.maxOutputTokens ??
-      (isDefaultModelSelection(observationSelectedModel)
+      (usesDefaultOutputTokenBudget(observationSelectedModel)
         ? OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.maxOutputTokens
         : undefined);
 
+    const reflectionTemperature =
+      config.reflection?.modelSettings?.temperature ??
+      (supportsDefaultTemperature(reflectionModel)
+        ? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.temperature
+        : undefined);
     const reflectionDefaultMaxOutputTokens =
       config.reflection?.modelSettings?.maxOutputTokens ??
-      (isDefaultModelSelection(reflectionSelectedModel)
+      (usesDefaultOutputTokenBudget(reflectionSelectedModel)
         ? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.maxOutputTokens
         : undefined);
 
@@ -551,9 +617,7 @@ export class ObservationalMemory {
       messageTokens: isSharedBudget ? { min: messageTokens, max: totalBudget } : messageTokens,
       shareTokenBudget: isSharedBudget,
       modelSettings: {
-        temperature:
-          config.observation?.modelSettings?.temperature ??
-          OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.temperature,
+        ...(observationTemperature !== undefined ? { temperature: observationTemperature } : {}),
         ...(observationDefaultMaxOutputTokens !== undefined
           ? { maxOutputTokens: observationDefaultMaxOutputTokens }
           : {}),
@@ -586,7 +650,9 @@ export class ObservationalMemory {
       previousObserverTokens: config.observation?.previousObserverTokens ?? 2000,
       instruction: config.observation?.instruction,
       threadTitle: config.observation?.threadTitle ?? false,
-      observeAttachments: config.observation?.observeAttachments ?? true,
+      observeAttachments: config.observation?.observeAttachments ?? [
+        ...OBSERVATIONAL_MEMORY_DEFAULTS.observation.observeAttachments,
+      ],
       extractors: composeObservationExtractors({
         threadTitle: config.observation?.threadTitle ?? false,
         extract: config.observation?.extract,
@@ -600,9 +666,7 @@ export class ObservationalMemory {
       observationTokens: observationTokens,
       shareTokenBudget: isSharedBudget,
       modelSettings: {
-        temperature:
-          config.reflection?.modelSettings?.temperature ??
-          OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.temperature,
+        ...(reflectionTemperature !== undefined ? { temperature: reflectionTemperature } : {}),
         ...(reflectionDefaultMaxOutputTokens !== undefined
           ? { maxOutputTokens: reflectionDefaultMaxOutputTokens }
           : {}),
@@ -646,6 +710,7 @@ export class ObservationalMemory {
       tokenCounter: this.tokenCounter,
       mastra: config.mastra,
       memory: this.memory,
+      hooks: this.hooks,
     });
 
     this.buffering = new BufferingCoordinator({
@@ -669,6 +734,7 @@ export class ObservationalMemory {
       mastra: config.mastra,
       memory: this.memory,
       onReflectionCommitted: config.onReflectionCommitted,
+      hooks: this.hooks,
     });
 
     // Validate buffer configuration
@@ -1442,7 +1508,7 @@ export class ObservationalMemory {
     const result: MastraDBMessage[] = [];
 
     for (const msg of allMessages) {
-      if (msg.role === 'system') {
+      if (msg.role === 'system' || isWorkingMemoryStateSignal(msg)) {
         continue;
       }
 
@@ -1888,7 +1954,10 @@ export class ObservationalMemory {
       });
     }
 
-    return result.messages.filter(msg => msg.role !== 'system');
+    // Exclude working-memory state signals so storage-loaded paths (e.g. observe()
+    // without explicit messages, buffering token counts) never re-observe stored
+    // working memory (#21961).
+    return result.messages.filter(msg => msg.role !== 'system' && !isWorkingMemoryStateSignal(msg));
   }
 
   /**
@@ -2265,6 +2334,7 @@ ${formattedMessages}
           writer,
           requestContext,
           observabilityContext,
+          trigger: 'async-buffer',
         }).run(),
     );
 
@@ -2317,6 +2387,7 @@ ${formattedMessages}
           opts.writer,
           opts.unbufferedPendingTokens,
           opts.requestContext,
+          opts.observabilityContext,
         ),
       );
     }
@@ -2702,7 +2773,9 @@ ${formattedMessages}
         filter: startDate ? { dateRange: { start: startDate } } : undefined,
       });
 
-      const filtered = result.messages.filter(m => !this.observedMessageIds.has(m.id));
+      const filtered = result.messages.filter(
+        message => !this.observedMessageIds.has(message.id) && !isWorkingMemoryStateSignal(message),
+      );
 
       if (filtered.length > 0) {
         messagesByThread.set(thread.id, filtered);
@@ -3253,6 +3326,7 @@ ${formattedMessages}
             requestContext,
             currentModel: opts.currentModel,
             observabilityContext,
+            trigger: 'async-buffer',
           }).run(),
       );
 
@@ -3528,9 +3602,8 @@ ${formattedMessages}
           currentTask: lastActivated.currentTask,
           threadTitle: chunkThreadTitle,
         });
-        const oldTitle = thread.title?.trim();
-        const newTitle = chunkThreadTitle?.trim();
-        const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
+        const newTitle = resolveThreadTitleUpdate(thread, chunkThreadTitle);
+        const shouldUpdateThreadTitle = newTitle !== undefined;
         await this.storage.patchThread({
           id: threadId,
           ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),
@@ -3555,16 +3628,16 @@ ${formattedMessages}
    * @internal
    */
   composeHooks(
-    callHooks: ObserveHooks | undefined,
+    callHooks: ObserveLifecycleHooks | undefined,
     context: ObserveHookContext,
     execution: 'configured' | 'non-blocking' = 'configured',
-  ): ObserveHooks | undefined {
+  ): ObserveLifecycleHooks | undefined {
     const configHooks = this.hooks;
     if (!configHooks) return callHooks;
     if (!callHooks && !Object.keys(configHooks).length) return undefined;
 
     const shouldAwaitConfig = execution === 'configured' && this.hookExecution === 'await';
-    const invokeConfigHook = async (name: keyof ObserveHooks, arg: unknown) => {
+    const invokeConfigHook = async (name: keyof ObserveLifecycleHooks, arg: unknown) => {
       const hook = configHooks[name] as ((arg?: unknown) => void | Promise<void>) | undefined;
       if (!hook) return;
       if (shouldAwaitConfig) {
@@ -3662,7 +3735,7 @@ ${formattedMessages}
     messages?: MastraDBMessage[];
     /** Live MessageList for the in-flight turn — lets markers land on the pending assistant message. */
     messageList?: MessageList;
-    hooks?: ObserveHooks;
+    hooks?: ObserveLifecycleHooks;
     /** Which pipeline path initiated this cycle; defaults to 'manual'. */
     trigger?: ObserveTrigger;
     agent?: ProcessorContext['agent'];
@@ -3678,7 +3751,8 @@ ${formattedMessages}
   }> {
     const { threadId, resourceId, messages, requestContext } = opts;
     const lockKey = this.buffering.getLockKey(threadId, resourceId);
-    const hooks = this.composeHooks(opts.hooks, { threadId, resourceId, trigger: opts.trigger ?? 'manual' });
+    const trigger = opts.trigger ?? 'manual';
+    const hooks = this.composeHooks(opts.hooks, { threadId, resourceId, trigger });
     const reflectionHooks = hooks
       ? { onReflectionStart: hooks.onReflectionStart, onReflectionEnd: hooks.onReflectionEnd }
       : undefined;
@@ -3722,6 +3796,7 @@ ${formattedMessages}
           messages: unobservedMessages,
           messageList: opts.messageList,
           reflectionHooks,
+          trigger,
           agent: opts.agent,
           sendSignal: opts.sendSignal,
           sendStateSignal: opts.sendStateSignal,
@@ -3759,49 +3834,7 @@ ${formattedMessages}
     const record = await this.getOrCreateRecord(threadId, resourceId);
     const reflected = record.generationCount > generationBefore && generationBefore >= 0;
 
-    if (observed) {
-      // Fire-and-forget; a curation failure must never fail the observation.
-      void this.maybeTriggerCadenceCuration(threadId, resourceId, record, requestContext).catch(error => {
-        omDebug(`[OM:observe] cadence curation failed: ${error instanceof Error ? error.message : String(error)}`);
-      });
-    }
-
     return { observed, reflected, record };
-  }
-
-  /**
-   * Count committed observation runs on the sync observe path and run the curator every
-   * `curationCadence` runs. The counter is persisted at `record.config.subconscious.observationRuns`
-   * (the OM record's config jsonb, deep-merged; threshold resolution only reads `_overrides`, so the
-   * sibling key is inert). Concurrent commits can miscount — the curator run is advisory, and the
-   * curation cursor is the real serializer. The async-buffer lane bypasses observe(); deployments
-   * that gate on this cadence (factory's resource scope) disable async buffering.
-   */
-  private async maybeTriggerCadenceCuration(
-    threadId: string,
-    resourceId: string | undefined,
-    record: ObservationalMemoryRecord,
-    requestContext?: RequestContext,
-  ): Promise<void> {
-    const cadence = this.curationCadence;
-    const memory = this.memory;
-    if (!cadence || cadence < 1 || !memory) return;
-
-    const config = (record.config ?? {}) as { subconscious?: { observationRuns?: number } };
-    const runs = (config.subconscious?.observationRuns ?? 0) + 1;
-    const fire = runs >= cadence;
-    await this.storage.updateObservationalMemoryConfig({
-      id: record.id,
-      config: { subconscious: { observationRuns: fire ? 0 : runs } },
-    });
-    if (!fire) return;
-
-    const result = await memory.runCuration({
-      threadId,
-      resourceId: resourceId ?? threadId,
-      requestContext,
-    });
-    omDebug(`[OM:observe] cadence curation outcome=${result.outcome} thread=${threadId}`);
   }
 
   /**
@@ -3847,7 +3880,8 @@ ${formattedMessages}
     await this.storage.setReflectingFlag(record.id, true);
     registerOp(record.id, 'reflecting');
 
-    const hooks = this.composeHooks(undefined, { threadId, resourceId, trigger: 'manual' });
+    const hookContext: ObserveHookContext = { threadId, resourceId, trigger: 'manual' };
+    const hooks = this.composeHooks(undefined, hookContext);
     let reflectionUsage: ObserveHookUsage | undefined;
     let reflectionProviderMetadata: ProviderMetadata | undefined;
     let reflectionError: Error | undefined;
@@ -3867,7 +3901,7 @@ ${formattedMessages}
       const priorExtractedValues = getPriorExtractedValues(previousOmMetadata, this.reflectionConfig.extractors);
       const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
       const reflectResult = await this.reflector.call(
-        record.activeObservations,
+        await applyTextTransform(this.hooks, 'beforeReflection', record.activeObservations, hookContext),
         prompt,
         undefined,
         reflectThreshold,
@@ -3878,6 +3912,12 @@ ${formattedMessages}
         priorExtractedValues,
         observabilityContext,
         undefined,
+      );
+      reflectResult.observations = await applyTextTransform(
+        this.hooks,
+        'afterReflection',
+        reflectResult.observations,
+        hookContext,
       );
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 

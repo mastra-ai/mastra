@@ -1,6 +1,6 @@
 ---
 title: "Server"
-description: "Overview of the Mastra server, covering HTTP endpoints, middleware, authentication, and client integration."
+description: "Configure the Mastra HTTP server to expose agents and workflows through REST APIs with middleware, authentication, streaming, and OpenAI-compatible routes."
 packages:
   - "@mastra/core"
 ---
@@ -77,7 +77,7 @@ Mastra exposes OpenAI-compatible Responses and Conversations routes that let you
 
 These APIs are currently experimental.
 
-Use `agent_id` to select the Mastra agent that should handle the request. Initial requests target an agent directly, and stored follow-up turns can continue with `previous_response_id`. You can also pass `model` to override the agent's configured model for a single request. If you omit `model`, Mastra uses the model already configured on the agent.
+Use `agent_id` to select the Mastra agent that should handle the request. Initial requests target an agent directly. Stored follow-up turns can continue through `previous_response_id`. Pass `model` to override the configured model for one request, or omit it to use the agent's existing model.
 
 The Responses routes support streaming, function calling (tools), stored continuations with `previous_response_id`, conversation threads through `conversation_id`, provider-specific passthrough with `providerOptions`, and JSON output through `text.format`.
 

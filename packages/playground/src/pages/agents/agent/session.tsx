@@ -1,10 +1,15 @@
 import { v4 as uuid } from '@lukeed/uuid';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { SessionHeader } from '@/components/session-header';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
 import { AgentChatLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
+import { AgentUnavailable } from '@/domains/agents/components/agent-unavailable';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
 import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
@@ -21,7 +26,7 @@ import { SchemaRequestContextProvider } from '@/domains/request-context/context/
 function AgentSession() {
   const { agentId, threadId } = useParams();
   const [searchParams] = useSearchParams();
-  const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);
+  const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
   const isNewThread = threadId === 'new';
@@ -48,12 +53,37 @@ function AgentSession() {
 
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
 
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <SessionExpired />
+      </div>
+    );
+  }
+
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <PermissionDenied resource="agents" />
+      </div>
+    );
+  }
+
   if (isAgentLoading) {
     return <AgentSessionLoadingSkeleton />;
   }
 
+  // A 404 is authoritative even if a previous fetch left stale data in the cache.
+  if (error && is404NotFoundError(error)) {
+    return <AgentUnavailable />;
+  }
+
+  if (error) {
+    return <ErrorState title="Failed to load agent" message={error.message} />;
+  }
+
   if (!agent) {
-    return <div className="py-4 text-center">Agent not found</div>;
+    return <AgentUnavailable />;
   }
 
   const actualThreadId = isNewThread ? newThreadId : (threadId ?? newThreadId);
@@ -76,14 +106,14 @@ function AgentSession() {
                 key={`session-${agentId}-${actualThreadId}`}
                 agentId={agentId!}
                 threadId={actualThreadId}
-                enabled={Boolean(agent?.browserTools?.length)}
+                enabled={Boolean(agent?.hasBrowser ?? agent?.browserTools?.length)}
               >
                 <ThreadInputProvider>
                   <ObservationalMemoryProvider>
                     <ActivatedSkillsProvider>
                       <MainContentLayout>
                         <SessionHeader />
-                        <div className="relative grid h-full overflow-y-auto pt-6">
+                        <div className="relative grid h-full min-h-0">
                           <AgentChat
                             key={actualThreadId}
                             agentId={agentId!}
@@ -117,7 +147,7 @@ export default AgentSession;
 const AgentSessionLoadingSkeleton = () => (
   <MainContentLayout>
     <SessionHeader />
-    <div className="relative grid h-full overflow-y-auto pt-6" data-testid="agent-session-skeleton" aria-busy="true">
+    <div className="relative grid h-full overflow-y-auto pt-4" data-testid="agent-session-skeleton" aria-busy="true">
       <AgentChatLoadingSkeleton />
     </div>
   </MainContentLayout>

@@ -4,6 +4,32 @@ import type { FactoryUserSession } from './user-sessions';
 
 const REVIEW_BRANCH_PREFIX = 'factory/pr-';
 
+export interface SessionOwnerDetails {
+  name: string;
+  avatarUrl?: string;
+}
+
+export interface SessionViewerProfile {
+  userId?: string;
+  name?: string;
+  email?: string;
+  avatarUrl?: string;
+}
+
+export function getSessionOwnerDetails(
+  session: FactoryUserSession,
+  viewer: SessionViewerProfile | undefined,
+): SessionOwnerDetails {
+  const isViewer = Boolean(viewer?.userId) && session.userId === viewer?.userId;
+  const name =
+    (isViewer && (viewer?.name?.trim() || viewer?.email?.trim())) || session.owner?.name?.trim() || session.userId;
+  const avatarUrl = (isViewer && viewer?.avatarUrl?.trim()) || session.owner?.avatarUrl?.trim();
+  return {
+    name,
+    ...(avatarUrl ? { avatarUrl } : {}),
+  };
+}
+
 export function getFactorySessionKind(session: FactoryUserSession, workItem: WorkItem | undefined): 'work' | 'review' {
   if (workItem?.source === 'github-pr') return 'review';
   if (!workItem && session.branch.startsWith(REVIEW_BRANCH_PREFIX)) return 'review';
@@ -27,8 +53,4 @@ export function getUserSessionLabel(session: FactoryUserSession): string {
   if (!session.branch.startsWith(USER_SESSION_BRANCH_PREFIX)) return session.branch;
   if (isAutomaticUserSessionBranch(session)) return 'New session';
   return session.branch.slice(USER_SESSION_BRANCH_PREFIX.length);
-}
-
-export function getUserSessionTooltip(session: FactoryUserSession): string {
-  return isAutomaticUserSessionBranch(session) ? getUserSessionLabel(session) : session.branch;
 }

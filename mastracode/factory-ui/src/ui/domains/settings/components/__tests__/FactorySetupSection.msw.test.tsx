@@ -45,21 +45,20 @@ function renderSection(factoryProject: FactoryProject = emptyFactory) {
 describe('FactorySetupSection', () => {
   it('given no github projects, when rendered, then the section is hidden', () => {
     renderSection();
-    expect(screen.queryByText('Worktree lifecycle')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sandbox')).not.toBeInTheDocument();
   });
 
-  it('given a stored setup command, when rendered, then the field shows it', async () => {
+  it('given stored commands, when rendered, then each command has its own row', async () => {
     useSettingsHandlers({ setupCommand: 'pnpm i && pnpm build', teardownCommand: 'pnpm local teardown' });
 
     renderSection(factory);
 
-    expect(await screen.findByText('Worktree lifecycle')).toBeInTheDocument();
+    expect(await screen.findByText('Sandbox')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('textbox', { name: FIELD })).toHaveValue('pnpm i && pnpm build'));
     expect(screen.getByRole('textbox', { name: TEARDOWN_FIELD })).toHaveValue('pnpm local teardown');
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
   });
 
-  it('given an edited command, when saving, then it persists and the button disables again', async () => {
+  it('given an edited setup command, when the field is left, then it persists on its own', async () => {
     const saved = useSettingsHandlers();
     const user = userEvent.setup();
 
@@ -68,17 +67,32 @@ describe('FactorySetupSection', () => {
     const input = await screen.findByRole('textbox', { name: FIELD });
     await waitFor(() => expect(input).toBeEnabled());
     await user.type(input, 'pnpm i && pnpm build');
-    await user.type(screen.getByRole('textbox', { name: TEARDOWN_FIELD }), 'pnpm local teardown');
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await user.tab();
 
-    await waitFor(() =>
-      expect(saved).toEqual([{ setupCommand: 'pnpm i && pnpm build', teardownCommand: 'pnpm local teardown' }]),
-    );
-    expect(await screen.findByText('Worktree commands saved')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
+    await waitFor(() => expect(saved).toEqual([{ setupCommand: 'pnpm i && pnpm build', teardownCommand: null }]));
+    expect(await screen.findByText('Sandbox commands saved')).toBeInTheDocument();
   });
 
-  it('given a stored command, when cleared and saved, then null is persisted', async () => {
+  it('given an unchanged field, when it is left, then nothing is saved', async () => {
+    const saved = useSettingsHandlers({ setupCommand: 'pnpm i', teardownCommand: null });
+    const user = userEvent.setup();
+
+    renderSection(factory);
+
+    const input = await screen.findByRole('textbox', { name: FIELD });
+    await waitFor(() => expect(input).toHaveValue('pnpm i'));
+    await user.click(input);
+    await user.tab();
+
+    // A real save on the other field lands after any request the untouched one
+    // could have fired, so a stray save shows up as a second entry here.
+    await user.type(screen.getByRole('textbox', { name: TEARDOWN_FIELD }), 'pnpm local teardown');
+    await user.tab();
+
+    await waitFor(() => expect(saved).toEqual([{ setupCommand: 'pnpm i', teardownCommand: 'pnpm local teardown' }]));
+  });
+
+  it('given a stored command, when cleared, then null is persisted and the other command is kept', async () => {
     const saved = useSettingsHandlers({ setupCommand: 'pnpm i', teardownCommand: 'pnpm local teardown' });
     const user = userEvent.setup();
 
@@ -87,9 +101,28 @@ describe('FactorySetupSection', () => {
     const input = await screen.findByRole('textbox', { name: FIELD });
     await waitFor(() => expect(input).toHaveValue('pnpm i'));
     await user.clear(input);
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await user.tab();
 
     await waitFor(() => expect(saved).toEqual([{ setupCommand: null, teardownCommand: 'pnpm local teardown' }]));
+  });
+
+  it('given the server rejects the save, when saving fails, then the typed command stays in the field', async () => {
+    server.use(
+      http.get(SETTINGS_URL, () => HttpResponse.json({ setupCommand: 'pnpm i', teardownCommand: null })),
+      http.post(SETTINGS_URL, () => HttpResponse.json({ error: 'Invalid setupCommand' }, { status: 400 })),
+    );
+    const user = userEvent.setup();
+
+    renderSection(factory);
+
+    const input = await screen.findByRole('textbox', { name: FIELD });
+    await waitFor(() => expect(input).toHaveValue('pnpm i'));
+    await user.clear(input);
+    await user.type(input, 'pnpm i --frozen-lockfile');
+    await user.tab();
+
+    expect(await screen.findByText('Invalid setupCommand')).toBeInTheDocument();
+    expect(input).toHaveValue('pnpm i --frozen-lockfile');
   });
 
   it('given the server rejects the save, when saving fails, then an error toast appears', async () => {
@@ -104,7 +137,7 @@ describe('FactorySetupSection', () => {
     const input = await screen.findByRole('textbox', { name: FIELD });
     await waitFor(() => expect(input).toBeEnabled());
     await user.type(input, 'rm -rf oops');
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await user.tab();
 
     expect(await screen.findByText('Invalid setupCommand')).toBeInTheDocument();
   });

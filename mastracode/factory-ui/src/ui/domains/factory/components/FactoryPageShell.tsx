@@ -6,7 +6,7 @@ import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { Sidebar } from '../../../Sidebar';
-import { PageLayout, ViewportLayout } from '../../../layouts/PageLayout';
+import { AppShell, type AppShellProps } from '../../../layouts/AppShell';
 import { ChatHeader } from '../../chat/components/ChatHeader';
 import type { FactoryProject } from '../../workspaces/services/github';
 
@@ -23,12 +23,7 @@ interface FactoryPageShellProps {
  * explanatory notice; when a factory links multiple repositories a picker in
  * the header scopes repository-based intake.
  */
-function FactoryPageShellFrame({
-  children,
-  Layout,
-}: FactoryPageShellProps & {
-  Layout: typeof PageLayout;
-}) {
+function FactoryPageShellFrame({ children, scroll }: FactoryPageShellProps & Pick<AppShellProps, 'scroll'>) {
   const { factoryId } = useParams<{ factoryId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
 
@@ -43,15 +38,15 @@ function FactoryPageShellFrame({
   const factory = factoryQuery.data;
 
   return (
-    <Layout sidebar={<Sidebar />} header={<ChatHeader />}>
+    <AppShell scroll={scroll} sidebar={<Sidebar />} header={<ChatHeader />}>
       {factory ? children(factory) : <Notice variant="destructive">Factory not found.</Notice>}
-    </Layout>
+    </AppShell>
   );
 }
 
 /** Factory page whose content participates in native document scrolling. */
 export function DocumentFactoryPageShell(props: FactoryPageShellProps) {
-  return <FactoryPageShellFrame {...props} Layout={PageLayout} />;
+  return <FactoryPageShellFrame {...props} scroll="document" />;
 }
 
 /**
@@ -60,7 +55,7 @@ export function DocumentFactoryPageShell(props: FactoryPageShellProps) {
  */
 export function FactoryPageShell({ children, bleed = false }: FactoryPageShellProps & { bleed?: boolean }) {
   return (
-    <FactoryPageShellFrame Layout={ViewportLayout}>
+    <FactoryPageShellFrame scroll="viewport">
       {factory => <div className={cn('flex min-h-0 flex-1 flex-col', !bleed && 'p-5')}>{children(factory)}</div>}
     </FactoryPageShellFrame>
   );

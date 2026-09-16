@@ -3,7 +3,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import { useChatRunVersionIdentity } from '@/lib/ai-ui/chat/chat-context';
+import { useChatRunVersionIdentity } from '@mastra/playground-ui/domains/chat/context/chat-context';
 
 interface AgentRunVersionIdentityProps {
   versions: ListAgentVersionsResponse['versions'];
@@ -34,7 +34,7 @@ export function AgentRunVersionIdentity({ versions }: AgentRunVersionIdentityPro
       <Txt variant="ui-xs" className="text-neutral3 shrink-0">
         Current run
       </Txt>
-      <Badge variant="info" className="min-w-0 shrink" title={accessibleLabel}>
+      <Badge variant="blue" className="min-w-0 shrink" title={accessibleLabel}>
         <span className="sr-only">{accessibleLabel}</span>
         <span aria-hidden="true" className="min-w-0 truncate">
           {visibleLabel}

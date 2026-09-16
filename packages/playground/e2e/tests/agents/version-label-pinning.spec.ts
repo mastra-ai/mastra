@@ -103,7 +103,7 @@ async function openVersionLabelManagerFromAgents(page: Page) {
   const agentLink = page.getByRole('link', { name: new RegExp(AGENT_NAME) }).first();
   await expect(agentLink).toBeVisible({ timeout: 10_000 });
   await agentLink.click();
-  await expect(page).toHaveURL(new RegExp(`/agents/${AGENT_ID}/chat/new(?:\\?.*)?$`));
+  await expect(page).toHaveURL(new RegExp(`/agents/${AGENT_ID}/threads/new(?:\\?.*)?$`));
 
   const editorTab = page.getByRole('tab', { name: 'Editor', exact: true });
   await expect(editorTab).toBeEnabled();

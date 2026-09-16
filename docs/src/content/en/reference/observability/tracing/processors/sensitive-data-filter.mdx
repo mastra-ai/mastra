@@ -1,6 +1,6 @@
 ---
 title: 'Reference: SensitiveDataFilter | Observability'
-description: 'API reference for SensitiveDataFilter, which redacts sensitive values from spans before export.'
+description: "SensitiveDataFilter is a span output processor that redacts values whose field names match a configured list."
 packages:
   - '@mastra/observability'
 ---
@@ -56,7 +56,7 @@ If a plain configuration already contains a `SensitiveDataFilter` in `spanOutput
 
 ## Constructor
 
-```typescript
+```typescript oxfmt:false
 new SensitiveDataFilter(options?: SensitiveDataFilterOptions)
 ```
 
@@ -104,7 +104,7 @@ type RedactionStyle = 'full' | 'partial' | 'indexed'
 
 Full redaction replaces each matched primitive value with `redactionToken`.
 
-```jsonc prettier:false
+```jsonc oxfmt:false
 // Before
 { "apiKey": "sk-abc123xyz789", "userId": "user_123" }
 
@@ -122,7 +122,7 @@ const filter = new SensitiveDataFilter({
 })
 ```
 
-```jsonc prettier:false
+```jsonc oxfmt:false
 // Before
 { "apiKey": "sk-abc123xyz789" }
 
@@ -140,7 +140,7 @@ const filter = new SensitiveDataFilter({
 })
 ```
 
-```jsonc prettier:false
+```jsonc oxfmt:false
 // Before (two spans in the same trace)
 [{ "apiKey": "sk-alice-key" }, { "apiKey": "sk-bob-key" }]
 
@@ -172,6 +172,7 @@ When a matched field contains an object or array, the filter traverses that valu
 - `input`
 - `output`
 - `errorInfo`
+- `requestContext`
 
 Within each field, the processor:
 
@@ -215,7 +216,7 @@ export function redactSpan(span: AnySpan): AnySpan {
   {
     name: 'span',
     type: 'AnySpan',
-    description: 'Span whose attributes, metadata, input, output, and error information are filtered.',
+    description: 'Span whose attributes, metadata, input, output, error information, and request context are filtered.',
   },
 ]}
 />

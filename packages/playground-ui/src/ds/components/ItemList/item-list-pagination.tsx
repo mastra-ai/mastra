@@ -13,7 +13,7 @@ export function ItemListPagination({ currentPage, hasMore, onNextPage, onPrevPag
   const showNavigation = (typeof currentPage === 'number' && currentPage > 0) || hasMore;
 
   return (
-    <div className={cn('flex items-center justify-center gap-8 pt-6 text-ui-md text-neutral3')}>
+    <div className={cn('flex items-center justify-center gap-4 pt-4 text-ui-md text-neutral3')}>
       <span>
         Page <b>{currentPage ? currentPage + 1 : '1'}</b>
       </span>

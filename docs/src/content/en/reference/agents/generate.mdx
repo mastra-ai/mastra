@@ -1,6 +1,6 @@
 ---
 title: "Reference: Agent.generate() | Agents"
-description: "Documentation for the `Agent.generate()` method in Mastra agents, which enables non-streaming generation of responses with enhanced capabilities."
+description: "The .generate() method enables non-streaming response generation from an agent with enhanced capabilities."
 packages:
   - "@mastra/core"
 ---
@@ -38,6 +38,13 @@ const result = await agent.generate('message for agent')
       {
         type: 'AgentExecutionOptions<Output, Format>',
         parameters: [
+          {
+            name: 'hideSignals',
+            type: 'boolean | AgentSignalType[]',
+            isOptional: true,
+            description:
+              'Accepted through shared execution options, but does not filter generated results. Only streamed signal chunks are hidden; model context and saved messages remain unchanged.',
+          },
           {
             name: 'maxSteps',
             type: 'number',

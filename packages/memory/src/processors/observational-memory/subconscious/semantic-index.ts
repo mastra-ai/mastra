@@ -193,7 +193,9 @@ export class KnowledgeSemanticIndexCoordinator {
       const node = await this.#knowledge.getNode(entry.documentId.slice('knowledge:node:'.length));
       if (!node || node.mergedInto) return null;
       return {
-        text: `${node.name}\n${node.content ?? ''}`,
+        text: node.description
+          ? `${node.name}\n${node.description}\n${node.content ?? ''}`
+          : `${node.name}\n${node.content ?? ''}`,
         name: node.name,
         scope: node.scope,
         recordId: node.id,

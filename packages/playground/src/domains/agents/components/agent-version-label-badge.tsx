@@ -1,9 +1,9 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 
-function getBadgeVariant(label: string): 'success' | 'info' | 'default' {
-  if (label === 'production') return 'success';
-  if (label === 'latest') return 'info';
-  return 'default';
+function getBadgeVariant(label: string): 'green' | 'blue' | 'neutral' {
+  if (label === 'production') return 'green';
+  if (label === 'latest') return 'blue';
+  return 'neutral';
 }
 
 export interface AgentVersionLabelBadgeProps {

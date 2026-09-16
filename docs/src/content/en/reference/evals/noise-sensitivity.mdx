@@ -1,6 +1,6 @@
 ---
 title: "Reference: Noise sensitivity scorer | Evals"
-description: Documentation for the Noise Sensitivity Scorer in Mastra. A CI/testing scorer that evaluates agent robustness by comparing responses between clean and noisy inputs in controlled test environments.
+description: "The createNoiseSensitivityScorerLLM() function creates a CI/testing scorer that evaluates how reliable an agent is when exposed to irrelevant, distracting, or misleading information."
 packages:
   - "@mastra/evals"
 ---
@@ -259,7 +259,7 @@ Each dimension receives an impact level with corresponding weights:
 - **Minimal (0.85)**: Slight phrasing changes but maintains correctness
 - **Moderate (0.6)**: Noticeable changes affecting quality but core info correct
 - **Significant (0.3)**: Major degradation in quality or accuracy
-- **Severe (0.1)**: Response substantially worse or completely derailed
+- **Severe (0.1)**: Response much worse than the baseline or unrelated to the original query
 
 ### Conservative Scoring
 

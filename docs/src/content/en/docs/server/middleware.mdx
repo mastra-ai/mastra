@@ -1,6 +1,6 @@
 ---
 title: "Middleware | Server"
-description: "Apply custom middleware functions to intercept requests."
+description: "Add Mastra server middleware for authentication, authorization, CORS, request logging, route blocking, and request-specific context injection."
 packages:
   - "@mastra/core"
   - "@mastra/server"
@@ -135,7 +135,7 @@ export const mastra = new Mastra({
 
 ### Authentication
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   handler: async (c, next) => {
     const authHeader = c.req.header('Authorization');
@@ -152,7 +152,11 @@ export const mastra = new Mastra({
 
 ### Authorization (User Isolation)
 
-Authentication verifies who the user is. Authorization controls what they can access. Without resource ID scoping, an authenticated user could access other users' threads by guessing IDs or manipulating the `resourceId` parameter.
+Authentication verifies who the user is, while authorization controls what they can access.
+
+Without server-enforced resource scoping or another authorization policy, authenticated callers can list threads across resources and access their messages and working memory. Callers don't need to guess thread IDs: an unscoped listing can expose them. For private per-user or per-tenant memory, configure `mapUserToResourceId` or set a trusted resource ID in middleware.
+
+Cross-resource access can be intentional in shared applications. A resource ID can identify a user, tenant, project, or another grouping. Choose an authorization policy that matches who can access those resources.
 
 The simplest way to scope memory and threads to the authenticated user is the `mapUserToResourceId` callback in the auth config:
 
@@ -173,10 +177,16 @@ export const mastra = new Mastra({
 
 After successful authentication, `mapUserToResourceId` is called with the authenticated user object. The returned value is set as `MASTRA_RESOURCE_ID_KEY` on the request context, which works across all server adapters (Hono, Express, Next.js, etc.).
 
+When configured, the callback must return a non-empty string. If it throws or returns `null`, `undefined`, an empty or whitespace-only string, or a non-string value, authentication middleware rejects the request with a 500 error before the route runs. This applies to all requests that run authentication, including non-memory routes. A client-provided resource ID can't override a failed mapping.
+
+With `CompositeAuth`, this requirement applies to the provider that authenticated the request. A provider without a mapper keeps its existing behavior, even if another provider in the composite has one. The same validation applies to configured Studio auth mappers.
+
+Without a mapper, authentication doesn't enable user isolation: you're responsible for setting a trusted resource ID in middleware or otherwise enforcing authorization.
+
 The resource ID doesn't have to be `user.id`. Common patterns:
 
 ```typescript
-// Org-scoped
+// Per-user within an organization
 mapUserToResourceId: user => `${user.orgId}:${user.id}`
 
 // From a JWT claim
@@ -188,12 +198,12 @@ mapUserToResourceId: user => `${user.workspaceId}:${user.projectId}:${user.id}`
 
 With a resource ID set, the server automatically:
 
-- **Filters thread listing** to only return threads owned by the user
-- **Validates thread access** and returns 403 if accessing another user's thread
-- **Forces thread creation** to use the authenticated user's ID
-- **Validates message operations** including deletion, ensuring messages belong to owned threads
+- **Filters thread listing** to only return threads in the configured resource scope
+- **Validates thread access** and returns 403 if accessing a thread belonging to a different resource
+- **Forces thread creation** to use the configured resource ID
+- **Validates message operations** including deletion, ensuring messages belong to threads in the configured resource scope
 
-Even if a client passes `?resourceId=other-user-id`, the auth-set value takes precedence. Attempts to access threads or messages owned by other users will return a 403 error.
+Even if a client passes `?resourceId=other-resource-id`, the server-set value takes precedence. Attempts to access threads or messages belonging to a different resource return a 403 error. Users mapped to the same resource ID share that resource scope.
 
 #### Advanced: Setting resource ID in middleware
 
@@ -255,7 +265,7 @@ This is useful when you want to restrict operations to a specific thread that yo
 
 ### CORS support
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   handler: async (c, next) => {
     c.header('Access-Control-Allow-Origin', '*');
@@ -279,7 +289,7 @@ This is useful when you want to restrict operations to a specific thread that yo
 
 ### Request logging
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   handler: async (c, next) => {
     const start = Date.now();

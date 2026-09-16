@@ -1,3 +1,4 @@
+import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import type { FactoryRuleStage } from '@mastra/factory/rules/types';
 import { FACTORY_RULE_STAGES } from '@mastra/factory/rules/types';
 
@@ -47,8 +48,30 @@ export function stageLabel(stage: string): string {
   return BOARD_STAGES.find(s => s.id === stage)?.label ?? stage;
 }
 
+/** The board column a raw stage id names, when it names one. */
+export function boardStage(stage: string): BoardStageId | undefined {
+  return BOARD_STAGES.find(s => s.id === stage)?.id;
+}
+
 /** Position of a stage in the board's column order; unknown stages sort last. */
 export function stageOrder(stage: string): number {
   const index = BOARD_STAGES.findIndex(s => s.id === stage);
   return index === -1 ? BOARD_STAGES.length : index;
+}
+
+const STAGE_TONES = {
+  intake: 'neutral',
+  triage: 'neutral',
+  planning: 'cyan',
+  execute: 'blue',
+  review: 'purple',
+  done: 'green',
+  canceled: 'red',
+} satisfies Record<BoardStageId, BadgeVariant>;
+
+const stageTones: Record<string, BadgeVariant | undefined> = STAGE_TONES;
+
+/** A stage's colour, so every surface that shows one agrees on it. */
+export function stageTone(stage: string): BadgeVariant {
+  return stageTones[stage] ?? 'neutral';
 }

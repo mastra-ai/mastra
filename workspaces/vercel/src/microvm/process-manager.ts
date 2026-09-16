@@ -158,10 +158,11 @@ export class VercelSandboxProcessManager extends SandboxProcessManager<VercelSan
 
     // The workspace passes a full command string; run it through a shell so
     // pipes, redirects, and builtins behave as expected.
+    const cwd = options.cwd ?? this.sandbox.workingDirectory;
     const cmd = await this.sandbox.sandbox.runCommand({
       cmd: 'sh',
       args: ['-c', command],
-      ...(options.cwd ? { cwd: options.cwd } : {}),
+      ...(cwd ? { cwd } : {}),
       ...(Object.keys(env).length ? { env } : {}),
       detached: true,
     });

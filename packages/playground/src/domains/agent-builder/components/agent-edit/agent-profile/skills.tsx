@@ -49,7 +49,7 @@ interface SkillItemProps {
 const SkillItem = ({ skill, editable, onToggle, isChecked }: SkillItemProps) => {
   return (
     <label
-      className="hover:bg-surface2 flex cursor-pointer items-start gap-3 px-6 py-4 transition-colors"
+      className="hover:bg-surface2 flex cursor-pointer items-start gap-3 px-4 py-4 transition-colors"
       aria-disabled={!editable}
     >
       <div className="mt-0.5">
@@ -75,7 +75,7 @@ const SkillItem = ({ skill, editable, onToggle, isChecked }: SkillItemProps) => 
 
 const SkillEmptyState = () => {
   return (
-    <div className="flex items-center justify-center py-12">
+    <div className="flex items-center justify-center py-8">
       <Txt variant="ui-sm" className="text-neutral3">
         No skills available in this project.
       </Txt>

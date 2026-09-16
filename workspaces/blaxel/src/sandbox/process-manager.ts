@@ -151,7 +151,7 @@ export class BlaxelProcessManager extends SandboxProcessManager<BlaxelSandbox> {
       const result = await blaxel.process.exec({
         command,
         waitForCompletion: false,
-        workingDir: options.cwd,
+        workingDir: options.cwd ?? this.sandbox.workingDirectory,
         ...(Object.keys(envs).length > 0 && { env: envs }),
         ...(options.timeout && { timeout: Math.ceil(options.timeout / 1000) }),
       });

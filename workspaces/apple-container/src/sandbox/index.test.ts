@@ -361,6 +361,38 @@ describe('AppleContainerSandbox', () => {
     expect(runOptions.env).toEqual(expect.objectContaining({ GH_TOKEN: 'tok_1' }));
   });
 
+  it('uses workingDirectory for exec --workdir when no per-command cwd is given', async () => {
+    const runner = createRunner([missingContainerResult(), {}, inspectResult('running'), {}, { stdout: 'ok\n' }]);
+    const sandbox = new AppleContainerSandbox({ id: 'apple-test', workingDirectory: '/srv/app', runner });
+
+    await sandbox._start();
+    runner.run.mockClear();
+    await sandbox.executeCommand('pwd');
+
+    const cliArgs = runner.run.mock.calls[0]![0] as string[];
+    expect(cliArgs.slice(0, 3)).toEqual(['exec', '--workdir', '/srv/app']);
+    expect(sandbox.workingDirectory).toBe('/srv/app');
+  });
+
+  it('workingDirectory wins over the deprecated workingDir alias', async () => {
+    const sandbox = new AppleContainerSandbox({
+      id: 'apple-test',
+      workingDirectory: '/srv/app',
+      workingDir: '/legacy',
+      runner: createRunner(),
+    });
+
+    expect(sandbox.workingDirectory).toBe('/srv/app');
+  });
+
+  it('the deprecated workingDir alias still applies and defaults hold when unset', () => {
+    const aliasOnly = new AppleContainerSandbox({ id: 'apple-test', workingDir: '/legacy', runner: createRunner() });
+    expect(aliasOnly.workingDirectory).toBe('/legacy');
+
+    const unset = new AppleContainerSandbox({ id: 'apple-test', runner: createRunner() });
+    expect(unset.workingDirectory).toBe('/workspace');
+  });
+
   it('executes commands with env, cwd, timeout, streaming and retained output options', async () => {
     const runner = createRunner([missingContainerResult(), {}, inspectResult('running'), {}, { stdout: 'hello\n' }]);
     const onStdout = vi.fn();

@@ -1,7 +1,6 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { baseCheckpointIsStale } from '../../../sandbox/base-checkpoint-triggers.js';
 import { FactoryProjectsStorage } from '../projects/base.js';
 import { SourceControlStorage } from './base.js';
 import type { ProjectRepository, SourceControlStorageHandle } from './base.js';
@@ -239,26 +238,7 @@ describe('SourceControlStorage', () => {
     expect(firstLink.id).not.toBe(secondLink.id);
   });
 
-  it('stores, reads, and clears base-checkpoint metadata', async () => {
-    const project = await createProject();
-    const link = await linkRepository({ factoryProjectId: project.id });
-    expect(link.baseCheckpoint).toBeNull();
-
-    const builtAt = new Date();
-    await github.projectRepositories.setBaseCheckpoint({
-      id: link.id,
-      checkpoint: { name: `repo-${link.id}`, sha: 'abc123', builtAt, setupCommandHash: 'hash-1' },
-      expectedSetupCommand: null,
-    });
-    let fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
-    expect(fresh?.baseCheckpoint).toMatchObject({ name: `repo-${link.id}`, sha: 'abc123', setupCommandHash: 'hash-1' });
-
-    await github.projectRepositories.setBaseCheckpoint({ id: link.id, checkpoint: null });
-    fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
-    expect(fresh?.baseCheckpoint).toBeNull();
-  });
-
-  it('preserves base-checkpoint metadata when link() is retried for the same connection', async () => {
+  it('returns the existing row unchanged when link() is retried for the same connection', async () => {
     const project = await createProject();
     const installation = await createInstallation(github);
     const repository = await github.repositories.upsert({
@@ -277,12 +257,6 @@ describe('SourceControlStorage', () => {
       repositoryId: repository.id,
       ...projectRepositoryInput,
     });
-    await github.projectRepositories.setBaseCheckpoint({
-      id: firstLink.id,
-      checkpoint: { name: `repo-${firstLink.id}`, sha: 'abc123', builtAt: new Date(), setupCommandHash: 'hash-1' },
-      expectedSetupCommand: null,
-    });
-
     const retried = await github.projectRepositories.link({
       orgId: 'org-1',
       connectionId: connection.id,
@@ -294,207 +268,7 @@ describe('SourceControlStorage', () => {
 
     expect(retried.id).toBe(firstLink.id);
     expect(retried.branch).toBeNull();
-    expect(retried.baseCheckpoint).toMatchObject({
-      name: `repo-${firstLink.id}`,
-      sha: 'abc123',
-      setupCommandHash: 'hash-1',
-    });
-    expect(fresh?.baseCheckpoint).toMatchObject({
-      name: `repo-${firstLink.id}`,
-      sha: 'abc123',
-      setupCommandHash: 'hash-1',
-    });
-  });
-
-  it('round-trips a null setupCommandHash so no-setup-command checkpoints stay fresh', async () => {
-    const project = await createProject();
-    const link = await linkRepository({ factoryProjectId: project.id });
-    await github.projectRepositories.setBaseCheckpoint({
-      id: link.id,
-      checkpoint: { name: `repo-${link.id}`, sha: 'abc123', builtAt: new Date(), setupCommandHash: null },
-      expectedSetupCommand: null,
-    });
-    const fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
-    // Must stay null (not ''), otherwise baseCheckpointIsStale() compares
-    // '' !== hashSetupCommand(null) and permanently marks the checkpoint stale.
-    expect(fresh?.baseCheckpoint?.setupCommandHash).toBeNull();
-    expect(baseCheckpointIsStale(fresh!)).toBe(false);
-  });
-
-  it('invalidates base-checkpoint metadata when the setup command changes', async () => {
-    const project = await createProject();
-    const link = await linkRepository({ factoryProjectId: project.id });
-    await github.projectRepositories.setBaseCheckpoint({
-      id: link.id,
-      checkpoint: { name: `repo-${link.id}`, sha: 'abc123', builtAt: new Date(), setupCommandHash: 'hash-1' },
-      expectedSetupCommand: null,
-    });
-
-    // Unrelated update keeps the checkpoint.
-    await github.projectRepositories.update({ orgId: 'org-1', id: link.id, input: { branch: 'develop' } });
-    let fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
-    expect(fresh?.baseCheckpoint).not.toBeNull();
-
-    // Setup-command change invalidates it.
-    await github.projectRepositories.update({ orgId: 'org-1', id: link.id, input: { setupCommand: 'pnpm i' } });
-    fresh = await github.projectRepositories.get({ orgId: 'org-1', id: link.id });
-    expect(fresh?.baseCheckpoint).toBeNull();
-  });
-
-  it('ignores a base-checkpoint build that finishes after the setup command changes', async () => {
-    const project = await createProject();
-    const link = await linkRepository({ factoryProjectId: project.id });
-
-    await github.projectRepositories.update({
-      orgId: 'org-1',
-      id: link.id,
-      input: { setupCommand: 'pnpm install' },
-    });
-    await github.projectRepositories.setBaseCheckpoint({
-      id: link.id,
-      checkpoint: { name: `repo-${link.id}`, sha: 'stale', builtAt: new Date(), setupCommandHash: null },
-      expectedSetupCommand: null,
-    });
-
-    expect((await github.projectRepositories.get({ orgId: 'org-1', id: link.id }))?.baseCheckpoint).toBeNull();
-  });
-
-  it('scopes sandboxes and worktrees to the project-repository link', async () => {
-    const project = await createProject();
-    const firstLink = await linkRepository({ factoryProjectId: project.id });
-    const secondLink = await linkRepository({
-      factoryProjectId: project.id,
-      repositoryExternalId: 'repository-35',
-      repositorySlug: 'mastra-ai/docs',
-    });
-    const [firstSandbox, duplicateSandbox, secondSandbox] = await Promise.all([
-      github.sandboxes.getOrCreate({ projectRepository: firstLink, userId: 'user-1' }),
-      github.sandboxes.getOrCreate({ projectRepository: firstLink, userId: 'user-1' }),
-      github.sandboxes.getOrCreate({ projectRepository: secondLink, userId: 'user-1' }),
-    ]);
-    expect(duplicateSandbox.id).toBe(firstSandbox.id);
-    expect(secondSandbox.id).not.toBe(firstSandbox.id);
-    expect(await gitlab.sandboxes.getById({ id: firstSandbox.id })).toBeNull();
-
-    await github.worktrees.upsert({
-      projectRepositoryId: firstLink.id,
-      userId: 'user-1',
-      branch: 'feature/a',
-      baseBranch: 'main',
-      worktreePath: '/workspace/worktrees/a',
-    });
-    expect(
-      await github.worktrees.get({ projectRepositoryId: firstLink.id, userId: 'user-1', branch: 'feature/a' }),
-    ).not.toBeNull();
-    expect(
-      await github.worktrees.get({ projectRepositoryId: secondLink.id, userId: 'user-1', branch: 'feature/a' }),
-    ).toBeNull();
-  });
-
-  it('releases and claims pooled sandboxes scoped to the project-repository link', async () => {
-    const project = await createProject();
-    const link = await linkRepository({ factoryProjectId: project.id });
-
-    expect(await github.sandboxPool.claim({ projectRepositoryId: link.id })).toBeNull();
-
-    await github.sandboxPool.release({
-      orgId: 'org-1',
-      projectRepositoryId: link.id,
-      userId: 'user-1',
-      sandboxId: 'sandbox-a',
-      sandboxWorkdir: '/workspace/mastra',
-    });
-    await github.sandboxPool.release({
-      orgId: 'org-1',
-      projectRepositoryId: link.id,
-      userId: 'user-1',
-      sandboxId: 'sandbox-b',
-      sandboxWorkdir: '/workspace/mastra',
-    });
-    // Releasing the same provider sandbox twice keeps one pool row.
-    await github.sandboxPool.release({
-      orgId: 'org-1',
-      projectRepositoryId: link.id,
-      userId: 'user-1',
-      sandboxId: 'sandbox-a',
-      sandboxWorkdir: '/workspace/mastra',
-    });
-
-    expect(await github.sandboxPool.claim({ projectRepositoryId: 'missing' })).toBeNull();
-
-    // The pool is per-repository, not per-user: a different user's session
-    // may claim a VM released by user-1 (tokens are never stored in the VM).
-    const first = await github.sandboxPool.claim({ projectRepositoryId: link.id });
-    const second = await github.sandboxPool.claim({ projectRepositoryId: link.id });
-    expect([first?.sandboxId, second?.sandboxId].sort()).toEqual(['sandbox-a', 'sandbox-b']);
-    expect([first, second].find(claimed => claimed?.sandboxId === 'sandbox-a')).toMatchObject({
-      orgId: 'org-1',
-      projectRepositoryId: link.id,
-      userId: 'user-1',
-      sandboxWorkdir: '/workspace/mastra',
-    });
-    expect(await github.sandboxPool.claim({ projectRepositoryId: link.id })).toBeNull();
-  });
-
-  it('hands one pooled sandbox to exactly one concurrent claimer', async () => {
-    const project = await createProject();
-    const link = await linkRepository({ factoryProjectId: project.id });
-    await github.sandboxPool.release({
-      orgId: 'org-1',
-      projectRepositoryId: link.id,
-      userId: 'user-1',
-      sandboxId: 'sandbox-a',
-      sandboxWorkdir: '/workspace/mastra',
-    });
-
-    const claims = await Promise.all([
-      github.sandboxPool.claim({ projectRepositoryId: link.id }),
-      github.sandboxPool.claim({ projectRepositoryId: link.id }),
-    ]);
-    expect(claims.filter(claimed => claimed !== null)).toHaveLength(1);
-  });
-
-  it('treats releasing into a missing project repository as a silent no-op', async () => {
-    // Best-effort contract: a concurrently unlinked repository must not turn
-    // a background release into a thrown error.
-    await expect(
-      github.sandboxPool.release({
-        orgId: 'org-1',
-        projectRepositoryId: 'missing',
-        userId: 'user-1',
-        sandboxId: 'sandbox-a',
-        sandboxWorkdir: '/workspace/mastra',
-      }),
-    ).resolves.toBeUndefined();
-    expect(await github.sandboxPool.claim({ projectRepositoryId: 'missing' })).toBeNull();
-  });
-
-  it('drops pooled sandboxes when the project repository is unlinked', async () => {
-    const project = await createProject();
-    const link = await linkRepository({ factoryProjectId: project.id });
-    await github.sandboxPool.release({
-      orgId: 'org-1',
-      projectRepositoryId: link.id,
-      userId: 'user-1',
-      sandboxId: 'sandbox-a',
-      sandboxWorkdir: '/workspace/mastra',
-    });
-
-    await github.projectRepositories.unlink({ orgId: 'org-1', id: link.id });
-
-    expect(await github.sandboxPool.claim({ projectRepositoryId: link.id })).toBeNull();
-  });
-
-  it('re-points a sandbox binding workdir and clears its materialization', async () => {
-    const project = await createProject();
-    const link = await linkRepository({ factoryProjectId: project.id });
-    const binding = await github.sandboxes.getOrCreate({ projectRepository: link, userId: 'user-1' });
-    await github.sandboxes.markMaterialized({ id: binding.id });
-
-    await github.sandboxes.setWorkdir({ id: binding.id, sandboxWorkdir: '/local/mastra-ai/mastra' });
-
-    const updated = await github.sandboxes.getById({ id: binding.id });
-    expect(updated).toMatchObject({ sandboxWorkdir: '/local/mastra-ai/mastra', materializedAt: null });
+    expect(fresh?.id).toBe(firstLink.id);
   });
 
   it('rejects cross-org, cross-provider, and cross-installation links', async () => {
@@ -741,14 +515,6 @@ describe('SourceControlStorage', () => {
   it('clears every owned source-control collection', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });
-    await github.sandboxes.getOrCreate({ projectRepository: link, userId: 'user-1' });
-    await github.worktrees.upsert({
-      projectRepositoryId: link.id,
-      userId: 'user-1',
-      branch: 'feature/a',
-      baseBranch: 'main',
-      worktreePath: '/workspace/worktrees/a',
-    });
 
     await domain.dangerouslyClearAll();
 
@@ -760,9 +526,32 @@ describe('SourceControlStorage', () => {
 describe('SourceControlStorageInMemory sessions.markMaterialized', () => {
   it('records materialized_at write-once', async () => {
     const store = new SourceControlStorageInMemory();
+    const installation = await store.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '1',
+    });
+    const repository = await store.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '2', slug: 'mastra-ai/mastra', defaultBranch: 'main' },
+    });
+    const connection = await store.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: 'project-1',
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const link = await store.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/mastra',
+    });
     const session = await store.sessions.create({
       sessionId: '00000000-0000-4000-8000-00000000aaaa',
-      projectRepositoryId: 'proj-1',
+      projectRepositoryId: link.id,
       orgId: 'org-1',
       userId: 'user-1',
       branch: 'user/session-00000000-0000-4000-8000-00000000aaaa',

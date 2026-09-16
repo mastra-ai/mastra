@@ -1,5 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
+import type { ChatSendArgs } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { memoryStatusQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-status';
 import { memoryThreadMessagesQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
 import { observationalMemoryQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
@@ -8,7 +9,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
-import type { ChatSendArgs } from './chat-context';
 import {
   getAgentRunVersionSelectorErrorCode,
   isAgentRunAuthorizationError,
@@ -210,10 +210,11 @@ export const useChatSendHandler = ({
           // Refetch the panel again once buffering completes, so any records that
           // only landed after awaitBufferStatus resolved are reflected immediately.
           refreshTimelinePanel(currentThreadId);
+          void refreshWorkingMemory?.();
         })
         .catch(() => {});
     },
-    [agentId, baseClient, queryClient, refreshTimelinePanel, setMessages],
+    [agentId, baseClient, queryClient, refreshTimelinePanel, refreshWorkingMemory, setMessages],
   );
 
   const handleHandledChunk = useCallback(
@@ -237,6 +238,9 @@ export const useChatSendHandler = ({
       ) {
         refreshObservationalMemory(handled.data?.operationType);
       }
+      if (handled?.type === 'data-om-observation-end') {
+        void refreshWorkingMemory?.();
+      }
       if (handled?.type === 'data-om-activation') {
         handleActivation(handled.data);
       }
@@ -248,6 +252,7 @@ export const useChatSendHandler = ({
       onRunAuthorizationError,
       onRunVersionSelectorError,
       refreshObservationalMemory,
+      refreshWorkingMemory,
       setStreamErrors,
     ],
   );
@@ -315,6 +320,8 @@ export const useChatSendHandler = ({
                   setStreamErrors(prev => [...prev, buildMaxStepsStreamErrorMessage(chunk, deps.maxSteps)]);
                 }
                 await refreshThreadList?.();
+                refreshTimelinePanel(deps.threadId);
+                completeObservationalMemoryBuffering(deps.threadId);
               }
               if (didUpdateWorkingMemory(chunk)) {
                 void refreshWorkingMemory?.();
@@ -324,8 +331,6 @@ export const useChatSendHandler = ({
             signal: controller.signal,
           });
 
-          refreshTimelinePanel(deps.threadId);
-          completeObservationalMemoryBuffering(deps.threadId);
           return;
         }
 

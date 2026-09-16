@@ -18,6 +18,7 @@ import type { Tool, ToolObserve } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
 import { createObservabilityCollector } from '../observability/collector';
+import type { Body, PathParams, RouteResponse } from '../route-types.generated.js';
 import type {
   ZodSchema,
   GenerateLegacyParams,
@@ -216,6 +217,11 @@ function stripVersionAssertionsForPinnedContinuation<
 
   return strippedParams;
 }
+
+type AgentId = PathParams<'GET /agents/:agentId'>['agentId'];
+type ToolId = PathParams<'GET /agents/:agentId/tools/:toolId'>['toolId'];
+type ToolCallGenerateResponse = RouteResponse<'POST /agents/:agentId/approve-tool-call-generate'> &
+  FullOutput<undefined>;
 
 type ResumeStreamParams<OUTPUT extends {}> = StreamParamsBaseWithoutMessages<OUTPUT> & {
   messages?: MessageListInput;
@@ -445,6 +451,7 @@ async function executeToolCallAndRespond<OUTPUT>({
           structuredOutput?: StructuredOutputOptions<OUTPUT>;
         } = {
           ...pinnedParams,
+          clientTools: params.clientToolsResolver?.() ?? params.clientTools,
         };
 
         delete (respondOptions as { messages?: MessageListInput }).messages;
@@ -461,7 +468,7 @@ async function executeToolCallAndRespond<OUTPUT>({
 export class AgentVoice extends BaseResource {
   constructor(
     options: ClientOptions,
-    private agentId: string,
+    private agentId: AgentId,
     private version?: AgentVersionIdentifier,
   ) {
     super(options);
@@ -504,7 +511,7 @@ export class AgentVoice extends BaseResource {
    * @param options - Optional provider-specific options
    * @returns Promise containing the transcribed text
    */
-  listen(audio: Blob, options?: Record<string, any>): Promise<{ text: string }> {
+  listen(audio: Blob, options?: Record<string, any>): Promise<RouteResponse<'POST /agents/:agentId/voice/listen'>> {
     const formData = new FormData();
     formData.append('audio', audio);
 
@@ -526,7 +533,7 @@ export class AgentVoice extends BaseResource {
    */
   getSpeakers(
     requestContext?: RequestContext | Record<string, any>,
-  ): Promise<Array<{ voiceId: string; [key: string]: any }>> {
+  ): Promise<RouteResponse<'GET /agents/:agentId/voice/speakers'>> {
     return this.request(`/agents/${this.agentId}/voice/speakers${this.getQueryString(requestContext)}`);
   }
 
@@ -536,7 +543,9 @@ export class AgentVoice extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing a check if the agent has listening capabilities
    */
-  getListener(requestContext?: RequestContext | Record<string, any>): Promise<{ enabled: boolean }> {
+  getListener(
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<RouteResponse<'GET /agents/:agentId/voice/listener'> & { enabled: boolean }> {
     return this.request(`/agents/${this.agentId}/voice/listener${this.getQueryString(requestContext)}`);
   }
 }
@@ -546,8 +555,9 @@ export class Agent extends BaseResource {
 
   constructor(
     options: ClientOptions,
-    private agentId: string,
+    private agentId: AgentId,
     private version?: AgentVersionIdentifier,
+    private routeOverrides?: { stream?: string },
   ) {
     super(options);
     this.voice = new AgentVoice(options, this.agentId, this.version);
@@ -693,7 +703,12 @@ export class Agent extends BaseResource {
           streamOptions: {
             ...selectedStreamOptions,
             requestContext: parseClientRequestContext(selectedStreamOptions.requestContext),
-            clientTools: processClientTools(selectedStreamOptions.clientTools),
+            clientTools: processClientTools(
+              selectedStreamOptions.clientToolsResolver?.() ?? selectedStreamOptions.clientTools,
+            ),
+            // Functions can't ride along to the server; the live resolver stays
+            // in the local signal runtime options for continuation rounds.
+            clientToolsResolver: undefined,
           },
         },
       } as Params,
@@ -774,6 +789,11 @@ export class Agent extends BaseResource {
    * depending on the toolset's scope).
    *
    * @param threadId - Optional thread ID for thread-scoped browser sessions
+   *
+   * @remarks This is a browser-stream adapter compatibility endpoint, not a
+   * `SERVER_ROUTES` route. Its historical deployer implementation returns
+   * `{ success: true }`; no generated contract exists while the adapter owns it.
+   * The public `boolean` result remains broad for backwards compatibility.
    */
   closeBrowser(threadId?: string): Promise<{ success: boolean }> {
     return this.request(`/agents/${this.agentId}/browser/close`, {
@@ -782,7 +802,10 @@ export class Agent extends BaseResource {
     });
   }
 
-  enhanceInstructions(instructions: string, comment: string): Promise<{ explanation: string; new_prompt: string }> {
+  enhanceInstructions(
+    instructions: string,
+    comment: string,
+  ): Promise<RouteResponse<'POST /agents/:agentId/instructions/enhance'>> {
     return this.request(`/agents/${this.agentId}/instructions/enhance${this.getQueryString()}`, {
       method: 'POST',
       body: { instructions, comment },
@@ -792,21 +815,21 @@ export class Agent extends BaseResource {
   /**
    * @experimental Agent message APIs are experimental and may change in a future release.
    */
-  sendMessage(params: SendAgentMessageParams): Promise<{ accepted: true; runId: string; signal?: unknown }> {
+  sendMessage(params: SendAgentMessageParams): Promise<RouteResponse<'POST /agents/:agentId/send-message'>> {
     return this.requestSignalRoute(`/agents/${this.agentId}/send-message`, params);
   }
 
   /**
    * @experimental Agent message APIs are experimental and may change in a future release.
    */
-  queueMessage(params: QueueAgentMessageParams): Promise<{ accepted: true; runId: string; signal?: unknown }> {
+  queueMessage(params: QueueAgentMessageParams): Promise<RouteResponse<'POST /agents/:agentId/queue-message'>> {
     return this.requestSignalRoute(`/agents/${this.agentId}/queue-message`, params);
   }
 
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
-  sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
+  sendSignal(params: SendAgentSignalParams): Promise<RouteResponse<'POST /agents/:agentId/signals'>> {
     return this.requestSignalRoute(`/agents/${this.agentId}/signals`, params);
   }
 
@@ -925,7 +948,12 @@ export class Agent extends BaseResource {
           }
 
           const activeRuntimeOptions = agent.getSignalRuntimeOptions({ runId, resourceId, threadId });
-          const activeClientTools = activeRuntimeOptions?.clientTools;
+          if (!activeRuntimeOptions) {
+            agent.deleteSignalRuntimeOptions(runId);
+            return;
+          }
+
+          const activeClientTools = activeRuntimeOptions.clientToolsResolver?.() ?? activeRuntimeOptions.clientTools;
           if (!activeClientTools) {
             agent.deleteSignalRuntimeOptions(runId);
             return;
@@ -1148,9 +1176,9 @@ export class Agent extends BaseResource {
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
-  async abortThread(params: SubscribeAgentThreadParams): Promise<{ aborted: boolean }> {
+  async abortThread(params: SubscribeAgentThreadParams): Promise<RouteResponse<'POST /agents/:agentId/threads/abort'>> {
     const { resourceId, threadId } = params;
-    return this.request<{ aborted: boolean }>(`/agents/${this.agentId}/threads/abort`, {
+    return this.request<RouteResponse<'POST /agents/:agentId/threads/abort'>>(`/agents/${this.agentId}/threads/abort`, {
       method: 'POST',
       body: { resourceId, threadId },
     });
@@ -1402,7 +1430,7 @@ export class Agent extends BaseResource {
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
     });
 
     const { resourceId, threadId, requestContext } = processedParams as GenerateLegacyParams;
@@ -1425,7 +1453,7 @@ export class Agent extends BaseResource {
       }
 
       for (const toolCall of toolCalls) {
-        const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
+        const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
 
         if (clientTool && clientTool.execute) {
           const { result, observability } = await executeClientToolWithObservability({
@@ -1495,10 +1523,11 @@ export class Agent extends BaseResource {
       ...options,
       messages: messages,
     } as StreamParams<OUTPUT>;
+    const resolvedClientTools = params.clientToolsResolver?.() ?? params.clientTools;
     const processedParams = this.applyVersionSelector<Record<string, any>>({
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(resolvedClientTools),
       structuredOutput: params.structuredOutput
         ? {
             ...params.structuredOutput,
@@ -1523,7 +1552,9 @@ export class Agent extends BaseResource {
     if (response.finishReason === 'tool-calls') {
       return executeToolCallAndRespond<OUTPUT>({
         response,
-        params,
+        // Dispatch from the resolved tools so resolver-only calls execute; the
+        // continuation re-invokes the resolver per round via params.clientToolsResolver.
+        params: { ...params, clientTools: resolvedClientTools },
         agentId: this.agentId,
         resourceId,
         threadId,
@@ -1794,13 +1825,16 @@ export class Agent extends BaseResource {
         execUpdate();
       },
       async onToolCallPart(value) {
+        const partialToolCall = partialToolCalls[value.toolCallId];
+        const streamedArgs = partialToolCall?.text ? parsePartialJson(partialToolCall.text).value : undefined;
+        const toolCall = streamedArgs === undefined ? value : { ...value, args: streamedArgs };
         const invocation = {
           state: 'call',
           step,
-          ...value,
+          ...toolCall,
         } as const;
 
-        if (partialToolCalls[value.toolCallId] != null) {
+        if (partialToolCall != null) {
           // change the partial tool call to a full tool call
           message.toolInvocations![partialToolCalls[value.toolCallId]!.index] = invocation;
         } else {
@@ -1819,12 +1853,12 @@ export class Agent extends BaseResource {
         // In the future we should make this non-blocking, which
         // requires additional state management for error handling etc.
         if (onToolCall) {
-          const result = await onToolCall({ toolCall: value });
+          const result = await onToolCall({ toolCall });
           if (result != null) {
             const invocation = {
               state: 'result',
               step,
-              ...value,
+              ...toolCall,
               result,
             } as const;
 
@@ -1931,7 +1965,7 @@ export class Agent extends BaseResource {
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
     });
 
     // Create a readable stream that will handle the response processing
@@ -2179,13 +2213,16 @@ export class Agent extends BaseResource {
           }
 
           case 'tool-call': {
+            const partialToolCall = partialToolCalls[chunk.payload.toolCallId];
+            const streamedArgs = partialToolCall?.text ? parsePartialJson(partialToolCall.text).value : undefined;
+            const toolCall = streamedArgs === undefined ? chunk.payload : { ...chunk.payload, args: streamedArgs };
             const invocation = {
               state: 'call',
               step,
-              ...chunk.payload,
+              ...toolCall,
             } as const;
 
-            if (partialToolCalls[chunk.payload.toolCallId] != null) {
+            if (partialToolCall != null) {
               // change the partial tool call to a full tool call
               message.toolInvocations![partialToolCalls[chunk.payload.toolCallId]!.index] =
                 invocation as ToolInvocation;
@@ -2209,12 +2246,12 @@ export class Agent extends BaseResource {
             // In the future we should make this non-blocking, which
             // requires additional state management for error handling etc.
             if (onToolCall) {
-              const result = await onToolCall({ toolCall: chunk.payload as any });
+              const result = await onToolCall({ toolCall: toolCall as any });
               if (result != null) {
                 const invocation = {
                   state: 'result',
                   step,
-                  ...chunk.payload,
+                  ...toolCall,
                   result,
                 } as const;
 
@@ -2381,7 +2418,11 @@ export class Agent extends BaseResource {
       requestBody = resumeStreamBody;
     }
 
-    const response: Response = await this.request(`/agents/${this.agentId}/${route}`, {
+    const requestPath =
+      route === 'stream' && this.routeOverrides?.stream
+        ? this.routeOverrides.stream
+        : `/agents/${this.agentId}/${route}`;
+    const response: Response = await this.request(requestPath, {
       method: 'POST',
       body: requestBody,
       stream: true,
@@ -2661,6 +2702,9 @@ export class Agent extends BaseResource {
                   {
                     ...pinnedParams,
                     messages: updatedMessages,
+                    clientTools: processClientTools(
+                      processedParams.clientToolsResolver?.() ?? processedParams.clientTools,
+                    ),
                   },
                   controller,
                   recursionRoute,
@@ -2939,7 +2983,7 @@ export class Agent extends BaseResource {
     const processedParams = this.applyVersionSelector<StreamParams<OUTPUT>>({
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
       structuredOutput,
     });
 
@@ -3061,7 +3105,7 @@ export class Agent extends BaseResource {
     const processedParams = this.applyVersionSelector<StreamParams<OUTPUT>>({
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
       structuredOutput,
     });
 
@@ -3186,18 +3230,13 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async sendToolApproval(params: {
-    /** Source run whose immutable version pins own a messages continuation. */
-    runId?: string;
-    resourceId: string;
-    threadId: string;
-    toolCallId: string;
-    approved: boolean;
-    resumeData?: unknown;
-    requestContext?: RequestContext | Record<string, any>;
-    messages?: MessageListInput;
-    streamOptions?: StreamParamsBaseWithoutMessages<any>;
-  }): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
+  async sendToolApproval(
+    params: Omit<Body<'POST /agents/:agentId/send-tool-approval'>, 'requestContext' | 'messages' | 'streamOptions'> & {
+      requestContext?: RequestContext | Record<string, any>;
+      messages?: MessageListInput;
+      streamOptions?: StreamParamsBaseWithoutMessages<any>;
+    },
+  ): Promise<RouteResponse<'POST /agents/:agentId/send-tool-approval'>> {
     const { requestContext, ...rest } = params;
     const body = params.runId
       ? {
@@ -3208,7 +3247,7 @@ export class Agent extends BaseResource {
           requestContext: stripVersionAssertionsForPinnedContinuation({ requestContext }).requestContext,
         }
       : { ...rest, requestContext: parseClientRequestContext(requestContext) };
-    return this.request<{ accepted: true; runId: string; toolCallId?: string }>(
+    return this.request<RouteResponse<'POST /agents/:agentId/send-tool-approval'>>(
       `/agents/${this.agentId}/send-tool-approval`,
       {
         method: 'POST',
@@ -3361,7 +3400,7 @@ export class Agent extends BaseResource {
       ...options,
       resumeData,
       requestContext: parseClientRequestContext(options.requestContext),
-      clientTools: processClientTools(options.clientTools),
+      clientTools: processClientTools(options.clientToolsResolver?.() ?? options.clientTools),
       structuredOutput: options.structuredOutput
         ? {
             ...options.structuredOutput,
@@ -3483,7 +3522,7 @@ export class Agent extends BaseResource {
       ...options,
       resumeData,
       requestContext: parseClientRequestContext(options.requestContext),
-      clientTools: processClientTools(options.clientTools),
+      clientTools: processClientTools(options.clientToolsResolver?.() ?? options.clientTools),
       structuredOutput: options.structuredOutput
         ? {
             ...options.structuredOutput,
@@ -3531,12 +3570,11 @@ export class Agent extends BaseResource {
    * Approves a pending tool call and returns the complete response (non-streaming).
    * Used when `requireToolApproval` is enabled with generate() to allow the agent to proceed.
    */
-  async approveToolCallGenerate(params: {
-    runId: string;
-    toolCallId: string;
-    model?: string;
-    requestContext?: RequestContext | Record<string, any>;
-  }): Promise<any> {
+  async approveToolCallGenerate(
+    params: Omit<Body<'POST /agents/:agentId/approve-tool-call-generate'>, 'requestContext'> & {
+      requestContext?: RequestContext | Record<string, any>;
+    },
+  ): Promise<ToolCallGenerateResponse> {
     const { requestContext, ...rest } = params;
     return this.request(`/agents/${this.agentId}/approve-tool-call-generate`, {
       method: 'POST',
@@ -3548,14 +3586,11 @@ export class Agent extends BaseResource {
    * Declines a pending tool call and returns the complete response (non-streaming).
    * Used when `requireToolApproval` is enabled with generate() to prevent tool execution.
    */
-  async declineToolCallGenerate(params: {
-    runId: string;
-    toolCallId: string;
-    model?: string;
-    /** Optional explanation surfaced to the model in place of the default decline message. */
-    reason?: string;
-    requestContext?: RequestContext | Record<string, any>;
-  }): Promise<any> {
+  async declineToolCallGenerate(
+    params: Omit<Body<'POST /agents/:agentId/decline-tool-call-generate'>, 'requestContext'> & {
+      requestContext?: RequestContext | Record<string, any>;
+    },
+  ): Promise<ToolCallGenerateResponse> {
     const { requestContext, ...rest } = params;
     return this.request(`/agents/${this.agentId}/decline-tool-call-generate`, {
       method: 'POST',
@@ -3575,7 +3610,7 @@ export class Agent extends BaseResource {
 
     const response: Response & {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
-    } = await this.request(`/agents/${this.agentId}/stream-legacy`, {
+    } = await this.request(this.routeOverrides?.stream ?? `/agents/${this.agentId}/stream-legacy`, {
       method: 'POST',
       body: processedParams,
       stream: true,
@@ -3703,6 +3738,9 @@ export class Agent extends BaseResource {
                 this.processStreamResponseLegacy(
                   {
                     ...pinnedParams,
+                    clientTools: processClientTools(
+                      processedParams.clientToolsResolver?.() ?? processedParams.clientTools,
+                    ),
                     messages: updatedMessages,
                   },
                   writable,
@@ -3735,7 +3773,7 @@ export class Agent extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing tool details
    */
-  getTool(toolId: string, requestContext?: RequestContext | Record<string, any>): Promise<GetToolResponse> {
+  getTool(toolId: ToolId, requestContext?: RequestContext | Record<string, any>): Promise<GetToolResponse> {
     return this.request(`/agents/${this.agentId}/tools/${toolId}${this.getQueryString(requestContext)}`);
   }
 
@@ -3746,15 +3784,13 @@ export class Agent extends BaseResource {
    * @returns Promise containing the tool execution results
    */
   executeTool(
-    toolId: string,
-    params: {
-      data: any;
+    toolId: PathParams<'POST /agents/:agentId/tools/:toolId/execute'>['toolId'],
+    params: Omit<Body<'POST /agents/:agentId/tools/:toolId/execute'>, 'requestContext'> & {
       requestContext?: RequestContext | Record<string, any>;
-      versions?: VersionOverrides;
     },
-  ): Promise<any> {
+  ): Promise<RouteResponse<'POST /agents/:agentId/tools/:toolId/execute'>> {
     const selectedParams = this.applyVersionSelector(params);
-    const body = {
+    const body: Body<'POST /agents/:agentId/tools/:toolId/execute'> = {
       data: selectedParams.data,
       requestContext: parseClientRequestContext(selectedParams.requestContext),
       versions: selectedParams.versions,
@@ -3770,7 +3806,7 @@ export class Agent extends BaseResource {
    * @param params - Parameters for updating the model
    * @returns Promise containing the updated model
    */
-  updateModel(params: UpdateModelParams): Promise<{ message: string }> {
+  updateModel(params: UpdateModelParams): Promise<RouteResponse<'POST /agents/:agentId/model'>> {
     return this.request(`/agents/${this.agentId}/model`, {
       method: 'POST',
       body: params,
@@ -3781,7 +3817,7 @@ export class Agent extends BaseResource {
    * Resets the agent's model to the original model that was set during construction
    * @returns Promise containing a success message
    */
-  resetModel(): Promise<{ message: string }> {
+  resetModel(): Promise<RouteResponse<'POST /agents/:agentId/model/reset'>> {
     return this.request(`/agents/${this.agentId}/model/reset`, {
       method: 'POST',
       body: {},
@@ -3793,7 +3829,10 @@ export class Agent extends BaseResource {
    * @param params - Parameters for updating the model
    * @returns Promise containing the updated model
    */
-  updateModelInModelList({ modelConfigId, ...params }: UpdateModelInModelListParams): Promise<{ message: string }> {
+  updateModelInModelList({
+    modelConfigId,
+    ...params
+  }: UpdateModelInModelListParams): Promise<RouteResponse<'POST /agents/:agentId/models/:modelConfigId'>> {
     return this.request(`/agents/${this.agentId}/models/${modelConfigId}`, {
       method: 'POST',
       body: params,
@@ -3805,7 +3844,7 @@ export class Agent extends BaseResource {
    * @param params - Parameters for reordering the model list
    * @returns Promise containing the updated model list
    */
-  reorderModelList(params: ReorderModelListParams): Promise<{ message: string }> {
+  reorderModelList(params: ReorderModelListParams): Promise<RouteResponse<'POST /agents/:agentId/models/reorder'>> {
     return this.request(`/agents/${this.agentId}/models/reorder`, {
       method: 'POST',
       body: params,

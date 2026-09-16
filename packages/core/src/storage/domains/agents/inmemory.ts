@@ -170,6 +170,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
     const perPage = normalizePerPage(perPageInput, 100);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     if (page < 0) {
       throw new Error('page must be >= 0');
@@ -238,8 +239,6 @@ export class InMemoryAgentsStorage extends AgentsStorage {
 
     // Deep clone agents to avoid mutation
     const clonedAgents = sortedAgents.map(agent => this.deepCopyAgent(agent));
-
-    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     return {
       agents: clonedAgents.slice(offset, offset + perPage),

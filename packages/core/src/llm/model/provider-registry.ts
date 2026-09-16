@@ -461,7 +461,65 @@ const capabilityOverrides: Partial<Record<CapabilityDimension, Record<string, bo
   structuredOutput: {
     'deepseek/deepseek-v4-pro': false,
   },
+  temperature: {
+    // Bedrock-hosted grok-4.6 rejects `temperature` (HTTP 400 "This model doesn't
+    // support the temperature field"), even though direct xai (`xai/grok-4.6`) accepts
+    // it. Bedrock diverges from the underlying vendor here, so the vendor fallback below
+    // is not enough — pin it explicitly. See mastra-ai/mastra#23319.
+    'aws-bedrock/grok-4.6': false,
+  },
 };
+
+/**
+ * AI SDK provider ids that differ from this registry's provider keys. Provider instances
+ * (e.g. `@ai-sdk/amazon-bedrock`) expose their own `provider` string, which we map onto
+ * the capability-file provider key before resolving.
+ */
+const PROVIDER_ALIASES: Record<string, string> = {
+  'amazon-bedrock': 'aws-bedrock',
+};
+
+/** Bedrock model-id region prefixes (cross-region inference profiles). */
+const BEDROCK_REGION_PREFIX = /^(global|us-gov|us|eu|apac|jp|au)\./;
+
+/** Underlying vendor segment carried by fully-qualified Bedrock model ids. */
+const BEDROCK_VENDOR_SEGMENT = /^(anthropic|xai|meta|amazon|cohere|mistral|ai21|deepseek)\.(.+)$/;
+
+/** Fallback vendor lookup for short Bedrock ids (`claude-sonnet-5`) that omit the vendor. */
+const BEDROCK_VENDOR_BY_PREFIX: Array<[RegExp, string]> = [
+  [/^claude/, 'anthropic'],
+  [/^grok/, 'xai'],
+  [/^llama/, 'meta'],
+  [/^(nova|titan)/, 'amazon'],
+  [/^command/, 'cohere'],
+  [/^(mistral|mixtral|pixtral)/, 'mistral'],
+  [/^jamba/, 'ai21'],
+  [/^deepseek/, 'deepseek'],
+];
+
+/**
+ * Resolve a Bedrock model id to its underlying vendor and short model id.
+ *
+ * Bedrock ids arrive in several shapes: a router short id (`claude-sonnet-5`), or a
+ * provider-instance id with a region prefix and vendor segment
+ * (`us.anthropic.claude-sonnet-5`, `us.xai.grok-4.6`). We strip the region prefix, peel
+ * off the vendor segment when present, and otherwise infer the vendor from the model-name
+ * prefix so the capability data of the underlying provider can be consulted.
+ */
+function resolveBedrockVendorModel(modelId: string): { vendor: string | null; shortId: string } {
+  const withoutRegion = modelId.replace(BEDROCK_REGION_PREFIX, '');
+
+  const segmentMatch = withoutRegion.match(BEDROCK_VENDOR_SEGMENT);
+  if (segmentMatch) {
+    return { vendor: segmentMatch[1]!, shortId: segmentMatch[2]! };
+  }
+
+  for (const [pattern, vendor] of BEDROCK_VENDOR_BY_PREFIX) {
+    if (pattern.test(withoutRegion)) return { vendor, shortId: withoutRegion };
+  }
+
+  return { vendor: null, shortId: withoutRegion };
+}
 
 function isDirectory(dir: string): boolean {
   try {
@@ -551,11 +609,35 @@ function getProviderCapabilitySupport(
   return models.includes(modelId);
 }
 
+/**
+ * Whether the provider's model list enumerates this model. Capability arrays only
+ * hold models with the capability set, so a model that supports nothing would be
+ * absent from all of them — the registry's model list is the real membership signal.
+ */
+function providerListsModel(provider: string, modelId: string): boolean {
+  return GatewayRegistry.getInstance().getModels()[provider]?.includes(modelId) ?? false;
+}
+
 function modelSupportsCapability(modelRouterId: string, dimension: CapabilityDimension): boolean | undefined {
-  const override = capabilityOverrides[dimension]?.[modelRouterId];
+  const parsed = parseModelString(modelRouterId);
+  const provider = parsed.provider ? (PROVIDER_ALIASES[parsed.provider] ?? parsed.provider) : parsed.provider;
+  let modelId = parsed.modelId;
+
+  // Bedrock provider instances carry region/vendor-qualified ids
+  // (`us.anthropic.claude-sonnet-5`); reduce to the short id the registry uses so both
+  // the override map and the capability files resolve consistently with router ids.
+  let bedrockVendor: string | null = null;
+  if (provider === 'aws-bedrock') {
+    const resolved = resolveBedrockVendorModel(modelId);
+    bedrockVendor = resolved.vendor;
+    modelId = resolved.shortId;
+  }
+
+  const canonicalRouterId = provider ? `${provider}/${modelId}` : modelId;
+  const override =
+    capabilityOverrides[dimension]?.[canonicalRouterId] ?? capabilityOverrides[dimension]?.[modelRouterId];
   if (override !== undefined) return override;
 
-  const { provider, modelId } = parseModelString(modelRouterId);
   if (!provider) return undefined;
 
   const registry = GatewayRegistry.getInstance();
@@ -565,18 +647,33 @@ function modelSupportsCapability(modelRouterId: string, dimension: CapabilityDim
   // Positive direct match wins immediately.
   if (directSupport === true) return true;
 
-  // For nested model IDs (e.g. `openrouter/anthropic/claude-sonnet-4-6`), the
-  // outer gateway's capability list may not enumerate every nested model. Fall
-  // back to the underlying provider's authoritative capability file before
-  // trusting a `false` from the gateway.
+  // The provider actually serving the request is authoritative. If it publishes
+  // capability data for this dimension and lists the model, its `false` stands —
+  // a gateway can lack capabilities the upstream provider offers directly
+  // (OpenRouter has no image-capable endpoint for `deepseek/deepseek-v4-flash`
+  // even though DeepSeek's own API does).
+  //
+  // Fall back to the underlying provider's capability file when the gateway
+  // never answered: either it has no data for this dimension at all (Netlify and
+  // custom gateways only implement `fetchProviders()`), or it doesn't enumerate
+  // the nested model (e.g. `openrouter/anthropic/claude-sonnet-4-6`).
+  const gatewayAnswered = directSupport !== undefined && providerListsModel(provider, modelId);
   const nestedProviderDelimiter = modelId.indexOf('/');
-  if (nestedProviderDelimiter !== -1) {
+  if (nestedProviderDelimiter !== -1 && !gatewayAnswered) {
     const nestedProvider = modelId.substring(0, nestedProviderDelimiter);
     const nestedModelId = modelId.substring(nestedProviderDelimiter + 1);
     if (nestedProvider && nestedModelId) {
       const nestedSupport = getProviderCapabilitySupport(nestedProvider, nestedModelId, dimension, useDynamicLoading);
       if (nestedSupport !== undefined) return nestedSupport;
     }
+  }
+
+  // Bedrock has no capability file of its own. When the direct lookup is inconclusive,
+  // fall back to the underlying vendor's authoritative file (Claude → anthropic,
+  // grok → xai) so Bedrock-hosted models inherit the vendor's sampling-param facts.
+  if (provider === 'aws-bedrock' && directSupport === undefined && bedrockVendor) {
+    const vendorSupport = getProviderCapabilitySupport(bedrockVendor, modelId, dimension, useDynamicLoading);
+    if (vendorSupport !== undefined) return vendorSupport;
   }
 
   return directSupport;

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -7,7 +8,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SubmitPlanTool } from '../submit-plan-tool';
 import type { SubmitPlanToolProps } from '../submit-plan-tool';
 import { submittedPlanFile, submittedPlanPath } from './fixtures/submit-plan';
-import { ToolCallProvider } from '@/services/tool-call-provider';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

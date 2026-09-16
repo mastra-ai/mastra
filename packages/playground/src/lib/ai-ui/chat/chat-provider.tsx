@@ -1,12 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
-import { memoryStatusQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-status';
-import { memoryThreadMessagesQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
-import { observationalMemoryQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
-import { useChat, useMastraClient } from '@mastra/react';
-import { useQueryClient } from '@tanstack/react-query';
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import type { ReactNode } from 'react';
 import {
   ChatAgentContext,
   ChatMessagesContext,
@@ -14,14 +7,22 @@ import {
   ChatRunVersionIdentityContext,
   ChatSendContext,
   ChatTasksContext,
-} from './chat-context';
+} from '@mastra/playground-ui/domains/chat/context/chat-context';
 import type {
   AgentContextValue,
   MessagesContextValue,
   RunningContextValue,
   SendContextValue,
   TasksContextValue,
-} from './chat-context';
+} from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
+import { memoryStatusQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-status';
+import { memoryThreadMessagesQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
+import { observationalMemoryQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
+import { useChat, useMastraClient } from '@mastra/react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import type { ReactNode } from 'react';
 import { useChatSendHandler } from './use-chat-send-handler';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
@@ -40,7 +41,6 @@ import {
 } from '@/services/om-parts-converter';
 import type { OmTerminalExtractionCache } from '@/services/om-parts-converter';
 import { buildStreamErrorMessage } from '@/services/stream-error-message';
-import { ToolCallProvider } from '@/services/tool-call-provider';
 import type { ChatProps } from '@/types';
 
 /**
@@ -113,6 +113,7 @@ export function ChatProvider({
     sendMessage,
     cancelRun,
     isRunning: isRunningStream,
+    activeRunId,
     isAwaitingToolApproval,
     setMessages,
     approveToolCall,
@@ -131,6 +132,9 @@ export function ChatProvider({
     versions,
     requestContext: chatRequestContext,
     enableThreadSignals: threadSignalsEnabled,
+    onSignalSent: () => {
+      void refreshThreadList?.();
+    },
     onThreadSignalsUnsupported: () => {
       threadSignalsUnsupportedRef.current = true;
       setThreadSignalsUnsupported(true);
@@ -398,6 +402,7 @@ export function ChatProvider({
     () => ({
       isRunning,
       isRunningStream,
+      activeRunId,
       cancelRun: () => {
         setIsToolContinuationBlocked(false);
         return cancel();
@@ -412,6 +417,7 @@ export function ChatProvider({
     [
       isRunning,
       isRunningStream,
+      activeRunId,
       cancel,
       canSendWhileStreaming,
       canStartRun,

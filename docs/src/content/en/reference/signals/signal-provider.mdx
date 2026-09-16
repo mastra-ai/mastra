@@ -1,6 +1,6 @@
 ---
 title: "Reference: SignalProvider | Signals"
-description: "API reference for SignalProvider, the abstract base class for building signal providers that monitor external sources and push events into agent threads."
+description: "Extend SignalProvider to monitor APIs, webhooks, or event streams and push external notifications into subscribed Mastra agent threads."
 packages:
   - "@mastra/core"
 ---
@@ -107,7 +107,7 @@ The agent calls `connect(this)` and registers any processors or tools the provid
 
 Called by the Agent constructor. Establishes the bidirectional link so the provider can send signals back to the agent. Override to run additional setup after the link is established. Always call `super.connect(agent)`.
 
-```typescript prettier:false
+```typescript
 class MySignals extends SignalProvider<'my-signals'> {
   readonly id = 'my-signals'
 
@@ -122,7 +122,7 @@ class MySignals extends SignalProvider<'my-signals'> {
 
 Called when the provider's agent is registered with a Mastra instance. Override to access storage or other Mastra services. Always call `super.__registerMastra(mastra)`.
 
-```typescript prettier:false
+```typescript oxfmt:false
 override __registerMastra(mastra) {
   super.__registerMastra(mastra)
   // this.mastra is now available
@@ -135,7 +135,7 @@ override __registerMastra(mastra) {
 
 Return input processors this provider needs to be registered with the agent. Override when your provider intercepts agent input steps (for example, injecting context hints or detecting tool calls).
 
-```typescript prettier:false
+```typescript oxfmt:false
 getInputProcessors() {
   return [this]
 }
@@ -147,7 +147,7 @@ Returns: `InputProcessorOrWorkflow[]`
 
 Return output processors this provider needs to be registered with the agent. Override when your provider intercepts agent output steps.
 
-```typescript prettier:false
+```typescript oxfmt:false
 getOutputProcessors() {
   return [this]
 }
@@ -159,7 +159,7 @@ Returns: `OutputProcessorOrWorkflow[]`
 
 Return tools this provider exposes to the agent. Override when your provider adds agent-callable tools such as subscribe or unsubscribe commands.
 
-```typescript prettier:false
+```typescript oxfmt:false
 getTools() {
   return {
     subscribe_pr: createTool({ /* ... */ }),
@@ -176,7 +176,7 @@ Returns: `Record<string, unknown>`
 
 Subscribe a thread to an external resource. This is a protected method: call it from within your provider implementation.
 
-```typescript prettier:false
+```typescript
 const sub = this.subscribe(
   { threadId: 'thread-1', resourceId: 'user-1' },
   'github:mastra-ai/mastra#123',
@@ -212,7 +212,7 @@ Returns: `SignalSubscription`: the created subscription, or the existing one wit
 
 Remove a subscription.
 
-```typescript prettier:false
+```typescript
 const removed = this.unsubscribe(
   { threadId: 'thread-1', resourceId: 'user-1' },
   'github:mastra-ai/mastra#123',
@@ -225,7 +225,7 @@ Returns: `boolean`: `true` if removed, `false` if no matching subscription exist
 
 Return all active subscriptions for this provider.
 
-```typescript prettier:false
+```typescript
 const allSubs = this.getSubscriptions()
 ```
 
@@ -235,7 +235,7 @@ Returns: `SignalSubscription[]`
 
 Return all subscriptions for a specific external resource.
 
-```typescript prettier:false
+```typescript
 const subs = this.getSubscriptionsForResource('github:mastra-ai/mastra#123')
 for (const sub of subs) {
   await this.notify(
@@ -251,7 +251,7 @@ Returns: `SignalSubscription[]`
 
 Return all subscriptions for a specific thread.
 
-```typescript prettier:false
+```typescript
 const subs = this.getSubscriptionsForThread({
   threadId: 'thread-1',
   resourceId: 'user-1',
@@ -264,7 +264,7 @@ Returns: `SignalSubscription[]`
 
 Check whether a subscription exists.
 
-```typescript prettier:false
+```typescript
 if (this.hasSubscription(target, 'github:mastra-ai/mastra#123')) {
   // already subscribed
 }
@@ -276,7 +276,7 @@ Returns: `boolean`
 
 Remove all subscriptions for a thread.
 
-```typescript prettier:false
+```typescript
 const removed = this.unsubscribeAll({
   threadId: 'thread-1',
   resourceId: 'user-1',
@@ -289,7 +289,7 @@ Returns: `number`: count of removed subscriptions.
 
 Total number of active subscriptions for this provider.
 
-```typescript prettier:false
+```typescript
 if (this.subscriptionCount === 0) {
   // nothing to poll
 }
@@ -303,7 +303,7 @@ Returns: `number`
 
 Called on each poll cycle with all active subscriptions. Override to check external sources and emit notifications. The framework prevents overlapping poll cycles: if a `poll()` call takes longer than `pollInterval`, the next cycle is skipped.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async poll(subscriptions: SignalSubscription[]) {
   for (const sub of subscriptions) {
     const events = await checkExternalSource(sub.externalResourceId)
@@ -321,7 +321,7 @@ async poll(subscriptions: SignalSubscription[]) {
 
 Start the polling timer. Called by the Agent after `connect()`. Idempotent: calling multiple times has no effect.
 
-```typescript prettier:false
+```typescript
 provider.startPolling()
 ```
 
@@ -329,7 +329,7 @@ provider.startPolling()
 
 Stop the polling timer.
 
-```typescript prettier:false
+```typescript
 provider.stopPolling()
 ```
 
@@ -341,7 +341,7 @@ Handle an incoming webhook request. Override to parse the payload and match it t
 
 Call this method from an application-defined HTTP endpoint after verifying the webhook request.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async handleWebhook(request) {
   const payload = request.body as { repo: string, event: string }
   const subs = this.getSubscriptionsForResource(payload.repo)
@@ -365,7 +365,7 @@ Returns: `Promise<{ status?: number; body?: unknown }>`
 
 Called after `connect()` to run async initialization. Override when setup requires the agent or Mastra instance to be available.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async start() {
   await this.loadInitialState()
 }
@@ -375,7 +375,7 @@ async start() {
 
 Called on shutdown. The default implementation stops polling and clears all subscriptions.
 
-```typescript prettier:false
+```typescript
 provider.stop()
 ```
 
@@ -385,7 +385,7 @@ provider.stop()
 
 Send a notification signal to the connected agent. This is a protected convenience wrapper around `agent.sendNotificationSignal()`.
 
-```typescript prettier:false
+```typescript
 await this.notify(
   {
     source: 'my-provider',
@@ -524,7 +524,7 @@ Identifies a specific agent thread.
 
 Runtime check for `SignalProvider` instances.
 
-```typescript prettier:false
+```typescript
 import { isSignalProvider } from '@mastra/core/signals'
 
 if (isSignalProvider(obj)) {

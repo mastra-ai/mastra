@@ -7,21 +7,15 @@ import type {
   CreateSourceControlSessionInput,
   ExternalRepositoryProjectTarget,
   LinkProjectRepositoryInput,
-  PooledSandbox,
   ProjectRepository,
-  ProjectRepositoryBaseCheckpoint,
-  ProjectRepositorySandbox,
   ProjectSourceControlConnection,
-  ReleasePooledSandboxInput,
   SourceControlInstallation,
   SourceControlRepository,
   SourceControlSession,
   SourceControlStorageHandle,
-  SourceControlWorktree,
   UpdateProjectRepositoryInput,
   UpsertSourceControlInstallationInput,
   UpsertSourceControlRepositoryInput,
-  UpsertSourceControlWorktreeInput,
 } from './base.js';
 
 /** In-memory provider-scoped source-control handle for route tests. */
@@ -31,9 +25,6 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   repositoriesRows: SourceControlRepository[] = [];
   connectionsRows: ProjectSourceControlConnection[] = [];
   projectRepositoriesRows: ProjectRepository[] = [];
-  sandboxesRows: ProjectRepositorySandbox[] = [];
-  sandboxPoolRows: PooledSandbox[] = [];
-  worktreesRows: SourceControlWorktree[] = [];
   sessionsRows: SourceControlSession[] = [];
 
   constructor(integrationId = 'github') {
@@ -302,7 +293,6 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         sandboxProvider: input.sandboxProvider,
         sandboxWorkdir: input.sandboxWorkdir,
         setupCommand: input.setupCommand ?? null,
-        baseCheckpoint: null,
         teardownCommand: input.teardownCommand ?? null,
         createdAt: now,
         updatedAt: now,
@@ -321,21 +311,8 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     }): Promise<ProjectRepository | null> => {
       const row = await this.projectRepositories.get({ orgId, id });
       if (!row) return null;
-      if (input.setupCommand !== undefined && input.setupCommand !== row.setupCommand) {
-        row.baseCheckpoint = null;
-      }
       Object.assign(row, input, { updatedAt: new Date() });
       return row;
-    },
-    setBaseCheckpoint: async (
-      args:
-        | { id: string; checkpoint: null }
-        | { id: string; checkpoint: ProjectRepositoryBaseCheckpoint; expectedSetupCommand: string | null },
-    ): Promise<void> => {
-      const row = this.projectRepositoriesRows.find(candidate => candidate.id === args.id);
-      if (!row) throw new Error('Project repository not found');
-      if (args.checkpoint && row.setupCommand !== args.expectedSetupCommand) return;
-      row.baseCheckpoint = args.checkpoint;
     },
     unlink: async ({ orgId, id }: { orgId: string; id: string }): Promise<boolean> => {
       if (!(await this.projectRepositories.get({ orgId, id }))) return false;
@@ -348,136 +325,6 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     },
   };
 
-  readonly sandboxes = {
-    getOrCreate: async ({
-      projectRepository,
-      userId,
-    }: {
-      projectRepository: ProjectRepository;
-      userId: string;
-    }): Promise<ProjectRepositorySandbox> => {
-      const existing = this.sandboxesRows.find(
-        row => row.projectRepositoryId === projectRepository.id && row.userId === userId,
-      );
-      if (existing) return existing;
-      const created: ProjectRepositorySandbox = {
-        id: randomUUID(),
-        projectRepositoryId: projectRepository.id,
-        userId,
-        sandboxId: null,
-        sandboxWorkdir: projectRepository.sandboxWorkdir,
-        materializedAt: null,
-        createdAt: new Date(),
-      };
-      this.sandboxesRows.push(created);
-      return created;
-    },
-    getById: async ({ id }: { id: string }): Promise<ProjectRepositorySandbox | null> =>
-      this.sandboxesRows.find(row => row.id === id) ?? null,
-    setWorkdir: async ({ id, sandboxWorkdir }: { id: string; sandboxWorkdir: string }): Promise<void> => {
-      const row = this.sandboxesRows.find(candidate => candidate.id === id);
-      if (row) Object.assign(row, { sandboxWorkdir, materializedAt: null });
-    },
-    setSandboxId: async ({ id, sandboxId }: { id: string; sandboxId: string }): Promise<void> => {
-      const row = this.sandboxesRows.find(candidate => candidate.id === id);
-      if (row) row.sandboxId = sandboxId;
-    },
-    clearBinding: async ({ id }: { id: string }): Promise<void> => {
-      const row = this.sandboxesRows.find(candidate => candidate.id === id);
-      if (row) Object.assign(row, { sandboxId: null, materializedAt: null });
-    },
-    markMaterialized: async ({ id }: { id: string }): Promise<void> => {
-      const row = this.sandboxesRows.find(candidate => candidate.id === id);
-      if (row) row.materializedAt = new Date();
-    },
-  };
-
-  readonly sandboxPool = {
-    release: async (input: ReleasePooledSandboxInput): Promise<void> => {
-      // Mirror the SQL implementation: a missing project-repository link
-      // makes the release a silent no-op.
-      if (!this.projectRepositoriesRows.some(row => row.id === input.projectRepositoryId)) return;
-      if (this.sandboxPoolRows.some(row => row.sandboxId === input.sandboxId)) return;
-      this.sandboxPoolRows.push({ id: randomUUID(), releasedAt: new Date(), ...input });
-    },
-    claim: async ({ projectRepositoryId }: { projectRepositoryId: string }): Promise<PooledSandbox | null> => {
-      const candidates = this.sandboxPoolRows
-        .filter(row => row.projectRepositoryId === projectRepositoryId)
-        .sort((left, right) => right.releasedAt.getTime() - left.releasedAt.getTime());
-      const claimed = candidates[0];
-      if (!claimed) return null;
-      this.sandboxPoolRows.splice(this.sandboxPoolRows.indexOf(claimed), 1);
-      return claimed;
-    },
-  };
-
-  readonly worktrees = {
-    upsert: async (input: UpsertSourceControlWorktreeInput): Promise<void> => {
-      const existing = this.worktreesRows.find(
-        row =>
-          row.projectRepositoryId === input.projectRepositoryId &&
-          row.userId === input.userId &&
-          row.branch === input.branch,
-      );
-      if (existing) {
-        existing.baseBranch = input.baseBranch;
-        existing.worktreePath = input.worktreePath;
-        return;
-      }
-      this.worktreesRows.push({ id: randomUUID(), createdAt: new Date(), ...input });
-    },
-    list: async ({
-      projectRepositoryId,
-      userId,
-    }: {
-      projectRepositoryId: string;
-      userId: string;
-    }): Promise<SourceControlWorktree[]> =>
-      this.worktreesRows.filter(row => row.projectRepositoryId === projectRepositoryId && row.userId === userId),
-    get: async ({
-      projectRepositoryId,
-      userId,
-      branch,
-    }: {
-      projectRepositoryId: string;
-      userId: string;
-      branch: string;
-    }): Promise<SourceControlWorktree | null> =>
-      this.worktreesRows.find(
-        row => row.projectRepositoryId === projectRepositoryId && row.userId === userId && row.branch === branch,
-      ) ?? null,
-    findByPath: async ({
-      projectRepositoryId,
-      userId,
-      worktreePath,
-    }: {
-      projectRepositoryId: string;
-      userId: string;
-      worktreePath: string;
-    }): Promise<SourceControlWorktree | null> =>
-      this.worktreesRows.find(
-        row =>
-          row.projectRepositoryId === projectRepositoryId && row.userId === userId && row.worktreePath === worktreePath,
-      ) ?? null,
-    delete: async ({
-      projectRepositoryId,
-      userId,
-      branch,
-    }: {
-      projectRepositoryId: string;
-      userId: string;
-      branch: string;
-    }): Promise<void> => {
-      this.worktreesRows.splice(
-        0,
-        this.worktreesRows.length,
-        ...this.worktreesRows.filter(
-          row => !(row.projectRepositoryId === projectRepositoryId && row.userId === userId && row.branch === branch),
-        ),
-      );
-    },
-  };
-
   readonly sessions = {
     list: async ({ projectRepositoryId, viewerUserId }: { projectRepositoryId: string; viewerUserId: string }) =>
       this.sessionsRows.filter(
@@ -487,8 +334,12 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       ),
     listByProjectRepository: async ({ projectRepositoryId }: { projectRepositoryId: string }) =>
       this.sessionsRows.filter(row => row.projectRepositoryId === projectRepositoryId),
-    getBySessionId: async (sessionId: string): Promise<SourceControlSession | null> =>
-      this.sessionsRows.find(row => row.sessionId === sessionId) ?? null,
+    getBySessionId: async (sessionId: string): Promise<SourceControlSession | null> => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (!row) return null;
+      // Mirrors base.ts: a session whose project-repository link is gone does not resolve.
+      return this.projectRepositoriesRows.some(link => link.id === row.projectRepositoryId) ? row : null;
+    },
     rename: async ({ sessionId, title }: { sessionId: string; title: string }): Promise<void> => {
       const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
       if (row) {

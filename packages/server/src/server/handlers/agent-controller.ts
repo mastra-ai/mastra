@@ -19,6 +19,7 @@ import { z } from 'zod/v4';
 
 import { HTTPException } from '../http-exception';
 import { agentVersionOverridesSchema } from '../schemas/agents';
+import { filterSchema, includeSchema, messageOrderBySchema } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import {
   ensureDefaultVersionStatus,
@@ -29,10 +30,8 @@ import {
   stashVersionOverrides,
 } from './agents';
 import { handleError } from './error';
-import {
-  createVersionLabelApiError,
-  handleVersionLabelError,
-} from './version-label-errors';
+import { enforceThreadAccess } from './utils';
+import { createVersionLabelApiError, handleVersionLabelError } from './version-label-errors';
 
 /**
  * AgentController session routes.
@@ -300,7 +299,33 @@ const cloneThreadBodySchema = z.object({
   sourceThreadId: z.string().optional(),
   title: z.string().optional(),
 });
-const listMessagesQuerySchema = z.object({ limit: z.coerce.number().optional(), sessionScope: z.string().optional() });
+const controllerPaginationNumber = z.coerce.number().int().min(0);
+const listMessagesQuerySchema = z
+  .object({
+    /** @deprecated Use page and perPage instead. */
+    limit: controllerPaginationNumber.optional(),
+    page: controllerPaginationNumber.optional(),
+    perPage: z
+      .preprocess(value => (value === 'false' ? false : value), z.union([z.literal(false), controllerPaginationNumber]))
+      .optional(),
+    orderBy: messageOrderBySchema,
+    include: includeSchema,
+    filter: filterSchema,
+    sessionScope: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.limit === undefined) return;
+
+    for (const field of ['perPage', 'orderBy', 'include', 'filter'] as const) {
+      if (value[field] !== undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `limit cannot be combined with ${field}; use perPage instead`,
+          path: ['limit'],
+        });
+      }
+    }
+  });
 /**
  * `tags` arrives as a JSON-encoded object in the query string (query params are
  * flat strings). It scopes the listing to threads whose metadata matches every
@@ -455,6 +480,10 @@ const listMessagesResponseSchema = z.object({
       type: z.string().optional(),
     }),
   ),
+  total: z.number(),
+  page: z.number(),
+  perPage: z.union([z.number(), z.literal(false)]),
+  hasMore: z.boolean(),
 });
 const listModelsResponseSchema = z.object({
   models: z.array(
@@ -566,9 +595,8 @@ function carriesError(event: AgentControllerEvent): event is ErrorCarryingAgentC
 
 /**
  * An `Error`'s `message`/`name` are non-enumerable, so flatten it before JSON
- * serialization. Streamed message events intentionally retain the controller's
- * live accumulated message; consumers requiring temporal isolation must copy or
- * serialize at their own ownership boundary.
+ * serialization. Compact message updates and ends are already JSON-safe and
+ * pass through unchanged; only `message_start` carries a message snapshot.
  */
 function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent {
   if ('displayState' in event) {
@@ -780,7 +808,15 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      await session.respondToToolSuspension({ toolCallId, resumeData, requestContext });
+      // A resumed tool drives the run to its next terminal or suspension boundary.
+      // Awaiting it holds this request open until the continuation finishes, which
+      // can trip the request timeout and leave CORS mutating an already-sent response.
+      ackBackgroundSessionWork({
+        work: session.respondToToolSuspension({ toolCallId, resumeData, requestContext }),
+        session,
+        mastra,
+        operation: 'respondToToolSuspension',
+      });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error responding to controller tool suspension');
@@ -1315,28 +1351,71 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
   queryParamSchema: listMessagesQuerySchema,
   responseSchema: listMessagesResponseSchema,
   summary: 'List thread messages',
-  description: 'Lists messages for a specific thread. Returns most recent messages first.',
+  description:
+    'Returns a paginated list of messages in a specific thread. The deprecated limit parameter may only be combined with page.',
   tags: ['AgentController', 'Threads'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
-  handler: async ({ mastra, controllerId, resourceId, threadId, limit }) => {
+  handler: async ({
+    mastra,
+    controllerId,
+    resourceId,
+    threadId,
+    limit,
+    page,
+    perPage,
+    orderBy,
+    include,
+    filter,
+    requestContext,
+  }) => {
     try {
-      const controller = getAgentControllerOrThrow(mastra, controllerId);
-      // Read-only route: query storage directly instead of constructing a
-      // Session. Session creation would trigger workspace/sandbox
-      // initialization as a side effect; reads should never pay that cost.
-      // The query methods lazily initialize storage (not workspace) on their own.
-      // The route is authorized for the URL's resourceId, but `threadId` is
-      // otherwise unscoped. Verify the thread belongs to this resource so a
-      // caller can't peek at another resource's messages by guessing an id
-      // — matches the check `session.thread.listMessages` performed via
-      // `session.thread.set` before we bypassed session construction.
-      const thread = await controller.queryThreadById({ threadId });
-      if (!thread || thread.resourceId !== resourceId) {
-        throw new Error(`Thread not found: ${threadId}`);
+      if (
+        limit !== undefined &&
+        (perPage !== undefined || orderBy !== undefined || include !== undefined || filter !== undefined)
+      ) {
+        throw new HTTPException(400, { message: 'limit can only be combined with page; use perPage instead' });
       }
-      const messages = await controller.queryThreadMessages({ threadId, limit });
+
+      const controller = getAgentControllerOrThrow(mastra, controllerId);
+      const thread = await controller.queryThreadById({ threadId });
+      if (!thread || (resourceId && thread.resourceId && thread.resourceId !== resourceId)) {
+        throw new HTTPException(404, { message: 'Thread not found' });
+      }
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId,
+        thread,
+        effectiveResourceId: resourceId,
+      });
+
+      // Read-only route: delegate storage retrieval to the controller without
+      // constructing a Session, which would initialize the workspace/sandbox.
+      const isLegacyLimitQuery = limit !== undefined;
+      const result = await controller.queryThreadMessages(
+        limit !== undefined
+          ? {
+              threadId,
+              resourceId,
+              perPage: limit,
+              page: page ?? 0,
+              orderBy: { field: 'createdAt', direction: 'DESC' as const },
+            }
+          : {
+              threadId,
+              resourceId,
+              ...(perPage !== undefined ? { perPage } : {}),
+              ...(page !== undefined ? { page } : {}),
+              ...(orderBy !== undefined ? { orderBy } : {}),
+              ...(include !== undefined ? { include } : {}),
+              ...(filter !== undefined ? { filter } : {}),
+            },
+      );
+      const messages = isLegacyLimitQuery ? result.messages.reverse() : result.messages;
+
       return {
+        ...result,
         messages: messages.map(m => ({
           id: m.id,
           role: m.role,

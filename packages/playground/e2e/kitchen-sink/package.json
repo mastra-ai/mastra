@@ -7,7 +7,7 @@
     "dev": "mastra dev",
     "build": "mastra build",
     "start": "mastra start",
-    "start:version-labels-e2e": "pnpm -C ../../../.. build:cli && mastra dev"
+    "start:version-labels-e2e": "pnpm -C ../../../.. build:cli && node ../../../cli/dist/index.js dev"
   },
   "dependencies": {
     "@mastra/core": "latest",
@@ -18,7 +18,7 @@
     "@mastra/memory": "latest",
     "ai": "^5.0.196",
     "mastra": "latest",
-    "zod": "^4.4.3"
+    "zod": "^4.6.4"
   },
   "devDependencies": {
     "@types/node": "22.19.20",

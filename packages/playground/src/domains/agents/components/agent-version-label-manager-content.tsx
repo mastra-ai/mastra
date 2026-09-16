@@ -41,10 +41,10 @@ function formatLabelKind(kind: AgentVersionLabel['kind']): 'Production' | 'Custo
   return 'Latest';
 }
 
-function getKindVariant(kind: AgentVersionLabel['kind']): 'success' | 'default' | 'info' {
-  if (kind === 'production') return 'success';
-  if (kind === 'custom') return 'default';
-  return 'info';
+function getKindVariant(kind: AgentVersionLabel['kind']): 'green' | 'neutral' | 'blue' {
+  if (kind === 'production') return 'green';
+  if (kind === 'custom') return 'neutral';
+  return 'blue';
 }
 
 function shortenVersionId(versionId: string): string {

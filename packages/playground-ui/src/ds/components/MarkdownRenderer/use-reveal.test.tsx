@@ -2,14 +2,14 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useReveal } from './use-reveal';
+import { useRevealedText } from './use-reveal';
 
 const frame = () => act(() => void vi.advanceTimersByTime(16));
 
 const words = (text: string) => text.match(/\S+/g)?.length ?? 0;
 
 const stream = (text: string, streaming = true) =>
-  renderHook(props => useReveal(props.text, props.streaming), { initialProps: { text, streaming } });
+  renderHook(props => useRevealedText(props.text, props.streaming), { initialProps: { text, streaming } });
 
 function drain(until: () => boolean, limit = 600): number {
   let frames = 0;
@@ -30,10 +30,12 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   Reflect.deleteProperty(window, 'matchMedia');
 });
 
-describe('useReveal', () => {
+describe('useRevealedText', () => {
   it('leaves a reply loaded from history where it is', () => {
     const { result } = stream('A reply loaded from history.', false);
 
@@ -137,14 +139,58 @@ describe('useReveal', () => {
     expect(drain(() => result.current === reply)).toBeLessThan(250);
   });
 
-  it('catches up on a reply it mounted late into rather than retyping it', () => {
-    const reply = sentence.repeat(30);
+  it('streams a reply it mounted mid-chunk from its first word', () => {
+    const reply = sentence.repeat(3);
+    const { result } = stream(reply);
+
+    expect(result.current).toBe('');
+
+    drain(() => words(result.current) > 0);
+    expect(words(result.current)).toBe(1);
+  });
+
+  it('joins a reply already far ahead close to its tail instead of retyping it all', () => {
+    const reply = sentence.repeat(60);
     const { result } = stream(reply);
 
     const held = words(reply) - words(result.current);
 
     expect(held).toBeGreaterThan(0);
-    expect(held).toBeLessThan(45);
+    expect(held).toBeLessThanOrEqual(300);
+  });
+
+  it('never rewinds when a frame reports time behind the loop start', () => {
+    // A rAF timestamp is the frame's start, so a loop armed mid-frame can see
+    // its first tick stamped earlier than the clock it read while arming.
+    const callbacks = new Map<number, FrameRequestCallback>();
+    let handle = 0;
+    let clock = 0;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callbacks.set(++handle, callback);
+      return handle;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => void callbacks.delete(id));
+    vi.spyOn(performance, 'now').mockImplementation(() => clock);
+
+    const fire = (at: number) =>
+      act(() => {
+        const pending = [...callbacks.values()];
+        callbacks.clear();
+        for (const callback of pending) callback(at);
+      });
+
+    const { result, rerender } = stream('one');
+    for (let at = 16; words(result.current) < 1 && at < 5000; at += 16) {
+      clock = at;
+      fire(at);
+    }
+    expect(result.current).toBe('one');
+
+    clock = 6000;
+    rerender({ text: 'one two', streaming: true });
+    fire(5990);
+
+    expect(result.current).toBe('one');
   });
 
   it('finishes the last words after the reply stops streaming', () => {

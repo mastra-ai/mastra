@@ -183,9 +183,9 @@ export function serializeModelSettings(
   const source = settings as Record<string, unknown>;
   const out: SerializableModelSettings = {};
   const pickNumber = (key: keyof SerializableModelSettings) => {
-    const value = source[key as string];
+    const value = source[key];
     if (typeof value === 'number' && Number.isFinite(value)) {
-      (out as Record<string, unknown>)[key as string] = value;
+      (out as Record<string, unknown>)[key] = value;
     }
   };
 
@@ -199,7 +199,7 @@ export function serializeModelSettings(
   pickNumber('maxRetries');
 
   if (Array.isArray(source.stopSequences) && source.stopSequences.every(v => typeof v === 'string')) {
-    out.stopSequences = source.stopSequences as string[];
+    out.stopSequences = source.stopSequences;
   }
 
   // Headers are never serialized into the workflow input. They are stored
@@ -232,6 +232,7 @@ export function serializeDurableOptions(options: {
   structuredOutput?: SerializableDurableOptions['structuredOutput'];
   skipBgTaskWait?: boolean;
   disableBackgroundTasks?: boolean;
+  backgroundTaskPolicy?: SerializableDurableOptions['backgroundTaskPolicy'];
   tracingOptions?: SerializableDurableOptions['tracingOptions'];
   actor?: SerializableDurableOptions['actor'];
   instructionsOverride?: SerializableDurableOptions['instructionsOverride'];
@@ -270,6 +271,7 @@ export function serializeDurableOptions(options: {
     structuredOutput: options.structuredOutput,
     skipBgTaskWait: options.skipBgTaskWait,
     disableBackgroundTasks: options.disableBackgroundTasks,
+    backgroundTaskPolicy: options.backgroundTaskPolicy,
     tracingOptions: options.tracingOptions,
     actor: options.actor,
     instructionsOverride: options.instructionsOverride,

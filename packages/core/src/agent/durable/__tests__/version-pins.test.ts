@@ -89,7 +89,21 @@ async function persistRecoverySnapshot(store: InMemoryStore, snapshot: WorkflowR
 describe('durable agent version pins', () => {
   it('rehydrates a label-selected root by its original exact ID after the label moves', async () => {
     let labelTarget = 'v1';
-    const inner = new Agent({ id: 'durable', name: 'durable', instructions: 'test', model: model() });
+    const inner = new Agent({
+      id: 'durable',
+      name: 'durable',
+      instructions: 'test',
+      model: model(),
+      inputProcessors: [
+        {
+          id: 'record-routing-context',
+          processInput: ({ requestContext, messages }) => {
+            requestContext?.set('routingStage', 'processed');
+            return messages;
+          },
+        },
+      ],
+    });
     const durable = new DurableAgent({ agent: inner });
     const mastra = new Mastra({ agents: { durable } });
     const selectors: unknown[] = [];
@@ -118,6 +132,7 @@ describe('durable agent version pins', () => {
       selectedLabel: 'production',
     });
     expect(first.workflowInput.requestContextEntries?.mastra__versions).toEqual({ defaultStatus: 'published' });
+    expect(first.workflowInput.requestContextEntries?.routingStage).toBe('processed');
 
     labelTarget = 'v2';
     selectors.length = 0;

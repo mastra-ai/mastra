@@ -42,6 +42,7 @@ async function waitFor(assertion: () => boolean, timeout = 500): Promise<void> {
 describe('Fastify Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Fastify Adapter Integration Tests',
+    supportsPostQueryRequestContext: true,
 
     setupAdapter: async (context: AdapterTestContext, options?: AdapterSetupOptions) => {
       // Create Fastify app
@@ -87,13 +88,13 @@ describe('Fastify Server Adapter', () => {
         const fetchOptions: RequestInit = {
           method: httpRequest.method,
           headers: {
-            'Content-Type': 'application/json',
+            ...(httpRequest.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
             ...(httpRequest.headers || {}),
           },
         };
 
         // Add body for POST/PUT/PATCH/DELETE
-        if (httpRequest.body && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpRequest.method)) {
+        if (httpRequest.body !== undefined && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpRequest.method)) {
           fetchOptions.body = JSON.stringify(httpRequest.body);
         }
 

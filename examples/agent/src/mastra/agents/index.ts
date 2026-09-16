@@ -10,6 +10,9 @@ import { calculatorWithUI, greetUserWithUI } from '../mcp/app-tools';
 import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
 import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt';
 import { requestContextDemoAgent } from './request-context-demo-agent';
+import { DaytonaSandbox } from '@mastra/daytona';
+import { E2BDesktopSandbox } from '@mastra/e2b-desktop';
+import { Workspace } from '@mastra/core/workspace';
 
 // Export Dynamic Tools Agent
 export { dynamicToolsAgent } from './dynamic-tools-agent.js';
@@ -310,4 +313,38 @@ Available tools:
     calculatorWithUI,
     greetUserWithUI,
   },
+});
+
+const computerUseProvider = process.env.COMPUTER_USE_PROVIDER === 'e2b-desktop' ? 'e2b-desktop' : 'daytona';
+
+const computerUseSandbox =
+  computerUseProvider === 'e2b-desktop'
+    ? new E2BDesktopSandbox({
+        id: 'computer-use-agent-example',
+        apiKey: process.env.E2B_API_KEY,
+        resolution: [1280, 720],
+      })
+    : new DaytonaSandbox({
+        id: 'computer-use-agent-example',
+        apiKey: process.env.DAYTONA_API_KEY,
+        autoStopInterval: 15,
+        computerUse: true,
+      });
+
+export const computerUseAgent = new Agent({
+  id: 'computer-use-agent',
+  name: 'Computer Use Agent',
+  description: `Controls a remote Linux desktop through the provider-neutral workspace computer tools (${computerUseProvider}).`,
+  instructions: [
+    'You control a remote Linux desktop through workspace computer and shell tools.',
+    'Take a screenshot and inspect the screen dimensions before interacting with the desktop.',
+    'Use fresh screenshots after actions instead of assuming that the interface has not changed.',
+    'Use mouse and keyboard tools for desktop interactions, and use shell tools to verify resulting files or process state when possible.',
+    'Do not expose credentials or authenticated desktop stream URLs in your response.',
+  ].join('\n'),
+  model: 'openai/gpt-5.6-sol',
+  workspace: new Workspace({
+    id: `computer-use-${computerUseProvider}-workspace`,
+    sandbox: computerUseSandbox,
+  }),
 });

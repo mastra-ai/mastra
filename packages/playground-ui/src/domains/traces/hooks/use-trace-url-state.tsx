@@ -24,6 +24,7 @@ const TRACE_ID_PARAM = 'traceId';
 const SPAN_ID_PARAM = 'spanId';
 const TAB_PARAM = 'tab';
 const SCORE_ID_PARAM = 'scoreId';
+const HIGHLIGHT_SPAN_IDS_PARAM = 'highlightSpanIds';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PRESET_MS: Partial<Record<TraceDatePreset, number>> = {
@@ -42,6 +43,7 @@ function clearSelectionParams(params: URLSearchParams) {
   params.delete(TRACE_ANCHOR_SPAN_ID_PARAM);
   params.delete(TAB_PARAM);
   params.delete(SCORE_ID_PARAM);
+  params.delete(HIGHLIGHT_SPAN_IDS_PARAM);
 }
 
 /** Minimal interface compatible with react-router's `setSearchParams`. */
@@ -77,6 +79,8 @@ export interface UseTraceUrlStateResult {
   anchorSpanIdParam: string | undefined;
   spanTabParam: SpanTab | undefined;
   scoreIdParam: string | undefined;
+  /** Span ids featured in the timeline (e.g. the spans behind a reconstructed message). Empty when unset. */
+  highlightSpanIdsParam: string[];
 
   // Filter state (derived from URL)
   listMode: TraceListMode;
@@ -105,6 +109,8 @@ export interface UseTraceUrlStateResult {
    *  of the two changes is lost on the first click. */
   handleSpanChangeWithTab: (spanId: string, tab: SpanTab) => void;
   handleScoreChange: (scoreId: string | null) => void;
+  /** Features `spanIds` in the timeline and selects the first one. An empty array clears the highlight. */
+  handleHighlightSpans: (spanIds: string[]) => void;
   /** Switches the list view between traces and branches. Clears the current selection. */
   handleListModeChange: (mode: TraceListMode) => void;
   handleFilterTokensChange: (nextTokens: PropertyFilterToken[]) => void;
@@ -131,7 +137,9 @@ export function useTraceUrlState(
   const { onRemoveAll } = options ?? {};
   const datePreset = useMemo<TraceDatePreset>(() => {
     const value = searchParams.get(TRACE_DATE_PRESET_PARAM);
-    return value && TRACE_DATE_PRESET_VALUES.has(value as TraceDatePreset) ? (value as TraceDatePreset) : 'last-24h';
+    return value && value !== 'all' && TRACE_DATE_PRESET_VALUES.has(value as TraceDatePreset)
+      ? (value as TraceDatePreset)
+      : 'last-7d';
   }, [searchParams]);
 
   const dateFromParamRaw = searchParams.get(TRACE_DATE_FROM_PARAM);
@@ -170,6 +178,11 @@ export function useTraceUrlState(
   const spanTabParam: SpanTab | undefined =
     tabParam === 'feedback' ? 'feedback' : tabParam === 'details' ? 'details' : undefined;
   const scoreIdParam = searchParams.get(SCORE_ID_PARAM) || undefined;
+  const highlightSpanIdsRaw = searchParams.get(HIGHLIGHT_SPAN_IDS_PARAM);
+  const highlightSpanIdsParam = useMemo(
+    () => (highlightSpanIdsRaw ? highlightSpanIdsRaw.split(',').filter(Boolean) : []),
+    [highlightSpanIdsRaw],
+  );
 
   const listMode = useMemo<TraceListMode>(() => {
     const value = searchParams.get(TRACE_LIST_MODE_PARAM);
@@ -207,6 +220,7 @@ export function useTraceUrlState(
           }
           next.delete(TAB_PARAM);
           next.delete(SCORE_ID_PARAM);
+          next.delete(HIGHLIGHT_SPAN_IDS_PARAM);
           return next;
         },
         { replace: true },
@@ -315,6 +329,29 @@ export function useTraceUrlState(
     [searchParams, setSearchParams],
   );
 
+  const handleHighlightSpans = useCallback(
+    (spanIds: string[]) => {
+      setSearchParams(
+        prev => {
+          const next = new URLSearchParams(prev);
+          const [firstSpanId] = spanIds;
+          if (!firstSpanId) {
+            next.delete(HIGHLIGHT_SPAN_IDS_PARAM);
+            return next;
+          }
+          next.set(HIGHLIGHT_SPAN_IDS_PARAM, spanIds.join(','));
+          // Open the detail panel on the first highlighted span.
+          next.set(SPAN_ID_PARAM, firstSpanId);
+          next.delete(TAB_PARAM);
+          next.delete(SCORE_ID_PARAM);
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   const applyFilterTokens = useCallback(
     (tokens: PropertyFilterToken[]) => {
       setSearchParams(
@@ -366,7 +403,7 @@ export function useTraceUrlState(
       setSearchParams(
         prev => {
           const next = new URLSearchParams(prev);
-          if (preset === 'last-24h') {
+          if (preset === 'last-7d') {
             // Default — clear all date params.
             next.delete(TRACE_DATE_PRESET_PARAM);
             next.delete(TRACE_DATE_FROM_PARAM);
@@ -439,6 +476,7 @@ export function useTraceUrlState(
     anchorSpanIdParam,
     spanTabParam,
     scoreIdParam,
+    highlightSpanIdsParam,
     listMode,
     selectedEntityOption,
     selectedStatus,
@@ -450,6 +488,7 @@ export function useTraceUrlState(
     handleSpanTabChange,
     handleSpanChangeWithTab,
     handleScoreChange,
+    handleHighlightSpans,
     handleListModeChange,
     handleFilterTokensChange,
     handleDateChange,

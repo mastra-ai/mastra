@@ -87,7 +87,9 @@ export function serializeTraceColumnPreferences(preferences: TraceColumnPreferen
 
 export function buildTraceListColumns(preferences: TraceColumnPreferences): string {
   const visible = new Set(preferences.visibleColumns);
-  const columns = ['6rem', '9rem', visible.has('input') ? '14rem' : 'minmax(14rem,1fr)'];
+  // Name is bounded when Input is visible so Input (1fr) absorbs the free space;
+  // without Input, Name is the flexible track that fills the grid.
+  const columns = ['11rem', visible.has('input') ? '14rem' : 'minmax(8rem,1fr)'];
 
   if (visible.has('input')) columns.push('minmax(8rem,1fr)');
   if (visible.has('entity')) columns.push('14rem');

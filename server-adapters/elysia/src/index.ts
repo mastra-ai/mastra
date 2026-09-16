@@ -8,6 +8,7 @@ import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-ada
 import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
+  getCustomHTTPExceptionResponse,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
@@ -548,20 +549,31 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
         const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
         const contentLength = ctx.request.headers.get('content-length');
-        if (this.bodyLimitOptions && maxSize && contentLength && parseInt(contentLength, 10) > maxSize) {
+        const contentType = ctx.request.headers.get('content-type') || '';
+        const exceedsDeclaredLimit =
+          maxSize !== undefined && contentLength !== null && parseInt(contentLength, 10) > maxSize;
+        // Elysia may populate ctx.body before this handler, so this is a
+        // post-parse safeguard when Content-Length is unavailable.
+        const exceedsStreamedJsonLimit =
+          maxSize !== undefined &&
+          contentLength === null &&
+          contentType.includes('application/json') &&
+          ctx.body !== undefined &&
+          new TextEncoder().encode(JSON.stringify(ctx.body)).byteLength > maxSize;
+        if (exceedsDeclaredLimit || exceedsStreamedJsonLimit) {
           let errorResponse: unknown = { error: 'Request body too large' };
-          try {
-            errorResponse = this.bodyLimitOptions.onError({ error: 'Request body too large' });
-          } catch {
-            // Fall back to the default error response.
+          if (route.maxBodySize === undefined && this.bodyLimitOptions) {
+            try {
+              errorResponse = this.bodyLimitOptions.onError(errorResponse);
+            } catch {
+              // Fall back to the default error response.
+            }
           }
           return new Response(JSON.stringify(errorResponse), {
             status: 413,
             headers: { 'Content-Type': 'application/json' },
           });
         }
-
-        const contentType = ctx.request.headers.get('content-type') || '';
 
         if (contentType.includes('multipart/form-data')) {
           try {
@@ -644,7 +656,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         }
       }
 
-      if (params.body) {
+      if (params.body !== undefined || route.bodySchema) {
         try {
           params.body = await this.parseBody(route, params.body);
         } catch (error) {
@@ -734,16 +746,13 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
           method: route.method,
         });
 
+        const customResponse = getCustomHTTPExceptionResponse(error);
+        if (customResponse) {
+          return customResponse;
+        }
+
         // Check if it's an error with a status code
         if (error && typeof error === 'object') {
-          // An HTTPException may carry a deliberately structured public response
-          // (for example the stable version-label error envelope). Serve it
-          // verbatim so typed error contracts survive the HTTP layer instead of
-          // being collapsed into `{ error: message }`.
-          if ('res' in error && (error as { res?: unknown }).res instanceof Response) {
-            const httpError = error as { res: Response; getResponse?: () => Response };
-            return typeof httpError.getResponse === 'function' ? httpError.getResponse() : httpError.res;
-          }
           if ('status' in error) {
             const status = (error as any).status;
             return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), {

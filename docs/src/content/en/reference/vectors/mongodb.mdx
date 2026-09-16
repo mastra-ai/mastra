@@ -1,6 +1,6 @@
 ---
 title: "Reference: MongoDB vector store | Vectors"
-description: Documentation for the MongoDBVector class in Mastra, which provides vector search using MongoDB Atlas and Vector Search.
+description: "The MongoDBVector class provides vector search using MongoDB Vector Search. It enables efficient similarity search and metadata filtering within your MongoDB collections."
 packages:
   - "@mastra/core"
   - "@mastra/fastembed"
@@ -433,7 +433,7 @@ const results = await store.textQuery({
 
 ### `hybridQuery()`
 
-Runs a hybrid search that fuses vector similarity and full-text results using MongoDB's server-side `$rankFusion`. It requires MongoDB >= 8.0 and is generally available from 8.1. On 8.0.x, it may require a MongoDB support case for enablement. It runs where enabled, including MongoDB Atlas 8.0.x. A full-text search index must exist: it's auto-created for managed indexes, but for a bring-your-own collection you must call `createSearchIndex()` first (opt-in).
+Runs a hybrid search that fuses vector similarity with full-text results through MongoDB's server-side `$rankFusion`. The feature requires MongoDB 8.0 or later and is generally available from 8.1. MongoDB Atlas 8.0.x supports it where enabled, although enablement may require a support case. A full-text search index must exist. Managed indexes create one automatically, while bring-your-own collections require an explicit `createSearchIndex()` call.
 
 <PropertiesTable
   content={[
@@ -512,7 +512,7 @@ const results = await store.hybridQuery({
 })
 ```
 
-`hybridQuery()` requires MongoDB >= 8.0 for the `$rankFusion` stage. The stage is generally available from 8.1. On 8.0.x, it may need a MongoDB support case to enable and runs where enabled, such as MongoDB Atlas 8.0.x. If you're running an older version, or `$rankFusion` isn't enabled on your 8.0.x deployment, use `query()` and `textQuery()` separately and merge the results client-side.
+`hybridQuery()` requires MongoDB 8.0 or later for the `$rankFusion` stage, which is generally available from 8.1. On 8.0.x, the stage runs where enabled, including MongoDB Atlas, but enablement may require a support case. If your deployment is older or lacks `$rankFusion`, run `query()` and `textQuery()` separately before merging the results client-side.
 
 ### `describeIndex()`
 

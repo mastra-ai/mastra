@@ -1,6 +1,6 @@
 ---
 title: "Reference: Scorer utils | Evals"
-description: Utility functions for extracting data from scorer run inputs and outputs, including text content, reasoning, system messages, and tool calls.
+description: "Mastra provides utility functions to help extract and process data from scorer run inputs and outputs. These utilities are particularly useful in the preprocess step of custom scorers."
 packages:
   - "@mastra/core"
   - "@mastra/evals"
@@ -75,7 +75,7 @@ const scorer = createScorer({
 
 Extracts the text content from the first user message in the run input.
 
-```typescript prettier:false
+```typescript oxfmt:false
 .preprocess(({ run }) => {
   const userMessage = getUserMessageFromRunInput(run.input);
   return { userMessage };
@@ -99,7 +99,7 @@ Extracts the text content from the first user message in the run input.
 
 Extracts text content from all input messages as an array.
 
-```typescript prettier:false
+```typescript oxfmt:false
 .preprocess(({ run }) => {
   const allUserMessages = extractInputMessages(run.input);
   return { conversationHistory: allUserMessages.join("\n") };
@@ -112,7 +112,7 @@ Extracts text content from all input messages as an array.
 
 Extracts text content from all assistant response messages as an array.
 
-```typescript prettier:false
+```typescript oxfmt:false
 .preprocess(({ run }) => {
   const allResponses = extractAgentResponseMessages(run.output);
   return { allResponses };
@@ -191,7 +191,7 @@ const reasoningQualityScorer = createScorer({
 
 Extracts all system messages from the run input, including both standard system messages and tagged system messages (specialized prompts like memory instructions).
 
-```typescript prettier:false
+```typescript oxfmt:false
 .preprocess(({ run }) => {
   const systemMessages = getSystemMessagesFromRunInput(run.input);
   return { 
@@ -207,7 +207,7 @@ Extracts all system messages from the run input, including both standard system 
 
 Combines all system messages into a single prompt string, joined with double newlines.
 
-```typescript prettier:false
+```typescript oxfmt:false
 .preprocess(({ run }) => {
   const fullSystemPrompt = getCombinedSystemPrompt(run.input);
   return { fullSystemPrompt };
@@ -245,7 +245,7 @@ const toolUsageScorer = createScorer({
 
 **Returns:**
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   tools: string[];           // Array of tool names
   toolCallInfos: ToolCallInfo[];  // Detailed tool call information

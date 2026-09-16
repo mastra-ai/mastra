@@ -5,6 +5,7 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
+import { Copy, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 
@@ -179,7 +180,7 @@ export function DuplicateDatasetDialog({
               />
             </div>
 
-            <p className="text-muted-foreground text-sm">
+            <p className="text-muted-foreground text-ui-md">
               All items from &quot;{sourceDatasetName}&quot; will be copied to the new dataset
             </p>
 
@@ -191,15 +192,15 @@ export function DuplicateDatasetDialog({
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-muted-foreground text-sm">{getProgressText()}</p>
+                <p className="text-muted-foreground text-ui-md">{getProgressText()}</p>
               </div>
             )}
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" onClick={handleCancel} disabled={isDuplicating}>
+              <Button icon={<X />} type="button" onClick={handleCancel} disabled={isDuplicating}>
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" disabled={isDuplicating || !name.trim()}>
+              <Button icon={<Copy />} type="submit" variant="primary" disabled={isDuplicating || !name.trim()}>
                 {isDuplicating ? 'Duplicating...' : 'Duplicate Dataset'}
               </Button>
             </div>

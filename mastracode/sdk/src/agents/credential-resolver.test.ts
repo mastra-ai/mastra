@@ -1,5 +1,5 @@
 import { RequestContext } from '@mastra/core/request-context';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AuthCredential, CredentialStore } from '../auth/types.js';
 import {
   hasCredentialStoreProvider,
@@ -52,6 +52,7 @@ describe('credential store provider registry', () => {
   });
 
   it('fails closed without an authenticated tenant on the request context', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     setCredentialStoreProvider(() => fakeStore({}));
     const withoutContext = resolveCredentialStore(undefined);
     const emptyContext = resolveCredentialStore(new RequestContext());
@@ -59,9 +60,21 @@ describe('credential store provider registry', () => {
     expect(withoutContext).toMatchObject({ allowEnvironmentFallback: false });
     expect(emptyContext).toBe(withoutContext);
     await expect(withoutContext?.getApiKey('anthropic')).resolves.toBeUndefined();
+    expect(warn).toHaveBeenNthCalledWith(1, '[MastraCode] Tenant credential resolution failed closed', {
+      reason: 'missing-user-context',
+      hasRequestContext: false,
+      factorySession: false,
+    });
+    expect(warn).toHaveBeenNthCalledWith(2, '[MastraCode] Tenant credential resolution failed closed', {
+      reason: 'missing-user-context',
+      hasRequestContext: true,
+      factorySession: false,
+    });
+    warn.mockRestore();
   });
 
   it('fails closed when the tenant store provider cannot resolve a store', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     setCredentialStoreProvider(() => undefined);
     const ctx = new RequestContext();
     ctx.set('user', { workosId: 'user_1', organizationId: 'org_1' });
@@ -69,6 +82,12 @@ describe('credential store provider registry', () => {
     const store = resolveCredentialStore(ctx);
     expect(store).toMatchObject({ allowEnvironmentFallback: false });
     await expect(store?.getApiKey('anthropic')).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith('[MastraCode] Tenant credential resolution failed closed', {
+      reason: 'credential-store-unavailable',
+      hasOrganization: true,
+      orgFirst: false,
+    });
+    warn.mockRestore();
   });
 
   it('falls back to the provider id when workosId is absent', () => {
