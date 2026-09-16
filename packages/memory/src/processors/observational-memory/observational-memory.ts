@@ -2,7 +2,7 @@ import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { resolveModelConfig } from '@mastra/core/llm';
+import { modelSupportsTemperature, resolveModelConfig } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
@@ -521,31 +521,51 @@ export class ObservationalMemory {
       config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens;
     const isSharedBudget = config.shareTokenBudget ?? false;
 
-    const isDefaultModelSelection = (model: WidenedObservationalMemoryModel | undefined) =>
-      model === undefined || model === 'default';
+    const supportsDefaultTemperature = (model: WidenedObservationalMemoryModel) => {
+      if (model instanceof ModelByInputTokens || typeof model === 'function') return false;
+
+      if (typeof model === 'string') {
+        return modelSupportsTemperature(model) === true;
+      }
+
+      if (
+        model &&
+        typeof model === 'object' &&
+        'provider' in model &&
+        'modelId' in model &&
+        typeof model.provider === 'string' &&
+        typeof model.modelId === 'string'
+      ) {
+        return modelSupportsTemperature(`${model.provider.split('.')[0]}/${model.modelId}`) === true;
+      }
+
+      return false;
+    };
+    const usesDefaultOutputTokenBudget = (model: WidenedObservationalMemoryModel | undefined) =>
+      model === undefined || model === 'default' || model instanceof ModelByInputTokens;
 
     const observationSelectedModel = topLevelModel ?? observationConfigModel ?? reflectionConfigModel;
     const reflectionSelectedModel = topLevelModel ?? reflectionConfigModel ?? observationConfigModel;
 
     const observationTemperature =
       config.observation?.modelSettings?.temperature ??
-      (isDefaultModelSelection(observationSelectedModel)
+      (supportsDefaultTemperature(observationModel)
         ? OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.temperature
         : undefined);
     const observationDefaultMaxOutputTokens =
       config.observation?.modelSettings?.maxOutputTokens ??
-      (isDefaultModelSelection(observationSelectedModel)
+      (usesDefaultOutputTokenBudget(observationSelectedModel)
         ? OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.maxOutputTokens
         : undefined);
 
     const reflectionTemperature =
       config.reflection?.modelSettings?.temperature ??
-      (isDefaultModelSelection(reflectionSelectedModel)
+      (supportsDefaultTemperature(reflectionModel)
         ? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.temperature
         : undefined);
     const reflectionDefaultMaxOutputTokens =
       config.reflection?.modelSettings?.maxOutputTokens ??
-      (isDefaultModelSelection(reflectionSelectedModel)
+      (usesDefaultOutputTokenBudget(reflectionSelectedModel)
         ? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.maxOutputTokens
         : undefined);
 

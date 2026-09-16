@@ -9753,7 +9753,7 @@ describe('Model Settings Defaults', () => {
     expect((om as any).reflectionConfig.modelSettings).toEqual({});
   });
 
-  it('should not default model settings for ModelByInputTokens', () => {
+  it('should omit temperature while preserving the output budget for ModelByInputTokens', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
@@ -9762,8 +9762,25 @@ describe('Model Settings Defaults', () => {
       reflection: { observationTokens: 20000 },
     });
 
-    expect((om as any).observationConfig.modelSettings).toEqual({});
-    expect((om as any).reflectionConfig.modelSettings).toEqual({});
+    expect((om as any).observationConfig.modelSettings).toEqual({ maxOutputTokens: 100_000 });
+    expect((om as any).reflectionConfig.modelSettings).toEqual({ maxOutputTokens: 100_000 });
+  });
+
+  it('should default temperature for a model instance known to support it', () => {
+    const model = createStreamCapableMockModel({
+      provider: 'google.generative-ai',
+      modelId: 'gemini-2.5-flash',
+    });
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model,
+      observation: { messageTokens: 50000 },
+      reflection: { observationTokens: 20000 },
+    });
+
+    expect((om as any).observationConfig.modelSettings).toEqual({ temperature: 0.3 });
+    expect((om as any).reflectionConfig.modelSettings).toEqual({ temperature: 0 });
   });
 
   it('should preserve explicit model settings for ModelByInputTokens', () => {
