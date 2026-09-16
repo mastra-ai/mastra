@@ -374,12 +374,6 @@ interface FactoryInvokeSkillDecisionBase extends FactoryCommitDecisionBase {
   arguments?: string;
   precedingMessage?: string;
   cancelInFlight?: boolean;
-  /**
-   * Same-stage re-entry: the skill is already active in the card's live session,
-   * so deliver a compact continuation that references it by name and carries only
-   * the fresh arguments, instead of re-pasting the whole skill document.
-   */
-  resume?: boolean;
 }
 
 /**
@@ -390,7 +384,20 @@ interface FactoryInvokeSkillDecisionBase extends FactoryCommitDecisionBase {
  * instead of an otherwise empty skill.
  */
 export type FactoryInvokeSkillDecision = FactoryInvokeSkillDecisionBase &
-  ({ skillName: string; prompt?: never } | { prompt: string; skillName?: never });
+  (
+    | {
+        skillName: string;
+        prompt?: never;
+        /**
+         * Same-stage re-entry: the skill is already active in the card's live session,
+         * so deliver a compact continuation that references it by name and carries only
+         * the fresh arguments, instead of re-pasting the whole skill document. Only valid
+         * for named-skill decisions — a plain prompt run has no active skill to resume.
+         */
+        resume?: boolean;
+      }
+    | { prompt: string; skillName?: never; resume?: never }
+  );
 
 export interface FactorySendMessageDecision extends FactoryCommitDecisionBase {
   type: 'sendMessage';

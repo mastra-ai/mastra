@@ -287,17 +287,24 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       if (value.resume !== undefined && typeof value.resume !== 'boolean') {
         throw new FactoryRuleValidationError('Factory skill resume must be a boolean.');
       }
+      // Resume continues an already-active skill by name; a plain prompt run has no
+      // skill to resume, so the dispatcher would silently ignore the flag.
+      if (value.resume === true && value.skillName === undefined) {
+        throw new FactoryRuleValidationError('Factory skill resume requires skillName.');
+      }
       return {
         type,
         ...commonCommitFields(value),
         role: boundedString(value.role, 'Factory skill role', MAX_ROLE_LENGTH, IDENTIFIER_RE),
         ...(value.skillName === undefined
           ? { prompt: boundedString(value.prompt, 'Factory skill prompt', MAX_MESSAGE_LENGTH) }
-          : { skillName: boundedString(value.skillName, 'Factory skill name', MAX_SKILL_NAME_LENGTH, SKILL_NAME_RE) }),
+          : {
+              skillName: boundedString(value.skillName, 'Factory skill name', MAX_SKILL_NAME_LENGTH, SKILL_NAME_RE),
+              ...(value.resume === true ? { resume: true } : {}),
+            }),
         ...(args ? { arguments: args } : {}),
         ...(precedingMessage ? { precedingMessage } : {}),
         ...(value.cancelInFlight === true ? { cancelInFlight: true } : {}),
-        ...(value.resume === true ? { resume: true } : {}),
       };
     }
     case 'sendMessage': {

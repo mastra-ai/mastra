@@ -426,6 +426,18 @@ describe('Factory rule validation', () => {
     ).toThrow(/resume must be a boolean/i);
   });
 
+  it('rejects resume on a prompt invokeSkill decision', () => {
+    expect(() =>
+      validateFactoryRuleDecision({
+        type: 'invokeSkill',
+        idempotencyKey: 'skill-8',
+        role: 'review',
+        prompt: 'do the thing',
+        resume: true,
+      }),
+    ).toThrow(/resume requires skillName/i);
+  });
+
   it('requires unique decision idempotency keys', () => {
     expect(() =>
       validateFactoryRuleDecisions([
