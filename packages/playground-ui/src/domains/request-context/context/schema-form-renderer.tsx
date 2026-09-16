@@ -7,6 +7,8 @@ export interface RequestContextSchemaFormRenderProps {
   defaultValues: Record<string, unknown>;
   /** Called on every change; the surrounding run options persist the values on "Save". */
   onValuesChange: (values: Record<string, unknown>) => void;
+  /** Persist validated values when the surrounding run options are saved. */
+  onSave: (values: Record<string, unknown>) => void;
 }
 
 export type RequestContextSchemaFormRenderer = (props: RequestContextSchemaFormRenderProps) => ReactNode;

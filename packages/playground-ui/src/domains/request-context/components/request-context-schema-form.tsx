@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { useRequestContext } from '../context/request-context-provider';
 import { useRequestContextSchemaFormRenderer } from '../context/schema-form-renderer';
 import { RequestContextLabel } from './request-context-label';
-import { useRunOptionsDraft } from '@/domains/run-options/context/run-options-draft';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { Txt } from '@/ds/components/Txt';
 
@@ -25,15 +24,6 @@ export const RequestContextSchemaForm = ({ labelTooltip, requestContextSchema }:
 
   const values = draft ?? requestContext;
 
-  useRunOptionsDraft({
-    isDirty: draft !== undefined && JSON.stringify(draft) !== JSON.stringify(requestContext),
-    save: () => {
-      if (draft) setRequestContext(draft);
-      setDraft(undefined);
-      return true;
-    },
-  });
-
   if (!render) {
     return (
       <div className="text-neutral3">
@@ -49,7 +39,15 @@ export const RequestContextSchemaForm = ({ labelTooltip, requestContextSchema }:
         <CopyButton content={JSON.stringify(values)} />
       </div>
 
-      {render({ requestContextSchema, defaultValues: requestContext, onValuesChange: setDraft })}
+      {render({
+        requestContextSchema,
+        defaultValues: requestContext,
+        onValuesChange: setDraft,
+        onSave: values => {
+          setRequestContext(values);
+          setDraft(undefined);
+        },
+      })}
     </div>
   );
 };

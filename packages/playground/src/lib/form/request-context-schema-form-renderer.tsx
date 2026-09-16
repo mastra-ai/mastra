@@ -4,12 +4,14 @@ import { useMemo } from 'react';
 import { parse } from 'superjson';
 import { DynamicForm } from './dynamic-form';
 import { jsonSchemaToZodRuntime } from './json-schema-to-zod-runtime';
+import { RequestContextFormDraft } from './request-context-form-draft';
 
 /** Renders a request context JSON schema through the playground `DynamicForm`. */
 export function RequestContextSchemaFormRenderer({
   requestContextSchema,
   defaultValues,
   onValuesChange,
+  onSave,
 }: RequestContextSchemaFormRenderProps) {
   const zodSchema = useMemo(() => {
     try {
@@ -30,5 +32,9 @@ export function RequestContextSchemaFormRenderer({
   }
 
   // No `onSubmit`: DynamicForm then renders no submit button; run options own the single "Save".
-  return <DynamicForm schema={zodSchema} onValuesChange={onValuesChange} defaultValues={defaultValues} />;
+  return (
+    <DynamicForm schema={zodSchema} onValuesChange={onValuesChange} defaultValues={defaultValues}>
+      <RequestContextFormDraft schema={zodSchema} defaultValues={defaultValues} onSave={onSave} />
+    </DynamicForm>
+  );
 }

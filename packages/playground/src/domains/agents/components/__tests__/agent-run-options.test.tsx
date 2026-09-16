@@ -67,7 +67,7 @@ function AgentVariablesHarness({ children }: { children: React.ReactNode }) {
       variables: {
         type: 'object',
         properties: {
-          locale: { type: 'string' },
+          locale: { type: 'string', minLength: 2 },
         },
         required: [],
       },
@@ -194,6 +194,42 @@ describe('AgentRunOptions', () => {
       expect(within(requestContextSection()).queryByRole('button', { name: /save/i })).toBeNull();
       expect(saveAllButton()).not.toBeNull();
       expect(screen.getByRole('button', { name: /json/i })).not.toBeNull();
+    });
+  });
+
+  describe.each(['schema', 'variables'] as const)('when the %s form contains an invalid value', source => {
+    it('keeps the saved context unchanged until the value is corrected', async () => {
+      const storageKey = `mastra:request-context:agent:${AGENT_ID}`;
+      window.localStorage.setItem(storageKey, JSON.stringify({ locale: 'en' }));
+      const requestContextSchema = stringify({
+        type: 'object',
+        properties: { locale: { type: 'string', minLength: 2 } },
+        required: ['locale'],
+      });
+      renderRunOptions(
+        source === 'schema' ? (
+          <AgentRunOptions triggerVariant="icon" requestContextSchema={requestContextSchema} />
+        ) : (
+          <AgentVariablesHarness>
+            <AgentRunOptions triggerVariant="icon" />
+          </AgentVariablesHarness>
+        ),
+      );
+      await openByTestId('composer-run-options-trigger');
+      const input = within(requestContextSection()).getByRole('textbox');
+      fireEvent.change(input, { target: { value: 'f' } });
+      fireEvent.click(saveAllButton());
+
+      await waitFor(() => {
+        expect(JSON.parse(window.localStorage.getItem(storageKey) ?? '{}')).toEqual({ locale: 'en' });
+        expect(within(requestContextSection()).getByText(/at least 2/i)).not.toBeNull();
+      });
+
+      fireEvent.change(input, { target: { value: 'fr' } });
+      fireEvent.click(saveAllButton());
+      await waitFor(() => {
+        expect(JSON.parse(window.localStorage.getItem(storageKey) ?? '{}')).toEqual({ locale: 'fr' });
+      });
     });
   });
 
