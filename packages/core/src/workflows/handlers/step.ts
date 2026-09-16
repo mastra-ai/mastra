@@ -636,7 +636,7 @@ export async function runScorersForStep(params: RunScorersParams): Promise<void>
         scorerObject.scorer.__registerMastra(engine.mastra);
         engine.mastra.addScorer(scorerObject.scorer, undefined, { source: 'code' });
       }
-      runScorer({
+      await runScorer({
         mastra: engine.mastra,
         scorerId: scorerObject.scorer.id,
         scorerObject: scorerObject,

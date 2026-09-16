@@ -2107,7 +2107,7 @@ export class Mastra<
         // refuse to claim this row from an instance whose local workflow
         // definition differs (stale-build fencing, #19169). `targetsEqual`
         // below picks up hash changes and rewrites the row on redeploy.
-        const definitionHash = computeScheduleDefinitionHash(workflowsById.get(workflowId)?.serializedStepGraph);
+        const definitionHash = await computeScheduleDefinitionHash(workflowsById.get(workflowId)?.serializedStepGraph);
         if (definitionHash) target.definitionHash = definitionHash;
 
         if (!existing) {

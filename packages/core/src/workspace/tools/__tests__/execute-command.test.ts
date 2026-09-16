@@ -748,7 +748,7 @@ describe('executeCommandTool browser CLI logic', () => {
         context,
       );
       expect(spawn).toHaveBeenCalledWith(
-        browserCliHandler.injectCdpUrl(command, 'ws://localhost:9222/devtools/browser/abc', 'test-thread'),
+        await browserCliHandler.injectCdpUrl(command, 'ws://localhost:9222/devtools/browser/abc', 'test-thread'),
         expect.any(Object),
       );
       expect(foreground).not.toHaveBeenCalled();

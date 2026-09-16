@@ -77,11 +77,11 @@ export class SchedulerWorker extends MastraWorker {
     // fire. Fails open for rows without a hash (legacy/imperative
     // schedules) and for agent targets, which have no step graph.
     const isTargetCurrent = mastra
-      ? (target: ScheduleTarget) => {
+      ? async (target: ScheduleTarget) => {
           if (target.type !== 'workflow' || !target.definitionHash) return true;
           try {
             const workflow = mastra.getWorkflowById(target.workflowId);
-            const localHash = computeScheduleDefinitionHash(workflow.serializedStepGraph);
+            const localHash = await computeScheduleDefinitionHash(workflow.serializedStepGraph);
             // Unhashable local graph → can't compare, fail open.
             if (!localHash) return true;
             return localHash === target.definitionHash;

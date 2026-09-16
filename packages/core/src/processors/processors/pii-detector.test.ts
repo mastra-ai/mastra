@@ -1415,7 +1415,20 @@ describe('PIIDetector', () => {
       });
 
       expect(result).toBeNull();
-      expect((flushed as any).payload.text).toContain('[HASH:');
+      expect((flushed as any).payload.text).toBe('Email: [HASH:f94d55f1]');
+    });
+
+    it('hashes empty, Unicode, and representative PII values with UTF-8 SHA-256', async () => {
+      const detector = new PIIDetector({
+        model: setupMockModel(createMockPIIResult()),
+        strategy: 'redact',
+        redactionMethod: 'hash',
+      });
+      const hashValue = (detector as any).hashValue.bind(detector) as (value: string) => Promise<string>;
+
+      await expect(hashValue('')).resolves.toBe('[HASH:e3b0c442]');
+      await expect(hashValue('José')).resolves.toBe('[HASH:24c2ab65]');
+      await expect(hashValue('hash@test.com')).resolves.toBe('[HASH:f94d55f1]');
     });
 
     it('should use remove redaction method during streaming', async () => {

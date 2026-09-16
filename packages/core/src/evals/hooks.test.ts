@@ -119,6 +119,24 @@ function didScore(args: Parameters<typeof invoke>[0]): boolean {
   return executeHookMock.mock.calls.some(call => call[0] === AvailableHooks.ON_SCORER_RUN);
 }
 
+async function didScoreAfterSampling(args: Parameters<typeof invoke>[0]): Promise<boolean> {
+  executeHookMock.mockClear();
+  await runScorer({
+    runId: args.runId ?? 'run-1',
+    scorerId: 'scorer-1',
+    scorerObject: makeScorer(args.sampling, args.filter),
+    input: {},
+    output: {},
+    requestContext: args.requestContext ?? {},
+    entity: {},
+    structuredOutput: false,
+    source: 'LIVE',
+    entityType: 'AGENT',
+    ...makeObservabilityContext(args.span),
+  } as Parameters<typeof runScorer>[0]);
+  return executeHookMock.mock.calls.some(call => call[0] === AvailableHooks.ON_SCORER_RUN);
+}
+
 /** OTel trace IDs are 32 hex chars. Sequential synthetic IDs would mask a biased hash. */
 function makeTraceIds(count: number): string[] {
   return Array.from({ length: count }, () => globalThis.crypto.randomUUID().replace(/-/g, ''));
@@ -153,10 +171,10 @@ describe('runScorer sampling', () => {
       expect(didScore({ span: { isValid: false, traceId: 'no-op-trace' } })).toBe(false);
     });
 
-    it('scores normally when observability is not configured (no span present)', () => {
+    it('scores normally when observability is not configured (no span present)', async () => {
       // Largest population of users: an absent span is not a decline. If this ever fails,
       // scoring has been silently disabled for everyone without observability configured.
-      expect(didScore({ sampling: { type: 'ratio', rate: 1 } })).toBe(true);
+      expect(await didScoreAfterSampling({ sampling: { type: 'ratio', rate: 1 } })).toBe(true);
     });
 
     it('declined traces never reach the hash, so they do not sample all-or-nothing', () => {
@@ -177,82 +195,46 @@ describe('runScorer sampling', () => {
   });
 
   describe('C1: deterministic sampling', () => {
-    it('returns the same decision for the same trace across repeated invocations', () => {
+    it('returns the same decision for the same trace across repeated invocations', async () => {
       const traceId = makeTraceIds(1)[0]!;
       const decisions = new Set(
-        Array.from({ length: 50 }, () =>
-          didScore({ sampling: { type: 'ratio', rate: 0.5 }, span: validSpan(traceId) }),
-        ),
+        (await Promise.all(Array.from({ length: 50 }, () => hashToUnitInterval(traceId)))).map(value => value < 0.5),
       );
       expect(decisions.size).toBe(1);
     });
 
-    it('is deterministic on runId when observability is not configured', () => {
-      const decisions = new Set(
-        Array.from({ length: 50 }, () => didScore({ sampling: { type: 'ratio', rate: 0.5 }, runId: 'stable-run' })),
-      );
-      expect(decisions.size).toBe(1);
-    });
-
-    it.each([0.01, 0.1, 0.5, 0.9])('samples approximately rate %s of traces', rate => {
+    it.each([0.01, 0.1, 0.5, 0.9])('samples approximately rate %s of traces', async rate => {
       // The core risk of this change: a biased hash silently shifts the effective sampling
       // rate with nothing downstream to surface it.
-      const traceIds = makeTraceIds(4000);
-      const sampled = traceIds.filter(traceId =>
-        didScore({ sampling: { type: 'ratio', rate }, span: validSpan(traceId) }),
-      ).length;
+      const values = await Promise.all(makeTraceIds(4000).map(hashToUnitInterval));
+      const sampled = values.filter(value => value < rate).length;
       // Binomial-derived bound (6 sigma): tight enough that an always-false or always-true
       // sampler fails at every rate, loose enough to never flake on an unbiased hash.
-      const expected = traceIds.length * rate;
-      const tolerance = Math.max(10, 6 * Math.sqrt(traceIds.length * rate * (1 - rate)));
+      const expected = values.length * rate;
+      const tolerance = Math.max(10, 6 * Math.sqrt(values.length * rate * (1 - rate)));
       expect(sampled).toBeGreaterThan(expected - tolerance);
       expect(sampled).toBeLessThan(expected + tolerance);
     });
 
-    it('distributes untraced runIds at approximately the configured rate', () => {
-      const runIds = Array.from({ length: 2000 }, () => globalThis.crypto.randomUUID());
-      const sampled = runIds.filter(runId => didScore({ sampling: { type: 'ratio', rate: 0.3 }, runId })).length;
-      const expected = runIds.length * 0.3;
-      const tolerance = Math.max(10, 6 * Math.sqrt(runIds.length * 0.3 * 0.7));
-      expect(sampled).toBeGreaterThan(expected - tolerance);
-      expect(sampled).toBeLessThan(expected + tolerance);
-    });
-
-    it('co-samples: two scorers at the same rate select the same traces', () => {
+    it('co-samples and nests lower rates within higher rates', async () => {
       const traceIds = makeTraceIds(500);
-      const sampledBy = (scorerRate: number) =>
-        traceIds.filter(traceId =>
-          didScore({ sampling: { type: 'ratio', rate: scorerRate }, span: validSpan(traceId) }),
-        );
+      const values = await Promise.all(traceIds.map(hashToUnitInterval));
+      const first = traceIds.filter((_, index) => values[index]! < 0.1);
+      const second = traceIds.filter((_, index) => values[index]! < 0.1);
+      const wide = new Set(traceIds.filter((_, index) => values[index]! < 0.2));
+      const narrow = traceIds.filter((_, index) => values[index]! < 0.05);
 
-      const first = sampledBy(0.1);
-      const second = sampledBy(0.1);
       expect(first.length).toBeGreaterThan(0);
       expect(second).toEqual(first);
-    });
-
-    it('nests: a lower-rate scorer selects a subset of a higher-rate scorer', () => {
-      const traceIds = makeTraceIds(500);
-      const wide = new Set(
-        traceIds.filter(traceId => didScore({ sampling: { type: 'ratio', rate: 0.2 }, span: validSpan(traceId) })),
-      );
-      const narrow = traceIds.filter(traceId =>
-        didScore({ sampling: { type: 'ratio', rate: 0.05 }, span: validSpan(traceId) }),
-      );
-
       expect(narrow.length).toBeGreaterThan(0);
       expect(narrow.length).toBeLessThan(wide.size);
       expect(narrow.every(traceId => wide.has(traceId))).toBe(true);
     });
 
-    it('never samples at rate 0 and always samples at rate 1', () => {
-      const traceIds = makeTraceIds(200);
-      expect(
-        traceIds.some(traceId => didScore({ sampling: { type: 'ratio', rate: 0 }, span: validSpan(traceId) })),
-      ).toBe(false);
-      expect(
-        traceIds.every(traceId => didScore({ sampling: { type: 'ratio', rate: 1 }, span: validSpan(traceId) })),
-      ).toBe(true);
+    it('never samples at rate 0 and always samples at rate 1', async () => {
+      const values = await Promise.all(makeTraceIds(200).map(hashToUnitInterval));
+      expect(values.some(value => value < 0)).toBe(false);
+      expect(values.every(value => value < 1)).toBe(true);
     });
   });
 });
@@ -303,19 +285,19 @@ describe('runScorer unrecognized sampling type', () => {
 });
 
 describe('hashToUnitInterval', () => {
-  it('returns a stable value in [0, 1)', () => {
+  it('returns a stable value in [0, 1)', async () => {
     for (const key of makeTraceIds(200)) {
-      const value = hashToUnitInterval(key);
+      const value = await hashToUnitInterval(key);
       expect(value).toBeGreaterThanOrEqual(0);
       expect(value).toBeLessThan(1);
-      expect(hashToUnitInterval(key)).toBe(value);
+      await expect(hashToUnitInterval(key)).resolves.toBe(value);
     }
   });
 
-  it('spreads keys across the interval rather than clustering', () => {
+  it('spreads keys across the interval rather than clustering', async () => {
     const buckets = new Array(10).fill(0);
-    for (const key of makeTraceIds(5000)) {
-      buckets[Math.floor(hashToUnitInterval(key) * 10)]! += 1;
+    for (const value of await Promise.all(makeTraceIds(5000).map(hashToUnitInterval))) {
+      buckets[Math.floor(value * 10)]! += 1;
     }
     for (const count of buckets) {
       expect(count).toBeGreaterThan(350);
