@@ -62,7 +62,7 @@ export function TraceSpanTree({
     <>
       {leadingSlot}
       <SpanTypeLegend spans={hierarchicalSpans} />
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] content-start items-start gap-y-px overflow-hidden py-1">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] content-start items-start gap-y-px overflow-hidden py-1">
         <SpanRows
           spans={hierarchicalSpans}
           onSpanClick={onSpanClick}

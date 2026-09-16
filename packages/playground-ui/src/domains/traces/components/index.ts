@@ -1,7 +1,6 @@
 export { formatHierarchicalSpans } from './format-hierarchical-spans';
 export { getSpanTypeUi, spanTypePrefixes } from './shared';
 export { SpanTokenUsage, type TokenUsage } from './span-token-usage';
-export { TimelineExpandCol } from './timeline-expand-col';
 export { TimelineNameCol } from './timeline-name-col';
 export { TimelineStructureSign } from './timeline-structure-sign';
 export { TimelineTimingCol } from './timeline-timing-col';

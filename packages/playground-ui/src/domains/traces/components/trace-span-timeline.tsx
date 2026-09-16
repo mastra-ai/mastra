@@ -54,7 +54,7 @@ export function TraceSpanTimeline({
     <>
       {leadingSlot}
       <SpanTypeLegend spans={hierarchicalSpans} />
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(12rem,1fr)] content-start items-start gap-y-px overflow-hidden py-1">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(12rem,1fr)] content-start items-start gap-y-px overflow-hidden py-1">
         <div
           aria-label="Trace time axis"
           className="text-ui-xs text-neutral3 col-start-3 flex justify-between px-1 pr-2 pb-1"

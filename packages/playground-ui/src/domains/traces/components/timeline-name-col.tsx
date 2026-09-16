@@ -1,3 +1,4 @@
+import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import type { UISpan, UISpanStyle } from '../types';
 import { TimelineStructureSign } from './timeline-structure-sign';
@@ -13,8 +14,10 @@ type TimelineNameColProps = {
   revealSpanId?: string;
   isLastChild?: boolean;
   hasChildren?: boolean;
+  numOfChildren?: number;
   isRootSpan?: boolean;
   isExpanded?: boolean;
+  toggleChildren?: () => void;
 };
 
 export function TimelineNameCol({
@@ -26,9 +29,11 @@ export function TimelineNameCol({
   selectedSpanId,
   revealSpanId,
   isLastChild,
-  hasChildren: _hasChildren,
+  hasChildren,
+  numOfChildren = 0,
   isRootSpan,
-  isExpanded: _isExpanded,
+  isExpanded,
+  toggleChildren,
 }: TimelineNameColProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const isSelected = selectedSpanId === span.id;
@@ -41,6 +46,8 @@ export function TimelineNameCol({
     if (shouldScrollIntoView) rowRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [shouldScrollIntoView]);
 
+  const toggleLabel = isExpanded ? `Collapse children (${numOfChildren})` : `Expand children (${numOfChildren})`;
+
   return (
     <div
       ref={rowRef}
@@ -52,6 +59,25 @@ export function TimelineNameCol({
       style={{ paddingLeft: `${depth * 1}rem` }}
     >
       {!isRootSpan && <TimelineStructureSign isLastChild={isLastChild} />}
+
+      {/* Fixed-width slot so span names stay aligned whether or not the row has children. */}
+      <div className="flex size-6 shrink-0 items-center justify-center">
+        {hasChildren && (
+          <button
+            type="button"
+            onClick={toggleChildren}
+            aria-label={toggleLabel}
+            aria-expanded={isExpanded}
+            className={cn(
+              'flex size-5 cursor-pointer items-center justify-center rounded-md transition-colors',
+              'hover:bg-surface5 [&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:opacity-50',
+              'focus:outline-none focus-visible:ring-1 focus-visible:ring-accent1',
+            )}
+          >
+            {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+          </button>
+        )}
+      </div>
 
       <button
         onClick={() => onSpanClick?.(span.id)}

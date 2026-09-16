@@ -77,14 +77,26 @@ describe('TraceSpanTimeline', () => {
     expect(onSpanClick).toHaveBeenCalledWith('child');
   });
 
-  it('keeps the expansion controls of the span tree', () => {
+  it('toggles children with the single chevron at the start of the row', () => {
     render(<Harness />);
     expect(rows()).toHaveLength(1);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Expand all' }));
-    expect(rows()).toHaveLength(2);
+    const root = screen.getByLabelText('View details for span agent run');
+    // Only one expansion control per row: the chevron precedes the span name.
+    expect(within(root).getAllByRole('button')).toHaveLength(2);
+    expect(within(root).getAllByRole('button')[0]?.getAttribute('aria-expanded')).toBe('false');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Collapse all' }));
+    fireEvent.click(within(root).getByRole('button', { name: 'Expand children (1)' }));
+    expect(rows()).toHaveLength(2);
+    expect(within(root).getByRole('button', { name: 'Collapse children (1)' }).getAttribute('aria-expanded')).toBe(
+      'true',
+    );
+
+    // Leaf rows have no chevron.
+    const leaf = screen.getByLabelText('View details for span weather tool');
+    expect(within(leaf).getAllByRole('button')).toHaveLength(1);
+
+    fireEvent.click(within(root).getByRole('button', { name: 'Collapse children (1)' }));
     expect(rows()).toHaveLength(1);
   });
 
