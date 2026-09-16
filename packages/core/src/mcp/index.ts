@@ -27,6 +27,12 @@ export type { MCPToolType } from '../tools';
  * that can be registered with Mastra, including handling of server metadata.
  */
 export abstract class MCPServerBase<TId extends string = string> extends MastraBase {
+  /**
+   * Set to `2` by servers that speak MCP 2026-07-28 (`@mastra/mcp` 2.x). Such a server
+   * has no standalone SSE transport and its `executeTool` resolves to a
+   * `MCPToolExecutionResultV2`. 1.x servers leave it undefined.
+   */
+  public readonly mcpVersion?: 2;
   /** Tracks if the server ID has been definitively set. */
   private idWasSet = false;
   /** The display name of the MCP server. */
@@ -204,18 +210,32 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
   public abstract startStdio(): Promise<void>;
 
   /**
-   * Start the MCP server using SSE transport
-   * This is typically used for web integration
+   * Start the MCP server using the standalone HTTP+SSE transport.
+   * Only `@mastra/mcp` 1.x overrides this; MCP 2026-07-28 removed the transport, so the
+   * base implementation throws and 2.x servers inherit that.
+   * @deprecated Removed in the next core major together with the 1.x server contract.
+   * Use `startHTTP` (Streamable HTTP) instead.
    * @param options Options for the SSE transport
    */
-  public abstract startSSE(options: MCPServerSSEOptions): Promise<void>;
+  public async startSSE(_options: MCPServerSSEOptions): Promise<void> {
+    throw new Error(
+      `MCP server '${this.id}' does not implement the standalone SSE transport (removed in MCP 2026-07-28); use startHTTP instead`,
+    );
+  }
 
   /**
-   * Start the MCP server using Hono SSE transport
-   * Used for Hono servers
+   * Start the MCP server using the standalone Hono SSE transport.
+   * Only `@mastra/mcp` 1.x overrides this; MCP 2026-07-28 removed the transport, so the
+   * base implementation throws and 2.x servers inherit that.
+   * @deprecated Removed in the next core major together with the 1.x server contract.
+   * Use `startHTTP` (Streamable HTTP) instead.
    * @param options Options for the SSE transport
    */
-  public abstract startHonoSSE(options: MCPServerHonoSSEOptions): Promise<Response | undefined>;
+  public async startHonoSSE(_options: MCPServerHonoSSEOptions): Promise<Response | undefined> {
+    throw new Error(
+      `MCP server '${this.id}' does not implement the standalone Hono SSE transport (removed in MCP 2026-07-28); use startHTTP instead`,
+    );
+  }
 
   /**
    * Start the MCP server using HTTP transport
@@ -300,13 +320,25 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
    * @param toolId The ID/name of the tool to execute.
    * @param args The arguments to pass to the tool's execute function.
    * @param executionContext Optional context for the tool execution (e.g., messages, toolCallId).
-   * @returns A promise that resolves to the result of the tool execution.
+   * On a 2026-07-28 server a continuation passes the previous round's `resumeData` and
+   * `suspendPayload`; the server supplies `context.suspend` and `context.mcp`.
+   * @returns A promise that resolves to the result of the tool execution. A server with
+   * `mcpVersion === 2` resolves to a `MCPToolExecutionResultV2` so a tool that suspended for
+   * input is reported instead of being mistaken for a completed call; such a server declares
+   * that return type on its override (the base stays `Promise<any>` so 1.x subclasses with a
+   * concrete return type keep compiling).
    * @throws Error if the tool is not found, or if execution fails.
    */
   public abstract executeTool(
     toolId: string,
     args: any,
-    executionContext?: { messages?: any[]; toolCallId?: string; requestContext?: RequestContext },
+    executionContext?: {
+      messages?: any[];
+      toolCallId?: string;
+      requestContext?: RequestContext;
+      resumeData?: unknown;
+      suspendPayload?: unknown;
+    },
   ): Promise<any>;
 
   /**

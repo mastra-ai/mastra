@@ -1,5 +1,6 @@
 import { DurableAgentDefaults } from '@mastra/core/agent/durable';
 
+import { MessageList } from '@mastra/core/agent/message-list';
 import type { AnyExportedSpan, ObservabilityExporter, TracingEvent } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { Observability } from '@mastra/observability';
@@ -205,12 +206,12 @@ describe('createInngestDurableAgenticWorkflow tool-call tracing (#19842)', () =>
 });
 
 /**
- * `map-final-output` runs the finish side effects through `engine.step.run`. These tests
- * only care about how the spans are ended, so the fake engine returns the step's result
- * without invoking the callback. Mocking the module instead would leak across files,
- * because this package runs vitest with `--no-isolate`.
+ * `map-final-output` calls `runDurableFinishSideEffects` directly (no step tooling — the
+ * mapping already runs inside the engine's durable boundary). These tests only care about
+ * how spans are ended, so they pass an empty serialized MessageList; with no registry
+ * entry the helper's side-effect blocks (processors, persistence, title) are no-ops.
  */
-const skipFinishSideEffects = async () => ({ messageListState: undefined, outputText: undefined });
+const emptyMessageListState = () => new MessageList().serialize();
 
 describe('createInngestDurableAgenticWorkflow final span ends', () => {
   it('ends the model span with usage on attributes and the agent span with text only', async () => {
@@ -256,10 +257,10 @@ describe('createInngestDurableAgenticWorkflow final span ends', () => {
         lastStepResult: { reason: 'stop', isContinued: false, warnings: [] },
         modelSpanData: modelSpan.exportSpan(),
         agentSpanData: agentSpan.exportSpan(),
+        messageListState: emptyMessageListState(),
         state: {},
       },
       getInitData: () => ({ runId: 'run-1', agentId: 'agent-1' }),
-      engine: { step: { run: skipFinishSideEffects } },
       mastra: { observability, getLogger: () => undefined },
     });
 
@@ -300,10 +301,10 @@ describe('createInngestDurableAgenticWorkflow final span ends', () => {
         accumulatedSteps,
         accumulatedUsage: usage,
         lastStepResult: { reason: 'stop', isContinued: false, warnings: [] },
+        messageListState: emptyMessageListState(),
         state: {},
       },
       getInitData: () => ({ runId: 'run-1', agentId: 'agent-1' }),
-      engine: { step: { run: skipFinishSideEffects } },
       mastra: { getLogger: () => undefined },
     });
 
