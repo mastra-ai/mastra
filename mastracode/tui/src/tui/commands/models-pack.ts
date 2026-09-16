@@ -44,7 +44,7 @@ const SHARE_PREFIX = 'mastra-pack:';
 
 interface SharedPackPayload {
   name: string;
-  models: { build: string; plan: string; fast: string; om?: string };
+  models: { build: string; plan: string; fast: string; memory?: string };
 }
 
 export function serializePack(pack: ModePack): string {
@@ -54,7 +54,7 @@ export function serializePack(pack: ModePack): string {
       build: pack.models.build,
       plan: pack.models.plan,
       fast: pack.models.fast,
-      ...(pack.models.om ? { om: pack.models.om } : {}),
+      ...(pack.models.memory ? { memory: pack.models.memory } : {}),
     },
   };
   return SHARE_PREFIX + Buffer.from(JSON.stringify(payload), 'utf-8').toString('base64');
@@ -76,14 +76,14 @@ export function deserializePack(input: string): ModePack | null {
     const build = typeof models.build === 'string' ? models.build : '';
     const plan = typeof models.plan === 'string' ? models.plan : '';
     const fast = typeof models.fast === 'string' ? models.fast : '';
-    const om = typeof models.om === 'string' && models.om.trim() ? models.om.trim() : undefined;
+    const memory = typeof models.memory === 'string' && models.memory.trim() ? models.memory.trim() : undefined;
     if (!build || !plan || !fast) return null;
 
     return {
       id: `custom:${name}`,
       name,
       description: 'Imported custom pack',
-      models: { build, plan, fast, ...(om ? { om } : {}) },
+      models: { build, plan, fast, ...(memory ? { memory } : {}) },
     };
   } catch {
     return null;
@@ -423,7 +423,7 @@ async function askModifiedBuiltinPackAction(
 async function askCustomPackEditTarget(
   ctx: SlashCommandContext,
   pack: ModePack,
-): Promise<'rename' | 'plan' | 'build' | 'fast' | 'om' | 'om-clear' | 'save' | null> {
+): Promise<'rename' | 'plan' | 'build' | 'fast' | 'memory' | 'memory-clear' | 'save' | null> {
   return new Promise(resolve => {
     const container = new Box(4, 2, text => theme.bg('overlayBg', text));
     container.addChild(new Text(theme.bold(theme.fg('accent', `Edit custom pack: ${pack.name}`)), 0, 0));
@@ -435,14 +435,16 @@ async function askCustomPackEditTarget(
       { value: 'build', label: `  ${chalk.hex(mastra.green)('build')} → ${theme.fg('text', pack.models.build)}` },
       { value: 'fast', label: `  ${chalk.hex(mastra.orange)('fast')} → ${theme.fg('text', pack.models.fast)}` },
       {
-        value: 'om',
-        label: `  ${chalk.hex(mastra.pink)('om')} → ${
-          pack.models.om ? theme.fg('text', pack.models.om) : theme.fg('dim', 'not set (uses standalone OM config)')
+        value: 'memory',
+        label: `  ${chalk.hex(mastra.pink)('memory')} → ${
+          pack.models.memory
+            ? theme.fg('text', pack.models.memory)
+            : theme.fg('dim', 'not set (uses standalone OM config)')
         }`,
       },
     ];
-    if (pack.models.om) {
-      items.push({ value: 'om-clear', label: `  ${theme.fg('warning', 'Clear OM model')}` });
+    if (pack.models.memory) {
+      items.push({ value: 'memory-clear', label: `  ${theme.fg('warning', 'Clear memory model')}` });
     }
     items.push({ value: 'save', label: `  ${theme.fg('success', 'Save')}` });
 
@@ -455,7 +457,7 @@ async function askCustomPackEditTarget(
 
     selectList.onSelect = item => {
       closeOverlay();
-      resolve(item.value as 'rename' | 'plan' | 'build' | 'fast' | 'om' | 'om-clear' | 'save');
+      resolve(item.value as 'rename' | 'plan' | 'build' | 'fast' | 'memory' | 'memory-clear' | 'save');
     };
 
     selectList.onCancel = () => {
@@ -543,7 +545,7 @@ async function runCustomFlow(
     build: existing.build ?? '',
     plan: existing.plan ?? '',
     fast: existing.fast ?? '',
-    om: existing.om ?? '',
+    memory: existing.memory ?? '',
   };
 
   for (const mode of modes) {
@@ -560,9 +562,14 @@ async function runCustomFlow(
   const omChoice = await askOptionalOmChoice(ctx);
   if (omChoice === null) return null;
   if (omChoice === 'choose') {
-    const omModelId = await selectModel(ctx, 'Select observational memory model', mastra.pink, models.om || undefined);
-    if (!omModelId) return null;
-    models.om = omModelId;
+    const memoryModelId = await selectModel(
+      ctx,
+      'Select observational memory model',
+      mastra.pink,
+      models.memory || undefined,
+    );
+    if (!memoryModelId) return null;
+    models.memory = memoryModelId;
   }
 
   return {
@@ -574,7 +581,7 @@ async function runCustomFlow(
       build: models.build!,
       plan: models.plan!,
       fast: models.fast!,
-      ...(models.om ? { om: models.om } : {}),
+      ...(models.memory ? { memory: models.memory } : {}),
     },
   };
 }
@@ -604,17 +611,22 @@ async function runCustomPackEditFlow(
       continue;
     }
 
-    if (editTarget === 'om-clear') {
+    if (editTarget === 'memory-clear') {
       const models = { ...workingPack.models };
-      delete models.om;
+      delete models.memory;
       workingPack = { ...workingPack, models };
       continue;
     }
 
-    if (editTarget === 'om') {
-      const omModelId = await selectModel(ctx, 'Select observational memory model', mastra.pink, workingPack.models.om);
-      if (!omModelId) continue;
-      workingPack = { ...workingPack, models: { ...workingPack.models, om: omModelId } };
+    if (editTarget === 'memory') {
+      const memoryModelId = await selectModel(
+        ctx,
+        'Select observational memory model',
+        mastra.pink,
+        workingPack.models.memory,
+      );
+      if (!memoryModelId) continue;
+      workingPack = { ...workingPack, models: { ...workingPack.models, memory: memoryModelId } };
       continue;
     }
 
@@ -772,7 +784,7 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
     const modelId = (pack.models as Record<string, string>)[mode.id];
     if (modelId) modeDefaults[mode.id] = modelId;
   }
-  if (pack.models.om) modeDefaults.om = pack.models.om;
+  if (pack.models.memory) modeDefaults.memory = pack.models.memory;
 
   if (pack.id.startsWith('custom:')) {
     upsertCustomPackInSettings(s, pack, modeDefaults, previousPackId);
@@ -817,16 +829,16 @@ function getModifiedPackDetail(pack: ModePack, builtinPack: ModePack): string {
       : theme.fg('text', pack.models[mode]);
 
   const lines = [
-    `  ${chalk.hex(mastra.purple)('plan')}  → ${modelText('plan')}`,
-    `  ${chalk.hex(mastra.green)('build')} → ${modelText('build')}`,
-    `  ${chalk.hex(mastra.orange)('fast')}  → ${modelText('fast')}`,
+    `  ${chalk.hex(mastra.purple)('plan')}   → ${modelText('plan')}`,
+    `  ${chalk.hex(mastra.green)('build')}  → ${modelText('build')}`,
+    `  ${chalk.hex(mastra.orange)('fast')}   → ${modelText('fast')}`,
   ];
-  if (pack.models.om) {
-    const omText =
-      pack.models.om !== builtinPack.models.om
-        ? theme.fg('warning', `${pack.models.om} (overridden)`)
-        : theme.fg('text', pack.models.om);
-    lines.push(`  ${chalk.hex(mastra.pink)('om')}    → ${omText}`);
+  if (pack.models.memory) {
+    const memoryText =
+      pack.models.memory !== builtinPack.models.memory
+        ? theme.fg('warning', `${pack.models.memory} (overridden)`)
+        : theme.fg('text', pack.models.memory);
+    lines.push(`  ${chalk.hex(mastra.pink)('memory')} → ${memoryText}`);
   }
   return lines.join('\n');
 }
@@ -836,12 +848,12 @@ function getPackDetail(pack: ModePack): string {
     return theme.fg('dim', '  Create a named custom pack and pick a model for each mode.');
   }
   const lines = [
-    `  ${chalk.hex(mastra.purple)('plan')}  → ${theme.fg('text', pack.models.plan)}`,
-    `  ${chalk.hex(mastra.green)('build')} → ${theme.fg('text', pack.models.build)}`,
-    `  ${chalk.hex(mastra.orange)('fast')}  → ${theme.fg('text', pack.models.fast)}`,
+    `  ${chalk.hex(mastra.purple)('plan')}   → ${theme.fg('text', pack.models.plan)}`,
+    `  ${chalk.hex(mastra.green)('build')}  → ${theme.fg('text', pack.models.build)}`,
+    `  ${chalk.hex(mastra.orange)('fast')}   → ${theme.fg('text', pack.models.fast)}`,
   ];
-  if (pack.models.om) {
-    lines.push(`  ${chalk.hex(mastra.pink)('om')}    → ${theme.fg('text', pack.models.om)}`);
+  if (pack.models.memory) {
+    lines.push(`  ${chalk.hex(mastra.pink)('memory')} → ${theme.fg('text', pack.models.memory)}`);
   }
   return lines.join('\n');
 }
@@ -859,7 +871,7 @@ async function saveCustomPackEdits(ctx: SlashCommandContext, pack: ModePack, pre
     plan: pack.models.plan,
     build: pack.models.build,
     fast: pack.models.fast,
-    ...(pack.models.om ? { om: pack.models.om } : {}),
+    ...(pack.models.memory ? { memory: pack.models.memory } : {}),
   };
 
   upsertCustomPackInSettings(settings, pack, modeDefaults, previousPackId, false);

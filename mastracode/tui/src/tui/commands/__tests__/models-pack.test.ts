@@ -695,16 +695,16 @@ describe('serializePack / deserializePack', () => {
     expect(deserialized!.name).toBe('Alpha');
   });
 
-  it('round-trips the optional OM model', () => {
+  it('round-trips the optional memory model', () => {
     const pack: ModePack = {
       ...alphaPack,
-      models: { ...alphaPack.models, om: 'anthropic/claude-haiku-4-5' },
+      models: { ...alphaPack.models, memory: 'anthropic/claude-haiku-4-5' },
     };
 
     const deserialized = deserializePack(serializePack(pack));
-    expect(deserialized!.models.om).toBe('anthropic/claude-haiku-4-5');
+    expect(deserialized!.models.memory).toBe('anthropic/claude-haiku-4-5');
 
-    const withoutOm = deserializePack(serializePack(alphaPack));
-    expect(withoutOm!.models.om).toBeUndefined();
+    const withoutMemory = deserializePack(serializePack(alphaPack));
+    expect(withoutMemory!.models.memory).toBeUndefined();
   });
 });

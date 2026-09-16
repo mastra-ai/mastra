@@ -10,13 +10,13 @@ import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowle
 import { loadSettings } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
-import { resolveModel, resolvePackOmModelChain } from './model.js';
-import type { PackOmModelChainEntry } from './model.js';
+import { resolveModel, resolvePackMemoryModelChain } from './model.js';
+import type { PackMemoryModelChainEntry } from './model.js';
 
 /**
  * Resolve one OM role's model for this invocation. Lookup order:
  *   1. The explicit role override (`observerModelOverride` / `reflectorModelOverride`).
- *   2. The active mode pack's optional `models.om`, walking the pack's fallback
+ *   2. The active mode pack's optional `models.memory`, walking the pack's fallback
  *      chain so OM fails over alongside (and independently of) the main agent.
  *      The pending pack-hop marker wins over the settled pack id so an immediate
  *      retrigger observes on the landed pack.
@@ -26,7 +26,7 @@ import type { PackOmModelChainEntry } from './model.js';
 function resolveOmRoleModelForRequest(
   role: 'observer' | 'reflector',
   requestContext: RequestContext,
-): GatewayLanguageModel | PackOmModelChainEntry[] {
+): GatewayLanguageModel | PackMemoryModelChainEntry[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = controller?.getState() as MastraCodeState | undefined;
   const resolveOptions = { remapForCodexOAuth: true, requestContext } as const;
@@ -49,7 +49,7 @@ function resolveOmRoleModelForRequest(
       : undefined;
   const packId = pendingPackId ?? state?.activeModelPackId ?? settings.models?.activeModelPackId;
   if (typeof packId === 'string' && packId.length > 0) {
-    const chained = resolvePackOmModelChain(settings, packId, resolveOptions);
+    const chained = resolvePackMemoryModelChain(settings, packId, resolveOptions);
     if (chained) return chained;
   }
 

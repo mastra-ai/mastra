@@ -721,7 +721,7 @@ Configure the scope through:
 
 The observer and reflector models default to `google/gemini-2.5-flash`. Set them through the `/om` panel or in the controller state.
 
-Custom model packs can carry an optional OM model. When creating or editing a pack in `/models`, the OM step lets you choose a model or skip it. OM models resolve in this order:
+Custom model packs can carry an optional memory model (stored as `models.memory`). When creating or editing a pack in `/models`, the memory step lets you choose a model or skip it. OM models resolve in this order:
 
 1. Explicit observer/reflector overrides from the `/om` panel
 1. The active pack's OM model, followed by the OM models of its fallback packs in chain order

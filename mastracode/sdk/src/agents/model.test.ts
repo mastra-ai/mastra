@@ -19,7 +19,12 @@ import type { CredentialStore } from '../auth/types.js';
 import { loadSettings } from '../onboarding/settings.js';
 import { setCredentialStoreProvider } from './credential-resolver.js';
 import { MastraCodeGateway } from './mastracode-gateway.js';
-import { createRequestScopedCredentialStore, getDynamicModel, resolveModel, resolvePackOmModelChain } from './model.js';
+import {
+  createRequestScopedCredentialStore,
+  getDynamicModel,
+  resolveModel,
+  resolvePackMemoryModelChain,
+} from './model.js';
 
 afterEach(() => {
   if (previousEnv.kimiApiKey === undefined) delete process.env.KIMI_API_KEY;
@@ -291,7 +296,7 @@ describe('getDynamicModel fallback chain', () => {
   });
 });
 
-describe('resolvePackOmModelChain', () => {
+describe('resolvePackMemoryModelChain', () => {
   function seedOmSettings({
     packFallbacks = {},
     customModelPacks = [],
@@ -317,13 +322,13 @@ describe('resolvePackOmModelChain', () => {
   it('returns undefined when no pack in the chain defines an OM model', () => {
     const settings = seedOmSettings({ packFallbacks: { anthropic: 'openai' } });
 
-    expect(resolvePackOmModelChain(settings, 'anthropic', undefined)).toBeUndefined();
+    expect(resolvePackMemoryModelChain(settings, 'anthropic', undefined)).toBeUndefined();
   });
 
   it('returns undefined for an unknown start pack', () => {
     const settings = seedOmSettings({});
 
-    expect(resolvePackOmModelChain(settings, 'custom:missing', undefined)).toBeUndefined();
+    expect(resolvePackMemoryModelChain(settings, 'custom:missing', undefined)).toBeUndefined();
   });
 
   it('returns a bare model for a single pack OM entry', () => {
@@ -331,12 +336,12 @@ describe('resolvePackOmModelChain', () => {
       customModelPacks: [
         {
           name: 'Work',
-          models: { build: 'anthropic/claude-fable-5', om: 'anthropic/claude-haiku-4-5' },
+          models: { build: 'anthropic/claude-fable-5', memory: 'anthropic/claude-haiku-4-5' },
         },
       ],
     });
 
-    const model = resolvePackOmModelChain(settings, 'custom:Work', undefined);
+    const model = resolvePackMemoryModelChain(settings, 'custom:Work', undefined);
 
     expect(Array.isArray(model)).toBe(false);
     expect((model as { modelId?: string }).modelId).toBe('claude-haiku-4-5');
@@ -346,16 +351,16 @@ describe('resolvePackOmModelChain', () => {
     const settings = seedOmSettings({
       packFallbacks: { 'custom:A': 'custom:B', 'custom:B': 'custom:C' },
       customModelPacks: [
-        { name: 'A', models: { build: 'anthropic/claude-fable-5', om: 'anthropic/claude-haiku-4-5' } },
+        { name: 'A', models: { build: 'anthropic/claude-fable-5', memory: 'anthropic/claude-haiku-4-5' } },
         { name: 'B', models: { build: 'openai/gpt-5.6-sol' } },
-        { name: 'C', models: { build: 'openai/gpt-5.6-sol', om: 'openai/gpt-5.4-mini' } },
+        { name: 'C', models: { build: 'openai/gpt-5.6-sol', memory: 'openai/gpt-5.4-mini' } },
       ],
     });
 
-    const model = resolvePackOmModelChain(settings, 'custom:A', undefined);
+    const model = resolvePackMemoryModelChain(settings, 'custom:A', undefined);
     const entries = model as Array<{ id: string; model: { modelId?: string } }>;
 
-    expect(entries.map(entry => entry.id)).toEqual(['custom:A:om', 'custom:C:om']);
+    expect(entries.map(entry => entry.id)).toEqual(['custom:A:memory', 'custom:C:memory']);
     expect(entries.map(entry => entry.model.modelId)).toEqual(['claude-haiku-4-5', 'gpt-5.4-mini']);
   });
 
@@ -363,12 +368,12 @@ describe('resolvePackOmModelChain', () => {
     const settings = seedOmSettings({
       packFallbacks: { 'custom:A': 'custom:B', 'custom:B': 'custom:A' },
       customModelPacks: [
-        { name: 'A', models: { build: 'anthropic/claude-fable-5', om: 'anthropic/claude-haiku-4-5' } },
-        { name: 'B', models: { build: 'openai/gpt-5.6-sol', om: 'anthropic/claude-haiku-4-5' } },
+        { name: 'A', models: { build: 'anthropic/claude-fable-5', memory: 'anthropic/claude-haiku-4-5' } },
+        { name: 'B', models: { build: 'openai/gpt-5.6-sol', memory: 'anthropic/claude-haiku-4-5' } },
       ],
     });
 
-    const model = resolvePackOmModelChain(settings, 'custom:A', undefined);
+    const model = resolvePackMemoryModelChain(settings, 'custom:A', undefined);
 
     expect(Array.isArray(model)).toBe(false);
     expect((model as { modelId?: string }).modelId).toBe('claude-haiku-4-5');
@@ -378,15 +383,15 @@ describe('resolvePackOmModelChain', () => {
     const settings = seedOmSettings({
       packFallbacks: { anthropic: 'openai' },
       modePackOverrides: {
-        anthropic: { om: 'anthropic/claude-haiku-4-5' },
-        openai: { om: 'openai/gpt-5.4-mini' },
+        anthropic: { memory: 'anthropic/claude-haiku-4-5' },
+        openai: { memory: 'openai/gpt-5.4-mini' },
       },
     });
 
-    const model = resolvePackOmModelChain(settings, 'anthropic', undefined);
+    const model = resolvePackMemoryModelChain(settings, 'anthropic', undefined);
     const entries = model as Array<{ id: string; model: { modelId?: string } }>;
 
-    expect(entries.map(entry => entry.id)).toEqual(['anthropic:om', 'openai:om']);
+    expect(entries.map(entry => entry.id)).toEqual(['anthropic:memory', 'openai:memory']);
     expect(entries.map(entry => entry.model.modelId)).toEqual(['claude-haiku-4-5', 'gpt-5.4-mini']);
   });
 });

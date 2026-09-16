@@ -376,12 +376,12 @@ export function getDynamicModel(
 }
 
 /** OM fallback-chain entry: a pack's OM model resolved through the gateway. Assignable to `ModelWithRetries`. */
-export type PackOmModelChainEntry = { id: string; model: GatewayLanguageModel };
+export type PackMemoryModelChainEntry = { id: string; model: GatewayLanguageModel };
 
 /**
  * Resolve the observational-memory model for the active mode pack, walking the
  * pack's fallback chain (`settings.models.packFallbacks`) and collecting each
- * pack's optional `models.om` entry. Packs without an OM model are skipped
+ * pack's optional `models.memory` entry. Packs without an OM model are skipped
  * (the field is optional, so absence must not truncate the chain); duplicate
  * model ids collapse so an A⇄B cycle never retries an identical OM model.
  *
@@ -391,11 +391,11 @@ export type PackOmModelChainEntry = { id: string; model: GatewayLanguageModel };
  * defines an OM model — callers then fall back to the standalone OM
  * configuration.
  */
-export function resolvePackOmModelChain(
+export function resolvePackMemoryModelChain(
   settings: ReturnType<typeof loadSettings>,
   startPackId: string,
   resolveOptions: Parameters<typeof resolveModel>[1],
-): GatewayLanguageModel | PackOmModelChainEntry[] | undefined {
+): GatewayLanguageModel | PackMemoryModelChainEntry[] | undefined {
   const packs = listResolvableModePacks(settings);
   if (!packs.some(pack => pack.id === startPackId)) return undefined;
 
@@ -405,23 +405,23 @@ export function resolvePackOmModelChain(
     settings.customModelPacks,
   );
   const seenModelIds = new Set<string>();
-  const entries: PackOmModelChainEntry[] = [];
+  const entries: PackMemoryModelChainEntry[] = [];
   for (const packId of chain) {
     const pack = packs.find(candidate => candidate.id === packId);
     if (!pack) break;
-    const omModelId = resolveModePackModels(settings, pack).om;
-    if (!omModelId || seenModelIds.has(omModelId)) continue;
-    seenModelIds.add(omModelId);
+    const memoryModelId = resolveModePackModels(settings, pack).memory;
+    if (!memoryModelId || seenModelIds.has(memoryModelId)) continue;
+    seenModelIds.add(memoryModelId);
     // Best-effort resolution: an unresolvable OM entry (e.g. unconnected
     // provider in deployed fail-closed mode) truncates the chain here rather
     // than failing observation before the pack's own OM model is tried.
     let entryModel: ResolvedModel;
     try {
-      entryModel = resolveModel(omModelId, resolveOptions);
+      entryModel = resolveModel(memoryModelId, resolveOptions);
     } catch {
       break;
     }
-    entries.push({ id: `${packId}:om`, model: entryModel });
+    entries.push({ id: `${packId}:memory`, model: entryModel });
   }
 
   if (entries.length === 0) return undefined;
