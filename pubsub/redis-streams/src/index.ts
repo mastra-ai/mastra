@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, LeaseProvider, PubSubDeliveryMode, SubscribeOptions } from '@mastra/core/events';
 import { createClient } from 'redis';
-import type { RedisClientOptions, RedisClientType } from 'redis';
+import type { RedisClientOptions, RedisClientType, RedisClusterType } from 'redis';
 
 /** Page size for the reclaim loop's XPENDING scan and the max entries claimed per tick. */
 const RECLAIM_PAGE_SIZE = 100;
@@ -73,7 +73,7 @@ export interface RedisStreamsPubSubConfig {
    * must not already be connected — this class owns its connection lifecycle
    * (connect on first use, quit on close).
    */
-  clientFactory?: () => RedisClientType;
+  clientFactory?: () => RedisClientType | RedisClusterType;
   /**
    * Approximate maximum number of entries kept per stream. On every publish we
    * issue MAXLEN ~ N which lets Redis trim opportunistically. Defaults to
@@ -156,7 +156,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
 
   #writeClient: RedisClientType;
   #connectOptions: RedisClientOptions;
-  #clientFactory?: () => RedisClientType;
+  #clientFactory?: () => RedisClientType | RedisClusterType;
   // Dedupes concurrent cold callers onto a single writer connect(); see
   // #ensureWriterConnected.
   #writerConnecting?: Promise<void>;
@@ -232,7 +232,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
    * `redisOptions`/`url`. Called once for the writer and once per reader.
    */
   #createClient(): RedisClientType {
-    return this.#clientFactory ? this.#clientFactory() : (createClient(this.#connectOptions) as RedisClientType);
+    return this.#clientFactory
+      ? (this.#clientFactory() as RedisClientType)
+      : (createClient(this.#connectOptions) as RedisClientType);
   }
 
   /**
