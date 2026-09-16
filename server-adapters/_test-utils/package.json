@@ -1,28 +1,62 @@
 {
-  "name": "@internal/server-adapter-test-utils",
-  "version": "0.0.29",
-  "description": "Test utilities for server adapters",
+  "name": "@mastra/server-adapters-test-suite",
+  "version": "0.0.0",
+  "description": "Reusable conformance test suite for Mastra server adapters",
   "type": "module",
-  "main": "src/index.ts",
-  "private": true,
-  "scripts": {
-    "test": "vitest run"
-  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./package.json": "./package.json"
   },
-  "keywords": [],
-  "author": "",
+  "scripts": {
+    "build": "tsdown --silent --config tsdown.config.ts",
+    "build:watch": "pnpm build --watch",
+    "test": "vitest run",
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
+  },
   "license": "Apache-2.0",
-  "peerDependencies": {
-    "vitest": "*",
-    "@mastra/core": "*",
-    "@mastra/server": "*"
+  "dependencies": {
+    "@mastra/mcp": "workspace:*"
   },
   "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/server": "workspace:*",
-    "@mastra/mcp": "workspace:*",
+    "@types/node": "22.20.1",
+    "eslint": "^10.7.0",
+    "tsdown": "0.22.9",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
     "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=1.64.0-0 <2.0.0-0",
+    "@mastra/server": ">=1.64.0-0 <2.0.0-0",
+    "vitest": ">=4.0.0 <5.0.0",
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "server-adapters/_test-utils"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
   }
 }

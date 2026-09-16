@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { ServerRoute } from '@mastra/server/server-adapter';
-import { AdapterTestContext, createDefaultTestContext } from './test-helpers';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { type AdapterTestContext, createDefaultTestContext } from './test-helpers';
 
 /**
  * Configuration for multipart FormData test suite
@@ -107,8 +107,7 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
 
       expect(response.status).toBe(200);
       const result = await response.json();
-      expect(result.success).toBe(true);
-      expect(result.hasAudio).toBe(true);
+      expect(result).toMatchObject({ success: true, hasAudio: true });
 
       // Verify the audio was parsed as a Buffer
       expect(receivedBody.audio).toBeDefined();
@@ -277,8 +276,7 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
 
       expect(response.status).toBe(200);
       const result = await response.json();
-      expect(result.success).toBe(true);
-      expect(result.bodyKeys).toEqual([]);
+      expect(result).toMatchObject({ success: true, bodyKeys: [] });
     });
 
     it('should handle multiple files', async () => {
@@ -319,8 +317,7 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
 
       expect(response.status).toBe(200);
       const result = await response.json();
-      expect(result.hasFile1).toBe(true);
-      expect(result.hasFile2).toBe(true);
+      expect(result).toMatchObject({ hasFile1: true, hasFile2: true });
 
       // Verify both files were parsed
       expect(Buffer.isBuffer(receivedBody.file1)).toBe(true);
@@ -355,8 +352,7 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
 
       expect(response.status).toBe(200);
       const result = await response.json();
-      expect(result.success).toBe(true);
-      expect(result.message).toBe('Hello, World!');
+      expect(result).toMatchObject({ success: true, message: 'Hello, World!' });
     });
   });
 }

@@ -4,8 +4,8 @@ import type {
   AdapterSetupOptions,
   HttpRequest,
   HttpResponse,
-} from '@internal/server-adapter-test-utils';
-import { createRouteAdapterTestSuite } from '@internal/server-adapter-test-utils';
+} from '@mastra/server-adapters-test-suite';
+import { createRouteAdapterTestSuite } from '@mastra/server-adapters-test-suite';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { Application } from 'express';

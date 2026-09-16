@@ -1,4 +1,4 @@
-import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
+import { createDefaultTestContext } from '@mastra/server-adapters-test-suite';
 import { HttpAdapterHost } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { describe, expect, it } from 'vitest';

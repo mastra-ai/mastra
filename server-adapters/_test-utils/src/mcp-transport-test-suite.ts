@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Mastra } from '@mastra/core/mastra';
-import { MCPServer, MCPClient } from '@mastra/mcp';
 import { createTool } from '@mastra/core/tools';
+import { MCPServer, MCPClient } from '@mastra/mcp';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { z } from 'zod';
 import { NativeMCPFixture } from './native-mcp-fixture';
 
@@ -279,6 +279,9 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
           const calculateTool = tools['server1_calculate'];
 
           expect(calculateTool).toBeDefined();
+          if (!calculateTool) {
+            throw new Error('Expected server1_calculate tool');
+          }
           expect(calculateTool.execute).toBeDefined();
 
           const result = await calculateTool.execute!({ operation: 'multiply', a: 6, b: 7 }, {} as any);
@@ -291,6 +294,9 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
           const weatherToolInstance = tools['server1_getWeather'];
 
           expect(weatherToolInstance).toBeDefined();
+          if (!weatherToolInstance) {
+            throw new Error('Expected server1_getWeather tool');
+          }
           expect(weatherToolInstance.execute).toBeDefined();
 
           const result = await weatherToolInstance.execute!({ location: 'Austin' }, {} as any);
@@ -368,6 +374,9 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
           const failingTool = tools['failing_failingTool'];
 
           expect(failingTool).toBeDefined();
+          if (!failingTool) {
+            throw new Error('Expected failing_failingTool tool');
+          }
 
           const result = await failingTool.execute!({}, {} as any);
 
@@ -436,6 +445,9 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
           const calculateTool = tools['server1_calculate'];
 
           expect(calculateTool).toBeDefined();
+          if (!calculateTool) {
+            throw new Error('Expected server1_calculate tool');
+          }
           expect(calculateTool.execute).toBeDefined();
 
           const result = await calculateTool.execute!({ operation: 'add', a: 10, b: 5 }, {} as any);
@@ -448,6 +460,9 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
           const weatherToolInstance = tools['server1_getWeather'];
 
           expect(weatherToolInstance).toBeDefined();
+          if (!weatherToolInstance) {
+            throw new Error('Expected server1_getWeather tool');
+          }
           expect(weatherToolInstance.execute).toBeDefined();
 
           const result = await weatherToolInstance.execute!({ location: 'New York' }, {} as any);
@@ -513,6 +528,9 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
           const failingTool = tools['failing_failingTool'];
 
           expect(failingTool).toBeDefined();
+          if (!failingTool) {
+            throw new Error('Expected failing_failingTool tool');
+          }
 
           const result = await failingTool.execute!({}, {} as any);
 

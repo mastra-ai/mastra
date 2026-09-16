@@ -1,6 +1,6 @@
-import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
-import type { AdapterTestContext } from '@internal/server-adapter-test-utils';
 import type { Mastra } from '@mastra/core/mastra';
+import { createDefaultTestContext } from '@mastra/server-adapters-test-suite';
+import type { AdapterTestContext } from '@mastra/server-adapters-test-suite';
 import { Injectable, Inject } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import express from 'express';

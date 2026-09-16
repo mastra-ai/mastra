@@ -1,18 +1,18 @@
-import { describe, it, expect, beforeEach } from 'vitest';
 import { createRoute, HTTPException, SERVER_ROUTES, type ServerRoute } from '@mastra/server/server-adapter';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { z as z3 } from 'zod/v3';
 
+import { createRouteTestSuite } from './route-test-suite';
+import { expectValidSchema } from './route-test-utils';
 import {
-  AdapterTestContext,
-  AdapterTestSuiteConfig,
+  type AdapterTestContext,
+  type AdapterTestSuiteConfig,
   buildRouteRequest,
   createDefaultTestContext,
-  HttpRequest,
+  type HttpRequest,
   parseDatesInResponse,
 } from './test-helpers';
-import { expectValidSchema } from './route-test-utils';
-import { createRouteTestSuite } from './route-test-suite';
 
 /**
  * Creates a standardized integration test suite for server adapters (Express/Hono)
@@ -742,7 +742,8 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
             }
 
             // Body field spreading test - for POST/PUT routes with body
-            if (['POST', 'PUT'].includes(route.method) && route.bodySchema) {
+            const bodySchema = route.bodySchema;
+            if (['POST', 'PUT'].includes(route.method) && bodySchema) {
               it('should spread body fields to handler params', async () => {
                 const request = buildRouteRequest(route);
 
@@ -754,7 +755,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
                   ...(typeof request.body === 'object' && request.body !== null ? request.body : {}),
                   [testField]: testValue,
                 };
-                const strictBody = !route.bodySchema.safeParse(body).success;
+                const strictBody = !bodySchema.safeParse(body).success;
 
                 const httpRequest: HttpRequest = {
                   method: request.method,

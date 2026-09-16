@@ -1,6 +1,6 @@
-import { z, ZodSchema } from 'zod';
-import type { ServerRoute } from '@mastra/server/server-adapter';
 import { getZodTypeName, getZodDef } from '@mastra/core/utils';
+import type { ServerRoute } from '@mastra/server/server-adapter';
+import { z, type ZodSchema } from 'zod';
 
 /**
  * Normalizes a route path to ensure consistent formatting.
@@ -501,7 +501,7 @@ export function validateRouteMetadata(
   expected: {
     method?: string;
     path?: string;
-    responseType?: 'json' | 'stream';
+    responseType?: ServerRoute['responseType'];
     hasPathParams?: boolean;
     hasQueryParams?: boolean;
     hasBody?: boolean;
