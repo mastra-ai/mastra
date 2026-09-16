@@ -129,7 +129,7 @@ const { thread: child, branch } = await source.branch({
 })
 ```
 
-Mastra generates `child.id`; the request doesn't accept a destination ID or resource ID. The response contains the sanitized child thread and:
+The request doesn't accept a destination ID or resource ID, so Mastra generates `child.id`. The response contains the sanitized child thread and:
 
 ```typescript
 {
@@ -174,7 +174,7 @@ const { history } = await mastraClient
   .getBranchHistory()
 ```
 
-`history` is ordered from the root to the selected thread. The root entry has `branch: null`; later entries contain the public branch metadata shown above. The server authorizes the selected thread and every ancestor at read time.
+`history` is ordered from the root to the selected thread. The root entry has `branch: null`. Later entries contain the public branch metadata shown above. The server authorizes the selected thread and every ancestor at read time.
 
 ## Message operations
 

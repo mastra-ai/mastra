@@ -93,7 +93,7 @@ Messages created after the fork are visible only on their own path:
 
 Branch creation snapshots the current active derived state rather than reconstructing state as it existed at the fork:
 
-- **Thread-scoped Observational Memory**: The active record is copied into child-owned storage. Reachable message references keep their IDs; unreachable references are removed.
+- **Thread-scoped Observational Memory**: The active record is copied into child-owned storage. Reachable message references keep their IDs. Unreachable references are removed.
 - **Resource-scoped Observational Memory**: The active record is copied into child-owned storage keyed by the child thread while retaining the real resource identity. Later source and child updates are isolated.
 - **Thread-scoped Working Memory**: The current value is copied to the child.
 - **Resource-scoped Working Memory**: The value remains shared by the source and child because both use the same resource.
@@ -101,16 +101,16 @@ Branch creation snapshots the current active derived state rather than reconstru
 Only the active Observational Memory generation is copied. Historical generations aren't copied, and transient observation or reflection flags are reset.
 
 :::warning
-Free-form Observational Memory text or thread-scoped Working Memory may already contain knowledge learned from source messages after the selected fork. Mastra filters message references but doesn't rewrite aggregate text to reconstruct historical state.
+Because free-form Observational Memory text or thread-scoped Working Memory may already contain knowledge learned from source messages after the selected fork, Mastra filters message references without rewriting aggregate text to reconstruct historical state.
 
 Concurrent branch creation synchronizes Observational Memory and Working Memory independently. Each copied value is complete from either before or after a concurrent update, but the values don't form one cross-component snapshot.
 :::
 
 ## Mutation and visibility rules
 
-A branch is published only after its lineage and derived state are ready. Incomplete `pending` children stay hidden from public reads and lists. A process crash can leave a hidden pending row; automatic cleanup isn't part of this version.
+A branch is published only after its lineage and derived state are ready. Incomplete `pending` children stay hidden from public reads and lists. A process crash can leave a hidden pending row. Automatic cleanup isn't part of this version.
 
-Inherited messages are immutable through the child. A thread with ready descendants can't be changed in a way that invalidates their lineage. Branch mutation locks coordinate one `Memory` instance and process; storage adapters may provide stronger atomicity for shared deployments.
+Inherited messages are immutable through the child. A thread with ready descendants can't be changed in a way that invalidates their lineage. Branch mutation locks coordinate one `Memory` instance and process. Storage adapters may provide stronger atomicity for shared deployments.
 
 ## Errors
 
