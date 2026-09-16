@@ -47,7 +47,12 @@ export interface McpHttpOAuthConfig {
   clientName?: string;
   /** Optional scopes requested during OAuth */
   scopes?: string[];
-  /** Optional pre-registered OAuth client ID */
+  /**
+   * Optional pre-registered OAuth client ID. When omitted, Mastra Code
+   * identifies itself with its Client ID Metadata Document URL, which
+   * authorization servers supporting URL-based client IDs accept without
+   * any registration step.
+   */
   clientId?: string;
   /** Optional pre-registered OAuth client secret */
   clientSecret?: string;

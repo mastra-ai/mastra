@@ -1,0 +1,15 @@
+{
+  "client_id": "https://mastra.ai/.well-known/oauth-client/mastracode.json",
+  "client_name": "Mastra Code",
+  "client_uri": "https://code.mastra.ai/",
+  "logo_uri": "https://mastra.ai/img/favicon.ico",
+  "redirect_uris": [
+    "http://127.0.0.1:1458/oauth/callback",
+    "http://127.0.0.1/oauth/callback",
+    "http://localhost/callback"
+  ],
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none",
+  "software_id": "mastra-code"
+}

@@ -48,17 +48,34 @@ function sendJson(res: ServerResponse, statusCode: number, payload: unknown, hea
  * OAuth-protected MCP fixture server for e2e scenarios.
  *
  * A single `node:http` server acts as both the OAuth 2.1 authorization server
- * (RFC 8414 metadata, RFC 7591 dynamic client registration, authorization code
- * grant with PKCE S256) and the protected MCP resource (RFC 9728 metadata,
+ * (RFC 8414 metadata, URL-based client IDs via Client ID Metadata Documents,
+ * authorization code grant with PKCE S256) and the protected MCP resource (RFC 9728 metadata,
  * Bearer-gated streamable HTTP endpoint). The authorize endpoint immediately
  * redirects back with a code — no login page — so the e2e harness can act as
  * the browser with a single fetch. All tokens are fake, per-run random strings.
  */
+function isClientMetadataUrl(clientId: string): boolean {
+  try {
+    const url = new URL(clientId);
+    return url.protocol === 'https:' && url.pathname !== '/';
+  } catch {
+    return false;
+  }
+}
+
+function isLoopbackRedirect(redirectUri: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(redirectUri);
+    return protocol === 'http:' && (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]');
+  } catch {
+    return false;
+  }
+}
+
 export async function startMcpOAuthFixtureServer(options: McpOAuthFixtureOptions): Promise<McpOAuthFixture> {
   const { McpServer, StreamableHTTPServerTransport } = await loadMcpSdk();
   const activeServers = new Set<McpFixtureServer>();
 
-  const clientsById = new Map<string, { client_id: string; redirect_uris: string[] }>();
   const pendingCodes = new Map<string, { codeChallenge: string; redirectUri: string }>();
   const refreshTokens = new Set<string>();
   const validTokens = new Set<string>();
@@ -105,7 +122,7 @@ export async function startMcpOAuthFixtureServer(options: McpOAuthFixtureOptions
           issuer: baseUrl,
           authorization_endpoint: `${baseUrl}/authorize`,
           token_endpoint: `${baseUrl}/token`,
-          registration_endpoint: `${baseUrl}/register`,
+          client_id_metadata_document_supported: true,
           response_types_supported: ['code'],
           grant_types_supported: ['authorization_code', 'refresh_token'],
           code_challenge_methods_supported: ['S256'],
@@ -114,25 +131,22 @@ export async function startMcpOAuthFixtureServer(options: McpOAuthFixtureOptions
         return;
       }
 
-      // --- RFC 7591 dynamic client registration ---
-      if (requestUrl.pathname === '/register' && req.method === 'POST') {
-        const metadata = JSON.parse(await readBody(req));
-        const registration = { client_id: `client-${randomUUID()}`, redirect_uris: metadata.redirect_uris };
-        clientsById.set(registration.client_id, registration);
-        sendJson(res, 201, {
-          ...metadata,
-          client_id: registration.client_id,
-          client_id_issued_at: Math.floor(Date.now() / 1000),
-          token_endpoint_auth_method: 'none',
-        });
+      // Dynamic client registration is not offered: the client identifies
+      // itself with a Client ID Metadata Document URL instead.
+      if (requestUrl.pathname === '/register') {
+        sendJson(res, 404, { error: 'invalid_request', error_description: 'Dynamic client registration is not supported' });
         return;
       }
 
       // --- Authorization endpoint: no login page, immediately redirect back ---
       if (requestUrl.pathname === '/authorize') {
-        const client = clientsById.get(requestUrl.searchParams.get('client_id') ?? '');
+        const clientId = requestUrl.searchParams.get('client_id') ?? '';
         const redirectUri = requestUrl.searchParams.get('redirect_uri') ?? '';
-        if (!client || !client.redirect_uris.includes(redirectUri)) {
+        // A Client ID Metadata Document identifies the client by an HTTPS URL. A
+        // real authorization server fetches the document to check the redirect
+        // URI; here the fixture only accepts loopback redirects on any port, as
+        // RFC 8252 §7.3 prescribes for native apps.
+        if (!isClientMetadataUrl(clientId) || !isLoopbackRedirect(redirectUri)) {
           sendJson(res, 400, { error: 'invalid_request', error_description: 'Unknown client or redirect_uri' });
           return;
         }

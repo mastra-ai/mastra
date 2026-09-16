@@ -30,6 +30,16 @@ import type { McpConfig, McpHttpOAuthConfig, McpServerConfig, McpSkippedServer }
  */
 export const DEFAULT_OAUTH_REDIRECT_URL = 'http://127.0.0.1:1458/oauth/callback';
 
+/**
+ * Mastra Code's Client ID Metadata Document (SEP-991 / OAuth Client ID
+ * Metadata Documents). Servers without a pre-registered `clientId` identify
+ * this client by the document URL itself: the authorization server fetches it
+ * to learn the client name and loopback redirect URIs, so no client
+ * registration step is needed. The document lives in the docs site at
+ * `docs/static/.well-known/oauth-client/mastracode.json`.
+ */
+export const MASTRA_CODE_CLIENT_METADATA_URL = 'https://mastra.ai/.well-known/oauth-client/mastracode.json';
+
 // Matches the entire 127.0.0.0/8 range in dotted-quad form. `URL` normalizes
 // IPv4 hosts to four octets (so `127.1` becomes `127.0.0.1`), so anchoring the
 // pattern is enough — and it rejects lookalikes like `127.evil.com` that a
