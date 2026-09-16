@@ -550,6 +550,81 @@ const memory = new Memory({
 
 This keeps recall-specific guidance attached to the recall tool instead of the agent's global instructions, so it doesn't affect unrelated tasks.
 
+#### Transform recall results with Code Mode
+
+Direct recall returns one bounded page at a time. Enable Memory-managed Code Mode when the agent needs to make several recall calls, filter or aggregate their results in TypeScript, and return only the transformed value. Mastra keeps the direct `recall` tool and also registers `execute_memory_recall`. The code tool exposes only `external_recall`, with the same modes, scope rules, authorization, request context, cancellation, and tracing as direct recall.
+
+Pass an explicit sandbox when the Memory configuration owns the execution boundary:
+
+```typescript title="src/mastra/agents/agent.ts"
+import { LocalSandbox } from '@mastra/core/workspace'
+import { Memory } from '@mastra/memory'
+
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      retrieval: {
+        vector: true,
+        codeMode: { sandbox: new LocalSandbox() },
+      },
+    },
+  },
+})
+```
+
+`LocalSandbox` runs model-authored code as a host process. Use it only when host execution is intentional. A remote sandbox can be passed in the same `sandbox` field.
+
+To use the agent's workspace sandbox, set `codeMode: true` and configure the workspace on the agent:
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { LocalSandbox, Workspace } from '@mastra/core/workspace'
+import { Memory } from '@mastra/memory'
+
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      retrieval: { codeMode: true },
+    },
+  },
+})
+
+const agent = new Agent({
+  id: 'memory-assistant',
+  name: 'memory-assistant',
+  instructions: 'Use recall when past context is needed.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory,
+  workspace: new Workspace({ sandbox: new LocalSandbox() }),
+})
+```
+
+A transport that owns its isolation boundary can run without a workspace sandbox:
+
+```typescript title="src/mastra/agents/agent.ts"
+import { IsolatedVmCodeModeTransport } from '@mastra/isolated-vm'
+import { Memory } from '@mastra/memory'
+
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      retrieval: {
+        codeMode: {
+          transport: new IsolatedVmCodeModeTransport({ memoryLimitMb: 128 }),
+        },
+      },
+    },
+  },
+})
+```
+
+If neither the Code Mode configuration nor the agent workspace provides a sandbox, invocation fails unless the transport declares `requiresSandbox: false`. Mastra doesn't fall back to host execution.
+
+Memory-managed Code Mode requires `@mastra/core@1.68.0-alpha.0` or newer, where `createCodeMode` is exported. The Code Mode factory is loaded only on the first `execute_memory_recall` call, so this option doesn't narrow Memory's existing Core compatibility when Code Mode is disabled. If an installed Core version otherwise supports the configured Memory features but doesn't export `createCodeMode`, Memory construction, direct recall, and tool listing don't load that export. The first Code Mode call reports the installed Core version and asks you to upgrade and align the Core and Memory versions.
+
 #### What retrieval enables
 
 With retrieval mode enabled, OM:

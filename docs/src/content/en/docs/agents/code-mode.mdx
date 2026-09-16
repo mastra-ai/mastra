@@ -36,7 +36,7 @@ Without code mode, multi-tool queries can run the agentic loop several times. Th
 
 Each turn adds the full tool response to the agent's context window which can lead to poorer reasoning and increased token usage.
 
-With code mode, your tools keep running on the host with full validation, request context, and tracing. Only the model's orchestration code runs in the sandbox. Each `external_*` call is bridged back to the real tool on the host, and the function can reduce or aggregate results before returning one response to the agent.
+With code mode, your tools keep running on the host with full validation, authorization, request context, cancellation, and tracing. Only the model's orchestration code runs in the sandbox. Each `external_*` call is bridged back to the real tool on the host and authorized as that tool, so permission to invoke the Code Mode tool doesn't grant permission to invoke every tool in its allow-list. The function can reduce or aggregate results before returning one response to the agent.
 
 The function runs in a [Workspace sandbox](/docs/sandbox/overview). Because code mode runs model-authored code, you must choose its execution boundary deliberately by passing `sandbox` or using a workspace that provides one. Pass `new LocalSandbox()` explicitly to execute on the host machine. This runs the function as a host `node` process with host privileges, so only use it for trusted or local development.
 
@@ -139,7 +139,7 @@ const agent = new Agent({
 })
 ```
 
-The generated code for `sales_code` can't call an inventory tool, and the reverse holds too. Use this for least-privilege scoping and to keep each tool's prompt surface small.
+The generated code for `sales_code` can't call an inventory tool, and the reverse holds too. Code Mode also checks the caller's permission for each allowed tool when `external_*` invokes it. Use both controls for least-privilege scoping and to keep each tool's prompt surface small.
 
 ## Remote sandboxes
 
