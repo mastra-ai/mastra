@@ -540,3 +540,130 @@ describe('DurableAgent structured output workflow integration', () => {
     expect(JSON.parse(serialized)).toBeDefined();
   });
 });
+
+// ============================================================================
+// Compact structuredOutput.instructions across the durable boundary (#23798)
+// ============================================================================
+
+describe('DurableAgent compact structuredOutput.instructions (issue #23798)', () => {
+  let pubsub: EventEmitterPubSub;
+
+  const INSTRUCTIONS = 'FIELDS: a,b';
+  const INLINE_SCHEMA_PREFIX = 'Return your response as JSON matching this schema';
+  const SYSTEM_SCHEMA_PREFIX = 'JSON schema:';
+  const SENTINEL = '__mastra23798Sentinel';
+  const sentinelSchema = z.object({ __mastra23798Sentinel: z.string() });
+
+  beforeEach(() => {
+    pubsub = new EventEmitterPubSub();
+  });
+
+  afterEach(async () => {
+    await pubsub.close();
+  });
+
+  function createCapturingModel(promptSnapshots: any[][], onCalled: () => void) {
+    return new MockLanguageModelV2({
+      doStream: async ({ prompt }: any) => {
+        promptSnapshots.push(prompt);
+        onCalled();
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
+            { type: 'text-start', id: 't' },
+            { type: 'text-delta', id: 't', delta: JSON.stringify({ __mastra23798Sentinel: 'ok' }) },
+            { type: 'text-end', id: 't' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        };
+      },
+    });
+  }
+
+  async function runDurable(structuredOutput: any, agentId: string) {
+    const promptSnapshots: any[][] = [];
+    let resolveCalled: () => void;
+    const calledPromise = new Promise<void>(r => {
+      resolveCalled = r;
+    });
+    const mockModel = createCapturingModel(promptSnapshots, () => resolveCalled());
+
+    const baseAgent = new Agent({
+      id: agentId,
+      name: agentId,
+      instructions: 'Agent system instructions.',
+      model: mockModel as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const { cleanup } = await durableAgent.stream('Extract now.', { structuredOutput, onChunk: () => {} });
+    await calledPromise;
+    await cleanup?.();
+
+    return JSON.stringify(promptSnapshots[0]);
+  }
+
+  it('serializes instructions into the durable workflow input', async () => {
+    const baseAgent = new Agent({
+      id: 'durable-instructions-serialization',
+      name: 'Durable Instructions Serialization',
+      instructions: 'Test serialization',
+      model: createStructuredOutputModel({ __mastra23798Sentinel: 'ok' }) as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const result = await durableAgent.prepare('Extract now.', {
+      structuredOutput: { schema: sentinelSchema, jsonPromptInjection: 'system', instructions: INSTRUCTIONS },
+    });
+
+    expect((result.workflowInput as any).options.structuredOutput.instructions).toBe(INSTRUCTIONS);
+  });
+
+  it('injects compact instructions instead of the schema dump on a durable run (system mode)', async () => {
+    const promptJson = await runDurable(
+      { schema: sentinelSchema, jsonPromptInjection: 'system', instructions: INSTRUCTIONS },
+      'durable-instructions-system',
+    );
+
+    expect(promptJson).toContain(INSTRUCTIONS);
+    expect(promptJson).not.toContain(INLINE_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SYSTEM_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SENTINEL);
+  });
+
+  it('injects compact instructions instead of the schema dump on a durable run (inline mode)', async () => {
+    const promptJson = await runDurable(
+      { schema: sentinelSchema, jsonPromptInjection: 'inline', instructions: INSTRUCTIONS },
+      'durable-instructions-inline',
+    );
+
+    expect(promptJson).toContain(INSTRUCTIONS);
+    expect(promptJson).not.toContain(INLINE_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SYSTEM_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SENTINEL);
+  });
+
+  it('keeps the generated schema instruction on a durable run without instructions', async () => {
+    const baseAgent = new Agent({
+      id: 'durable-no-instructions-serialization',
+      name: 'Durable No Instructions',
+      instructions: 'Test serialization',
+      model: createStructuredOutputModel({ __mastra23798Sentinel: 'ok' }) as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    const prepared = await durableAgent.prepare('Extract now.', {
+      structuredOutput: { schema: sentinelSchema, jsonPromptInjection: 'system' },
+    });
+    expect((prepared.workflowInput as any).options.structuredOutput.instructions).toBeUndefined();
+
+    const promptJson = await runDurable(
+      { schema: sentinelSchema, jsonPromptInjection: 'system' },
+      'durable-no-instructions-run',
+    );
+    expect(promptJson).toContain(SYSTEM_SCHEMA_PREFIX);
+    expect(promptJson).toContain(SENTINEL);
+  });
+});

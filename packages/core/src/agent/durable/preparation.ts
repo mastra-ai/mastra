@@ -605,6 +605,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     if (so.schema) {
       serializedStructuredOutput = {
         jsonPromptInjection: so.jsonPromptInjection,
+        instructions: so.instructions,
         useAgent: so.useAgent,
       };
       // Convert Zod schema to JSON Schema if possible
