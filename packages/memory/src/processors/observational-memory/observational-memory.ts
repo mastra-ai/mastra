@@ -246,6 +246,7 @@ import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-regis
 import type { CompressionLevel } from './reflector-agent';
 import { ReflectorRunner } from './reflector-runner';
 import { isOmReproCaptureEnabled, writeObserverExchangeReproCapture } from './repro-capture';
+import { RETRY_CONFIG } from './retry';
 import {
   calculateDynamicThreshold,
   calculateProjectedMessageRemoval,
@@ -612,7 +613,8 @@ export class ObservationalMemory {
     // Resolve observation config with defaults
     this.observationConfig = {
       model: observationModel,
-      onFailure: config.observation?.onFailure ?? 'abort',
+      maxRetries: config.observation?.maxRetries ?? RETRY_CONFIG.maxRetries,
+      failurePolicy: config.observation?.failurePolicy ?? 'abort',
       // When shared budget, store as range: min = base threshold, max = total budget
       // This allows messages to expand into unused observation space
       messageTokens: isSharedBudget ? { min: messageTokens, max: totalBudget } : messageTokens,
@@ -664,6 +666,8 @@ export class ObservationalMemory {
     // Resolve reflection config with defaults
     this.reflectionConfig = {
       model: reflectionModel,
+      maxRetries: config.reflection?.maxRetries ?? RETRY_CONFIG.maxRetries,
+      failurePolicy: config.reflection?.failurePolicy ?? 'abort',
       observationTokens: observationTokens,
       shareTokenBudget: isSharedBudget,
       modelSettings: {
@@ -762,7 +766,7 @@ export class ObservationalMemory {
     observation: {
       messageTokens: number | ThresholdRange;
       previousObserverTokens: number | false | undefined;
-      onFailure: 'abort' | 'continue';
+      failurePolicy: 'abort' | 'continue';
     };
     reflection: {
       observationTokens: number | ThresholdRange;
@@ -774,7 +778,7 @@ export class ObservationalMemory {
       observation: {
         messageTokens: this.observationConfig.messageTokens,
         previousObserverTokens: this.observationConfig.previousObserverTokens,
-        onFailure: this.observationConfig.onFailure,
+        failurePolicy: this.observationConfig.failurePolicy,
       },
       reflection: {
         observationTokens: this.reflectionConfig.observationTokens,
@@ -965,11 +969,15 @@ export class ObservationalMemory {
       messageTokens: number | ThresholdRange;
       model: string;
       previousObserverTokens: number | false | undefined;
+      maxRetries: number;
+      failurePolicy: 'abort' | 'continue';
       routing?: Array<{ upTo: number; model: string }>;
     };
     reflection: {
       observationTokens: number | ThresholdRange;
       model: string;
+      maxRetries: number;
+      failurePolicy: 'abort' | 'continue';
       routing?: Array<{ upTo: number; model: string }>;
     };
   }> {
@@ -984,11 +992,15 @@ export class ObservationalMemory {
         messageTokens: this.observationConfig.messageTokens,
         model: observationResolved.model,
         previousObserverTokens: this.observationConfig.previousObserverTokens,
+        maxRetries: this.observationConfig.maxRetries,
+        failurePolicy: this.observationConfig.failurePolicy,
         routing: observationResolved.routing,
       },
       reflection: {
         observationTokens: this.reflectionConfig.observationTokens,
         model: reflectionResolved.model,
+        maxRetries: this.reflectionConfig.maxRetries,
+        failurePolicy: this.reflectionConfig.failurePolicy,
         routing: reflectionResolved.routing,
       },
     };

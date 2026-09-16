@@ -2,7 +2,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
-import { isObserverProviderError } from '../error';
+import { isOmModelExecutionError } from '../error';
 import { filterObservedMessages, getObservableMessages } from '../message-utils';
 import { getLastActivityFromMessages, getLatestStepParts } from '../observational-memory';
 import { resolveRetentionFloor } from '../thresholds';
@@ -492,7 +492,12 @@ export class ObservationStep {
         observabilityContext: this.turn.observabilityContext,
       });
     } catch (error) {
-      if (om.config.observation.onFailure !== 'continue' || !isObserverProviderError(error)) throw error;
+      if (
+        om.config.observation.failurePolicy !== 'continue' ||
+        !isOmModelExecutionError(error) ||
+        error.failureKind !== 'observer-model'
+      )
+        throw error;
       return { succeeded: false, record: freshStatus.record };
     }
 

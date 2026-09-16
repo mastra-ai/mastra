@@ -67,14 +67,16 @@ describe('Memory', () => {
         options: {
           observationalMemory: {
             model: 'test-model',
-            observation: { onFailure: 'continue' },
+            observation: { maxRetries: 1, failurePolicy: 'continue' },
+            reflection: { maxRetries: 0, failurePolicy: 'continue' },
           },
         },
       });
 
       const om = await memory.omEngine;
 
-      expect(om?.config.observation.onFailure).toBe('continue');
+      expect(om?.config.observation).toMatchObject({ maxRetries: 1, failurePolicy: 'continue' });
+      expect(om?.config.reflection).toMatchObject({ maxRetries: 0, failurePolicy: 'continue' });
     });
   });
 

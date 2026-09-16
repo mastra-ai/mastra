@@ -2171,13 +2171,16 @@ ${workingMemory}`;
             threadTitle: omConfig.observation.threadTitle,
             observeAttachments: omConfig.observation.observeAttachments,
             continuationHints: omConfig.observation.continuationHints,
-            onFailure: omConfig.observation.onFailure,
+            maxRetries: omConfig.observation.maxRetries,
+            failurePolicy: omConfig.observation.failurePolicy,
             extract: omConfig.observation.extract,
           }
         : undefined,
       reflection: omConfig.reflection
         ? {
             model: omConfig.reflection.model,
+            maxRetries: omConfig.reflection.maxRetries,
+            failurePolicy: omConfig.reflection.failurePolicy,
             observationTokens: omConfig.reflection.observationTokens,
             modelSettings: omConfig.reflection.modelSettings,
             providerOptions: omConfig.reflection.providerOptions,

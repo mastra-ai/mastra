@@ -3,20 +3,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export type OmFailurePolicy = 'abort' | 'continue';
-export type OmFailureKind = 'observer-provider';
+export type OmFailureKind = 'observer-model' | 'reflector-model';
 
-export class ObserverProviderError extends Error {
-  readonly failureKind = 'observer-provider' as const;
-
-  constructor(cause: unknown) {
+export class OmModelExecutionError extends Error {
+  constructor(
+    readonly failureKind: OmFailureKind,
+    cause: unknown,
+  ) {
     super(formatOmError(cause), { cause });
-    this.name = 'ObserverProviderError';
+    this.name = 'OmModelExecutionError';
   }
 }
 
-export function isObserverProviderError(error: unknown): error is ObserverProviderError {
+export function isOmModelExecutionError(error: unknown): error is OmModelExecutionError {
   try {
-    return error instanceof ObserverProviderError;
+    return error instanceof OmModelExecutionError;
   } catch {
     return false;
   }
@@ -25,7 +26,7 @@ export function isObserverProviderError(error: unknown): error is ObserverProvid
 export function getOmFailureMetadata(error: unknown, failurePolicy: OmFailurePolicy) {
   return {
     failurePolicy,
-    ...(isObserverProviderError(error) ? { failureKind: error.failureKind } : {}),
+    ...(isOmModelExecutionError(error) ? { failureKind: error.failureKind } : {}),
   };
 }
 

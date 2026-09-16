@@ -116,10 +116,10 @@ export interface DataOmBufferingFailedPart {
     error: string;
 
     /** Resolved failure policy for this observation cycle. */
-    failurePolicy: 'abort' | 'continue';
+    failurePolicy?: 'abort' | 'continue';
 
     /** Machine-readable failure classification when the observer/provider call failed. */
-    failureKind?: 'observer-provider';
+    failureKind?: 'observer-model' | 'reflector-model';
 
     /** The OM record ID */
     recordId: string;

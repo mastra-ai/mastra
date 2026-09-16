@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { MessageList } from '@mastra/core/agent';
+import type { WidenModelId } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { MastraMemory } from '@mastra/core/memory';
@@ -284,11 +285,24 @@ export class ReflectorRunner {
     memory?: MastraMemory,
     extractors = this.reflectionConfig.extractors,
   ): Agent {
+    let agentModel: WidenModelId<ConcreteReflectionModel> = model;
+    if (Array.isArray(agentModel)) {
+      agentModel = agentModel.map(fallback => ({ ...fallback, maxRetries: 0 }));
+    } else if (typeof agentModel === 'function') {
+      const resolveDynamicModel = agentModel;
+      agentModel = (async args => {
+        const resolvedModel = await resolveDynamicModel(args);
+        return Array.isArray(resolvedModel)
+          ? resolvedModel.map(fallback => ({ ...fallback, maxRetries: 0 }))
+          : resolvedModel;
+      }) as typeof agentModel;
+    }
     const agent = new Agent({
       id: 'observational-memory-reflector',
       name: 'Reflector',
       instructions: buildReflectorSystemPrompt(this.reflectionConfig.instruction, extractors),
-      model,
+      model: agentModel,
+      maxRetries: 0,
       ...(memory ? { memory } : {}),
       ...(this.mastra ? { mastra: this.mastra } : {}),
     });
@@ -477,7 +491,11 @@ export class ReflectorRunner {
                 return streamResult.getFullOutput();
               }, abortSignal),
           }),
-        { label: 'reflector', abortSignal },
+        {
+          label: 'reflector',
+          abortSignal,
+          maxRetries: this.reflectionConfig.maxRetries,
+        },
       );
 
       omDebug(

@@ -244,6 +244,10 @@ function createOM(
     reflectionExtract?: Extractor<any>[];
     observationContinuationHints?: ContinuationHintsConfig;
     reflectionContinuationHints?: ContinuationHintsConfig;
+    observationMaxRetries?: number;
+    observationFailurePolicy?: 'abort' | 'continue';
+    reflectionMaxRetries?: number;
+    reflectionFailurePolicy?: 'abort' | 'continue';
     activateAfterIdle?: number | string;
     hooks?: ObserveHooks;
     hookExecution?: 'non-blocking' | 'await';
@@ -261,12 +265,16 @@ function createOM(
       bufferTokens: opts?.bufferTokens ?? false,
       extract: opts?.observationExtract,
       continuationHints: opts?.observationContinuationHints,
+      maxRetries: opts?.observationMaxRetries,
+      failurePolicy: opts?.observationFailurePolicy,
     },
     reflection: {
       model: opts?.reflectorModel ?? createMockReflectorModel(),
       observationTokens: opts?.observationTokens ?? 50_000,
       extract: opts?.reflectionExtract,
       continuationHints: opts?.reflectionContinuationHints,
+      maxRetries: opts?.reflectionMaxRetries,
+      failurePolicy: opts?.reflectionFailurePolicy,
     },
   });
 }
@@ -2688,6 +2696,26 @@ describe('getResolvedConfig()', () => {
     expect(config.scope).toBe('thread');
     expect(config.observation).toBeTruthy();
     expect(config.reflection).toBeTruthy();
+    expect(config.observation.maxRetries).toBe(8);
+    expect(config.observation.failurePolicy).toBe('abort');
+    expect(config.reflection.maxRetries).toBe(8);
+    expect(config.reflection.failurePolicy).toBe('abort');
+  });
+
+  it('should resolve independent observation and reflection failure controls', async () => {
+    const storage = createInMemoryStorage();
+    const om = createOM(storage, {
+      observationMaxRetries: 0,
+      observationFailurePolicy: 'continue',
+      reflectionMaxRetries: 1,
+      reflectionFailurePolicy: 'continue',
+    });
+
+    const config = await om.getResolvedConfig();
+    expect(config.observation.maxRetries).toBe(0);
+    expect(config.observation.failurePolicy).toBe('continue');
+    expect(config.reflection.maxRetries).toBe(1);
+    expect(config.reflection.failurePolicy).toBe('continue');
   });
 
   it('should reflect resource scope when configured', async () => {

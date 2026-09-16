@@ -140,7 +140,7 @@ export abstract class ObservationStrategy {
             operationType: 'observation',
             startedAt: new Date().toISOString(),
             error: formatOmError(error),
-            ...getOmFailureMetadata(error, this.observationConfig.onFailure),
+            ...getOmFailureMetadata(error, this.observationConfig.failurePolicy),
             recordId: record.id,
             threadId,
           },

@@ -90,7 +90,7 @@ describe('AgentController OM failure abort behavior', () => {
     expect(events.some(e => e.type === 'message_start')).toBe(false);
   });
 
-  it('continues the stream after an observer/provider buffering failure under continue policy', async () => {
+  it('continues the stream after an observer model buffering failure under continue policy', async () => {
     const { session } = await createSession();
     const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
@@ -106,7 +106,7 @@ describe('AgentController OM failure abort behavior', () => {
             operationType: 'observation',
             error: 'fetch failed',
             failurePolicy: 'continue',
-            failureKind: 'observer-provider',
+            failureKind: 'observer-model',
           },
         };
         yield { type: 'text-start', payload: { id: 't3' } };
@@ -121,7 +121,7 @@ describe('AgentController OM failure abort behavior', () => {
     expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(false);
   });
 
-  it('continues the stream after an awaited observer/provider failure under continue policy', async () => {
+  it('continues the stream after an awaited observer model failure under continue policy', async () => {
     const { session } = await createSession();
     const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
@@ -138,7 +138,7 @@ describe('AgentController OM failure abort behavior', () => {
             error: 'fetch failed',
             durationMs: 50,
             failurePolicy: 'continue',
-            failureKind: 'observer-provider',
+            failureKind: 'observer-model',
           },
         };
         yield { type: 'text-start', payload: { id: 't4' } };
@@ -153,35 +153,63 @@ describe('AgentController OM failure abort behavior', () => {
     expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(false);
   });
 
+  const failClosedMetadataCases = [
+    ['policy missing', { failureKind: 'observer-model' }],
+    ['kind missing', { failurePolicy: 'continue' }],
+    ['both missing', {}],
+    ['unknown policy', { failurePolicy: 'ignore', failureKind: 'observer-model' }],
+    ['unknown kind', { failurePolicy: 'continue', failureKind: 'provider' }],
+    ['mismatched kind', { failurePolicy: 'continue', failureKind: 'reflector-model' }],
+    [
+      'inherited policy',
+      Object.assign(Object.create({ failurePolicy: 'continue' }), { failureKind: 'observer-model' }),
+    ],
+    ['inherited kind', Object.assign(Object.create({ failureKind: 'observer-model' }), { failurePolicy: 'continue' })],
+    ['both inherited', Object.create({ failurePolicy: 'continue', failureKind: 'observer-model' })],
+  ] as const;
+
   it.each(['data-om-buffering-failed', 'data-om-observation-failed'] as const)(
-    'fails closed for %s when continue lacks observer/provider classification',
+    'fails closed for %s without complete own continuation metadata',
     async type => {
-      const { session } = await createSession();
-      const events: AgentControllerEvent[] = [];
-      session.subscribe(event => {
-        events.push(event);
-      });
-      session.run.ensureAbortController();
+      for (const [name, metadata] of failClosedMetadataCases) {
+        const { session } = await createSession();
+        const events: AgentControllerEvent[] = [];
+        session.subscribe(event => {
+          events.push(event);
+        });
+        session.run.ensureAbortController();
 
-      await (session as any).processStream({
-        fullStream: (async function* () {
-          yield {
-            type,
-            data: {
-              cycleId: 'fail-closed',
-              operationType: 'observation',
-              error: 'storage failed',
-              durationMs: 50,
-              failurePolicy: 'continue',
-            },
-          };
-          yield { type: 'text-start', payload: { id: 'blocked' } };
-        })(),
-      });
+        const data = Object.assign(
+          Object.create(Object.getPrototypeOf(metadata)),
+          {
+            cycleId: `fail-closed-${name}`,
+            operationType: 'observation',
+            error: 'storage failed',
+            durationMs: 50,
+          },
+          metadata,
+        );
 
-      expect(events.some(e => e.type === 'error')).toBe(true);
-      expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(true);
-      expect(events.some(e => e.type === 'message_start')).toBe(false);
+        await (session as any).processStream({
+          fullStream: (async function* () {
+            yield { type, data };
+            yield { type: 'text-start', payload: { id: 'blocked' } };
+          })(),
+        });
+
+        expect(
+          events.some(e => e.type === 'error'),
+          name,
+        ).toBe(true);
+        expect(
+          events.some(e => e.type === 'agent_end' && e.reason === 'aborted'),
+          name,
+        ).toBe(true);
+        expect(
+          events.some(e => e.type === 'message_start'),
+          name,
+        ).toBe(false);
+      }
     },
   );
 });

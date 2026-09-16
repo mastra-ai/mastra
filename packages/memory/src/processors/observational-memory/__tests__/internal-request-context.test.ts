@@ -315,7 +315,7 @@ describe('multi-thread observer failure state', () => {
         bufferTokens: false,
         previousObserverTokens: 1000,
         observeAttachments: false,
-        onFailure: 'continue',
+        failurePolicy: 'continue',
       } as any,
       observedMessageIds,
       resolveModel: () => ({ model: 'mock/model' as any }),
@@ -334,7 +334,7 @@ describe('multi-thread observer failure state', () => {
 
     await expect(
       (observer as any).callMultiThreadObserver(undefined, messagesByThread, ['thread-1', 'thread-2']),
-    ).rejects.toMatchObject({ name: 'ObserverProviderError' });
+    ).rejects.toMatchObject({ name: 'OmModelExecutionError', failureKind: 'observer-model' });
     expect([...observedMessageIds]).toEqual(['previously-observed']);
   });
 });

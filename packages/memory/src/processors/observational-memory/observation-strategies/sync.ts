@@ -294,7 +294,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
         startedAt: this.startedAt,
         tokensAttempted: this.tokensToObserve,
         error,
-        failurePolicy: this.observationConfig.onFailure,
+        failurePolicy: this.observationConfig.failurePolicy,
         recordId: this.opts.record.id,
         threadId: this.opts.threadId,
       });

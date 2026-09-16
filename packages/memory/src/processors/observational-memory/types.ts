@@ -103,17 +103,11 @@ export interface ObservationConfig {
    */
   model?: ObservationalMemoryModel;
 
-  /**
-   * Controls how observer/provider failures affect the main agent turn.
-   *
-   * - `'abort'` preserves the existing retry schedule and aborts the turn after failure.
-   * - `'continue'` makes one observer/provider attempt, emits the failure for diagnosis, and keeps the failed input pending.
-   *
-   * Persistence, indexing, transform, locking, invariant, and explicit abort failures remain fatal.
-   *
-   * @default 'abort'
-   */
-  onFailure?: 'abort' | 'continue';
+  /** Number of retries after the initial Observer model call. @default 8 */
+  maxRetries?: number;
+
+  /** Terminal policy after Observer model retries are exhausted. @default 'abort' */
+  failurePolicy?: 'abort' | 'continue';
 
   /**
    * Token count of unobserved messages that triggers observation.
@@ -316,6 +310,12 @@ export interface ReflectionConfig {
    * @default 'google/gemini-2.5-flash'
    */
   model?: ObservationalMemoryModel;
+
+  /** Number of retries after the initial Reflector model call. @default 8 */
+  maxRetries?: number;
+
+  /** Terminal policy after Reflector model retries are exhausted. @default 'abort' */
+  failurePolicy?: 'abort' | 'continue';
 
   /**
    * Token count of observations that triggers reflection.
@@ -568,10 +568,10 @@ export interface DataOmObservationFailedPart {
     error: string;
 
     /** Resolved failure policy for this observation cycle. */
-    failurePolicy: 'abort' | 'continue';
+    failurePolicy?: 'abort' | 'continue';
 
     /** Machine-readable failure classification when the observer/provider call failed. */
-    failureKind?: 'observer-provider';
+    failureKind?: 'observer-model' | 'reflector-model';
 
     /** The OM record ID */
     recordId: string;
@@ -756,10 +756,10 @@ export interface DataOmBufferingFailedPart {
     error: string;
 
     /** Resolved failure policy for this observation cycle. */
-    failurePolicy: 'abort' | 'continue';
+    failurePolicy?: 'abort' | 'continue';
 
     /** Machine-readable failure classification when the observer/provider call failed. */
-    failureKind?: 'observer-provider';
+    failureKind?: 'observer-model' | 'reflector-model';
 
     /** The OM record ID */
     recordId: string;
@@ -1137,7 +1137,8 @@ export interface ObservationalMemoryConfig {
  */
 export interface ResolvedObservationConfig {
   model: ObservationalMemoryModel;
-  onFailure: 'abort' | 'continue';
+  maxRetries: number;
+  failurePolicy: 'abort' | 'continue';
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   messageTokens: number | ThresholdRange;
   /** Whether shared token budget is enabled */
@@ -1172,6 +1173,8 @@ export interface ResolvedObservationConfig {
 
 export interface ResolvedReflectionConfig {
   model: ObservationalMemoryModel;
+  maxRetries: number;
+  failurePolicy: 'abort' | 'continue';
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   observationTokens: number | ThresholdRange;
   /** Whether shared token budget is enabled */

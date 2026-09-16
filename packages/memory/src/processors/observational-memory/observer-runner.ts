@@ -11,7 +11,7 @@ import type { ProviderMetadata } from '@mastra/core/stream';
 
 import type { Memory } from '../..';
 import { omDebug } from './debug';
-import { formatOmError, ObserverProviderError } from './error';
+import { formatOmError, OmModelExecutionError } from './error';
 import { getBuiltInExtractedValues, mergeExtractedValues, mergeExtractionFailures } from './extracted-values';
 import { extractStructuredValues } from './extraction-runner';
 import type { Extractor } from './extractor';
@@ -163,22 +163,21 @@ export class ObserverRunner {
     // Read the model into the widened type before branching on it so the
     // conditional does not force TypeScript to enumerate every model-id literal.
     let agentModel: WidenModelId<ConcreteObservationModel> = model;
-    if (this.observationConfig.onFailure === 'continue') {
-      if (Array.isArray(agentModel)) {
-        agentModel = agentModel.map(fallback => ({ ...fallback, maxRetries: 0 }));
-      } else if (typeof agentModel === 'function') {
-        const resolveDynamicModel = agentModel;
-        agentModel = (async args => {
-          const resolvedModel = await resolveDynamicModel(args);
-          return Array.isArray(resolvedModel)
-            ? resolvedModel.map(fallback => ({ ...fallback, maxRetries: 0 }))
-            : resolvedModel;
-        }) as typeof agentModel;
-      }
+    if (Array.isArray(agentModel)) {
+      agentModel = agentModel.map(fallback => ({ ...fallback, maxRetries: 0 }));
+    } else if (typeof agentModel === 'function') {
+      const resolveDynamicModel = agentModel;
+      agentModel = (async args => {
+        const resolvedModel = await resolveDynamicModel(args);
+        return Array.isArray(resolvedModel)
+          ? resolvedModel.map(fallback => ({ ...fallback, maxRetries: 0 }))
+          : resolvedModel;
+      }) as typeof agentModel;
     }
     const agent = new Agent({
       id: isMultiThread ? 'multi-thread-observer' : 'observational-memory-observer',
       name: isMultiThread ? 'multi-thread-observer' : 'Observer',
+      maxRetries: 0,
       instructions: buildObserverSystemPrompt(
         isMultiThread,
         this.observationConfig.instruction,
@@ -186,7 +185,6 @@ export class ObserverRunner {
         extractors,
       ),
       model: agentModel,
-      ...(this.observationConfig.onFailure === 'continue' ? { maxRetries: 0 } : {}),
       ...(memory ? { memory } : {}),
       ...(this.mastra ? { mastra: this.mastra } : {}),
     });
@@ -378,14 +376,14 @@ export class ObserverRunner {
                     aborted: abortSignal?.aborted ?? false,
                   });
                   if (abortSignal?.aborted) throw error;
-                  throw new ObserverProviderError(error);
+                  throw new OmModelExecutionError('observer-model', error);
                 }
               }, abortSignal),
           }),
         {
           label: 'observer',
           abortSignal,
-          maxRetries: this.observationConfig.onFailure === 'continue' ? 0 : undefined,
+          maxRetries: this.observationConfig.maxRetries,
         },
       );
     };
@@ -687,14 +685,14 @@ export class ObserverRunner {
                     aborted: abortSignal?.aborted ?? false,
                   });
                   if (abortSignal?.aborted) throw error;
-                  throw new ObserverProviderError(error);
+                  throw new OmModelExecutionError('observer-model', error);
                 }
               }, abortSignal),
           }),
         {
           label: 'observer-multi-thread',
           abortSignal,
-          maxRetries: this.observationConfig.onFailure === 'continue' ? 0 : undefined,
+          maxRetries: this.observationConfig.maxRetries,
         },
       );
     };

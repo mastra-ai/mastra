@@ -403,7 +403,7 @@ describe('OM Error State', { timeout: 30_000 }, () => {
             ],
             messageTokens: 20,
             bufferTokens: false,
-            onFailure: 'continue',
+            failurePolicy: 'continue',
           },
           reflection: {
             model: createMockReflectorModel() as any,
