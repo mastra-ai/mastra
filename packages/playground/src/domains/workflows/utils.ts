@@ -8,18 +8,37 @@ export function convertWorkflowRunStateToStreamResult(
 ): WorkflowRunStreamResult {
   const { input, ...recordedSteps } =
     'context' in runState ? runState.context : { ...runState.steps, input: runState.payload };
-  const steps: WorkflowRunStreamResult['steps'] = {};
-
-  for (const [stepId, stepResult] of Object.entries(recordedSteps)) {
-    if (Array.isArray(stepResult)) continue;
-    const hasTripwire = stepResult.status === 'failed' && 'tripwire' in stepResult && stepResult.tripwire !== undefined;
-    steps[stepId] = { ...stepResult, ...(hasTripwire ? { error: undefined } : {}) };
-  }
+  const steps: WorkflowRunStreamResult['steps'] = Object.fromEntries(
+    Object.entries(recordedSteps).flatMap(([stepId, recordedStep]) => {
+      const stepResult = Array.isArray(recordedStep)
+        ? (recordedStep.find(result => result?.status === 'suspended') ?? recordedStep[0])
+        : recordedStep;
+      if (!stepResult) return [];
+      const hasTripwire =
+        stepResult.status === 'failed' && 'tripwire' in stepResult && stepResult.tripwire !== undefined;
+      return [
+        [
+          stepId,
+          {
+            ...stepResult,
+            ...(Array.isArray(recordedStep)
+              ? {
+                  payload: recordedStep.map(result => result?.payload),
+                  output: recordedStep.map(result => result?.output),
+                }
+              : {}),
+            ...(hasTripwire ? { error: undefined } : {}),
+          },
+        ] as const,
+      ];
+    }),
+  );
 
   const suspended = Object.entries(steps).flatMap(([stepId, step]) => {
     if (step.status !== 'suspended') return [];
-    const nestedPath = step.suspendPayload?.__workflow_meta?.path;
-    return [nestedPath ? [stepId, ...nestedPath] : [stepId]];
+    const path = step.suspendPayload?.__workflow_meta?.path;
+    const nestedPath = Array.isArray(path) ? path.filter((part): part is string => typeof part === 'string') : [];
+    return [nestedPath[0] === stepId ? nestedPath : [stepId, ...nestedPath]];
   });
   const suspendedStep = suspended[0]?.[0];
   const tripwire = 'tripwire' in runState ? runState.tripwire : undefined;

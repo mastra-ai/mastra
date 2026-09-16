@@ -7,9 +7,8 @@ import type {
   MastraToolInvocationPart,
 } from '@mastra/core/agent/message-list';
 import type { AgentChunkType, ChunkType, NetworkChunkType } from '@mastra/core/stream';
-import type { WorkflowStreamResult } from '@mastra/core/workflows';
+import type { StepResult, WorkflowStreamResult } from '@mastra/core/workflows';
 import { uint8ArrayToBase64, encodeFilePartDataForStorage } from '../../agent/signal-data';
-import type { WorkflowStreamResult as AccumulatedWorkflowStreamResult } from '../../workflows/types';
 import { formatCompletionFeedback, formatStreamCompletionFeedback } from './formatCompletionFeedback';
 import { CLIENT_MESSAGE_ID_KEY } from './types';
 import type {
@@ -253,9 +252,9 @@ const mergeBgTaskMetadata = (
  * `mapWorkflowStreamChunkToWatchResult` from the previous accumulator.
  */
 export const mapWorkflowStreamChunkToWatchResult = (
-  prev: AccumulatedWorkflowStreamResult,
+  prev: WorkflowStreamResult<any, any, any, any>,
   chunk: StreamChunk,
-): AccumulatedWorkflowStreamResult => {
+): WorkflowStreamResult<any, any, any, any> => {
   if (chunk.type === 'workflow-start') {
     return {
       input: prev?.input,
@@ -286,7 +285,7 @@ export const mapWorkflowStreamChunkToWatchResult = (
   }
 
   const { stepCallId: _stepCallId, stepName: _stepName, ...newPayload } = chunk.payload ?? {};
-  const newSteps: AccumulatedWorkflowStreamResult['steps'] = {
+  const newSteps = {
     ...prev?.steps,
     [chunk.payload.id]: {
       ...prev?.steps?.[chunk.payload.id],
@@ -297,19 +296,23 @@ export const mapWorkflowStreamChunkToWatchResult = (
   if (chunk.type === 'workflow-step-start') return { ...prev, steps: newSteps };
 
   if (chunk.type === 'workflow-step-suspended') {
-    const suspendedStepIds = Object.entries(newSteps).flatMap(([stepId, stepResult]) => {
-      if (stepResult?.status === 'suspended') {
-        const nestedPath = stepResult?.suspendPayload?.__workflow_meta?.path;
-        return nestedPath ? [[stepId, ...nestedPath]] : [[stepId]];
-      }
-      return [];
-    });
+    const suspendedStepIds = Object.entries(newSteps as Record<string, StepResult<any, any, any, any>>).flatMap(
+      ([stepId, stepResult]) => {
+        if (stepResult?.status === 'suspended') {
+          const nestedPath = stepResult?.suspendPayload?.__workflow_meta?.path;
+          return nestedPath ? [[stepId, ...nestedPath]] : [[stepId]];
+        }
+        return [];
+      },
+    );
+    // A suspended chunk contributes at least its own step path.
+    const suspended = suspendedStepIds as [string[], ...string[][]];
     return {
       ...prev,
       status: 'suspended',
       steps: newSteps,
       suspendPayload: chunk.payload.suspendPayload,
-      suspended: suspendedStepIds,
+      suspended,
     };
   }
 

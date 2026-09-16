@@ -1,17 +1,25 @@
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { useContext, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { convertWorkflowRunStateToStreamResult } from '../../utils';
 import { twoStepWorkflow } from '../../workflow/__tests__/fixtures/workflow-debug-step-controls';
 import { WorkflowTimeline } from '../../workflow/workflow-timeline';
 import { WorkflowRunContext } from '../workflow-run-context';
 import { WorkflowRunProvider } from '../workflow-run-provider';
 import { WorkflowSelectedStepProvider } from '../workflow-selected-step-context';
 import { WorkflowStepDetailProvider } from '../workflow-step-detail-provider';
-import { completedLoop, partialCompletedLoop, pausedLoop, suspendedLoop } from './fixtures/completed-loop';
+import {
+  completedIterationArray,
+  completedLoop,
+  partialCompletedLoop,
+  pausedLoop,
+  rawCompletedRun,
+  suspendedLoop,
+} from './fixtures/completed-loop';
 import { completedChunks, runningChunk } from './fixtures/workflow-stream';
 import { server } from '@/test/msw-server';
 
@@ -120,6 +128,7 @@ function CompletedRunProbe() {
       <output aria-label="Stream completion">{streamFinished ? 'Finished' : 'Pending'}</output>
       <output aria-label="Streaming state">{String(isStreamingWorkflow)}</output>
       <output aria-label="Run state">{result?.status}</output>
+      <output aria-label="Step IDs">{JSON.stringify(Object.keys(result?.steps ?? {}))}</output>
       <output aria-label="Child state">
         {result?.steps['analyze-document[0].count-words']?.status ?? 'No child state'}
       </output>
@@ -127,6 +136,10 @@ function CompletedRunProbe() {
         {JSON.stringify(result?.steps['analyze-document[0].count-words']?.output)}
       </output>
       <output aria-label="Persisted state">{result?.steps.persisted?.status}</output>
+      <output aria-label="Iteration state">{result?.steps.transform?.status}</output>
+      <output aria-label="Iteration input">{JSON.stringify(result?.steps.transform?.payload)}</output>
+      <output aria-label="Iteration output">{JSON.stringify(result?.steps.transform?.output)}</output>
+      <output aria-label="Iteration metadata">{JSON.stringify(result?.steps.transform?.metadata)}</output>
     </>
   );
 }
@@ -157,6 +170,47 @@ describe('WorkflowRunProvider', () => {
         HttpResponse.json(completedLoop),
       ),
     );
+  });
+
+  describe('when completed iterations are stored as an array', () => {
+    it('retains every iteration input and output for inspection', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/workflows/two-step-workflow/runs/completed-loop`, () =>
+          HttpResponse.json(completedIterationArray),
+        ),
+      );
+      renderProvider(completedLoop.runId);
+      await waitFor(() => expect(screen.getByLabelText('Iteration state').textContent).toBe('success'));
+      expect(screen.getByLabelText('Iteration input').textContent).toBe('[false,0,"",null]');
+      expect(screen.getByLabelText('Iteration output').textContent).toBe('[0,false,null,""]');
+      expect(screen.getByLabelText('Iteration metadata').textContent).toBe(
+        '{"application":{"untouched":[null,false]}}',
+      );
+    });
+  });
+
+  describe('when a snapshot omits step details', () => {
+    it('keeps the recorded status without inventing step data or timings', () => {
+      const result = convertWorkflowRunStateToStreamResult(partialCompletedLoop);
+      expect(result.steps.persisted).toEqual({ status: 'success', startedAt: 100, endedAt: 110 });
+      expect(Object.keys(result.steps)).toContain('__proto__');
+      expect(result.steps['__proto__'].output).toBe(false);
+      expect(convertWorkflowRunStateToStreamResult({ ...completedLoop, steps: undefined }).steps).toEqual({});
+    });
+  });
+
+  describe('when the snapshot is a raw WorkflowRunState', () => {
+    it('retains its completed step data and workflow result', () => {
+      const result = convertWorkflowRunStateToStreamResult(rawCompletedRun);
+      expect(result.steps.transform).toEqual({
+        status: 'success',
+        payload: 0,
+        output: false,
+        startedAt: 100,
+        endedAt: 110,
+      });
+      expect(result.result).toEqual({ accepted: false });
+    });
   });
 
   describe('when a run streams without an input panel mounted', () => {
@@ -316,16 +370,42 @@ describe('WorkflowRunProvider', () => {
   });
 
   describe('when opening a paused run', () => {
-    it('keeps continuation available instead of waiting for an observer stream', async () => {
+    it('keeps continuation available while observing remote progress', async () => {
+      let observeStarted = false;
+      let streamController!: ReadableStreamDefaultController<Uint8Array>;
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          streamController = controller;
+        },
+      });
       server.use(
         http.get(`${BASE_URL}/api/workflows/two-step-workflow/runs/completed-loop`, () =>
           HttpResponse.json(pausedLoop),
         ),
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/create-run`, () =>
+          HttpResponse.json({ runId: completedLoop.runId }),
+        ),
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/observe`, () => {
+          observeStarted = true;
+          return new HttpResponse(stream);
+        }),
       );
       renderProvider(completedLoop.runId);
       await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('paused'));
       fireEvent.click(screen.getByRole('button', { name: 'Observe run' }));
+      await waitFor(() => expect(observeStarted).toBe(true));
+      expect(screen.getByLabelText('Run state').textContent).toBe('paused');
       expect(screen.getByLabelText('Streaming state').textContent).toBe('false');
+      await act(async () => {
+        streamController.enqueue(
+          new TextEncoder().encode(
+            completedChunks.map(chunk => JSON.stringify({ ...chunk, runId: completedLoop.runId }) + '\x1e').join(''),
+          ),
+        );
+        streamController.close();
+      });
+      await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('success'));
+      expect(screen.getByLabelText('Child output').textContent).toBe('{"words":2}');
     });
   });
 
@@ -368,6 +448,7 @@ describe('WorkflowRunProvider', () => {
       await waitFor(() => expect(screen.getByLabelText('Stream completion').textContent).toBe('Finished'));
       await waitFor(() => expect(screen.getByLabelText('Persisted state').textContent).toBe('success'));
       expect(screen.getByLabelText('Child output').textContent).toBe('{"words":2}');
+      expect(screen.getByLabelText('Step IDs').textContent).toContain('"__proto__"');
     });
   });
 

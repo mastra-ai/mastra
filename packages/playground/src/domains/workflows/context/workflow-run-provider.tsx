@@ -17,15 +17,23 @@ function resolveWorkflowRunResult(
   storedResult: WorkflowRunStreamResult | null,
   isStreaming: boolean,
 ) {
-  if (!liveResult) return storedResult;
+  if (!liveResult?.status) return storedResult ?? liveResult;
+  if (!storedResult) return liveResult;
   const canReconcile =
-    !isStreaming && storedResult?.status === liveResult.status && isWorkflowRunFinished(liveResult.status);
-  if (!canReconcile) return liveResult;
-  const steps = { ...liveResult.steps };
-  for (const [stepId, step] of Object.entries(storedResult.steps)) {
-    steps[stepId] = { ...steps[stepId], ...step };
-  }
-  return { ...storedResult, ...liveResult, steps };
+    !isStreaming && storedResult.status === liveResult.status && isWorkflowRunFinished(liveResult.status);
+  const previousSteps = canReconcile ? liveResult.steps : storedResult.steps;
+  const latestSteps = canReconcile ? storedResult.steps : liveResult.steps;
+  const steps = {
+    ...previousSteps,
+    ...Object.fromEntries(
+      Object.entries(latestSteps).map(([stepId, step]) => [stepId, { ...previousSteps[stepId], ...step }] as const),
+    ),
+  };
+  return {
+    ...liveResult,
+    input: liveResult.input === undefined ? storedResult.input : liveResult.input,
+    steps,
+  };
 }
 
 export function WorkflowRunProvider({
@@ -47,7 +55,7 @@ export function WorkflowRunProvider({
     result: WorkflowRunStreamResult | null;
     payload: unknown;
   }>({ runId: '', result: null, payload: null });
-  const [streamRunId, setStreamRunId] = useState<string>();
+  const [streamRun, setStreamRun] = useState<{ runId?: string; mode: 'execute' | 'observe' }>();
   const [debugMode, setDebugMode] = useState(false);
   const { data: workflow, isLoading, error } = useWorkflow(workflowId);
   const { settings } = useTracingSettings();
@@ -69,17 +77,16 @@ export function WorkflowRunProvider({
   });
 
   const runId = initialRunId ?? localRun.runId;
-  const hasStreamResult = isStreaming || streamResult.status !== 'pending';
-  const selectedStream = streamRunId === runId && hasStreamResult ? streamResult : null;
+  const selectedStream = streamRun?.runId === runId && streamResult.status ? streamResult : null;
   const selectedOverride = localRun.runId === runId ? localRun.result : null;
-  const isStreamingWorkflow = streamRunId === runId && isStreaming;
+  const isStreamOpen = streamRun?.runId === runId && isStreaming;
   const liveResult = selectedOverride ?? selectedStream;
   const completedRunId = !initialRunId && isWorkflowRunFinished(liveResult?.status) ? runId : '';
   const snapshotRunId = initialRunId || completedRunId;
   const { isLoading: isLoadingRunExecutionResult, data: runExecutionResult } = useWorkflowRun(
     workflowId,
     snapshotRunId,
-    isStreamingWorkflow ? undefined : query => (isWorkflowRunFinished(query.state.data?.status) ? false : 5000),
+    isStreamOpen ? undefined : query => (isWorkflowRunFinished(query.state.data?.status) ? false : 5000),
   );
 
   const executionSnapshot = useMemo(() => {
@@ -97,9 +104,12 @@ export function WorkflowRunProvider({
     return storedSnapshot ? convertWorkflowRunStateToStreamResult(storedSnapshot) : null;
   }, [executionSnapshot, snapshot]);
   const result = useMemo(
-    () => resolveWorkflowRunResult(liveResult, storedResult, isStreamingWorkflow),
-    [liveResult, storedResult, isStreamingWorkflow],
+    () => resolveWorkflowRunResult(liveResult, storedResult, isStreamOpen),
+    [liveResult, storedResult, isStreamOpen],
   );
+  const isObservingIdleRun =
+    streamRun?.mode === 'observe' && (result?.status === 'paused' || result?.status === 'suspended');
+  const isStreamingWorkflow = isStreamOpen && !isObservingIdleRun;
   const payload = useMemo(() => {
     if (!runSnapshot) return localRun.payload;
     const initialState = 'value' in runSnapshot ? runSnapshot.value : runSnapshot.initialState;
@@ -143,7 +153,7 @@ export function WorkflowRunProvider({
 
   const closeStreamsAndReset = useCallback(() => {
     resetStream();
-    setStreamRunId(undefined);
+    setStreamRun(undefined);
   }, [resetStream]);
   const clearData = useCallback(() => {
     resetStepDetail?.();
@@ -154,8 +164,8 @@ export function WorkflowRunProvider({
   // Keep the canvas mounted while releasing the previous route's stream and run state.
   useEffect(() => clearData, [workflowId, initialRunId, clearData]);
 
-  const selectStreamRun = useCallback((runId?: string) => {
-    setStreamRunId(runId);
+  const selectStreamRun = useCallback((runId?: string, mode: 'execute' | 'observe' = 'execute') => {
+    setStreamRun({ runId, mode });
     setLocalRun(current => (current.runId === runId ? { ...current, result: null } : current));
   }, []);
 
@@ -182,10 +192,14 @@ export function WorkflowRunProvider({
 
   const startObserveWorkflowStream = useCallback(
     (props: Parameters<NonNullable<WorkflowRunContextType['observeWorkflowStream']>>[0]) => {
-      selectStreamRun(props.runId);
-      observeWorkflowStream(props);
+      if (props.storeRunResult?.status === 'suspended') {
+        closeStreamsAndReset();
+        return;
+      }
+      selectStreamRun(props.runId, 'observe');
+      observeWorkflowStream({ workflowId: props.workflowId, runId: props.runId, storeRunResult: null });
     },
-    [selectStreamRun, observeWorkflowStream],
+    [closeStreamsAndReset, selectStreamRun, observeWorkflowStream],
   );
 
   const startTimeTravelWorkflowStream = useCallback(

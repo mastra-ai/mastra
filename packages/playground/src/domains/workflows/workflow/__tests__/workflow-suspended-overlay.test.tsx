@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { GetWorkflowRunByIdResponse } from '@mastra/client-js';
+import type { GetWorkflowResponse, GetWorkflowRunByIdResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -11,7 +11,15 @@ import { WorkflowRunProvider } from '../../context/workflow-run-provider';
 import { WorkflowSuspendedOverlay } from '../workflow-suspended-overlay';
 import { twoStepWorkflow } from './fixtures/workflow-debug-step-controls';
 import { pausedRunAfterFirstStepState, successfulRunState, suspendedRunState } from './fixtures/workflow-run-states';
-import { falsySuspension, noWorkflowAuth, readOnlyWorkflowUser, suspendedChunk } from './fixtures/workflow-suspension';
+import {
+  falsySuspension,
+  nestedIterationSuspension,
+  nestedIterationWorkflow,
+  noWorkflowAuth,
+  readOnlyWorkflowUser,
+  suspendedChunk,
+  suspendedIterationArray,
+} from './fixtures/workflow-suspension';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import type { AuthCapabilities } from '@/domains/auth/types';
 import { server } from '@/test/msw-server';
@@ -27,6 +35,11 @@ function RunProbe() {
       <output aria-label="Run state">{result?.status}</output>
       <output aria-label="Streaming state">{String(isStreamingWorkflow)}</output>
       <output aria-label="Permissions loaded">{String(!isLoadingPermissions)}</output>
+      <output aria-label="Suspended paths">{JSON.stringify(result?.suspended)}</output>
+      <output aria-label="Iteration input">{JSON.stringify(result?.steps.transform?.payload)}</output>
+      <output aria-label="Iteration output">{JSON.stringify(result?.steps.transform?.output)}</output>
+      <output aria-label="Suspended output">{JSON.stringify(result?.steps.transform?.suspendOutput)}</output>
+      <output aria-label="Iteration metadata">{JSON.stringify(result?.steps.transform?.metadata)}</output>
       <button
         onClick={() => {
           if (runId) void streamWorkflow({ workflowId: 'two-step-workflow', runId, inputData: {}, requestContext: {} });
@@ -41,10 +54,11 @@ function RunProbe() {
 function renderOverlay(
   run: GetWorkflowRunByIdResponse = suspendedRunState,
   capabilities: AuthCapabilities = noWorkflowAuth,
+  workflow: GetWorkflowResponse = twoStepWorkflow,
 ) {
   server.use(
     http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(capabilities)),
-    http.get(`${BASE_URL}/api/workflows/two-step-workflow`, () => HttpResponse.json(twoStepWorkflow)),
+    http.get(`${BASE_URL}/api/workflows/two-step-workflow`, () => HttpResponse.json(workflow)),
     http.get(`${BASE_URL}/api/workflows/two-step-workflow/runs/${run.runId}`, () => HttpResponse.json(run)),
   );
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -111,6 +125,38 @@ describe('WorkflowSuspendedOverlay', () => {
       await screen.findByRole('button', { name: 'Resume' });
       fireEvent.click(screen.getByRole('button', { name: /transform.*5 B/ }));
       expect(within(screen.getByTestId('suspended-payload')).getByText('false')).not.toBeNull();
+    });
+  });
+
+  describe('when a later persisted iteration is suspended', () => {
+    it('keeps its suspension request and all iteration data inspectable', async () => {
+      renderOverlay(suspendedIterationArray);
+      await screen.findByRole('button', { name: 'Resume' });
+      expect(screen.getByLabelText('Iteration input').textContent).toBe('[false,{"document":"second"}]');
+      expect(screen.getByLabelText('Iteration output').textContent).toBe('[0,null]');
+      expect(screen.getByLabelText('Suspended output').textContent).toBe('false');
+      expect(screen.getByLabelText('Iteration metadata').textContent).toBe('{"application":{"iteration":1}}');
+      expect(screen.getByLabelText('Suspended paths').textContent).toBe('[["transform","review"]]');
+      fireEvent.click(screen.getByRole('button', { name: /transform.*B/ }));
+      const payload = screen.getByTestId('suspended-payload');
+      expect(payload.textContent).toContain('opaque');
+      expect(payload.textContent).toContain('untouched');
+    });
+
+    it('resumes the suspended nested step instead of the completed first iteration', async () => {
+      let resumeRequest: unknown;
+      server.use(
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/create-run`, () =>
+          HttpResponse.json({ runId: nestedIterationSuspension.runId }),
+        ),
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/resume-stream`, async ({ request }) => {
+          resumeRequest = await request.json();
+          return new HttpResponse('');
+        }),
+      );
+      renderOverlay(nestedIterationSuspension, noWorkflowAuth, nestedIterationWorkflow);
+      fireEvent.click(await screen.findByRole('button', { name: 'Resume' }));
+      await waitFor(() => expect(resumeRequest).toMatchObject({ step: ['nested', 'transform'] }));
     });
   });
 

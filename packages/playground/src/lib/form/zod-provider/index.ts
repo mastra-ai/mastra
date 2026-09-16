@@ -152,8 +152,6 @@ export function parseSchema(schema: AnySchema): ParsedSchema {
   return { fields };
 }
 
-// Only blank optional scalar controls represent missing input. Arrays retain their
-// positions, and explicit empty collections must reach the schema unchanged.
 function normalizeFormValues(value: unknown, schema: AnySchema): unknown {
   const baseSchema = getBaseSchema(schema);
   const shape = getShape(baseSchema);
@@ -162,6 +160,11 @@ function normalizeFormValues(value: unknown, schema: AnySchema): unknown {
     for (const [key, child] of Object.entries(value)) {
       const fieldValue = shape[key] ? normalizeFormValues(child, shape[key]) : child;
       if (fieldValue !== undefined) normalized[key] = fieldValue;
+    }
+    const isBlankGroup = Object.values(normalized).every(child => child === '' || child === undefined);
+    if (isBlankGroup && !schema.safeParse(normalized).success) {
+      const omitted = schema.safeParse(undefined);
+      if (omitted.success && omitted.data === undefined) return undefined;
     }
     return normalized;
   }

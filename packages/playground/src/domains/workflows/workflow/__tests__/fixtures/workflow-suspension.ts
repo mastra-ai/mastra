@@ -1,4 +1,5 @@
-import type { GetWorkflowRunByIdResponse, StreamVNextChunkType } from '@mastra/client-js';
+import type { GetWorkflowResponse, GetWorkflowRunByIdResponse, StreamVNextChunkType } from '@mastra/client-js';
+import { twoStepWorkflow } from './workflow-debug-step-controls';
 import { suspendedRunState } from './workflow-run-states';
 import type { AuthCapabilities } from '@/domains/auth/types';
 
@@ -22,6 +23,46 @@ export const falsySuspension: GetWorkflowRunByIdResponse = {
       startedAt: 100,
       suspendedAt: 110,
     },
+  },
+};
+
+export const suspendedIterationArray: GetWorkflowRunByIdResponse = {
+  ...suspendedRunState,
+  steps: {
+    transform: [
+      { status: 'success', payload: false, output: 0 },
+      {
+        status: 'suspended',
+        payload: { document: 'second' },
+        suspendPayload: {
+          question: 'Review the second document',
+          __workflow_meta: { path: ['transform', 'review'], application: { untouched: null } },
+          application: { constructor: 'opaque', values: [0, false, ''] },
+        },
+        suspendOutput: false,
+        metadata: { application: { iteration: 1 } },
+      },
+    ],
+  },
+  suspendedPaths: { transform: [1] },
+};
+
+export const nestedIterationWorkflow: GetWorkflowResponse = {
+  ...twoStepWorkflow,
+  allSteps: {
+    ...twoStepWorkflow.allSteps,
+    'nested.transform': { ...twoStepWorkflow.allSteps.transform, id: 'nested.transform' },
+  },
+};
+
+export const nestedIterationSuspension: GetWorkflowRunByIdResponse = {
+  ...suspendedRunState,
+  steps: {
+    nested: { status: 'running' },
+    'nested.transform': [
+      { status: 'success', payload: false, output: 0 },
+      { status: 'suspended', payload: { document: 'second' }, suspendPayload: false },
+    ],
   },
 };
 
