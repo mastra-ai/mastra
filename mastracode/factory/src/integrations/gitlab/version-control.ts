@@ -48,10 +48,11 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
   const listPullRequests: VersionControl['listPullRequests'] = async input => {
     const context = await deps.contextForConnection(input.connection);
     const page = parsePositiveCursor(input.cursor);
-    const state = input.state === 'open' ? 'opened' : (input.state ?? 'opened');
+    const state = input.state === 'open' ? 'opened' : input.state === 'closed' ? 'all' : (input.state ?? 'opened');
     const mergeRequests = await context.api.listMergeRequests(input.sourceId, { page, state });
     return {
       pullRequests: mergeRequests
+        .filter(mergeRequest => input.state !== 'closed' || mergeRequest.state === 'closed' || mergeRequest.state === 'merged')
         .filter(mergeRequest => input.includeDrafts !== false || !isDraft(mergeRequest))
         .map(toPullRequest),
       nextCursor: mergeRequests.length === GITLAB_MERGE_REQUESTS_PAGE_SIZE ? String(page + 1) : null,
@@ -490,15 +491,24 @@ async function submitReviewAction(
     throw notSupported('GitLab has no first-class pending review object.');
   }
   if (input.event === 'approve') {
+    const body = input.body?.trim();
+    const comment = body
+      ? toPullRequestComment(
+          context.host,
+          input.sourceId,
+          mergeRequestIid,
+          await context.api.createMergeRequestNote(input.sourceId, mergeRequestIid, body),
+        )
+      : null;
     await context.api.approveMergeRequest(input.sourceId, mergeRequestIid, input.commitId);
     return {
-      id: `${mergeRequestIid}:approval`,
-      url: mergeRequestUrl(context.host, input.sourceId, mergeRequestIid),
-      author: null,
-      body: input.body?.trim() || null,
+      id: String(mergeRequestIid) + ':approval',
+      url: comment?.url ?? mergeRequestUrl(context.host, input.sourceId, mergeRequestIid),
+      author: comment?.author ?? null,
+      body: comment?.body ?? null,
       state: 'approved',
       commitId: null,
-      submittedAt: null,
+      submittedAt: comment?.createdAt ?? null,
     };
   }
   const body = input.body?.trim();

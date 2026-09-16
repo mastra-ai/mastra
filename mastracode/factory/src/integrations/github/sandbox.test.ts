@@ -163,6 +163,35 @@ describe('materializeRepo', () => {
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
+  it('matches self-hosted HTTPS remotes with ports without accepting a different repository', async () => {
+    const cloneUrl = 'https://gitlab.example.com:8443/acme/platform/app.git';
+    const sameRepo = new FakeSandbox(script =>
+      script.includes('remote get-url origin')
+        ? { exitCode: 0, stdout: cloneUrl + '\n', stderr: '' }
+        : OK,
+    );
+    await materializeRepo(
+      makeRow({ materializedAt: new Date() }),
+      makeRepoInfo({ repoFullName: 'acme/platform/app', cloneUrl, authUsername: 'oauth2' }),
+      sameRepo,
+      'glpat-token',
+    );
+    expect(sameRepo.calls.some(call => call.includes('git clone'))).toBe(false);
+
+    const wrongRepo = new FakeSandbox(script =>
+      script.includes('remote get-url origin')
+        ? { exitCode: 0, stdout: 'https://gitlab.example.com:8443/acme/platform/other.git\n', stderr: '' }
+        : OK,
+    );
+    await materializeRepo(
+      makeRow({ materializedAt: new Date() }),
+      makeRepoInfo({ repoFullName: 'acme/platform/app', cloneUrl, authUsername: 'oauth2' }),
+      wrongRepo,
+      'glpat-token',
+    );
+    expect(wrongRepo.calls.some(call => call.includes('git clone'))).toBe(true);
+  });
+
   it('leaves the checkout alone when the DB says first open but the workdir already holds this repo', async () => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('remote get-url origin')) {
