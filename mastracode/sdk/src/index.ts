@@ -1229,9 +1229,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   if (useCrossAgentSignals) {
     controller.onSessionCreated(
       async session => {
+        const latestObservedTitles = new Map<string, string | undefined>();
         const threadOwnership = createThreadOwnershipManager(async threadId => {
           const thread = await session.thread.getById({ threadId });
-          return controller.getCurrentAgent(session).claimThreadOwnership({
+          const agent = controller.getCurrentAgent(session);
+          const claim = await agent.claimThreadOwnership({
             threadId,
             resourceId: session.identity.getResourceId(),
             streamOptions: () => session.machinery.buildStreamOptions({}),
@@ -1240,6 +1242,14 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
               ...(thread?.title ? { title: thread.title } : {}),
             },
           });
+          if (claim.claimed && latestObservedTitles.has(threadId)) {
+            agent.updateThreadPeerAdvertisement({
+              resourceId: session.identity.getResourceId(),
+              threadId,
+              peer: { title: latestObservedTitles.get(threadId) },
+            });
+          }
+          return claim;
         });
 
         const claimThreadOwnership = async (threadId: string) => {
@@ -1253,10 +1263,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           if (event.type === 'thread_changed') void claimThreadOwnership(event.threadId);
           else if (event.type === 'thread_created') void claimThreadOwnership(event.thread.id);
           else if (event.type === 'thread_title_updated' || event.type === 'om_thread_title_updated') {
+            const title = event.type === 'thread_title_updated' ? event.title : event.newTitle;
+            latestObservedTitles.set(event.threadId, title);
             controller.getCurrentAgent(session).updateThreadPeerAdvertisement({
               resourceId: session.identity.getResourceId(),
               threadId: event.threadId,
-              peer: { title: event.type === 'thread_title_updated' ? event.title : event.newTitle },
+              peer: { title },
             });
           }
         });

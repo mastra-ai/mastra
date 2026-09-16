@@ -2377,6 +2377,17 @@ describe('Agent signals', () => {
       }),
     ]);
 
+    expect(ownerAgent.updateThreadPeerAdvertisement({ ...target, peer: { metadata: undefined } })).toBe(true);
+    const peersAfterClearingMetadata = await discoveryAgent.discoverThreadPeers();
+    expect(peersAfterClearingMetadata).toEqual([
+      expect.objectContaining({
+        id: 'updatable-peer-agent:updatable-resource:updatable-thread',
+        label: 'Mastra',
+        title: 'Renamed thread',
+      }),
+    ]);
+    expect(peersAfterClearingMetadata[0]?.metadata).toBeUndefined();
+
     claim.unsubscribe();
     await expect(discoveryAgent.discoverThreadPeers({ timeoutMs: 10 })).resolves.toEqual([]);
   });

@@ -301,24 +301,29 @@ The peer does not need to be currently advertised. Disconnecting is idempotent a
     id: 'agent_signal_send',
     description: `Send a prioritized notification signal to a connected peer agent.
 
-The target must already be saved and freshly advertise the same exact thread endpoint at send time. Use expectsReply to declare whether the peer owes one signal back to this thread; false removes that obligation but does not prevent or forbid a reply. Reuse messageId when retrying the same logical send, and set replyTo to the request messageId when replying. Use priority to indicate urgency: low, medium, high, or urgent.`,
-    inputSchema: z.object({
-      targetId: z.string().min(1).describe('Connected peer id.'),
-      summary: z.string().min(1).describe('Short summary to deliver to the peer.'),
-      priority: prioritySchema.default('medium'),
-      expectsReply: z
-        .boolean()
-        .describe('Whether the peer owes one signal back. False means no obligation, not no permission to reply.'),
-      messageId: z
-        .string()
-        .min(1)
-        .optional()
-        .describe(
-          'Stable logical message id. Reuse the same id for a sequential retry; receiver-side notification coalescing also uses it.',
-        ),
-      replyTo: z.string().min(1).optional().describe('Message id of the peer request this signal replies to.'),
-      payload: z.unknown().optional().describe('Optional structured payload for the peer.'),
-    }),
+The target must already be saved and freshly advertise the same exact thread endpoint at send time. Use expectsReply to declare whether the peer owes one signal back to this thread; false removes that obligation but does not prevent or forbid a reply. Low-priority signals are summarized and cannot require a reply. Reuse messageId when retrying the same logical send, and set replyTo to the request messageId when replying. Use priority to indicate urgency: low, medium, high, or urgent.`,
+    inputSchema: z
+      .object({
+        targetId: z.string().min(1).describe('Connected peer id.'),
+        summary: z.string().min(1).describe('Short summary to deliver to the peer.'),
+        priority: prioritySchema.default('medium'),
+        expectsReply: z
+          .boolean()
+          .describe('Whether the peer owes one signal back. False means no obligation, not no permission to reply.'),
+        messageId: z
+          .string()
+          .min(1)
+          .optional()
+          .describe(
+            'Stable logical message id. Reuse the same id for a sequential retry; receiver-side notification coalescing also uses it.',
+          ),
+        replyTo: z.string().min(1).optional().describe('Message id of the peer request this signal replies to.'),
+        payload: z.unknown().optional().describe('Optional structured payload for the peer.'),
+      })
+      .refine(input => input.priority !== 'low' || !input.expectsReply, {
+        message: 'Low-priority signals are summarized and cannot require a reply. Use medium or higher priority.',
+        path: ['expectsReply'],
+      }),
     outputSchema: signalResultSchema,
     execute: async (
       { targetId, summary, priority = 'medium', expectsReply, messageId: inputMessageId, replyTo, payload },
@@ -453,19 +458,22 @@ The target must already be saved and freshly advertise the same exact thread end
             };
           }
         }
-        if (accepted.action === 'blocked') {
+        if (accepted.action === 'blocked' || accepted.action === 'discard') {
           // The signal was not routed, so skip sent history: a retry with the
           // same messageId must be able to route instead of short-circuiting
           // as a duplicate.
           return {
-            content: `Failed to send agent signal: target thread ${untrustedThreadId(target)} is suspended and did not accept the signal. Retry with the same messageId once it resumes.`,
+            content:
+              accepted.action === 'blocked'
+                ? `Failed to send agent signal: target thread ${untrustedThreadId(target)} is suspended and did not accept the signal. Retry with the same messageId once it resumes.`
+                : `Failed to send agent signal: delivery policy discarded the signal before it reached ${untrustedPeerLabel(target)}. Retry with the same messageId if the delivery policy changes.`,
             target,
             priority: priority as AgentSignalPriority,
             expectsReply,
             messageId,
             replyTo,
             returnPeerId,
-            routingAction: 'blocked',
+            routingAction: accepted.action,
             isError: true,
           };
         }

@@ -1080,8 +1080,7 @@ describe('AgentController signal messages', () => {
       return true;
     });
 
-    const subscribeToThread = vi.spyOn(agent, 'subscribeToThread');
-    subscribeToThread.mockResolvedValueOnce({
+    const subscribeToThread = vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
       stream: (async function* () {
         yield { type: 'start', runId: 'run-1' };
         await abortReleased;
@@ -1091,14 +1090,6 @@ describe('AgentController signal messages', () => {
       unsubscribe: vi.fn(),
       abort,
       activeRunId: () => activeRunId,
-    });
-    subscribeToThread.mockResolvedValue({
-      stream: (async function* () {
-        await new Promise(() => {});
-      })(),
-      unsubscribe: vi.fn(),
-      abort: vi.fn(),
-      activeRunId: () => null,
     });
     await session.thread.create();
     vi.spyOn(agent, 'sendSignal').mockReturnValue({
@@ -1113,7 +1104,7 @@ describe('AgentController signal messages', () => {
     await waitFor(() => events.some(event => event.type === 'agent_end'));
     await new Promise(resolve => setTimeout(resolve, 0));
 
-    expect(subscribeToThread).toHaveBeenCalledTimes(2);
+    expect(subscribeToThread).toHaveBeenCalledTimes(1);
     expect(events.filter(event => event.type === 'agent_start')).toHaveLength(1);
     expect(events.filter(event => event.type === 'agent_end')).toEqual([{ type: 'agent_end', reason: 'aborted' }]);
   });

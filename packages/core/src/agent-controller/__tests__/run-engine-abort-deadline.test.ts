@@ -127,17 +127,20 @@ describe('SessionRunEngine — abort deadline', () => {
     expect(session.stream.isOpen()).toBe(false);
   });
 
-  it('Given an aborted subscribed run, When its abort chunk ends the consumer, Then it immediately re-subscribes for incoming signals', async () => {
+  it("Given an aborted subscribed run, When the subscription continues, Then it ignores that run's tail and processes the next run", async () => {
     const { engine, events, session } = createHarness();
-    const ensureCurrentSubscription = vi.spyOn(session.thread, 'ensureCurrentSubscription').mockResolvedValue();
 
     const subscription = {
       stream: (async function* () {
-        yield chunk({ type: 'text-start', payload: { id: 't1' } });
+        yield chunk({ type: 'text-start', payload: { id: 't1' }, runId: 'run-1' });
         session.run.requestAbort();
-        yield chunk({ type: 'abort', payload: {} });
+        yield chunk({ type: 'abort', payload: {}, runId: 'run-1' });
+        yield chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } }, runId: 'run-1' });
+        yield chunk({ type: 'text-start', payload: { id: 't2' }, runId: 'run-2' });
+        yield chunk({ type: 'text-delta', payload: { id: 't2', text: 'recovered' }, runId: 'run-2' });
+        yield chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } }, runId: 'run-2' });
       })(),
-      activeRunId: () => 'run-1',
+      activeRunId: () => null,
       abort: () => true,
       unsubscribe: vi.fn(),
     };
@@ -145,9 +148,11 @@ describe('SessionRunEngine — abort deadline', () => {
 
     await engine.processSubscribedThreadStream(subscription);
 
-    expect(events).toContainEqual({ type: 'agent_end', reason: 'aborted' });
-    expect(subscription.unsubscribe).toHaveBeenCalledOnce();
-    expect(ensureCurrentSubscription).toHaveBeenCalledOnce();
+    expect(events.filter(event => event.type === 'agent_start')).toHaveLength(2);
+    expect(events.filter(event => event.type === 'agent_end')).toEqual([
+      { type: 'agent_end', reason: 'aborted' },
+      { type: 'agent_end', reason: 'complete' },
+    ]);
   });
 
   it('Given an aborted subscribed run that finishes within the grace period, Then the stale deadline does not kill a follow-up run', async () => {

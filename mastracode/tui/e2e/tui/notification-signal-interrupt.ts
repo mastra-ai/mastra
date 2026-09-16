@@ -30,10 +30,10 @@ let replyDelivered = new Promise<void>((resolve, reject) => {
   resolveReplyDelivered = resolve;
   rejectReplyDelivered = reject;
 });
-let abortRecoveryArmed = false;
-let resolveAbortRecovery: (() => void) | undefined;
-let abortRecovery = new Promise<void>(resolve => {
-  resolveAbortRecovery = resolve;
+let originatingRunAbortArmed = false;
+let resolveOriginatingRunAborted: (() => void) | undefined;
+let originatingRunAborted = new Promise<void>(resolve => {
+  resolveOriginatingRunAborted = resolve;
 });
 
 function resetSignalDelivery(): void {
@@ -48,9 +48,9 @@ function resetSignalDelivery(): void {
     resolveReplyDelivered = resolve;
     rejectReplyDelivered = reject;
   });
-  abortRecoveryArmed = false;
-  abortRecovery = new Promise<void>(resolve => {
-    resolveAbortRecovery = resolve;
+  originatingRunAbortArmed = false;
+  originatingRunAborted = new Promise<void>(resolve => {
+    resolveOriginatingRunAborted = resolve;
   });
 }
 
@@ -65,6 +65,7 @@ export const notificationSignalInterruptScenario = {
   async inProcessApp({ startMastraCodeApp }): Promise<McE2eInProcessApp> {
     resetSignalDelivery();
     let peerClaim: Awaited<ReturnType<Agent['claimThreadOwnership']>> | undefined;
+    let unsubscribeAbortObservation: (() => void) | undefined;
     let timer: ReturnType<typeof setInterval> | undefined;
     let sendStarted = false;
 
@@ -80,14 +81,12 @@ export const notificationSignalInterruptScenario = {
         const hostAgent = mastra?.getAgentById('code-agent');
         if (!mastra || !hostAgent) throw new Error('Mastra Code agent was unavailable');
 
-        const ensureCurrentSubscription = result.session.thread.ensureCurrentSubscription.bind(result.session.thread);
-        result.session.thread.ensureCurrentSubscription = async () => {
-          await ensureCurrentSubscription();
-          if (abortRecoveryArmed) {
-            abortRecoveryArmed = false;
-            resolveAbortRecovery?.();
+        unsubscribeAbortObservation = result.session.subscribe(event => {
+          if (originatingRunAbortArmed && event.type === 'agent_end' && event.reason === 'aborted') {
+            originatingRunAbortArmed = false;
+            resolveOriginatingRunAborted?.();
           }
-        };
+        });
 
         const peerAgent = new Agent({
           id: 'code-agent',
@@ -155,7 +154,7 @@ export const notificationSignalInterruptScenario = {
               {
                 targetId: peerId,
                 summary: requestSummary,
-                priority: 'low',
+                priority: 'medium',
                 expectsReply: true,
                 messageId: requestMessageId,
                 payload: { scenario: 'notification-signal-interrupt' },
@@ -194,6 +193,7 @@ export const notificationSignalInterruptScenario = {
     return {
       stop: async () => {
         if (timer) clearInterval(timer);
+        unsubscribeAbortObservation?.();
         peerClaim?.unsubscribe();
         await app.stop?.();
       },
@@ -213,14 +213,15 @@ export const notificationSignalInterruptScenario = {
     await runtime.waitForScreenText(/Originating run text/i, terminal, 15_000);
 
     await requestDelivered;
-    abortRecoveryArmed = true;
+    originatingRunAbortArmed = true;
     terminal.keyCtrlC();
     await Promise.race([
-      abortRecovery,
+      originatingRunAborted,
       runtime.sleep(10_000).then(() => {
-        throw new Error('Timed out waiting for the thread subscription to recover after abort');
+        throw new Error('Timed out waiting for the originating run to finish aborting');
       }),
     ]);
+    await runtime.sleep(100);
     releasePeerReply?.();
     await replyDelivered;
     await runtime.sleep(500);

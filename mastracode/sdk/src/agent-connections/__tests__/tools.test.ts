@@ -389,6 +389,25 @@ describe('agent connection tools', () => {
     expect(getStored().sentSignals).toBeUndefined();
   });
 
+  it('rejects reply obligations on low-priority summarized signals', () => {
+    const tools = createAgentConnectionTools({ registry: createRegistry() });
+
+    const parsed = (tools.agent_signal_send as any).inputSchema.safeParse({
+      targetId: PEER_ID,
+      summary: 'Reply later',
+      priority: 'low',
+      expectsReply: true,
+    });
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.error.issues).toContainEqual(
+      expect.objectContaining({
+        path: ['expectsReply'],
+        message: 'Low-priority signals are summarized and cannot require a reply. Use medium or higher priority.',
+      }),
+    );
+  });
+
   it('reports low-priority notifications queued for summary as persisted', async () => {
     const sendNotificationSignal = vi.fn(async () => ({
       record: { id: 'notification-1', status: 'pending' as const, deliveryReason: 'idle-low-summary' },
@@ -474,6 +493,44 @@ describe('agent connection tools', () => {
         context,
       ),
     ).resolves.toMatchObject({ isError: false, routingAction: 'deliver' });
+  });
+
+  it('treats discarded routing as retryable and does not record sent history', async () => {
+    const sendNotificationSignal = vi
+      .fn()
+      .mockResolvedValueOnce({
+        record: { id: 'notification-1' },
+        decision: { action: 'discard' as const },
+      })
+      .mockResolvedValueOnce({
+        record: { id: 'notification-2' },
+        decision: { action: 'deliver' as const },
+        accepted: Promise.resolve({ action: 'deliver' as const, runId: 'run-2' }),
+      });
+    const tools = createAgentConnectionTools({
+      registry: createRegistry(),
+      getAgent: () => ({ sendNotificationSignal }),
+    });
+    const { context, getStored } = createContext([savedPeer()]);
+    const input = {
+      targetId: PEER_ID,
+      summary: 'Retry discarded signal',
+      priority: 'medium',
+      expectsReply: false,
+      messageId: 'discarded-message',
+    };
+
+    await expect((tools.agent_signal_send as any).execute(input, context)).resolves.toMatchObject({
+      isError: true,
+      messageId: 'discarded-message',
+      routingAction: 'discard',
+    });
+    expect(getStored().sentSignals).toBeUndefined();
+
+    const retry = await (tools.agent_signal_send as any).execute(input, context);
+    expect(retry).toMatchObject({ isError: false, routingAction: 'deliver' });
+    expect(retry).not.toHaveProperty('duplicate');
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(2);
   });
 
   it('applies concurrent connect and disconnect deltas without clobbering each other', async () => {
