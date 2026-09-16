@@ -1,3 +1,4 @@
+import type { Trajectory as CoreTrajectory } from '@mastra/core/evals';
 import type { Body, PathParams, QueryParams, RouteKey, Simplify } from '../route-types.generated.js';
 import type { SerializedRouteResponse } from '../types';
 
@@ -19,7 +20,7 @@ export type ListTracesArgs = ListArgs<Query<'GET /observability/traces'>>;
 export type ListTracesResponse = Response<'GET /observability/traces'>;
 export type ListTracesLightResponse = Response<'GET /observability/traces/light'>;
 export type TraceQueryRequest = Body<'POST /observability/traces/query'>;
-export type TraceQueryResponse = Response<'POST /observability/traces/query'>;
+export type TraceQueryResponse = Extract<Response<'POST /observability/traces/query'>, { traces: unknown[] }>;
 export type ListBranchesArgs = ListArgs<Query<'GET /observability/branches'>>;
 export type ListBranchesResponse = Response<'GET /observability/branches'>;
 export type GetBranchArgs = PathParams<'GET /observability/traces/:traceId/branches/:spanId'> &
@@ -34,7 +35,8 @@ export type ScoreTracesResponse = Response<'POST /observability/traces/score'>;
 export type DeleteTracesRequest = Body<'POST /observability/traces/delete'>;
 export type DeleteTracesResponse = Response<'POST /observability/traces/delete'>;
 export type ListScoresResponse = Response<'GET /observability/traces/:traceId/:spanId/scores'>;
-export type Trajectory = Response<'GET /observability/traces/:traceId/trajectory'>;
+export type Trajectory = Omit<Response<'GET /observability/traces/:traceId/trajectory'>, 'steps'> &
+  Pick<CoreTrajectory, 'steps'>;
 export type ListLogsArgs = ListArgs<Query<'GET /observability/logs'>>;
 export type ListLogsResponse = Response<'GET /observability/logs'>;
 export type ListScoresArgs = ListArgs<Query<'GET /observability/scores'>>;

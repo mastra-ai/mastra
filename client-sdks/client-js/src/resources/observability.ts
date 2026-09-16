@@ -1,5 +1,5 @@
 import type { SpanType } from '@mastra/core/observability';
-import type { QueryThreadsInput, QueryThreadsResult } from '@mastra/core/storage';
+import type { QueryThreadsInput, QueryThreadsResult, TraceQueryPredicate } from '@mastra/core/storage';
 import type { ClientOptions, ListFeedbackResponse } from '../types';
 import { toQueryParams } from '../utils';
 import { BaseResource } from './base';
@@ -122,7 +122,10 @@ export interface LegacyGetTracesResponse {
 
 export type ListScoresBySpanParams = SpanIds & PaginationArgs;
 
-export type QueryTracesInput = Omit<TraceQueryRequest, 'group'> & { group?: never };
+export type QueryTracesInput = Omit<TraceQueryRequest, 'group' | 'where'> & {
+  where?: TraceQueryPredicate;
+  group?: never;
+};
 export type QueryTraceThreadsInput = QueryThreadsInput;
 export type QueryTraceThreadsResult = QueryThreadsResult;
 

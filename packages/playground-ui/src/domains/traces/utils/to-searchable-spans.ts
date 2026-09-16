@@ -15,7 +15,7 @@ import { flattenToSearchText } from './flatten-to-search-text';
  *
  * Inputs are left untouched; each result is a new object.
  */
-export function toSearchableSpans(spans: LightSpanRecord[]): SearchableSpan[] {
+export function toSearchableSpans<Span extends LightSpanRecord>(spans: Span[]): Array<Span & { searchText: string }> {
   return spans.map(span => ({
     ...span,
     // Computed from `span`, so a stale `searchText` on the input is overwritten

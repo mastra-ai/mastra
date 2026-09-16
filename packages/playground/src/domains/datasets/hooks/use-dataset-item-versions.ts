@@ -1,24 +1,12 @@
-import type { DatasetItemToolMock } from '@mastra/client-js';
+import type { DatasetItemVersionResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
-export interface DatasetItemVersion {
-  id: string;
-  datasetId: string;
-  datasetVersion: number;
-  input: unknown;
-  groundTruth?: unknown;
-  expectedTrajectory?: unknown;
-  toolMocks?: DatasetItemToolMock[];
-  scorerIds?: string[];
-  requestContext?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
+export type DatasetItemVersion = DatasetItemVersionResponse & {
   validTo: number | null;
   isDeleted: boolean;
-  createdAt: Date | string;
-  updatedAt: Date | string;
   isLatest: boolean;
-}
+};
 
 /**
  * Hook to fetch full item history (SCD-2 rows).

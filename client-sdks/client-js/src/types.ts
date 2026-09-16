@@ -36,7 +36,7 @@ import type {
 } from '@mastra/core/storage';
 import type { ChunkType } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
-import type { WorkflowResult, WorkflowRunStatus, WorkflowState } from '@mastra/core/workflows';
+import type { SerializedStepFlowEntry, WorkflowResult, WorkflowRunStatus, WorkflowState } from '@mastra/core/workflows';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
 
 import type { JSONSchema7 } from 'json-schema';
@@ -457,7 +457,11 @@ export type GetToolResponse = GeneratedResponse<'GET /tools/:toolId'>;
 export type ListWorkflowRunsParams = Omit<GeneratedRequest<QueryParams<'GET /workflows/:workflowId/runs'>>, 'limit'> & {
   limit?: number | false;
 };
-export type ListWorkflowRunsResponse = GeneratedResponse<'GET /workflows/:workflowId/runs'> & Serialized<WorkflowRuns>;
+type WorkflowRunsRouteResponse = SerializedRouteResponse<'GET /workflows/:workflowId/runs'>;
+type WorkflowRunSnapshot = WorkflowRuns['runs'][number]['snapshot'];
+export type ListWorkflowRunsResponse = Omit<WorkflowRunsRouteResponse, 'runs'> & {
+  runs: Array<Omit<WorkflowRunsRouteResponse['runs'][number], 'snapshot'> & { snapshot: WorkflowRunSnapshot }>;
+};
 export type WorkflowRunCounts = GeneratedResponse<'GET /workflows/run-counts'>[string];
 export type ListWorkflowRunCountsResponse = GeneratedResponse<'GET /workflows/run-counts'>;
 export type GetWorkflowRunByIdResponse = GeneratedResponse<'GET /workflows/:workflowId/runs/:runId'> &
@@ -481,7 +485,11 @@ export type DynamicWorkflowDefinition = Omit<
   Pick<UpsertDynamicWorkflowParams, DynamicWorkflowDefinitionField>;
 export type DeleteDynamicWorkflowResponse = GeneratedResponse<'DELETE /stored/workflows/:dynamicWorkflowId'>;
 
-export type GetWorkflowResponse = GeneratedResponse<'GET /workflows/:workflowId'>;
+export type GetWorkflowResponse = Omit<GeneratedResponse<'GET /workflows/:workflowId'>, 'name' | 'stepGraph'> & {
+  name: string;
+  stepGraph?: SerializedStepFlowEntry[];
+  requestContextSchema?: string;
+};
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
 export type UpsertVectorParams = GeneratedRequest<Body<'POST /vector/:vectorName/upsert'>>;
@@ -979,7 +987,10 @@ export interface StoredAgentSkillConfig {
   strategy?: 'latest' | 'live';
 }
 
-export type StoredWorkspaceRef = NonNullable<GeneratedRequest<Body<'POST /stored/agents'>>['workspace']>;
+export type StoredWorkspaceRef = Extract<
+  NonNullable<GeneratedRequest<Body<'POST /stored/agents'>>['workspace']>,
+  { type: 'id' | 'inline' | 'provider' }
+>;
 
 export interface StoredBrowserConfig {
   provider: string;
@@ -2078,10 +2089,10 @@ export type CompareExperimentsParams = PathParams<'POST /datasets/:datasetId/com
   WithoutIndexSignatures<GeneratedRequest<Body<'POST /datasets/:datasetId/compare'>>>;
 
 export type DatasetItemVersionResponse = NonNullable<
-  GeneratedResponse<'GET /datasets/:datasetId/items/:itemId/versions/:datasetVersion'>
+  SerializedRouteResponse<'GET /datasets/:datasetId/items/:itemId/versions/:datasetVersion'>
 >;
 
-export type DatasetVersionResponse = GeneratedResponse<'GET /datasets/:datasetId/versions'>['versions'][number];
+export type DatasetVersionResponse = SerializedRouteResponse<'GET /datasets/:datasetId/versions'>['versions'][number];
 
 export type CompareExperimentsResponse = GeneratedResponse<'POST /datasets/:datasetId/compare'>;
 

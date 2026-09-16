@@ -106,7 +106,12 @@ type _ConversationItems = Expect<
 type _AgentDetailsName = Expect<Equal<GetAgentResponse['name'], RouteResponse<'GET /agents/:agentId'>['name']>>;
 type _AgentDetailsIncludesCompatibilityId = Expect<Equal<'id' extends keyof GetAgentResponse ? true : false, true>>;
 type _ToolDetails = Expect<Equal<GetToolResponse, RouteResponse<'GET /tools/:toolId'>>>;
-type _WorkflowDetails = Expect<Equal<GetWorkflowResponse, RouteResponse<'GET /workflows/:workflowId'>>>;
+type _WorkflowDetails = Expect<
+  Equal<
+    Omit<GetWorkflowResponse, 'name' | 'stepGraph' | 'requestContextSchema'>,
+    Omit<RouteResponse<'GET /workflows/:workflowId'>, 'name' | 'stepGraph'>
+  >
+>;
 type _WorkflowRunDates = Expect<Equal<ListWorkflowRunsResponse['runs'][number]['createdAt'], string>>;
 
 const scoreRequest = {
@@ -154,7 +159,7 @@ type _ListProcessors = Expect<
   Equal<ReturnType<MastraClient['listProcessors']>, Promise<RouteResponse<'GET /processors'>>>
 >;
 type _ListWorkflows = Expect<
-  Equal<ReturnType<MastraClient['listWorkflows']>, Promise<RouteResponse<'GET /workflows'>>>
+  Equal<ReturnType<MastraClient['listWorkflows']>, Promise<Record<string, GetWorkflowResponse>>>
 >;
 type _ScheduleQuery = Expect<Equal<ListSchedulesParams, QueryParams<'GET /schedules'>>>;
 type _ScheduleResponse = Expect<Equal<ScheduleResponse, RouteResponse<'GET /schedules'>['schedules'][number]>>;
