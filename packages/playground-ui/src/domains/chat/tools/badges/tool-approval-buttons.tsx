@@ -39,13 +39,18 @@ export const ToolApprovalButtons = ({
     networkToolCallApprovals,
   } = useToolCall();
 
+  // The approval entry names the tool call the server suspended on, which is the only id a resume
+  // accepts. For a sub-agent delegation that is the outer `agent-*` call, while this card renders
+  // the child's inner call — submitting the inner id fails with "could not find suspended run".
+  const approvalToolCallId = toolApprovalMetadata?.toolCallId ?? toolCallId;
+
   const handleApprove = () => {
     if (isNetwork) {
       approveNetworkToolcall(toolName, toolApprovalMetadata?.runId);
     } else if (isGenerateMode) {
-      approveToolcallGenerate(toolCallId);
+      approveToolcallGenerate(approvalToolCallId);
     } else {
-      approveToolcall(toolCallId);
+      approveToolcall(approvalToolCallId);
     }
   };
 
@@ -53,16 +58,16 @@ export const ToolApprovalButtons = ({
     if (isNetwork) {
       declineNetworkToolcall(toolName, toolApprovalMetadata?.runId);
     } else if (isGenerateMode) {
-      declineToolcallGenerate(toolCallId);
+      declineToolcallGenerate(approvalToolCallId);
     } else {
-      declineToolcall(toolCallId);
+      declineToolcall(approvalToolCallId);
     }
   };
 
   const toolCallApprovalStatus = isNetwork
     ? networkToolCallApprovals?.[toolApprovalMetadata?.runId ? `${toolApprovalMetadata.runId}-${toolName}` : toolName]
         ?.status
-    : toolCallApprovals?.[toolCallId]?.status;
+    : toolCallApprovals?.[approvalToolCallId]?.status;
 
   if (toolApprovalMetadata && !toolCalled) {
     return (
