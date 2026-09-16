@@ -508,6 +508,25 @@ describe('FGA Middleware - checkRouteFGA', () => {
     );
   });
 
+  it.each([
+    ['POST', '/memory/threads/:threadId/branch'],
+    ['GET', '/memory/threads/:threadId/parent'],
+    ['GET', '/memory/threads/:threadId/branches'],
+    ['GET', '/memory/threads/:threadId/branch-history'],
+  ])('should defer %s %s FGA to the ancestry-aware route handler', async (method, path) => {
+    const fgaProvider = { ...createMockFGAProvider(false), requireForProtectedRoutes: true };
+    const mastra = { getServer: () => ({ fga: fgaProvider }) };
+    const requestContext = new Map<string, unknown>();
+    requestContext.set('user', { id: 'user-1' });
+
+    const result = await checkRouteFGA(mastra, { method, path, requiresAuth: true } as any, requestContext as any, {
+      threadId: 'thread-1',
+    });
+
+    expect(result).toBeNull();
+    expect(fgaProvider.check).not.toHaveBeenCalled();
+  });
+
   it('should derive built-in FGA metadata for protected workflow execution routes', async () => {
     const fgaProvider = createMockFGAProvider(true);
     const mastra = { getServer: () => ({ fga: fgaProvider }) };
