@@ -1829,6 +1829,14 @@ type Shared_Type_76 = {
 type Shared_Type_77 = {
   traceId: string;
   rootSpanId: string;
+  name: string;
+  entityId: string | null;
+  parentSpanId: string | null;
+  createdAt: string;
+  metadata: {
+    [key: string]: unknown;
+  } | null;
+  inputPreview: string | null;
   threadId: string | null;
   resourceId: string | null;
   startedAt: string;
