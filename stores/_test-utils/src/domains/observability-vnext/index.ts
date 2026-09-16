@@ -284,7 +284,9 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           observedFields: [
             expect.objectContaining({ path: 'metadata.customer', occurrences: 3 }),
             expect.objectContaining({ path: 'metadata.region', occurrences: 3 }),
+            expect.objectContaining({ path: 'metadata.escapedValue', occurrences: 2 }),
             expect.objectContaining({ path: 'metadata.literalPattern', occurrences: 2 }),
+            expect.objectContaining({ path: 'metadata.unicodeValue', occurrences: 2 }),
             expect.objectContaining({ path: 'metadata.percent%key', occurrences: 1 }),
             expect.objectContaining({ path: 'metadata.under_score', occurrences: 1 }),
           ],
@@ -321,6 +323,17 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           values: [
             { value: 'us-west-2', count: 2 },
             { value: 'eu-west-1', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'trace', path: 'metadata.escapedValue' })).resolves.toEqual({
+          values: [{ value: 'quote" and slash\\ with 雪', count: 2 }],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'trace', path: 'metadata.unicodeValue' })).resolves.toEqual({
+          values: [
+            { value: '大阪', count: 1 },
+            { value: '東京', count: 1 },
           ],
           valuesTruncated: false,
         });

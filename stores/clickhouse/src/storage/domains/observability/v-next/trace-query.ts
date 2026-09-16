@@ -494,22 +494,29 @@ export function compileClickHouseTraceQueryObservedFields(
   const parameters = new ParameterBuilder();
   const ctes = compileClickHouseTraceScope(plan, new Set(), parameters);
   const search = plan.search
-    ? `AND positionCaseInsensitiveUTF8(concat('metadata.', entry.1), ${parameters.add(plan.search, 'String')}) > 0`
+    ? `AND positionCaseInsensitiveUTF8(concat('metadata.', key), ${parameters.add(plan.search, 'String')}) > 0`
     : '';
   const limit = parameters.add(plan.limit + 1, 'UInt64');
+  ctes.push(`metadata_entries AS (
+    SELECT
+      entry.1 AS key,
+      entry.2 AS rawValue,
+      JSONExtractString(entry.2) AS value
+    FROM root_scope r
+    ARRAY JOIN JSONExtractKeysAndValuesRaw(ifNull(r.metadataRaw, '{}')) AS entry
+  )`);
   return {
     query: `WITH ${ctes.join(',\n')}
-SELECT concat('metadata.', entry.1) AS path, count() AS occurrences
-FROM root_scope r
-ARRAY JOIN JSONExtractKeysAndValuesRaw(ifNull(r.metadataRaw, '{}')) AS entry
-WHERE JSONType(entry.2) = 'String'
-  AND trim(JSONExtractString(r.metadataRaw, entry.1)) != ''
-  AND entry.1 != ''
-  AND position(entry.1, '.') = 0
-  AND length(concat('metadata.', entry.1)) <= ${coreStorage.TRACE_QUERY_MAX_PATH_BYTES}
-  AND length(JSONExtractString(r.metadataRaw, entry.1)) <= ${coreStorage.TRACE_QUERY_MAX_STRING_BYTES}
+SELECT concat('metadata.', key) AS path, count() AS occurrences
+FROM metadata_entries
+WHERE JSONType(rawValue) = 'String'
+  AND trim(value) != ''
+  AND key != ''
+  AND position(key, '.') = 0
+  AND length(concat('metadata.', key)) <= ${coreStorage.TRACE_QUERY_MAX_PATH_BYTES}
+  AND length(value) <= ${coreStorage.TRACE_QUERY_MAX_STRING_BYTES}
   ${search}
-GROUP BY entry.1
+GROUP BY key
 ORDER BY occurrences DESC, path ASC
 LIMIT ${limit}`,
     query_params: parameters.params,

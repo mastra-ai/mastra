@@ -95,6 +95,11 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
         region: 'us-west-2',
         customer: 'acme',
         literalPattern: '%prod_',
+        escapedValue: 'quote" and slash\\ with 雪',
+        unicodeValue: '東京',
+        whitespaceOnly: '   ',
+        emptyValue: '',
+        arrayValue: ['unsupported'],
         'percent%key': 'percent',
         under_score: 'underscore',
         nested: { plan: 'pro' },
@@ -122,7 +127,13 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
     }),
     span(20, 'trace-b', 'root-b', {
       startedAt: '2026-08-11T10:00:00.000Z',
-      metadata: { region: 'us-west-2', customer: 'beta', literalPattern: 'ordinary' },
+      metadata: {
+        region: 'us-west-2',
+        customer: 'beta',
+        literalPattern: 'ordinary',
+        escapedValue: 'quote" and slash\\ with 雪',
+        unicodeValue: '大阪',
+      },
       environment: 'staging',
     }),
     span(21, 'trace-b', 'span-model-b', {
