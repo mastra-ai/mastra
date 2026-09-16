@@ -47,6 +47,48 @@ type IsAny<T> = 0 extends 1 & T ? true : false;
 `;
 
 describe('concrete MCP schema generation', () => {
+  it.each(['reference/tools/mcp-client.mdx', 'docs/connections/mcp.mdx'])(
+    'compiles generated types with the actual %s examples',
+    async page => {
+      const docs = readFileSync(new URL(`../../../../docs/src/content/en/${page}`, import.meta.url), 'utf8');
+      const config = docs.match(/```typescript title="src\/mcp\/client.ts"\n([\s\S]*?)```/)?.[1];
+      const call = docs.match(/```typescript title="src\/mcp\/call-weather.ts"\n([\s\S]*?)```/)?.[1];
+      expect(config).toBeDefined();
+      expect(call).toBeDefined();
+      const generated = await generateToolTypes({
+        weather: {
+          get_weather: {
+            name: 'get_weather',
+            inputSchema: {
+              type: 'object',
+              properties: { location: { type: 'string' } },
+              required: ['location'],
+              additionalProperties: false,
+            },
+            outputSchema: {
+              type: 'object',
+              properties: { temperature: { type: 'number' } },
+              required: ['temperature'],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+      const dir = mkdtempSync(join(fixtureDir, 'docs-generated-'));
+      try {
+        writeFileSync(join(dir, 'mcp-types.generated.ts'), generated.source);
+        writeFileSync(join(dir, 'client.ts'), config!.replace("'@mastra/mcp'", "'../../../../index'"));
+        const file = join(dir, 'call.ts');
+        writeFileSync(file, call!);
+        const result = compileConsumer([file]);
+        expect(result.stdout + result.stderr).toBe('');
+        expect(result.status).toBe(0);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
   it('reuses the complete Wave 1 direct-call contract with generated interfaces', async () => {
     const shape = (properties: Record<string, unknown>, required: string[] = Object.keys(properties)) => ({
       type: 'object',
