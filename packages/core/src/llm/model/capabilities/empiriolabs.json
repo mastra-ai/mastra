@@ -1,5 +1,6 @@
 {
   "attachment": [
+    "deepseek-v4-1-flash",
     "fugu-ultra-v1-0",
     "fugu-ultra-v1-1",
     "fugu-ultra-v2-0",
@@ -44,6 +45,7 @@
   ],
   "temperature": [
     "deepseek-v3-2",
+    "deepseek-v4-1-flash",
     "deepseek-v4-flash",
     "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
@@ -100,6 +102,7 @@
   ],
   "structuredOutput": [
     "deepseek-v3-2",
+    "deepseek-v4-1-flash",
     "deepseek-v4-flash",
     "deepseek-v4-flash-0731",
     "deepseek-v4-pro",

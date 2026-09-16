@@ -1,7 +1,9 @@
 import * as coreStorage from '@mastra/core/storage';
 import type {
+  GetTraceQueryValuesResponse,
   QueryThreadsResult,
   TraceQueryCanonicalField,
+  TraceQueryObservedFieldsResult,
   TraceQueryFeedbackField,
   TraceQueryField,
   TraceQueryPredicateField,
@@ -10,12 +12,15 @@ import type {
   TraceQuerySpanField,
   TrustedThreadPredicate,
   TrustedThreadQueryPlan,
+  TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
+  TrustedTraceQueryValuesPlan,
   TrustedTraceQueryPredicate,
   TrustedTraceQueryScalarPredicate,
 } from '@mastra/core/storage';
 
 import type { DuckDBConnection } from '../../db/index';
+import { parseJson } from './helpers';
 
 type ParameterType = 'scalar' | 'timestamp';
 type FieldDefinition = { sql: string; parameterType: ParameterType };
@@ -82,6 +87,11 @@ const FEEDBACK_FIELDS = {
 const TRACE_SELECT = `
   r.traceId AS traceId,
   r.spanId AS rootSpanId,
+  r.name AS name,
+  r.entityId AS entityId,
+  r.parentSpanId AS parentSpanId,
+  r.metadata AS metadata,
+  r.input AS input,
   r.threadId AS threadId,
   r.resourceId AS resourceId,
   r.startedAt AS startedAt,
@@ -199,7 +209,7 @@ function compileFeedbackScalarPredicate(predicate: TrustedTraceQueryScalarPredic
     return { sql: `s.value IS ${predicate.operator === 'exists' ? 'NOT ' : ''}NULL`, values: [] };
   }
   const sample = predicate.type === 'membership' ? predicate.values[0] : predicate.value;
-  const field = typeof sample === 'number' ? 'TRY_CAST(s.value AS DOUBLE)' : 's.value';
+  const field = typeof sample === 'number' ? 's.valueNumber' : 's.valueString';
   return compileScalarPredicate(predicate, { value: { sql: field, parameterType: 'scalar' } });
 }
 
@@ -508,6 +518,106 @@ LIMIT ?`,
   };
 }
 
+function discoveryRegistry(scope: TrustedTraceQueryValuesPlan['predicateScope']): Partial<FieldRegistry<string>> {
+  if (scope === 'trace') return TRACE_FIELDS;
+  if (scope === 'spans') return SPAN_FIELDS;
+  if (scope === 'scores') return SCORE_FIELDS;
+  return FEEDBACK_FIELDS;
+}
+
+function discoverySource(scope: TrustedTraceQueryValuesPlan['predicateScope']): string {
+  if (scope === 'trace') return 'root_scope r';
+  if (scope === 'spans') return 'current_spans s';
+  if (scope === 'scores') return 'current_scores s';
+  return 'current_feedback s';
+}
+
+function discoveryCollections(scope: TrustedTraceQueryValuesPlan['predicateScope']): Set<RelatedCollection> {
+  return scope === 'trace' ? new Set() : new Set([scope]);
+}
+
+export function compileDuckDBTraceQueryObservedFields(
+  plan: TrustedTraceQueryObservedFieldsPlan,
+): CompiledDuckDBTraceQuery {
+  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to];
+  if (plan.search) values.push(plan.search);
+  values.push(plan.limit + 1);
+  const search = plan.search ? `AND strpos(lower('metadata.' || entry.key), lower(?)) > 0` : '';
+  return {
+    sql: `WITH ${compileDuckDBTraceScope(new Set()).join(',\n  ')}
+SELECT 'metadata.' || entry.key AS path, count(*) AS occurrences
+FROM root_scope r, LATERAL json_each(r.metadata) entry
+WHERE entry.type = 'VARCHAR'
+  AND trim(json_extract_string(entry.value, '$')) <> ''
+  AND entry.key <> ''
+  AND strpos(entry.key, '.') = 0
+  AND octet_length(encode('metadata.' || entry.key)) <= ${coreStorage.TRACE_QUERY_MAX_PATH_BYTES}
+  AND octet_length(encode(json_extract_string(entry.value, '$'))) <= ${coreStorage.TRACE_QUERY_MAX_STRING_BYTES}
+  ${search}
+GROUP BY entry.key
+ORDER BY occurrences DESC, path ASC
+LIMIT ?`,
+    values,
+  };
+}
+
+export function compileDuckDBTraceQueryValues(plan: TrustedTraceQueryValuesPlan): CompiledDuckDBTraceQuery {
+  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to];
+  const ctes = compileDuckDBTraceScope(discoveryCollections(plan.predicateScope));
+  let fieldSql: string;
+  if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
+    const jsonPath = `$.${JSON.stringify(plan.path.slice('metadata.'.length))}`;
+    fieldSql = `NULLIF(trim(CASE WHEN json_type(r.metadata, ?) = 'VARCHAR' THEN json_extract_string(r.metadata, ?) END), '')`;
+    values.push(jsonPath, jsonPath);
+  } else {
+    fieldSql = fieldDefinition(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField).sql;
+  }
+  if (plan.search) values.push(plan.search);
+  values.push(plan.limit + 1);
+  const search = plan.search ? 'AND strpos(lower(CAST(value AS VARCHAR)), lower(?)) > 0' : '';
+  return {
+    sql: `WITH ${ctes.join(',\n  ')}, extracted AS (
+  SELECT ${fieldSql} AS value FROM ${discoverySource(plan.predicateScope)}
+)
+SELECT CAST(value AS VARCHAR) AS value, count(*) AS count
+FROM extracted
+WHERE value IS NOT NULL
+  AND octet_length(encode(CAST(value AS VARCHAR))) <= ${coreStorage.TRACE_QUERY_MAX_STRING_BYTES}
+  ${search}
+GROUP BY value
+ORDER BY count DESC, value ASC
+LIMIT ?`,
+    values,
+  };
+}
+
+export async function getTraceQueryObservedFields(
+  db: DuckDBConnection,
+  plan: TrustedTraceQueryObservedFieldsPlan,
+): Promise<TraceQueryObservedFieldsResult> {
+  if (plan.predicateScope !== 'trace') return { observedFields: [], observedFieldsTruncated: false };
+  const query = compileDuckDBTraceQueryObservedFields(plan);
+  const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
+  return {
+    observedFields: rows
+      .slice(0, plan.limit)
+      .map(row => coreStorage.createTraceQueryObservedFieldDescriptor(String(row.path), Number(row.occurrences))),
+    observedFieldsTruncated: rows.length > plan.limit,
+  };
+}
+
+export async function getTraceQueryValues(
+  db: DuckDBConnection,
+  plan: TrustedTraceQueryValuesPlan,
+): Promise<GetTraceQueryValuesResponse> {
+  const query = compileDuckDBTraceQueryValues(plan);
+  const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
+  return coreStorage.getTraceQueryValuesResponseSchema.parse({
+    values: rows.slice(0, plan.limit).map(row => ({ value: String(row.value), count: Number(row.count) })),
+    valuesTruncated: rows.length > plan.limit,
+  });
+}
+
 function asIsoTimestamp(value: unknown): string {
   return value instanceof Date ? value.toISOString() : new Date(value as string | number).toISOString();
 }
@@ -534,6 +644,12 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
   const traces = visibleRows.map(row => ({
     traceId: String(row.traceId),
     rootSpanId: String(row.rootSpanId),
+    name: row.name,
+    entityId: row.entityId ?? null,
+    parentSpanId: row.parentSpanId ?? null,
+    createdAt: asIsoTimestamp(row.startedAt),
+    metadata: parseJson(row.metadata) ?? null,
+    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
     threadId: row.threadId == null ? null : String(row.threadId),
     resourceId: row.resourceId == null ? null : String(row.resourceId),
     startedAt: asIsoTimestamp(row.startedAt),

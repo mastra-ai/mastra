@@ -594,6 +594,9 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     createPostToolAssistantComponent(ctx, toolCallId);
 
     flushRender(state);
+  } else if (toolName === 'subagent') {
+    createPostToolAssistantComponent(ctx, toolCallId);
+    flushRender(state);
   } else if (isTaskMutationTool(toolName)) {
     // Record position so task_updated can place inline completed/cleared display here
     state.taskToolInsertIndex = state.chatContainer.children.length;

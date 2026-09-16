@@ -39,6 +39,7 @@ export type OpenAICompatibleConfig =
       url?: string; // Optional custom URL endpoint
       apiKey?: string; // Optional API key (falls back to env vars)
       headers?: Record<string, string>; // Additional headers
+      api?: 'chat' | 'responses'; // OpenAI wire API for custom url; defaults to 'chat'
     }
   | {
       providerId: string; // Provider ID like "openai" or "custom-provider"
@@ -46,6 +47,7 @@ export type OpenAICompatibleConfig =
       url?: string; // Optional custom URL endpoint
       apiKey?: string; // Optional API key (falls back to env vars)
       headers?: Record<string, string>; // Additional headers
+      api?: 'chat' | 'responses'; // OpenAI wire API for custom url; defaults to 'chat'
     };
 
 type DoStreamResultPromiseV2 = PromiseLike<Awaited<ReturnType<LanguageModelV2['doStream']>>>;
@@ -91,6 +93,22 @@ export type MastraModelConfig =
   | ModelRouterModelId
   | OpenAICompatibleConfig
   | MastraLanguageModel;
+
+/**
+ * Replaces the model-id literal union (`ModelRouterModelId`) inside `T` with plain `string`,
+ * leaving every other member (language model objects, config objects, functions, arrays) as-is.
+ *
+ * Keep `MastraModelConfig` on public config fields so users get autocomplete, but widen with
+ * this before merging model values in internal code (`a ?? b`, ternaries, array literals):
+ * those expressions make TypeScript subtype-reduce the union, which scales with the number of
+ * model-id literals and fails with "union type is too complex" (TS2590) once the registry is
+ * large enough. `string` is assignable back to `ModelRouterModelId`, so widened values can
+ * still be passed anywhere the public type is expected.
+ */
+export type WidenModelId<T> = T extends ModelRouterModelId ? string : T;
+
+/** `MastraModelConfig` with model-id literals widened to `string`. See {@link WidenModelId}. */
+export type WidenedMastraModelConfig = WidenModelId<MastraModelConfig>;
 
 export type MastraModelOptions = {
   tracingPolicy?: TracingPolicy;

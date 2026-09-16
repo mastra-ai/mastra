@@ -65,7 +65,7 @@ afterEach(() => {
 });
 
 describe('AgentDetailHeaderActions', () => {
-  it('renders Share and the overview toggle inside the route header slot', async () => {
+  it('renders Share and the Config toggle inside the route header slot', async () => {
     installHandlers();
     renderActions();
 

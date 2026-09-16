@@ -1,17 +1,25 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import {
   encodeTraceQueryCursor,
+  parseGetTraceQueryFieldsArgs,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
   planThreadQuery,
   planTraceQuery,
+  planTraceQueryObservedFields,
   TraceQueryExecutionError,
 } from '@mastra/core/storage';
 import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SCORE_EVENTS_DDL, SPAN_EVENTS_DDL, TRACE_BRANCHES_DDL, TRACE_ROOTS_DDL } from './ddl';
-import { compileClickHouseThreadQuery, compileClickHouseTraceQuery, queryThreads, queryTraces } from './trace-query';
+import {
+  compileClickHouseThreadQuery,
+  compileClickHouseTraceQuery,
+  compileClickHouseTraceQueryObservedFields,
+  queryThreads,
+  queryTraces,
+} from './trace-query';
 import { ObservabilityStorageClickhouseVNext } from '.';
 
 const TIME_RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' };
@@ -33,6 +41,23 @@ describe('ClickHouse advanced trace query', () => {
           traceQueryTimeoutMs: 0,
         }),
     ).toThrow('traceQueryTimeoutMs must be an integer between');
+  });
+
+  it('decodes each observed metadata value from the expanded JSON entry', () => {
+    const compiled = compileClickHouseTraceQueryObservedFields(
+      planTraceQueryObservedFields(
+        parseGetTraceQueryFieldsArgs({
+          timeRange: TIME_RANGE,
+          predicateScope: 'trace',
+        }),
+      ),
+    );
+
+    expect(compiled.query).toContain('JSONExtractString(entry.2) AS value');
+    expect(compiled.query).toContain("JSONType(rawValue) = 'String'");
+    expect(compiled.query).toContain("trim(value) != ''");
+    expect(compiled.query).toContain('length(value) <= 4096');
+    expect(compiled.query).not.toContain('JSONExtractString(r.metadataRaw, entry.1)');
   });
 
   it('uses named parameters and one correlated existence check per collection clause', () => {
@@ -429,7 +454,37 @@ describe('ClickHouse advanced trace query', () => {
       traces: [{ traceId: 'trace-a', rootSpanId: 'root-trace-a', status: 'success' }],
       page: { next: expect.any(String) },
     });
-    expect(Object.keys(response.traces[0]!)).toHaveLength(10);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(16);
+    expect(response.traces[0]).toMatchObject({
+      name: 'Agent run',
+      entityId: 'agent-1',
+      parentSpanId: null,
+      createdAt: '2026-01-01T12:00:00.000Z',
+      metadata: { customer: { id: 'customer-1' }, count: 2 },
+      inputPreview: 'Help with my order',
+    });
+    expect(response.traces[0]).not.toHaveProperty('input');
+  });
+
+  it('returns null for absent optional root span details', async () => {
+    const row = {
+      ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
+      entityId: null,
+      metadata: null,
+      input: null,
+    };
+    const json = vi.fn().mockResolvedValue([row]);
+    const query = vi.fn().mockResolvedValue({ json });
+    const response = await queryTraces({ query } as unknown as ClickHouseClient, plan(), 15_000);
+
+    expect(response.traces[0]).toMatchObject({
+      name: 'Agent run',
+      entityId: null,
+      parentSpanId: null,
+      metadata: null,
+      inputPreview: null,
+    });
+    expect(response.page.next).toBeNull();
   });
 
   it('reuses the execution timeout and returns fixed thread identities with a next cursor', async () => {
@@ -475,6 +530,11 @@ function traceRow(traceId: string, startedAt: string) {
   return {
     traceId,
     rootSpanId: `root-${traceId}`,
+    name: 'Agent run',
+    entityId: 'agent-1',
+    parentSpanId: null,
+    metadata: JSON.stringify({ customer: { id: 'customer-1' }, count: 2 }),
+    input: JSON.stringify({ messages: [{ role: 'user', content: 'Help with my order' }] }),
     threadId: null,
     resourceId: null,
     startedAt,

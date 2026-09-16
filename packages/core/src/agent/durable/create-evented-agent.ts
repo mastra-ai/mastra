@@ -26,6 +26,7 @@
 
 import type { MastraServerCache } from '../../cache/base';
 import type { PubSub } from '../../events/pubsub';
+import type { ShouldPersistSnapshotFn } from '../../workflows/types';
 import type { Agent } from '../agent';
 
 import { EventedAgent } from './evented-agent';
@@ -73,6 +74,15 @@ export interface CreateEventedAgentOptions<
    * regardless of this option.
    */
   shouldCache?: (topic: string) => boolean;
+
+  /**
+   * Accepted for API symmetry with `createDurableAgent`, but **ignored** by
+   * EventedAgent (a warning is logged if set). The evented engine requires
+   * the full snapshot set (`pending | paused | suspended | running`): the
+   * initial `running` write creates the base row that suspend-merges and
+   * multi-worker coordination build on.
+   */
+  shouldPersistSnapshot?: ShouldPersistSnapshotFn;
 }
 
 /**
@@ -104,7 +114,7 @@ export function createEventedAgent<
   TTools extends Record<string, any> = Record<string, any>,
   TOutput = undefined,
 >(options: CreateEventedAgentOptions<TAgentId, TTools, TOutput>): EventedAgent<TAgentId, TTools, TOutput> {
-  const { agent, pubsub, cache, maxSteps, shouldCache } = options;
+  const { agent, pubsub, cache, maxSteps, shouldCache, shouldPersistSnapshot } = options;
 
   return new EventedAgent({
     agent,
@@ -112,6 +122,7 @@ export function createEventedAgent<
     cache,
     maxSteps,
     shouldCache,
+    shouldPersistSnapshot,
   } as EventedAgentConfig<TAgentId, TTools, TOutput>);
 }
 

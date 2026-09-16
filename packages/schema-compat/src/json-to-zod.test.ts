@@ -403,6 +403,46 @@ describe('jsonSchemaToZod', () => {
       });
     });
 
+    describe('Record generation (Zod v4 < 4.4.0 compatibility)', () => {
+      // Single-arg `z.record(value)` leaves `valueType` undefined on older Zod v4 builds,
+      // so every emitted record must use the explicit two-arg form.
+      const evaluate = (code: string) => Function('z', `"use strict";return (${code});`)(z) as z.ZodTypeAny;
+
+      it('emits two-arg z.record for additionalProperties schema', () => {
+        const result = jsonSchemaToZod({ type: 'object', additionalProperties: { type: 'number' } });
+
+        expect(result).toBe('z.record(z.string(), z.number())');
+        expect(evaluate(result).safeParse({ a: 1 }).success).toBe(true);
+        expect(evaluate(result).safeParse({ a: 'x' }).success).toBe(false);
+      });
+
+      it('emits two-arg z.record for bare object schema', () => {
+        const result = jsonSchemaToZod({ type: 'object' });
+
+        expect(result).toBe('z.record(z.string(), z.any())');
+        expect(evaluate(result).safeParse({ anything: true }).success).toBe(true);
+      });
+
+      it('emits two-arg z.record for patternProperties without properties', () => {
+        const single = jsonSchemaToZod({ type: 'object', patternProperties: { '^a': { type: 'string' } } });
+        const multi = jsonSchemaToZod({
+          type: 'object',
+          patternProperties: { '^a': { type: 'string' }, '^b': { type: 'number' } },
+        });
+        const withAdditional = jsonSchemaToZod({
+          type: 'object',
+          patternProperties: { '^a': { type: 'string' } },
+          additionalProperties: { type: 'boolean' },
+        });
+
+        for (const code of [single, multi, withAdditional]) {
+          expect(code).toContain('z.record(z.string(), ');
+          expect(code).not.toMatch(/z\.record\((?!z\.string\(\), )/);
+          expect(evaluate(code).safeParse({ a1: 'ok' }).success).toBe(true);
+        }
+      });
+    });
+
     describe('PatternProperties', () => {
       it('should handle patternProperties with single pattern', () => {
         const schema: JsonSchema = {
