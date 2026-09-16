@@ -461,6 +461,8 @@ export const mastra = new Mastra({
 })
 ```
 
+`process()` must mutate the span it receives and return the same instance, or return `undefined` to drop the span. Don't return a copy (for example `{ ...span, input: '...' }`): `exportSpan()` and `isValid` are instance members of the live span, so a copy can't be exported. Mastra logs a processor error and drops the span in that case.
+
 Processors are executed in the order they're defined, allowing you to chain multiple transformations. Common use cases include:
 
 - Redacting sensitive data (passwords, tokens, API keys)
