@@ -1742,7 +1742,7 @@ describe('PIIDetector', () => {
       expect(result1).toBeNull();
       expect(llmCallCount).toBe(0);
 
-      // Second chunk ends with period — triggers flush
+      // A short sentence remains inside the bounded regex suffix until a safe stream boundary.
       const result2 = await detector.processOutputStream({
         part: {
           type: 'text-delta',
@@ -1754,9 +1754,16 @@ describe('PIIDetector', () => {
         state,
         abort: vi.fn() as any,
       });
-      // Flush emits combined text
-      expect(result2).not.toBeNull();
-      expect((result2 as any).payload.text).toBe('Hello there, how are you.');
+      expect(result2).toBeNull();
+
+      const flushed = await detector.processOutputStream({
+        part: { type: 'step-finish' as any, payload: {}, runId: 'finish', from: ChunkFrom.AGENT },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+      expect(flushed).not.toBeNull();
+      expect((flushed as any).payload.text).toBe('Hello there, how are you.');
       expect(llmCallCount).toBe(1);
     });
 
@@ -2149,6 +2156,84 @@ describe('PIIDetector', () => {
       if (flushed?.type === 'text-delta') emitted.push(flushed.payload.text);
 
       expect(emitted.join('')).toBe(`${prefix} [EMAIL] trailing`);
+    });
+
+    it('pulls emission back when PII straddles the carryover boundary', async () => {
+      const detector = new PIIDetector({
+        model: new MockLanguageModelV1(),
+        strategy: 'redact',
+        redactionMethod: 'placeholder',
+        detectionTypes: ['email'],
+      });
+      const state: Record<string, any> = {};
+      const text = `${'a'.repeat(10)} secret@example.com ${'z'.repeat(114)}`;
+      const emitted: string[] = [];
+      const first = await detector.processOutputStream({
+        part: { type: 'text-delta', payload: { id: 'first', text }, runId: 'first', from: ChunkFrom.AGENT },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+      if (first?.type === 'text-delta') emitted.push(first.payload.text);
+      const flushed = await detector.processOutputStream({
+        part: { type: 'step-finish' as any, payload: {}, runId: 'finish', from: ChunkFrom.AGENT },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+      if (flushed?.type === 'text-delta') emitted.push(flushed.payload.text);
+
+      expect(first).toMatchObject({ type: 'text-delta', payload: { text: `${'a'.repeat(10)} ` } });
+      expect(emitted.join('')).toBe(`${'a'.repeat(10)} [EMAIL] ${'z'.repeat(114)}`);
+    });
+
+    it('keeps mixed-mode sentence fragments in regex carryover', async () => {
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: JSON.stringify(createMockPIIResult()),
+        }),
+      });
+      const detector = new PIIDetector({
+        model,
+        strategy: 'redact',
+        redactionMethod: 'placeholder',
+        detectionTypes: ['email', 'name'],
+      });
+      const state: Record<string, any> = {};
+
+      expect(
+        await detector.processOutputStream({
+          part: {
+            type: 'text-delta',
+            payload: { id: 'first', text: 'Contact secret@example.' },
+            runId: 'first',
+            from: ChunkFrom.AGENT,
+          },
+          streamParts: [],
+          state,
+          abort: vi.fn() as any,
+        }),
+      ).toBeNull();
+      expect(
+        await detector.processOutputStream({
+          part: { type: 'text-delta', payload: { id: 'second', text: 'com' }, runId: 'second', from: ChunkFrom.AGENT },
+          streamParts: [],
+          state,
+          abort: vi.fn() as any,
+        }),
+      ).toBeNull();
+      const flushed = await detector.processOutputStream({
+        part: { type: 'step-finish' as any, payload: {}, runId: 'finish', from: ChunkFrom.AGENT },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+
+      expect(flushed).toMatchObject({ type: 'text-delta', payload: { text: 'Contact [EMAIL]' } });
     });
 
     it('preserves regex carryover and replacement lengths across mixed-mode flushes', async () => {

@@ -911,7 +911,12 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
       const pending = state._piiPendingNonText.shift();
       if (state._piiPendingNonText.length === 0) state._piiPendingNonText = undefined;
       if (part.type === 'text-delta') {
-        this.appendRegexCarryover(state, part as ChunkType & { type: 'text-delta' });
+        const previousLength = (state._piiRegexTail as string | undefined)?.length ?? 0;
+        const combined = this.appendRegexCarryover(state, part as ChunkType & { type: 'text-delta' });
+        const regexResult = this.detectPIILocal(combined);
+        if (regexResult.detections?.some(detection => detection.end > previousLength)) {
+          await this.emitDetection(combined, regexResult, true);
+        }
       } else {
         if (!state._piiPendingNonText) state._piiPendingNonText = [];
         state._piiPendingNonText.push(part);
@@ -962,18 +967,6 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
     const detections = regexResult.detections ?? [];
     const hasNewPII = detections.some(detection => detection.end > previousLength);
     if (hasNewPII) await this.emitDetection(combined, regexResult, true);
-
-    if (this.hasLLMOnlyTypes && /[.!?]\s*$/.test(combined)) {
-      const carryoverPart = (state._piiRegexTailPart as typeof textPart | undefined) ?? textPart;
-      if (!state._piiFirstPayloadId) {
-        state._piiFirstPayloadId = carryoverPart.payload.id;
-        state._piiFirstRunId = carryoverPart.runId;
-      }
-      state._piiBuffer = (state._piiBuffer || '') + (regexResult.redacted_content ?? combined);
-      state._piiRegexTail = undefined;
-      state._piiRegexTailPart = undefined;
-      return this.flushLLMBuffer(state, abort, observabilityContext, requestContext);
-    }
 
     if (combined.length <= PIIDetector.REGEX_CARRYOVER_SIZE) return null;
 
