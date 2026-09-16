@@ -23,6 +23,7 @@ const semanticTokens = [
   'border',
   'ring',
   'sidebar-accent',
+  'selected',
 ] as const;
 
 const deferredSemanticTokens = [
@@ -35,7 +36,6 @@ const deferredSemanticTokens = [
   'secondary-foreground',
   'accent',
   'accent-foreground',
-  'selected',
   'input',
   'sidebar-foreground',
   'sidebar-accent-foreground',
@@ -54,6 +54,7 @@ const darkAliases = {
   border: 'gray-alpha-2',
   ring: 'gray-8',
   'sidebar-accent': 'gray-alpha-1',
+  selected: 'gray-alpha-2',
 } as const;
 
 const lightAliases = {
@@ -136,6 +137,8 @@ describe('theme.css export', () => {
   const newThemeCss = readFileSync(resolve(pkgRoot, 'new-theme.css'), 'utf8');
   const productionCss = readFileSync(resolve(pkgRoot, 'src/index.css'), 'utf8');
   const storybookCss = readFileSync(resolve(pkgRoot, '.storybook/tailwind.css'), 'utf8');
+  const sidebarThemeCss = readFileSync(resolve(pkgRoot, 'src/ds/new/sidebar/sidebar-new-theme.css'), 'utf8');
+  const sidebarEntry = readFileSync(resolve(pkgRoot, 'src/ds/new/sidebar/index.ts'), 'utf8');
 
   it('ships raw (uncompiled) with the @theme directive intact', () => {
     expect(themeCss).toMatch(/@theme\s*\{/);
@@ -313,6 +316,15 @@ describe('theme.css export', () => {
         }
       }
     }
+  });
+
+  it('lets SidebarNew opt into the semantic layer', () => {
+    expect(sidebarEntry).toContain("import './sidebar-new-theme.css';");
+    expect(sidebarThemeCss).toContain("@import '../../../../new-theme.css';");
+    expect(sidebarThemeCss).toContain('source(none)');
+    expect(sidebarThemeCss).toContain('@source inline(');
+    expect(sidebarThemeCss).toContain('--neutral3: var(--muted-foreground);');
+    expect(sidebarThemeCss).toContain('--sidebar-nav-active: var(--selected);');
   });
 
   it('ships the semantic layer as an opt-in raw stylesheet', () => {

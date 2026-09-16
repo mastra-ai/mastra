@@ -1,3 +1,5 @@
+import './sidebar-new-theme.css';
+
 export { SidebarNew } from './sidebar-new';
 export { SidebarNewBrand, type SidebarNewBrandProps } from './sidebar-new-brand';
 export { SidebarNewFooter, type SidebarNewFooterProps } from './sidebar-new-footer';

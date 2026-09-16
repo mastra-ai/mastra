@@ -20,7 +20,7 @@ const GRAIN_SIZE = 110;
 const FALLOFF_RAMP = [0, 0.08, 0.16, 0.25, 0.34, 0.44, 0.55, 0.66, 0.78, 0.89, 1];
 
 const TONES = {
-  neutral: { colorVar: '--neutral6', peak: 0.08, grain: true, text: 'text-neutral4' },
+  neutral: { colorVar: '--foreground', peak: 0.08, grain: true, text: 'text-muted-foreground' },
   warning: {
     colorVar: '--notice-warning',
     peak: 0.16,
@@ -149,14 +149,14 @@ export const SidebarNewMeter = forwardRef<HTMLDivElement, SidebarNewMeterProps>(
         data-tone={tone}
         data-state={state}
         className={cn(
-          'relative isolate flex items-center justify-center overflow-hidden rounded-lg border border-border1 bg-surface2 px-1 py-2',
+          'border-border bg-background relative isolate flex items-center justify-center overflow-hidden rounded-lg border px-1 py-2',
           className,
         )}
         {...props}
       >
         <Bloom tone={tone} />
         {href ? <Link href={href} className="absolute inset-0 rounded-lg" aria-label={linkLabel} /> : null}
-        <span className="text-ui-xs text-neutral3 pointer-events-none relative font-semibold tabular-nums">
+        <span className="text-foreground text-ui-xs pointer-events-none relative font-semibold tabular-nums">
           {value}
         </span>
       </div>
@@ -170,8 +170,8 @@ export const SidebarNewMeter = forwardRef<HTMLDivElement, SidebarNewMeterProps>(
       data-tone={tone}
       data-state={state}
       className={cn(
-        'relative isolate flex flex-col justify-center overflow-hidden rounded-lg border border-border1 bg-surface2 px-3',
-        href && 'transition-colors hover:bg-surface3',
+        'border-border bg-background relative isolate flex flex-col justify-center overflow-hidden rounded-lg border px-3',
+        href && 'hover:bg-card transition-colors',
         className,
       )}
       style={{ height: CARD_HEIGHT }}
@@ -183,11 +183,11 @@ export const SidebarNewMeter = forwardRef<HTMLDivElement, SidebarNewMeterProps>(
       <div className="pointer-events-none relative">
         <div className="flex items-center gap-1.5">
           {tone === 'neutral' ? null : icon}
-          <span className="text-ui-sm text-neutral3 font-medium">{label}</span>
+          <span className="text-muted-foreground text-ui-sm font-medium">{label}</span>
           {action ? <span className="pointer-events-auto">{action}</span> : null}
         </div>
 
-        <p className="text-ui-lg text-neutral6 mt-0.5 leading-tight font-semibold tabular-nums">{value}</p>
+        <p className="text-foreground text-ui-lg mt-0.5 leading-tight font-semibold tabular-nums">{value}</p>
 
         {status ? (
           <div className="text-ui-xs mt-1">

@@ -55,7 +55,10 @@ export function SidebarNewNavStackView({
         type="button"
         aria-label={`${backLabel}: ${title}`}
         onClick={handleBack}
-        className={cn(navItemClasses(), 'mb-2 grid grid-cols-[2rem_1fr_2rem] px-1 text-neutral5 hover:text-neutral6')}
+        className={cn(
+          navItemClasses(),
+          'text-muted-foreground hover:text-foreground mb-2 grid grid-cols-[2rem_1fr_2rem] px-1',
+        )}
       >
         <ArrowLeftIcon className="justify-self-center" aria-hidden="true" />
         <span className="min-w-0 truncate text-center">{title}</span>

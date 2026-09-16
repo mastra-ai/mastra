@@ -133,6 +133,7 @@ const semanticEntries: [string, string][] = [
   ['muted-foreground', Colors['muted-foreground']],
   ['ring', Colors.ring],
   ['sidebar-accent', Colors['sidebar-accent']],
+  ['selected', Colors.selected],
 ];
 
 const semanticBorderEntries: [string, string][] = [['border', BorderColors.border]];
@@ -159,7 +160,7 @@ const SurfacePreview = ({ semantic }: { semantic: boolean }) => {
           />
           <div
             className="h-6 rounded"
-            style={{ background: semantic ? 'var(--sidebar-accent)' : 'var(--sidebar-nav-hover)' }}
+            style={{ background: semantic ? 'var(--selected)' : 'var(--sidebar-nav-active)' }}
           />
         </div>
       </div>

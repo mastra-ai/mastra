@@ -39,8 +39,8 @@ function SidebarNewStory() {
   }
 
   return (
-    <div className="bg-surface1 flex h-dvh w-dvw">
-      <SidebarNew className="border-border1 bg-surface2 border-r">
+    <div className="bg-background flex h-dvh w-dvw">
+      <SidebarNew className="border-border border-r">
         <SidebarNew.Header>
           {state === 'collapsed' ? (
             <SidebarNew.Trigger />
