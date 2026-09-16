@@ -92,7 +92,7 @@ export abstract class SkillsStorage extends VersionedStorageDomain<
     'createdAt',
   ] satisfies (keyof SkillVersion)[];
 
-  private readonly publishQueues = new Map<string, Promise<void>>();
+  readonly #publishQueues = new Map<string, Promise<void>>();
 
   constructor() {
     super({
@@ -107,17 +107,17 @@ export abstract class SkillsStorage extends VersionedStorageDomain<
    * multiple instances should override it with a native transaction.
    */
   publishVersion(input: PublishSkillVersionInput): Promise<SkillVersion> {
-    const previous = this.publishQueues.get(input.skillId) ?? Promise.resolve();
+    const previous = this.#publishQueues.get(input.skillId) ?? Promise.resolve();
     const publication = previous.catch(() => {}).then(() => this.publishVersionFallback(input));
     const tail = publication.then(
       () => undefined,
       () => undefined,
     );
-    this.publishQueues.set(input.skillId, tail);
+    this.#publishQueues.set(input.skillId, tail);
 
     return publication.finally(() => {
-      if (this.publishQueues.get(input.skillId) === tail) {
-        this.publishQueues.delete(input.skillId);
+      if (this.#publishQueues.get(input.skillId) === tail) {
+        this.#publishQueues.delete(input.skillId);
       }
     });
   }
