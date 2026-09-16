@@ -725,6 +725,108 @@ describe('eager tool dispatch — discarded model attempt', () => {
    * tool that honours its abort signal stops, and nothing it produced is adopted. This is
    * the documented cost of opting in.
    */
+  async function runErrorChunkRetryScenario(eagerToolExecution: boolean) {
+    const { events, record } = createRecorder();
+    let attempt = 0;
+
+    // An `error` chunk answered by an error processor's `retry` is the *other* way an
+    // attempt gets discarded, and it returns `toolCalls: []` exactly like the thrown
+    // case. It reaches a different early return, which is how it shipped uncancelled.
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        attempt += 1;
+        const failing = attempt === 1;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: `response-${attempt}`,
+                modelId: 'mock-model',
+                timestamp: new Date(0),
+              });
+              if (failing) {
+                controller.enqueue({
+                  type: 'tool-call',
+                  toolCallId: 'call-discarded',
+                  toolName: 'tool-a',
+                  input: JSON.stringify({ value: 'discarded' }),
+                });
+                await new Promise(resolve => setTimeout(resolve, 20));
+                controller.enqueue({ type: 'error', error: new Error('transient provider failure') });
+                controller.close();
+                return;
+              }
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'recovered' });
+              controller.enqueue({ type: 'text-end', id: 'text-1' });
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: `eager-error-retry-agent-${eagerToolExecution}`,
+      name: 'Eager error retry agent',
+      instructions: 'Call tool-a.',
+      model,
+      errorProcessors: [
+        {
+          id: 'retry-once',
+          processAPIError: async ({ retryCount }: { retryCount: number }) => ({ retry: retryCount < 1 }),
+        },
+      ] as never,
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Records that it ran',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          execute: async ({ value }, options) => {
+            record(`execute-${value}`);
+            const signal = (options as { abortSignal?: AbortSignal } | undefined)?.abortSignal;
+            if (signal) {
+              await new Promise<void>(resolve => {
+                if (signal.aborted) return resolve();
+                signal.addEventListener('abort', () => resolve(), { once: true });
+                setTimeout(resolve, 500);
+              });
+              if (signal.aborted) record(`aborted-${value}`);
+            }
+            return { value };
+          },
+        }),
+      },
+    });
+
+    await drain(
+      await agent.stream('go', { maxSteps: 1, eagerToolExecution } as Record<string, unknown> as never),
+    ).catch(() => {});
+    await new Promise(resolve => setTimeout(resolve, 150));
+    return events;
+  }
+
+  it('cancels eager work when an error chunk is answered with a retry', async () => {
+    const withoutEager = await runErrorChunkRetryScenario(false);
+    const withEager = await runErrorChunkRetryScenario(true);
+
+    // The discarded attempt's call never runs at all without eager dispatch.
+    expect(withoutEager).toEqual([]);
+    // With it, the call had already started, so the guarantee is that it is cancelled
+    // rather than left running to produce a side effect nothing will ever record.
+    expect(withEager).toEqual(['execute-discarded', 'aborted-discarded']);
+  });
+
   async function runFallbackScenario(eagerToolExecution: boolean) {
     const { events, record } = createRecorder();
 
