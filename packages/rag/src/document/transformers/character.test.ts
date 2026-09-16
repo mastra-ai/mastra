@@ -60,6 +60,57 @@ describe('CharacterTransformer', () => {
   });
 });
 
+describe('maxSize with a large overlap', () => {
+  it('keeps every chunk within maxSize when the overlap is large relative to it', () => {
+    // The overlap window is carried into the next chunk, and the split that
+    // triggered the flush was appended without checking that the two still fit.
+    // `aaaa bbbb cccc` is 14 characters against a maxSize of 12, and the loop
+    // only noticed one iteration later, after the chunk had been emitted.
+    const transformer = new RecursiveCharacterTransformer({
+      separators: [' '],
+      maxSize: 12,
+      overlap: 8,
+    });
+
+    const chunks = transformer.splitText({ text: 'aaaa bbbb cccc dddd eeee' });
+
+    expect(chunks).toEqual(['aaaa bbbb', 'bbbb cccc', 'cccc dddd', 'dddd eeee']);
+  });
+
+  it('still emits a single split that cannot fit, rather than dropping it', () => {
+    // The control: dropping from the front must stop at an empty window, so the
+    // oversized split is emitted whole and the existing warning still covers it.
+    const transformer = new RecursiveCharacterTransformer({
+      separators: [' '],
+      maxSize: 4,
+      overlap: 3,
+    });
+
+    const chunks = transformer.splitText({ text: 'aa bbbbbbbb cc' });
+
+    expect(chunks.join(' ')).toContain('bbbbbbbb');
+  });
+
+  it('leaves a transformer whose splits already fit unchanged', () => {
+    // The control: CharacterTransformer on a space separator produces splits of
+    // 4, which never trip the limit, so its output must not move.
+    const transformer = new CharacterTransformer({
+      separator: ' ',
+      maxSize: 12,
+      overlap: 8,
+      isSeparatorRegex: false,
+    });
+
+    expect(transformer.splitText({ text: 'aaaa bbbb cccc dddd eeee' })).toEqual([
+      'aaaa',
+      'bbbb',
+      'cccc',
+      'dddd',
+      'eeee',
+    ]);
+  });
+});
+
 describe('separatorPosition: start', () => {
   const baseOptions = { maxSize: 100, overlap: 0, stripWhitespace: false } as const;
 
