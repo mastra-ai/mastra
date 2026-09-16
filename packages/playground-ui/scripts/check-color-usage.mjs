@@ -9,41 +9,36 @@ const semanticTokenPattern =
   '(?:sidebar-accent-foreground|popover-foreground|secondary-foreground|tertiary-foreground|disabled-foreground|contrast-foreground|sidebar-foreground|sidebar-accent|sidebar-border|sidebar-ring|card-foreground|muted-foreground|accent-foreground|background|secondary|foreground|selected|popover|sidebar|accent|border|input|muted|card|ring)';
 const foundationTokenPattern = '(?:background-[1-3]|gray-(?:10|[1-9])|gray-alpha-(?:10|[1-9]))';
 const colorUtilityPattern = '(?:bg|text|border|ring|outline|fill|stroke|from|via|to)';
-const approvedFoundationFiles = new Set(['packages/playground-ui/theme.css']);
+const approvedFoundationFiles = new Set(['packages/playground-ui/theme.css', 'packages/playground-ui/new-theme.css']);
 const tokenContractFiles = new Set([
   'packages/playground-ui/theme.css',
+  'packages/playground-ui/new-theme.css',
   'packages/playground-ui/src/ds/tokens/colors.ts',
 ]);
 
 const normalizePath = value => value.split(sep).join('/');
 
 const parseArguments = argv => {
-  const options = { mode: '', roots: [], component: '', baseline: '' };
+  const options = { roots: [], component: '' };
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
 
-    if (argument === '--check' || argument === '--report') {
-      if (options.mode) throw new Error('Choose either --check or --report.');
-      options.mode = argument.slice(2);
-      continue;
-    }
+    if (argument === '--report') continue;
 
-    if (argument === '--root' || argument === '--component' || argument === '--baseline') {
+    if (argument === '--root' || argument === '--component') {
       const value = argv[index + 1];
       if (!value) throw new Error(`${argument} requires a value.`);
       index += 1;
 
       if (argument === '--root') options.roots.push(value);
       if (argument === '--component') options.component = value;
-      if (argument === '--baseline') options.baseline = value;
       continue;
     }
 
     throw new Error(`Unknown argument: ${argument}`);
   }
 
-  if (!options.mode) throw new Error('Choose --check or --report.');
   return options;
 };
 
@@ -256,69 +251,13 @@ const buildReport = ({ repositoryRoot, roots, component = '' }) => {
   };
 };
 
-const recordKey = record => `${record.file}\u0000${record.kind}\u0000${record.form}\u0000${record.token}`;
-
-const compareReports = (baseline, current) => {
-  const failures = [];
-  const baselineRecords = new Map(baseline.groups.production.map(record => [recordKey(record), record]));
-  const currentRecords = new Map(current.groups.production.map(record => [recordKey(record), record]));
-
-  for (const record of [...current.groups.production, ...current.groups.tokens]) {
-    if (record.kind === 'foundation') {
-      failures.push(`${record.file}: direct foundation reference ${record.token} (${record.form})`);
-    }
-  }
-
-  for (const record of current.groups.production) {
-    const previous = baselineRecords.get(recordKey(record));
-    if (!previous) {
-      failures.push(`${record.file}: new ${record.kind} reference ${record.token} (${record.form})`);
-      continue;
-    }
-
-    if (record.count > previous.count) {
-      failures.push(`${record.file}: ${record.token} (${record.form}) increased ${previous.count} -> ${record.count}`);
-    } else if (record.count < previous.count) {
-      failures.push(
-        `${record.file}: baseline is stale for ${record.token} (${record.form}), ${previous.count} -> ${record.count}`,
-      );
-    }
-  }
-
-  for (const record of baseline.groups.production) {
-    if (!currentRecords.has(recordKey(record))) {
-      failures.push(`${record.file}: baseline is stale for removed ${record.token} (${record.form})`);
-    }
-  }
-
-  return failures.sort();
-};
-
 const main = argv => {
   const options = parseArguments(argv);
   const repositoryRoot = findRepositoryRoot(process.cwd());
   const roots = options.roots.length ? options.roots : ['packages/playground-ui', 'packages/playground'];
   const report = buildReport({ repositoryRoot, roots, component: options.component });
 
-  if (options.mode === 'report') {
-    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-    return;
-  }
-
-  const baselinePath = resolve(
-    repositoryRoot,
-    options.baseline || 'packages/playground-ui/scripts/color-usage-baseline.json',
-  );
-  const baseline = JSON.parse(readFileSync(baselinePath, 'utf8'));
-  const failures = compareReports(baseline, report);
-
-  if (failures.length) {
-    process.stderr.write(`${failures.join('\n')}\n`);
-    process.exitCode = 1;
-    return;
-  }
-
-  process.stdout.write(`Color usage matches ${normalizePath(relative(repositoryRoot, baselinePath))}.\n`);
+  process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 };
 
 if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
@@ -330,4 +269,4 @@ if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
   }
 }
 
-export { buildReport, compareReports, parseArguments, scanFile };
+export { buildReport, parseArguments, scanFile };

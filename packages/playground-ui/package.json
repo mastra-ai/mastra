@@ -8,11 +8,13 @@
   ],
   "files": [
     "dist",
-    "theme.css"
+    "theme.css",
+    "new-theme.css"
   ],
   "exports": {
     "./style.css": "./dist/style.css",
     "./theme.css": "./theme.css",
+    "./new-theme.css": "./new-theme.css",
     "./tokens": {
       "import": {
         "types": "./dist/tokens.d.ts",
@@ -140,11 +142,10 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite build && vite build --watch --mode development",
-    "test": "node --test scripts/check-color-usage.test.mjs && vitest",
+    "test": "vitest",
     "test:mutate": "stryker run --mutate",
     "typecheck": "tsc",
-    "lint": "node scripts/check-color-usage.mjs --check && oxlint . && eslint .",
-    "lint:colors": "node scripts/check-color-usage.mjs --check",
+    "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix .",
     "build:publish": "pnpm build && yalc push",
     "preview": "vite preview",

@@ -23,7 +23,6 @@ const semanticTokens = [
   'border',
   'ring',
   'sidebar-accent',
-  'selected',
 ] as const;
 
 const deferredSemanticTokens = [
@@ -36,6 +35,7 @@ const deferredSemanticTokens = [
   'secondary-foreground',
   'accent',
   'accent-foreground',
+  'selected',
   'input',
   'sidebar-foreground',
   'sidebar-accent-foreground',
@@ -54,7 +54,6 @@ const darkAliases = {
   border: 'gray-alpha-2',
   ring: 'gray-8',
   'sidebar-accent': 'gray-alpha-1',
-  selected: 'gray-alpha-2',
 } as const;
 
 const lightAliases = {
@@ -72,6 +71,28 @@ const parseVariables = (css: string) => {
   }
 
   return variables;
+};
+
+const getThemeVariables = (themeCss: string, newThemeCss: string) => {
+  const themeRootBlock = themeCss.slice(themeCss.indexOf(':root {'), themeCss.indexOf('html.light'));
+  const themeLightStart = themeCss.indexOf('html.light');
+  const themeLightBlock = themeCss.slice(themeLightStart, themeCss.indexOf('\n}\n\n@theme', themeLightStart) + 2);
+  const semanticRootBlock = newThemeCss.slice(newThemeCss.indexOf(':root {'), newThemeCss.indexOf('html.light'));
+  const semanticLightStart = newThemeCss.indexOf('html.light');
+  const semanticLightBlock = newThemeCss.slice(
+    semanticLightStart,
+    newThemeCss.indexOf('\n}\n\n@theme', semanticLightStart) + 2,
+  );
+  const semanticRootVariables = parseVariables(semanticRootBlock);
+  const semanticLightVariables = new Map([...semanticRootVariables, ...parseVariables(semanticLightBlock)]);
+  const darkVariables = new Map([...parseVariables(themeRootBlock), ...semanticRootVariables]);
+  const lightVariables = new Map([
+    ...darkVariables,
+    ...parseVariables(themeLightBlock),
+    ...parseVariables(semanticLightBlock),
+  ]);
+
+  return { semanticRootVariables, semanticLightVariables, darkVariables, lightVariables };
 };
 
 const resolveToken = (token: string, variables: Map<string, string>, seen: string[] = []): string => {
@@ -112,14 +133,21 @@ const apcaContrast = (foreground: number, background: number) => {
 
 describe('theme.css export', () => {
   const themeCss = readFileSync(resolve(pkgRoot, 'theme.css'), 'utf8');
+  const newThemeCss = readFileSync(resolve(pkgRoot, 'new-theme.css'), 'utf8');
+  const productionCss = readFileSync(resolve(pkgRoot, 'src/index.css'), 'utf8');
+  const storybookCss = readFileSync(resolve(pkgRoot, '.storybook/tailwind.css'), 'utf8');
 
   it('ships raw (uncompiled) with the @theme directive intact', () => {
     expect(themeCss).toMatch(/@theme\s*\{/);
     expect(themeCss).toMatch(/:root\s*\{/);
+    expect(newThemeCss).toMatch(/@theme\s*\{/);
+    expect(newThemeCss).toMatch(/:root\s*\{/);
     // A compiled Tailwind stylesheet opens with the version banner — this must not.
     expect(themeCss).not.toMatch(/^\/\*!\s*tailwindcss/);
+    expect(newThemeCss).not.toMatch(/^\/\*!\s*tailwindcss/);
     // Token definitions only — no generated utility classes.
     expect(themeCss).not.toMatch(/\.bg-surface1\b/);
+    expect(newThemeCss).not.toMatch(/\.bg-background\b/);
   });
 
   it('overrides the green palette the native v4 way (initial + remap)', () => {
@@ -190,24 +218,23 @@ describe('theme.css export', () => {
   });
 
   it('defines the approved semantic alias graph in both themes', () => {
-    const rootBlock = themeCss.slice(themeCss.indexOf(':root {'), themeCss.indexOf('html.light'));
-    const lightStart = themeCss.indexOf('html.light');
-    const lightBlock = themeCss.slice(lightStart, themeCss.indexOf('\n}\n\n@theme', lightStart) + 2);
-    const rootVariables = parseVariables(rootBlock);
-    const lightVariables = new Map([...rootVariables, ...parseVariables(lightBlock)]);
+    const { semanticRootVariables, semanticLightVariables, darkVariables, lightVariables } = getThemeVariables(
+      themeCss,
+      newThemeCss,
+    );
 
     for (const [token, reference] of Object.entries(darkAliases)) {
-      expect(rootVariables.get(token)).toBe(`var(--${reference})`);
+      expect(semanticRootVariables.get(token)).toBe(`var(--${reference})`);
     }
 
     for (const [token, reference] of Object.entries(lightAliases)) {
-      expect(lightVariables.get(token)).toBe(`var(--${reference})`);
+      expect(semanticLightVariables.get(token)).toBe(`var(--${reference})`);
     }
 
     for (const token of semanticTokens) {
-      expect(() => resolveToken(token, rootVariables)).not.toThrow();
+      expect(() => resolveToken(token, darkVariables)).not.toThrow();
       expect(() => resolveToken(token, lightVariables)).not.toThrow();
-      expect(themeCss).toContain(`--color-${token}: var(--${token});`);
+      expect(newThemeCss).toContain(`--color-${token}: var(--${token});`);
     }
   });
 
@@ -223,8 +250,8 @@ describe('theme.css export', () => {
     const exportedColors = { ...Colors, ...BorderColors };
 
     for (const token of deferredSemanticTokens) {
-      expect(themeCss).not.toContain(`--${token}:`);
-      expect(themeCss).not.toContain(`--color-${token}:`);
+      expect(newThemeCss).not.toContain(`--${token}:`);
+      expect(newThemeCss).not.toContain(`--color-${token}:`);
       expect(Object.hasOwn(exportedColors, token)).toBe(false);
     }
   });
@@ -240,12 +267,13 @@ describe('theme.css export', () => {
       ...Array.from({ length: 10 }, (_, index) => `gray-alpha-${index + 1}`),
     ]) {
       expect(themeCss).not.toContain(`--color-${token}:`);
+      expect(newThemeCss).not.toContain(`--color-${token}:`);
       expect(colorSource).not.toContain(`var(--${token})`);
     }
   });
 
   it('compiles utilities for every semantic token', async () => {
-    const compiler = await compile(`${themeCss}\n@tailwind utilities;`);
+    const compiler = await compile(`${newThemeCss}\n@tailwind utilities;`);
     const candidates = semanticTokens.flatMap(token => [
       `bg-${token}`,
       `text-${token}`,
@@ -260,11 +288,7 @@ describe('theme.css export', () => {
   });
 
   it('keeps the focus ring visible on every neutral product surface', () => {
-    const rootBlock = themeCss.slice(themeCss.indexOf(':root {'), themeCss.indexOf('html.light'));
-    const lightStart = themeCss.indexOf('html.light');
-    const lightBlock = themeCss.slice(lightStart, themeCss.indexOf('\n}\n\n@theme', lightStart) + 2);
-    const darkVariables = parseVariables(rootBlock);
-    const lightVariables = new Map([...darkVariables, ...parseVariables(lightBlock)]);
+    const { darkVariables, lightVariables } = getThemeVariables(themeCss, newThemeCss);
 
     for (const variables of [darkVariables, lightVariables]) {
       const ringLightness = oklchLightness(resolveToken('ring', variables));
@@ -276,11 +300,7 @@ describe('theme.css export', () => {
   });
 
   it('meets text contrast gates on every neutral product surface', () => {
-    const rootBlock = themeCss.slice(themeCss.indexOf(':root {'), themeCss.indexOf('html.light'));
-    const lightStart = themeCss.indexOf('html.light');
-    const lightBlock = themeCss.slice(lightStart, themeCss.indexOf('\n}\n\n@theme', lightStart) + 2);
-    const darkVariables = parseVariables(rootBlock);
-    const lightVariables = new Map([...darkVariables, ...parseVariables(lightBlock)]);
+    const { darkVariables, lightVariables } = getThemeVariables(themeCss, newThemeCss);
 
     for (const variables of [darkVariables, lightVariables]) {
       for (const foreground of ['foreground', 'muted-foreground']) {
@@ -295,9 +315,14 @@ describe('theme.css export', () => {
     }
   });
 
-  it('is exported from the package root, not the compiled dist bundle', () => {
+  it('ships the semantic layer as an opt-in raw stylesheet', () => {
+    expect(themeCss).not.toContain("@import './new-theme.css';");
+    expect(productionCss).not.toContain("@import '../new-theme.css';");
+    expect(storybookCss).toContain("@import '../new-theme.css';");
     expect(pkg.exports['./theme.css']).toBe('./theme.css');
     expect(pkg.exports['./theme.css']).not.toContain('dist');
+    expect(pkg.exports['./new-theme.css']).toBe('./new-theme.css');
     expect(pkg.files).toContain('theme.css');
+    expect(pkg.files).toContain('new-theme.css');
   });
 });

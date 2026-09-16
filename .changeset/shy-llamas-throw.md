@@ -1,8 +1,12 @@
 ---
-'@mastra/playground-ui': minor
+'@mastra/playground-ui': patch
 ---
 
-Added semantic neutral color tokens, enabled existing semantic utility classes, and added checks that prevent new legacy neutral usage.
+Added an opt-in semantic neutral color contract in `new-theme.css` and lightweight scoped color usage reporting.
+
+```css
+@import '@mastra/playground-ui/new-theme.css';
+```
 
 ```tsx
 <div className="border-border bg-background text-foreground">Content</div>

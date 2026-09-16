@@ -35,7 +35,6 @@ export const Colors = {
   'muted-foreground': 'var(--muted-foreground)',
   ring: 'var(--ring)',
   'sidebar-accent': 'var(--sidebar-accent)',
-  selected: 'var(--selected)',
 
   // Semantic state colors
   error: 'var(--error)',

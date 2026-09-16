@@ -133,7 +133,6 @@ const semanticEntries: [string, string][] = [
   ['muted-foreground', Colors['muted-foreground']],
   ['ring', Colors.ring],
   ['sidebar-accent', Colors['sidebar-accent']],
-  ['selected', Colors.selected],
 ];
 
 const semanticBorderEntries: [string, string][] = [['border', BorderColors.border]];
@@ -160,7 +159,7 @@ const SurfacePreview = ({ semantic }: { semantic: boolean }) => {
           />
           <div
             className="h-6 rounded"
-            style={{ background: semantic ? 'var(--selected)' : 'var(--sidebar-nav-active)' }}
+            style={{ background: semantic ? 'var(--sidebar-accent)' : 'var(--sidebar-nav-hover)' }}
           />
         </div>
       </div>
@@ -233,20 +232,20 @@ export const SemanticNeutrals: Story = {
         Semantic neutrals
       </SectionTitle>
       <SwatchGrid entries={[...semanticEntries, ...semanticBorderEntries]} />
-      <SectionTitle note="These combinations already exist in observation and dataset call sites.">
-        Existing consumer combinations
+      <SectionTitle note="Use these combinations after a consumer opts into the semantic layer.">
+        Representative combinations
       </SectionTitle>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="border-border bg-background text-foreground rounded-md border p-4">
           <div className="text-ui-sm font-medium">Observation summary</div>
-          <div className="text-ui-sm text-muted-foreground mt-1">Today, 12 minutes ago</div>
-          <div className="bg-muted text-ui-xs text-muted-foreground mt-3 inline-flex rounded px-2 py-1">
+          <div className="text-muted-foreground text-ui-sm mt-1">Today, 12 minutes ago</div>
+          <div className="bg-muted text-muted-foreground text-ui-xs mt-3 inline-flex rounded px-2 py-1">
             Thread support-triage
           </div>
         </div>
         <div className="border-border bg-muted rounded-md border p-4">
-          <div className="text-ui-sm text-foreground font-medium">Dataset import</div>
-          <div className="text-ui-sm text-muted-foreground mt-1">No validation issues found.</div>
+          <div className="text-foreground text-ui-sm font-medium">Dataset import</div>
+          <div className="text-muted-foreground text-ui-sm mt-1">No validation issues found.</div>
         </div>
       </div>
     </div>

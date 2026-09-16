@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
-import { buildReport, compareReports, parseArguments } from './check-color-usage.mjs';
+import { buildReport, parseArguments } from './check-color-usage.mjs';
 
 const createRepository = () => {
   const directory = mkdtempSync(join(tmpdir(), 'color-usage-'));
@@ -24,13 +24,11 @@ const track = (repository, file, content) => {
 
 test('parses report options and configurable roots', () => {
   assert.deepEqual(parseArguments(['--report', '--root', 'frontend', '--component', 'Button']), {
-    mode: 'report',
     roots: ['frontend'],
     component: 'Button',
-    baseline: '',
   });
-  assert.throws(() => parseArguments([]), /Choose --check or --report/);
-  assert.throws(() => parseArguments(['--check', '--report']), /Choose either/);
+  assert.deepEqual(parseArguments([]), { roots: [], component: '' });
+  assert.throws(() => parseArguments(['--check']), /Unknown argument/);
 });
 
 test('reports legacy, foundation, and achromatic usage by source group', () => {
@@ -80,21 +78,4 @@ test('filters reports to one component', () => {
     report.groups.production.map(record => record.file),
     ['src/Button/button.tsx'],
   );
-});
-
-test('rejects new, increased, removed, and direct foundation usage', () => {
-  const repository = createRepository();
-  track(repository, 'src/Button/button.tsx', "const value = 'bg-surface2';");
-  const baseline = buildReport({ repositoryRoot: repository, roots: ['src'] });
-
-  track(repository, 'src/Button/button.tsx', "const value = 'bg-surface2 hover:bg-surface2 bg-(--gray-1)';");
-  const current = buildReport({ repositoryRoot: repository, roots: ['src'] });
-  const failures = compareReports(baseline, current);
-
-  assert.ok(failures.some(failure => failure.includes('surface2 (tailwind) increased 1 -> 2')));
-  assert.ok(failures.some(failure => failure.includes('direct foundation reference gray-1')));
-
-  track(repository, 'src/Button/button.tsx', "const value = 'bg-card';");
-  const removed = compareReports(baseline, buildReport({ repositoryRoot: repository, roots: ['src'] }));
-  assert.ok(removed.some(failure => failure.includes('baseline is stale for removed surface2')));
 });
