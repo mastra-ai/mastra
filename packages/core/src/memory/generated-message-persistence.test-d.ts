@@ -1,3 +1,4 @@
+// eslint-disable-next-line import/order -- Emitted self-import ordering differs before and after the package build.
 import { describe, expectTypeOf, it } from 'vitest';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
