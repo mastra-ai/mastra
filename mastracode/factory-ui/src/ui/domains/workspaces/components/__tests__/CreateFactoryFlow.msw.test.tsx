@@ -247,6 +247,7 @@ describe('Create Factory wizard', () => {
     expect(intakeConfigs).toEqual([
       {
         github: { enabled: true, sourceIds: ['octo/hello'] },
+        gitlab: { enabled: false, sourceIds: null },
         linear: { enabled: false, sourceIds: null },
         jira: { enabled: false, sourceIds: null },
         incidentio: { enabled: false, sourceIds: null },
@@ -467,6 +468,7 @@ describe('Create Factory wizard', () => {
       },
       {
         github: { enabled: true, sourceIds: ['octo/hello'] },
+        gitlab: { enabled: false, sourceIds: null },
         linear: { enabled: true, sourceIds: ['lin-1'] },
         jira: { enabled: false, sourceIds: null },
         incidentio: { enabled: false, sourceIds: null },
@@ -546,6 +548,7 @@ describe('Create Factory wizard', () => {
     expect(intakeConfigs).toEqual([
       {
         github: { enabled: true, sourceIds: ['octo/hello'] },
+        gitlab: { enabled: false, sourceIds: null },
         linear: { enabled: false, sourceIds: null },
         jira: { enabled: false, sourceIds: null },
         incidentio: { enabled: false, sourceIds: null },

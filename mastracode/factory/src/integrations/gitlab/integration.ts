@@ -55,6 +55,13 @@ interface GitLabPageCursor {
   page: number;
 }
 
+export interface GitLabStatusConnection {
+  id: string;
+  integrationId: string;
+  status: 'active' | 'needs_reauth';
+  accountLabel: string | null;
+}
+
 const DIRECT_CONNECTION_ID = 'direct';
 const GITLAB_CONNECTION_TOKEN_PREFIX = 'gitlab-connection:';
 const GITLAB_SOURCE_PREFIX = 'gitlab-project:';
@@ -125,12 +132,17 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   protected abstract activeContexts(): Promise<GitLabConnectionContext[]>;
   protected abstract contextById(connectionId: string): Promise<GitLabConnectionContext>;
 
+  /** Platform mode exposes org connections; direct mode returns undefined. */
+  async statusConnections(): Promise<GitLabStatusConnection[] | undefined> {
+    return undefined;
+  }
+
   protected get webhookSecret(): string | undefined {
     return undefined;
   }
 
-  routes(_ctx: IntegrationContext): ApiRoute[] {
-    return buildGitLabRoutes({ webhookSecret: this.webhookSecret });
+  routes(ctx: IntegrationContext): ApiRoute[] {
+    return buildGitLabRoutes({ gitlab: this, auth: ctx.auth, webhookSecret: this.webhookSecret });
   }
 
   async agentTools(args: { requestContext: RequestContext }): Promise<IntegrationTools> {
