@@ -1,5 +1,94 @@
 # @mastra/core
 
+## 1.68.0-alpha.2
+
+### Minor Changes
+
+- Added A2A v1.0 remote subagent delegation with explicit protocol selection on `A2AAgent`. Existing integrations continue to use v0.3 by default. ([#24134](https://github.com/mastra-ai/mastra/pull/24134))
+
+  ```typescript
+  const remoteAgent = new A2AAgent({
+    url: 'https://example.com/.well-known/agent-card.json',
+    protocolVersion: '1.0',
+  });
+  ```
+
+- Added MCP 2026-07-28 server contracts to `MCPServerBase` while keeping MCP 1.x servers working unchanged. ([#23875](https://github.com/mastra-ai/mastra/pull/23875))
+
+  - Added `mcpVersion` to `MCPServerBase`. A server that sets it to `2` resolves `executeTool` to `MCPToolExecutionResultV2`, which reports a suspended tool (`{ status: 'suspended', suspendPayload, resumeSchema }`) instead of a bare result. Thrown errors and schema failures still reject. Existing 1.x servers need no new properties.
+  - Added `context.mcp.protocolVersion`, set to `'2026-07-28'` by 2.x servers. `context.mcp.extra`, `log` and `progress` keep the same shape on both server versions.
+  - Added `suspend`, `resumeData` and `suspendPayload` at the top level of the tool execution context for direct and MCP 2.x execution. Agents and workflows keep nesting them under `agent` and `workflow` until the next core major.
+  - Added `suspendPayload` to tools resumed by agents (including durable agents) and workflows, alongside `resumeData`.
+  - Deprecated the surfaces MCP 2026-07-28 removed, for removal in the next core major: `startSSE`, `startHonoSSE`, `MCPServerSSEOptions`, `MCPServerHonoSSEOptions`, `MCPServerHTTPOptions.options`, `context.mcp.elicitation.sendRequest`, `context.mcp.extra.sendRequest` and `context.mcp.extra.sendNotification`. On a 2.x server the deprecated `context.mcp` members throw with a message naming the replacement. `startSSE` and `startHonoSSE` are no longer abstract, so 2.x servers do not implement them.
+
+  Tools that need input mid-execution use the suspend/resume primitives `createTool` already has:
+
+  ```ts
+  import { createTool } from '@mastra/core/tools';
+  import { z } from 'zod';
+
+  const confirm = createTool({
+    id: 'confirm',
+    description: 'Ask for confirmation',
+    inputSchema: z.object({ amount: z.number() }),
+    outputSchema: z.boolean(),
+    suspendSchema: z.object({ phase: z.literal('confirm'), amount: z.number() }),
+    resumeSchema: z.object({ confirmed: z.boolean() }),
+    execute: async ({ amount }, context) => {
+      await context.mcp?.log?.('info', 'asking for confirmation', { amount });
+      if (!context.resumeData) {
+        await context.suspend?.({ phase: 'confirm', amount });
+        return;
+      }
+      return context.resumeData.confirmed;
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Documented the `SpanOutputProcessor.process()` contract: mutate the span you receive and return the same instance, or return `undefined` to drop it. Returning a copy is not supported because `exportSpan()` and `isValid` are instance members of the live span. Related to #23796 ([#24048](https://github.com/mastra-ai/mastra/pull/24048))
+
+- Fixed span output processors that return a copy of the span instead of the same instance. Previously this threw `TypeError: processedSpan?.exportSpan is not a function` out of `startSpan()` for started/updated spans, and silently dropped every ended span. Now the span is dropped with a logged processor error naming the processor, and the `SensitiveDataFilter.process()` docstring correctly states that it mutates the span in place. Fixes #23796 ([#24048](https://github.com/mastra-ai/mastra/pull/24048))
+
+- Fixed queued follow-up messages being saved without an answer after the active run is aborted. ([#23926](https://github.com/mastra-ai/mastra/pull/23926))
+
+  - Pending signals wait for a fresh run instead of being consumed by an aborted run.
+  - Queued messages no longer inherit the previous run's cancellation signal. Explicit cancellation supplied for a queued message is preserved.
+  - Pending signals stay ahead of idle messages when preparation fails, including after cancellation of a queued startup.
+  - Forwarding signals to a new thread owner does not duplicate the same ID already waiting in that owner's pre-run or pending signal queue.
+
+- Fixed workflow and agent delegation tools adopting a malformed model-supplied `suspendedToolRunId`. Some models emit the literal string `"null"` for this optional auto-resume field on fresh calls; because that string is truthy, two independent workflow-tool calls could collide on a single run (silently dropping one), and agent delegation could try to resume a non-existent run and crash. Sentinel strings (`"null"`, `"undefined"`, `"none"`, `"nil"`) are now treated as absent at every point where the field crosses the model boundary. ([#24121](https://github.com/mastra-ai/mastra/pull/24121))
+
+  **Behavior change**: workflow tools now only honor a supplied `suspendedToolRunId` together with `resumeData` — fresh calls always receive a framework-generated unique run id. If you pinned `args.suspendedToolRunId` in a `beforeToolCall` hook (the documented workaround for run-id collisions), that pin is no longer applied on fresh calls — and is no longer needed. Fixes [#23739](https://github.com/mastra-ai/mastra/issues/23739).
+
+- Fixed workspace `requireReadBeforeWrite` falsely rejecting writes with "has not been read" after suspend/resume and between conversation turns (#23772). Read records now persist per memory thread in the `threadState` storage domain — the same store that holds task lists and goal objectives — so a file read before a tool suspends (for example, awaiting plan approval or a `requireApproval` tool) no longer needs a wasteful re-read after the run resumes, including on serverless runtimes where the process is torn down between suspend and resume when a persistent storage adapter (for example LibSQL or Postgres) is configured. No configuration is needed: with in-memory storage, records survive suspend/resume within the same process, and runs without a memory thread or Mastra storage fall back to per-run tracking. Files modified on disk after being read still require a re-read before writing. Read records are scoped to the filesystem they were read from (provider + base path), so threads that resolve a different workspace or filesystem between requests cannot satisfy the write gate with a read from a different file store. ([#24122](https://github.com/mastra-ai/mastra/pull/24122))
+
+- Fixed manually renamed thread titles being replaced by Observational Memory. Explicitly regenerating a title enables automatic title updates again, as do programmatic title writes that opt out of pinning: ([#23791](https://github.com/mastra-ai/mastra/pull/23791))
+
+  ```ts
+  await session.thread.rename({ title: 'Initial title', pin: false });
+  ```
+
+  Fixes #22421
+
+- Reduced the core install footprint by embedding the MCP context declarations instead of installing the MCP server SDK. Existing MCP tool context types remain compatible with the SDK. ([#23998](https://github.com/mastra-ai/mastra/pull/23998))
+
+- Removed the redundant direct Ajv dependency. Schema compatibility bundles its validator and standalone types without requiring a separate Ajv installation. ([#23998](https://github.com/mastra-ai/mastra/pull/23998))
+
+- Fixed token usage and finish reason handling when a model router model is wrapped with AI SDK v7 `wrapLanguageModel`. The AI SDK compatibility shim nests usage and finish reason one level deeper, which made `result.usage` come back as the string `"0[object Object]…"` and made multi-step agent turns run to `maxSteps`. Mastra now unwraps repeated envelopes so token counts stay numbers and the loop stops on `stop`. Fixes https://github.com/mastra-ai/mastra/issues/23735 and https://github.com/mastra-ai/mastra/issues/23746 ([#23914](https://github.com/mastra-ai/mastra/pull/23914))
+
+- Fixed durable agents on cross-process engines (like Inngest) dropping `requestContext` values written by input processors. ([#24133](https://github.com/mastra-ai/mastra/pull/24133))
+
+  Values set with `requestContext.set(...)` inside an input processor now reach tools and scorers running on a separate worker process. Framework-internal entries (model version overrides, memory instances, auth tokens) are still kept out of the persisted workflow input. Fixes [#23904](https://github.com/mastra-ai/mastra/issues/23904)
+
+- Fixed `TokenLimiterProcessor` truncation (`strategy: 'truncate'`) splitting UTF-16 surrogate pairs. ([#24096](https://github.com/mastra-ai/mastra/pull/24096))
+
+  Truncated text that ends inside an emoji or other astral character no longer contains a lone surrogate. Lone surrogates are replaced with `U+FFFD`, so the output round-trips through UTF-8 unchanged and strict JSON consumers can reuse truncated messages as history. This matches the repair already applied to workspace tool output.
+
+- Updated dependencies [[`5085475`](https://github.com/mastra-ai/mastra/commit/5085475c0da226e618eb3ee2676d347788c3fb00), [`6c781fd`](https://github.com/mastra-ai/mastra/commit/6c781fda62eb0b0b74d016f188ed0b2db5cfdceb)]:
+  - @mastra/schema-compat@1.3.11-alpha.1
+
 ## 1.68.0-alpha.1
 
 ### Minor Changes

@@ -1,3 +1,4 @@
+import type { DatasetExperiment } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import type { ReviewItem } from '../components/review-item-card';
@@ -11,19 +12,34 @@ type ReviewStatus = 'needs-review' | 'complete';
 export interface ReviewItemsOptions extends ExperimentTargetFilter {
   /** When set, only this experiment's results are loaded; otherwise every experiment in the project. */
   experimentId?: string;
+  /** Explicit source owned by the caller; an empty list disables discovery too. */
+  experiments?: DatasetExperiment[];
+  isLoadingExperiments?: boolean;
 }
 
 /**
  * Loads experiment results with the given review status, across the project, scoped to a target,
  * or scoped to one experiment.
  */
-const useReviewItemsByStatus = (status: ReviewStatus, { experimentId, targetType, targetId }: ReviewItemsOptions) => {
-  const client = useMastraClient();
-  const { data: experimentsData, isLoading: isLoadingExperiments } = useExperimentsForDatasetFilter(undefined, {
+const useReviewItemsByStatus = (
+  status: ReviewStatus,
+  {
+    experimentId,
     targetType,
     targetId,
-  });
-  const experiments = experimentsData?.experiments;
+    experiments: suppliedExperiments,
+    isLoadingExperiments = false,
+  }: ReviewItemsOptions,
+) => {
+  const client = useMastraClient();
+  const hasSuppliedExperiments = suppliedExperiments !== undefined;
+  const { data: experimentsData, isLoading: isDiscoveringExperiments } = useExperimentsForDatasetFilter(
+    undefined,
+    { targetType, targetId },
+    { enabled: !hasSuppliedExperiments },
+  );
+  const experiments = hasSuppliedExperiments ? suppliedExperiments : experimentsData?.experiments;
+  const isLoadingSource = hasSuppliedExperiments ? isLoadingExperiments : isDiscoveringExperiments;
   const scopedExperiments = experimentId ? experiments?.filter(exp => exp.id === experimentId) : experiments;
 
   const query = useQuery({
@@ -31,9 +47,10 @@ const useReviewItemsByStatus = (status: ReviewStatus, { experimentId, targetType
       'review-items',
       status,
       experimentId ?? 'all',
-      targetType || 'all',
-      targetId || 'all',
-      scopedExperiments?.map(e => e.id),
+      hasSuppliedExperiments ? 'supplied' : 'discovered',
+      hasSuppliedExperiments ? undefined : targetType || 'all',
+      hasSuppliedExperiments ? undefined : targetId || 'all',
+      scopedExperiments?.map(e => [e.datasetId, e.id]),
     ],
     queryFn: async () => {
       if (!scopedExperiments || scopedExperiments.length === 0) return [] as ReviewItem[];
@@ -75,7 +92,7 @@ const useReviewItemsByStatus = (status: ReviewStatus, { experimentId, targetType
 
   // The results query is disabled until experiments arrive, so its own `isLoading`
   // is false during that window; surface the upstream load to avoid an empty flash.
-  return { ...query, isLoading: query.isLoading || isLoadingExperiments };
+  return { ...query, isLoading: query.isLoading || isLoadingSource };
 };
 
 /** Loads persisted review items (status='needs-review'), project-wide, per target or for one experiment. */

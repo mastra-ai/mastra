@@ -1406,7 +1406,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
             mode: 'stream',
             requireApprovalMetadata: {
               ...lastRequireApproval,
-              [chunk.payload.toolName]: {
+              [chunk.payload.toolCallId]: {
                 toolCallId: chunk.payload.toolCallId,
                 toolName: chunk.payload.toolName,
                 args: chunk.payload.args as Record<string, unknown>,

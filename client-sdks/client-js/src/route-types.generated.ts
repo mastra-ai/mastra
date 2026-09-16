@@ -147,7 +147,7 @@ type Shared_Auxiliary_647 =
           };
     };
 
-type Shared_Auxiliary_1168 =
+type Shared_Auxiliary_1169 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -192,19 +192,19 @@ type Shared_Auxiliary_1168 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1168[];
+      args: Shared_Auxiliary_1169[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1168;
+      arg: Shared_Auxiliary_1169;
     };
 
-type Shared_Auxiliary_1308 = {
+type Shared_Auxiliary_1309 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1308[] | undefined;
+  children?: Shared_Auxiliary_1309[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -2645,7 +2645,7 @@ type Shared_Type_111 = {
       }
     | undefined;
   steps: Shared_Type_106;
-  predicates: Shared_Auxiliary_1168[];
+  predicates: Shared_Auxiliary_1169[];
 };
 
 type Shared_Type_112 = {
@@ -2668,7 +2668,7 @@ type Shared_Type_112 = {
         description?: string | undefined;
       };
   loopType: 'dowhile' | 'dountil';
-  predicate: Shared_Auxiliary_1168;
+  predicate: Shared_Auxiliary_1169;
 };
 
 type Shared_Type_113 =
@@ -3022,7 +3022,7 @@ type Shared_Type_126 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1308[] | undefined;
+  files?: Shared_Auxiliary_1309[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -9242,6 +9242,14 @@ export type PostObservabilityTracesQuery_Response =
       traces: {
         traceId: string;
         rootSpanId: string;
+        name: string;
+        entityId: string | null;
+        parentSpanId: string | null;
+        createdAt: string;
+        metadata: {
+          [key: string]: unknown;
+        } | null;
+        inputPreview: string | null;
         threadId: string | null;
         resourceId: string | null;
         startedAt: string;
@@ -12875,11 +12883,24 @@ export type PostMcpServerIdToolsToolIdExecute_PathParams = GetMcpServerIdToolsTo
 
 export type PostMcpServerIdToolsToolIdExecute_Body = {
   data?: unknown | undefined;
+  /** Answer for a tool that reported `status: "suspended"`; 2026-07-28 servers only */
+  resumeData?: unknown | undefined;
+  /** The `suspendPayload` from the suspended response, echoed back with `resumeData` */
+  suspendPayload?: unknown | undefined;
 };
 
-export type PostMcpServerIdToolsToolIdExecute_Response = {
-  result: unknown;
-};
+export type PostMcpServerIdToolsToolIdExecute_Response =
+  | {
+      result: unknown;
+    }
+  | {
+      /** The tool paused and asked for input; it did not complete */
+      status: 'suspended';
+      /** What the tool suspended with */
+      suspendPayload: unknown;
+      /** JSON Schema of the input the tool needs to resume */
+      resumeSchema?: unknown | undefined;
+    };
 
 export type PostMcpServerIdToolsToolIdExecute_Request = Simplify<
   (PostMcpServerIdToolsToolIdExecute_PathParams extends never
@@ -17006,7 +17027,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1308[] | undefined;
+  files?: Shared_Auxiliary_1309[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -17064,7 +17085,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1308[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1309[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (

@@ -1,0 +1,87 @@
+[data-composer-tone] {
+  --composer-tone-color: var(--accent1);
+}
+
+.composer-tone-label {
+  --composer-tone-color: var(--neutral4);
+
+  color: var(--composer-tone-color);
+}
+
+[data-composer-tone='green'] {
+  --composer-tone-color: #4ade80;
+}
+
+[data-composer-tone='purple'] {
+  --composer-tone-color: #c4b5fd;
+}
+
+[data-composer-tone='orange'] {
+  --composer-tone-color: #fdba74;
+}
+
+html.light [data-composer-tone='green'] {
+  --composer-tone-color: #087a32;
+}
+
+html.light [data-composer-tone='purple'] {
+  --composer-tone-color: #6d28d9;
+}
+
+html.light [data-composer-tone='orange'] {
+  --composer-tone-color: #8a4400;
+}
+
+.composer-box {
+  --composer-edge: oklch(0% 0 0deg / 18%);
+
+  background-color: var(--surface4);
+}
+
+html.light .composer-box {
+  --composer-edge: transparent;
+
+  background-color: var(--surface3);
+}
+
+.composer-box::before,
+.composer-box::after {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  content: '';
+}
+
+.composer-box::before {
+  background: radial-gradient(
+    200px circle at var(--composer-spotlight-x, 50%) var(--composer-spotlight-y, 50%),
+    color-mix(in srgb, var(--composer-tone-color, var(--accent1)) 5%, transparent),
+    transparent 75%
+  );
+  filter: blur(12px);
+  opacity: var(--composer-spotlight-strength, 0);
+  transition: opacity 200ms;
+}
+
+.composer-box::after {
+  box-shadow: inset 0 0 0 1px var(--composer-edge);
+  mask-image: linear-gradient(to bottom, #000, transparent 45%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-box::before {
+    transition: none;
+  }
+
+  .composer-sending {
+    display: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .composer-box::before,
+  .composer-box::after {
+    display: none;
+  }
+}
