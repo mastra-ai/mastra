@@ -464,7 +464,7 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
           <Button size="xs" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
-          <Button size="xs" variant="primary" onClick={() => step.commitSelection() || step.commitFreeText()}>
+          <Button size="xs" variant="default" onClick={() => step.commitSelection() || step.commitFreeText()}>
             Done
             <Kbd size="xs">{modEnterLabel}</Kbd>
           </Button>

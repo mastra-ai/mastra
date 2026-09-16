@@ -304,7 +304,7 @@ export function FilterBarInput({
                 <div className="border-border1 flex items-center justify-end gap-1 border-t p-1">
                   <Button
                     size="xs"
-                    variant="primary"
+                    variant="default"
                     onMouseDown={e => e.preventDefault()}
                     onClick={() => valueStep.commitSelection() || valueStep.commitFreeText()}
                   >
