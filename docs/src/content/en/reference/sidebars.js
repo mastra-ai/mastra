@@ -430,6 +430,11 @@ const sidebars = {
       items: [
         {
           type: 'doc',
+          id: 'migrations/mcp-v2',
+          label: '@mastra/mcp v1 to v2',
+        },
+        {
+          type: 'doc',
           id: 'migrations/agentnetwork',
           label: 'AgentNetwork to .network()',
         },
@@ -452,11 +457,6 @@ const sidebars = {
           type: 'doc',
           id: 'migrations/network-to-supervisor',
           label: '.network() to Supervisor Agents',
-        },
-        {
-          type: 'doc',
-          id: 'migrations/mcp-v2',
-          label: '@mastra/mcp v1 to v2',
         },
         {
           type: 'category',
