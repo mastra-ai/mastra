@@ -8424,7 +8424,7 @@ export class Agent<
     peer: AgentUpdateThreadPeerOptions;
   }): boolean {
     return agentThreadStreamRuntime.updateThreadPeerAdvertisement(
-      this.#getThreadRuntimeAgent(),
+      this as Agent<any, any, any, any>,
       options,
       this.getPubSub(),
     );

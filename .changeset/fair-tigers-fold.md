@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added support for the active thread owner to refresh advertised agent peer details without reclaiming thread ownership. Updates from other agent instances are rejected, even when they share the same agent id.
+Added support for refreshing advertised agent peer details without reclaiming thread ownership.
 
 ```ts
 const updated = agent.updateThreadPeerAdvertisement({

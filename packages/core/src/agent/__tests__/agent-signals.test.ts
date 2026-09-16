@@ -2352,13 +2352,6 @@ describe('Agent signals', () => {
       model: createTextStreamModel('discovery response'),
       pubsub,
     });
-    const sameIdAgent = new Agent({
-      id: ownerAgent.id,
-      name: 'Same ID Agent',
-      instructions: 'Test',
-      model: createTextStreamModel('same id response'),
-      pubsub,
-    });
     const target = { resourceId: 'updatable-resource', threadId: 'updatable-thread' };
     const claim = await ownerAgent.claimThreadOwnership({
       ...target,
@@ -2374,7 +2367,6 @@ describe('Agent signals', () => {
     expect(discoveryAgent.updateThreadPeerAdvertisement({ ...target, peer: { title: 'Unauthorized rename' } })).toBe(
       false,
     );
-    expect(sameIdAgent.updateThreadPeerAdvertisement({ ...target, peer: { title: 'Same ID rename' } })).toBe(false);
 
     await expect(discoveryAgent.discoverThreadPeers()).resolves.toEqual([
       expect.objectContaining({
@@ -2398,34 +2390,6 @@ describe('Agent signals', () => {
 
     claim.unsubscribe();
     await expect(discoveryAgent.discoverThreadPeers({ timeoutMs: 10 })).resolves.toEqual([]);
-  });
-
-  it('updates peer advertisements through the registered thread-runtime agent', async () => {
-    const pubsub = new EventEmitterPubSub();
-    const agent = new Agent({
-      id: 'wrapped-peer-agent',
-      name: 'Wrapped Peer Agent',
-      instructions: 'Test',
-      model: createTextStreamModel('wrapped response'),
-      pubsub,
-    });
-    const wrapper = { id: agent.id } as unknown as Agent<any, any, any, any>;
-    agent.__setThreadRuntimeAgent(wrapper);
-    const target = { resourceId: 'wrapped-resource', threadId: 'wrapped-thread' };
-    const claim = await agent.claimThreadOwnership({
-      ...target,
-      peer: { label: 'Wrapped peer', title: 'Initial title' },
-    });
-
-    expect(agent.updateThreadPeerAdvertisement({ ...target, peer: { title: 'Updated title' } })).toBe(true);
-    await expect(agent.discoverThreadPeers()).resolves.toEqual([
-      expect.objectContaining({
-        id: 'wrapped-peer-agent:wrapped-resource:wrapped-thread',
-        title: 'Updated title',
-      }),
-    ]);
-
-    claim.unsubscribe();
   });
 
   it('settles peer discovery without waiting for pubsub unsubscribe', async () => {
