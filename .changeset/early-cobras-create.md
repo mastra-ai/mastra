@@ -2,11 +2,9 @@
 '@mastra/mcp': major
 ---
 
-Rebuilt `@mastra/mcp` on the MCP 2026-07-28 revision. Servers serve that revision only, and every request is self-contained: there is no `initialize` handshake, session header, `ping`, or standalone HTTP+SSE transport. Streamable HTTP responses still stream as Server-Sent Events. Requires `@mastra/core` 1.68 or newer.
+Rebuilt `@mastra/mcp` on the MCP 2026-07-28 revision. Servers serve that revision only, and every request is self-contained: there is no `initialize` handshake, session header, `ping`, or standalone HTTP+SSE transport. Streamable HTTP responses still stream as Server-Sent Events. Requires `@mastra/core` 1.68 or newer. The full migration guide is at `/reference/migrations/mcp-v2`.
 
-**Suspend and resume instead of server-initiated elicitation.** A tool that needs input from the caller calls `context.suspend(payload)`; the server returns `input_required` with a signed `requestState`, and when the caller answers, the tool runs again with `context.resumeData` (validated against `resumeSchema`) and `context.suspendPayload`. The same `createTool` definition works for agents, workflows and MCP. Resource and prompt callbacks receive `suspend`, `resumeData` and `suspendPayload` too. `context.mcp` keeps `extra`, `log` and `progress`; `elicitation.sendRequest`, `extra.sendRequest` and `extra.sendNotification` throw on a 2.0 server. `server.executeTool()` and the REST execute route report `{ status: 'suspended', suspendPayload, resumeSchema }` for a suspended tool and `{ status: 'completed', output }` otherwise.
-
-The primary migration is replacing each awaited `context.mcp.elicitation.sendRequest()` with a suspension, and on the client replacing `mcp.elicitation.onRequest()` with a per-server `inputRequests` handler:
+**Migration.** A tool that needs input from the caller no longer awaits `context.mcp.elicitation.sendRequest()`. It calls `context.suspend(payload)` and returns; the server answers `input_required`, and when the caller replies the tool runs again with `context.resumeData` and `context.suspendPayload`. On the client, `mcp.elicitation.onRequest()` becomes a per-server `inputRequests` handler.
 
 ```diff
   execute: async ({ orderId }, context) => {
@@ -24,8 +22,6 @@ The primary migration is replacing each awaited `context.mcp.elicitation.sendReq
 +   servers: { returns: { url, inputRequests: async ({ key, params }) => askUser(key, params) } },
 + });
 ```
-
-The full picture, including the server-side `requestState` key:
 
 ```ts
 import { createTool } from '@mastra/core/tools';
@@ -48,6 +44,7 @@ const server = new MCPServer({
   name: 'Returns Desk',
   version: '2.0.0',
   tools: { bookDelivery },
+  // Signs the continuation state; share it across every process that may answer a resumed round.
   requestState: { key: process.env.MCP_REQUEST_STATE_KEY! },
 });
 
@@ -55,6 +52,7 @@ const client = new MCPClient({
   servers: {
     returns: {
       url: new URL('https://returns.example.com/mcp'),
+      // Called once per embedded request per round; return accept, decline or cancel.
       inputRequests: async ({ key, params }) => {
         if (params.mode !== 'form') return { action: 'decline' };
         return { action: 'accept', content: await promptUser(key, params.requestedSchema) };
@@ -64,22 +62,17 @@ const client = new MCPClient({
 });
 ```
 
-The server keeps no memory between rounds. What it needs to resume (method, tool name, a hash of the original arguments, the caller (token subject, mapped user id or bearer token, in that order), the round number and your `suspendPayload`) is signed with an HMAC key and travels as the opaque `requestState` string, which the client echoes back unchanged. A tampered, expired or foreign `requestState` is rejected with `-32602` before the tool runs. Set `requestState: { key }` from a secret (32 bytes or more) whenever more than one process may answer a continuation, for example serverless or multiple replicas. Without it the server signs with a random per-process key, so a round can only be resumed on the process that started it. `ttlSeconds` (default 600) bounds how long a round stays answerable. The state is signed, not encrypted, so keep `suspendPayload` to identifiers rather than secrets.
+The server keeps nothing between rounds: what it needs to resume (method, tool, argument hash, caller, round and your `suspendPayload`) travels in the signed `requestState` the client echoes back, so a tampered, expired or foreign state is rejected before the tool runs. Without `requestState.key` the server signs with a per-process key and a round can only be resumed on the process that started it.
 
-**Client negotiation.** `MCPClient` speaks 2026-07-28 and by default probes each server with `server/discover`, falling back to the legacy `initialize` handshake for servers that have not upgraded. Per-server `protocolVersion` pins `'2026-07-28'` (fail on legacy servers) or `'legacy'` (skip the probe); `getServerProtocolVersions()` reports what was negotiated. On a legacy connection the shared verbs work while resource subscriptions, list-changed handlers and embedded input requests throw. `elicitation.onRequest()` is removed.
+**Also changed**
 
-**Answering `input_required`.** When a server suspends, `MCPClient` calls the per-server `inputRequests` handler once for each embedded request with `{ key, params, signal }`: `key` is the name the server filed the request under, `params` is the elicitation request (`mode: 'form'` with a flat `requestedSchema`, or `mode: 'url'`), and `signal` aborts if the originating call is cancelled. Return `{ action: 'accept', content }` with content matching the schema, or `{ action: 'decline' }` / `{ action: 'cancel' }` to end the call with an error result. The client retries the original `tools/call`, `resources/read` or `prompts/get` with the answers and the echoed `requestState`; the server may suspend again for another round, and only that round's requests are passed to the handler. Without an `inputRequests` handler the client doesn't advertise the `elicitation` capability and an `input_required` result fails the call.
+- `MCPClient` probes each server with `server/discover` and falls back to the legacy handshake unless `protocolVersion` pins `'2026-07-28'` or `'legacy'`; `getServerProtocolVersions()` reports the outcome. Legacy connections keep the shared verbs but not subscriptions, list-changed handlers or input requests.
+- `server.executeTool()` and the REST execute route return `{ status: 'suspended', suspendPayload, resumeSchema }` or `{ status: 'completed', output }`, and answer invalid input with an error instead of a completed result.
+- `context.mcp` keeps `extra`, `log` and `progress`; `elicitation.sendRequest`, `extra.sendRequest` and `extra.sendNotification` throw on a 2.0 server.
+- Log levels are requested per request through the `io.modelcontextprotocol/logLevel` metadata key.
+- `resources.subscribe` and `resources.unsubscribe` keep their signatures but ride one `subscriptions/listen` stream per server.
+- Tool schemas are advertised and validated as JSON Schema 2020-12, with untrusted schemas bounded to 128 levels and 10,000 nodes.
+- Server definitions accept a `traceContext` provider; received W3C trace fields are available to tools as `requestContext.get('traceContext')`.
+- `MCPOAuthClientProvider` requires exactly one of `clientInformation` or `clientMetadataUrl` and never registers dynamically.
 
-**Logging.** Log levels are requested per request through the `io.modelcontextprotocol/logLevel` metadata key (the client sends it when `enableServerLogs` is on, at `serverLogLevel`); `logging/setLevel`, `sendLoggingMessage()` and `getServer()` are removed.
-
-**Subscriptions.** `resources.subscribe` and `resources.unsubscribe` keep their signatures but ride one `subscriptions/listen` stream per server together with list-changed handlers. The client replaces the stream when the set changes, restores it after a reconnect and closes it on disconnect. A URI the server declines rejects and leaves earlier subscriptions in place. The wire-level `resources/subscribe` method is gone.
-
-**Schemas.** Tool schemas are advertised as JSON Schema 2020-12 with the dialect declared. The client treats undeclared schemas as 2020-12, validates structured results for live and cache-hydrated tools through the configured SDK validator, bounds untrusted catalogue schemas to 128 nested levels and 10,000 nodes, and round-trips `null`, scalar and tuple `structuredContent` unchanged.
-
-**Trace context.** Server definitions accept a `traceContext` provider whose W3C `traceparent`, `tracestate` and `baggage` are sent as request `_meta`; `MCPServer` exposes the received values to tools as `requestContext.get('traceContext')` and to `context.mcp._meta`, request-scoped and never used for authorization.
-
-**Auth.** `MCPOAuthClientProvider` requires a pre-registered `clientInformation` or a `clientMetadataUrl` (Client ID Metadata Document) and never performs dynamic client registration; `registerClient` and `OAuthClientRegistrationError` are no longer exported.
-
-**Removed options and surfaces:** the server `protocolVersion` option, `connectSSE`, `handleServerlessRequest`, `sessionId`, `sessionIds`, `reconnectionOptions`, `eventSourceInit`, the `roots` option with `setRoots()` / `sendRootsListChanged()`, `MastraPrompt` (use `Prompt`), and the session/serverless flags of `startHTTP`. `startSSE` and `startHonoSSE` stay on the shared `MCPServerBase` for 1.x servers and reject on a 2.0 server. `MCPServer` and `MCPClientServerProxy` set `mcpVersion` to `2` so registries can tell the two apart without a separate base class.
-
-`@mastra/mcp` 1.x remains the path for serving clients that have not adopted 2026-07-28 and keeps working with current `@mastra/core`. See the migration guide at `/reference/migrations/mcp-v2` for before-and-after examples.
+**Removed:** the server `protocolVersion` option, `startSSE`, `startHonoSSE`, `connectSSE`, `handleServerlessRequest`, `sessionId`, `sessionIds`, `reconnectionOptions`, `eventSourceInit`, `elicitation` actions, `roots`, `sampling`, `logging/setLevel`, `sendLoggingMessage()`, `getServer()`, `resources/subscribe`, `registerClient` and `OAuthClientRegistrationError`.
