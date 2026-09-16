@@ -647,16 +647,19 @@ function modelSupportsCapability(modelRouterId: string, dimension: CapabilityDim
   // Positive direct match wins immediately.
   if (directSupport === true) return true;
 
-  // The provider actually serving the request is authoritative. If it lists the
-  // model at all, its `false` stands — a gateway can lack capabilities the
-  // upstream provider offers directly (OpenRouter has no image-capable endpoint
-  // for `deepseek/deepseek-v4-flash` even though DeepSeek's own API does).
+  // The provider actually serving the request is authoritative. If it publishes
+  // capability data for this dimension and lists the model, its `false` stands —
+  // a gateway can lack capabilities the upstream provider offers directly
+  // (OpenRouter has no image-capable endpoint for `deepseek/deepseek-v4-flash`
+  // even though DeepSeek's own API does).
   //
-  // Only when the gateway doesn't enumerate the nested model anywhere (e.g.
-  // `openrouter/anthropic/claude-sonnet-4-6` missing from OpenRouter's data) do
-  // we fall back to the underlying provider's capability file.
+  // Fall back to the underlying provider's capability file when the gateway
+  // never answered: either it has no data for this dimension at all (Netlify and
+  // custom gateways only implement `fetchProviders()`), or it doesn't enumerate
+  // the nested model (e.g. `openrouter/anthropic/claude-sonnet-4-6`).
+  const gatewayAnswered = directSupport !== undefined && providerListsModel(provider, modelId);
   const nestedProviderDelimiter = modelId.indexOf('/');
-  if (nestedProviderDelimiter !== -1 && !providerListsModel(provider, modelId)) {
+  if (nestedProviderDelimiter !== -1 && !gatewayAnswered) {
     const nestedProvider = modelId.substring(0, nestedProviderDelimiter);
     const nestedModelId = modelId.substring(nestedProviderDelimiter + 1);
     if (nestedProvider && nestedModelId) {
