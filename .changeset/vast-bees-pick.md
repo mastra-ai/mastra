@@ -2,22 +2,18 @@
 '@mastra/temporal': patch
 ---
 
-Fixed Temporal workflow runs so unsupported streaming, resume, restart, and time-travel APIs fail clearly instead of executing with the local workflow engine.
+Fixed Temporal workflow runs so unsupported streaming, resume, restart, and time-travel APIs now throw a clear error instead of silently executing with the local workflow engine.
 
-**Before**
-
-```ts
-await run.stream({ inputData });
-```
-
-Unsupported APIs could execute through the local workflow engine instead of Temporal.
-
-**After**
+Temporal runs currently support `start()`, `startAsync()`, and `cancel()`. If `stream()` was used only to execute a workflow and wait for its result, use `start()` instead:
 
 ```ts
 const result = await run.start({ inputData });
-// Or start without waiting for completion:
+```
+
+Use `startAsync()` to submit a workflow without waiting for completion:
+
+```ts
 const { runId } = await run.startAsync({ inputData });
 ```
 
-Replace unsupported run APIs with `start()` or `startAsync()` so execution is delegated to Temporal.
+There is currently no Temporal-backed replacement for incremental workflow streaming, resume, restart, or time travel.
