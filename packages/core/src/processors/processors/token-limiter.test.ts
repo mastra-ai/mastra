@@ -753,6 +753,47 @@ describe('TokenLimiterProcessor', () => {
       expect((result[0].content.parts[0] as TextPart).text).toBe(originalText);
     });
 
+    it('should not emit unpaired surrogates when truncating multi-byte text', async () => {
+      // A truncation boundary landing inside an emoji's surrogate pair must not
+      // leave a lone surrogate in the output (invalid UTF-16).
+      for (const limit of [1, 2, 3, 4, 8, 16]) {
+        processor = new TokenLimiterProcessor({ limit });
+        const messages = [createTestMessage('😀'.repeat(20))];
+
+        const result = await processor.processOutputResult({ messages, abort: mockAbort });
+        const text = (result[0].content.parts[0] as TextPart).text;
+
+        // No lone surrogate code unit remains.
+        expect(/[\uD800-\uDFFF]/u.test(text.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/gu, ''))).toBe(false);
+        // Output round-trips losslessly through UTF-8.
+        expect(Buffer.from(text, 'utf8').toString('utf8')).toBe(text);
+      }
+    });
+
+    it('should not introduce replacement characters when truncating ASCII', async () => {
+      processor = new TokenLimiterProcessor({ limit: 10 });
+      const messages = [
+        createTestMessage('This is a very long message that will definitely exceed the token limit of 10 tokens'),
+      ];
+
+      const result = await processor.processOutputResult({ messages, abort: mockAbort });
+      const truncatedText = (result[0].content.parts[0] as TextPart).text;
+
+      expect(truncatedText.length).toBeGreaterThan(0);
+      expect(truncatedText).not.toContain('\uFFFD');
+    });
+
+    it('should preserve complete surrogate pairs within the token limit', async () => {
+      processor = new TokenLimiterProcessor({ limit: 200 });
+      const originalText = '😀😀😀';
+      const messages = [createTestMessage(originalText)];
+
+      const result = await processor.processOutputResult({ messages, abort: mockAbort });
+
+      expect((result[0].content.parts[0] as TextPart).text).toBe(originalText);
+      expect((result[0].content.parts[0] as TextPart).text).not.toContain('\uFFFD');
+    });
+
     it('should handle non-assistant messages', async () => {
       processor = new TokenLimiterProcessor({ limit: 10 });
 
