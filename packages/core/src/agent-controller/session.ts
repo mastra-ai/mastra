@@ -398,6 +398,7 @@ export interface ThreadDataStore {
   /** Clone a thread (and its messages) via the host's memory, returning the new thread. */
   cloneThread(input: {
     sourceThreadId: string;
+    newThreadId?: string;
     resourceId: string;
     title?: string;
     metadata?: Record<string, unknown>;
@@ -1191,11 +1192,13 @@ export class SessionThread {
 
   async #clone({
     sourceThreadId,
+    newThreadId,
     title,
     resourceId,
     requestContext,
   }: {
     sourceThreadId?: string;
+    newThreadId?: string;
     title?: string;
     resourceId?: string;
     requestContext?: RequestContext;
@@ -1210,6 +1213,7 @@ export class SessionThread {
     }
     return this.#cloneThread({
       sourceThreadId: sourceId,
+      newThreadId,
       resourceId: resourceId ?? this.#owner.identity.getResourceId(),
       title,
       requestContext,
@@ -1218,12 +1222,14 @@ export class SessionThread {
 
   async #cloneThread({
     sourceThreadId,
+    newThreadId,
     resourceId,
     title,
     metadata,
     requestContext,
   }: {
     sourceThreadId: string;
+    newThreadId?: string;
     resourceId: string;
     title?: string;
     metadata?: Record<string, unknown>;
@@ -1238,6 +1244,7 @@ export class SessionThread {
     const ownerId = session.identity.getOwnerId();
     const clonedThread = await store.cloneThread({
       sourceThreadId,
+      newThreadId,
       resourceId,
       title,
       metadata: { ...metadata, ownerId, createdBy: ownerId },

@@ -27,6 +27,12 @@ import { filterSchema, includeSchema, messageOrderBySchema } from '../schemas/me
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { shareStreamChunk } from '../server-adapter/serialize';
 import { handleError } from './error';
+import {
+  authorizeMemoryThreadAccess,
+  authorizeThreadBranchTree,
+  createMemoryThreadIfAbsent,
+  inspectVisibleMemoryThread,
+} from './thread-branching';
 import { enforceThreadAccess } from './utils';
 
 /**
@@ -71,7 +77,11 @@ const RESERVED_THREAD_METADATA_KEYS = {
 } satisfies Record<ReservedThreadMetadataKey, true>;
 
 function isReservedThreadMetadataKey(key: string): boolean {
-  return Object.hasOwn(RESERVED_THREAD_METADATA_KEYS, key) || key.startsWith('modeModelId_');
+  return (
+    key === '__mastra_thread_branch' ||
+    Object.hasOwn(RESERVED_THREAD_METADATA_KEYS, key) ||
+    key.startsWith('modeModelId_')
+  );
 }
 
 function storageTagFilter(tags: Record<string, string>) {
@@ -128,6 +138,7 @@ async function resolveSessionResourceId(controller: AgentController<any>, sessio
  * arrives before the session was started fails instead of landing on a thread nobody reads.
  */
 async function getSession(
+  mastra: any,
   controller: AgentController<any>,
   sessionId: string,
   requestContext?: RequestContext,
@@ -594,6 +605,9 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, controllerId, resourceId, sessionId, tags, threadId, requestContext }) => {
     try {
+      if (tags && Object.keys(tags).some(isReservedThreadMetadataKey)) {
+        throw new HTTPException(400, { message: 'Session tags contain reserved metadata.' });
+      }
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       await controller.init();
       const id = (sessionId ?? resourceId)!;
@@ -1294,10 +1308,22 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
       const ds = session.displayState.get();
       const threadId = requestedThreadId ?? session.thread.getId() ?? undefined;
       const storage = mastra.getStorage();
-      if (requestedThreadId) {
-        const memory = await storage?.getStore('memory');
-        const thread = await memory?.getThreadById({ threadId: requestedThreadId, resourceId });
-        if (!thread) throw new HTTPException(404, { message: `thread "${requestedThreadId}" not found` });
+      if (threadId) {
+        try {
+          await authorizeControllerThreadAccess({
+            mastra,
+            controller,
+            session,
+            requestContext,
+            threadId,
+            resourceId,
+          });
+        } catch (error) {
+          if (error instanceof HTTPException && error.status === 404) {
+            throw new HTTPException(404, { message: `thread "${threadId}" not found` });
+          }
+          throw error;
+        }
       }
       const threadState = threadId ? await storage?.getStore('threadState') : undefined;
       const storedTasks = threadId ? await threadState?.getState<unknown>({ threadId, type: 'task' }) : undefined;
@@ -1392,10 +1418,28 @@ export const LIST_AGENT_CONTROLLER_ACTIVE_RUNS_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
-  handler: async ({ mastra, controllerId }) => {
+  handler: async ({ mastra, controllerId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      return { runs: controller.listActiveThreadRuns() };
+      const runs = [];
+      for (const run of controller.listActiveThreadRuns()) {
+        try {
+          await authorizeControllerThreadAccess({
+            mastra,
+            controller,
+            requestContext,
+            threadId: run.threadId,
+            resourceId: run.resourceId ?? '',
+          });
+          runs.push(run);
+        } catch (error) {
+          const id = error && typeof error === 'object' ? (error as { id?: unknown }).id : undefined;
+          if ((!(error instanceof HTTPException) || error.status !== 404) && id !== 'BRANCH_NOT_FOUND') {
+            throw error;
+          }
+        }
+      }
+      return { runs };
     } catch (error) {
       return handleError(error, 'error listing active controller runs');
     }
@@ -1465,11 +1509,11 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
       // are ignored as filter tags so callers can't match on session bookkeeping.
       const scoped =
         tagEntries.length > 0
-          ? threads.filter(t => {
+          ? accessibleThreads.filter(t => {
               const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
               return tagEntries.every(([key, value]) => metadata[key] === value);
             })
-          : threads;
+          : accessibleThreads;
       const toTime = (t: { updatedAt?: Date; createdAt?: Date }) => (t.updatedAt ?? t.createdAt)?.getTime() ?? 0;
       const sorted = [...scoped].sort((a, b) => toTime(b) - toTime(a));
       const limited = normalizedLimit !== undefined ? sorted.slice(0, normalizedLimit) : sorted;
@@ -1730,23 +1774,21 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
       }
       await enforceThreadAccess({
         mastra,
+        controller,
         requestContext,
         threadId,
-        thread,
-        effectiveResourceId: resourceId,
+        resourceId,
       });
 
-      // Read-only route: delegate storage retrieval to the controller without
-      // constructing a Session, which would initialize the workspace/sandbox.
       const isLegacyLimitQuery = limit !== undefined;
-      const result = await controller.queryThreadMessages(
+      const query =
         limit !== undefined
           ? {
               threadId,
               resourceId,
               perPage: limit,
               page: page ?? 0,
-              orderBy: { field: 'createdAt', direction: 'DESC' as const },
+              orderBy: { field: 'createdAt' as const, direction: 'DESC' as const },
             }
           : {
               threadId,
@@ -1756,8 +1798,8 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
               ...(orderBy !== undefined ? { orderBy } : {}),
               ...(include !== undefined ? { include } : {}),
               ...(filter !== undefined ? { filter } : {}),
-            },
-      );
+            };
+      const result = memory ? await memory.recall(query) : await controller.queryThreadMessages(query);
       const messages = isLegacyLimitQuery ? result.messages.reverse() : result.messages;
 
       return {

@@ -8,6 +8,7 @@ import type {
   ThreadBranchHistoryOutput,
 } from './branching';
 import { MASTRA_THREAD_BRANCH_METADATA_KEY } from './branching';
+import { inspectThreadBranchState } from './internal';
 import { MockMemory } from './mock';
 
 describe('MastraMemory thread branching contract', () => {
@@ -30,6 +31,18 @@ describe('MastraMemory thread branching contract', () => {
 
     const thread = await memory.createThread({ resourceId: 'resource', threadId: 'legacy-thread' });
     expect(thread.id).toBe('legacy-thread');
+  });
+
+  it('fails closed when a branching implementation omits physical branch-state inspection', async () => {
+    class IncompleteBranchingMemory extends MockMemory {
+      override get supportsThreadBranching() {
+        return true;
+      }
+    }
+
+    await expect(inspectThreadBranchState(new IncompleteBranchingMemory(), 'thread')).rejects.toMatchObject({
+      id: 'BRANCHING_UNSUPPORTED',
+    });
   });
 
   it('exports the exact public branch type shapes', () => {

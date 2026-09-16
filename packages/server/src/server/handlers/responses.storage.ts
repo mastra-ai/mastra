@@ -1,8 +1,10 @@
 import type { Agent, MastraDBMessage } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
-import type { StorageThreadType } from '@mastra/core/memory';
+import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
+import { inspectThreadBranchState, persistGeneratedMessages } from '@mastra/core/memory/internal';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
+import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import type {
   ResponseObject,
@@ -12,6 +14,7 @@ import type {
   ResponseUsage,
 } from '../schemas/responses';
 import { listAgentsVisibleTo } from './agent-access';
+import { authorizeMemoryThreadAccess, throwThreadBranchNotFound } from './thread-branching';
 import { getEffectiveResourceId, validateThreadOwnership } from './utils';
 
 export type ThreadExecutionContext = {
@@ -51,6 +54,7 @@ export type ResponseTurnRecord = {
   message: MastraDBMessage;
   messages: MastraDBMessage[];
   thread: StorageThreadType;
+  memory: MastraMemory;
   memoryStore: MemoryStorage;
 };
 
@@ -175,25 +179,22 @@ export async function findResponseTurnRecord({
   agent,
   responseId,
   requestContext,
+  permission = MastraFGAPermissions.MEMORY_READ,
 }: {
   agent: Agent<any, any, any, any>;
   responseId: string;
   requestContext: RequestContext;
+  permission?: string;
 }): Promise<ResponseTurnRecord | null> {
+  const memory = await agent.getMemory({ requestContext });
   const memoryStore = await getAgentMemoryStore({ agent, requestContext });
-  if (!memoryStore) {
+  if (!memory || !memoryStore) {
     return null;
   }
 
-  const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
   const { messages: matchedMessages } = await memoryStore.listMessagesById({ messageIds: [responseId] });
   const message = matchedMessages[0];
   if (!message || message.role !== 'assistant') {
-    return null;
-  }
-
-  const metadata = readResponseTurnRecordMetadata(message);
-  if (!metadata || metadata.agentId !== agent.id) {
     return null;
   }
 
@@ -202,25 +203,51 @@ export async function findResponseTurnRecord({
     return null;
   }
 
-  await validateThreadOwnership(thread, effectiveResourceId);
+  const mastra = agent.getMastraInstance();
+  if (!mastra) {
+    return null;
+  }
+  await authorizeMemoryThreadAccess({
+    mastra,
+    requestContext,
+    memory,
+    thread,
+    effectiveResourceId: getEffectiveResourceId(requestContext, undefined),
+    permission,
+  });
+
+  const metadata = readResponseTurnRecordMetadata(message);
+  if (!metadata || metadata.agentId !== agent.id) {
+    return null;
+  }
+
   const messageIds = metadata.messageIds.length > 0 ? metadata.messageIds : [message.id];
-  const { messages: responseMessages } = await memoryStore.listMessagesById({ messageIds });
-  const messagesById = new Map(responseMessages.map(storedMessage => [storedMessage.id, storedMessage] as const));
+  const { messages: reachableMessages } = await memory.recall({
+    threadId: thread.id,
+    resourceId: thread.resourceId,
+    perPage: false,
+  });
+  const messagesById = new Map(reachableMessages.map(storedMessage => [storedMessage.id, storedMessage] as const));
   const orderedMessages = messageIds
     .map(messageId => messagesById.get(messageId))
     .filter((storedMessage): storedMessage is MastraDBMessage => Boolean(storedMessage));
+  if (orderedMessages.length !== messageIds.length || !messagesById.has(message.id)) {
+    return null;
+  }
 
-  return { metadata, message, messages: orderedMessages, thread, memoryStore };
+  return { metadata, message, messages: orderedMessages, thread, memory, memoryStore };
 }
 
 export async function findResponseTurnRecordAcrossAgents({
   mastra,
   responseId,
   requestContext,
+  permission = MastraFGAPermissions.MEMORY_READ,
 }: {
   mastra: Mastra | undefined;
   responseId: string;
   requestContext: RequestContext;
+  permission?: string;
 }): Promise<ResponseTurnRecord | null> {
   if (!mastra) {
     return null;
@@ -228,7 +255,7 @@ export async function findResponseTurnRecordAcrossAgents({
 
   const agents = Object.values(listAgentsVisibleTo(mastra.listAgents(), requestContext)) as Agent<any, any, any, any>[];
   for (const agent of agents) {
-    const match = await findResponseTurnRecord({ agent, responseId, requestContext });
+    const match = await findResponseTurnRecord({ agent, responseId, requestContext, permission });
     if (match) {
       return match;
     }
@@ -239,6 +266,7 @@ export async function findResponseTurnRecordAcrossAgents({
 
 export type ConversationThreadRecord = {
   thread: StorageThreadType;
+  memory: MastraMemory;
   memoryStore: MemoryStorage;
 };
 
@@ -259,18 +287,20 @@ export async function findConversationThreadAcrossAgents({
   const agents = Object.values(listAgentsVisibleTo(mastra.listAgents(), requestContext)) as Agent<any, any, any, any>[];
 
   for (const agent of agents) {
+    const memory = await agent.getMemory({ requestContext });
     const memoryStore = await getAgentMemoryStore({ agent, requestContext });
-    if (!memoryStore) {
+    if (!memory || !memoryStore) {
       continue;
     }
 
-    const thread = await memoryStore.getThreadById({ threadId: conversationId });
-    if (!thread) {
-      continue;
-    }
+    const state = await inspectThreadBranchState(memory, conversationId);
+    if (state.state === 'pending') throwThreadBranchNotFound();
+    if (state.state === 'absent') continue;
+    const thread = await memory.getThreadById({ threadId: conversationId });
+    if (!thread) throwThreadBranchNotFound();
 
     await validateThreadOwnership(thread, effectiveResourceId);
-    return { thread, memoryStore };
+    return { thread, memory, memoryStore };
   }
 
   return null;
@@ -776,12 +806,14 @@ export async function resolveResponseTurnMessagesForStorage({
  * the Responses object from thread-backed storage.
  */
 export async function persistResponseTurnRecord({
+  memory,
   memoryStore,
   responseId,
   metadata,
   threadContext,
   messages,
 }: {
+  memory?: MastraMemory | null;
   memoryStore: MemoryStorage | null;
   responseId: string;
   metadata: ResponseTurnRecordMetadata;
@@ -858,11 +890,23 @@ export async function persistResponseTurnRecord({
     (message, index) => index === storedMessageIndex || !isEmptyAssistantMessage(message),
   );
 
-  await memoryStore.saveMessages({ messages: savedMessages });
+  if (memory) {
+    await persistGeneratedMessages(
+      memory,
+      { messages: savedMessages },
+      savedMessages.map(message => message.id),
+    );
+  } else {
+    await memoryStore.saveMessages({ messages: savedMessages });
+  }
 
   const deleteMessageIds = [...new Set([...staleMessageIds, ...droppedSupersededMessageIds])];
   if (deleteMessageIds.length > 0) {
-    await memoryStore.deleteMessages(deleteMessageIds);
+    if (memory) {
+      await memory.deleteMessages(deleteMessageIds);
+    } else {
+      await memoryStore.deleteMessages(deleteMessageIds);
+    }
   }
 }
 
@@ -879,5 +923,5 @@ export async function deleteResponseTurnRecord({
       ? responseTurnRecord.messages.map(message => message.id)
       : [responseTurnRecord.message.id];
 
-  await responseTurnRecord.memoryStore.deleteMessages(messageIds);
+  await responseTurnRecord.memory.deleteMessages(messageIds);
 }

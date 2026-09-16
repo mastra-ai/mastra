@@ -1847,10 +1847,12 @@ describe('A2A Handler', () => {
           metadata: { resourceId: 'test-agent' },
           status: {
             message: {
+              contextId: expect.any(String),
               kind: 'message',
               messageId: expect.any(String),
               parts: [{ kind: 'text', text: 'Generating response...' }],
               role: 'agent',
+              taskId: expect.any(String),
             },
             state: 'working',
             timestamp: '2025-05-08T11:47:38.458Z',
@@ -3225,7 +3227,9 @@ describe('A2A Handler', () => {
           metadata: undefined,
           status: {
             message: {
+              contextId: 'test-session-id',
               messageId: expect.any(String),
+              taskId: 'test-task-id',
               parts: [
                 {
                   text: 'Task cancelled by request.',
@@ -4248,7 +4252,7 @@ describe('A2A Handler', () => {
       await mockTaskStore.save({ agentId: 'test-agent', data: task });
 
       expect(
-        handleTaskList({
+        await handleTaskList({
           requestId: 3,
           taskStore: mockTaskStore,
           agentId: 'test-agent',

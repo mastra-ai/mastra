@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { normalizeQueryParams } from '../server-adapter/index';
-import { awaitBufferStatusResponseSchema, listMessagesQuerySchema, listThreadsQuerySchema } from './memory';
+import {
+  awaitBufferStatusResponseSchema,
+  branchThreadBodySchema,
+  listMessagesQuerySchema,
+  listThreadBranchesQuerySchema,
+  listThreadsQuerySchema,
+} from './memory';
 
 /**
  * Regression tests for GitHub Issue #11761
@@ -596,6 +602,35 @@ describe('Memory Schema Query Parsing', () => {
       });
 
       expect(result.success).toBe(false);
+    });
+  });
+});
+
+describe('Thread branch schemas', () => {
+  it('accepts only the public branch creation fields', () => {
+    expect(
+      branchThreadBodySchema.safeParse({
+        branchPointMessageId: 'message-1',
+        title: 'Alternative',
+        metadata: { mode: 'edited' },
+      }).success,
+    ).toBe(true);
+    expect(
+      branchThreadBodySchema.safeParse({ branchPointMessageId: 'message-1', resourceId: 'resource-1' }).success,
+    ).toBe(false);
+  });
+
+  it.each(['workingMemory', '__mastra_thread_branch'])('rejects reserved metadata key %s', key => {
+    expect(
+      branchThreadBodySchema.safeParse({ branchPointMessageId: 'message-1', metadata: { [key]: {} } }).success,
+    ).toBe(false);
+  });
+
+  it('parses unlimited direct-child pagination', () => {
+    expect(listThreadBranchesQuerySchema.parse({ agentId: 'agent-1', perPage: 'false' })).toEqual({
+      agentId: 'agent-1',
+      page: 0,
+      perPage: false,
     });
   });
 });

@@ -1,5 +1,6 @@
 import { MASTRA_THREAD_BRANCH_METADATA_KEY } from '@mastra/core/memory';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
+import { branchThreadWithGeneratedId } from '@mastra/core/memory/internal';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -88,6 +89,20 @@ describe('Memory.branchThread', () => {
     );
   });
 
+  it('uses a trusted transport-provided child ID without calling the generator', async () => {
+    await seedRoot();
+    const generateId = vi.spyOn(memory as any, 'generateId');
+
+    const branch = await branchThreadWithGeneratedId(memory, {
+      threadId: 'root',
+      branchPointMessageId: 'm1',
+      generatedThreadId: 'authorized-child',
+    });
+
+    expect(branch.thread.id).toBe('authorized-child');
+    expect(generateId).not.toHaveBeenCalled();
+  });
+
   it('supports generated-ID collision retries and fails without overwriting after the fixed limit', async () => {
     await seedRoot();
     await memory.createThread({ threadId: 'collision', resourceId });
@@ -168,10 +183,16 @@ describe('Memory.branchThread', () => {
       );
     }
 
+    const allBranches = (await memory.listBranches({ threadId: 'root', perPage: false })).branches;
+    const expectedIds = children
+      .map(child => child.thread)
+      .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime() || left.id.localeCompare(right.id))
+      .map(thread => thread.id);
+    expect(allBranches.map(branch => branch.thread.id)).toEqual(expectedIds);
+
     const page = await memory.listBranches({ threadId: 'root', page: 1, perPage: 10 });
     expect(page).toMatchObject({ total: 105, page: 1, perPage: 10, hasMore: true });
-    expect(page.branches).toHaveLength(10);
-    expect((await memory.listBranches({ threadId: 'root', perPage: false })).branches).toHaveLength(105);
+    expect(page.branches.map(branch => branch.thread.id)).toEqual(expectedIds.slice(10, 20));
     expect(await memory.getParentThread({ threadId: 'root' })).toBeNull();
     expect((await memory.getParentThread({ threadId: children[0]!.thread.id }))?.id).toBe('root');
   });
@@ -211,6 +232,26 @@ describe('Memory.branchThread', () => {
     });
     expect(await store.getThreadById({ threadId: 'rolled-back-child' })).toBeNull();
     expect(await store.getThreadById({ threadId: 'root' })).not.toBeNull();
+  });
+
+  it('rolls back a pending child when source thread fields change during derived-state cloning', async () => {
+    await seedRoot();
+    vi.spyOn(memory as any, 'generateId').mockReturnValue('stale-title-child');
+    const originalSave = store.saveThread.bind(store);
+    vi.spyOn(store, 'saveThread').mockImplementationOnce(async args => {
+      const saved = await originalSave(args);
+      await store.patchThread({ id: 'root', title: 'changed during branch', metadata: { sourceVersion: 2 } });
+      return saved;
+    });
+
+    await expect(memory.branchThread({ threadId: 'root', branchPointMessageId: 'm1' })).rejects.toMatchObject({
+      id: 'BRANCH_MUTATION_CONFLICT',
+    });
+    expect(await store.getThreadById({ threadId: 'stale-title-child' })).toBeNull();
+    expect(await store.getThreadById({ threadId: 'root' })).toMatchObject({
+      title: 'changed during branch',
+      metadata: { sourceVersion: 2 },
+    });
   });
 
   it('sanitizes public thread methods while preserving raw lineage through ordinary round trips', async () => {
