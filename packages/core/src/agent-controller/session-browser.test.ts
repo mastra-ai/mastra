@@ -1,17 +1,121 @@
-import { describe, expect, it, vi } from 'vitest';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createDurableAgent } from '../agent/durable';
-import { createTool } from '../tools';
 import type { MastraBrowser } from '../browser';
 import { RequestContext } from '../request-context';
+import { InMemoryStore } from '../storage/mock';
+import { createTool } from '../tools';
 import { createTestAgent, createTestController } from './test-utils';
 
 function browser() {
   return { providerType: 'sdk', close: vi.fn().mockResolvedValue(undefined) } as unknown as MastraBrowser;
 }
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(done => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 describe('session browser binding', () => {
+  it.each([false, true])('waits for closure before acquiring a browser (static=%s)', async borrowed => {
+    const shared = browser();
+    const closing = deferred();
+    const started = deferred();
+    vi.mocked(shared.close).mockImplementationOnce(() => {
+      started.resolve();
+      return closing.promise;
+    });
+    const factory = vi.fn(async () => shared);
+    const controller = createTestController({ browser: factory });
+    await controller.init();
+    await controller.createSession({ ownerId: 'owner', resourceId: 'user', scope: 'a' });
+    const deletion = controller.deleteSession({ resourceId: 'user', scope: 'a' });
+    await started.promise;
+    let acquired = false;
+    const creation = controller
+      .createSession({
+        ownerId: 'owner',
+        resourceId: 'user',
+        scope: 'b',
+        ...(borrowed ? { browser: shared } : {}),
+      })
+      .then(session => {
+        acquired = true;
+        return session;
+      });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(acquired).toBe(false);
+    closing.resolve();
+    await deletion;
+    expect((await creation).browser).toBe(shared);
+    await controller.deleteSession({ resourceId: 'user', scope: 'b' });
+    expect(shared.close).toHaveBeenCalledTimes(borrowed ? 1 : 2);
+  });
+
+  it.each([false, true])(
+    'blocks acquisition after failed closure until the owner retries (static=%s)',
+    async borrowed => {
+      const shared = browser();
+      vi.mocked(shared.close).mockRejectedValueOnce(new Error('close failed'));
+      const controller = createTestController({ browser: async () => shared });
+      await controller.init();
+      await controller.createSession({ ownerId: 'owner', resourceId: 'user', scope: 'a' });
+      await expect(controller.deleteSession({ resourceId: 'user', scope: 'a' })).rejects.toThrow('close failed');
+      await expect(
+        controller.createSession({
+          ownerId: 'owner',
+          resourceId: 'user',
+          scope: 'b',
+          ...(borrowed ? { browser: shared } : {}),
+        }),
+      ).rejects.toThrow('close failed');
+      expect(shared.close).toHaveBeenCalledOnce();
+      await controller.deleteSession({ resourceId: 'user', scope: 'a' });
+      expect((await controller.createSession({ ownerId: 'owner', resourceId: 'user', scope: 'b' })).browser).toBe(
+        shared,
+      );
+    },
+  );
+
+  it.each(['create', 'delete'])('retains failed initialization cleanup for a concurrent %s retry', async retry => {
+    const storage = new InMemoryStore();
+    const owned = browser();
+    const closing = deferred();
+    const started = deferred();
+    vi.mocked(owned.close)
+      .mockRejectedValueOnce(new Error('close failed'))
+      .mockImplementationOnce(() => {
+        started.resolve();
+        return closing.promise;
+      });
+    const factory = vi.fn(async () => owned);
+    const controller = createTestController({ storage, browser: factory });
+    await controller.init();
+    vi.spyOn(storage.stores.memory, 'getThreadById').mockRejectedValueOnce(new Error('initialization failed'));
+    const options = { ownerId: 'owner', resourceId: 'user', scope: 'a', threadId: 'thread-a' };
+    await expect(controller.createSession(options)).rejects.toThrow('close failed');
+    expect(await controller.getSessionByResource('user', 'a')).toBeUndefined();
+    const first =
+      retry === 'create'
+        ? controller.createSession(options)
+        : controller.deleteSession({ resourceId: 'user', scope: 'a' });
+    await started.promise;
+    const second = controller.createSession(options);
+    expect(factory).toHaveBeenCalledOnce();
+    expect(owned.close).toHaveBeenCalledTimes(2);
+    closing.resolve();
+    await first;
+    const fresh = await second;
+    expect(fresh.browser).toBe(owned);
+    expect(factory).toHaveBeenCalledTimes(2);
+    expect(owned.close).toHaveBeenCalledTimes(2);
+    expect(await controller.getSessionByResource('user', 'a')).toBe(fresh);
+  });
+
   it('allows an unused browser to follow the initial exact-thread creation race', async () => {
     const unused = { ...browser(), status: 'pending' } as MastraBrowser;
     const controller = createTestController({ browser: async () => unused });
