@@ -285,8 +285,8 @@ describe('PrefillErrorHandler Recovery', () => {
       });
 
       const mockMemory = new MockMemory();
-      const threadId = randomUUID();
-      const resourceId = randomUUID();
+      const threadId = globalThis.crypto.randomUUID();
+      const resourceId = globalThis.crypto.randomUUID();
 
       const agent = new Agent({
         id: 'prefill-test-budget-exhausted',

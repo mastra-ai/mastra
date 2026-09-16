@@ -226,7 +226,7 @@ describe('Scorer Definition CRUD (LibSQL)', () => {
 
     async function updateDefinition() {
       const store = await storage.getStore('scorerDefinitions');
-      const versionId = randomUUID();
+      const versionId = globalThis.crypto.randomUUID();
       await store!.createVersion({
         ...definition,
         id: versionId,
