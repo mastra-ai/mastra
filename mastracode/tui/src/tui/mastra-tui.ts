@@ -42,6 +42,8 @@ import { LoginDialogComponent } from './components/login-dialog.js';
 import { promptAuthMode } from './components/login-mode-selector.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
 import type { ModelItem } from './components/model-selector.js';
+import { NotificationSummaryComponent } from './components/notification-summary.js';
+import { NotificationComponent } from './components/notification.js';
 import { GradientAnimator } from './components/obi-loader.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
@@ -1568,6 +1570,12 @@ export class MastraTUI {
       tool.setCompactToolModeColor?.(modeColor);
       tool.setQuietModeDisplay?.(enabled ? 'quiet' : 'normal');
       tool.setQuietPreviewLineLimit?.(previewLineLimit);
+    }
+    for (const component of this.state.messageComponentsById.values()) {
+      if (component instanceof NotificationComponent || component instanceof NotificationSummaryComponent) {
+        component.setQuietModeDisplay(enabled ? 'quiet' : 'normal');
+      }
+      if (component instanceof NotificationComponent) component.setQuietPreviewLineLimit(previewLineLimit);
     }
     flushRender(this.state);
   }

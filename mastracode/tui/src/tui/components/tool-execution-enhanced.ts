@@ -375,11 +375,21 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     }
   }
 
+  /** Quiet mode keeps the shell box and command but drops the output entirely. */
   private limitQuietShellLines(lines: string[]): string[] {
-    if (this.quietDisplayMode !== 'quiet' || lines.length <= 15) {
-      return lines;
-    }
-    return lines.slice(-15);
+    return this.quietDisplayMode === 'quiet' ? [] : lines;
+  }
+
+  /**
+   * Quiet mode also caps the command itself (heredocs and inline scripts can run
+   * to dozens of lines) at the quiet preview limit, ending with a hidden-line count.
+   */
+  private limitQuietShellCommandLines(lines: string[]): string[] {
+    if (this.quietDisplayMode !== 'quiet') return lines;
+    const limit = Math.max(1, this.quietPreviewLineLimit);
+    if (lines.length <= limit) return lines;
+    const hidden = lines.length - limit;
+    return [...lines.slice(0, limit), theme.fg('muted', `⋯ (+${hidden} ${hidden === 1 ? 'line' : 'lines'})`)];
   }
 
   /**
@@ -1452,7 +1462,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
         this.contentBox.addChild(new Text(`${border('├')}${border(horizontal)}${border('┤')}`, 0, 0));
       }
       const footerWrapWidth = Math.max(1, contentWidth - 4);
-      const footerLines = this.wrapQuietShellCommand(command, footerWrapWidth);
+      const footerLines = this.limitQuietShellCommandLines(this.wrapQuietShellCommand(command, footerWrapWidth));
       const footerSuffixWidth = visibleWidth(footerSuffix);
       footerLines.forEach((footerLine, index) => {
         const prefix = index === 0 ? footerPrompt : '  ';

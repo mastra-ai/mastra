@@ -948,13 +948,16 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output.split('\n')).toHaveLength(1);
   });
 
-  it('limits quiet shell output to fifteen content lines', () => {
+  it('keeps the quiet shell box and full command but hides all output', () => {
+    const command = 'pnpm --filter ./mastracode/tui exec vitest run src/tui --reporter=dot --bail 1 && echo done';
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
-      { command: 'printf lines' },
+      { command },
       { quietDisplayMode: 'quiet', collapsedByDefault: true },
       ui,
     );
+    component.appendStreamingOutput('streaming line\n');
+    expect(stripAnsi(component.render(60).join('\n'))).not.toContain('streaming line');
 
     component.updateResult(
       {
@@ -964,13 +967,58 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       false,
     );
 
-    const output = component.render(100).join('\n');
-    const lines = output.split('\n');
-    expect(output).toContain(theme.fg('success', ' ✓'));
-    expect(output).toContain('line 2');
-    expect(output).toContain('line 16');
-    expect(lines.some(line => line.includes('line 1 ') || line.includes('line 1│'))).toBe(false);
-    expect(lines.filter(line => line.includes('line '))).toHaveLength(15);
+    const rendered = component.render(60);
+    const visible = stripAnsi(rendered.join('\n'));
+    expect(rendered.join('\n')).toContain(theme.fg('success', ' ✓'));
+    expect(visible).toContain('╭');
+    expect(visible).toContain('╰');
+    expect(visible).not.toContain('├');
+    expect(visible).not.toMatch(/line \d/);
+    // The command wraps rather than truncates so the whole thing is still readable.
+    expect(visible).toContain('--reporter=dot');
+    expect(visible).toContain('echo done');
+    expect(visible).not.toContain('…');
+  });
+
+  it('caps long quiet shell commands at the preview limit with a hidden-line count', () => {
+    const command = ["python3 - <<'EOF'", "p = 'file.ts'", 's = open(p).read()', "open(p, 'w').write(s)", 'EOF'].join(
+      '\n',
+    );
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
+
+    const visible = stripAnsi(component.render(80).join('\n'));
+    expect(visible).toContain("$ python3 - <<'EOF'");
+    expect(visible).toContain("p = 'file.ts'");
+    expect(visible).not.toContain('open(p)');
+    expect(visible).toContain('⋯ (+3 lines)');
+    expect(visible).not.toContain('ok');
+    // top, 2 command lines, marker (with status suffix), bottom
+    expect(visible.split('\n')).toHaveLength(5);
+
+    component.setQuietModeDisplay('normal');
+    const full = stripAnsi(component.render(80).join('\n'));
+    expect(full).toContain('open(p)');
+    expect(full).not.toContain('⋯ (+');
+  });
+
+  it('still hides quiet shell output when the command fails', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'exit 1' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'boom' }], isError: true }, false);
+
+    const output = component.render(60).join('\n');
+    expect(output).toContain(theme.fg('error', ' ✗'));
+    expect(stripAnsi(output)).not.toContain('boom');
   });
 
   it('keeps quiet shell box borders aligned for long git output', () => {
@@ -1009,7 +1057,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { quietDisplayMode: 'normal', collapsedByDefault: true },
       ui,
     );
 
@@ -1081,7 +1129,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: 'printf START-' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { quietDisplayMode: 'normal', collapsedByDefault: true },
       ui,
     );
 
@@ -1150,7 +1198,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { quietDisplayMode: 'normal', collapsedByDefault: true },
       ui,
     );
 
@@ -1185,7 +1233,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { quietDisplayMode: 'normal', collapsedByDefault: true },
       ui,
     );
 
