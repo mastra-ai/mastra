@@ -48,6 +48,31 @@ const baseCard: AgentCard = {
   supportsAuthenticatedExtendedCard: false,
 };
 
+const v1Card = {
+  name: 'Remote Agent',
+  description: 'A remote agent',
+  supportedInterfaces: [
+    {
+      url: 'https://remote.example.com/a2a/remote',
+      protocolBinding: 'JSONRPC',
+      protocolVersion: '1.0',
+    },
+  ],
+  version: '1.0',
+  skills: [],
+  defaultInputModes: ['text/plain'],
+  defaultOutputModes: ['text/plain'],
+  capabilities: {
+    streaming: true,
+    pushNotifications: false,
+    stateTransitionHistory: false,
+    extensions: [],
+  },
+  securityRequirements: [],
+  securitySchemes: {},
+  supportsAuthenticatedExtendedCard: false,
+};
+
 function jsonRpcResult(result: unknown) {
   return new Response(
     JSON.stringify({
@@ -1024,5 +1049,90 @@ describe('A2AAgent', () => {
     expect(resumedEvents).toEqual(['text-start', 'text-delta', 'text-end', 'finish']);
     expect(await resumed.text).toBe('Resubscribed text');
     expect((await resumed.task)?.status.state).toBe('completed');
+  });
+
+  it('delegates to a v1-only remote using v1 headers and wire messages', async () => {
+    const fetchMock = createFetchMock([
+      (input, init) => {
+        expect(input.toString()).toBe('https://remote.example.com/.well-known/agent-card.json');
+        expect(new Headers(init?.headers).get('A2A-Version')).toBe('1.0');
+        return new Response(JSON.stringify(v1Card), { status: 200 });
+      },
+      (_input, init) => {
+        expect(new Headers(init?.headers).get('A2A-Version')).toBe('1.0');
+        const request = JSON.parse(String(init?.body));
+        expect(request.method).toBe('SendMessage');
+        expect(request.params.message).toMatchObject({ role: 'ROLE_USER' });
+        expect(request.params.message).not.toHaveProperty('kind');
+        return jsonRpcResult({
+          message: {
+            messageId: 'v1-message-1',
+            role: 'ROLE_AGENT',
+            parts: [{ text: 'V1 delegation complete' }],
+          },
+        });
+      },
+    ]);
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      protocolVersion: '1.0',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const output = await agent.generate('Use A2A v1');
+
+    expect(output.text).toBe('V1 delegation complete');
+    expect(output.message?.role).toBe('agent');
+  });
+
+  it('decodes v1 streaming task, artifact, and status payloads', async () => {
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify(v1Card), { status: 200 }),
+      (_input, init) => {
+        expect(new Headers(init?.headers).get('A2A-Version')).toBe('1.0');
+        const request = JSON.parse(String(init?.body));
+        expect(request.method).toBe('SendStreamingMessage');
+        return createSseResponse([
+          {
+            task: {
+              id: 'v1-task-1',
+              contextId: 'v1-context-1',
+              status: { state: 'TASK_STATE_WORKING' },
+            },
+          },
+          {
+            artifactUpdate: {
+              taskId: 'v1-task-1',
+              contextId: 'v1-context-1',
+              artifact: { artifactId: 'v1-artifact-1', parts: [{ text: 'V1 streamed text' }] },
+              append: false,
+              lastChunk: true,
+            },
+          },
+          {
+            statusUpdate: {
+              taskId: 'v1-task-1',
+              contextId: 'v1-context-1',
+              status: { state: 'TASK_STATE_COMPLETED' },
+            },
+          },
+        ]);
+      },
+    ]);
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      protocolVersion: '1.0',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const output = await agent.stream('Stream over A2A v1');
+    const eventTypes: string[] = [];
+    for await (const event of output.fullStream) {
+      eventTypes.push(event.type);
+    }
+
+    expect(eventTypes).toEqual(['start', 'text-start', 'text-delta', 'text-end', 'finish']);
+    expect(await output.text).toBe('V1 streamed text');
+    expect((await output.task)?.status.state).toBe('completed');
   });
 });
