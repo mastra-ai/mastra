@@ -108,17 +108,13 @@ export function useWaitingStepKey(): string | undefined {
   // flag starts out false.
   const isPaused = result?.status === 'paused';
 
-  const isStepSuccess = useCallback((stepId: string) => steps?.[stepId]?.status === 'success', [steps]);
-  // A non-truthy conditional arm is rehydrated as 'skipped' and never produces a successor join,
-  // so isBranchArmBypassed can't infer it. Treat both 'success' and 'skipped' as resolved when
-  // deciding which step still needs to run, otherwise the controls re-select the skipped arm.
   const isStepResolved = useCallback(
     (stepId: string) => steps?.[stepId]?.status === 'success' || steps?.[stepId]?.status === 'skipped',
     [steps],
   );
   const isStepBypassed = useCallback(
-    (stepId: string) => isBranchArmBypassed({ stepId, conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess }),
-    [conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess],
+    (stepId: string) => isBranchArmBypassed({ stepId, conditionalStepIds, stepSuccessors, stepsFlow, steps }),
+    [conditionalStepIds, stepSuccessors, stepsFlow, steps],
   );
 
   return useMemo(
@@ -153,14 +149,13 @@ export function useNextPerStep() {
 
   const steps = result?.steps;
 
-  const isStepSuccess = useCallback((stepId: string) => steps?.[stepId]?.status === 'success', [steps]);
   const isStepResolved = useCallback(
     (stepId: string) => steps?.[stepId]?.status === 'success' || steps?.[stepId]?.status === 'skipped',
     [steps],
   );
   const isStepBypassed = useCallback(
-    (stepId: string) => isBranchArmBypassed({ stepId, conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess }),
-    [conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess],
+    (stepId: string) => isBranchArmBypassed({ stepId, conditionalStepIds, stepSuccessors, stepsFlow, steps }),
+    [conditionalStepIds, stepSuccessors, stepsFlow, steps],
   );
 
   const nextStepKey = useWaitingStepKey();
@@ -172,7 +167,7 @@ export function useNextPerStep() {
     // upstream output to build from, so buildNextStepInput returns undefined and the run can never
     // advance. Seed it from the run's own input/payload so the first step becomes runnable.
     if (nextStepKey && (stepsFlow[nextStepKey]?.length ?? 0) === 0) {
-      return { hasMultiSteps: false, input: result?.input ?? payload };
+      return { hasMultiSteps: false, input: result?.input !== undefined ? result.input : payload };
     }
     return undefined;
   }, [nextStepKey, stepsFlow, steps, result?.input, payload, isStepBypassed]);

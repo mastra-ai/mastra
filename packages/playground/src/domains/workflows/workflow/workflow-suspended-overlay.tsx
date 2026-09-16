@@ -1,40 +1,18 @@
 import { useContext } from 'react';
-import { useParams } from 'react-router';
 
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useResumeWorkflow, useSuspendedSteps } from './use-workflow-trigger';
 import { WorkflowSuspendedSteps } from './workflow-suspended-steps';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export function WorkflowSuspendedOverlay() {
-  const { result, runSnapshot, workflow, runId, isStreamingWorkflow } = useContext(WorkflowRunContext);
-  const { runId: routeRunId } = useParams();
+  const { result, workflow, runId, isStreamingWorkflow } = useContext(WorkflowRunContext);
+  const { canExecute, isLoading: isLoadingPermissions } = usePermissions();
   const suspendedSteps = useSuspendedSteps(result, runId ?? '');
   const onResume = useResumeWorkflow();
 
-  // `runSnapshot` is fetched per-run (keyed on the route's runId), so it is the run-accurate
-  // source of truth. `result` lags behind during run navigation (it is hydrated asynchronously),
-  // so a finished run can briefly keep the previously selected suspended run's steps. Only treat
-  // this as "viewing a stored run" when the route has a runId — a live run sets the context runId
-  // while streaming, but has no route runId, so its suspended steps must still surface.
-  //
-  // The snapshot is also refetched at most every few seconds, so it lags behind live transitions.
-  // When advancing a paused run step-by-step on the :runId page, a "Run next step" can suspend the
-  // run before the snapshot refetches — `result.status` flips to 'suspended' immediately while the
-  // stale snapshot still says 'paused'. In that case the live result is the accurate signal, so we
-  // surface the steps rather than suppressing them on the stale snapshot.
-  const isViewingStoredRun = Boolean(routeRunId);
-  const storedRunIsSuspended = runSnapshot?.status === 'suspended';
-  // The live `result` may still belong to a previously viewed run while the new route run
-  // hydrates, so only trust the live-suspended fallback when the live run matches the route run.
-  const liveResultMatchesRouteRun = Boolean(routeRunId && runId && routeRunId === runId);
-  const liveResultIsSuspended = liveResultMatchesRouteRun && result?.status === 'suspended';
-
-  if (
-    isStreamingWorkflow ||
-    !workflow ||
-    suspendedSteps.length === 0 ||
-    (isViewingStoredRun && !storedRunIsSuspended && !liveResultIsSuspended)
-  ) {
+  const canResume = result?.status === 'suspended' && !isStreamingWorkflow && workflow && suspendedSteps.length > 0;
+  if (!canResume || isLoadingPermissions || !canExecute('workflows')) {
     return null;
   }
 

@@ -7,7 +7,7 @@ import type {
   MastraToolInvocationPart,
 } from '@mastra/core/agent/message-list';
 import type { AgentChunkType, ChunkType, NetworkChunkType } from '@mastra/core/stream';
-import type { WorkflowStreamResult, StepResult } from '@mastra/core/workflows';
+import type { StepResult, WorkflowStreamResult } from '@mastra/core/workflows';
 import { uint8ArrayToBase64, encodeFilePartDataForStorage } from '../../agent/signal-data';
 import { formatCompletionFeedback, formatStreamCompletionFeedback } from './formatCompletionFeedback';
 import { CLIENT_MESSAGE_ID_KEY } from './types';
@@ -305,12 +305,14 @@ export const mapWorkflowStreamChunkToWatchResult = (
         return [];
       },
     );
+    // A suspended chunk contributes at least its own step path.
+    const suspended = suspendedStepIds as [string[], ...string[][]];
     return {
       ...prev,
       status: 'suspended',
       steps: newSteps,
       suspendPayload: chunk.payload.suspendPayload,
-      suspended: suspendedStepIds as any,
+      suspended,
     };
   }
 
@@ -1589,7 +1591,6 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     case 'network-validation-end':
     case 'network-object':
     case 'network-object-result':
-    case 'tool-output-denied':
       return result;
 
     default:

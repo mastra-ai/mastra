@@ -16,7 +16,9 @@ export const WorkflowCardStatusIcon = ({ displayStatus, hasStep }: WorkflowCardS
       {displayStatus === 'tripwire' && <ShieldAlert className="text-amber-400" strokeWidth={strokeWidth} />}
       {displayStatus === 'failed' && <CircleX className="text-accent2" strokeWidth={strokeWidth} />}
       {displayStatus === 'success' && <CircleCheck className="text-accent1" strokeWidth={strokeWidth} />}
-      {displayStatus === 'suspended' && <PauseIcon className="text-accent3" strokeWidth={strokeWidth} />}
+      {(displayStatus === 'suspended' || displayStatus === 'paused') && (
+        <PauseIcon className="text-accent3" strokeWidth={strokeWidth} />
+      )}
       {displayStatus === 'waiting' && <HourglassIcon className="text-accent5" strokeWidth={strokeWidth} />}
       {displayStatus === 'running' && <Loader2 className="text-accent6 animate-spin" strokeWidth={strokeWidth} />}
       {!displayStatus && !hasStep && <CircleDashed className="text-neutral2" strokeWidth={strokeWidth} />}

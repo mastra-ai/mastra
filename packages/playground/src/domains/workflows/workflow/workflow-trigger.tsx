@@ -86,16 +86,6 @@ function DebugModeSwitch() {
   );
 }
 
-function useSyncStreamResultToWorkflowRunContext(streamResult: WorkflowRunStreamResult | null) {
-  const { setResult } = useContext(WorkflowRunContext);
-
-  useEffect(() => {
-    if (streamResult) {
-      setResult(streamResult);
-    }
-  }, [setResult, streamResult]);
-}
-
 function formatRunStatus(status?: WorkflowRunStatus) {
   if (!status) return 'Run';
   return status.charAt(0).toUpperCase() + status.slice(1);
@@ -215,7 +205,6 @@ export function WorkflowTrigger({
   streamWorkflow,
   observeWorkflowStream,
   isStreamingWorkflow,
-  streamResult,
   isCancellingWorkflowRun,
   cancelWorkflowRun,
 }: WorkflowTriggerProps) {
@@ -231,19 +220,20 @@ export function WorkflowTrigger({
     runSnapshot,
     workflowError,
   } = useContext(WorkflowRunContext);
-  useSyncStreamResultToWorkflowRunContext(streamResult);
   const { canExecute } = usePermissions();
 
   // Check if user can execute workflows
   const canExecuteWorkflow = canExecute('workflows');
 
-  const [innerRunId, setInnerRunId] = useState<string>('');
-  const [cancelResponse, setCancelResponse] = useState<{ message: string } | null>(null);
+  const [isStarting, setIsStarting] = useState(false);
+  const pendingStart = useRef<AbortController | null>(null);
+  const [cancelResponse, setCancelResponse] = useState<{ runId: string; message: string }>();
   const observedParamRunRef = useRef<string | null>(null);
 
   const activeRunId = paramsRunId || contextRunId;
-  const streamResultToUse = activeRunId ? (result ?? streamResult) : null;
-  const suspendedSteps = useSuspendedSteps(streamResultToUse, innerRunId);
+  const currentCancellation = cancelResponse?.runId === activeRunId ? cancelResponse : undefined;
+  const streamResultToUse = activeRunId ? result : null;
+  const suspendedSteps = useSuspendedSteps(streamResultToUse, activeRunId ?? '');
   const { zodSchemaToUse, hasStateSchema } = useWorkflowSchemas(workflow);
 
   const hasFinished = ['success', 'failed', 'canceled', 'bailed'].includes(streamResultToUse?.status ?? '');
@@ -252,32 +242,44 @@ export function WorkflowTrigger({
   // on its :runId page, where the in-memory debugMode flag starts out false.
   const isPausedDebug = streamResultToUse?.status === 'paused';
 
-  const handleExecuteWorkflow = async (data: any) => {
-    try {
-      if (!workflow) return;
+  useEffect(() => () => pendingStart.current?.abort(), []);
 
-      setCancelResponse(null);
+  const handleExecuteWorkflow = async (data: any) => {
+    if (!workflow || isStarting) return;
+    pendingStart.current?.abort();
+    const request = new AbortController();
+    pendingStart.current = request;
+    setIsStarting(true);
+    try {
+      setCancelResponse(undefined);
       setResult(null);
 
       const run = await createWorkflowRun({ workflowId });
+      if (request.signal.aborted) return;
 
       setRunId?.(run.runId);
-      setInnerRunId(run.runId);
       setContextRunId(run.runId);
+      setIsStarting(false);
 
       const { initialState, inputData: dataInputData } = data ?? {};
       const inputData = hasStateSchema ? dataInputData : data;
 
       await streamWorkflow({ workflowId, runId: run.runId, inputData, initialState, requestContext });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error executing workflow');
+      if (!request.signal.aborted) toast.error(error instanceof Error ? error.message : 'Error executing workflow');
+    } finally {
+      if (!request.signal.aborted) setIsStarting(false);
     }
   };
 
   const handleCancelWorkflowRun = async () => {
+    if (!activeRunId) return;
+    const pausedResult = result?.status === 'paused' ? result : undefined;
     try {
-      const response = await cancelWorkflowRun({ workflowId, runId: innerRunId });
-      setCancelResponse(response);
+      const response = await cancelWorkflowRun({ workflowId, runId: activeRunId });
+      setCancelResponse({ ...response, runId: activeRunId });
+      // Paused runs have no active stream to publish cancellation.
+      setResult(current => (current && current === pausedResult ? { ...current, status: 'canceled' } : current));
     } catch {
       toast.error('Error cancelling workflow run');
     }
@@ -291,16 +293,7 @@ export function WorkflowTrigger({
       observeWorkflowStream({ workflowId, runId: paramsRunId });
       observedParamRunRef.current = observedParamRunKey;
     }
-
-    setInnerRunId(paramsRunId);
-    setContextRunId(paramsRunId);
-  }, [paramsRunId, observeWorkflowStream, setContextRunId, workflowId]);
-
-  useEffect(() => {
-    if (!paramsRunId && !contextRunId) {
-      setInnerRunId('');
-    }
-  }, [contextRunId, paramsRunId]);
+  }, [paramsRunId, observeWorkflowStream, workflowId]);
 
   if (isLoading) {
     return (
@@ -347,7 +340,7 @@ export function WorkflowTrigger({
             <WorkflowTriggerForm
               zodSchema={zodSchemaToUse}
               defaultValues={payload}
-              isStreaming={isStreamingWorkflow || isSuspendedSteps}
+              isStreaming={isStarting || isStreamingWorkflow || isSuspendedSteps}
               onExecute={data => {
                 setPayload(data);
                 void handleExecuteWorkflow(data);
@@ -403,9 +396,12 @@ export function WorkflowTrigger({
           </div>
         )}
 
-        {isPausedDebug && (
+        {isPausedDebug && canExecuteWorkflow && (
           <div className="px-5 pt-3 pb-4">
-            <WorkflowDebugStepControls isStreaming={isStreamingWorkflow} />
+            <WorkflowDebugStepControls
+              isStreaming={isStreamingWorkflow}
+              disabled={isCancellingWorkflowRun || !!currentCancellation}
+            />
           </div>
         )}
 
@@ -413,10 +409,10 @@ export function WorkflowTrigger({
           <div data-testid="workflow-cancel-action" className="px-5 pt-3 pb-4">
             <WorkflowCancelButton
               status={isSuspendedSteps ? 'suspended' : streamResultToUse?.status}
-              cancelMessage={cancelResponse?.message ?? null}
+              cancelMessage={currentCancellation?.message ?? null}
               isCancelling={isCancellingWorkflowRun}
               onCancel={handleCancelWorkflowRun}
-              disabled={isSuspendedSteps}
+              disabled={isSuspendedSteps || !canExecuteWorkflow}
             />
           </div>
         )}

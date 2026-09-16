@@ -12,6 +12,11 @@ import type {
   TimeTravelWorkflowStreamParams,
 } from './types';
 
+type StreamOperation = {
+  controller: AbortController;
+  reader?: ReadableStreamDefaultReader<StreamVNextChunkType>;
+};
+
 /**
  * Hook for streaming workflow execution with support for observing, resuming, and time-travel.
  *
@@ -44,394 +49,149 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
   const client = useMastraClient();
   const [streamResult, setStreamResult] = useState<WorkflowStreamResult>({} as WorkflowStreamResult);
   const [isStreaming, setIsStreaming] = useState(false);
-  const readerRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);
-  const observerRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);
-  const resumeStreamRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);
-  const timeTravelStreamRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);
+  const activeStream = useRef<StreamOperation | undefined>(undefined);
   const isMountedRef = useRef(true);
 
-  // Cleanup on unmount
+  const closeActiveStream = useCallback(() => {
+    const operation = activeStream.current;
+    activeStream.current = undefined;
+    if (!operation) return;
+    operation.controller.abort();
+    // An already errored transport may reject cancellation during disposal.
+    void operation.reader?.cancel().catch(() => undefined);
+    operation.reader?.releaseLock();
+    operation.reader = undefined;
+  }, []);
+
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
-      if (readerRef.current) {
-        try {
-          readerRef.current.releaseLock();
-        } catch {
-          // Reader might already be released, ignore the error
-        }
-        readerRef.current = null;
-      }
-      if (observerRef.current) {
-        try {
-          observerRef.current.releaseLock();
-        } catch {
-          // Reader might already be released, ignore the error
-        }
-        observerRef.current = null;
-      }
-      if (resumeStreamRef.current) {
-        try {
-          resumeStreamRef.current.releaseLock();
-        } catch {
-          // Reader might already be released, ignore the error
-        }
-        resumeStreamRef.current = null;
-      }
-      if (timeTravelStreamRef.current) {
-        try {
-          timeTravelStreamRef.current.releaseLock();
-        } catch {
-          // Reader might already be released, ignore the error
-        }
-        timeTravelStreamRef.current = null;
-      }
+      closeActiveStream();
     };
-  }, []);
+  }, [closeActiveStream]);
 
-  const handleStreamError = useCallback(
-    (err: unknown, defaultMessage: string, setStreamingState?: (isStreaming: boolean) => void) => {
-      // Expected error during cleanup - safe to ignore
-      if (err instanceof TypeError) {
+  async function consumeStream(
+    openStream: (signal: AbortSignal) => Promise<ReadableStream<StreamVNextChunkType> | undefined>,
+    defaultMessage: string,
+    initialResult?: WorkflowStreamResult,
+  ) {
+    if (!isMountedRef.current) return;
+    closeActiveStream();
+    const operation: StreamOperation = { controller: new AbortController() };
+    activeStream.current = operation;
+    const { signal } = operation.controller;
+    setIsStreaming(true);
+    if (initialResult) setStreamResult(initialResult);
+
+    try {
+      const stream = await openStream(signal);
+      if (signal.aborted) {
+        await stream?.cancel();
         return;
       }
-      const error = err instanceof Error ? err : new Error(defaultMessage);
-      onError?.(error, defaultMessage);
-      setStreamingState?.(false);
-    },
-    [onError],
-  );
-
-  const handleWorkflowFinish = useCallback((value: StreamVNextChunkType) => {
-    if (value.type === 'workflow-finish') {
-      const streamStatus = value.payload?.workflowStatus;
-      const metadata = value.payload?.metadata;
-      setStreamResult(prev => ({
-        ...prev,
-        status: streamStatus,
-      }));
-      if (streamStatus === 'failed') {
-        throw new Error(metadata?.errorMessage || 'Workflow execution failed');
+      if (!stream) {
+        onError?.(new Error('No stream returned'), 'No stream returned');
+        return;
       }
-      // Tripwire status is not an error - it's handled separately in the UI
-      // Don't throw an error for tripwire status
+      const reader = stream.getReader();
+      operation.reader = reader;
+
+      while (!signal.aborted) {
+        const { done, value } = await reader.read();
+        if (done || signal.aborted) break;
+        setStreamResult(previous => mapWorkflowStreamChunkToWatchResult(previous, value));
+        if (value.type === 'workflow-step-start') setIsStreaming(true);
+        if (value.type === 'workflow-step-suspended') setIsStreaming(false);
+        if (value.type === 'workflow-finish' && value.payload.workflowStatus === 'failed') {
+          throw new Error(value.payload.metadata?.errorMessage || 'Workflow execution failed');
+        }
+      }
+    } catch (error) {
+      // Releasing an obsolete reader rejects its pending read; real transport TypeErrors must still surface.
+      if (!signal.aborted) {
+        if (!operation.reader) throw error;
+        onError?.(error instanceof Error ? error : new Error(defaultMessage), defaultMessage);
+      }
+    } finally {
+      operation.reader?.releaseLock();
+      operation.reader = undefined;
+      if (activeStream.current === operation) {
+        activeStream.current = undefined;
+        setIsStreaming(false);
+      }
     }
-  }, []);
+  }
 
   const streamWorkflow = useMutation<void, Error, StreamWorkflowParams>(
-    async ({ workflowId, runId, inputData, initialState, requestContext: playgroundRequestContext, perStep }) => {
-      // Clean up any existing reader before starting new stream
-      if (readerRef.current) {
-        readerRef.current.releaseLock();
-      }
-
-      if (!isMountedRef.current) return;
-
-      setIsStreaming(true);
-      setStreamResult({ input: inputData } as WorkflowStreamResult);
-      const workflow = client.getWorkflow(workflowId);
-      const run = await workflow.createRun({ runId });
-      const stream = await run.stream({
-        inputData,
-        initialState,
-        requestContext: playgroundRequestContext,
-        closeOnSuspend: true,
-        tracingOptions,
-        perStep: perStep ?? debugMode,
-      });
-
-      if (!stream) {
-        return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
-      }
-
-      // Get a reader from the ReadableStream and store it in ref
-      const reader = stream.getReader();
-      readerRef.current = reader;
-
-      try {
-        while (true) {
-          if (!isMountedRef.current) break;
-
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          // Only update state if component is still mounted
-          if (isMountedRef.current) {
-            setStreamResult(prev => {
-              const newResult = mapWorkflowStreamChunkToWatchResult(prev, value);
-              return newResult;
-            });
-
-            if (value.type === 'workflow-step-start') {
-              setIsStreaming(true);
-            }
-
-            if (value.type === 'workflow-step-suspended') {
-              setIsStreaming(false);
-            }
-
-            if (value.type === 'workflow-finish') {
-              handleWorkflowFinish(value);
-            }
-          }
-        }
-      } catch (err) {
-        handleStreamError(err, 'Error streaming workflow');
-      } finally {
-        if (isMountedRef.current) {
-          setIsStreaming(false);
-        }
-        if (readerRef.current) {
-          readerRef.current.releaseLock();
-          readerRef.current = null;
-        }
-      }
-    },
+    ({ workflowId, runId, inputData, initialState, requestContext, perStep }) =>
+      consumeStream(
+        async signal => {
+          const run = await client.getWorkflow(workflowId).createRun({ runId });
+          if (signal.aborted) return;
+          return run.stream({
+            inputData,
+            initialState,
+            requestContext,
+            closeOnSuspend: true,
+            tracingOptions,
+            perStep: perStep ?? debugMode,
+          });
+        },
+        'Error streaming workflow',
+        { input: inputData } as WorkflowStreamResult,
+      ),
   );
 
   const observeWorkflowStream = useMutation<void, Error, ObserveWorkflowStreamParams>(
     async ({ workflowId, runId, storeRunResult }) => {
-      // Clean up any existing reader before starting new stream
-      if (observerRef.current) {
-        observerRef.current.releaseLock();
-      }
-
       if (!isMountedRef.current) return;
-
-      setIsStreaming(true);
-
-      setStreamResult((storeRunResult || {}) as WorkflowStreamResult);
       if (storeRunResult?.status === 'suspended') {
+        closeActiveStream();
+        setStreamResult(storeRunResult);
         setIsStreaming(false);
         return;
       }
-      const workflow = client.getWorkflow(workflowId);
-      const run = await workflow.createRun({ runId });
-      const stream = await run.observeStream();
-
-      if (!stream) {
-        return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
-      }
-
-      // Get a reader from the ReadableStream and store it in ref
-      const reader = stream.getReader();
-      observerRef.current = reader;
-
-      try {
-        while (true) {
-          if (!isMountedRef.current) break;
-
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          // Only update state if component is still mounted
-          if (isMountedRef.current) {
-            setStreamResult(prev => {
-              const newResult = mapWorkflowStreamChunkToWatchResult(prev, value);
-              return newResult;
-            });
-
-            if (value.type === 'workflow-step-start') {
-              setIsStreaming(true);
-            }
-
-            if (value.type === 'workflow-step-suspended') {
-              setIsStreaming(false);
-            }
-
-            if (value.type === 'workflow-finish') {
-              handleWorkflowFinish(value);
-            }
-          }
-        }
-      } catch (err) {
-        handleStreamError(err, 'Error observing workflow');
-      } finally {
-        if (isMountedRef.current) {
-          setIsStreaming(false);
-        }
-        if (observerRef.current) {
-          observerRef.current.releaseLock();
-          observerRef.current = null;
-        }
-      }
+      await consumeStream(
+        async signal => {
+          const run = await client.getWorkflow(workflowId).createRun({ runId });
+          if (signal.aborted) return;
+          return run.observeStream();
+        },
+        'Error observing workflow',
+        (storeRunResult || {}) as WorkflowStreamResult,
+      );
     },
   );
 
   const resumeWorkflowStream = useMutation<void, Error, ResumeWorkflowStreamParams>(
-    async ({ workflowId, runId, step, resumeData, requestContext: playgroundRequestContext, perStep }) => {
-      // Clean up any existing reader before starting new stream
-      if (resumeStreamRef.current) {
-        resumeStreamRef.current.releaseLock();
-      }
-
-      if (!isMountedRef.current) return;
-
-      setIsStreaming(true);
-      const workflow = client.getWorkflow(workflowId);
-      const run = await workflow.createRun({ runId });
-      const stream = await run.resumeStream({
-        step,
-        resumeData,
-        requestContext: playgroundRequestContext,
-        tracingOptions,
-        perStep: perStep ?? debugMode,
-      });
-
-      if (!stream) {
-        return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
-      }
-
-      // Get a reader from the ReadableStream and store it in ref
-      const reader = stream.getReader();
-      resumeStreamRef.current = reader;
-
-      try {
-        while (true) {
-          if (!isMountedRef.current) break;
-
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          // Only update state if component is still mounted
-          if (isMountedRef.current) {
-            setStreamResult(prev => {
-              const newResult = mapWorkflowStreamChunkToWatchResult(prev, value);
-              return newResult;
-            });
-
-            if (value.type === 'workflow-step-start') {
-              setIsStreaming(true);
-            }
-
-            if (value.type === 'workflow-step-suspended') {
-              setIsStreaming(false);
-            }
-
-            if (value.type === 'workflow-finish') {
-              handleWorkflowFinish(value);
-            }
-          }
-        }
-      } catch (err) {
-        handleStreamError(err, 'Error resuming workflow stream');
-      } finally {
-        if (isMountedRef.current) {
-          setIsStreaming(false);
-        }
-        if (resumeStreamRef.current) {
-          resumeStreamRef.current.releaseLock();
-          resumeStreamRef.current = null;
-        }
-      }
-    },
+    ({ workflowId, runId, step, resumeData, requestContext, perStep }) =>
+      consumeStream(async signal => {
+        const run = await client.getWorkflow(workflowId).createRun({ runId });
+        if (signal.aborted) return;
+        return run.resumeStream({ step, resumeData, requestContext, tracingOptions, perStep: perStep ?? debugMode });
+      }, 'Error resuming workflow stream'),
   );
 
   const timeTravelWorkflowStream = useMutation<void, Error, TimeTravelWorkflowStreamParams>(
-    async ({ workflowId, requestContext: playgroundRequestContext, runId, perStep, ...params }) => {
-      // Clean up any existing reader before starting new stream
-      if (timeTravelStreamRef.current) {
-        timeTravelStreamRef.current.releaseLock();
-      }
-
-      if (!isMountedRef.current) return;
-
-      setIsStreaming(true);
-      const workflow = client.getWorkflow(workflowId);
-      const run = await workflow.createRun({ runId });
-      const stream = await run.timeTravelStream({
-        ...params,
-        perStep: perStep ?? debugMode,
-        requestContext: playgroundRequestContext,
-        tracingOptions,
-      });
-
-      if (!stream) {
-        return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
-      }
-
-      // Get a reader from the ReadableStream and store it in ref
-      const reader = stream.getReader();
-      timeTravelStreamRef.current = reader;
-
-      try {
-        while (true) {
-          if (!isMountedRef.current) break;
-
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          // Only update state if component is still mounted
-          if (isMountedRef.current) {
-            setStreamResult(prev => {
-              const newResult = mapWorkflowStreamChunkToWatchResult(prev, value);
-              return newResult;
-            });
-
-            if (value.type === 'workflow-step-start') {
-              setIsStreaming(true);
-            }
-
-            if (value.type === 'workflow-step-suspended') {
-              setIsStreaming(false);
-            }
-
-            if (value.type === 'workflow-finish') {
-              handleWorkflowFinish(value);
-            }
-          }
-        }
-      } catch (err) {
-        handleStreamError(err, 'Error time traveling workflow stream');
-      } finally {
-        if (isMountedRef.current) {
-          setIsStreaming(false);
-        }
-        if (timeTravelStreamRef.current) {
-          timeTravelStreamRef.current.releaseLock();
-          timeTravelStreamRef.current = null;
-        }
-      }
-    },
+    ({ workflowId, requestContext, runId, perStep, ...params }) =>
+      consumeStream(async signal => {
+        const run = await client.getWorkflow(workflowId).createRun({ runId });
+        if (signal.aborted) return;
+        return run.timeTravelStream({
+          ...params,
+          perStep: perStep ?? debugMode,
+          requestContext,
+          tracingOptions,
+        });
+      }, 'Error time traveling workflow stream'),
   );
 
   const closeStreamsAndReset = useCallback(() => {
+    closeActiveStream();
     setIsStreaming(false);
     setStreamResult({} as WorkflowStreamResult);
-    if (readerRef.current) {
-      try {
-        readerRef.current.releaseLock();
-      } catch {
-        // Reader might already be released, ignore the error
-      }
-      readerRef.current = null;
-    }
-    if (observerRef.current) {
-      try {
-        observerRef.current.releaseLock();
-      } catch {
-        // Reader might already be released, ignore the error
-      }
-      observerRef.current = null;
-    }
-    if (resumeStreamRef.current) {
-      try {
-        resumeStreamRef.current.releaseLock();
-      } catch {
-        // Reader might already be released, ignore the error
-      }
-      resumeStreamRef.current = null;
-    }
-    if (timeTravelStreamRef.current) {
-      try {
-        timeTravelStreamRef.current.releaseLock();
-      } catch {
-        // Reader might already be released, ignore the error
-      }
-      timeTravelStreamRef.current = null;
-    }
-  }, []);
+  }, [closeActiveStream]);
 
   return {
     streamWorkflow,

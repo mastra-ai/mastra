@@ -40,10 +40,16 @@ export const useWorkflowGraphRuntime = ({
   const isArmBypassed = useMemo(() => {
     const stepSuccessors = buildStepSuccessors(stepsFlow);
     const { conditionalStepIds } = collectGraphStepFlags(stepGraph ?? workflowRun.workflow?.stepGraph);
-    const isStepSuccess = (stepId: string) => steps[getScopedStepId(stepId, workflowName) ?? '']?.status === 'success';
+    const scopedSteps = workflowName
+      ? Object.fromEntries(
+          Object.entries(steps)
+            .filter(([stepId]) => stepId.startsWith(`${workflowName}.`))
+            .map(([stepId, step]) => [stepId.slice(workflowName.length + 1), step]),
+        )
+      : steps;
     return (stepId: string | undefined) =>
-      Boolean(stepId) &&
-      isBranchArmBypassed({ stepId: stepId!, conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess });
+      stepId !== undefined &&
+      isBranchArmBypassed({ stepId, conditionalStepIds, stepSuccessors, stepsFlow, steps: scopedSteps });
   }, [stepsFlow, stepGraph, workflowRun.workflow?.stepGraph, steps, workflowName]);
   const nodeTypes = useMemo(
     () => ({

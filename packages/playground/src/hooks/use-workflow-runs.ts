@@ -1,13 +1,14 @@
+import type { GetWorkflowRunByIdResponse } from '@mastra/client-js';
 import type { WorkflowRuns } from '@mastra/core/storage';
 import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
+import type { UseQueryOptions } from '@tanstack/react-query';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
 export const PER_PAGE = 20;
 
-/** Returns the next page number if the last page was full, indicating more results may exist. */
 export function getWorkflowRunsNextPageParam(lastPage: WorkflowRuns, _allPages: unknown, lastPageParam: number) {
   if (lastPage.runs.length < PER_PAGE) {
     return undefined;
@@ -15,7 +16,6 @@ export function getWorkflowRunsNextPageParam(lastPage: WorkflowRuns, _allPages: 
   return lastPageParam + 1;
 }
 
-/** Deduplicates workflow runs by runId across all loaded pages, keeping the first occurrence. */
 export function selectUniqueRuns(data: { pages: WorkflowRuns[] }) {
   const seen = new Set<string>();
   return data.pages
@@ -52,7 +52,11 @@ export const useWorkflowRuns = (workflowId: string, { enabled = true }: { enable
   return { ...query, setEndOfListElement };
 };
 
-export const useWorkflowRun = (workflowId: string, runId: string, refetchInterval?: number) => {
+export const useWorkflowRun = (
+  workflowId: string,
+  runId: string,
+  refetchInterval?: UseQueryOptions<GetWorkflowRunByIdResponse>['refetchInterval'],
+) => {
   const client = useMastraClient();
   return useQuery({
     queryKey: ['workflow-run', workflowId, runId],
