@@ -311,6 +311,8 @@ When `requireReadBeforeWrite` is enabled, write tools reject changes to files th
 
 If a file changes on disk after it was read, the write is still rejected until the agent re-reads it, and a successful write always clears the record so the next edit requires a fresh read. Runs without a memory thread or without Mastra storage track reads per run.
 
+Read records are scoped to the filesystem they were read from, identified by the filesystem's provider and base path. If a thread resolves a different filesystem between requests — for example, a dynamic workspace or filesystem that varies by request context — previously read files must be re-read on the new filesystem before writing. Filesystems with the same configuration (such as two `LocalFilesystem` instances with the same `basePath`) share read records.
+
 ### Tool hooks
 
 Set `tools.hooks` to run logic before and after every enabled workspace tool call. Hooks run after name remapping, so the context includes both the exposed `toolName` and the original `workspaceToolName`.

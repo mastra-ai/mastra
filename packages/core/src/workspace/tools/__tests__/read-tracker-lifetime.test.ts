@@ -6,7 +6,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { InMemoryThreadStateStorage } from '../../../storage/domains/thread-state';
 import { WORKSPACE_TOOLS } from '../../constants';
 import { FileReadRequiredError } from '../../errors';
-import { LocalFilesystem, ThreadStateFileReadTracker, WORKSPACE_READS_STATE_TYPE } from '../../filesystem';
+import {
+  deriveReadScope,
+  LocalFilesystem,
+  ThreadStateFileReadTracker,
+  WORKSPACE_READS_STATE_TYPE,
+} from '../../filesystem';
 import { Workspace } from '../../workspace';
 import { createWorkspaceTools } from '../tools';
 
@@ -127,8 +132,10 @@ describe('read-tracker lifetime across createWorkspaceTools calls (GH-23772)', (
       await run1[READ_FILE].execute({ path: 'target.txt' }, { workspace });
 
       // External modification between runs — mtime staleness must still fire.
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Set the mtime explicitly so the test doesn't depend on filesystem timestamp granularity.
       await fs.writeFile(path.join(tempDir, 'target.txt'), 'externally modified');
+      const bumped = new Date(Date.now() + 5_000);
+      await fs.utimes(path.join(tempDir, 'target.txt'), bumped, bumped);
 
       const run2 = await createWorkspaceTools(workspace, {
         workspace,
@@ -269,6 +276,108 @@ describe('read-tracker lifetime across createWorkspaceTools calls (GH-23772)', (
           { workspace },
         ),
       ).rejects.toThrow(FileReadRequiredError);
+    });
+  });
+
+  describe('filesystem scope isolation (records are keyed to the filesystem they were read from)', () => {
+    let otherDir: string;
+
+    beforeEach(async () => {
+      otherDir = await fs.mkdtemp(path.join(os.tmpdir(), 'read-tracker-scope-'));
+      await fs.writeFile(path.join(otherDir, 'target.txt'), 'other content');
+    });
+
+    afterEach(async () => {
+      await fs.rm(otherDir, { recursive: true, force: true }).catch(() => {});
+    });
+
+    function makeWorkspaceAt(basePath: string) {
+      return new Workspace({
+        filesystem: new LocalFilesystem({ basePath }),
+        tools: {
+          [EDIT_FILE]: { requireReadBeforeWrite: true },
+        },
+      });
+    }
+
+    it('rejects a write on a different filesystem even though the thread has a record for the same path', async () => {
+      const store = new InMemoryThreadStateStorage();
+
+      // Read target.txt on filesystem A.
+      const workspaceA = makeWorkspaceAt(tempDir);
+      const runA = await createWorkspaceTools(workspaceA, {
+        workspace: workspaceA,
+        readTracker: new ThreadStateFileReadTracker({ threadId: 'thread-1', store }),
+      });
+      await runA[READ_FILE].execute({ path: 'target.txt' }, { workspace: workspaceA });
+
+      // Make B's file *older* than A's recorded mtime, so the mtime staleness
+      // check alone would pass — only the scope check can catch this.
+      const past = new Date('2020-01-01T00:00:00Z');
+      await fs.utimes(path.join(otherDir, 'target.txt'), past, past);
+
+      // Edit the same relative path on filesystem B, same thread + store.
+      const workspaceB = makeWorkspaceAt(otherDir);
+      const runB = await createWorkspaceTools(workspaceB, {
+        workspace: workspaceB,
+        readTracker: new ThreadStateFileReadTracker({ threadId: 'thread-1', store }),
+      });
+      await expect(
+        runB[EDIT_FILE].execute(
+          { path: 'target.txt', old_string: 'other content', new_string: 'sneaky edit' },
+          { workspace: workspaceB },
+        ),
+      ).rejects.toThrow(/different filesystem/);
+
+      const content = await fs.readFile(path.join(otherDir, 'target.txt'), 'utf-8');
+      expect(content).toBe('other content');
+    });
+
+    it('shares records across fresh workspace instances with the same basePath (suspend/resume with new instances)', async () => {
+      const store = new InMemoryThreadStateStorage();
+
+      // Run 1: read on one workspace instance.
+      const workspaceA = makeWorkspaceAt(tempDir);
+      const runA = await createWorkspaceTools(workspaceA, {
+        workspace: workspaceA,
+        readTracker: new ThreadStateFileReadTracker({ threadId: 'thread-1', store }),
+      });
+      await runA[READ_FILE].execute({ path: 'target.txt' }, { workspace: workspaceA });
+
+      // Run 2 (resume): brand-new workspace + filesystem + tracker instances
+      // pointing at the same basePath — the scope is configuration-derived,
+      // so the record still counts and the edit succeeds.
+      const workspaceB = makeWorkspaceAt(tempDir);
+      const runB = await createWorkspaceTools(workspaceB, {
+        workspace: workspaceB,
+        readTracker: new ThreadStateFileReadTracker({ threadId: 'thread-1', store }),
+      });
+      const result = await runB[EDIT_FILE].execute(
+        { path: 'target.txt', old_string: 'original content', new_string: 'updated content' },
+        { workspace: workspaceB },
+      );
+      expect(result).toContain('Replaced 1 occurrence');
+    });
+
+    it('round-trips the scope through thread-state persistence', async () => {
+      const store = new InMemoryThreadStateStorage();
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const scope = deriveReadScope(filesystem);
+      const modifiedAt = new Date('2026-01-02T03:04:05.678Z');
+
+      const writer = new ThreadStateFileReadTracker({ threadId: 'thread-1', store });
+      await writer.recordRead('target.txt', modifiedAt, scope);
+
+      // Fresh instance, same store/thread: scope survived serialization.
+      const reader = new ThreadStateFileReadTracker({ threadId: 'thread-1', store });
+      const record = await reader.getReadRecord('target.txt');
+      expect(record?.scope).toBe(scope);
+
+      // Same filesystem configuration → gate passes; different one → fails.
+      expect((await reader.needsReRead('target.txt', modifiedAt, scope)).needsReRead).toBe(false);
+      const mismatch = await reader.needsReRead('target.txt', modifiedAt, 'local:/somewhere/else');
+      expect(mismatch.needsReRead).toBe(true);
+      expect(mismatch.reason).toContain('different filesystem');
     });
   });
 

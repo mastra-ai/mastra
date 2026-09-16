@@ -24,6 +24,7 @@ const MAX_RECORDS_PER_THREAD = 200;
 interface SerializedReadRecord {
   readAt: string;
   modifiedAtRead: string;
+  scope?: string;
 }
 
 type SerializedReadRecords = Record<string, SerializedReadRecord>;
@@ -41,7 +42,9 @@ function deserializeRecords(value: unknown): Map<string, FileReadRecord> {
     const readAt = new Date(raw.readAt);
     const modifiedAtRead = new Date(raw.modifiedAtRead);
     if (Number.isNaN(readAt.getTime()) || Number.isNaN(modifiedAtRead.getTime())) continue;
-    records.set(path, { path, readAt, modifiedAtRead });
+    // Tolerate records without a scope (they fail closed at the gate).
+    const scope = typeof raw.scope === 'string' ? raw.scope : undefined;
+    records.set(path, { path, readAt, modifiedAtRead, scope });
   }
   return records;
 }
@@ -52,6 +55,7 @@ function serializeRecords(records: Map<string, FileReadRecord>): SerializedReadR
     out[path] = {
       readAt: record.readAt.toISOString(),
       modifiedAtRead: record.modifiedAtRead.toISOString(),
+      ...(record.scope !== undefined ? { scope: record.scope } : {}),
     };
   }
   return out;
@@ -94,7 +98,7 @@ export class ThreadStateFileReadTracker implements FileReadTracker {
     this.logger = logger;
   }
 
-  async recordRead(path: string, modifiedAt: Date): Promise<void> {
+  async recordRead(path: string, modifiedAt: Date, scope?: string): Promise<void> {
     const records = await this.ensureLoaded();
     const normalizedPath = normalizeReadTrackerPath(path);
     if (!records.has(normalizedPath) && records.size >= MAX_RECORDS_PER_THREAD) {
@@ -104,6 +108,7 @@ export class ThreadStateFileReadTracker implements FileReadTracker {
       path: normalizedPath,
       readAt: new Date(),
       modifiedAtRead: modifiedAt,
+      scope,
     });
     await this.persist();
   }
@@ -113,8 +118,12 @@ export class ThreadStateFileReadTracker implements FileReadTracker {
     return records.get(normalizeReadTrackerPath(path));
   }
 
-  async needsReRead(path: string, currentModifiedAt: Date): Promise<{ needsReRead: boolean; reason?: string }> {
-    return evaluateReadRecord(path, await this.getReadRecord(path), currentModifiedAt);
+  async needsReRead(
+    path: string,
+    currentModifiedAt: Date,
+    scope?: string,
+  ): Promise<{ needsReRead: boolean; reason?: string }> {
+    return evaluateReadRecord(path, await this.getReadRecord(path), currentModifiedAt, scope);
   }
 
   async clearReadRecord(path: string): Promise<void> {
