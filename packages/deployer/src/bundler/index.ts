@@ -12,7 +12,7 @@ import fsExtra, { copy, ensureDir, emptyDir, readJSON } from 'fs-extra/esm';
 import type { InputOptions, OutputOptions } from 'rollup';
 import { glob } from 'tinyglobby';
 import { analyzeBundle } from '../build/analyze';
-import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
+import { createBundler as createBundlerUtil, getInputOptions, getUnresolvedWorkspaceImport } from '../build/bundler';
 import { getBundlerOptions } from '../build/bundlerOptions';
 import type { BundlerOptions, ExternalDependencyInfo } from '../build/types';
 import type { BundlerPlatform } from '../build/utils';
@@ -747,14 +747,12 @@ export abstract class Bundler extends MastraBundler {
           ...inputOptions,
           logLevel: inputOptions.logLevel === 'silent' ? 'warn' : inputOptions.logLevel,
           onwarn: warning => {
-            if (warning.code === 'UNRESOLVED_IMPORT') {
-              const src = (warning as { source?: string; id?: string }).source ?? (warning as { id?: string }).id ?? '';
-              if (src) {
-                const pkgName = getPackageName(src);
-                if (pkgName && analyzedBundleInfo.workspaceMap.has(pkgName)) {
-                  unresolvedWorkspaceImports.push({ source: src });
-                }
-              }
+            const unresolvedWorkspaceDep = getUnresolvedWorkspaceImport(
+              warning as { code: string; source?: string; id?: string },
+              analyzedBundleInfo.workspaceMap,
+            );
+            if (unresolvedWorkspaceDep) {
+              unresolvedWorkspaceImports.push({ source: unresolvedWorkspaceDep });
             }
 
             if (warning.code === 'CIRCULAR_DEPENDENCY') {
