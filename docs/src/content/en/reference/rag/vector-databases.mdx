@@ -669,12 +669,12 @@ Each vector database enforces specific naming conventions for indexes and collec
   <TabItem value="azure-ai-search" label="Azure AI Search">
     Index names must:
 
-    - Use only lowercase letters, numbers, and dashes
-    - Start with a letter
-    - Not end with a dash or contain consecutive dashes
+    - Use only lowercase letters, numbers, dashes, and underscores
+    - Not start or end with a dash
     - Be between 2 and 128 characters long
-    - Example: `my-index-123` is valid
-    - Example: `My_Index` isn't valid (contains uppercase letters and an underscore)
+    - Example: `my-index-123` and `my_index` are valid
+    - Example: `MyIndex` isn't valid (contains uppercase letters)
+    - Example: `my-index-` isn't valid (ends with a dash)
   </TabItem>
 </Tabs>
 

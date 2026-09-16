@@ -153,6 +153,12 @@ type AzureAISearchDeleteVectorsParams = {
   filter?: AzureAISearchVectorFilter;
 };
 
+interface IndexSchema {
+  vectorFieldName: string;
+  dimension: number | undefined;
+  fields: Map<string, IndexFieldCapabilities>;
+}
+
 type IndexFieldCapabilities = {
   type?: string;
 };
@@ -432,38 +438,45 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
   }
 
   /**
+   * Reads the index definition once and derives everything a write path needs
+   * from it: the vector field name, its dimension, and per-field capabilities.
+   * `@azure/search-documents` does not cache `getIndex`, so callers that need
+   * more than one of these must share a single read.
+   */
+  private async readIndexSchema(indexName: string): Promise<IndexSchema> {
+    const index = await this.indexClient.getIndex(indexName);
+    return this.schemaFromIndex(index);
+  }
+
+  private schemaFromIndex(index: { fields?: unknown[] }): IndexSchema {
+    const fields = new Map<string, IndexFieldCapabilities>();
+    let vectorFieldName = 'vector';
+    let dimension: number | undefined;
+
+    for (const raw of index.fields ?? []) {
+      const field = raw as { name: string; type: string; dimensions?: number; vectorSearchDimensions?: number };
+      fields.set(field.name, { type: field.type });
+      const dims = field.dimensions ?? field.vectorSearchDimensions;
+      if (dimension === undefined && field.type === 'Collection(Edm.Single)' && dims) {
+        vectorFieldName = field.name;
+        dimension = dims;
+      }
+    }
+
+    return { vectorFieldName, dimension, fields };
+  }
+
+  /**
    * Detects the vector field name in an existing index
    * Falls back to 'vector' for backward compatibility
-   *
-   * @param indexName - Name of the index
-   * @returns The name of the vector field
    */
   private async getVectorFieldName(indexName: string): Promise<string> {
     try {
-      const index = await this.indexClient.getIndex(indexName);
-      const vectorField = index.fields?.find(
-        (field: any) => field.type === 'Collection(Edm.Single)' && (field.dimensions || field.vectorSearchDimensions),
-      );
-
-      // Return the found vector field name, or default to 'vector' for backward compatibility
-      return vectorField?.name || 'vector';
+      return (await this.readIndexSchema(indexName)).vectorFieldName;
     } catch {
       // If we can't determine the vector field name, fall back to 'vector' for backward compatibility
       return 'vector';
     }
-  }
-
-  private async getIndexFieldCapabilities(indexName: string): Promise<Map<string, IndexFieldCapabilities>> {
-    const index = await this.indexClient.getIndex(indexName);
-    const capabilities = new Map<string, IndexFieldCapabilities>();
-
-    for (const field of index.fields ?? []) {
-      capabilities.set((field as any).name, {
-        type: (field as any).type,
-      });
-    }
-
-    return capabilities;
   }
 
   private getMetadataIndexFields(
@@ -591,7 +604,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
 
     // Another writer may have declared the field with a different type; re-read
     // the authoritative schema rather than trusting our inferred types.
-    const refreshed = await this.getIndexFieldCapabilities(indexName);
+    const refreshed = (await this.readIndexSchema(indexName)).fields;
     for (const [name, capability] of refreshed) {
       fields.set(name, capability);
     }
@@ -892,24 +905,8 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       const searchClient = this.getSearchClient(indexName);
       const countResult = await searchClient.getDocumentsCount();
 
-      // Extract vector field information (find any vector field)
-      const vectorField = index.fields?.find(
-        (field: any) => field.type === 'Collection(Edm.Single)' && (field.dimensions || field.vectorSearchDimensions),
-      ) as any;
-
-      // For backward compatibility, if no vector field found or no dimensions,
-      // try to find 'vector' field specifically or use default values
-      if (!vectorField || (!vectorField.dimensions && !vectorField.vectorSearchDimensions)) {
-        const defaultVectorField = index.fields?.find((field: any) => field.name === 'vector') as any;
-        if (defaultVectorField && (defaultVectorField.dimensions || defaultVectorField.vectorSearchDimensions)) {
-          // Use the default 'vector' field
-          const dimension = defaultVectorField.dimensions || defaultVectorField.vectorSearchDimensions;
-          return {
-            dimension,
-            count: countResult,
-            metric: 'cosine', // Default metric for backward compatibility
-          };
-        }
+      const { dimension } = this.schemaFromIndex(index);
+      if (dimension === undefined) {
         throw new Error('Vector field not found or missing dimensions');
       }
 
@@ -927,11 +924,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
         }
       }
 
-      return {
-        dimension: vectorField.dimensions || vectorField.vectorSearchDimensions,
-        count: countResult,
-        metric,
-      };
+      return { dimension, count: countResult, metric };
     } catch (error) {
       throw new MastraError(
         {
@@ -1016,13 +1009,12 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
         await this.deleteVectors({ indexName, filter: deleteFilter });
       }
 
-      // Get index info to validate vector dimensions and detect vector field
-      const indexInfo = await this.describeIndex({ indexName });
-      this.validateVectorDimensions(vectors, indexInfo.dimension);
-
-      // Detect vector field name
-      const vectorFieldName = await this.getVectorFieldName(indexName);
-      const fields = await this.getIndexFieldCapabilities(indexName);
+      // One schema read gives us the vector field, its dimension, and field types.
+      const { vectorFieldName, dimension, fields } = await this.readIndexSchema(indexName);
+      if (dimension === undefined) {
+        throw new Error('Vector field not found or missing dimensions');
+      }
+      this.validateVectorDimensions(vectors, dimension);
       await this.ensureMetadataFields({ indexName, metadataList: metadata, vectorFieldName, fields });
 
       // Generate IDs if not provided
@@ -1343,14 +1335,14 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
 
       const searchClient = this.getSearchClient(indexName);
 
-      // Get vector field name
-      const vectorFieldName = await this.getVectorFieldName(indexName);
-      const fields = await this.getIndexFieldCapabilities(indexName);
+      const { vectorFieldName, dimension, fields } = await this.readIndexSchema(indexName);
 
       // Validate vector dimension if updating vector
       if (update.vector) {
-        const indexInfo = await this.describeIndex({ indexName });
-        this.validateVectorDimensions([update.vector], indexInfo.dimension);
+        if (dimension === undefined) {
+          throw new Error('Vector field not found or missing dimensions');
+        }
+        this.validateVectorDimensions([update.vector], dimension);
       }
 
       let targetIds: string[];
@@ -1611,6 +1603,18 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
   private async findIdsByFilter(indexName: string, filter: AzureAISearchVectorFilter): Promise<string[]> {
     const searchClient = this.getSearchClient(indexName);
     const odataFilter = this.transformFilter(filter);
+    // Only update/delete call this. A filter that is non-empty as an object but
+    // translates to no predicate (`{ $and: [] }`, `{ x: { $nin: [] } }`) would
+    // otherwise select every document, which is never what a caller meant.
+    if (!odataFilter) {
+      throw new MastraError({
+        id: 'STORAGE_AZURE_AI_SEARCH_EMPTY_FILTER',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: 'Filter does not constrain any documents; refusing to apply it to every document',
+      });
+    }
 
     const ids: string[] = [];
     const pageSize = 1000;

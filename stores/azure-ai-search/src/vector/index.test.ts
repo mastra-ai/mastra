@@ -346,12 +346,12 @@ describe('AzureAISearchVector Unit Tests', () => {
         indexName: 'test-index',
         vectors: [[0.1, 0.2, 0.3]],
         metadata: [{ type: 'document' }],
-        deleteFilter: { eq: { type: 'document' } },
+        deleteFilter: { type: 'document' },
       });
 
       expect(deleteVectorsSpy).toHaveBeenCalledWith({
         indexName: 'test-index',
-        filter: { eq: { type: 'document' } },
+        filter: { type: 'document' },
       });
     });
   });
@@ -417,13 +417,13 @@ describe('AzureAISearchVector Unit Tests', () => {
         indexName: 'test-index',
         queryVector: Array.from({ length: 128 }, (_, i) => i * 0.001),
         topK: 5,
-        filter: { contains: { content: 'test' } },
+        filter: { content: 'test' },
       });
 
       expect(mockSearchClientInstance.search).toHaveBeenCalledWith(
         '*',
         expect.objectContaining({
-          filter: "search.ismatch('test', 'content')",
+          filter: "content eq 'test'",
         }),
       );
     });
@@ -495,7 +495,7 @@ describe('AzureAISearchVector Unit Tests', () => {
 
       await azureVector.updateVector({
         indexName: 'test-index',
-        filter: { eq: { category: 'old' } },
+        filter: { category: 'old' },
         update: { metadata: { category: 'new' } },
       });
 
@@ -629,7 +629,7 @@ describe('AzureAISearchVector Unit Tests', () => {
 
       await azureVector.deleteVectors({
         indexName: 'test-index',
-        filter: { eq: { category: 'books' } },
+        filter: { category: 'books' },
       });
 
       expect(mockSearchClientInstance.deleteDocuments).toHaveBeenCalledWith([{ id: 'doc1' }, { id: 'doc2' }]);
@@ -650,7 +650,7 @@ describe('AzureAISearchVector Unit Tests', () => {
 
       await azureVector.deleteVectors({
         indexName: 'test-index',
-        filter: { eq: { category: 'books' } },
+        filter: { category: 'books' },
       });
 
       expect(mockSearchClientInstance.search).toHaveBeenCalledTimes(2);
@@ -683,86 +683,100 @@ describe('AzureAISearchVector Unit Tests', () => {
         expect(translator.translate()).toBeUndefined();
       });
 
-      it('should use raw $filter when provided', () => {
-        const result = translator.translate({ $filter: "category eq 'books'" });
-        expect(result).toBe("category eq 'books'");
-      });
-
       it('should translate equality filters', () => {
-        const result = translator.translate({
-          eq: { category: 'books', author: 'Jane Doe' },
-        });
+        const result = translator.translate({ category: { $eq: 'books' }, author: 'Jane Doe' });
         expect(result).toBe("category eq 'books' and author eq 'Jane Doe'");
       });
 
       it('should translate comparison filters', () => {
         const result = translator.translate({
-          gt: { price: 10 },
-          lt: { rating: 5 },
-          ge: { year: 2020 },
-          le: { pages: 300 },
+          price: { $gt: 10 },
+          rating: { $lt: 5 },
+          year: { $gte: 2020 },
+          pages: { $lte: 300 },
         });
-        expect(result).toBe('price gt 10 and year ge 2020 and rating lt 5 and pages le 300');
-      });
-
-      it('should translate string operations', () => {
-        const result = translator.translate({
-          startsWith: { title: 'The' },
-          contains: { description: 'adventure' },
-        });
-        expect(result).toBe("search.ismatch('adventure', 'description') and startswith(title, 'The')");
-      });
-
-      it('should translate logical operations', () => {
-        const result = translator.translate({
-          and: [{ eq: { category: 'books' } }, { gt: { price: 10 } }],
-        });
-        expect(result).toBe("(category eq 'books' and price gt 10)");
+        expect(result).toBe('price gt 10 and rating lt 5 and year ge 2020 and pages le 300');
       });
 
       it('should translate NOT operations', () => {
-        const result = translator.translate({
-          not: { eq: { category: 'books' } },
-        });
-        expect(result).toBe("not (category eq 'books')");
+        expect(translator.translate({ $not: { category: 'books' } })).toBe("not (category eq 'books')");
+        expect(translator.translate({ category: { $not: { $eq: 'books' } } })).toBe("not (category eq 'books')");
       });
 
       it('should handle complex nested filters', () => {
         const result = translator.translate({
-          and: [
-            { eq: { category: 'books' } },
-            {
-              or: [{ gt: { price: 20 } }, { eq: { author: 'Famous Author' } }],
-            },
-          ],
+          $and: [{ category: 'books' }, { $or: [{ price: { $gt: 20 } }, { author: 'Famous Author' }] }],
         });
         expect(result).toBe("(category eq 'books' and (price gt 20 or author eq 'Famous Author'))");
       });
 
       it('should escape special characters in strings', () => {
-        const result = translator.translate({
-          eq: { title: "Book's Title" },
-        });
-        expect(result).toBe("title eq 'Book''s Title'");
+        expect(translator.translate({ title: "Book's Title" })).toBe("title eq 'Book''s Title'");
       });
 
       it('should handle different value types', () => {
-        const result = translator.translate({
-          eq: {
-            isAvailable: true,
-            price: 29.99,
-            category: 'fiction',
-          },
-        });
+        const result = translator.translate({ isAvailable: true, price: 29.99, category: 'fiction' });
         expect(result).toBe("isAvailable eq true and price eq 29.99 and category eq 'fiction'");
       });
 
       it('should handle date values', () => {
         const date = new Date('2023-01-01');
-        const result = translator.translate({
-          ge: { publishDate: date },
-        });
-        expect(result).toBe(`publishDate ge ${date.toISOString()}`);
+        expect(translator.translate({ publishDate: { $gte: date } })).toBe(`publishDate ge ${date.toISOString()}`);
+        expect(translator.translate({ publishDate: date })).toBe(`publishDate eq ${date.toISOString()}`);
+      });
+
+      it('should translate $in and $nin as equality chains', () => {
+        expect(translator.translate({ category: { $in: ['a', 'b'] } })).toBe("(category eq 'a' or category eq 'b')");
+        expect(translator.translate({ category: ['a', 'b'] })).toBe("(category eq 'a' or category eq 'b')");
+        expect(translator.translate({ category: { $nin: ['a'] } })).toBe("not (category eq 'a')");
+      });
+
+      it('should produce a match-none predicate for empty disjunctions and membership sets', () => {
+        const none = "(id eq '__mastra_none__' and id ne '__mastra_none__')";
+        expect(translator.translate({ $or: [] })).toBe(none);
+        expect(translator.translate({ category: { $in: [] } })).toBe(none);
+        expect(translator.translate({ category: [] })).toBe(none);
+        // Combined with other clauses it still poisons the whole conjunction.
+        expect(translator.translate({ tenant: 't1', category: { $in: [] } })).toBe(`tenant eq 't1' and ${none}`);
+      });
+
+      it('should treat empty $and and empty $nin as vacuously true', () => {
+        expect(translator.translate({ $and: [] })).toBeUndefined();
+        expect(translator.translate({ category: { $nin: [] } })).toBeUndefined();
+      });
+
+      it('should treat and/or/eq/not as ordinary field names, not operators', () => {
+        expect(translator.translate({ and: 'retail' })).toBe("and eq 'retail'");
+        expect(translator.translate({ or: { $gt: 1 }, eq: true, not: null })).toBe(
+          'or gt 1 and eq eq true and not eq null',
+        );
+      });
+
+      it('should reject raw OData and unknown operators', () => {
+        expect(() => translator.translate({ $filter: "category eq 'books'" } as any)).toThrow(
+          /Unsupported filter operator '\$filter'/,
+        );
+        expect(() => translator.translate({ category: { $regex: 'x' } } as any)).toThrow(
+          /Unsupported filter operator '\$regex'/,
+        );
+      });
+
+      it('should refuse to delete or update with a filter that translates to no predicate', async () => {
+        await expect(azureVector.deleteVectors({ indexName: 'test-index', filter: { $and: [] } })).rejects.toThrow(
+          /does not constrain/,
+        );
+        await expect(
+          azureVector.updateVector({
+            indexName: 'test-index',
+            filter: { tag: { $nin: [] } },
+            update: { metadata: { a: 1 } },
+          }),
+        ).rejects.toThrow(/does not constrain/);
+        expect(mockSearchClientInstance.search).not.toHaveBeenCalled();
+      });
+
+      it('should reject field names that could inject OData', () => {
+        expect(() => translator.translate({ "id eq 'x' or 1": 1 } as any)).toThrow(/Invalid field name/);
       });
 
       it('should translate Mastra-style operators', () => {

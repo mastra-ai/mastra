@@ -160,7 +160,7 @@ For Azure AI Search-specific index features (custom vector field name, additiona
     type: 'AzureAISearchVectorFilter',
     isOptional: true,
     description:
-      'Metadata filter for the query. Accepts Mastra-style operators ($eq, $ne, $gt, $gte, $lt, $lte, $in, $nin, $exists, $and, $or, $not) or the legacy Azure-specific shape (eq, ne, gt, ge, lt, le, contains, startsWith, endsWith, any, all, $filter).',
+      'Metadata filter for the query, using Mastra operators ($eq, $ne, $gt, $gte, $lt, $lte, $in, $nin, $exists, $and, $or, $not). Translated to an Azure OData $filter; raw OData strings are not accepted.',
   },
   {
     name: 'includeVector',

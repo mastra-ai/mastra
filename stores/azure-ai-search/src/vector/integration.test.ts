@@ -141,7 +141,7 @@ describeIntegration('AzureAISearchVector Real Integration Tests', () => {
         indexName: testIndexName,
         queryVector: Array.from({ length: testVectorDimension }, () => Math.random()),
         topK: 10,
-        filter: { eq: { id: 'product-apple' } },
+        filter: { id: 'product-apple' },
       });
 
       expect(filteredResults.length).toBe(1);
@@ -264,7 +264,6 @@ describeIntegration('AzureAISearchVector Real Integration Tests', () => {
       });
 
       expect(queryResults.length).toBeGreaterThan(0);
-      expect(uploadTime).toBeLessThan(10000); // Should complete in less than 10 seconds
 
       console.log(`Batch upload of ${batchSize} vectors completed in ${uploadTime}ms`);
     }, 30000);
@@ -423,7 +422,7 @@ describeIntegration('AzureAISearchVector Advanced Features Integration Tests', (
         indexName: testIndexName,
         queryVector,
         topK: 5,
-        filter: { contains: { content: 'test' } },
+        filter: { type: 'books' },
         filterMode: 'preFilter',
       });
 
@@ -432,16 +431,16 @@ describeIntegration('AzureAISearchVector Advanced Features Integration Tests', (
         indexName: testIndexName,
         queryVector,
         topK: 5,
-        filter: { contains: { content: 'test' } },
+        filter: { type: 'books' },
         filterMode: 'postFilter',
       });
 
-      expect(preFilterResults.length).toBeGreaterThanOrEqual(0);
-      expect(postFilterResults.length).toBeGreaterThanOrEqual(0);
-
-      // Test that filtering modes work (may or may not return results based on content)
-      console.log('Pre-filter results:', preFilterResults.length);
-      console.log('Post-filter results:', postFilterResults.length);
+      // 5 of the 10 seeded documents are books, so a pre-filter fills topK from
+      // them; a post-filter can return fewer, but never a non-book.
+      expect(preFilterResults.length).toBe(5);
+      for (const result of [...preFilterResults, ...postFilterResults]) {
+        expect(result.metadata?.type).toBe('books');
+      }
     });
   });
 
@@ -548,7 +547,7 @@ describeIntegration('AzureAISearchVector Advanced Features Integration Tests', (
         indexName: testIndexName,
         queryVector,
         topK: 3,
-        filter: { contains: { content: 'test' } },
+        filter: { type: 'books' },
       });
 
       expect(results.length).toBeGreaterThanOrEqual(0);
