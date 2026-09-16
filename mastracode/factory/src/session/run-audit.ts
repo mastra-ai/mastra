@@ -20,9 +20,30 @@ const factoryOpenRunSchema = z.object({
   threadId: z.string(),
   branch: z.string(),
   agentName: z.string(),
+  /**
+   * Which dispatcher process is watching this run, and when it last said so
+   * (epoch ms). The ledger is a thread setting shared by every replica, so a
+   * remote reader needs these to tell a run that is live elsewhere from one
+   * that died with its process. Absent on entries written before ownership
+   * was recorded; those read as stale.
+   */
+  ownerId: z.string().optional(),
+  heartbeatAt: z.number().optional(),
 });
 
 export type FactoryOpenRun = z.infer<typeof factoryOpenRunSchema>;
+
+/** A heartbeat older than this means the owner is gone; nothing renews it once the run's dispatcher dies. */
+export const FACTORY_OPEN_RUN_STALE_MS = 30_000;
+
+export function isOpenRunLiveElsewhere(run: FactoryOpenRun, ownerId: string, now = Date.now()): boolean {
+  return (
+    run.ownerId !== undefined &&
+    run.ownerId !== ownerId &&
+    run.heartbeatAt !== undefined &&
+    now - run.heartbeatAt < FACTORY_OPEN_RUN_STALE_MS
+  );
+}
 
 export interface RunEndCaptureSession {
   readonly thread: {
@@ -54,7 +75,10 @@ export async function waitForSessionRunAudit(session: RunEndCaptureSession): Pro
 }
 
 function runAuditInput(run: FactoryOpenRun) {
-  const { orgId, factoryProjectId, workItemId, workItemName, ...metadata } = run;
+  // Ownership fields are dispatcher bookkeeping, not part of the run's audit record.
+  const { orgId, factoryProjectId, workItemId, workItemName, ownerId, heartbeatAt, ...metadata } = run;
+  void ownerId;
+  void heartbeatAt;
   return {
     orgId,
     factoryProjectId,
@@ -119,6 +143,22 @@ export function recordSessionRunStart(
       action: 'factory.run.started',
     });
     await recordRunEnds(session, audit, observedEnd(), run.kickoffId);
+  });
+}
+
+/** Renew this process's claim on an open run so other replicas keep treating it as live. */
+export function heartbeatSessionOpenRun(
+  session: RunEndCaptureSession,
+  kickoffId: string,
+  at = Date.now(),
+): Promise<void> {
+  return serializeRunAudit(session, async () => {
+    const runs = await listSessionOpenRuns(session);
+    if (!runs.some(run => run.kickoffId === kickoffId)) return;
+    await session.thread.setSetting({
+      key: FACTORY_OPEN_RUNS_SETTING,
+      value: runs.map(run => (run.kickoffId === kickoffId ? { ...run, heartbeatAt: at } : run)),
+    });
   });
 }
 

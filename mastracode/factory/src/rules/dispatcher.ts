@@ -12,7 +12,14 @@ import {
   workItemPhaseSemantics,
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import { listSessionOpenRuns, recordSessionRunStart, waitForSessionRunAudit } from '../session/run-audit.js';
+import {
+  FACTORY_OPEN_RUN_STALE_MS,
+  heartbeatSessionOpenRun,
+  isOpenRunLiveElsewhere,
+  listSessionOpenRuns,
+  recordSessionRunStart,
+  waitForSessionRunAudit,
+} from '../session/run-audit.js';
 import { resolvePromptInvocation, resolveSkillInvocation, resolveSkillResumeInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
@@ -861,11 +868,15 @@ export class FactoryDecisionDispatcher {
           const runStillActive = () =>
             this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
           // Only a *live* run on this binding can be duplicated by a second
-          // kickoff, so that is the only thing worth waiting on. A durable
-          // open-run entry with no run behind it is an orphan: the run died with
-          // its process and no `agent_end` will ever clear it. Waiting on it
-          // would wedge the binding for good; the next observed run end sweeps
-          // it out of the ledger.
+          // kickoff, so that is the only thing worth waiting on. The open-run
+          // ledger is shared by every replica, but the run registry is local, so
+          // an entry with nothing live here is one of two things:
+          //  - live on another replica (fresh heartbeat from another owner):
+          //    hand the decision back to retry, since that owner will clear the
+          //    entry and only it can observe the run end;
+          //  - an orphan (stale or missing heartbeat): the run died with its
+          //    process and no `agent_end` will ever clear it. Waiting would
+          //    wedge the binding for good; the next observed run end sweeps it.
           while (true) {
             const openRun = watchRun(session, {
               timeoutMs: this.#skillCompletionObservationTimeoutMs,
@@ -874,8 +885,15 @@ export class FactoryDecisionDispatcher {
               runStillActive,
             });
             try {
-              const alreadyOpen = (await listSessionOpenRuns(session)).some(open => open.bindingId === binding.id);
-              if (!alreadyOpen || !runStillActive()) break;
+              const open = (await listSessionOpenRuns(session)).filter(entry => entry.bindingId === binding.id);
+              if (open.length === 0) break;
+              if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) {
+                throw new FactoryDispatchError(
+                  'session_unavailable',
+                  `Factory binding ${binding.id} has a run in flight on another dispatcher.`,
+                );
+              }
+              if (!runStillActive()) break;
               if (!(await openRun.wait())) break;
             } finally {
               openRun.close();
@@ -1005,7 +1023,7 @@ export class FactoryDecisionDispatcher {
             // terminal outcome matters as much as a fresh wake's: a run that ends
             // in error after accepting the prompt has still failed this decision.
             try {
-              await run.settle();
+              await this.#withOpenRunHeartbeat(session, deliveryId, () => run.settle());
             } catch (error) {
               // Roles share one session. When this role handed the card on
               // mid-turn, the next role's kickoff was delivered onto the same
@@ -1397,6 +1415,25 @@ export class FactoryDecisionDispatcher {
     }
   }
 
+  /** Keep this process's claim on an open run fresh for as long as it is watching the run. */
+  async #withOpenRunHeartbeat<T>(
+    session: BoundDispatcherSession,
+    kickoffId: string,
+    effect: () => Promise<T>,
+  ): Promise<T> {
+    if (!this.#audit) return effect();
+    const timer = setInterval(
+      () => void heartbeatSessionOpenRun(session, kickoffId),
+      Math.floor(FACTORY_OPEN_RUN_STALE_MS / 3),
+    );
+    timer.unref?.();
+    try {
+      return await effect();
+    } finally {
+      clearInterval(timer);
+    }
+  }
+
   async #recordRunStart(
     session: BoundDispatcherSession,
     binding: FactoryRunBindingRecord,
@@ -1413,6 +1450,8 @@ export class FactoryDecisionDispatcher {
       observedEnd,
       run: {
         kickoffId,
+        ownerId: this.#ownerId,
+        heartbeatAt: Date.now(),
         bindingId: binding.id,
         role: binding.role,
         startedBy: humanApproved ? approvedBy : 'factory-rule-dispatcher',
@@ -1544,6 +1583,7 @@ export const FACTORY_DISPATCH_CONSTANTS = {
   maxBackoffMs: MAX_BACKOFF_MS,
   skillCompletionObservationTimeoutMs: SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS,
   runRegistryHeartbeatMs: RUN_REGISTRY_HEARTBEAT_MS,
+  openRunStaleMs: FACTORY_OPEN_RUN_STALE_MS,
   maxInFlight: MAX_IN_FLIGHT,
   stages: FACTORY_RULE_STAGES,
 } as const;

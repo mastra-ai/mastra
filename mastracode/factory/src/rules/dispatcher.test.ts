@@ -2044,56 +2044,134 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
   });
 
-  it('kicks off when the open-run entry is stale and no run is live for the binding', async () => {
-    const seed = await createFactoryStorageForTests();
-    const storage = seed.workItems;
-    const { item, transitionService } = await queueDecision(storage, {
-      type: 'invokeSkill',
-      role: 'work',
-      skillName: 'understand-issue',
-      idempotencyKey: 'stale-open-binding-run',
-    });
-    const binding = await bindWorkRun(storage, item.id);
-    const { controller, session } = createSession(undefined, {
-      signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
-      emitAgentEndDuringSignal: true,
-      agentEndReason: 'complete',
-    });
-    // A run that died with its process: the durable entry survives, no
-    // agent_end will ever arrive for it, and the registry shows the thread idle.
-    await session.thread.setSetting({
-      key: FACTORY_OPEN_RUNS_SETTING,
-      value: [
-        {
-          kickoffId: 'orphaned-kickoff',
-          bindingId: binding.id,
-          role: binding.role,
-          startedBy: 'factory-rule-dispatcher',
-          orgId: binding.orgId,
-          factoryProjectId: binding.factoryProjectId,
-          workItemId: binding.workItemId,
-          sessionId: binding.sessionId,
-          threadId: binding.threadId,
-          branch: binding.branch,
-          agentName: 'build',
-        },
-      ],
-    });
-    controller.listActiveThreadRuns.mockReturnValue([]);
-    observeSessionRunEnd(session, { audit: seed.audit });
-    const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
-      isAutoRunEnabled: async () => true,
-      transitionService,
-      storage,
-      audit: seed.audit,
-      ownerId: 'worker-1',
+  describe('open-run ledger across dispatchers', () => {
+    async function setUpOpenBinding(entry: Record<string, unknown>) {
+      const seed = await createFactoryStorageForTests();
+      const storage = seed.workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'work',
+        skillName: 'understand-issue',
+        idempotencyKey: 'open-binding-ledger',
+      });
+      const binding = await bindWorkRun(storage, item.id);
+      const { controller, session } = createSession(undefined, {
+        signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+        emitAgentEndDuringSignal: true,
+        agentEndReason: 'complete',
+      });
+      await session.thread.setSetting({
+        key: FACTORY_OPEN_RUNS_SETTING,
+        value: [
+          {
+            kickoffId: 'earlier-kickoff',
+            bindingId: binding.id,
+            role: binding.role,
+            startedBy: 'factory-rule-dispatcher',
+            orgId: binding.orgId,
+            factoryProjectId: binding.factoryProjectId,
+            workItemId: binding.workItemId,
+            sessionId: binding.sessionId,
+            threadId: binding.threadId,
+            branch: binding.branch,
+            agentName: 'build',
+            ...entry,
+          },
+        ],
+      });
+      // Nothing live in this process's registry: the entry is either an orphan
+      // or a run another replica is hosting.
+      controller.listActiveThreadRuns.mockReturnValue([]);
+      observeSessionRunEnd(session, { audit: seed.audit });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        audit: seed.audit,
+        ownerId: 'worker-1',
+      });
+      return { storage, session, dispatcher };
+    }
+
+    it.each([
+      ['a legacy entry with no owner', {}],
+      ['an entry whose owner stopped heartbeating', { ownerId: 'worker-2', heartbeatAt: Date.now() - 60_000 }],
+      ['our own entry from a run that died', { ownerId: 'worker-1', heartbeatAt: Date.now() - 60_000 }],
+    ])('kicks off past %s', async (_label, entry) => {
+      const { storage, session, dispatcher } = await setUpOpenBinding(entry);
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
     });
 
-    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    it('hands the decision back for retry while another dispatcher is heartbeating the run', async () => {
+      const { storage, session, dispatcher } = await setUpOpenBinding({ ownerId: 'worker-2', heartbeatAt: Date.now() });
 
-    expect(session.sendSignal).toHaveBeenCalledTimes(1);
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect(session.sendSignal).not.toHaveBeenCalled();
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'retry',
+        failureCode: 'session_unavailable',
+        lastError: expect.stringContaining('in flight on another dispatcher'),
+      });
+    });
+
+    it('stamps ownership on the run it starts and heartbeats it until the run settles', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+      try {
+        const seed = await createFactoryStorageForTests();
+        const storage = seed.workItems;
+        const { item, transitionService } = await queueDecision(storage, {
+          type: 'invokeSkill',
+          role: 'work',
+          skillName: 'understand-issue',
+          idempotencyKey: 'heartbeat-open-run',
+        });
+        const binding = await bindWorkRun(storage, item.id);
+        const { controller, session, emitAgentEnd } = createSession(undefined, {
+          signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+          streamActive: true,
+        });
+        controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: binding.threadId }]);
+        observeSessionRunEnd(session, { audit: seed.audit });
+        const dispatcher = new FactoryDecisionDispatcher({
+          controller: controller as never,
+          isAutoRunEnabled: async () => true,
+          transitionService,
+          storage,
+          audit: seed.audit,
+          ownerId: 'worker-1',
+        });
+
+        const dispatch = dispatcher.runOnce();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(session.sendSignal).toHaveBeenCalledTimes(1);
+        const startedAt = Date.now();
+        expect(await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })).toEqual([
+          expect.objectContaining({ bindingId: binding.id, ownerId: 'worker-1', heartbeatAt: startedAt }),
+        ]);
+
+        // A remote replica reading the ledger during the run must keep seeing a fresh claim.
+        await vi.advanceTimersByTimeAsync(25_000);
+        const [entry] = (await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })) as Array<{
+          heartbeatAt: number;
+        }>;
+        expect(entry.heartbeatAt).toBeGreaterThan(startedAt);
+        expect(Date.now() - entry.heartbeatAt).toBeLessThan(FACTORY_DISPATCH_CONSTANTS.openRunStaleMs);
+
+        controller.listActiveThreadRuns.mockReturnValue([]);
+        emitAgentEnd('complete');
+        await dispatch;
+        expect(await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })).toEqual([]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it('serializes concurrently claimed skill decisions for the same binding', async () => {

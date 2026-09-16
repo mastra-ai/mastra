@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import {
+  FACTORY_OPEN_RUN_STALE_MS,
   FACTORY_OPEN_RUNS_SETTING,
+  heartbeatSessionOpenRun,
+  isOpenRunLiveElsewhere,
   listSessionOpenRuns,
   observeSessionRunEnd,
   recordSessionRunStart,
@@ -64,6 +67,37 @@ describe('Factory run lifecycle audit', () => {
     settings[FACTORY_OPEN_RUNS_SETTING] = [stored];
 
     await expect(listSessionOpenRuns(session)).resolves.toEqual([stored]);
+  });
+
+  it('accepts ledger entries written before ownership was recorded', async () => {
+    const { session, settings } = makeSession();
+    settings[FACTORY_OPEN_RUNS_SETTING] = [{ ...OPEN_RUN, agentName: 'build' }];
+
+    const [entry] = await listSessionOpenRuns(session);
+    expect(isOpenRunLiveElsewhere(entry!, 'worker-2')).toBe(false);
+  });
+
+  it('treats only a fresh heartbeat from a different owner as live elsewhere', () => {
+    const now = 1_000_000;
+    const entry = { ...OPEN_RUN, agentName: 'build', ownerId: 'worker-1', heartbeatAt: now };
+    expect(isOpenRunLiveElsewhere(entry, 'worker-2', now)).toBe(true);
+    expect(isOpenRunLiveElsewhere(entry, 'worker-1', now)).toBe(false);
+    expect(isOpenRunLiveElsewhere(entry, 'worker-2', now + FACTORY_OPEN_RUN_STALE_MS)).toBe(false);
+    expect(isOpenRunLiveElsewhere({ ...entry, heartbeatAt: undefined }, 'worker-2', now)).toBe(false);
+  });
+
+  it('renews the heartbeat of an open run and keeps ownership out of the audit record', async () => {
+    const { session, start, settings, events } = await setup();
+    await start({ ...OPEN_RUN, ownerId: 'worker-1', heartbeatAt: 1 });
+    await heartbeatSessionOpenRun(session, 'kickoff-1', 2);
+    await heartbeatSessionOpenRun(session, 'someone-else', 3);
+
+    expect(settings[FACTORY_OPEN_RUNS_SETTING]).toEqual([
+      expect.objectContaining({ kickoffId: 'kickoff-1', ownerId: 'worker-1', heartbeatAt: 2 }),
+    ]);
+    const [started] = await events();
+    expect(started!.metadata).not.toHaveProperty('ownerId');
+    expect(started!.metadata).not.toHaveProperty('heartbeatAt');
   });
 
   it('retains both kickoffs when roles hand off within the same agent turn', async () => {
