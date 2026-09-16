@@ -7,7 +7,7 @@ import type { AgentController } from '@mastra/core/agent-controller';
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { applyStoredMemorySettings, type OMConfigurableSession } from './memory-settings-hydration.js';
 import { seedSessionOrg } from './org-seed.js';
 
@@ -28,6 +28,104 @@ export async function resolveFactoryDefaultModelId(
   } catch {
     return undefined;
   }
+}
+
+export interface SourceControlSessionLookup {
+  getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
+  getSourceControlBySessionId(sessionId: string): Promise<SourceControlStorageHandle | null>;
+  rename(args: { sessionId: string; title: string }): Promise<void>;
+  markFirstMessage(args: { sessionId: string }): Promise<void>;
+  markFirstMeaningfulExec(args: { sessionId: string }): Promise<void>;
+}
+
+/**
+ * Read or update a session across every registered source-control partition.
+ * Session ids are globally generated, so more than one match is invalid and
+ * fails closed instead of mutating an arbitrary provider.
+ */
+export function createSourceControlSessionLookup(
+  sourceControls: readonly SourceControlStorageHandle[],
+): SourceControlSessionLookup {
+  const resolve = async (
+    sessionId: string,
+  ): Promise<{ sourceControl: SourceControlStorageHandle; session: SourceControlSession } | null> => {
+    const matches = (
+      await Promise.all(
+        sourceControls.map(async sourceControl => ({
+          sourceControl,
+          session: await sourceControl.sessions.getBySessionId(sessionId),
+        })),
+      )
+    ).filter(
+      (match): match is { sourceControl: SourceControlStorageHandle; session: SourceControlSession } =>
+        match.session !== null,
+    );
+    if (matches.length > 1) throw new Error('Factory session exists in multiple source-control providers.');
+    return matches[0] ?? null;
+  };
+
+  return {
+    getBySessionId: async sessionId => (await resolve(sessionId))?.session ?? null,
+    getSourceControlBySessionId: async sessionId => (await resolve(sessionId))?.sourceControl ?? null,
+    rename: async args => (await resolve(args.sessionId))?.sourceControl.sessions.rename(args),
+    markFirstMessage: async args => (await resolve(args.sessionId))?.sourceControl.sessions.markFirstMessage(args),
+    markFirstMeaningfulExec: async args =>
+      (await resolve(args.sessionId))?.sourceControl.sessions.markFirstMeaningfulExec(args),
+  };
+}
+
+/**
+ * Resolve the source-control provider from durable Factory repository links,
+ * never from the issue tracker that happened to create the work item.
+ */
+export async function resolveFactorySourceControl(args: {
+  sourceControls: readonly SourceControlStorageHandle[];
+  orgId: string;
+  factoryProjectId: string;
+  sessionId?: string;
+}): Promise<SourceControlStorageHandle | undefined> {
+  if (args.sessionId) {
+    const sessionMatches = (
+      await Promise.all(
+        args.sourceControls.map(async sourceControl => ({
+          sourceControl,
+          session: await sourceControl.sessions.getBySessionId(args.sessionId!),
+        })),
+      )
+    ).filter(match => match.session !== null);
+    if (sessionMatches.length > 1) throw new Error('Factory session exists in multiple source-control providers.');
+    if (sessionMatches[0]) return sessionMatches[0].sourceControl;
+  }
+
+  const linked = [];
+  for (const sourceControl of args.sourceControls) {
+    let connections;
+    try {
+      connections = await sourceControl.connections.list({
+        orgId: args.orgId,
+        factoryProjectId: args.factoryProjectId,
+      });
+    } catch {
+      continue;
+    }
+    let hasLinkedRepository = false;
+    for (const connection of connections) {
+      try {
+        if (
+          (await sourceControl.projectRepositories.list({ orgId: args.orgId, connectionId: connection.id })).length > 0
+        ) {
+          hasLinkedRepository = true;
+          break;
+        }
+      } catch {
+        // A stale connection must not hide a healthy provider partition.
+      }
+    }
+    if (hasLinkedRepository) linked.push(sourceControl);
+  }
+  if (linked.length > 1)
+    throw new Error('Factory project has repositories linked through multiple source-control providers.');
+  return linked[0];
 }
 
 export interface EnsureFactorySourceSessionArgs {

@@ -110,6 +110,8 @@ export interface IntegrationContext {
      * Absent when no source-control owner is registered.
      */
     sourceControlOwner?: SourceControlStorageHandle;
+    /** Every registered source-control partition, for project-aware provider selection. */
+    sourceControls: readonly SourceControlStorageHandle[];
     /** Factory projects domain — e.g. resolving a project's default model. */
     projects: FactoryProjectsStorage;
     /**
