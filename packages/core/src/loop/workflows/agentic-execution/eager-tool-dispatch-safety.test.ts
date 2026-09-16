@@ -120,6 +120,126 @@ describe('eager tool dispatch — excluded tool classes', () => {
     expect(chunks.filter(chunk => chunk.type === 'error')).toEqual([]);
   });
 
+  it('does not eagerly execute when approval comes from the run-level policy', async () => {
+    const { events, record } = createRecorder();
+    const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
+
+    // The tool itself is a plain eligible tool. The veto is entirely run-level, which is
+    // a source the whitelist has to consult separately from the tool's own flag.
+    const agent = new Agent({
+      id: 'eager-run-approval-agent',
+      name: 'Eager run approval agent',
+      instructions: 'Call tool-a once.',
+      model,
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Plain tool',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          onInputAvailable: async () => record('input-available-a'),
+          execute: async ({ value }) => {
+            record('execute-a');
+            return { value };
+          },
+        }),
+      },
+    });
+
+    await drain(
+      await agent.stream('go', {
+        maxSteps: 1,
+        eagerToolExecution: true,
+        requireToolApproval: true,
+      } as Record<string, unknown> as never),
+    );
+
+    expect(events.slice(0, 3)).toEqual(['complete-call-a', 'later-output', 'finish']);
+    expect(events.indexOf('execute-a')).toBe(-1);
+  });
+
+  it('does not eagerly execute a tool whose approval is decided by a predicate', async () => {
+    const { events, record } = createRecorder();
+    const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
+
+    // A predicate is async and may do real work before deciding, so its answer is not
+    // available at dispatch time. Unknown has to mean ineligible. Note the tool builder
+    // converts a predicate into `requireApproval: true` plus a `needsApprovalFn`, so what
+    // actually stops this today is the flag check; this pins the user-visible behaviour
+    // rather than one particular guard.
+    const agent = new Agent({
+      id: 'eager-predicate-approval-agent',
+      name: 'Eager predicate approval agent',
+      instructions: 'Call tool-a once.',
+      model,
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Approval by predicate',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          requireApproval: async () => true,
+          onInputAvailable: async () => record('input-available-a'),
+          execute: async ({ value }) => {
+            record('execute-a');
+            return { value };
+          },
+        }) as never,
+      },
+    });
+
+    await drain(
+      await agent.stream('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as never),
+    );
+
+    expect(events.slice(0, 3)).toEqual(['complete-call-a', 'later-output', 'finish']);
+    expect(events.indexOf('execute-a')).toBe(-1);
+  });
+
+  it('does not eagerly execute a tool the step has filtered out of activeTools', async () => {
+    const { events, record } = createRecorder();
+    const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
+
+    const agent = new Agent({
+      id: 'eager-active-tools-agent',
+      name: 'Eager activeTools agent',
+      instructions: 'Call tool-a once.',
+      model,
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Filtered out of this step',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          execute: async ({ value }) => {
+            record('execute-a');
+            return { value };
+          },
+        }),
+        'tool-b': createTool({
+          id: 'tool-b',
+          description: 'The only active tool',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          execute: async ({ value }) => ({ value }),
+        }),
+      },
+    });
+
+    await drain(
+      await agent.stream('go', {
+        maxSteps: 1,
+        eagerToolExecution: true,
+        activeTools: ['tool-b'],
+      } as Record<string, unknown> as never),
+    );
+
+    // The foreach rejects an inactive call and eager dispatch must not run it first.
+    // A filtered tool is also absent from the resolved set, so the explicit activeTools
+    // check is belt-and-braces; this pins the behaviour, whichever guard delivers it.
+    expect(events.indexOf('execute-a')).toBe(-1);
+  });
+
   it('does not eagerly execute a suspendable tool', async () => {
     const { events, record } = createRecorder();
     const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);

@@ -2014,21 +2014,19 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           toolResultTripwireFromStream = streamToolResultTripwire;
 
           // The model stream is over, so no further call can become eligible. Stop the
-          // coordinator when the turn ended in a way that must not produce new tool work:
-          // a tripwire, an error, or a terminal reason other than a normal tool-call/stop.
-          // Executions already running keep their abort signal and are still adopted by the
-          // foreach, so a real side effect is never left unrecorded; only work that had not
-          // started is dropped back to the normal path.
-          if (eagerCoordinator) {
-            const finishReason = runState.state.stepResult?.reason;
-            const unsafeTermination =
-              Boolean(toolResultTripwireFromStream) ||
-              runState.state.hasErrored ||
-              (finishReason !== undefined && finishReason !== 'tool-calls' && finishReason !== 'stop');
-            if (unsafeTermination) {
-              eagerCoordinator.stop();
-            }
-          }
+          // The model has stopped producing, so there is nothing left to be early for.
+          // Dispatch closes here unconditionally, whether the turn ended well or badly.
+          //
+          // Doing this only on unsafe terminations left a real hole: on an ordinary
+          // tool-calls finish the coordinator stayed open, so a queued eager call could
+          // still be started later by an earlier one settling, at the same time as the
+          // foreach was running an ineligible call it had picked up itself. Two separate
+          // counters, one limit, and the limit loses. Closing at finish drops queued work
+          // back to the foreach, which is about to run anyway and accounts for it properly.
+          //
+          // Executions already running are left alone and still adopted, so a real side
+          // effect is never left unrecorded.
+          eagerCoordinator?.stop();
 
           if (toolResultTripwireFromStream) {
             return buildTripWireBailResponse({

@@ -258,7 +258,9 @@ export function isEagerlyExecutableToolCall({
   if (!tool || isProviderTool(tool)) return false;
   if (!('execute' in (tool as object)) || typeof (tool as { execute?: unknown }).execute !== 'function') return false;
 
-  // Respect per-step tool filtering; the foreach rejects inactive tools.
+  // Respect per-step tool filtering. Redundant today, since a filtered tool is absent
+  // from the resolved set above and already fails the `!tool` check; kept because that
+  // is a property of how tools are resolved, not a guarantee this predicate is given.
   if (activeTools && !activeTools.includes(toolCall.toolName)) return false;
 
   // Anything that can suspend. `hasSuspendSchema` alone is not enough: agent- and
@@ -276,6 +278,9 @@ export function isEagerlyExecutableToolCall({
   if ('requireApproval' in (tool as object) && Boolean((tool as { requireApproval?: unknown }).requireApproval)) {
     return false;
   }
+  // Also redundant today: every path in tool-builder that attaches a `needsApprovalFn`
+  // sets `requireApproval` to true alongside it, so the check above already caught this.
+  // Kept because this predicate must not depend on that pairing holding forever.
   if (getNeedsApprovalFn(tool)) return false;
 
   return true;
