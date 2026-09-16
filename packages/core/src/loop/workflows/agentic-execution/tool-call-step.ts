@@ -52,7 +52,11 @@ import type { ResolvedSuspendedToolIdentity } from '../../shared/suspended-tool-
 import type { OuterLLMRun } from '../../types';
 import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
-import { EAGER_TOOL_EXECUTION_MARKER, eagerToolCallDidNotExecute } from './eager-tool-execution';
+import {
+  EAGER_TOOL_ABORT_SIGNAL,
+  EAGER_TOOL_EXECUTION_MARKER,
+  eagerToolCallDidNotExecute,
+} from './eager-tool-execution';
 
 type AddToolMetadataOptions = {
   toolCallId: string;
@@ -98,6 +102,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
     outputSchema: toolCallOutputSchema,
     execute: async executionContext => {
       const { inputData, suspend, resumeData: workflowResumeData, suspendData, requestContext } = executionContext;
+      // Eager dispatch invokes this step with its own signal, chained to the run's, so a
+      // call started for a model attempt that is later discarded can be cancelled on its
+      // own. Every other caller falls back to the run signal, unchanged.
+      const callerAbortSignal = (executionContext as unknown as Record<symbol, AbortSignal | undefined>)[
+        EAGER_TOOL_ABORT_SIGNAL
+      ];
+      const abortSignal =
+        callerAbortSignal && options?.abortSignal
+          ? AbortSignal.any([callerAbortSignal, options.abortSignal])
+          : (callerAbortSignal ?? options?.abortSignal);
       // Resolve run-scoped state from either the Mastra-managed RunScope (production
       // path via loop.ts hydration) or the legacy `_internal` bag (tests).
       const scopeCtx: RunScopeContext = { mastra, runId, _internal };
@@ -406,7 +420,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             toolCallId: inputData.toolCallId,
             input: inputData.args,
             messages: messageList.get.input.aiV5.model(),
-            abortSignal: options?.abortSignal,
+            abortSignal,
           });
         } catch (error) {
           logger?.error('Error calling onInputAvailable', error);
@@ -640,7 +654,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             : resumeData;
 
         const toolOptions: MastraToolInvocationOptions = {
-          abortSignal: options?.abortSignal,
+          abortSignal,
           toolCallId: inputData.toolCallId,
           // Agent tools receive the exact processor-adjusted prompt visible to the parent model.
           // Regular tools retain the input-only context expected by the AI SDK tool contract.
@@ -1330,7 +1344,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             });
 
             const awaitAuthoritativeBackgroundResult = async () => {
-              const completedTask = await bgTask.waitForCompletion({ abortSignal: options?.abortSignal });
+              const completedTask = await bgTask.waitForCompletion({ abortSignal });
               if (completedTask.status !== 'completed') {
                 throw new Error(
                   completedTask.error?.message ??
@@ -1436,7 +1450,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               toolCallId: inputData.toolCallId,
               toolName: inputData.toolName,
               output: result,
-              abortSignal: options?.abortSignal,
+              abortSignal,
             });
           } catch (error) {
             logger?.error('Error calling onOutput', error);
@@ -1455,7 +1469,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // aborted instead and let the mapping step leave the call incomplete. Key off the
         // abort signal, not the error type: CoreToolBuilder wraps the AbortError in a
         // TOOL_EXECUTION_FAILED MastraError, so isAbortError(error) wouldn't match here.
-        if (options?.abortSignal?.aborted) {
+        if (abortSignal?.aborted) {
           // Log the discarded error for observability (control flow unchanged).
           logger?.debug?.('Tool execution interrupted by request abort; leaving the tool call incomplete', {
             toolName: inputData.toolName,

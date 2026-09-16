@@ -581,16 +581,22 @@ describe('eager tool dispatch — unsafe terminations', () => {
   });
 });
 
-describe('eager tool dispatch — processor tripwire', () => {
+describe('eager tool dispatch — discarded model attempt', () => {
   /**
-   * Runs the same tripwire scenario in both modes. The tripwire fires on the first
-   * tool's *result*, i.e. after that tool has run, so it cannot un-start work that is
-   * already in flight — in either mode. What must hold is parity: eager dispatch must
-   * not execute anything the normal pipeline would not have executed.
+   * A model that emits a tool call and then fails mid-stream has its whole attempt
+   * discarded: the request is retried on the next model, and the normal pipeline never
+   * executes that attempt's tool calls.
+   *
+   * Eager dispatch cannot fully match that — by the time the model fails, the tool has
+   * already started, and no amount of bookkeeping un-runs a side effect. What it can do,
+   * and must, is cancel: the discarded attempt's eager work is aborted immediately, so a
+   * tool that honours its abort signal stops, and nothing it produced is adopted. This is
+   * the documented cost of opting in.
    */
-  async function runTripwireScenario(eagerToolExecution: boolean) {
+  async function runFallbackScenario(eagerToolExecution: boolean) {
     const { events, record } = createRecorder();
-    const model = new MockLanguageModelV2({
+
+    const failing = new MockLanguageModelV2({
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
@@ -600,21 +606,41 @@ describe('eager tool dispatch — processor tripwire', () => {
             controller.enqueue({
               type: 'response-metadata',
               id: 'response-1',
-              modelId: 'mock-model',
+              modelId: 'failing-model',
               timestamp: new Date(0),
             });
-            for (const id of ['call-a', 'call-b', 'call-c']) {
-              controller.enqueue({
-                type: 'tool-call',
-                toolCallId: id,
-                toolName: 'tool-a',
-                input: JSON.stringify({ value: id }),
-              });
-            }
-            await new Promise(resolve => setTimeout(resolve, 60));
+            controller.enqueue({
+              type: 'tool-call',
+              toolCallId: 'call-discarded',
+              toolName: 'tool-a',
+              input: JSON.stringify({ value: 'discarded' }),
+            });
+            await new Promise(resolve => setTimeout(resolve, 20));
+            controller.error(new Error('model blew up mid-stream'));
+          },
+        }),
+      }),
+    });
+
+    const recovering = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({
+              type: 'response-metadata',
+              id: 'response-2',
+              modelId: 'recovering-model',
+              timestamp: new Date(0),
+            });
+            controller.enqueue({ type: 'text-start', id: 'text-1' });
+            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'recovered' });
+            controller.enqueue({ type: 'text-end', id: 'text-1' });
             controller.enqueue({
               type: 'finish',
-              finishReason: 'tool-calls',
+              finishReason: 'stop',
               usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
             });
             controller.close();
@@ -624,34 +650,28 @@ describe('eager tool dispatch — processor tripwire', () => {
     });
 
     const agent = new Agent({
-      id: `eager-tripwire-agent-${eagerToolExecution}`,
-      name: 'Eager tripwire agent',
-      instructions: 'Call tool-a three times.',
-      model,
+      id: `eager-fallback-agent-${eagerToolExecution}`,
+      name: 'Eager fallback agent',
+      instructions: 'Call tool-a.',
+      model: [
+        { model: failing, maxRetries: 0 },
+        { model: recovering, maxRetries: 0 },
+      ] as any,
       tools: {
         'tool-a': createTool({
           id: 'tool-a',
-          description: 'Slow tool',
+          description: 'Records that it ran',
           inputSchema: z.object({ value: z.string() }),
           outputSchema: z.object({ value: z.string() }),
-          execute: async ({ value }) => {
+          execute: async ({ value }, options) => {
             record(`execute-${value}`);
-            await new Promise(resolve => setTimeout(resolve, 40));
+            const signal = (options as { abortSignal?: AbortSignal } | undefined)?.abortSignal;
+            await new Promise(resolve => setTimeout(resolve, 60));
+            if (signal?.aborted) record(`aborted-${value}`);
             return { value };
           },
         }),
       },
-      outputProcessors: [
-        {
-          id: 'trip-on-tool-result',
-          // Per-chunk only: a post-stream processor disables eager dispatch entirely,
-          // which is a different contract covered elsewhere.
-          processOutputStream: async ({ part, abort }: any) => {
-            if (part?.type === 'tool-result') abort('blocked');
-            return part;
-          },
-        } as any,
-      ],
     });
 
     await drain(
@@ -662,14 +682,20 @@ describe('eager tool dispatch — processor tripwire', () => {
       } as Record<string, unknown> as any),
     ).catch(() => {});
 
-    return events.filter(event => event.startsWith('execute-')).sort();
+    // Give any leaked eager execution time to surface rather than racing the assertion.
+    await new Promise(resolve => setTimeout(resolve, 50));
+    return events.filter(event => event.startsWith('execute-') || event.startsWith('aborted-'));
   }
 
-  it('executes no more than the normal pipeline would when the wire trips', async () => {
-    const withoutEager = await runTripwireScenario(false);
-    const withEager = await runTripwireScenario(true);
+  it('cancels eager work belonging to an attempt the pipeline discarded', async () => {
+    const withoutEager = await runFallbackScenario(false);
+    const withEager = await runFallbackScenario(true);
 
-    expect(withEager).toEqual(withoutEager);
+    // The normal pipeline never runs the discarded attempt's call at all.
+    expect(withoutEager).toEqual([]);
+    // Eager dispatch had already started it, so the guarantee is cancellation, not
+    // absence: the tool is told to stop the moment the attempt is thrown away.
+    expect(withEager).toEqual(['execute-discarded', 'aborted-discarded']);
   });
 });
 

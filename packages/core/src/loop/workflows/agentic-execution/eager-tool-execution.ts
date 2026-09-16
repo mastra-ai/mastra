@@ -7,6 +7,13 @@ type EagerToolResult = unknown;
  */
 export const EAGER_TOOL_EXECUTION_MARKER = Symbol('eager-tool-execution');
 
+/**
+ * Carries the coordinator's per-execution abort signal into `toolCallStep`. A dedicated
+ * key rather than the step's own `abortSignal` argument, so no other caller's behaviour
+ * changes: the step combines this with the run signal only when it is present.
+ */
+export const EAGER_TOOL_ABORT_SIGNAL = Symbol('eager-tool-abort-signal');
+
 /** Brands errors raised before the tool's own `execute` ever ran. */
 const EAGER_NOT_EXECUTED = Symbol('eager-tool-not-executed');
 
@@ -29,8 +36,10 @@ type QueuedExecution = {
 export class EagerToolExecutionCoordinator {
   readonly #executions = new Map<string, Promise<EagerToolResult>>();
   readonly #queued: QueuedExecution[] = [];
+  readonly #controllers = new Map<string, AbortController>();
   #running = 0;
   #stopped = false;
+  #stoppedPermanently = false;
 
   constructor(private readonly getConcurrency: () => number) {}
 
@@ -51,16 +60,22 @@ export class EagerToolExecutionCoordinator {
    * coordinator is stopped or the id is already in flight, so a replayed or duplicate
    * id within the same step can never execute twice.
    */
-  start(toolCallId: string, execute: () => Promise<EagerToolResult>) {
+  start(toolCallId: string, execute: (abortSignal: AbortSignal) => Promise<EagerToolResult>) {
     if (this.#stopped || this.#executions.has(toolCallId)) return false;
+
+    // Its own controller, so work started for an attempt the pipeline later discards can
+    // be cancelled without touching the run's signal.
+    const controller = new AbortController();
 
     const promise = new Promise<EagerToolResult>((resolve, reject) => {
       const run = () => {
         this.#running++;
-        void execute()
+        this.#controllers.set(toolCallId, controller);
+        void execute(controller.signal)
           .then(resolve, reject)
           .finally(() => {
             this.#running--;
+            this.#controllers.delete(toolCallId);
             this.#queued.shift()?.run();
           });
       };
@@ -94,12 +109,32 @@ export class EagerToolExecutionCoordinator {
    * and the foreach still adopts whatever they produce so a real side effect is
    * never silently discarded.
    */
-  stop() {
+  stop({ permanent = false, cancelRunning = false }: { permanent?: boolean; cancelRunning?: boolean } = {}) {
     this.#stopped = true;
+    this.#stoppedPermanently ||= permanent;
     for (const queued of this.#queued.splice(0)) {
       this.#executions.delete(queued.toolCallId);
       queued.cancel();
     }
+
+    // `cancelRunning` is for the one case where the surrounding attempt is thrown away
+    // entirely (a model failing mid-stream, then retried or failed over): the normal
+    // pipeline never runs those calls, so neither may we. After an unsafe *finish* the
+    // foreach still runs and adopts, so running work is left alone there.
+    if (cancelRunning) {
+      for (const controller of this.#controllers.values()) controller.abort();
+    }
+  }
+
+  /**
+   * Open a new model turn. A stop caused by a bad turn is scoped to that turn — the
+   * next one is a fresh model call and may dispatch again — but a caller abort is
+   * permanent. Executions from the previous turn that nothing ever adopted are dropped
+   * here so the map cannot grow across a long loop.
+   */
+  beginTurn() {
+    if (!this.#stoppedPermanently) this.#stopped = false;
+    this.#executions.clear();
   }
 }
 
