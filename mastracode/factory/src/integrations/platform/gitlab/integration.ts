@@ -63,7 +63,7 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
   }
 
   diagnostics(): Record<string, unknown> {
-    return { configured: true, mode: 'platform', endpointHost: this.#endpointHost };
+    return { configured: true, mode: 'platform', endpointHost: this.#endpointHost, webhookConfigured: false };
   }
 
   async #activeConnections(): Promise<PlatformIntegrationConnection[]> {

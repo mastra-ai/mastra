@@ -62,6 +62,16 @@ function platform(): PlatformGitLabIntegration {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('GitLabIntegration', () => {
+  it('exposes webhook configuration and the unauthenticated webhook route without leaking the secret', () => {
+    const gitlab = new GitLabIntegration({ accessToken: 'group-token', webhookSecret: 'webhook-secret' });
+
+    expect(gitlab.routes({} as never).map(route => ({ path: route.path, requiresAuth: route.requiresAuth }))).toEqual([
+      { path: '/web/gitlab/webhook', requiresAuth: false },
+    ]);
+    expect(gitlab.diagnostics()).toMatchObject({ webhookConfigured: true });
+    expect(JSON.stringify(gitlab.diagnostics())).not.toContain('webhook-secret');
+  });
+
   it('uses a direct group token and exposes projects as intake sources', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(json([project(10, 'mastra/platform')]));
     const gitlab = direct(fetchMock);
