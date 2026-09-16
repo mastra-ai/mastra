@@ -15,4 +15,4 @@ Use these guidelines when writing, reviewing, or refactoring code, including tes
 
 For React written in TypeScript, use all three references.
 
-Each reference contains rule summaries and links to the full guidance and examples.
+Read the references for the applicable categories, then read their linked rule files in full, including the examples. Apply that guidance when writing, reviewing, or refactoring code.
