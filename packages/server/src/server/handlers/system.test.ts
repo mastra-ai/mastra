@@ -10,7 +10,9 @@ type MockStorage = {
     observability?: {
       constructor?: { name?: string };
       runtimeTracingStrategy?: 'realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced';
-      getFeatures?: () => readonly ('delta-polling' | 'metrics' | 'logs')[] | undefined;
+      getFeatures?: () =>
+        | readonly ('delta-polling' | 'metrics' | 'logs' | 'trace-query' | 'trace-query-discovery')[]
+        | undefined;
     };
   };
 };
