@@ -115,7 +115,7 @@ describe('QUERY_TRACES', () => {
     expect(response).not.toHaveProperty('page');
   });
 
-  it('rejects mixed and grouped compatibility pagination before storage execution', async () => {
+  it('rejects mixed and grouped compatibility pagination in the request schema', () => {
     const { mastra, observabilityStore, getStore } = createHarness();
     const requests = [
       { timeRange: TIME_RANGE, page: { limit: 10 }, pagination: { page: 0, perPage: 10 } },
@@ -123,8 +123,7 @@ describe('QUERY_TRACES', () => {
     ];
 
     for (const request of requests) {
-      const error = await captureHttpException(QUERY_TRACES.handler(params(mastra, request)));
-      expect(error.status).toBe(422);
+      expect(() => params(mastra, request)).toThrow();
     }
     expect(getStore).not.toHaveBeenCalled();
     expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
