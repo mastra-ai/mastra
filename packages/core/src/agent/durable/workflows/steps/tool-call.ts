@@ -899,6 +899,14 @@ export function createDurableToolCallStep() {
         // Delegated approval decisions must also flow to the wrapper tool: it only
         // resumes the inner suspended run when resumeData is present.
         resumeData: isResumingFromSuspension || isDelegatedApprovalResume ? resumeData : undefined,
+        // The payload this tool call suspended with (see `toolCallSuspended` below), so a
+        // resumed tool can continue from its own state — mirrors the non-durable step.
+        ...(isResumingFromSuspension &&
+        suspendData != null &&
+        typeof suspendData === 'object' &&
+        'toolCallSuspended' in suspendData
+          ? { suspendPayload: (suspendData as { toolCallSuspended?: unknown }).toolCallSuspended }
+          : {}),
         ...(toolAbortSignal ? { abortSignal: toolAbortSignal } : {}),
         // Provide outputWriter so context.writer.write() / context.writer.custom()
         // emit chunks through pubsub (matching the regular agent's tool streaming).

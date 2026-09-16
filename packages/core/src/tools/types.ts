@@ -217,6 +217,8 @@ export interface AgentToolExecutionContext<TSuspend, TResume> {
 
   // Optional - only present if tool was previously suspended
   resumeData?: TResume;
+  // Optional - the payload this tool suspended with, present on resume
+  suspendPayload?: TSuspend;
 
   // Optional - original WritableStream passed from AI SDK (without Mastra metadata wrapping)
   writableStream?: WritableStream<any>;
@@ -245,31 +247,57 @@ export interface WorkflowToolExecutionContext<TSuspend, TResume> {
   suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
   // Optional - only present if workflow step was previously suspended
   resumeData?: TResume;
+  // Optional - the payload this step suspended with, present on resume
+  suspendPayload?: TSuspend;
 }
 
 /** Log levels for MCP `notifications/message`, ordered per RFC 5424. */
 export type MCPLoggingLevel = 'debug' | 'info' | 'notice' | 'warning' | 'error' | 'critical' | 'alert' | 'emergency';
 
+/** Protocol context the MCP server hands to a tool as `context.mcp.extra`. */
 export type MCPServerContext = ServerContext & {
+  /** Aborts when the client cancels the request or disconnects. */
   signal: ServerContext['mcpReq']['signal'];
   requestId: ServerContext['mcpReq']['id'];
   authInfo?: NonNullable<ServerContext['http']>['authInfo'];
+  /**
+   * Raw notification sender.
+   * @deprecated Use `context.mcp.log` / `context.mcp.progress`. A 2026-07-28 server throws when this is called.
+   * Removed in the next core major.
+   */
   sendNotification: ServerContext['mcpReq']['notify'];
+  /**
+   * Raw server-to-client request sender.
+   * @deprecated 2026-07-28 removed server-initiated requests; a 2026-07-28 server throws when this is called.
+   * Removed in the next core major.
+   */
   sendRequest: ServerContext['mcpReq']['send'];
+  /** Request metadata: trace headers, the log-level opt-in and the progress token. */
   _meta?: ServerContext['mcpReq']['_meta'];
 };
 
-// MCP tool execution context - properties specific when tools are executed via Model Context Protocol
+/**
+ * MCP tool execution context - properties specific when tools are executed via a Model Context Protocol server.
+ *
+ * `@mastra/mcp` 1.x and 2.x servers both provide it. `extra` (minus the deprecated senders), `log` and `progress`
+ * behave the same on either; the deprecated members throw on a 2026-07-28 server with a message pointing at the
+ * replacement.
+ */
 export interface MCPToolExecutionContext {
   /** MCP protocol context passed by the server */
   extra: MCPServerContext;
-  /** Elicitation handler for interactive user input during tool execution */
+  /**
+   * Elicitation handler for interactive user input during tool execution.
+   * @deprecated 2026-07-28 removed server-initiated elicitation: call `context.suspend(payload)` and read
+   * `context.resumeData` instead. A 2026-07-28 server throws when this is called. Removed in the next core major.
+   */
   elicitation: {
     sendRequest: (request: ElicitRequest['params']) => Promise<ElicitResult>;
   };
   /**
    * Sends a `notifications/message` log notification to the calling client.
-   * Messages below the client's minimum level (set via `logging/setLevel`) are dropped.
+   * Messages below the client's minimum level are dropped: 1.x reads it from `logging/setLevel`,
+   * 2026-07-28 from the request's `_meta`.
    */
   log?: (level: MCPLoggingLevel, message: string, data?: Record<string, unknown>) => Promise<void>;
   /**
@@ -277,6 +305,8 @@ export interface MCPToolExecutionContext {
    * No-op if the caller did not request progress tracking (no progressToken in `_meta`).
    */
   progress?: (params: { progress: number; total?: number; message?: string }) => Promise<void>;
+  /** Set by 2026-07-28 servers. Absent on `@mastra/mcp` 1.x. */
+  protocolVersion?: '2026-07-28';
 }
 
 /**
@@ -295,6 +325,8 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
   Partial<ObservabilityContext> & {
     suspend?: (suspendPayload: any, suspendOptions?: SuspendOptions) => Promise<any>;
     resumeData?: any;
+    /** The payload the tool previously suspended with, when resuming. */
+    suspendPayload?: any;
     outputWriter?: OutputWriter;
     /**
      * Optional MCP-specific context passed when tool is executed in MCP server.
@@ -587,6 +619,16 @@ export interface ToolExecutionContext<
 
   // MCP (Model Context Protocol) specific context
   mcp?: MCPToolExecutionContext;
+
+  // ============ Suspend/resume for direct and MCP 2.x execution ============
+  // Agents and workflows nest these under `agent` / `workflow` until the next core major.
+
+  /** Suspends the tool with a payload validated against `suspendSchema`. On an MCP 2.x server this ends the request as `input_required`. */
+  suspend?: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
+  /** The answer to the last suspension, validated against `resumeSchema`. Present only when resuming. */
+  resumeData?: TResume;
+  /** The payload the tool last suspended with. Present only when resuming. */
+  suspendPayload?: TSuspend;
 
   /**
    * Observability helpers for recording child spans and structured logs
