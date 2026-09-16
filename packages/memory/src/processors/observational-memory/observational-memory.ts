@@ -527,12 +527,22 @@ export class ObservationalMemory {
     const observationSelectedModel = topLevelModel ?? observationConfigModel ?? reflectionConfigModel;
     const reflectionSelectedModel = topLevelModel ?? reflectionConfigModel ?? observationConfigModel;
 
+    const observationTemperature =
+      config.observation?.modelSettings?.temperature ??
+      (isDefaultModelSelection(observationSelectedModel)
+        ? OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.temperature
+        : undefined);
     const observationDefaultMaxOutputTokens =
       config.observation?.modelSettings?.maxOutputTokens ??
       (isDefaultModelSelection(observationSelectedModel)
         ? OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.maxOutputTokens
         : undefined);
 
+    const reflectionTemperature =
+      config.reflection?.modelSettings?.temperature ??
+      (isDefaultModelSelection(reflectionSelectedModel)
+        ? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.temperature
+        : undefined);
     const reflectionDefaultMaxOutputTokens =
       config.reflection?.modelSettings?.maxOutputTokens ??
       (isDefaultModelSelection(reflectionSelectedModel)
@@ -586,9 +596,7 @@ export class ObservationalMemory {
       messageTokens: isSharedBudget ? { min: messageTokens, max: totalBudget } : messageTokens,
       shareTokenBudget: isSharedBudget,
       modelSettings: {
-        temperature:
-          config.observation?.modelSettings?.temperature ??
-          OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.temperature,
+        ...(observationTemperature !== undefined ? { temperature: observationTemperature } : {}),
         ...(observationDefaultMaxOutputTokens !== undefined
           ? { maxOutputTokens: observationDefaultMaxOutputTokens }
           : {}),
@@ -637,9 +645,7 @@ export class ObservationalMemory {
       observationTokens: observationTokens,
       shareTokenBudget: isSharedBudget,
       modelSettings: {
-        temperature:
-          config.reflection?.modelSettings?.temperature ??
-          OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.temperature,
+        ...(reflectionTemperature !== undefined ? { temperature: reflectionTemperature } : {}),
         ...(reflectionDefaultMaxOutputTokens !== undefined
           ? { maxOutputTokens: reflectionDefaultMaxOutputTokens }
           : {}),

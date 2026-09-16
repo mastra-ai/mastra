@@ -115,8 +115,8 @@ export interface ObservationConfig {
    * Model settings for the Observer agent.
    * @default { temperature: 0.3 }
    *
-   * Note: `maxOutputTokens: 100_000` is only applied by default when using
-   * the built-in default model selection.
+   * Note: The default `temperature` and `maxOutputTokens: 100_000` are only applied
+   * when using the built-in default model selection.
    */
   modelSettings?: ModelSettings;
 
@@ -317,8 +317,8 @@ export interface ReflectionConfig {
    * Model settings for the Reflector agent.
    * @default { temperature: 0 }
    *
-   * Note: `maxOutputTokens: 100_000` is only applied by default when using
-   * the built-in default model selection.
+   * Note: The default `temperature` and `maxOutputTokens: 100_000` are only applied
+   * when using the built-in default model selection.
    */
   modelSettings?: ModelSettings;
 
