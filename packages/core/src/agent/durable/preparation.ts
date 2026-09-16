@@ -275,6 +275,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         (rawExecOptions ?? {}) as Record<string, unknown>,
       ) as AgentExecutionOptions<OUTPUT>);
 
+  if (execOptions.eagerToolExecution) {
+    throw new Error('eagerToolExecution is not supported by durable agents');
+  }
+
   // 3. Merge version overrides (Mastra defaults < requestContext < call-site)
   const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
   let mergedVersions = mergeVersionOverrides(mastra?.getVersionOverrides?.(), requestVersions);

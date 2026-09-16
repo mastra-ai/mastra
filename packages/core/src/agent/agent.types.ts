@@ -558,6 +558,12 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    */
   hideSignals?: boolean | AgentSignalType[];
 
+  /**
+   * Start eligible server-side tools as soon as their complete tool-call part is streamed.
+   * Only supported by `Agent.stream()` and disabled by default.
+   */
+  eagerToolExecution?: boolean;
+
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: SystemMessage;
 

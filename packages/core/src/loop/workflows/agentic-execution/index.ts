@@ -6,6 +6,7 @@ import { pruneAgentLoopSnapshot } from '../prune-snapshot';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
 import { createBackgroundTaskCheckStep } from './background-task-check-step';
+import { EagerToolExecutionCoordinator } from './eager-tool-execution';
 import { createGoalStep } from './goal-step';
 import { createIsTaskCompleteStep } from './is-task-complete-step';
 import { createLLMExecutionStep } from './llm-execution-step';
@@ -39,16 +40,23 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     }),
   };
 
-  const llmExecutionStep = createLLMExecutionStep({
-    models,
-    _internal,
-    toolCallForeachOptions,
-    ...rest,
-  });
+  const eagerCoordinator =
+    rest.eagerToolExecution && toolCallConcurrencyStrategy === 'available'
+      ? new EagerToolExecutionCoordinator(toolCallForeachOptions.concurrency)
+      : undefined;
 
   const toolCallStep = createToolCallStep({
     models,
     _internal,
+    ...rest,
+  });
+
+  const llmExecutionStep = createLLMExecutionStep({
+    models,
+    _internal,
+    toolCallForeachOptions,
+    eagerCoordinator,
+    eagerToolCallStep: toolCallStep,
     ...rest,
   });
 
