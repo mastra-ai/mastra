@@ -691,6 +691,7 @@ export class CoreToolBuilder extends MastraBase {
               return execOptions.suspend?.(args, newSuspendOptions);
             },
             resumeData: execOptions.resumeData,
+            suspendPayload: execOptions.suspendPayload,
           };
 
           // Check if this is agent execution
@@ -712,7 +713,7 @@ export class CoreToolBuilder extends MastraBase {
             // (agents use workflows internally but tools should see agent context)
             // Preserve MCP context when the agent run originated from an MCP tools/call
             // so nested tools can use elicitation/log/progress.
-            const { suspend, resumeData, threadId, resourceId, ...restBaseContext } = baseContext;
+            const { suspend, resumeData, suspendPayload, threadId, resourceId, ...restBaseContext } = baseContext;
             toolContext = {
               ...restBaseContext,
               ...(execOptions.mcp ? { mcp: execOptions.mcp } : {}),
@@ -722,6 +723,7 @@ export class CoreToolBuilder extends MastraBase {
                 messages: execOptions.messages || [],
                 suspend,
                 resumeData,
+                suspendPayload,
                 threadId,
                 resourceId,
                 outputWriter: options.outputWriter || execOptions.outputWriter,
@@ -731,7 +733,7 @@ export class CoreToolBuilder extends MastraBase {
             };
           } else if (isWorkflowExecution) {
             // Nest workflow-specific properties under 'workflow' key
-            const { suspend, resumeData, ...restBaseContext } = baseContext;
+            const { suspend, resumeData, suspendPayload, ...restBaseContext } = baseContext;
             toolContext = {
               ...restBaseContext,
               ...(execOptions.mcp ? { mcp: execOptions.mcp } : {}),
@@ -742,6 +744,7 @@ export class CoreToolBuilder extends MastraBase {
                 setState: options.setState,
                 suspend,
                 resumeData,
+                suspendPayload,
               },
             };
           } else if (execOptions.mcp) {
@@ -757,7 +760,7 @@ export class CoreToolBuilder extends MastraBase {
 
           const resumeData = execOptions.resumeData;
 
-          if (resumeData) {
+          if (resumeData != null) {
             const resumeValidation = validateToolInput(resumeSchema, resumeData, options.name);
             if (resumeValidation.error) {
               logger?.warn(resumeValidation.error.message);
@@ -897,7 +900,7 @@ export class CoreToolBuilder extends MastraBase {
         // validation unless the builder injected additional fields. The original args
         // were already validated during the initial execution, but builder-local fields
         // still need validation before Tool.execute skips its own validation.
-        const isResuming = !!execOptions?.resumeData;
+        const isResuming = execOptions?.resumeData != null;
 
         const parameters = inputValidationSchema ?? this.getParameters();
         if (!isResuming || this.injectedInputSchema) {

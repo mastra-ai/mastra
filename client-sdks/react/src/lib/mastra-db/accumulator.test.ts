@@ -1087,8 +1087,22 @@ describe('accumulateChunk - tool calls', () => {
     expect(out[0].content.metadata).toMatchObject({
       mode: 'stream',
       requireApprovalMetadata: {
-        sendMail: { toolCallId: 'tc-1', toolName: 'sendMail', args: { to: 'x' } },
+        'tc-1': { toolCallId: 'tc-1', toolName: 'sendMail', args: { to: 'x' } },
       },
+    });
+  });
+
+  it('keeps same-named approvals independently addressable by call ID', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('tc-1', 'sendMail', { to: 'first' }),
+      toolCallChunk('tc-2', 'sendMail', { to: 'second' }),
+      toolCallApprovalChunk('tc-1', 'sendMail', { to: 'first' }),
+      toolCallApprovalChunk('tc-2', 'sendMail', { to: 'second' }),
+    ]);
+    expect(out[0].content.metadata?.requireApprovalMetadata).toEqual({
+      'tc-1': { toolCallId: 'tc-1', toolName: 'sendMail', args: { to: 'first' } },
+      'tc-2': { toolCallId: 'tc-2', toolName: 'sendMail', args: { to: 'second' } },
     });
   });
 

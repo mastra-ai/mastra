@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.3.11-alpha.0
+
+### Patch Changes
+
+- Fixed `@mastra/schema-compat/json-to-zod` failing with "jsonSchemaToZod is not a function" when loaded from CommonJS, and generated schemas now use `z.record(z.string(), value)` so JSON Schemas with `additionalProperties` or `patternProperties` validate correctly on Zod v4 before 4.4.0 (including zod@3.25's `zod/v4`). Fixes dataset `addItem` and tool schema conversion crashing on record-shaped schemas. See https://github.com/mastra-ai/mastra/issues/23993 ([#24049](https://github.com/mastra-ai/mastra/pull/24049))
+
 ## 1.3.10
 
 ### Patch Changes

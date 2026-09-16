@@ -1,17 +1,25 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import {
   encodeTraceQueryCursor,
+  parseGetTraceQueryFieldsArgs,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
   planThreadQuery,
   planTraceQuery,
+  planTraceQueryObservedFields,
   TraceQueryExecutionError,
 } from '@mastra/core/storage';
 import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SCORE_EVENTS_DDL, SPAN_EVENTS_DDL, TRACE_BRANCHES_DDL, TRACE_ROOTS_DDL } from './ddl';
-import { compileClickHouseThreadQuery, compileClickHouseTraceQuery, queryThreads, queryTraces } from './trace-query';
+import {
+  compileClickHouseThreadQuery,
+  compileClickHouseTraceQuery,
+  compileClickHouseTraceQueryObservedFields,
+  queryThreads,
+  queryTraces,
+} from './trace-query';
 import { ObservabilityStorageClickhouseVNext } from '.';
 
 const TIME_RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' };
@@ -33,6 +41,23 @@ describe('ClickHouse advanced trace query', () => {
           traceQueryTimeoutMs: 0,
         }),
     ).toThrow('traceQueryTimeoutMs must be an integer between');
+  });
+
+  it('decodes each observed metadata value from the expanded JSON entry', () => {
+    const compiled = compileClickHouseTraceQueryObservedFields(
+      planTraceQueryObservedFields(
+        parseGetTraceQueryFieldsArgs({
+          timeRange: TIME_RANGE,
+          predicateScope: 'trace',
+        }),
+      ),
+    );
+
+    expect(compiled.query).toContain('JSONExtractString(entry.2) AS value');
+    expect(compiled.query).toContain("JSONType(rawValue) = 'String'");
+    expect(compiled.query).toContain("trim(value) != ''");
+    expect(compiled.query).toContain('length(value) <= 4096');
+    expect(compiled.query).not.toContain('JSONExtractString(r.metadataRaw, entry.1)');
   });
 
   it('uses named parameters and one correlated existence check per collection clause', () => {

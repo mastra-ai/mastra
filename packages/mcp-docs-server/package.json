@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-docs-server",
-  "version": "1.2.27-alpha.1",
+  "version": "1.2.27-alpha.3",
   "description": "MCP server for accessing Mastra.ai documentation, changelogs, and news.",
   "type": "module",
   "main": "dist/index.js",
@@ -35,7 +35,6 @@
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:^",
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "jsdom": "^26.1.0",
     "local-pkg": "^1.1.2",
     "zod": "catalog:"
   },
@@ -44,7 +43,6 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/jsdom": "^21.1.7",
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
