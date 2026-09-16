@@ -230,9 +230,9 @@ Both discovery requests require a half-open time range of at most 31 days. They 
 
 `search` defaults to the empty string, is trimmed, and matches case-insensitive literal substrings. Characters such as `%` and `_` have no wildcard meaning. An empty search returns the most frequent results. `limit` defaults to 25 and has a maximum of 100. Both endpoints fetch one extra result to set their truncation flag, but don't provide a cursor. When a flag is `true`, refine `search`. It doesn't imply that a next page is available. No matches return an empty array and `false` truncation.
 
-If discovery exceeds its execution timeout, the route returns `504 TRACE_QUERY_EXECUTION_TIMEOUT`. If the backend exceeds a memory or resource budget, it returns `503 TRACE_QUERY_RESOURCE_LIMIT`. Neither failure returns partial suggestions or sets a truncation flag; truncation only means a complete ranking was cut to the requested response limit.
+If discovery exceeds its execution timeout, the route returns `504 TRACE_QUERY_EXECUTION_TIMEOUT`. If the backend exceeds a memory or resource budget, it returns `503 TRACE_QUERY_RESOURCE_LIMIT`. Neither failure returns partial suggestions or sets a truncation flag. Truncation only means a complete ranking was cut to the requested response limit.
 
-ClickHouse discovery requests default to a 5-second timeout and a 256 MiB per-query memory limit. Configure these with `traceQueryDiscoveryTimeoutMs` and `traceQueryDiscoveryMemoryLimitBytes`. If only `traceQueryTimeoutMs` is configured, discovery uses that timeout instead of the 5-second default. These settings don't change ordinary `queryTraces()` execution limits.
+ClickHouse discovery requests default to a 5-second timeout and a 256 MiB per-query memory limit. Configure these with `observability.traceQuery.discovery.timeoutMs` and `observability.traceQuery.discovery.memoryLimitBytes` on `ClickhouseStoreVNext`. Discovery falls back to `observability.traceQuery.timeoutMs` when its timeout isn't configured, without changing ordinary `queryTraces()` execution limits.
 
 Both routes require `observability:read` and use the configured observability storage boundary. Don't send organization or project authorization fields in the request. Treat discovered paths, values, and counts as observability data.
 
