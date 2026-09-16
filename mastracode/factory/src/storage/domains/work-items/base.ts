@@ -2886,13 +2886,24 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               org_id: input.orgId,
               factory_project_id: input.factoryProjectId,
             }));
-          if (!bindingRow || !itemRow) throw new Error('Factory start replay references missing state.');
-          return {
-            item: toRow(itemRow),
-            binding: toBinding(bindingRow),
-            pendingStart: toPendingStart(prior),
-            replayed: true,
-          };
+          // Replay only a still-live binding. A prior pending row whose binding
+          // was revoked (abort → stage re-entry) or whose state is gone is a
+          // dead-run artifact: discard it and mint a fresh binding below. The
+          // unique kickoff_key index requires removing the stale row before
+          // re-inserting.
+          if (bindingRow && itemRow && bindingRow.status === 'active') {
+            return {
+              item: toRow(itemRow),
+              binding: toBinding(bindingRow),
+              pendingStart: toPendingStart(prior),
+              replayed: true,
+            };
+          }
+          await ops.deleteMany('factory_pending_starts', {
+            id: prior.id,
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+          });
         }
         const now = new Date();
         const create = input.workItem.input;
