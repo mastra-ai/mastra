@@ -1386,6 +1386,12 @@ function getRouteSpecificPathDefaults(route: ServerRoute): {
     return { query: { runId: `test-run-${randomUUID()}` } };
   }
 
+  // MCP tool execution validates `data` against the tool's input schema and
+  // answers 400 when it does not match; the default path targets getWeather.
+  if (routePath === '/mcp/:serverId/tools/:toolId/execute') {
+    return { body: { data: { location: 'test-location' } } };
+  }
+
   return {};
 }
 

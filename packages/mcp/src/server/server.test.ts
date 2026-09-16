@@ -165,6 +165,28 @@ describe('MCPServer', () => {
       expect(result).toMatchObject({ status: 'completed', output: { status: 'success', result: { doubled: 42 } } });
     });
 
+    it('rejects invalid input to executeTool as the caller error, not a completed result', async () => {
+      const server = new MCPServer({
+        name: 'Workflows',
+        version: '1.0.0',
+        tools: {
+          echo: createTool({
+            id: 'echo',
+            description: 'Echoes a number',
+            inputSchema: z.object({ n: z.number() }),
+            execute: async ({ n }) => ({ n }),
+          }),
+        },
+      });
+      await expect(server.executeTool('echo', { n: 'one' })).rejects.toMatchObject({
+        id: 'MCP_SERVER_TOOL_INVALID_INPUT',
+        message: expect.stringMatching(/input validation failed for echo/i),
+      });
+      await expect(server.executeTool('echo', undefined)).rejects.toMatchObject({
+        id: 'MCP_SERVER_TOOL_INVALID_INPUT',
+      });
+    });
+
     it('requires descriptions and lets explicit tools win name collisions', () => {
       expect(
         () => new MCPServer({ name: 'NoDesc', version: '1.0.0', tools: {}, agents: { a: createMockAgent('A') } }),

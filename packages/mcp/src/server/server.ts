@@ -1079,13 +1079,20 @@ export class MCPServer extends MCPServerBase {
         resumeData: executionContext.resumeData,
         suspendPayload: executionContext.suspendPayload,
       });
-      // Invalid input or resume data is a failed call, not a completed one.
+      // Invalid input or resume data is the caller's error, not a completed call.
       if (execution.status === 'completed' && isValidationError(execution.output)) {
-        throw new Error(execution.output.message);
+        throw new MastraError({
+          id: 'MCP_SERVER_TOOL_INVALID_INPUT',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          text: execution.output.message,
+          details: { toolId },
+        });
       }
       this.logger.info('Tool executed successfully', { tool: toolId });
       return execution;
     } catch (error) {
+      if (error instanceof MastraError && error.id === 'MCP_SERVER_TOOL_INVALID_INPUT') throw error;
       const mastraError = new MastraError(
         {
           id: 'MCP_SERVER_TOOL_EXECUTE_FAILED',
