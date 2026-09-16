@@ -737,13 +737,18 @@ export async function queryTraces(
   timeoutMs: number,
 ): Promise<TraceQueryResponse> {
   if (plan.paginationMode === 'page') {
+    const resolvedTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(timeoutMs);
+    const deadline = performance.now() + resolvedTimeoutMs;
     const countQuery = compilePostgresTraceQuery(schema, plan, 'count');
     const dataQuery = compilePostgresTraceQuery(schema, plan);
     const { total, rows } = await runWithPostgresTraceQueryTimeout(
       client,
-      timeoutMs,
+      resolvedTimeoutMs,
       async transaction => {
         const countRows = await transaction.any<{ count: string }>(countQuery.text, countQuery.values);
+        const remainingTimeoutMs = Math.floor(deadline - performance.now());
+        if (remainingTimeoutMs <= 0) throw new coreStorage.TraceQueryExecutionError();
+        await transaction.query(`SELECT set_config('statement_timeout', $1, true)`, [`${remainingTimeoutMs}ms`]);
         const rows = await transaction.any<Record<string, unknown>>(dataQuery.text, dataQuery.values);
         return { total: Number(countRows[0]?.count ?? 0), rows };
       },
