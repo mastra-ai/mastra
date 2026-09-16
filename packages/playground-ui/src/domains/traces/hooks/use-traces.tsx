@@ -1,10 +1,4 @@
-import type {
-  LightSpanRecord,
-  ListBranchesArgs,
-  ListBranchesResponse,
-  ListTracesArgs,
-  ListTracesLightResponse,
-} from '@mastra/core/storage';
+import type { MastraClient } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import type { InfiniteData } from '@tanstack/react-query';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -12,6 +6,12 @@ import { useEffect, useRef, useState } from 'react';
 import type { TraceListMode } from '../trace-filters';
 import { useInView } from '@/hooks/use-in-view';
 import { is403ForbiddenError } from '@/lib/query-utils';
+
+type ListBranchesArgs = NonNullable<Parameters<MastraClient['listBranches']>[0]>;
+type ListBranchesResponse = Awaited<ReturnType<MastraClient['listBranches']>>;
+type ListTracesArgs = NonNullable<Parameters<MastraClient['listTraces']>[0]>;
+type ListTracesLightResponse = Awaited<ReturnType<MastraClient['listTracesLight']>>;
+type LightSpanRecord = ListTracesLightResponse['spans'][number] | ListBranchesResponse['branches'][number];
 
 /**
  * Per-MastraClient delta-polling support cache. Sticks once we observe a 501

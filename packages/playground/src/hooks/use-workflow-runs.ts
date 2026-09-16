@@ -1,9 +1,11 @@
-import type { WorkflowRuns } from '@mastra/core/storage';
+import type { MastraClient } from '@mastra/client-js';
 import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
+
+type WorkflowRuns = Awaited<ReturnType<ReturnType<MastraClient['getWorkflow']>['runs']>>;
 
 export const PER_PAGE = 20;
 

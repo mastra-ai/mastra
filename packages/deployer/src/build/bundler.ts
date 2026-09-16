@@ -17,7 +17,7 @@ import { removeDeployer } from './plugins/remove-deployer';
 import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 import type { ExternalDependencyInfo } from './types';
-import { getNodeResolveOptions, slash } from './utils';
+import { getPackageName, getNodeResolveOptions, slash } from './utils';
 import type { BundlerPlatform } from './utils';
 
 export function mastraInternalAliasPlugin(entryFile: string): Plugin {
@@ -195,4 +195,30 @@ export async function createBundler(
       return bundler.close();
     },
   };
+}
+
+/**
+ * Checks whether a Rollup warning is an UNRESOLVED_IMPORT for a workspace package.
+ * Returns the original import specifier if it's a workspace package that leaked
+ * through, or undefined if it's not.
+ */
+export function getUnresolvedWorkspaceImport(
+  warning: { code: string; source?: string; id?: string },
+  workspaceMap: Map<string, WorkspacePackageInfo>,
+): string | undefined {
+  if (warning.code !== 'UNRESOLVED_IMPORT') {
+    return undefined;
+  }
+
+  const src = warning.source ?? warning.id ?? '';
+  if (!src) {
+    return undefined;
+  }
+
+  const pkgName = getPackageName(src);
+  if (pkgName && workspaceMap.has(pkgName)) {
+    return src;
+  }
+
+  return undefined;
 }

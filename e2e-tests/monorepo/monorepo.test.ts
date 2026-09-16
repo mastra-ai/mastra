@@ -961,7 +961,18 @@ export const mastra = new Mastra({
         try {
           await writeFile(mastraConfigPath, originalMastraConfig.replace(/externals:\s*\[[^\]]*\]/, 'externals: true'));
 
-          await runBuild(isolatedFixturePath);
+          const buildResult = await execa(pkgManager, ['build'], {
+            cwd: join(isolatedFixturePath, 'apps', 'custom'),
+            reject: false,
+            env: process.env,
+          });
+          expect(buildResult.exitCode).toBe(0);
+
+          const bundledEntry = await readFile(
+            join(isolatedFixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs'),
+            'utf-8',
+          );
+          expect(bundledEntry).not.toContain('@inner/subpath-only/value');
 
           proc = execaNode('index.mjs', {
             cwd: join(isolatedFixturePath, 'apps', 'custom', '.mastra', 'output'),
@@ -1010,6 +1021,44 @@ export const mastra = new Mastra({
           }
 
           await writeFile(mastraConfigPath, originalMastraConfig);
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+
+    it(
+      'should exit non-zero when a workspace subpath import cannot be resolved',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-missing-dep-test-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          const corePath = join(isolatedFixturePath, 'apps', 'custom', 'node_modules', '@mastra', 'core', 'dist');
+          await mkdir(join(corePath, 'runtime-context'), { recursive: true });
+          await writeFile(
+            join(corePath, 'runtime-context', 'index.js'),
+            `export { RequestContext as RuntimeContext } from '../request-context/index.js';`,
+          );
+
+          const transitiveDependencyPath = join(isolatedFixturePath, 'packages', 'transitive-c', 'src', 'index.js');
+          const transitiveDependencySource = await readFile(transitiveDependencyPath, 'utf-8');
+          await writeFile(
+            transitiveDependencyPath,
+            transitiveDependencySource.replace('@inner/subpath-only/value', '@inner/subpath-only/missing'),
+          );
+
+          const buildResult = await execa(pkgManager, ['build'], {
+            cwd: join(isolatedFixturePath, 'apps', 'custom'),
+            reject: false,
+            env: process.env,
+          });
+          const output = `${buildResult.stdout}\n${buildResult.stderr}`;
+
+          expect(buildResult.exitCode, output).toBe(1);
+          expect(output).toContain('Missing "./missing" specifier in "@inner/subpath-only" package');
+          expect(output).toContain('@inner/subpath-only/missing');
+        } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }
       },
