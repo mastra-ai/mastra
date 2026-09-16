@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   combineObservationGroupRanges,
+  deriveObservationGroupProvenance,
   parseObservationGroups,
   reconcileObservationGroupsFromReflection,
   renderObservationGroupsForReflection,
+  stripObservationGroups,
   type ObservationGroup,
 } from '../observation-groups';
 
@@ -58,6 +60,51 @@ after`);
   });
 });
 
+describe('observation group tags in observation content', () => {
+  const quotedTag = `<observation-group id="outer" range="1:5">
+- The format is <observation-group id="example" range="2:3"> with attributes
+</observation-group>`;
+
+  it('treats a tag mentioned inside a line as content, not as a nested group', () => {
+    expect(parseObservationGroups(quotedTag)).toEqual([
+      {
+        id: 'outer',
+        range: '1:5',
+        kind: undefined,
+        content: '- The format is <observation-group id="example" range="2:3"> with attributes',
+      },
+    ]);
+  });
+
+  it('keeps quoted tag text intact when stripping and rendering', () => {
+    expect(stripObservationGroups(quotedTag)).toBe(
+      '- The format is <observation-group id="example" range="2:3"> with attributes',
+    );
+    expect(renderObservationGroupsForReflection(quotedTag)).toBe(`## Group \`outer\`
+_range: \`1:5\`_
+
+- The format is <observation-group id="example" range="2:3"> with attributes`);
+  });
+
+  it('reads a line-started tag as a nested group so the complete group is recovered', () => {
+    const observations = `<observation-group id="incomplete" range="1:2">
+Incomplete
+<observation-group id="complete" range="3:4">
+Complete
+</observation-group>`;
+
+    expect(parseObservationGroups(observations)).toEqual([
+      { id: 'complete', range: '3:4', kind: undefined, content: 'Complete' },
+    ]);
+    expect(stripObservationGroups(observations)).toBe('Incomplete\nComplete');
+    expect(renderObservationGroupsForReflection(observations)).toBe(`Incomplete
+## Group \`complete\`
+_range: \`3:4\`_
+
+Complete`);
+  });
+});
+
 describe('combineObservationGroupRanges', () => {
   it('spans unordered numeric ranges by endpoint value', () => {
     expect(combineObservationGroupRanges([group('a', '10:20'), group('b', '1:5')])).toBe('1:20');
@@ -65,12 +112,18 @@ describe('combineObservationGroupRanges', () => {
 
   it('normalizes reversed numeric pairs and comma-separated segments', () => {
     expect(combineObservationGroupRanges([group('a', '10:5, 2:3'), group('b', '8:12')])).toBe('2:12');
+    expect(combineObservationGroupRanges([group('a', '10:5')])).toBe('5:10');
   });
 
-  it('preserves opaque, malformed, singleton, and unsafe segments losslessly', () => {
-    expect(combineObservationGroupRanges([group('a', 'm1:m2'), group('b', 'm3:m4,m1:m2')])).toBe('m1:m2,m3:m4');
-    expect(combineObservationGroupRanges([group('a', '1:2'), group('b', 'message-id')])).toBe('1:2,message-id');
+  it('compacts opaque segments to a bounded span instead of listing them', () => {
+    expect(combineObservationGroupRanges([group('a', 'm1:m2'), group('b', 'm3:m4,m1:m2')])).toBe('m1:m4');
+    expect(combineObservationGroupRanges([group('a', 'm1:m2'), group('b', 'm3:m4')])).toBe('m1:m4');
+  });
+
+  it('leaves segments that are not start:end pairs untouched', () => {
+    expect(combineObservationGroupRanges([group('a', 'message-id')])).toBe('message-id');
     expect(combineObservationGroupRanges([group('a', '1:2:3')])).toBe('1:2:3');
+    expect(combineObservationGroupRanges([group('a', '1:2'), group('b', 'message-id')])).toBe('1:2,message-id');
     expect(combineObservationGroupRanges([group('a', '9007199254740992:9007199254740993')])).toBe(
       '9007199254740992:9007199254740993',
     );
@@ -100,9 +153,9 @@ describe('reconcileObservationGroupsFromReflection', () => {
     const reflection = `## Group \`merged\`\n\n- First\n- Second`;
     const reconciled = reconcileObservationGroupsFromReflection(reflection, source)!;
 
-    expect(reconciled).toContain('range="m1:m2,m3:m4"');
+    expect(reconciled).toContain('range="m1:m4"');
     const rerendered = renderObservationGroupsForReflection(reconciled)!;
-    expect(reconcileObservationGroupsFromReflection(rerendered, reconciled)).toContain('range="m1:m2,m3:m4"');
+    expect(reconcileObservationGroupsFromReflection(rerendered, reconciled)).toContain('range="m1:m4"');
   });
 
   it('preserves each source range when duplicate-content groups are rendered and reconciled', () => {
@@ -122,19 +175,42 @@ describe('reconcileObservationGroupsFromReflection', () => {
   });
 });
 
-describe('malformed observation group input', () => {
-  it('skips an incomplete group before a complete group', () => {
-    const observations = `<observation-group id="incomplete" range="1:2">
-Incomplete
-<observation-group id="complete" range="3:4">
-Complete
-</observation-group>`;
+describe('deriveObservationGroupProvenance', () => {
+  const source = `<observation-group id="A" range="1:2">- Fact A</observation-group>
+<observation-group id="B" range="3:4">- Fact B</observation-group>`;
 
-    expect(parseObservationGroups(observations)).toEqual([
-      { id: 'complete', range: '3:4', kind: undefined, content: 'Complete' },
+  it('keeps a retained heading id pinned to its own group', () => {
+    expect(deriveObservationGroupProvenance(`## Group \`A\`\n\n- Fact A`, parseObservationGroups(source))).toEqual([
+      { id: 'A', range: '1:2', kind: 'reflection', content: '- Fact A' },
     ]);
   });
 
+  it('unions the other source groups whose facts the section also carries', () => {
+    expect(
+      deriveObservationGroupProvenance(`## Group \`A\`\n\n- Fact A\n- Fact B`, parseObservationGroups(source)),
+    ).toEqual([{ id: 'A', range: '1:4', kind: 'reflection', content: '- Fact A\n- Fact B' }]);
+  });
+
+  it('does not widen a section to groups whose facts it already covers', () => {
+    const duplicated = `<observation-group id="g1" range="1:2">- Same fact</observation-group>
+<observation-group id="g2" range="3:4">- Same fact</observation-group>`;
+
+    expect(
+      deriveObservationGroupProvenance(`## Group \`g1\`\n\n- Same fact`, parseObservationGroups(duplicated)),
+    ).toEqual([{ id: 'g1', range: '1:2', kind: 'reflection', content: '- Same fact' }]);
+  });
+
+  it('falls back to content matching when the heading id is not a source group', () => {
+    expect(
+      deriveObservationGroupProvenance(
+        `## Group \`merged-project\`\n\n- Fact A\n- Fact B`,
+        parseObservationGroups(source),
+      ),
+    ).toEqual([{ id: 'merged-project', range: '1:4', kind: 'reflection', content: '- Fact A\n- Fact B' }]);
+  });
+});
+
+describe('malformed observation group input', () => {
   it('processes repeated unterminated group openings in linear time', () => {
     const observations = '<observation-group >' + 'a<observation-group >'.repeat(10_000);
     const start = performance.now();

@@ -19,6 +19,16 @@ interface ObservationGroupTag {
   content: string;
 }
 
+interface ObservationGroupScan {
+  tags: ObservationGroupTag[];
+  /**
+   * Opening tags of groups that never close before a line-started sibling. Their content is not
+   * attributable to the group, so they are not parsed, but the tag text must not leak into
+   * stripped or rendered output.
+   */
+  incompleteOpenings: Array<{ start: number; end: number }>;
+}
+
 const OBSERVATION_GROUP_OPEN = '<observation-group';
 const OBSERVATION_GROUP_CLOSE = '</observation-group>';
 const ATTRIBUTE_PATTERN = /([\w][\w-]*)="([^"]*)"/g;
@@ -37,9 +47,17 @@ function parseObservationGroupAttributes(attributeString: string): Record<string
   return attributes;
 }
 
-function findObservationGroupTags(observations: string): ObservationGroupTag[] {
+function isLineStart(observations: string, index: number): boolean {
+  return index === 0 || observations[index - 1] === '\n';
+}
+
+function scanObservationGroupTags(observations: string): ObservationGroupScan {
   const tags: ObservationGroupTag[] = [];
+  const incompleteOpenings: Array<{ start: number; end: number }> = [];
   let cursor = 0;
+  // Known closing tag at or after the cursor. Reusing it for successive openings stops malformed
+  // input from re-walking the tail of the string once per opening.
+  let closeFloor = 0;
 
   while (cursor < observations.length) {
     const start = observations.indexOf(OBSERVATION_GROUP_OPEN, cursor);
@@ -54,11 +72,15 @@ function findObservationGroupTags(observations: string): ObservationGroupTag[] {
     const openEnd = observations.indexOf('>', attributesStart);
     if (openEnd === -1) break;
 
-    const closeStart = observations.indexOf(OBSERVATION_GROUP_CLOSE, openEnd + 1);
+    const closeStart = observations.indexOf(OBSERVATION_GROUP_CLOSE, Math.max(openEnd + 1, closeFloor));
     if (closeStart === -1) break;
 
+    // Only a line-started opening can be a nested group: the producer always writes tags on their
+    // own lines, so anything else is observation content that happens to mention the tag name.
     const nestedStart = observations.indexOf(OBSERVATION_GROUP_OPEN, openEnd + 1);
-    if (nestedStart !== -1 && nestedStart < closeStart) {
+    if (nestedStart !== -1 && nestedStart < closeStart && isLineStart(observations, nestedStart)) {
+      incompleteOpenings.push({ start, end: openEnd + 1 });
+      closeFloor = closeStart;
       cursor = nestedStart;
       continue;
     }
@@ -69,21 +91,40 @@ function findObservationGroupTags(observations: string): ObservationGroupTag[] {
       attributeString: observations.slice(attributesStart, openEnd),
       content: observations.slice(openEnd + 1, closeStart),
     });
+    closeFloor = closeStart;
     cursor = closeStart + OBSERVATION_GROUP_CLOSE.length;
   }
 
-  return tags;
+  return { tags, incompleteOpenings };
 }
 
 function replaceObservationGroupTags(observations: string, replace: (tag: ObservationGroupTag) => string): string {
+  const { tags, incompleteOpenings } = scanObservationGroupTags(observations);
   const parts: string[] = [];
   let cursor = 0;
+  let openingIndex = 0;
 
-  for (const tag of findObservationGroupTags(observations)) {
+  // Accepted tags and incomplete openings are discovered left to right, so both lists are sorted
+  // and never overlap. Walk them together, skipping the openings that were already consumed.
+  const skipIncompleteOpeningsBefore = (limit: number) => {
+    while (openingIndex < incompleteOpenings.length && incompleteOpenings[openingIndex]!.start < limit) {
+      const opening = incompleteOpenings[openingIndex]!;
+      openingIndex++;
+
+      if (opening.start < cursor) continue;
+
+      parts.push(observations.slice(cursor, opening.start));
+      cursor = opening.end;
+    }
+  };
+
+  for (const tag of tags) {
+    skipIncompleteOpeningsBefore(tag.start);
     parts.push(observations.slice(cursor, tag.start), replace(tag));
     cursor = tag.end;
   }
 
+  skipIncompleteOpeningsBefore(Number.POSITIVE_INFINITY);
   parts.push(observations.slice(cursor));
   return parts.join('');
 }
@@ -137,7 +178,7 @@ export function parseObservationGroups(observations: string): ObservationGroup[]
 
   const groups: ObservationGroup[] = [];
 
-  for (const tag of findObservationGroupTags(observations)) {
+  for (const tag of scanObservationGroupTags(observations).tags) {
     const attributes = parseObservationGroupAttributes(tag.attributeString);
     const id = attributes.id;
     const range = attributes.range;
@@ -174,31 +215,65 @@ function getRangeSegments(range: string): string[] {
     .filter(Boolean);
 }
 
+function getRangeEndpoints(segment: string): { start: string; end: string } | null {
+  const parts = segment.split(':').map(part => part.trim());
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    return null;
+  }
+
+  return { start: parts[0], end: parts[1] };
+}
+
+/**
+ * `buildMessageRange` produces opaque UUID endpoints, so those segments cannot be ordered by value.
+ * Spanning from the first start to the last end keeps reflected metadata bounded — the full segment
+ * list is deliberately not preserved (#14791). Segments that are not `start:end` pairs are left as
+ * they are rather than being joined into a fabricated span.
+ */
+function spanRangeSegments(segments: string[]): string {
+  const endpoints = segments.map(getRangeEndpoints);
+  if (endpoints.some(endpoint => endpoint === null)) {
+    return segments.join(',');
+  }
+
+  const first = endpoints[0]!;
+  const last = endpoints.at(-1)!;
+  return `${first.start}:${last.end}`;
+}
+
 export function combineObservationGroupRanges(groups: ObservationGroup[]): string {
   const segments = Array.from(new Set(groups.flatMap(group => getRangeSegments(group.range))));
   if (segments.length === 0) {
     return '';
   }
 
-  const endpoints: Array<{ label: string; value: number }> = [];
-  for (const segment of segments) {
-    const parts = segment.split(':').map(part => part.trim());
-    if (parts.length !== 2 || parts.some(part => !/^\d+$/.test(part))) {
-      return segments.join(',');
+  // Numeric endpoints are orderable, so span by value: arrival order must never produce an
+  // inverted range.
+  const numericEndpoints: Array<{ start: { label: string; value: number }; end: { label: string; value: number } }> =
+    [];
+  const allNumeric = segments.every(segment => {
+    const endpoints = getRangeEndpoints(segment);
+    if (!endpoints || !/^\d+$/.test(endpoints.start) || !/^\d+$/.test(endpoints.end)) {
+      return false;
     }
 
-    for (const label of parts) {
-      const value = Number(label);
-      if (!Number.isSafeInteger(value)) {
-        return segments.join(',');
-      }
-      endpoints.push({ label, value });
+    const start = { label: endpoints.start, value: Number(endpoints.start) };
+    const end = { label: endpoints.end, value: Number(endpoints.end) };
+    if (!Number.isSafeInteger(start.value) || !Number.isSafeInteger(end.value)) {
+      return false;
     }
+
+    numericEndpoints.push(start.value <= end.value ? { start, end } : { start: end, end: start });
+    return true;
+  });
+
+  if (!allNumeric) {
+    return spanRangeSegments(segments);
   }
 
-  const first = endpoints.reduce((lowest, endpoint) => (endpoint.value < lowest.value ? endpoint : lowest));
-  const last = endpoints.reduce((highest, endpoint) => (endpoint.value > highest.value ? endpoint : highest));
-  return `${first.label}:${last.label}`;
+  const first = numericEndpoints.reduce((lowest, pair) => (pair.start.value < lowest.start.value ? pair : lowest));
+  const last = numericEndpoints.reduce((highest, pair) => (pair.end.value > highest.end.value ? pair : highest));
+  return `${first.start.label}:${last.end.label}`;
 }
 
 export function renderObservationGroupsForReflection(observations: string): string | null {
@@ -221,6 +296,18 @@ function getCanonicalGroupId(sectionHeading: string, fallbackIndex: number): str
   return match?.[1]?.trim() || `derived-group-${fallbackIndex + 1}`;
 }
 
+function getContentLines(content: string): string[] {
+  return content
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean);
+}
+
+function contributesFactsNotIn(group: ObservationGroup, other: ObservationGroup): boolean {
+  const otherLines = new Set(getContentLines(other.content));
+  return getContentLines(group.content).some(line => !otherLines.has(line));
+}
+
 export function deriveObservationGroupProvenance(content: string, groups: ObservationGroup[]): ObservationGroup[] {
   const sections = parseReflectionObservationGroupSections(content);
   if (sections.length === 0 || groups.length === 0) {
@@ -230,24 +317,20 @@ export function deriveObservationGroupProvenance(content: string, groups: Observ
   return sections.map((section, index) => {
     const canonicalGroupId = getCanonicalGroupId(section.heading, index);
     const identifiedGroup = groups.find(group => group.id === canonicalGroupId);
-    const bodyLines = new Set(
-      section.body
-        .split('\n')
-        .map(line => line.trim())
-        .filter(Boolean),
-    );
+    const bodyLines = new Set(getContentLines(section.body));
 
-    const matchingGroups = groups.filter(group => {
-      const groupLines = group.content
-        .split('\n')
-        .map(line => line.trim())
-        .filter(Boolean);
-      return groupLines.some(line => bodyLines.has(line));
-    });
+    const matchingGroups = groups.filter(group => getContentLines(group.content).some(line => bodyLines.has(line)));
 
     const fallbackGroup = groups[Math.min(index, groups.length - 1)];
+    // A heading id pins the section to its own group, which is what keeps duplicate-content groups
+    // distinct. Any other matched group that carries facts the identified group does not still
+    // contributes provenance, so it is unioned in rather than dropped.
+    const contributingGroups = identifiedGroup
+      ? matchingGroups.filter(group => group.id !== identifiedGroup.id && contributesFactsNotIn(group, identifiedGroup))
+      : [];
+
     const resolvedGroups = identifiedGroup
-      ? [identifiedGroup]
+      ? [identifiedGroup, ...contributingGroups]
       : matchingGroups.length > 0
         ? matchingGroups
         : fallbackGroup

@@ -3616,7 +3616,7 @@ _range: \`ignored-by-reconciler\`_
       expect(deriveObservationGroupProvenance(reflection, parseObservationGroups(sourceObservations))).toEqual([
         {
           id: 'merged-project',
-          range: 'm1:m2,m3:m4',
+          range: 'm1:m4',
           kind: 'reflection',
           content: '- 🔴 User is building a React app\n- 🟡 Needs help with auth flow',
         },
@@ -3638,7 +3638,7 @@ _range: \`ignored-by-reconciler\`_
 - 🟡 Needs help with auth flow`;
 
       expect(reconcileObservationGroupsFromReflection(reflection, sourceObservations))
-        .toBe(`<observation-group id="merged-project" range="m1:m2,m3:m4" kind="reflection">
+        .toBe(`<observation-group id="merged-project" range="m1:m4" kind="reflection">
 - 🔴 User is building a React app
 - 🟡 Needs help with auth flow
 </observation-group>`);
@@ -3714,7 +3714,7 @@ _range: \`ignored-by-reconciler\`_
 
       const result = parseReflectorOutput(output, sourceObservations);
 
-      expect(result.observations).toBe(`<observation-group id="merged-project" range="m1:m2,m3:m4" kind="reflection">
+      expect(result.observations).toBe(`<observation-group id="merged-project" range="m1:m4" kind="reflection">
 - 🔴 User is building a React app
 - 🟡 Needs help with auth flow
 </observation-group>`);
@@ -3760,7 +3760,7 @@ _range: \`ignored-by-reconciler\`_
 
       const result = parseReflectorOutput(output, sourceObservations);
 
-      expect(result.observations).toBe(`<observation-group id="merged-project" range="m1:m2,m3:m4" kind="reflection">
+      expect(result.observations).toBe(`<observation-group id="merged-project" range="m1:m4" kind="reflection">
 - 🔴 User is building a React app
 - 🟡 Needs help with auth flow
 </observation-group>`);
@@ -3790,7 +3790,7 @@ _range: \`ignored-by-reconciler\`_
 
       const sourceRange = parseObservationGroups(sourceObservations)[0]!.range;
       expect(result.observations)
-        .toBe(`<observation-group id="message-saving-debug" range="${sourceRange}" kind="reflection">
+        .toBe(`<observation-group id="message-saving-debug" range="7250b0a4-9d0a-4504-99ff-35762ec557a5:a172fe73-2e02-4d19-9b68-8025a50f1b95" kind="reflection">
 Date: Mar 25, 2026
 * 🔴 User asked to get familiar with observational memory, especially message saving; later reported a persistence bug where reload showed older/mixed-up history, first as “latest messages sometimes are not saved,” then as “message order is sometimes mixed up,” suggesting writes may target an older message ID rather than disappearing.
 * 🟡 Assistant mapped OM as a three-tier flow: recent messages → observations → reflections, with buffering that can outlive the stream.
@@ -3800,7 +3800,7 @@ Date: Mar 25, 2026
       expect(parseObservationGroups(result.observations)).toEqual([
         {
           id: 'message-saving-debug',
-          range: sourceRange,
+          range: '7250b0a4-9d0a-4504-99ff-35762ec557a5:a172fe73-2e02-4d19-9b68-8025a50f1b95',
           kind: 'reflection',
           content: `Date: Mar 25, 2026
 * 🔴 User asked to get familiar with observational memory, especially message saving; later reported a persistence bug where reload showed older/mixed-up history, first as “latest messages sometimes are not saved,” then as “message order is sometimes mixed up,” suggesting writes may target an older message ID rather than disappearing.
@@ -3808,6 +3808,11 @@ Date: Mar 25, 2026
 * 🟡 Investigation centered on savePerStep and finish-time assembly.`,
         },
       ]);
+
+      // The bloated legacy range must come back as one compact segment, not the 64-segment list.
+      const compactedRange = parseObservationGroups(result.observations)[0]!.range;
+      expect(compactedRange).not.toContain(',');
+      expect(compactedRange.length).toBeLessThan(sourceRange.length / 10);
     });
 
     it('should extract continuation hint from XML suggested-response tag', () => {
@@ -4293,8 +4298,6 @@ describe('ObservationalMemory Integration', () => {
       expect(instructions).toContain('mode: "messages"');
       expect(instructions).not.toContain("ALL of this user's conversation threads");
       expect(instructions).not.toContain('do not give up');
-      expect(instructions).toContain('Multiple source segments are separated by commas');
-      expect(instructions).toContain('Never pass the comma-separated list as an ID');
     });
 
     it('appends custom instructions after the native guidance without replacing it', () => {
