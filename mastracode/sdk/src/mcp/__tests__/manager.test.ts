@@ -1150,8 +1150,8 @@ describe('createMcpManager', () => {
       expect(options.clientMetadata.redirect_uris).toEqual(['http://127.0.0.1:1458/oauth/callback']);
       // No pre-registered client: the Client ID Metadata Document is the identity.
       expect(options.clientInformation).toBeUndefined();
-      expect(options.clientMetadataUrl).toBe('https://mastra.ai/.well-known/oauth-client/mastracode.json');
-      expect(options.clientMetadata.client_id).toBe('https://mastra.ai/.well-known/oauth-client/mastracode.json');
+      expect(options.clientMetadataUrl).toBe('https://code.mastra.ai/.well-known/oauth-client/mastracode.json');
+      expect(options.clientMetadata.client_id).toBe('https://code.mastra.ai/.well-known/oauth-client/mastracode.json');
       expect(options.clientMetadata.client_name).toBe('Mastra Code');
 
       // The provider is attached to the live server def so the client sees it
