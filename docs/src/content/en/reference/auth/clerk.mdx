@@ -98,7 +98,7 @@ export const mastra = new Mastra({
     name: 'authorizeUser',
     type: '(user: User, request: HonoRequest) => Promise<boolean> | boolean',
     description:
-      'Custom authorization function to determine if a user should be granted access. Called after token verification. By default, allows all authenticated users.',
+      'Custom authorization function to determine if a user should be granted access. Called after token verification. By default, allows all authenticated users when neither `organizationId` nor `organizationSlug` is configured; when either is set, users outside the required organization are denied.',
     isOptional: true,
   },
 ]}
