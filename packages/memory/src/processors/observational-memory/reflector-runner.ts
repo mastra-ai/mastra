@@ -14,6 +14,7 @@ import type { Memory } from '../..';
 import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { omDebug, omError } from './debug';
+import { isOmModelExecutionError, isOmModelExecutionFailure, OmModelExecutionError } from './error';
 import {
   applyExtractorHooks,
   buildThreadMetadataFromExtractedValues,
@@ -448,47 +449,52 @@ export class ReflectorRunner {
                 // Reset chunk counter per attempt so retry-after-transient-error
                 // doesn't get tagged with the previous attempt's chunk count.
                 chunkCount = 0;
-                const streamResult = await agent.stream(prompt, {
-                  modelSettings: {
-                    ...this.reflectionConfig.modelSettings,
-                  },
-                  providerOptions: this.reflectionConfig.providerOptions as any,
-                  ...(temporaryMemory ? { memory: temporaryMemory.options } : {}),
-                  ...(abortSignal ? { abortSignal } : {}),
-                  ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
-                  ...childObservabilityContext,
-                  ...(attemptNumber === 1
-                    ? {
-                        onChunk(chunk: any) {
-                          chunkCount++;
-                          if (chunkCount === 1 || chunkCount % 50 === 0) {
-                            const preview =
-                              chunk.type === 'text-delta'
-                                ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
-                                : chunk.type === 'tool-call'
-                                  ? ` tool=${chunk.toolName}`
-                                  : '';
-                            omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
-                          }
-                        },
-                        onFinish(event: any) {
-                          omDebug(
-                            `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
-                          );
-                        },
-                        onAbort(event: any) {
-                          omDebug(
-                            `[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`,
-                          );
-                        },
-                        onError({ error }: { error: unknown }) {
-                          omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
-                        },
-                      }
-                    : {}),
-                });
+                try {
+                  const streamResult = await agent.stream(prompt, {
+                    modelSettings: {
+                      ...this.reflectionConfig.modelSettings,
+                    },
+                    providerOptions: this.reflectionConfig.providerOptions as any,
+                    ...(temporaryMemory ? { memory: temporaryMemory.options } : {}),
+                    ...(abortSignal ? { abortSignal } : {}),
+                    ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
+                    ...childObservabilityContext,
+                    ...(attemptNumber === 1
+                      ? {
+                          onChunk(chunk: any) {
+                            chunkCount++;
+                            if (chunkCount === 1 || chunkCount % 50 === 0) {
+                              const preview =
+                                chunk.type === 'text-delta'
+                                  ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
+                                  : chunk.type === 'tool-call'
+                                    ? ` tool=${chunk.toolName}`
+                                    : '';
+                              omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
+                            }
+                          },
+                          onFinish(event: any) {
+                            omDebug(
+                              `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
+                            );
+                          },
+                          onAbort(event: any) {
+                            omDebug(
+                              `[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`,
+                            );
+                          },
+                          onError({ error }: { error: unknown }) {
+                            omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
+                          },
+                        }
+                      : {}),
+                  });
 
-                return streamResult.getFullOutput();
+                  return await streamResult.getFullOutput();
+                } catch (error) {
+                  if (abortSignal?.aborted || !isOmModelExecutionFailure(error)) throw error;
+                  throw new OmModelExecutionError('reflector-model', error);
+                }
               }, abortSignal),
           }),
         {
@@ -1442,6 +1448,7 @@ export class ReflectorRunner {
           startedAt: streamContext.startedAt,
           tokensAttempted: observationTokens,
           error,
+          failurePolicy: this.reflectionConfig.failurePolicy,
           recordId: record.id,
           threadId,
         });
@@ -1450,7 +1457,13 @@ export class ReflectorRunner {
         await this.persistMarkerToStorage(failedMarker, threadId, record.resourceId ?? undefined);
       }
       reflectionError = error instanceof Error ? error : new Error(String(error));
-      if (lifecycleError !== undefined || abortSignal?.aborted) {
+      if (
+        lifecycleError !== undefined ||
+        abortSignal?.aborted ||
+        this.reflectionConfig.failurePolicy !== 'continue' ||
+        !isOmModelExecutionError(error) ||
+        error.failureKind !== 'reflector-model'
+      ) {
         throw error;
       }
       this.syncReflectionSuppression.set(lockKey, observationTokens);

@@ -1,5 +1,32 @@
+import { isTransientLLMError } from './retry';
+
+const AI_API_CALL_ERROR_MARKER = Symbol.for('vercel.ai.error.AI_APICallError');
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function isAbortError(value: unknown): boolean {
+  return isRecord(value) && value.name === 'AbortError';
+}
+
+export function isOmModelExecutionFailure(error: unknown): boolean {
+  if (isTransientLLMError(error)) return true;
+
+  const visited = new Set<object>();
+  let current: unknown = error;
+  while (isRecord(current) && !visited.has(current)) {
+    if (isAbortError(current)) return false;
+    visited.add(current);
+
+    if (Object.prototype.hasOwnProperty.call(current, AI_API_CALL_ERROR_MARKER)) {
+      return Reflect.get(current, AI_API_CALL_ERROR_MARKER) === true;
+    }
+
+    current = current.cause ?? current.error;
+  }
+
+  return false;
 }
 
 export type OmFailurePolicy = 'abort' | 'continue';

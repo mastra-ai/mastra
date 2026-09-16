@@ -11,7 +11,7 @@ import type { ProviderMetadata } from '@mastra/core/stream';
 
 import type { Memory } from '../..';
 import { omDebug } from './debug';
-import { formatOmError, OmModelExecutionError } from './error';
+import { formatOmError, isOmModelExecutionFailure, OmModelExecutionError } from './error';
 import { getBuiltInExtractedValues, mergeExtractedValues, mergeExtractionFailures } from './extracted-values';
 import { extractStructuredValues } from './extraction-runner';
 import type { Extractor } from './extractor';
@@ -375,7 +375,7 @@ export class ObserverRunner {
                     hasRequestContext: Boolean(internalRequestContext),
                     aborted: abortSignal?.aborted ?? false,
                   });
-                  if (abortSignal?.aborted) throw error;
+                  if (abortSignal?.aborted || !isOmModelExecutionFailure(error)) throw error;
                   throw new OmModelExecutionError('observer-model', error);
                 }
               }, abortSignal),
@@ -684,7 +684,7 @@ export class ObserverRunner {
                     hasRequestContext: Boolean(internalRequestContext),
                     aborted: abortSignal?.aborted ?? false,
                   });
-                  if (abortSignal?.aborted) throw error;
+                  if (abortSignal?.aborted || !isOmModelExecutionFailure(error)) throw error;
                   throw new OmModelExecutionError('observer-model', error);
                 }
               }, abortSignal),
