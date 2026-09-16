@@ -1,4 +1,5 @@
 import { createTool, isValidationError, type ValidationError } from '@mastra/core/tools';
+import { createFirecrawlSearchTool, createFirecrawlScrapeTool } from '@mastra/firecrawl';
 import { createParallelSearchTool, createParallelExtractTool } from '@mastra/parallel';
 import { createTavilySearchTool, createTavilyExtractTool } from '@mastra/tavily';
 import { z } from 'zod';
@@ -15,9 +16,17 @@ const parallelWebSearchInputSchema = z.object({
   query: z.string().min(1).describe('The search query'),
 });
 
-function requireParallelOutput<T>(output: T | ValidationError | void, operation: 'search' | 'extract'): T {
+const firecrawlWebExtractInputSchema = z.object({
+  urls: z.array(z.string().url()).min(1).describe('The URLs to extract content from'),
+});
+
+function requireToolOutput<T>(
+  output: T | ValidationError | void,
+  provider: 'Parallel' | 'Firecrawl',
+  operation: 'search' | 'extract',
+): T {
   if (output === undefined) {
-    throw new Error(`Parallel ${operation} returned no output`);
+    throw new Error(`${provider} ${operation} returned no output`);
   }
 
   if (isValidationError(output)) {
@@ -39,6 +48,11 @@ export function hasTavilyKey(): boolean {
 /** Check whether a Parallel API key is available in the environment. */
 export function hasParallelKey(): boolean {
   return !!process.env.PARALLEL_API_KEY;
+}
+
+/** Check whether a Firecrawl API key is available in the environment. */
+export function hasFirecrawlKey(): boolean {
+  return !!process.env.FIRECRAWL_API_KEY;
 }
 
 /**
@@ -120,8 +134,9 @@ export function createParallelWebSearchTool() {
     description: parallelSearchTool.description!,
     inputSchema: parallelWebSearchInputSchema,
     execute: async (input, context) => {
-      const output = requireParallelOutput(
+      const output = requireToolOutput(
         await parallelSearchTool.execute!({ searchQueries: [input.query] }, context),
+        'Parallel',
         'search',
       );
       const parts: string[] = [];
@@ -149,7 +164,7 @@ export function createParallelWebExtractTool() {
     description: parallelExtractTool.description!,
     inputSchema: parallelExtractTool.inputSchema!,
     execute: async (input, context) => {
-      const output = requireParallelOutput(await parallelExtractTool.execute!(input, context), 'extract');
+      const output = requireToolOutput(await parallelExtractTool.execute!(input, context), 'Parallel', 'extract');
       const parts: string[] = [];
 
       for (const result of output.results) {
@@ -168,19 +183,88 @@ export function createParallelWebExtractTool() {
 }
 
 /**
+ * Wraps the @mastra/firecrawl search tool with Mastra Code's standard tool id,
+ * markdown string output, and token truncation.
+ */
+export function createFirecrawlWebSearchTool() {
+  const firecrawlSearchTool = createFirecrawlSearchTool();
+
+  return createTool({
+    id: 'web-search',
+    description: firecrawlSearchTool.description!,
+    inputSchema: parallelWebSearchInputSchema,
+    execute: async (input, context) => {
+      const output = requireToolOutput(
+        await firecrawlSearchTool.execute!({ query: input.query }, context),
+        'Firecrawl',
+        'search',
+      );
+      const parts: string[] = [];
+
+      for (const result of output.web) {
+        const title = result.title || result.url;
+        parts.push([`## ${title}`, result.url, result.description].filter(Boolean).join('\n'));
+      }
+
+      return truncateStringForTokenEstimate(parts.join('\n\n'), MAX_WEB_SEARCH_TOKENS);
+    },
+  });
+}
+
+/**
+ * Wraps the @mastra/firecrawl scrape tool with Mastra Code's standard
+ * `web-extract` id and multi-URL input, markdown string output, and token
+ * truncation. Firecrawl scrapes one URL per call, so URLs are fetched
+ * concurrently and failures are reported inline rather than failing the batch.
+ */
+export function createFirecrawlWebExtractTool() {
+  const firecrawlScrapeTool = createFirecrawlScrapeTool();
+
+  return createTool({
+    id: 'web-extract',
+    description: firecrawlScrapeTool.description!,
+    inputSchema: firecrawlWebExtractInputSchema,
+    execute: async (input, context) => {
+      const settled = await Promise.allSettled(input.urls.map(url => firecrawlScrapeTool.execute!({ url }, context)));
+      const parts: string[] = [];
+
+      settled.forEach((result, index) => {
+        const url = input.urls[index]!;
+        if (result.status === 'rejected') {
+          const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+          parts.push(`## ${url}\nError: ${message}`);
+          return;
+        }
+
+        try {
+          const doc = requireToolOutput(result.value, 'Firecrawl', 'extract');
+          parts.push([`## ${doc.url || url}`, doc.markdown].filter(Boolean).join('\n'));
+        } catch (error) {
+          parts.push(`## ${url}\nError: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      });
+
+      return truncateStringForTokenEstimate(parts.join('\n\n'), MAX_WEB_EXTRACT_TOKENS);
+    },
+  });
+}
+
+/**
  * Resolve which model-independent web provider to use. An explicit user
  * preference wins while its API key is configured; otherwise `auto` picks the
- * first configured provider key (Tavily, then Parallel).
+ * first configured provider key (Tavily, then Parallel, then Firecrawl).
  */
 export function resolveWebSearchProvider(
   preference: WebSearchProviderSetting = 'auto',
-): 'tavily' | 'parallel' | undefined {
+): 'tavily' | 'parallel' | 'firecrawl' | undefined {
   if (preference === 'tavily' && hasTavilyKey()) return 'tavily';
   if (preference === 'parallel' && hasParallelKey()) return 'parallel';
+  if (preference === 'firecrawl' && hasFirecrawlKey()) return 'firecrawl';
 
   // `auto`, or an explicit choice whose key is no longer configured.
   if (hasTavilyKey()) return 'tavily';
   if (hasParallelKey()) return 'parallel';
+  if (hasFirecrawlKey()) return 'firecrawl';
   return undefined;
 }
 
@@ -195,6 +279,13 @@ export function createConfiguredWebTools() {
     return {
       web_search: createParallelWebSearchTool(),
       web_extract: createParallelWebExtractTool(),
+    };
+  }
+
+  if (provider === 'firecrawl') {
+    return {
+      web_search: createFirecrawlWebSearchTool(),
+      web_extract: createFirecrawlWebExtractTool(),
     };
   }
 

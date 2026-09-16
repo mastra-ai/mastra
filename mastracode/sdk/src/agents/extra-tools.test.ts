@@ -7,6 +7,7 @@ vi.mock('../tools/index.js', () => ({
   createWebSearchTool: () => ({ description: 'web search' }),
   createWebExtractTool: () => ({ description: 'web extract' }),
   createConfiguredWebTools: () => undefined,
+  hasFirecrawlKey: () => false,
   hasParallelKey: () => false,
   hasTavilyKey: () => false,
   requestSandboxAccessTool: { description: 'request sandbox access' },
