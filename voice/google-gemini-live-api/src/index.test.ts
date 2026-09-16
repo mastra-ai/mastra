@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
@@ -1009,6 +1010,67 @@ describe('GeminiLiveVoice', () => {
       await expect(sessionPromise).resolves.toMatchObject({
         state: 'disconnected',
       });
+    });
+
+    it('should surface an abnormal WebSocket close as an error so connect() rejects quickly', async () => {
+      // Wire a real EventEmitter as the socket so the production close handler runs.
+      const fakeWs: any = new EventEmitter();
+      fakeWs.readyState = 1;
+      fakeWs.send = vi.fn();
+      fakeWs.close = vi.fn();
+      (voice as any).ws = fakeWs;
+      (voice as any).setupEventListeners();
+
+      const errors: any[] = [];
+      const sessions: any[] = [];
+      voice.on('error', event => errors.push(event));
+      voice.on('session', event => sessions.push(event));
+
+      // A server-side setup rejection (e.g. bad model id) arrives as a clean close, not a socket error.
+      fakeWs.emit('close', 1007, Buffer.from('invalid model id'));
+
+      expect(sessions).toContainEqual(
+        expect.objectContaining({ state: 'disconnected', code: 1007, reason: 'invalid model id' }),
+      );
+      expect(errors).toContainEqual(
+        expect.objectContaining({
+          code: 'websocket_closed',
+          details: { code: 1007, reason: 'invalid model id' },
+        }),
+      );
+    });
+
+    it('should not emit an error for a normal (1000) WebSocket close', async () => {
+      const fakeWs: any = new EventEmitter();
+      fakeWs.readyState = 1;
+      fakeWs.send = vi.fn();
+      fakeWs.close = vi.fn();
+      (voice as any).ws = fakeWs;
+      (voice as any).setupEventListeners();
+
+      const errors: any[] = [];
+      const sessions: any[] = [];
+      voice.on('error', event => errors.push(event));
+      voice.on('session', event => sessions.push(event));
+
+      fakeWs.emit('close', 1000, Buffer.from(''));
+
+      expect(sessions).toContainEqual(expect.objectContaining({ state: 'disconnected', code: 1000 }));
+      expect(errors).toHaveLength(0);
+    });
+
+    it('should reject a pending waitForSessionCreated() on an abnormal close', async () => {
+      const fakeWs: any = new EventEmitter();
+      fakeWs.readyState = 1;
+      fakeWs.send = vi.fn();
+      fakeWs.close = vi.fn();
+      (voice as any).ws = fakeWs;
+      (voice as any).setupEventListeners();
+
+      const waitPromise = (voice as any).waitForSessionCreated() as Promise<void>;
+      fakeWs.emit('close', 1007, Buffer.from('invalid model id'));
+
+      await expect(waitPromise).rejects.toThrow(/invalid model id/);
     });
   });
 
