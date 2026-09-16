@@ -138,6 +138,10 @@ export type VNextObservabilityConfig = ClickhouseDomainConfig & {
   retention?: RetentionConfig;
   /** Maximum execution time for one advanced trace query. Default 15 seconds. */
   traceQueryTimeoutMs?: number;
+  /** Maximum execution time for one trace-query discovery request. Default 5 seconds. */
+  traceQueryDiscoveryTimeoutMs?: number;
+  /** Maximum memory for one trace-query discovery request. Default 256 MiB. */
+  traceQueryDiscoveryMemoryLimitBytes?: number;
   /** @internal Test-only override for the ClickHouse delta cursor strategy. */
   deltaCursorStrategy?: ClickHouseDeltaCursorStrategy;
 };
@@ -458,12 +462,25 @@ async function detectExistingDeltaCursorStrategy(
   }
 }
 
+const TRACE_QUERY_DISCOVERY_DEFAULT_TIMEOUT_MS = 5_000;
+const TRACE_QUERY_DISCOVERY_DEFAULT_MEMORY_LIMIT_BYTES = 256 * 1024 * 1024;
+
+function resolveTraceQueryDiscoveryMemoryLimitBytes(
+  memoryLimitBytes = TRACE_QUERY_DISCOVERY_DEFAULT_MEMORY_LIMIT_BYTES,
+): number {
+  if (!Number.isSafeInteger(memoryLimitBytes) || memoryLimitBytes <= 0) {
+    throw new RangeError('traceQueryDiscoveryMemoryLimitBytes must be a positive safe integer');
+  }
+  return memoryLimitBytes;
+}
+
 export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   readonly #client: ClickHouseClient;
   readonly #retention?: RetentionConfig;
   readonly #replication?: ClickhouseReplicationConfig;
   readonly #deltaCursorStrategyOverride?: ClickHouseDeltaCursorStrategy;
   readonly #traceQueryTimeoutMs: number;
+  readonly #traceQueryDiscoveryLimits: traceQueryOps.ClickHouseTraceQueryExecutionLimits;
   #deltaCursorStrategy: ClickHouseDeltaCursorStrategy | null = 'fallback';
 
   constructor(config: VNextObservabilityConfig) {
@@ -474,6 +491,12 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     this.#retention = config.retention;
     this.#deltaCursorStrategyOverride = config.deltaCursorStrategy;
     this.#traceQueryTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(config.traceQueryTimeoutMs);
+    this.#traceQueryDiscoveryLimits = {
+      timeoutMs: coreStorage.resolveTraceQueryTimeoutMs(
+        config.traceQueryDiscoveryTimeoutMs ?? config.traceQueryTimeoutMs ?? TRACE_QUERY_DISCOVERY_DEFAULT_TIMEOUT_MS,
+      ),
+      memoryLimitBytes: resolveTraceQueryDiscoveryMemoryLimitBytes(config.traceQueryDiscoveryMemoryLimitBytes),
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -865,9 +888,14 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     plan: TrustedTraceQueryObservedFieldsPlan,
   ): Promise<TraceQueryObservedFieldsResult> {
     try {
-      return await traceQueryOps.getTraceQueryObservedFields(this.#client, plan, this.#traceQueryTimeoutMs);
+      return await traceQueryOps.getTraceQueryObservedFields(this.#client, plan, this.#traceQueryDiscoveryLimits);
     } catch (error) {
-      if (error instanceof MastraError || error instanceof coreStorage.TraceQueryExecutionError) throw error;
+      if (
+        error instanceof MastraError ||
+        error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      )
+        throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'GET_TRACE_QUERY_OBSERVED_FIELDS', 'FAILED'),
@@ -881,9 +909,14 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async getTraceQueryValues(plan: TrustedTraceQueryValuesPlan): Promise<GetTraceQueryValuesResponse> {
     try {
-      return await traceQueryOps.getTraceQueryValues(this.#client, plan, this.#traceQueryTimeoutMs);
+      return await traceQueryOps.getTraceQueryValues(this.#client, plan, this.#traceQueryDiscoveryLimits);
     } catch (error) {
-      if (error instanceof MastraError || error instanceof coreStorage.TraceQueryExecutionError) throw error;
+      if (
+        error instanceof MastraError ||
+        error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      )
+        throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'GET_TRACE_QUERY_VALUES', 'FAILED'),
