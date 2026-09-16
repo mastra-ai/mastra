@@ -483,7 +483,7 @@ export class GeminiLiveVoice extends MastraVoice<
         this.log('Using Vertex AI authentication with OAuth token');
       } else {
         // Live API endpoint - this is specifically for the Live API
-        wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent`;
+        wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent`;
         headers = {
           headers: {
             'x-goog-api-key': this.options.apiKey || '',
@@ -1259,9 +1259,22 @@ export class GeminiLiveVoice extends MastraVoice<
     });
 
     this.ws.on('close', (code: number, reason: Buffer) => {
-      this.log('WebSocket connection closed', { code, reason: reason.toString() });
+      const reasonText = reason.toString();
+      this.log('WebSocket connection closed', { code, reason: reasonText });
       this.state = 'disconnected';
-      this.emit('session', { state: 'disconnected', code, reason: reason.toString() });
+      this.emit('session', { state: 'disconnected', code, reason: reasonText });
+
+      // A clean server-initiated close (e.g. 1007 invalid-argument for a bad model id or a
+      // malformed setup frame) arrives as `close`, not as a socket `error`. Surface it as an
+      // `error` so a pending connect() (waitForSessionCreated) rejects immediately with the
+      // real close code and reason instead of waiting out the 30s setup timeout.
+      if (code !== 1000) {
+        this.emit('error', {
+          message: `WebSocket closed during/after setup (code ${code})${reasonText ? `: ${reasonText}` : ''}`,
+          code: 'websocket_closed',
+          details: { code, reason: reasonText },
+        });
+      }
     });
 
     this.ws.on('error', (error: Error) => {

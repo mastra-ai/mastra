@@ -142,6 +142,12 @@ packageExtensions:
   '@huggingface/transformers@*':
     dependencies:
       onnxruntime-common: '*'
+  # weaviate-client references protobufjs on its gRPC path without declaring it;
+  # with the global virtual store there is no fallback hoist, so make the
+  # dependency explicit so @mastra/weaviate can import it at runtime.
+  'weaviate-client@*':
+    dependencies:
+      protobufjs: '*'
   # @daytonaio/sdk requires tslib at runtime without declaring it; with the
   # global virtual store there is no fallback hoist, so importing the SDK
   # fails with "Cannot find module 'tslib'".
@@ -464,6 +470,10 @@ allowBuilds:
   edgedriver: false
   esbuild: false
   geckodriver: false
+  # Blocked so every `pnpm install` doesn't download the ~100MB Inngest Go binary.
+  # Inngest tests resolve the CLI via workflows/inngest/src/__tests__/inngest-cli.ts
+  # and fail with install instructions if it's absent; install it explicitly with
+  # `pnpm --filter @mastra/inngest setup:inngest-cli` (or brew install inngest/tap/inngest).
   inngest-cli: false
   koffi: false
   msgpackr-extract: false

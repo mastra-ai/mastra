@@ -1,18 +1,20 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "55.1.0-alpha.0",
+  "version": "56.0.0-alpha.1",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
   ],
   "files": [
     "dist",
-    "theme.css"
+    "theme.css",
+    "new-theme.css"
   ],
   "exports": {
     "./style.css": "./dist/style.css",
     "./theme.css": "./theme.css",
+    "./new-theme.css": "./new-theme.css",
     "./tokens": {
       "import": {
         "types": "./dist/tokens.d.ts",

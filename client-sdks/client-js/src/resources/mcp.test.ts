@@ -222,5 +222,23 @@ describe('MCP Server Registry Client Methods', () => {
       const headers = new Headers(init.headers);
       expect(headers.get('content-type')).toContain('application/json');
     });
+
+    it('continues a suspended tool by echoing suspendPayload with resumeData', async () => {
+      mockFetchResponse({ result: { charged: 990 } });
+      const tool = client.getMcpServerTool(serverId, toolId);
+      const response = await tool.execute({
+        data: { amount: 990 },
+        resumeData: { confirmed: true },
+        suspendPayload: { phase: 'confirm', amount: 990 },
+      });
+
+      expect(response).toEqual({ result: { charged: 990 } });
+      const [, init] = (global.fetch as any).mock.calls.at(-1) as [string, RequestInit];
+      expect(JSON.parse(init.body as string)).toEqual({
+        data: { amount: 990 },
+        resumeData: { confirmed: true },
+        suspendPayload: { phase: 'confirm', amount: 990 },
+      });
+    });
   });
 });

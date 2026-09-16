@@ -1265,6 +1265,56 @@ describe('FactoryDecisionDispatcher', () => {
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
+  it('delivers a compact continuation instead of the full skill body when the invokeSkill decision sets resume', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      arguments: 'Issue 42',
+      idempotencyKey: 'skill-resume-1',
+      resume: true,
+    });
+    const { controller, session } = createSession();
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-null',
+      kickoffMessage: null,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      primeCredentials: vi.fn(async () => {}),
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const contents = session.sendSignal.mock.calls[0]?.[0]?.contents as string;
+    expect(contents).toContain('<skill name="understand-issue">');
+    expect(contents).toContain('Resume the active understand-issue session');
+    expect(contents).toContain('ARGUMENTS: Issue 42');
+    // The whole fix: the full skill body ('Follow the skill.') is not re-pasted.
+    expect(contents).not.toContain('Follow the skill.');
+  });
+
   describe('a role handed past on a shared session', () => {
     /** Seat `role` on the one session every role of a card shares. */
     async function bindRole(
