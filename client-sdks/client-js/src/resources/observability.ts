@@ -11,6 +11,7 @@ import type {
   QueryThreadsResult,
   TraceQueryRequest,
   TraceQueryTraceResponse,
+  TraceQueryPaginatedTraceResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -246,7 +247,7 @@ export class Observability extends BaseResource {
    * @param params - Advanced trace query, including its required time range
    * @returns Matching lightweight traces
    */
-  queryTraces(params: QueryTracesInput): Promise<TraceQueryTraceResponse> {
+  queryTraces(params: QueryTracesInput): Promise<TraceQueryTraceResponse | TraceQueryPaginatedTraceResponse> {
     return this.request('/observability/traces/query', { method: 'POST', body: params });
   }
 

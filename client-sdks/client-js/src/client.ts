@@ -10,6 +10,7 @@ import type {
   ListTracesResponse,
   ListTracesLightResponse,
   TraceQueryTraceResponse,
+  TraceQueryPaginatedTraceResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -1118,7 +1119,7 @@ export class MastraClient extends BaseResource {
   }
 
   /** Queries completed logical traces using recursive trace and related-record predicates. */
-  queryTraces(params: QueryTracesInput): Promise<TraceQueryTraceResponse> {
+  queryTraces(params: QueryTracesInput): Promise<TraceQueryTraceResponse | TraceQueryPaginatedTraceResponse> {
     return this.observability.queryTraces(params);
   }
 
