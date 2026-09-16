@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import type { BaseUIEvent } from '@base-ui/react/types';
-import { LockIcon, SearchIcon, XIcon } from 'lucide-react';
+import { LockIcon, PencilIcon, SearchIcon, XIcon } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { emptyValueFor, useFilterBarContext } from './filter-bar-context';
@@ -161,6 +162,8 @@ type SegmentComboboxProps<T> = {
   onOpen?: () => void;
   onInputKeyDown?: (event: BaseUIEvent<KeyboardEvent<HTMLInputElement>>, highlighted: T | null) => void;
   placeholder: string;
+  /** Leading icon of the popup input. Defaults to a search glass; free-text editing uses a pencil. */
+  icon?: LucideIcon;
   children: ReactNode;
 };
 
@@ -182,6 +185,7 @@ function SegmentCombobox<T>({
   onOpen,
   onInputKeyDown,
   placeholder,
+  icon: Icon = SearchIcon,
   children,
 }: SegmentComboboxProps<T>) {
   const ctx = useFilterBarContext();
@@ -248,7 +252,7 @@ function SegmentCombobox<T>({
         >
           <ComboboxPrimitive.Popup className={cn(comboboxStyles.popup, 'w-56')} data-slot="filter-bar-editor">
             <div className={comboboxStyles.searchContainer}>
-              <SearchIcon className={comboboxStyles.searchIcon} />
+              <Icon className={comboboxStyles.searchIcon} />
               <ComboboxPrimitive.Input
                 className={comboboxStyles.searchInput}
                 placeholder={placeholder}
@@ -403,6 +407,7 @@ function ValueEditor() {
         if (handled || (event.key === 'Enter' && highlightedOption === null)) event.preventBaseUIHandler();
       }}
       placeholder={placeholder}
+      icon={step.hasSuggestions ? SearchIcon : PencilIcon}
     >
       {step.hasSuggestions && (
         <FilterBarOptionList<FilterBarOption>

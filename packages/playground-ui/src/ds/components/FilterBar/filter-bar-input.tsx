@@ -284,7 +284,7 @@ export function FilterBarInput({
                   </Txt>
                   <Button
                     size="xs"
-                    variant="primary"
+                    variant="default"
                     disabled={query.trim().length === 0}
                     onMouseDown={e => e.preventDefault()}
                     onClick={() => valueStep.commitFreeText()}
