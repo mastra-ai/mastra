@@ -1286,6 +1286,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       currentIteration++;
       // Resolve run-scoped state from either the Mastra-managed RunScope or
       // the legacy `_internal` bag (back-compat for tests).
+      /**
+       * This attempt is being thrown away: the error handling either retries the request
+       * or falls through to the next model, and the tool calls this attempt emitted are
+       * discarded with it. The normal pipeline never runs them, so eager work must not
+       * run either, and work already running is cancelled rather than left to complete a
+       * side effect nothing will record. `beginTurn` then reopens dispatch so the retry
+       * or fallback model is treated like any other turn.
+       *
+       * Every path that discards an attempt has to call this. There are two, and they are
+       * easy to miss: an error thrown out of the stream, and an error chunk that an error
+       * processor answers with a retry. The second one shipped without this for a while.
+       */
+      const discardAttemptEagerWork = () => {
+        eagerCoordinator?.stop({ cancelRunning: true });
+        eagerCoordinator?.beginTurn();
+      };
+
       const scopeCtx: RunScopeContext = { mastra, runId, _internal };
       if (eagerCoordinator) {
         writeScoped(scopeCtx, EAGER_TOOL_EXECUTION_KEY, 'eagerToolExecutionCoordinator', eagerCoordinator);
@@ -2146,15 +2163,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // before abort/error/fallback handling can return or throw.
           cleanupProviderToolSpans(true);
 
-          // This attempt is being discarded: the error handling below either retries the
-          // request or falls through to the next model, and the tool calls this attempt
-          // emitted are discarded with it. The normal pipeline never runs them, so eager
-          // work that has not started must not run either — it would be the one case where
-          // eager execution produces a side effect the default path would not.
-          // The attempt is being discarded: cancel and forget its eager work, then open a
-          // fresh turn so the retry or fallback model dispatches eagerly like any other.
-          eagerCoordinator?.stop({ cancelRunning: true });
-          eagerCoordinator?.beginTurn();
+          discardAttemptEagerWork();
 
           const provider = model?.provider;
           const modelIdStr = model?.modelId;
@@ -2433,6 +2442,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // If processAPIError signaled retry, return early with retry metadata
       if (apiErrorRetryResult?.retry) {
         cleanupProviderToolSpans(true);
+        // Same discard as the thrown-error path: this attempt's tool calls are dropped
+        // (the step returns `toolCalls: []`), so its eager work must not survive either.
+        discardAttemptEagerWork();
         const currentProcessorRetryCount = inputData.processorRetryCount || 0;
         const steps = inputData.output?.steps || [];
         const nextProcessorRetryCount = currentProcessorRetryCount + 1;
