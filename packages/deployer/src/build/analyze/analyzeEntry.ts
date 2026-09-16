@@ -327,12 +327,16 @@ export async function analyzeEntry(
       external: DEPS_TO_IGNORE,
     });
 
-    const { output } = await optimizerBundler.generate({
-      format: 'esm',
-      inlineDynamicImports: true,
-    });
-
-    await optimizerBundler.close();
+    const { output } = await (async () => {
+      try {
+        return await optimizerBundler.generate({
+          format: 'esm',
+          inlineDynamicImports: true,
+        });
+      } finally {
+        await optimizerBundler.close();
+      }
+    })();
 
     const depsToOptimize = await captureDependenciesToOptimize(output[0] as OutputChunk, workspaceMap, projectRoot, {
       logger,
