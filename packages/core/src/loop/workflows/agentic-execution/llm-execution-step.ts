@@ -1295,9 +1295,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
        * side effect nothing will record. `beginTurn` then reopens dispatch so the retry
        * or fallback model is treated like any other turn.
        *
-       * Every path that discards an attempt has to call this. There are two, and they are
-       * easy to miss: an error thrown out of the stream, and an error chunk that an error
-       * processor answers with a retry. The second one shipped without this for a while.
+       * Every path that discards an attempt has to call this. There are two, and the second
+       * is easy to miss: an error thrown out of the stream, and an error chunk that an
+       * error processor answers with a retry.
        */
       const discardAttemptEagerWork = () => {
         eagerCoordinator?.stop({ cancelRunning: true });
