@@ -7,7 +7,9 @@ packages:
 
 # Memory.recall()
 
-The `Memory.recall()` method retrieves messages from a specific thread, with support for pagination, filtering options, and semantic search.
+The `Memory.recall()` method retrieves raw messages from a specific thread, with support for pagination, filtering options, and semantic search.
+
+To retrieve retired Observational Memory groups, enable [`observation.archive`](/reference/memory/observational-memory#configuration) and use the agent's registered `recall` tool with `mode: "observations"`. That mode returns archived observation text first and raw-message cursors second. `Memory.recall()` itself remains the programmatic raw-message API. Pass one returned message cursor as `from` or `to` to drill into the source history.
 
 ## Usage example
 

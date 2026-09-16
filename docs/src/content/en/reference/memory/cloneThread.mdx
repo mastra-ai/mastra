@@ -11,6 +11,8 @@ The `.cloneThread()` method creates a copy of an existing conversation thread, i
 
 `cloneThread()` loads the cloned messages to return them. If you only need the new thread ID, use [`copyThread()`](/reference/memory/copyThread), which copies the thread without loading message content into memory.
 
+When Observational Memory is present, cloning copies only its current active record. It preserves the live observation tail and remaps available raw-message provenance to the cloned message IDs. Historical reflection and archive generations aren't copied, so the cloned thread starts with an empty observation archive catalog.
+
 ## Usage example
 
 The following example creates a `Memory` instance and clones an existing thread.

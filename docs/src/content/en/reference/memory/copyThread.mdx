@@ -7,7 +7,7 @@ packages:
 
 # Memory.copyThread()
 
-The `.copyThread()` method copies an existing thread and its messages to a new thread. It behaves like [`cloneThread()`](/reference/memory/cloneThread), including working memory, observational memory, and semantic-recall embeddings, but it doesn't return the copied messages. On `@mastra/libsql` and `@mastra/pg` the rows are copied inside the database, so the copy itself never loads message content into the Node.js process. See [Memory usage](#memory-usage) for the cases where content is still read.
+The `.copyThread()` method copies an existing thread and its messages to a new thread. It behaves like [`cloneThread()`](/reference/memory/cloneThread), including working memory, the current active observational-memory record, and semantic-recall embeddings, but it doesn't return the copied messages. Historical observational-memory reflection and archive generations aren't copied. On `@mastra/libsql` and `@mastra/pg` the rows are copied inside the database, so the copy itself never loads message content into the Node.js process. See [Memory usage](#memory-usage) for the cases where content is still read.
 
 Use `copyThread()` when you only need the new thread ID, such as forking a conversation for a subagent. Use `cloneThread()` when you need the copied messages in the response.
 
