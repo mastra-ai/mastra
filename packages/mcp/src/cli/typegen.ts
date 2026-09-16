@@ -45,6 +45,18 @@ const supported = new Set([
   '$ref',
   'minItems',
   'maxItems',
+  'format',
+  'pattern',
+  'minLength',
+  'maxLength',
+  'minimum',
+  'maximum',
+  'exclusiveMinimum',
+  'exclusiveMaximum',
+  'multipleOf',
+  'uniqueItems',
+  'minProperties',
+  'maxProperties',
 ]);
 const types = new Set(['object', 'array', 'string', 'number', 'integer', 'boolean', 'null']);
 
