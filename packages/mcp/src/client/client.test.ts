@@ -14,6 +14,7 @@ import type { CallToolResult } from '@modelcontextprotocol/server';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 
+import type { MCPTraceContext } from '../shared/trace-context.js';
 import { InternalMastraMCPClient, getMcpCallToolContent, getMcpCallToolMeta } from './client.js';
 
 describe('InternalMastraMCPClient - server instructions', () => {
@@ -2012,6 +2013,63 @@ describe('MastraMCPClient - Custom _meta', () => {
       }),
       expect.anything(),
     );
+  });
+
+  it('resolves fresh W3C trace context per request and keeps explicit caller precedence', async () => {
+    let activeTrace: Record<string, string> = {
+      traceparent: '00-11111111111111111111111111111111-1111111111111111-01',
+      tracestate: 'vendor=first',
+      baggage: 'tenant=one',
+      'io.modelcontextprotocol/protocolVersion': 'attacker-controlled',
+    };
+    client = new InternalMastraMCPClient({
+      name: 'trace-context-client',
+      server: {
+        url: testServer.baseUrl,
+        enableServerLogs: false,
+        traceContext: () => activeTrace as unknown as MCPTraceContext,
+      },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    const tools = await client.tools();
+    const sendSpy = vi.spyOn((sdkClient as any).transport, 'send');
+
+    await tools['echo']?.execute?.({ msg: 'first' });
+    activeTrace = {
+      traceparent: '00-22222222222222222222222222222222-2222222222222222-01',
+      tracestate: 'vendor=second',
+      baggage: 'tenant=two',
+    };
+    await tools['echo']?.execute?.(
+      { msg: 'second' },
+      { _meta: { traceparent: '00-33333333333333333333333333333333-3333333333333333-01', custom: true } },
+    );
+    await client.listResources();
+
+    const sent = sendSpy.mock.calls.map(call => call[0] as { method?: string; params?: { _meta?: unknown } });
+    const callRequests = sent.filter(message => message.method === 'tools/call');
+    // Only the three W3C keys are taken from the provider; reserved SDK keys cannot be spoofed.
+    expect(callRequests[0]?.params?._meta).toMatchObject({
+      traceparent: '00-11111111111111111111111111111111-1111111111111111-01',
+      tracestate: 'vendor=first',
+      baggage: 'tenant=one',
+    });
+    expect((callRequests[0]?.params?._meta as Record<string, unknown>)['io.modelcontextprotocol/protocolVersion']).not.toBe(
+      'attacker-controlled',
+    );
+    expect(callRequests[1]?.params?._meta).toMatchObject({
+      traceparent: '00-33333333333333333333333333333333-3333333333333333-01',
+      tracestate: 'vendor=second',
+      baggage: 'tenant=two',
+      custom: true,
+    });
+    expect(sent.find(message => message.method === 'resources/list')?.params?._meta).toMatchObject({
+      traceparent: '00-22222222222222222222222222222222-2222222222222222-01',
+      tracestate: 'vendor=second',
+      baggage: 'tenant=two',
+    });
   });
 
   it('should merge custom _meta with progressToken when progress tracking is enabled', async () => {

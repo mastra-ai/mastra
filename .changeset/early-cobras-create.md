@@ -14,6 +14,8 @@ Rebuilt `@mastra/mcp` on the MCP 2026-07-28 revision. Servers serve that revisio
 
 **Schemas.** Tool schemas are advertised as JSON Schema 2020-12 with the dialect declared. The client treats undeclared schemas as 2020-12, validates structured results for live and cache-hydrated tools through the configured SDK validator, bounds untrusted catalogue schemas to 128 nested levels and 10,000 nodes, and round-trips `null`, scalar and tuple `structuredContent` unchanged.
 
+**Trace context.** Server definitions accept a `traceContext` provider whose W3C `traceparent`, `tracestate` and `baggage` are sent as request `_meta`; `MCPServer` exposes the received values to tools as `requestContext.get('traceContext')` and to `context.mcp._meta`, request-scoped and never used for authorization.
+
 **Auth.** `MCPOAuthClientProvider` requires a pre-registered `clientInformation` or a `clientMetadataUrl` (Client ID Metadata Document) and never performs dynamic client registration; `registerClient` and `OAuthClientRegistrationError` are no longer exported.
 
 **Removed options and surfaces:** the server `protocolVersion` option, `connectSSE`, `handleServerlessRequest`, `sessionId`, `sessionIds`, `reconnectionOptions`, `eventSourceInit`, the `roots` option with `setRoots()` / `sendRootsListChanged()`, `MastraPrompt` (use `Prompt`), and the session/serverless flags of `startHTTP`. `startSSE` and `startHonoSSE` stay on the shared `MCPServerBase` for 1.x servers and reject on a 2.0 server. `MCPServer` and `MCPClientServerProxy` set `mcpVersion` to `2` so registries can tell the two apart without a separate base class.

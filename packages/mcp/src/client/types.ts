@@ -10,6 +10,7 @@ import type {
   ToolAnnotations,
   jsonSchemaValidator,
 } from '@modelcontextprotocol/client';
+import type { MCPTraceContext } from '../shared/trace-context';
 
 // FetchLike is used internally when wrapping MastraFetchLike for transport compatibility
 export type { FetchLike } from '@modelcontextprotocol/client';
@@ -215,6 +216,15 @@ export type BaseServerOptions = {
   serverLogLevel?: LoggingLevel;
   /** Whether to enable progress tracking (default: false) */
   enableProgressTracking?: boolean;
+  /**
+   * Returns the W3C `traceparent`, `tracestate` and `baggage` values to attach
+   * to each outgoing MCP request's `_meta`.
+   *
+   * The provider is called when the request is sent so consumers can read from
+   * their own request-local trace carrier without coupling MCP to a tracing SDK.
+   * Explicit `_meta` keys supplied for a tool call take precedence.
+   */
+  traceContext?: () => MCPTraceContext | undefined;
   /**
    * Whether instructions returned by this MCP server during discovery should
    * be forwarded to agents that use the server's tools.

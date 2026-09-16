@@ -6,7 +6,7 @@ import { createTool } from '@mastra/core/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { connectModern, serveHTTP, textOf } from './__tests__/harness';
+import { connectClient, serveHTTP, textOf } from './__tests__/harness';
 import type { ServedHTTP } from './__tests__/harness';
 import { MCPServer } from './server';
 
@@ -102,7 +102,7 @@ describe('MCPServer', () => {
       });
       const served = await serveHTTP(server);
       try {
-        const client = await connectModern(served.url);
+        const client = await connectClient(served.url);
         try {
           expect(client.getInstructions()).toBe('Read me first');
           expect(client.getDiscoverResult()?.ttlMs).toBe(1_000);
@@ -235,7 +235,7 @@ describe('MCPServer', () => {
     });
 
     it('lists and reads application and app resources, preserving _meta', async () => {
-      const client = await connectModern(served.url);
+      const client = await connectClient(served.url);
       try {
         expect(client.getServerCapabilities()?.extensions).toEqual({ 'io.modelcontextprotocol/ui': {} });
         const listed = await client.listResources();
@@ -264,7 +264,7 @@ describe('MCPServer', () => {
     });
 
     it('lists and resolves prompts with argument checks', async () => {
-      const client = await connectModern(served.url);
+      const client = await connectClient(served.url);
       try {
         expect((await client.listPrompts()).prompts.map(p => p.name)).toEqual(['greet']);
         const withTone = await client.getPrompt({ name: 'greet', arguments: { who: 'Ada', tone: 'warm' } });
@@ -329,7 +329,7 @@ describe('MCPServer', () => {
     });
 
     it('serves `{ parameters, execute }` tool objects alongside createTool tools', async () => {
-      const client = await connectModern(served.url);
+      const client = await connectClient(served.url);
       try {
         const listed = (await client.listTools()).tools.find(t => t.name === 'plain');
         expect(listed?.inputSchema).toMatchObject({ type: 'object', properties: { input: { type: 'string' } } });
@@ -348,7 +348,7 @@ describe('MCPServer', () => {
     });
 
     it('advertises output schemas and returns structuredContent with a JSON text fallback', async () => {
-      const client = await connectModern(served.url);
+      const client = await connectClient(served.url);
       try {
         const listed = (await client.listTools()).tools.find(t => t.name === 'structured');
         expect(listed?.outputSchema).toMatchObject({
@@ -369,7 +369,7 @@ describe('MCPServer', () => {
     });
 
     it('returns input validation failures as isError results naming every invalid field', async () => {
-      const client = await connectModern(served.url);
+      const client = await connectClient(served.url);
       try {
         const missing = await client.callTool({ name: 'strict', arguments: {} });
         expect(missing.isError).toBe(true);
@@ -393,7 +393,7 @@ describe('MCPServer', () => {
     });
 
     it('reports output schema violations as tool errors instead of invalid structured content', async () => {
-      const client = await connectModern(served.url);
+      const client = await connectClient(served.url);
       try {
         const result = await client.callTool({ name: 'broken', arguments: {} });
         expect(result.isError).toBe(true);
@@ -419,7 +419,7 @@ describe('MCPServer', () => {
       await new Promise<void>(resolve => httpServer.listen(0, '127.0.0.1', resolve));
       const { port } = httpServer.address() as { port: number };
       try {
-        const client = await connectModern(new URL(`http://127.0.0.1:${port}/mcp`));
+        const client = await connectClient(new URL(`http://127.0.0.1:${port}/mcp`));
         try {
           for (const message of ['first', 'second']) {
             expect(textOf(await client.callTool({ name: 'echo', arguments: { message } }))).toBe(

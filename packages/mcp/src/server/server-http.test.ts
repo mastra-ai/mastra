@@ -9,8 +9,9 @@ import {
 import type { AuthInfo } from '@modelcontextprotocol/server';
 import { afterAll, beforeAll, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { connectModern, rawRequest, serveHTTP, textOf } from './__tests__/harness';
+import { connectClient, rawRequest, serveHTTP, textOf } from './__tests__/harness';
 import type { ServedHTTP } from './__tests__/harness';
+import type { MCPTraceContext } from '../shared/trace-context';
 import { MCPServer } from './server';
 import type { MCPServerHTTPOptions, MCPServerHTTPRequestOptions } from './types';
 
@@ -105,7 +106,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
   });
 
   it('serves discovery, listing and calls to a pinned client without any session', async () => {
-    const client = await connectModern(served.url);
+    const client = await connectClient(served.url);
     try {
       expect(client.getDiscoverResult()?.supportedVersions).toEqual(['2026-07-28']);
       const tools = await client.listTools();
@@ -135,7 +136,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
   });
 
   it('advertises JSON Schema 2020-12 and preserves null and tuple structured results', async () => {
-    const client = await connectModern(served.url);
+    const client = await connectClient(served.url);
     try {
       const tools = (await client.listTools()).tools;
       const tuple = tools.find(tool => tool.name === 'tupleTool')?.outputSchema as Record<string, unknown>;
@@ -160,7 +161,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
   });
 
   it('advertises only supported capabilities', async () => {
-    const client = await connectModern(served.url);
+    const client = await connectClient(served.url);
     try {
       const capabilities = client.getServerCapabilities()!;
       expect(capabilities.tools).toEqual({ listChanged: true });
@@ -178,7 +179,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
   });
 
   it('returns validation failures as tool errors the model can correct', async () => {
-    const client = await connectModern(served.url);
+    const client = await connectClient(served.url);
     try {
       const result = await client.callTool({ name: 'echoTool', arguments: { text: 42 } });
       expect(result.isError).toBe(true);
@@ -192,7 +193,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
   });
 
   it('derives auth and the mapped user from the transport on every request', async () => {
-    const client = await connectModern(served.url);
+    const client = await connectClient(served.url);
     try {
       expect(textOf(await client.callTool({ name: 'authTool', arguments: {} }))).toBe(
         'test-client/user-of-test-client',
@@ -203,7 +204,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
     const anonymous = new MCPServer({ name: 'Anonymous', version: '1.0.0', tools: makeTools() });
     const anonymousServed = await serveHTTP(anonymous);
     try {
-      const client = await connectModern(anonymousServed.url);
+      const client = await connectClient(anonymousServed.url);
       try {
         expect(textOf(await client.callTool({ name: 'authTool', arguments: {} }))).toBe('anonymous/none');
       } finally {
@@ -215,7 +216,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
   });
 
   it('publishes catalogue changes through subscriptions/listen', async () => {
-    const client = await connectModern(served.url);
+    const client = await connectClient(served.url);
     const toolChanges: Array<() => void> = [];
     client.setNotificationHandler('notifications/tools/list_changed', async () => toolChanges.shift()?.());
     const nextToolChange = () => new Promise<void>(resolve => toolChanges.push(resolve));
@@ -263,7 +264,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
     };
 
     it('delivers logs at or above the level the request opted into', async () => {
-      const client = await connectModern(served.url);
+      const client = await connectClient(served.url);
       const messages = collect(client);
       try {
         const info = await client.callTool({
@@ -290,7 +291,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
     });
 
     it('delivers nothing without an opt-in and never leaks a previous opt-in to later requests', async () => {
-      const client = await connectModern(served.url);
+      const client = await connectClient(served.url);
       const messages = collect(client);
       try {
         await client.callTool({
@@ -310,8 +311,8 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
     });
 
     it('isolates concurrent requests on the same server', async () => {
-      const opted = await connectModern(served.url);
-      const silent = await connectModern(served.url);
+      const opted = await connectClient(served.url);
+      const silent = await connectClient(served.url);
       const optedMessages = collect(opted);
       const silentMessages = collect(silent);
       try {
@@ -330,7 +331,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
     it('does not serve the deprecated session-level logging/setLevel', async () => {
       const response = await rawRequest(served.url, { method: 'logging/setLevel', params: { level: 'debug' } });
       expect(response.json().error.code).toBe(-32601);
-      const client = await connectModern(served.url);
+      const client = await connectClient(served.url);
       try {
         await expect(client.setLoggingLevel('debug')).rejects.toThrow();
       } finally {
@@ -340,7 +341,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
   });
 
   it('reports progress on the request stream when the caller supplies a token', async () => {
-    const client = await connectModern(served.url);
+    const client = await connectClient(served.url);
     const progress: Array<{ progress: number; total?: number; message?: string }> = [];
     try {
       const result = await client.callTool(

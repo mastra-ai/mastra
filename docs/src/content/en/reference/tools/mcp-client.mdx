@@ -154,6 +154,13 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     description: 'Whether to enable logging for this server.',
   },
   {
+    name: 'traceContext',
+    type: '() => MCPTraceContext | undefined',
+    isOptional: true,
+    description:
+      'Returns the W3C `traceparent`, optional `tracestate` and `baggage` to send as request `_meta` on every call to this server. Called when each request is sent so it can read a request-local carrier. Explicit `_meta` keys on a tool call take precedence. Servers built with `MCPServer` expose the received values to tools as `requestContext.get("traceContext")`; they are observability data and are never used for authorization.',
+  },
+  {
     name: 'forwardInstructions',
     type: 'boolean',
     isOptional: true,

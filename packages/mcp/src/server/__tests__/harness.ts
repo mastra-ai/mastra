@@ -55,7 +55,7 @@ export function modernClient(options: ClientOptions = {}): Client {
   );
 }
 
-export async function connectModern(
+export async function connectClient(
   url: URL,
   options: ClientOptions = {},
   headers?: Record<string, string>,

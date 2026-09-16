@@ -33,6 +33,7 @@ import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotoc
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { UnauthorizedError } from '../shared/oauth-types';
+import { traceContextToMeta } from '../shared/trace-context';
 import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
@@ -508,11 +509,14 @@ export class InternalMastraMCPClient extends MastraBase {
 
   /**
    * Request metadata every outgoing request carries: the per-request log-level
-   * opt-in (when enabled) merged under caller-supplied keys.
+   * opt-in (when enabled) and the W3C trace fields resolved for this request,
+   * merged under caller-supplied keys.
    */
   private requestMeta(meta?: Record<string, unknown>): Record<string, unknown> | undefined {
+    const traceContext = this.serverConfig.traceContext?.();
     const merged = {
       ...(this.serverLogLevel ? { [LOG_LEVEL_META_KEY]: this.serverLogLevel } : {}),
+      ...(traceContext ? traceContextToMeta(traceContext) : {}),
       ...meta,
     };
     return Object.keys(merged).length > 0 ? merged : undefined;

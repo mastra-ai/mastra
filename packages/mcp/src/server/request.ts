@@ -3,6 +3,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { MCPToolExecutionContext } from '@mastra/core/tools';
 import { ProtocolError, ProtocolErrorCode, inputResponse } from '@modelcontextprotocol/server';
 import type { ServerContext } from '@modelcontextprotocol/server';
+import { traceContextFromMeta } from '../shared/trace-context';
 import type { MCPAuthInfoToUserMapper } from './types';
 
 const unavailable = (feature: string, replacement: string) => (): Promise<never> =>
@@ -43,13 +44,17 @@ export function toToolExecutionContext(ctx: ServerContext, loggerName: string): 
 
 /**
  * Builds the trusted application context for one request. Auth is re-derived from
- * the transport every time; nothing is carried between continuation rounds.
+ * the transport every time; nothing is carried between continuation rounds. The W3C
+ * trace fields sent by the client are exposed under `traceContext` as opaque
+ * strings for observability only; they are never consulted for authorization.
  */
 export async function toRequestContext(
   ctx: ServerContext,
   mapAuthInfoToUser: MCPAuthInfoToUserMapper | undefined,
 ): Promise<RequestContext> {
   const requestContext = new RequestContext();
+  const traceContext = traceContextFromMeta(ctx.mcpReq._meta);
+  if (traceContext) requestContext.set('traceContext', traceContext);
   const authInfo = ctx.http?.authInfo;
   if (!authInfo) return requestContext;
   requestContext.set('authInfo', authInfo);

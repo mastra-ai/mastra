@@ -5,7 +5,7 @@ import { createRequestStateCodec } from '@modelcontextprotocol/server';
 import type { AuthInfo, ElicitResult, InputRequiredResult } from '@modelcontextprotocol/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { connectModern, serveHTTP, textOf } from './__tests__/harness';
+import { connectClient, serveHTTP, textOf } from './__tests__/harness';
 import type { ServedHTTP } from './__tests__/harness';
 import { MCPServer } from './server';
 import type { MCPServerConfig } from './server';
@@ -164,7 +164,7 @@ describe('input_required continuation through suspend/resume', () => {
   });
 
   it('runs two rounds with named phases, the resumeSchema form and one counted write', async () => {
-    const client = await connectModern(served.url, manual);
+    const client = await connectClient(served.url, manual);
     try {
       const first = asRound(await callRound(client, 'bookDelivery', { opKey: 'op-1' }));
       expect(first.inputRequests!.input).toEqual({
@@ -224,7 +224,7 @@ describe('input_required continuation through suspend/resume', () => {
       'Delivery address?': accept({ address: '2 Side St' }),
       'Confirm booking?': accept({ ok: true }),
     };
-    const client = await connectModern(served.url, { capabilities: { elicitation: { form: {} } } });
+    const client = await connectClient(served.url, { capabilities: { elicitation: { form: {} } } });
     const seen: string[] = [];
     client.setRequestHandler('elicitation/create', async request => {
       seen.push(request.params.message);
@@ -240,7 +240,7 @@ describe('input_required continuation through suspend/resume', () => {
   });
 
   it('ends the request on decline or cancel without running the handler', async () => {
-    const client = await connectModern(served.url, manual);
+    const client = await connectClient(served.url, manual);
     try {
       const first = asRound(await callRound(client, 'bookDelivery', { opKey: 'op-decline' }));
       const declined = await callRound(
@@ -274,7 +274,7 @@ describe('input_required continuation through suspend/resume', () => {
   });
 
   it('rejects malformed, mismatched and missing answers', async () => {
-    const client = await connectModern(served.url, manual);
+    const client = await connectClient(served.url, manual);
     try {
       const first = asRound(await callRound(client, 'bookDelivery', { opKey: 'op-bad' }));
 
@@ -314,7 +314,7 @@ describe('input_required continuation through suspend/resume', () => {
   });
 
   it('rejects tampered, foreign and expired request state before any handler runs', async () => {
-    const client = await connectModern(served.url, manual);
+    const client = await connectClient(served.url, manual);
     try {
       const first = asRound(await callRound(client, 'bookDelivery', { opKey: 'op-state' }));
       const rounds = journal.rounds.length;
@@ -351,9 +351,9 @@ describe('input_required continuation through suspend/resume', () => {
   });
 
   it('re-authorizes every round and refuses continuation by a different caller', async () => {
-    const clientA = await connectModern(served.url, manual);
+    const clientA = await connectClient(served.url, manual);
     // The transport identity is derived per request; the header selects the test principal.
-    const clientB = await connectModern(served.url, manual, { 'x-test-client': 'client-b' });
+    const clientB = await connectClient(served.url, manual, { 'x-test-client': 'client-b' });
     try {
       const first = asRound(await callRound(clientA, 'bookDelivery', { opKey: 'op-principal' }));
       await expect(
@@ -384,8 +384,8 @@ describe('input_required continuation through suspend/resume', () => {
     const otherJournal = newJournal();
     const other = await serveHTTP(makeServer(otherJournal), { auth: () => clientAuth('client-a') });
     try {
-      const clientA = await connectModern(served.url, manual);
-      const clientB = await connectModern(other.url, manual);
+      const clientA = await connectClient(served.url, manual);
+      const clientB = await connectClient(other.url, manual);
       try {
         const first = asRound(await callRound(clientA, 'bookDelivery', { opKey: 'op-cross' }));
         const second = asRound(
@@ -420,8 +420,8 @@ describe('input_required continuation through suspend/resume', () => {
       auth: () => clientAuth('client-a'),
     });
     try {
-      const clientA = await connectModern(served.url, manual);
-      const clientB = await connectModern(other.url, manual);
+      const clientA = await connectClient(served.url, manual);
+      const clientB = await connectClient(other.url, manual);
       try {
         const first = asRound(await callRound(clientA, 'bookDelivery', { opKey: 'op-unkeyed' }));
         await expect(
@@ -442,7 +442,7 @@ describe('input_required continuation through suspend/resume', () => {
   });
 
   it('cancels the handler when the client abandons the request', async () => {
-    const client = await connectModern(served.url, manual);
+    const client = await connectClient(served.url, manual);
     try {
       const controller = new AbortController();
       const call = client.callTool({ name: 'slowTool', arguments: {} }, { signal: controller.signal });
@@ -456,7 +456,7 @@ describe('input_required continuation through suspend/resume', () => {
   });
 
   it('scopes per-request logging to each round', async () => {
-    const client = await connectModern(served.url, manual);
+    const client = await connectClient(served.url, manual);
     const logs: unknown[] = [];
     client.setNotificationHandler('notifications/message', async n => {
       logs.push(n.params.data);
@@ -483,7 +483,7 @@ describe('input_required continuation through suspend/resume', () => {
   });
 
   it('suspends and resumes resources/read and prompts/get the same way', async () => {
-    const client = await connectModern(served.url, manual);
+    const client = await connectClient(served.url, manual);
     try {
       const resourceRound = asRound(await client.readResource({ uri: 'ticket://1' }, { allowInputRequired: true }));
       expect(messageOf(resourceRound)).toBe('Who is reading?');
@@ -520,7 +520,7 @@ describe('input_required continuation through suspend/resume', () => {
   });
 
   it('surfaces input_required as a typed failure when a client cannot answer', async () => {
-    const client = await connectModern(served.url, manual);
+    const client = await connectClient(served.url, manual);
     try {
       await expect(client.callTool({ name: 'bookDelivery', arguments: { opKey: 'op-manual' } })).rejects.toThrow(
         /input_required/,
@@ -528,7 +528,7 @@ describe('input_required continuation through suspend/resume', () => {
     } finally {
       await client.close();
     }
-    const noHandler = await connectModern(served.url);
+    const noHandler = await connectClient(served.url);
     try {
       await expect(noHandler.callTool({ name: 'bookDelivery', arguments: { opKey: 'op-nohandler' } })).rejects.toThrow(
         /elicitation\/create/,
