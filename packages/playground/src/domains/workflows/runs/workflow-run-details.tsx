@@ -74,18 +74,16 @@ export const WorkflowRunDetail = ({
     );
   }
 
-  if (runId) {
-    return (
-      <div className="grid h-full grid-rows-[1fr_auto]">
-        <WorkflowTrigger
-          key={`${workflowId}:${runId}`}
-          {...triggerProps}
-          paramsRunId={runId}
-          paramsRunStatus={runSnapshot.status}
-          workflowId={workflowId}
-          observeWorkflowStream={observeSelectedRun}
-        />
-      </div>
-    );
-  }
+  return (
+    <div className="grid h-full grid-rows-[1fr_auto]">
+      <WorkflowTrigger
+        key={`${workflowId}:${runId}`}
+        {...triggerProps}
+        paramsRunId={runId}
+        paramsRunStatus={runSnapshot.status}
+        workflowId={workflowId}
+        observeWorkflowStream={observeSelectedRun}
+      />
+    </div>
+  );
 };

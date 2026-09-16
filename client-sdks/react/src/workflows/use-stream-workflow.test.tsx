@@ -189,7 +189,7 @@ describe('useStreamWorkflow stream ownership', () => {
       oldOperation = invoke(operation, 'obsolete');
     });
     await act(async () => obsolete.send('workflow-start'));
-    await waitFor(() => expect(result.current.streamResult.status).toBe('running'));
+    await waitFor(() => expect(result.current.streamResult?.status).toBe('running'));
     let newOperation!: Promise<void>;
     await act(async () => {
       obsolete.send('workflow-step-result', { id: 'stale', status: 'success', output: 'must not appear' });
@@ -198,7 +198,7 @@ describe('useStreamWorkflow stream ownership', () => {
       await obsolete.canceled;
     });
     expect(result.current.isStreaming).toBe(true);
-    expect(result.current.streamResult.steps?.stale).toBeUndefined();
+    expect(result.current.streamResult?.steps?.stale).toBeUndefined();
     await act(async () => {
       current.send('workflow-step-result', { id: 'current', status: 'success', output: false });
       current.send('workflow-finish', { workflowStatus: 'success' });
@@ -280,7 +280,7 @@ describe('useStreamWorkflow stream ownership', () => {
       operation = invoke('start', 'active');
     });
     await act(async () => remote.send('workflow-start'));
-    await waitFor(() => expect(result.current.streamResult.status).toBe('running'));
+    await waitFor(() => expect(result.current.streamResult?.status).toBe('running'));
     const requestCount = requests.length;
     unmount();
     await remote.canceled;
@@ -313,7 +313,7 @@ describe('useStreamWorkflow stream ownership', () => {
       operation = invoke('start', 'active');
     });
     await act(async () => remote.send('workflow-start'));
-    await waitFor(() => expect(result.current.streamResult.status).toBe('running'));
+    await waitFor(() => expect(result.current.streamResult?.status).toBe('running'));
     const failure = new TypeError('Disconnected transport');
     await act(async () => {
       remote.error(failure);

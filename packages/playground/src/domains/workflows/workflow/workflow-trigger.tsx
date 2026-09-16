@@ -11,6 +11,7 @@ import { WorkflowRequestContextDialog } from '../components/workflow-request-con
 import { WorkflowRunOptionsDialog } from '../components/workflow-run-options-dialog';
 import type { WorkflowRunContextType } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
+import { isWorkflowRunFinished } from '../utils';
 import { useSuspendedSteps, useWorkflowSchemas } from './use-workflow-trigger';
 import { WorkflowCancelButton } from './workflow-cancel-button';
 import { WorkflowDebugStepControls } from './workflow-debug-step-controls';
@@ -35,7 +36,6 @@ export type WorkflowTriggerProps = Pick<
 > & {
   paramsRunId?: string;
   paramsRunStatus?: WorkflowRunStatus;
-  setRunId?: (runId: string) => void;
   observeWorkflowStream?: (params: { workflowId: string; runId: string }) => void;
 };
 
@@ -55,7 +55,6 @@ export function WorkflowTrigger({
   workflowId,
   paramsRunId,
   paramsRunStatus,
-  setRunId,
   workflow,
   isLoading,
   createWorkflowRun,
@@ -91,7 +90,7 @@ export function WorkflowTrigger({
   const suspendedSteps = useSuspendedSteps(streamResultToUse, activeRunId);
   const { zodSchemaToUse, hasStateSchema } = useWorkflowSchemas(workflow);
 
-  const hasFinished = ['success', 'failed', 'canceled', 'bailed'].includes(streamResultToUse?.status ?? '');
+  const hasFinished = isWorkflowRunFinished(streamResultToUse?.status);
   // Only per-step (debug) runs pause, so a paused run is steppable even where debugMode starts false.
   const isPausedDebug = streamResultToUse?.status === 'paused';
 
@@ -110,7 +109,6 @@ export function WorkflowTrigger({
       const run = await createWorkflowRun({ workflowId });
       if (request.signal.aborted) return;
 
-      setRunId?.(run.runId);
       setContextRunId(run.runId);
       setIsStarting(false);
 

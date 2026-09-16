@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog } from '@mastra/playground-ui/components/Dialog';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { getNodeIndicators, WorkflowCardBadges } from '@mastra/playground-ui/components/Workflow';
 
 import { useAutoscroll } from '@mastra/playground-ui/hooks/use-autoscroll';
 import { CheckIcon } from '@mastra/playground-ui/icons/CheckIcon';
@@ -72,28 +71,6 @@ const toDialogData = (value: unknown): Record<string, unknown> => {
   return { value };
 };
 
-const getTimelineIndicators = (step: Step) => {
-  const stepWithMetadata = step as Step & {
-    duration?: number;
-    date?: Date;
-    isForEach?: boolean;
-    mapConfig?: string;
-    canSuspend?: boolean;
-    isParallel?: boolean;
-    stepGraph?: unknown;
-  };
-
-  return getNodeIndicators({
-    duration: stepWithMetadata.duration,
-    date: stepWithMetadata.date,
-    isForEach: stepWithMetadata.isForEach,
-    mapConfig: stepWithMetadata.mapConfig,
-    canSuspend: stepWithMetadata.canSuspend,
-    isParallel: stepWithMetadata.isParallel,
-    stepGraph: stepWithMetadata.stepGraph,
-  });
-};
-
 interface WorkflowTimelineRowProps {
   row: TimelineRow;
   index: number;
@@ -115,7 +92,6 @@ const WorkflowTimelineRow = ({
   onOpenInput,
   onOpenOutput,
 }: WorkflowTimelineRowProps) => {
-  const indicators = getTimelineIndicators(row.step);
   const isInProgress = row.status === 'running';
   const canSelect = !row.isNestedEntry;
 
@@ -184,9 +160,7 @@ const WorkflowTimelineRow = ({
           <SquareArrowRight />
         </Button>
       </div>
-      <div className="flex overflow-hidden">
-        <WorkflowCardBadges indicators={indicators} className="shrink-0" />
-      </div>
+      <div className="flex overflow-hidden"></div>
       <Txt
         as="span"
         variant="ui-sm"

@@ -16,7 +16,7 @@ import type { Dispatch, SetStateAction } from 'react';
 
 type StepProgress = Extract<StreamVNextChunkType, { type: 'workflow-step-progress' }>['payload'];
 
-type WorkflowRunStreamStep = Omit<WorkflowStateSingleStepResult, 'error'> & {
+export type WorkflowRunStreamStep = Omit<WorkflowStateSingleStepResult, 'error'> & {
   error?: WorkflowStateSingleStepResult['error'] | Error;
   tripwire?: StepTripwireInfo;
   foreachProgress?: Pick<

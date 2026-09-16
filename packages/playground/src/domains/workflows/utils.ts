@@ -42,7 +42,6 @@ function toStreamStep(recorded: RecordedStep): StreamStep | undefined {
   };
 }
 
-// Object.fromEntries keeps a "__proto__" step id as an own key; index assignment would hit the setter.
 function toStreamSteps(recordedSteps: Record<string, RecordedStep>): WorkflowRunStreamResult['steps'] {
   return Object.fromEntries(
     Object.entries(recordedSteps).flatMap(([stepId, recorded]) => {
@@ -88,7 +87,6 @@ export function convertWorkflowRunStateToStreamResult(run: RecordedRun): Workflo
   return { input, steps, status: run.status, ...readRunOutcome(run, steps) };
 }
 
-// Object.fromEntries keeps a "__proto__" step id as an own key; index assignment would hit the setter.
 function mergeStepResults(liveSteps: WorkflowRunStreamResult['steps'], storedSteps: WorkflowRunStreamResult['steps']) {
   const mergedLiveSteps = Object.entries(liveSteps).map(
     ([stepId, liveStep]) => [stepId, { ...storedSteps[stepId], ...liveStep }] as const,
@@ -100,7 +98,7 @@ export function resolveWorkflowRunResult(
   liveResult: WorkflowRunStreamResult | null,
   storedResult: WorkflowRunStreamResult | null,
 ) {
-  if (!liveResult?.status) return storedResult ?? liveResult;
+  if (!liveResult) return storedResult;
   if (!storedResult) return liveResult;
   return {
     ...liveResult,

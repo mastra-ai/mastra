@@ -4,7 +4,7 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { Plus } from 'lucide-react';
 import type { ContextType, ReactNode } from 'react';
-import { useState, useEffect, useContext } from 'react';
+import { useEffect, useContext } from 'react';
 
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 import type { WorkflowRunContextType } from '../context/workflow-run-context';
@@ -35,7 +35,6 @@ type InitialWorkflowSidebarProps = WorkflowActionProps & {
   workflowId: string;
   workflow?: GetWorkflowResponse;
   isLoading: boolean;
-  setRunId: (runId: string) => void;
 };
 
 type RunWorkflowSidebarProps = InitialWorkflowSidebarProps & {
@@ -105,7 +104,6 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
   const {
     createWorkflowRun,
     streamWorkflow,
-    streamResult,
     isStreamingWorkflow,
     observeWorkflowStream,
     closeStreamsAndReset,
@@ -119,15 +117,10 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
 
   const { setSelectedStepId } = useWorkflowSelectedStep();
 
-  const [runId, setRunId] = useState<string>('');
-
-  const isCurrentRunFinished = ['success', 'failed', 'canceled', 'bailed'].includes(streamResult?.status ?? '');
-  const showNewRunButton =
-    Boolean(initialRunId || runId || contextRunId || isStreamingWorkflow) || isCurrentRunFinished;
+  const activeRunId = initialRunId || contextRunId;
 
   const actionProps = {
     workflowId,
-    setRunId,
     workflow: workflow ?? undefined,
     isLoading,
     createWorkflowRun,
@@ -137,12 +130,6 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
     isCancellingWorkflowRun,
     cancelWorkflowRun,
   };
-
-  useEffect(() => {
-    if (!runId && !initialRunId) {
-      closeStreamsAndReset();
-    }
-  }, [runId, initialRunId, closeStreamsAndReset]);
 
   useEffect(() => {
     if (error) {
@@ -162,7 +149,6 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
   const resetToNewRun = () => {
     closeStreamsAndReset();
     clearData();
-    setRunId('');
     setContextRunId('');
     setSelectedStepId(null);
   };
@@ -171,7 +157,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
     <div data-testid="workflow-information-panel" className="flex h-full min-h-0 w-full flex-col gap-2 p-2">
       <WorkflowInformationTopSection
         newRunButton={
-          showNewRunButton ? <NewWorkflowRunButton workflowId={workflowId} onClick={resetToNewRun} /> : undefined
+          activeRunId ? <NewWorkflowRunButton workflowId={workflowId} onClick={resetToNewRun} /> : undefined
         }
       >
         {initialRunId ? (
@@ -181,7 +167,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
         )}
       </WorkflowInformationTopSection>
 
-      <RecentWorkflowRunsSection workflowId={workflowId} activeRunId={initialRunId || runId || contextRunId} />
+      <RecentWorkflowRunsSection workflowId={workflowId} activeRunId={activeRunId} />
     </div>
   );
 }

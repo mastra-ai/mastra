@@ -22,7 +22,7 @@ export function useStreamForRun({ runId, debugMode, tracingOptions }: StreamForR
   } = useStreamWorkflow({ debugMode, tracingOptions, onError: error => toast.error(error.message) });
 
   const belongsToRun = streamRun?.runId === runId;
-  const result = belongsToRun && streamResult.status ? streamResult : null;
+  const result = belongsToRun && streamResult ? streamResult : null;
   const isOpen = belongsToRun && isStreaming;
   const isObserving = belongsToRun && streamRun?.mode === 'observe';
 
