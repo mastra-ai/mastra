@@ -49,6 +49,75 @@ export interface AzureAISearchVectorOptions {
    * ```
    */
   clientOptions?: Omit<SearchClientOptions, 'apiVersion'>;
+  /**
+   * Automatically add a filterable field to the index the first time a top-level
+   * string/number/boolean metadata key is seen in `upsert`/`updateVector`.
+   *
+   * Azure AI Search can only filter on fields declared in the index schema and has
+   * no JSON-path filtering, so without this, `query({ filter: { thread_id } })` on a
+   * key that was never declared via `metadataIndexes` fails with HTTP 400. Mastra
+   * Memory relies on filtering by `thread_id`/`resource_id` without declaring them.
+   *
+   * Field type is inferred from the first value seen. Keys whose names are not valid
+   * Azure field names (must match `^[A-Za-z][A-Za-z0-9_]*$`), or whose values are
+   * arrays/objects/null, stay in the JSON `metadata` blob only and are not filterable.
+   *
+   * Defaults to `true`. Set to `false` to require explicit `metadataIndexes`.
+   */
+  autoIndexMetadata?: boolean;
+}
+
+/**
+ * Azure AI Search document keys may only contain letters, digits, `_`, `-` and `=`.
+ * IDs that use anything else (e.g. `urn:uuid:...`, paths, emails) are base64url
+ * encoded behind a marker prefix and decoded back on every read path.
+ */
+const SAFE_DOCUMENT_KEY = /^[A-Za-z0-9_\-=]+$/;
+const ENCODED_KEY_PREFIX = 'b64-';
+
+function encodeDocumentKey(id: string): string {
+  if (SAFE_DOCUMENT_KEY.test(id) && !id.startsWith(ENCODED_KEY_PREFIX)) {
+    return id;
+  }
+  return ENCODED_KEY_PREFIX + Buffer.from(id, 'utf8').toString('base64url');
+}
+
+function decodeDocumentKey(key: string): string {
+  if (!key.startsWith(ENCODED_KEY_PREFIX)) {
+    return key;
+  }
+  return Buffer.from(key.slice(ENCODED_KEY_PREFIX.length), 'base64url').toString('utf8');
+}
+
+/** Azure AI Search field naming rules (letters/digits/underscore, must start with a letter, max 128 chars). */
+const AZURE_FIELD_NAME = /^[A-Za-z][A-Za-z0-9_]{0,127}$/;
+
+function edmTypeForValue(value: unknown): string | undefined {
+  switch (typeof value) {
+    case 'string':
+      return 'Edm.String';
+    case 'number':
+      return Number.isFinite(value) ? 'Edm.Double' : undefined;
+    case 'boolean':
+      return 'Edm.Boolean';
+    default:
+      return undefined;
+  }
+}
+
+function valueMatchesEdmType(value: unknown, edmType: string | undefined): boolean {
+  switch (edmType) {
+    case 'Edm.String':
+      return typeof value === 'string';
+    case 'Edm.Double':
+    case 'Edm.Int32':
+    case 'Edm.Int64':
+      return typeof value === 'number' && Number.isFinite(value);
+    case 'Edm.Boolean':
+      return typeof value === 'boolean';
+    default:
+      return false;
+  }
 }
 
 /**
@@ -240,6 +309,13 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
   private clientOptions?: Omit<SearchClientOptions, 'apiVersion'>;
   private indexClient: SearchIndexClient;
   private searchClients: Map<string, SearchClient<AzureAISearchDocument>> = new Map();
+  private autoIndexMetadata: boolean;
+  /**
+   * Serializes schema updates per index within this process. `createOrUpdateIndex`
+   * is last-writer-wins, so two concurrent upserts each adding a different new
+   * metadata field would otherwise clobber each other's field.
+   */
+  private schemaUpdateQueues: Map<string, Promise<void>> = new Map();
 
   /**
    * Azure AI Search rejects indexing requests containing more than 1,000 documents
@@ -248,13 +324,21 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
    */
   private static readonly INDEXING_BATCH_SIZE = 1000;
 
-  constructor({ id, endpoint, credential, apiVersion, clientOptions }: AzureAISearchVectorOptions & { id: string }) {
+  constructor({
+    id,
+    endpoint,
+    credential,
+    apiVersion,
+    clientOptions,
+    autoIndexMetadata = true,
+  }: AzureAISearchVectorOptions & { id: string }) {
     super({ id });
 
     this.endpoint = endpoint;
     this.credential = credential;
     this.apiVersion = apiVersion;
     this.clientOptions = clientOptions;
+    this.autoIndexMetadata = autoIndexMetadata;
 
     // Initialize the index client for managing indexes
     this.indexClient = new SearchIndexClient(
@@ -318,10 +402,33 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
     const results: R[] = [];
     for (let i = 0; i < documents.length; i += AzureAISearchVector.INDEXING_BATCH_SIZE) {
       const batch = documents.slice(i, i + AzureAISearchVector.INDEXING_BATCH_SIZE);
-      const { results: batchResults } = await operation(batch);
+      const { results: batchResults } = await this.retryWhileSchemaPropagates(() => operation(batch));
       results.push(...batchResults);
     }
     return results;
+  }
+
+  /**
+   * A field added with `createOrUpdateIndex` is not immediately visible to the
+   * indexing endpoint; an upload issued right after can be rejected with
+   * "The property 'x' does not exist on type 'search.documentFields'". Retry that
+   * specific error briefly while the schema change propagates.
+   */
+  private async retryWhileSchemaPropagates<T>(operation: () => Promise<T>): Promise<T> {
+    const maxAttempts = 20;
+    const delayMs = 500;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const schemaLag = /does not exist on type 'search\.documentFields'/.test(message);
+        if (!schemaLag || attempt >= maxAttempts) {
+          throw error;
+        }
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
   }
 
   /**
@@ -402,18 +509,92 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       return;
     }
 
-    const existingIndex = (await this.indexClient.getIndex(indexName)) as any;
-    const existingFieldNames = new Set((existingIndex.fields ?? []).map((field: any) => field.name));
-    const missingFields = fields.filter(field => !existingFieldNames.has(field.name));
+    const previous = this.schemaUpdateQueues.get(indexName) ?? Promise.resolve();
+    const run = previous
+      .catch(() => {})
+      .then(async () => {
+        // Re-read inside the lock so we merge onto whatever the previous update wrote.
+        const existingIndex = (await this.indexClient.getIndex(indexName)) as any;
+        const existingFieldNames = new Set((existingIndex.fields ?? []).map((field: any) => field.name));
+        const missingFields = fields.filter(field => !existingFieldNames.has(field.name));
 
-    if (missingFields.length === 0) {
+        if (missingFields.length === 0) {
+          return;
+        }
+
+        await (this.indexClient as any).createOrUpdateIndex({
+          ...existingIndex,
+          fields: [...(existingIndex.fields ?? []), ...missingFields],
+        });
+      });
+    this.schemaUpdateQueues.set(indexName, run);
+    try {
+      await run;
+    } finally {
+      if (this.schemaUpdateQueues.get(indexName) === run) {
+        this.schemaUpdateQueues.delete(indexName);
+      }
+    }
+  }
+
+  /**
+   * Adds a filterable field for every top-level scalar metadata key that the index
+   * does not yet have, so that `filter: { key: value }` works without the caller
+   * declaring the key up front. Mutates `fields` so the subsequent document build
+   * writes the typed column. No-op when `autoIndexMetadata` is false.
+   */
+  private async ensureMetadataFields({
+    indexName,
+    metadataList,
+    vectorFieldName,
+    fields,
+  }: {
+    indexName: string;
+    metadataList: Array<Record<string, any> | undefined>;
+    vectorFieldName: string;
+    fields: Map<string, IndexFieldCapabilities>;
+  }): Promise<void> {
+    if (!this.autoIndexMetadata) {
       return;
     }
 
-    await (this.indexClient as any).createOrUpdateIndex({
-      ...existingIndex,
-      fields: [...(existingIndex.fields ?? []), ...missingFields],
+    const missing = new Map<string, string>();
+    for (const metadata of metadataList) {
+      if (!metadata) continue;
+      for (const [key, value] of Object.entries(metadata)) {
+        if (fields.has(key) || missing.has(key)) continue;
+        if (DEFAULT_DOCUMENT_FIELDS.has(key) || key === vectorFieldName) continue;
+        // Names starting with "azureSearch" are reserved by the service.
+        if (!AZURE_FIELD_NAME.test(key) || key.startsWith('azureSearch')) continue;
+        const edmType = edmTypeForValue(value);
+        if (!edmType) continue;
+        missing.set(key, edmType);
+      }
+    }
+
+    if (missing.size === 0) {
+      return;
+    }
+
+    await this.ensureExistingIndexFields({
+      indexName,
+      fields: [...missing].map(([name, type]) => ({
+        name,
+        type,
+        searchable: false,
+        filterable: true,
+        retrievable: true,
+        sortable: false,
+        facetable: false,
+      })),
     });
+
+    // Another writer may have declared the field with a different type; re-read
+    // the authoritative schema rather than trusting our inferred types.
+    const refreshed = await this.getIndexFieldCapabilities(indexName);
+    for (const [name, capability] of refreshed) {
+      fields.set(name, capability);
+    }
   }
 
   private buildDocumentFromMetadata({
@@ -456,8 +637,12 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
         continue;
       }
 
+      // Only write the typed column when the JS value matches the column's Edm type.
+      // Azure rejects the whole document otherwise (e.g. number into Edm.String:
+      // "Cannot convert the literal '0' to the expected type 'Edm.String'"). The
+      // JSON `metadata` blob remains the source of truth on read either way.
       if (Object.prototype.hasOwnProperty.call(metadata, fieldName)) {
-        doc[fieldName] = metadata[fieldName];
+        doc[fieldName] = valueMatchesEdmType(metadata[fieldName], field.type) ? metadata[fieldName] : null;
       }
     }
 
@@ -798,6 +983,15 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
    * @throws {MastraError} When upsert operation fails
    */
   async upsert({ indexName, vectors, metadata = [], ids, deleteFilter }: AzureAISearchUpsertParams): Promise<string[]> {
+    if (!Array.isArray(vectors) || vectors.length === 0) {
+      throw new MastraError({
+        id: 'STORAGE_AZURE_AI_SEARCH_UPSERT_EMPTY_VECTORS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Cannot upsert an empty vectors array',
+        details: { indexName },
+      });
+    }
     if (metadata.length > 0 && metadata.length !== vectors.length) {
       throw new MastraError({
         id: 'STORAGE_AZURE_AI_SEARCH_UPSERT_METADATA_LENGTH_MISMATCH',
@@ -829,6 +1023,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       // Detect vector field name
       const vectorFieldName = await this.getVectorFieldName(indexName);
       const fields = await this.getIndexFieldCapabilities(indexName);
+      await this.ensureMetadataFields({ indexName, metadataList: metadata, vectorFieldName, fields });
 
       // Generate IDs if not provided
       const vectorIds = ids || vectors.map(() => crypto.randomUUID());
@@ -836,7 +1031,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       // Prepare documents for upload using dynamic vector field
       const documents = vectors.map((vector: number[], i: number) =>
         this.buildDocumentFromMetadata({
-          id: vectorIds[i]!,
+          id: encodeDocumentKey(vectorIds[i]!),
           vector,
           vectorFieldName,
           metadata: metadata[i] || {},
@@ -1046,7 +1241,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       for await (const result of searchResults.results) {
         if (result.document) {
           const queryResult: QueryResult = {
-            id: result.document.id,
+            id: decodeDocumentKey(result.document.id),
             score: result.score || 0,
             metadata: result.document.metadata
               ? (() => {
@@ -1081,6 +1276,19 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
 
       return results;
     } catch (error) {
+      const unknownField = this.unknownFilterField(error);
+      if (unknownField) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_AZURE_AI_SEARCH_FILTER_UNKNOWN_FIELD',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text: `Filter references metadata field '${unknownField}' which does not exist on index '${indexName}'. Azure AI Search can only filter on declared fields: either upsert at least one document carrying '${unknownField}' as a string/number/boolean value (autoIndexMetadata), or declare it via createIndex({ metadataIndexes: ['${unknownField}'] }).`,
+            details: { indexName, field: unknownField },
+          },
+          error,
+        );
+      }
       throw new MastraError(
         {
           id: 'STORAGE_AZURE_AI_SEARCH_QUERY_FAILED',
@@ -1165,9 +1373,13 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
         return;
       }
 
+      if (update.metadata) {
+        await this.ensureMetadataFields({ indexName, metadataList: [update.metadata], vectorFieldName, fields });
+      }
+
       const updatedDocs = targetIds.map(targetId =>
         this.buildDocumentFromMetadata({
-          id: targetId,
+          id: encodeDocumentKey(targetId),
           vector: update.vector,
           vectorFieldName,
           metadata: update.metadata,
@@ -1271,7 +1483,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       }
 
       const searchClient = this.getSearchClient(indexName);
-      const deleteDocs = idsToDelete.map(id => ({ id }));
+      const deleteDocs = idsToDelete.map(id => ({ id: encodeDocumentKey(id) }));
       const deleteResults = await this.runBatchedIndexing(deleteDocs, batch =>
         searchClient.deleteDocuments(batch as any),
       );
@@ -1325,7 +1537,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
   async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
     try {
       const searchClient = this.getSearchClient(indexName);
-      const deleteResult = await searchClient.deleteDocuments([{ id }] as any); // Type assertion for Azure SDK compatibility
+      const deleteResult = await searchClient.deleteDocuments([{ id: encodeDocumentKey(id) }] as any);
       const deleteFailure = deleteResult.results.find(result => !result.succeeded);
 
       if (deleteFailure) {
@@ -1378,6 +1590,14 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
   }
 
   /**
+   * Extracts the field name from Azure's "Could not find a property named 'x'" $filter error.
+   */
+  private unknownFilterField(error: unknown): string | undefined {
+    const message = error instanceof Error ? error.message : String(error);
+    return /Could not find a property named '([^']+)'/.exec(message)?.[1];
+  }
+
+  /**
    * Transforms filter to Azure AI Search OData syntax
    */
   private transformFilter(filter?: AzureAISearchVectorFilter): string | undefined {
@@ -1412,7 +1632,8 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       let count = 0;
       for await (const result of searchResults.results) {
         if (result.document?.id) {
-          ids.push(result.document.id);
+          ids.push(decodeDocumentKey(result.document.id));
+          // Range-scan cursor must stay in stored (encoded) key space.
           lastId = result.document.id;
         }
         count++;

@@ -42,6 +42,14 @@ The `AzureAISearchVector` class provides vector search using [Azure AI Search](h
     description:
       'Additional options passed to the underlying SearchClient/SearchIndexClient, such as additionalPolicies for proxies, custom headers, or retry behavior.',
   },
+  {
+    name: 'autoIndexMetadata',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description:
+      'Add a filterable field to the index the first time a top-level string, number, or boolean metadata key is seen in upsert() or updateVector(). Azure AI Search can only filter on declared fields, so this is required for Memory semantic recall (which filters by thread_id and resource_id) unless you declare those keys via metadataIndexes. Set to false to manage the schema yourself.',
+  },
 ]}
 />
 
@@ -80,10 +88,10 @@ const vectorStore = new AzureAISearchVector({
   },
   {
     name: 'metadataIndexes',
-    type: 'string[]',
+    type: "Array<string | { name: string; type: 'string' | 'number' | 'boolean' }>",
     isOptional: true,
     description:
-      'Metadata keys that should also be created as explicit filterable Azure AI Search fields, in addition to the JSON-encoded metadata blob.',
+      'Metadata keys to declare as explicit filterable fields up front. Optional when autoIndexMetadata is enabled (the default), since fields are then added on first write. Values whose JavaScript type does not match the declared field type are kept in the JSON metadata blob only.',
   },
 ]}
 />
@@ -114,7 +122,8 @@ For Azure AI Search-specific index features (custom vector field name, additiona
     name: 'ids',
     type: 'string[]',
     isOptional: true,
-    description: 'Optional vector IDs (auto-generated if not provided)',
+    description:
+      'Optional vector IDs (auto-generated if not provided). IDs containing characters other than letters, digits, _, - and = are stored base64url-encoded and decoded back on read, so any string is accepted.',
   },
   {
     name: 'deleteFilter',

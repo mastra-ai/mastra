@@ -80,18 +80,21 @@ const memory = new Memory({
 
 ### Metadata filtering
 
-Mastra-style operators (`$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$exists`, `$and`, `$or`, `$not`) are translated to Azure OData filter expressions. To filter on a value, add it as a filterable field when creating the index:
+Mastra-style operators (`$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$exists`, `$and`, `$or`, `$not`) are translated to Azure OData filter expressions.
+
+Azure AI Search can only filter on fields declared in the index schema and has no JSON-path filtering. By default (`autoIndexMetadata: true`) the store adds a filterable field the first time a top-level string, number, or boolean metadata key is seen in `upsert()` or `updateVector()`, with the field type inferred from that first value. This is what lets Mastra Memory filter by `thread_id` and `resource_id` without declaring them. Keys that are not valid Azure field names (letters, digits and underscores, starting with a letter) or whose values are arrays, objects, or `null` stay in the JSON `metadata` blob only and cannot be filtered on.
+
+To control the schema yourself, pass `autoIndexMetadata: false` and declare fields up front:
 
 ```typescript
 await vectorStore.createIndex({
   indexName: 'products',
   dimension: 1536,
-  additionalFields: [
-    { name: 'category', type: 'Edm.String', filterable: true },
-    { name: 'price', type: 'Edm.Double', filterable: true },
-  ],
+  metadataIndexes: ['category', { name: 'price', type: 'number' }],
 });
 ```
+
+Document IDs are passed through unchanged when they only contain letters, digits, `_`, `-` and `=`. Any other ID (for example `urn:uuid:...` or an email address) is stored base64url-encoded and decoded back on every read, so callers always see the ID they supplied.
 
 ### Semantic, hybrid, and multi-vector queries
 

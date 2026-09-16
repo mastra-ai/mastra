@@ -9,6 +9,9 @@ export default defineConfig({
     name: 'e2e:stores/azure-ai-search',
     environment: 'node',
     globals: true,
-    setupFiles: ['./src/test-setup.ts'],
+    // Index create/delete on the Free SKU regularly takes >10s; the conformance
+    // suite creates a fresh index per test in several describe blocks.
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
   },
 });

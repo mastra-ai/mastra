@@ -737,35 +737,9 @@ describeIntegration('AzureAISearchVector Conformance Suite Integration Tests', (
         })
       : (undefined as unknown as AzureAISearchVector);
 
-  // Every metadata field the shared suite filters on across all its domains, with
-  // its real type — Azure AI Search requires filterable fields to be declared in
-  // the index schema up front (no schemaless metadata filtering), and the field's
-  // Azure type must match the value type used in comparisons ($gt et al. reject an
-  // unquoted numeric literal against an Edm.String field).
-  const conformanceMetadataIndexes: NonNullable<Parameters<AzureAISearchVector['createIndex']>[0]['metadataIndexes']> =
-    [
-      { name: 'category', type: 'string' },
-      { name: 'name', type: 'string' },
-      { name: 'description', type: 'string' },
-      { name: 'author', type: 'string' },
-      { name: 'tenant', type: 'string' },
-      { name: 'tenant_id', type: 'string' },
-      { name: 'env', type: 'string' },
-      { name: 'status', type: 'string' },
-      { name: 'userId', type: 'string' },
-      { name: 'source_id', type: 'string' },
-      { name: 'resource_id', type: 'string' },
-      { name: 'thread_id', type: 'string' },
-      { name: 'type', type: 'string' },
-      { name: 'batch', type: 'string' },
-      { name: 'price', type: 'number' },
-      { name: 'rating', type: 'number' },
-      { name: 'version', type: 'number' },
-      { name: 'index', type: 'number' },
-      { name: 'available', type: 'boolean' },
-      { name: 'marked', type: 'boolean' },
-    ];
-
+  // No metadataIndexes are declared here on purpose: the shared suite (like
+  // @mastra/memory) filters on metadata keys it never declared. The store must
+  // provision those fields itself (autoIndexMetadata) for the contract to hold.
   createVectorTestSuite({
     vector: conformanceVector,
     createIndex: async (indexName: string, options) => {
@@ -776,7 +750,6 @@ describeIntegration('AzureAISearchVector Conformance Suite Integration Tests', (
         indexName,
         dimension: 1536,
         metric: options?.metric,
-        metadataIndexes: conformanceMetadataIndexes,
       });
     },
     deleteIndex: async (indexName: string) => {
