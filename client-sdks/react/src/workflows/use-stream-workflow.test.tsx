@@ -3,9 +3,12 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MastraClientProvider } from '../mastra-client-context';
 import type { WorkflowStreamResult } from './types';
-import { useStreamWorkflow } from './use-stream-workflow';
+
+// Sibling files stub MastraClient; with isolate:false the cached context module would keep their stub.
+vi.resetModules();
+const { MastraClientProvider } = await import('../mastra-client-context');
+const { useStreamWorkflow } = await import('./use-stream-workflow');
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
