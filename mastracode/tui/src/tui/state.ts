@@ -14,7 +14,6 @@ import type { McpManager } from '@mastra/code-sdk/mcp/manager';
 import { loadSettings } from '@mastra/code-sdk/onboarding/settings';
 import type { PluginManager } from '@mastra/code-sdk/plugins/manager';
 import type { ProcessMemoryDiagnostics } from '@mastra/code-sdk/process-memory-diagnostics';
-import { detectProject } from '@mastra/code-sdk/utils/project';
 import type { ProjectInfo } from '@mastra/code-sdk/utils/project';
 import type { SlashCommandMetadata } from '@mastra/code-sdk/utils/slash-command-loader';
 import type { StorageMaintenance } from '@mastra/code-sdk/utils/storage-maintenance';
@@ -106,6 +105,9 @@ export interface MastraTUIOptions {
 
   /** The session created from the controller that all work runs through */
   session: Session<any>;
+
+  /** Resolved project identity supplied by the async startup path. */
+  projectInfo: ProjectInfo;
 
   /** Hook manager for session lifecycle hooks */
   hookManager?: HookManager;
@@ -446,7 +448,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     pendingApprovalDismiss: null,
 
     // Status line
-    projectInfo: detectProject(process.cwd()),
+    projectInfo: options.projectInfo,
     modelAuthStatus: { hasAuth: true },
     githubPrPollingActive: false,
 

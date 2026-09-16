@@ -503,7 +503,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const amazonBedrockGateway = createAmazonBedrockGateway();
 
   // Project detection
-  const project = detectProject(cwd);
+  const project = await detectProject(cwd);
 
   const resourceIdOverride = getResourceIdOverride(project.rootPath, configDir);
   if (resourceIdOverride) {

@@ -10,29 +10,29 @@ import { resolveCodebase } from '@mastra/factory/routes/fs';
  * `detectProject` (and honor the MASTRA_RESOURCE_ID override identically).
  */
 describe('web project resolution (TUI parity)', () => {
-  it('produces the same resourceId as detectProject for a path', () => {
+  it('produces the same resourceId as detectProject for a path', async () => {
     const cwd = process.cwd();
-    const direct = detectProject(cwd);
-    const resolved = resolveCodebase(cwd);
+    const direct = await detectProject(cwd);
+    const resolved = await resolveCodebase(cwd);
     expect(resolved.resourceId).toBe(direct.resourceId);
     expect(resolved.name).toBe(direct.name);
     expect(resolved.rootPath).toBe(direct.rootPath);
   });
 
-  it('honors the MASTRA_RESOURCE_ID override like the TUI', () => {
+  it('honors the MASTRA_RESOURCE_ID override like the TUI', async () => {
     const prev = process.env.MASTRA_RESOURCE_ID;
     process.env.MASTRA_RESOURCE_ID = 'shared-team-resource';
     try {
-      expect(resolveCodebase(process.cwd()).resourceId).toBe('shared-team-resource');
+      expect((await resolveCodebase(process.cwd())).resourceId).toBe('shared-team-resource');
     } finally {
       if (prev === undefined) delete process.env.MASTRA_RESOURCE_ID;
       else process.env.MASTRA_RESOURCE_ID = prev;
     }
   });
 
-  it('is deterministic — the same path always yields the same resourceId', () => {
-    const a = resolveCodebase(process.cwd()).resourceId;
-    const b = resolveCodebase(process.cwd()).resourceId;
+  it('is deterministic — the same path always yields the same resourceId', async () => {
+    const a = (await resolveCodebase(process.cwd())).resourceId;
+    const b = (await resolveCodebase(process.cwd())).resourceId;
     expect(a).toBe(b);
   });
 });

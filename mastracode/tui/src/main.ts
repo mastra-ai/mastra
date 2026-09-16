@@ -15,6 +15,7 @@ import {
   type ProcessMemoryDiagnostics,
 } from '@mastra/code-sdk/process-memory-diagnostics';
 import { setupDebugLogging, truncateLogFile } from '@mastra/code-sdk/utils/debug-log';
+import { detectProject } from '@mastra/code-sdk/utils/project';
 import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
 import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';
 import { TUI_CO_AUTHOR } from './commit-attribution.js';
@@ -143,9 +144,12 @@ async function tuiMain(pipedInput?: string | null) {
     theme: themeMode,
   });
 
+  const projectInfo = await detectProject(process.cwd());
+
   tui = new MastraTUI({
     controller: controller,
     session,
+    projectInfo,
     hookManager,
     analytics,
     authStorage,

@@ -49,14 +49,6 @@ vi.mock('@mastra/code-sdk/onboarding/settings', async importOriginal => {
   };
 });
 
-vi.mock('@mastra/code-sdk/utils/project', async importOriginal => {
-  const actual = (await importOriginal()) as Record<string, unknown>;
-  return {
-    ...actual,
-    detectProject: vi.fn(() => ({ rootPath: '/tmp/mastra-code-project', gitBranch: 'main' })),
-  };
-});
-
 import { createTUIState } from '../state.js';
 
 function createSession() {
@@ -82,6 +74,13 @@ describe('createTUIState', () => {
     const state = createTUIState({
       controller: controller as never,
       session: session as never,
+      projectInfo: {
+        resourceId: 'project-abc',
+        name: 'project',
+        rootPath: '/tmp/mastra-code-project',
+        gitBranch: 'main',
+        isWorktree: false,
+      },
       hookManager: hookManager as never,
       analytics: analytics as never,
       authStorage: authStorage as never,
@@ -148,7 +147,13 @@ describe('createTUIState', () => {
     expect(state.quietMode).toBe(false);
     expect(state.quietModeMaxToolPreviewLines).toBe(2);
     expect(state.modelAuthStatus).toEqual({ hasAuth: true });
-    expect(state.projectInfo).toEqual({ rootPath: '/tmp/mastra-code-project', gitBranch: 'main' });
+    expect(state.projectInfo).toEqual({
+      resourceId: 'project-abc',
+      name: 'project',
+      rootPath: '/tmp/mastra-code-project',
+      gitBranch: 'main',
+      isWorktree: false,
+    });
 
     expect(state.editor.getModeColor?.()).toBe('#7c3aed');
     expect(controller.session.mode.resolve).toHaveBeenCalled();
