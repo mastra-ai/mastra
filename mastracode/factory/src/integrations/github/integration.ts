@@ -780,7 +780,9 @@ export class GithubIntegration implements FactoryIntegration {
       // Search hits carry no branches, so each one is fetched in full.
       const pullRequests = await Promise.all(
         data.items
-          .filter(hitBelongsTo(input.sourceId))
+          .filter(
+            withinFeed(input.sourceId, { kind: 'pr', state: input.state ?? 'open', includeDrafts: input.includeDrafts }),
+          )
           .map(async hit => parsePullRequest((await octokit.pulls.get({ ...parts, pull_number: hit.number })).data)),
       );
       return { pullRequests, nextCursor: data.items.length === LIST_PAGE_SIZE ? String(page + 1) : null };
@@ -1116,9 +1118,10 @@ export class GithubIntegration implements FactoryIntegration {
 
   /**
    * List one page of a repo's open issues through an installation token. The
-   * issues API also returns pull requests, so those are filtered out (the
-   * filter can make a non-final page shorter than the page size — `nextPage`
-   * is derived from the raw response length, not the filtered one).
+   * issues API also returns pull requests and a search can stray past its
+   * qualifiers, so hits outside the feed are dropped (the filter can make a
+   * non-final page shorter than the page size — `nextPage` is derived from the
+   * raw response length, not the filtered one).
    */
   async listRepoOpenIssues(
     installationId: number,
@@ -1136,7 +1139,7 @@ export class GithubIntegration implements FactoryIntegration {
             per_page: LIST_PAGE_SIZE,
             page,
           })
-        ).data.items.filter(hitBelongsTo(repoFullName))
+        ).data.items
       : (
           await octokit.issues.listForRepo({
             owner: parts.owner,
@@ -1148,7 +1151,7 @@ export class GithubIntegration implements FactoryIntegration {
           })
         ).data;
     const issues = listed
-      .filter(issue => !issue.pull_request)
+      .filter(withinFeed(repoFullName, { kind: 'issue', state: 'open' }))
       .map(issue => ({
         number: issue.number,
         title: issue.title,
@@ -1459,10 +1462,24 @@ interface GithubReviewCommentData extends GithubCommentData {
   in_reply_to_id?: number | null;
 }
 
-// Search operators inside the free text (`OR repo:x`) can widen the query past the repo qualifier.
-function hitBelongsTo(repoFullName: string): (hit: { repository_url: string }) => boolean {
+interface SearchHit {
+  repository_url: string;
+  state: string;
+  draft?: boolean | null;
+  pull_request?: unknown;
+}
+
+// Operators inside the free text (`OR repo:x`, `OR is:closed`) can widen a search past its qualifiers.
+function withinFeed(
+  repoFullName: string,
+  feed: { kind: 'issue' | 'pr'; state: 'open' | 'closed' | 'all'; includeDrafts?: boolean },
+): (hit: SearchHit) => boolean {
   const suffix = `/repos/${repoFullName}`.toLowerCase();
-  return hit => hit.repository_url.toLowerCase().endsWith(suffix);
+  return hit =>
+    hit.repository_url.toLowerCase().endsWith(suffix) &&
+    Boolean(hit.pull_request) === (feed.kind === 'pr') &&
+    (feed.state === 'all' || hit.state === feed.state) &&
+    (feed.includeDrafts !== false || !hit.draft);
 }
 
 function issueSearchQuery(repoFullName: string, options: ListRepoOpenIssuesOptions): string {

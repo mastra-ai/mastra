@@ -329,6 +329,8 @@ describe('GithubIntegration capability surface', () => {
           number: 12,
           title: 'Fix intake',
           html_url: 'https://github.com/acme/app/issues/12',
+          repository_url: 'https://api.github.com/repos/acme/app',
+          state: 'open',
           user: { login: 'ada' },
           labels: [{ name: 'bug' }],
           comments: 3,
@@ -361,33 +363,30 @@ describe('GithubIntegration capability surface', () => {
     expect(listForRepo).toHaveBeenCalledWith(expect.objectContaining({ labels: 'bug,urgent' }));
   });
 
-  it('searches issues through GitHub search when a query is given, keeping only hits of the repository', async () => {
+  it('searches issues through GitHub search, drops hits outside the open-issue feed and pages on the raw hit count', async () => {
     const github = new GithubIntegration(validConfig());
+    const hit = (number: number, overrides: Record<string, unknown> = {}) => ({
+      number,
+      title: `Issue ${number}`,
+      html_url: `https://github.com/acme/app/issues/${number}`,
+      repository_url: 'https://api.github.com/repos/acme/app',
+      state: 'open',
+      user: { login: 'ada' },
+      labels: [],
+      comments: 0,
+      created_at: '2026-07-01T00:00:00Z',
+      updated_at: '2026-07-02T00:00:00Z',
+      ...overrides,
+    });
+    const filler = Array.from({ length: 26 }, (_, index) => hit(100 + index));
     const issuesAndPullRequests = vi.fn(async () => ({
       data: {
         items: [
-          {
-            number: 21068,
-            title: 'Retry failed uploads',
-            html_url: 'https://github.com/acme/app/issues/21068',
-            repository_url: 'https://api.github.com/repos/acme/app',
-            user: { login: 'ada' },
-            labels: [{ name: 'bug' }],
-            comments: 0,
-            created_at: '2026-07-01T00:00:00Z',
-            updated_at: '2026-07-02T00:00:00Z',
-          },
-          {
-            number: 9,
-            title: 'Retry failed uploads elsewhere',
-            html_url: 'https://github.com/acme/other/issues/9',
-            repository_url: 'https://api.github.com/repos/acme/other',
-            user: { login: 'ada' },
-            labels: [],
-            comments: 0,
-            created_at: '2026-07-01T00:00:00Z',
-            updated_at: '2026-07-02T00:00:00Z',
-          },
+          hit(21068, { labels: [{ name: 'bug' }] }),
+          hit(9, { repository_url: 'https://api.github.com/repos/acme/other' }),
+          hit(10, { state: 'closed' }),
+          hit(11, { pull_request: {} }),
+          ...filler,
         ],
       },
     }));
@@ -401,7 +400,8 @@ describe('GithubIntegration capability surface', () => {
       query: '21068',
     });
 
-    expect(result.issues.map(issue => issue.identifier)).toEqual(['#21068']);
+    expect(result.issues.map(issue => issue.identifier)).toEqual(['#21068', ...filler.map(issue => `#${issue.number}`)]);
+    expect(result.nextCursor).toBe('3');
     expect(issuesAndPullRequests).toHaveBeenCalledWith({
       q: 'repo:acme/app is:issue is:open label:"bug" 21068',
       per_page: 30,
@@ -559,13 +559,16 @@ describe('GithubIntegration capability surface', () => {
     });
   });
 
-  it('searches pull requests and fetches each hit of the repository in full', async () => {
+  it('searches pull requests and fetches in full only the hits inside the open, non-draft feed', async () => {
     const github = new GithubIntegration(validConfig());
     const issuesAndPullRequests = vi.fn(async () => ({
       data: {
         items: [
-          { number: 34, repository_url: 'https://api.github.com/repos/acme/app' },
-          { number: 35, repository_url: 'https://api.github.com/repos/acme/other' },
+          { number: 34, repository_url: 'https://api.github.com/repos/acme/app', state: 'open', pull_request: {} },
+          { number: 35, repository_url: 'https://api.github.com/repos/acme/other', state: 'open', pull_request: {} },
+          { number: 36, repository_url: 'https://api.github.com/repos/acme/app', state: 'closed', pull_request: {} },
+          { number: 37, repository_url: 'https://api.github.com/repos/acme/app', state: 'open', draft: true, pull_request: {} },
+          { number: 38, repository_url: 'https://api.github.com/repos/acme/app', state: 'open' },
         ],
       },
     }));
