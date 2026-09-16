@@ -115,14 +115,16 @@ export function AppSidebar() {
     </MainSidebar.NavLink>
   );
 
-  // Rows keep registry order (promoted items slot into their usual place). "More" is a flat
-  // placeholder at the end: clicking it swaps the row for the folded items at the same level.
-  // While server data is resolving, foldable rows are replaced by a single skeleton row.
+  // Foldable rows always sit at the bottom of the section: regular items first, then promoted
+  // foldable ones, then "More" — a flat placeholder that swaps itself for the remaining folded
+  // rows when clicked. While server data is resolving, the foldable tail is a single skeleton row.
   const renderFoldableSection = (items: NavItem[]) => {
+    const regularRows = items.filter(item => !item.foldable).map(item => renderNavItem(item, items));
+
     if (foldable.isResolving) {
       return (
         <>
-          {items.filter(item => !item.foldable).map(item => renderNavItem(item, items))}
+          {regularRows}
           {/* Mirrors the nav row box (h-7, px-3, size-4 icon + label with gap-2) so it doesn't jump on resolve. */}
           <li
             aria-busy="true"
@@ -138,9 +140,8 @@ export function AppSidebar() {
 
     return (
       <>
-        {items
-          .filter(item => !item.foldable || foldable.promoted.includes(item))
-          .map(item => renderNavItem(item, items))}
+        {regularRows}
+        {foldable.promoted.map(item => renderNavItem(item, items))}
         {foldable.folded.length > 0 && !isMoreOpen && (
           <MainSidebar.NavLink
             state={state}

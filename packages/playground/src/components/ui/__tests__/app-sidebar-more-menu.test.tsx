@@ -46,6 +46,12 @@ function seedRecentVisit(url: string, expiresAt: number) {
 
 const foldedNames = [/^processors$/i, /^mcp servers$/i, /^tools$/i, /^workspaces$/i];
 
+/** Row labels of the Primitives list, in DOM order. */
+function primitiveLabels() {
+  const list = screen.getByRole('link', { name: /^agents$/i }).closest('ul');
+  return Array.from(list?.querySelectorAll(':scope > li') ?? []).map(li => li.textContent?.trim());
+}
+
 beforeEach(() => {
   (window as unknown as Record<string, unknown>).MASTRA_CLOUD_API_ENDPOINT = '';
   localStorage.clear();
@@ -132,17 +138,32 @@ describe('AppSidebar — More menu', () => {
       expect(screen.queryByRole('link', { name: /^workspaces$/i })).toBeNull();
     });
 
-    it('keeps the promoted item in registry order, with More last', async () => {
+    it('lists the promoted item after the regular primitives, then More', async () => {
       server.use(...baseHandlers(), mcpServersHandler(oneMcpServer), workspacesHandler(noWorkspaces));
 
       renderSidebar();
 
       await screen.findByRole('link', { name: /^mcp servers$/i });
-      const primitives = screen.getByRole('link', { name: /^agents$/i }).closest('ul');
-      expect(primitives).not.toBeNull();
-      const labels = Array.from(primitives?.querySelectorAll(':scope > li') ?? []).map(li => li.textContent?.trim());
       // Prompts is CMS-gated and hidden in this scaffold.
-      expect(labels).toEqual(['Agents', 'Workflows', 'MCP Servers', 'Request Context', 'More']);
+      expect(primitiveLabels()).toEqual(['Agents', 'Workflows', 'Request Context', 'MCP Servers', 'More']);
+    });
+
+    it('reveals the folded items at the bottom, in registry order, when More is clicked', async () => {
+      server.use(...baseHandlers(), mcpServersHandler(oneMcpServer), workspacesHandler(noWorkspaces));
+
+      renderSidebar();
+
+      fireEvent.click(await screen.findByRole('button', { name: /^more$/i }));
+
+      expect(primitiveLabels()).toEqual([
+        'Agents',
+        'Workflows',
+        'Request Context',
+        'MCP Servers',
+        'Processors',
+        'Tools',
+        'Workspaces',
+      ]);
     });
   });
 
