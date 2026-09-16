@@ -78,6 +78,22 @@ describe('collectSkillForPublishFromFiles', () => {
     );
   });
 
+  it.each([
+    ['UTF-8 first', [file('text.txt', 'abc'), file('binary.bin', 'YWJj', { encoding: 'base64' })]],
+    ['Base64 first', [file('binary.bin', 'YWJj', { encoding: 'base64' }), file('text.txt', 'abc')]],
+  ])('deduplicates identical raw bytes with canonical blob content when %s', async (_name, sharedFiles) => {
+    const result = await collectSkillForPublishFromFiles([file('SKILL.md', skillMd), ...sharedFiles]);
+    const textEntry = result.tree.entries['text.txt'];
+    const binaryEntry = result.tree.entries['binary.bin'];
+
+    expect(textEntry?.blobHash).toBe(binaryEntry?.blobHash);
+    expect(textEntry).toMatchObject({ encoding: 'base64', sourceEncoding: 'utf-8' });
+    expect(binaryEntry).toMatchObject({ encoding: 'base64', sourceEncoding: 'base64' });
+    expect(result.blobs.filter(blob => blob.hash === textEntry?.blobHash)).toEqual([
+      expect.objectContaining({ content: 'YWJj', size: 3 }),
+    ]);
+  });
+
   it('decodes only explicitly base64-encoded files and preserves their metadata', async () => {
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
     const files: StorageSkillFileNode[] = [
@@ -111,9 +127,11 @@ describe('collectSkillForPublishFromFiles', () => {
     const result = await collectSkillForPublishFromFiles(files);
     const entry = result.tree.entries['assets/legacy.png'];
 
-    expect(entry?.encoding).toBeUndefined();
+    expect(entry).toMatchObject({ encoding: 'base64', sourceEncoding: 'utf-8' });
     expect(entry?.size).toBe(Buffer.byteLength('not-base64'));
-    expect(result.blobs.find(blob => blob.hash === entry?.blobHash)?.content).toBe('not-base64');
+    expect(result.blobs.find(blob => blob.hash === entry?.blobHash)?.content).toBe(
+      Buffer.from('not-base64').toString('base64'),
+    );
   });
 
   it('rejects malformed or non-canonical base64 content', async () => {
@@ -164,7 +182,7 @@ describe('collectSkillForPublishFromFiles', () => {
     const entry = result.tree.entries['empty.txt'];
 
     expect(entry?.size).toBe(0);
-    expect(entry?.encoding).toBeUndefined();
+    expect(entry).toMatchObject({ encoding: 'base64', sourceEncoding: 'utf-8' });
     expect(result.blobs.find(blob => blob.hash === entry?.blobHash)?.content).toBe('');
   });
 

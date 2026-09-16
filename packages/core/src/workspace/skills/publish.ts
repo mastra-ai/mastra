@@ -278,51 +278,27 @@ export async function collectSkillForPublish(source: SkillSource, skillPath: str
   const now = new Date();
 
   for (const file of files) {
-    const hash = hashContent(file.content);
+    const content = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content, 'utf-8');
+    const hash = hashContent(content);
     const mimeType = file.mimeType ?? detectMimeType(file.path);
+    const size = content.length;
 
-    if (file.isBinary) {
-      // Binary file: store as base64-encoded string
-      const buf = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content);
-      const size = buf.length;
-      const base64Content = buf.toString('base64');
+    treeEntries[file.path] = {
+      blobHash: hash,
+      size,
+      mimeType,
+      encoding: 'base64',
+      sourceEncoding: file.isBinary ? 'base64' : 'utf-8',
+    };
 
-      treeEntries[file.path] = {
-        blobHash: hash,
+    if (!blobMap.has(hash)) {
+      blobMap.set(hash, {
+        hash,
+        content: content.toString('base64'),
         size,
         mimeType,
-        encoding: 'base64',
-      };
-
-      if (!blobMap.has(hash)) {
-        blobMap.set(hash, {
-          hash,
-          content: base64Content,
-          size,
-          mimeType,
-          createdAt: now,
-        });
-      }
-    } else {
-      // Text file: store as UTF-8 string
-      const content = file.content as string;
-      const size = Buffer.byteLength(content, 'utf-8');
-
-      treeEntries[file.path] = {
-        blobHash: hash,
-        size,
-        mimeType,
-      };
-
-      if (!blobMap.has(hash)) {
-        blobMap.set(hash, {
-          hash,
-          content,
-          size,
-          mimeType,
-          createdAt: now,
-        });
-      }
+        createdAt: now,
+      });
     }
   }
 

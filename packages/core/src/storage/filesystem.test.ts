@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { MastraCompositeStore } from './base';
+import { FilesystemSkillsStorage } from './domains/skills/filesystem';
 import { FilesystemStore } from './filesystem';
 import { FilesystemDB } from './filesystem-db';
 import { InMemoryStore } from './mock';
@@ -393,6 +394,75 @@ describe('FilesystemStore', () => {
       });
 
       expect(updated.status).toBe('published');
+    });
+
+    it('rolls back publication state when filesystem activation persistence fails', async () => {
+      const db = new FilesystemDB(dir);
+      await db.init();
+      const skills = new FilesystemSkillsStorage({ db });
+      await skills.init();
+      await skills.create({
+        skill: {
+          id: 'publication-rollback',
+          name: 'Publication rollback',
+          description: 'Draft',
+          instructions: 'Draft instructions',
+        },
+      });
+
+      const sourceVersion = await skills.getLatestVersion('publication-rollback');
+      await skills.publishVersion({
+        skillId: 'publication-rollback',
+        sourceVersionId: sourceVersion!.id,
+        versionId: 'published-v2',
+        snapshot: {
+          name: 'Publication rollback',
+          description: 'Published',
+          instructions: 'Published instructions',
+        },
+      });
+
+      const tmpPath = join(dir, 'skills.json.tmp');
+      mkdirSync(tmpPath);
+      await expect(
+        skills.publishVersion({
+          skillId: 'publication-rollback',
+          sourceVersionId: sourceVersion!.id,
+          versionId: 'failed-v3',
+          snapshot: {
+            name: 'Publication rollback',
+            description: 'Failed publication',
+            instructions: 'Must not become active',
+          },
+        }),
+      ).rejects.toThrow();
+
+      expect(await skills.getById('publication-rollback')).toMatchObject({
+        status: 'published',
+        activeVersionId: 'published-v2',
+      });
+      expect(await skills.getVersion('failed-v3')).toBeNull();
+      expect((await skills.getByIdResolved('publication-rollback'))?.description).toBe('Published');
+
+      const freshSkills = new FilesystemSkillsStorage({ db });
+      await freshSkills.init();
+      expect((await freshSkills.getByIdResolved('publication-rollback'))?.description).toBe('Published');
+
+      await rm(tmpPath, { recursive: true });
+      await skills.publishVersion({
+        skillId: 'publication-rollback',
+        sourceVersionId: sourceVersion!.id,
+        versionId: 'published-v3',
+        snapshot: {
+          name: 'Publication rollback',
+          description: 'Recovered',
+          instructions: 'Publication recovered',
+        },
+      });
+      expect(await skills.getById('publication-rollback')).toMatchObject({
+        status: 'published',
+        activeVersionId: 'published-v3',
+      });
     });
   });
 

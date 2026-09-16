@@ -78,8 +78,6 @@ export class FilesystemDB {
    * Uses atomic write (write to .tmp, then rename) to prevent corruption.
    */
   writeDomain<T = Record<string, unknown>>(filename: string, data: Record<string, T>): void {
-    this.cache.set(filename, data as Record<string, unknown>);
-
     const filePath = join(this.dir, filename);
     const tmpPath = filePath + '.tmp';
 
@@ -91,6 +89,7 @@ export class FilesystemDB {
 
     writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
     renameSync(tmpPath, filePath);
+    this.cache.set(filename, data as Record<string, unknown>);
   }
 
   /**
