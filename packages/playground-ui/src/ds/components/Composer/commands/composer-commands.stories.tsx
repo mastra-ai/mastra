@@ -8,7 +8,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Compose ComposerSuggestions with useComposerCommands. Spread inputProps onto ComposerInput and suggestionsProps onto ComposerSuggestions. The caller owns the draft and onSubmit callback; the hook handles prefix matching, option selection, keyboard navigation, and focus. When composing an onKeyDown handler, call inputProps.onKeyDown first and handle submission only when the event has not been prevented. Enter on an exact command without options falls through to the caller. Command execution and availability belong to the application.',
+          'Compose ComposerSuggestions with useComposerCommands. Attach inputRef to ComposerInput, spread inputProps onto it, and pass suggestionsProps to ComposerSuggestions. The caller owns the draft and onSubmit callback; the hook handles prefix matching, option selection, keyboard navigation, and focus through the input ref. A local onKeyDown handler should return when event.defaultPrevented is true and ignore IME composition before submitting. Enter on an exact command without options falls through to the caller. Command execution and availability belong to the application.',
       },
     },
   },

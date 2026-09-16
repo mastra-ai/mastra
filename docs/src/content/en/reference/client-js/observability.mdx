@@ -68,9 +68,9 @@ const selected = await mastraClient.getTrace(list.spans[0].traceId)
 
 It accepts the same filtering, ordering and delta-polling arguments as `listTraces()`. Use `listTraces()` when you actually need the full span payloads.
 
-## Querying traces with recursive predicates
+## Querying traces and threads
 
-`queryTraces()` finds completed logical traces using trace fields and conditions over related spans or scores. Every query requires an ISO timestamp range of at most 31 days.
+`queryTraces()` finds completed logical traces using trace fields and conditions over related spans, scores, or feedback. Every query requires an ISO timestamp range of at most 31 days.
 
 ```typescript
 const result = await mastraClient.queryTraces({
@@ -92,9 +92,60 @@ const result = await mastraClient.queryTraces({
 })
 ```
 
-The API limits predicate depth, nodes, related clauses, set members, literal bytes, and the total literal budget before storage execution. Cursor pages are deterministic but aren't a database snapshot, so signals written between requests can change later pages. PostgreSQL and ClickHouse queries have a configurable 15-second execution timeout.
+`queryTraceThreads()` returns thread identities derived from observability traces after applying eligibility and cross-trace conditions. It doesn't read or return memory thread records or messages. In this example, one production trace can have the low factuality score while another production trace in the same thread has the clinician correction:
 
-See [Advanced trace queries](/reference/observability/tracing/trace-query) for the complete limits, request fields, predicates, grouping, cursor pagination, response shapes, and errors.
+```typescript
+const result = await mastraClient.queryTraceThreads({
+  traces: {
+    timeRange: {
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-08-08T00:00:00.000Z',
+    },
+    where: {
+      op: 'eq',
+      left: { path: 'environment' },
+      right: { literal: 'production' },
+    },
+  },
+  where: {
+    op: 'and',
+    args: [
+      {
+        traces: {
+          some: {
+            scores: {
+              some: {
+                op: 'lt',
+                left: { path: 'score' },
+                right: { literal: 0.6 },
+              },
+            },
+          },
+        },
+      },
+      {
+        traces: {
+          some: {
+            feedback: {
+              some: {
+                op: 'eq',
+                left: { path: 'feedbackType' },
+                right: { literal: 'clinician-correction' },
+              },
+            },
+          },
+        },
+      },
+    ],
+  },
+})
+
+// { threads: [{ threadId: 'thread-123' }], page: { next: null } }
+```
+
+The API limits predicate depth, nodes, related clauses, set members, literal bytes, and the total literal budget before storage execution. Cursor pages are deterministic but aren't a database snapshot, so signals written between requests can change later pages. PostgreSQL and ClickHouse trace and thread queries have a configurable 15-second execution timeout.
+
+See [Advanced trace queries](/reference/observability/tracing/trace-query) for the complete limits, request fields, predicates, thread qualification semantics, cursor pagination, response shapes, and errors.
 
 ## Deleting traces
 

@@ -83,10 +83,10 @@ describe('Elysia Server Adapter', () => {
       const req = new Request(url, {
         method: request.method,
         headers: {
-          'Content-Type': 'application/json',
+          ...(request.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
           ...(request.headers || {}),
         },
-        body: request.body ? JSON.stringify(request.body) : undefined,
+        body: request.body !== undefined ? JSON.stringify(request.body) : undefined,
       });
 
       // Execute request through Elysia - app.fetch() always returns Promise<Response>

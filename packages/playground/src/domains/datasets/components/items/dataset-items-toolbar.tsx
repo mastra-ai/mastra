@@ -1,9 +1,9 @@
 'use client';
-import { Button } from '@mastra/playground-ui/components/Button';
+import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { Plus, Upload, FileJson, Download, FolderPlus, FolderOutput, Trash2, ChevronDown } from 'lucide-react';
+import { Upload, FileJson, Download, FolderPlus, FolderOutput, Trash2, ChevronDown } from 'lucide-react';
 
 export type DatasetItemsToolbarProps = {
   // Normal mode actions
@@ -143,9 +143,9 @@ export function DatasetItemsToolbar({
         {selectionDropdown}
         {showItemActions && !isItemPanelOpen && !isViewingOldVersion && (
           <ButtonsGroup spacing="close">
-            <Button onClick={onAddClick} icon={<Plus />}>
-              Add Item
-            </Button>
+            <CreateButton onClick={onAddClick} tooltip="Add an item">
+              New item
+            </CreateButton>
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>
                 <Button aria-label="Dataset actions menu">

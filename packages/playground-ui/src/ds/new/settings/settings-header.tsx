@@ -45,18 +45,12 @@ export function SettingsTitle({
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <Txt
-        as="h2"
-        id={titleId}
-        variant="ui-sm"
-        className={cn('text-icon6 leading-ui-md font-semibold', className)}
-        {...props}
-      />
+      <Txt as="h2" id={titleId} variant="title" className={className} {...props} />
       {accessory}
     </div>
   );
 }
 
 export function SettingsDescription({ className, ...props }: ComponentProps<'p'>) {
-  return <Txt as="p" variant="ui-sm" className={cn('text-icon3', className)} {...props} />;
+  return <Txt as="p" variant="caption" className={className} {...props} />;
 }

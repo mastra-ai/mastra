@@ -7,7 +7,6 @@ import type {
   ToolExecutionOptions,
   Schema,
 } from '@internal/external-types';
-import type { ElicitRequest, ElicitResult, ServerContext } from '@modelcontextprotocol/server';
 import type { MastraPrimitives, MastraUnion } from '../action';
 export type { MastraPrimitives, MastraUnion };
 import type { ActorSignal } from '../auth/ee';
@@ -19,6 +18,7 @@ import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import type { SuspendOptions, OutputWriter } from '../workflows';
 import type { Workspace } from '../workspace/workspace';
+import type { ElicitRequest, ElicitResult, ServerContext } from './mcp-types';
 import type { ToolStream } from './stream';
 import type { ValidationError } from './validation';
 

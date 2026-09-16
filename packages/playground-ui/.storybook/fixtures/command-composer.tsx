@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type KeyboardEvent } from 'react';
 import { reviewCommands } from './chat/commands';
 import { Button } from '@/ds/components/Button';
 import {
@@ -40,6 +40,16 @@ export function CommandComposer({
     setValue('');
   }
 
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.defaultPrevented) return;
+    const composing = event.nativeEvent.isComposing || event.keyCode === 229;
+    const shouldSubmit = event.key === 'Enter' && !event.shiftKey && !composing;
+    if (shouldSubmit) {
+      event.preventDefault();
+      if (value.trim()) submit(value);
+    }
+  }
+
   return (
     <Composer
       onSubmit={event => {
@@ -54,15 +64,7 @@ export function CommandComposer({
           ref={inputRef}
           aria-label="Message"
           placeholder="Type / for commands…"
-          onKeyDown={event => {
-            commandMenu.inputProps.onKeyDown(event);
-            const composing = event.nativeEvent.isComposing || event.keyCode === 229;
-            const shouldSubmit = event.key === 'Enter' && !event.shiftKey && !composing;
-            if (!event.defaultPrevented && shouldSubmit) {
-              event.preventDefault();
-              if (value.trim()) submit(value);
-            }
-          }}
+          onKeyDown={handleComposerKeyDown}
         />
         <ComposerActions>
           <Txt variant="ui-sm" role="status">

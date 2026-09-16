@@ -16,6 +16,7 @@ export const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling'
 export const OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE =
   'Delta polling requires a newer @mastra/core with observability delta polling support. Please upgrade.';
 const OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE = 'trace-query';
+const OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE = 'thread-query';
 
 export const OBSERVABILITY_LIST_ENDPOINTS = {
   traces: 'traces',
@@ -77,6 +78,14 @@ export function assertObservabilityTraceQuerySupported(observabilityStore: Obser
   });
 }
 
+export function assertObservabilityThreadQuerySupported(observabilityStore: ObservabilityStorage) {
+  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE)) return;
+
+  throw new HTTPException(501, {
+    message: 'Advanced thread queries are not supported by the configured observability store',
+  });
+}
+
 export function assertObservabilityDeltaSupported(
   observabilityStore: ObservabilityStorage,
   endpoint: ObservabilityListEndpoint,
@@ -110,6 +119,14 @@ export const NEW_ROUTE_DEFS = {
     path: '/observability/traces/query',
     summary: 'Query traces',
     description: 'Returns completed logical traces or distinct thread groups matching an advanced trace query',
+    requiresPermission: 'observability:read',
+  },
+
+  QUERY_THREADS: {
+    method: 'POST',
+    path: '/observability/threads/query',
+    summary: 'Query threads',
+    description: 'Returns thread identities matching eligible trace and cross-trace predicates',
     requiresPermission: 'observability:read',
   },
 

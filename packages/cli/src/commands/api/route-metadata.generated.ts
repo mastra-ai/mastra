@@ -2013,6 +2013,24 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /observability/threads/query": {
+    "method": "POST",
+    "path": "/observability/threads/query",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "page",
+      "traces",
+      "where"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "threads",
+      "paginationProperty": "page"
+    }
+  },
   "GET /observability/metrics": {
     "method": "GET",
     "path": "/observability/metrics",
@@ -4967,7 +4985,9 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [
       "page",
-      "perPage"
+      "perPage",
+      "targetIds",
+      "targetType"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -5274,6 +5294,8 @@ export const API_ROUTE_METADATA = {
       "experimentSetId",
       "page",
       "perPage",
+      "targetId",
+      "targetType",
       "trialIndex",
       "variantId"
     ],
@@ -5327,6 +5349,8 @@ export const API_ROUTE_METADATA = {
       "experimentSetId",
       "page",
       "perPage",
+      "targetId",
+      "targetType",
       "trialIndex",
       "variantId"
     ],

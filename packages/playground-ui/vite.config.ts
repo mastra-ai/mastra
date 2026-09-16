@@ -106,6 +106,7 @@ const createLibConfig = (isProduction: boolean): UserConfig => ({
         ...fileEntries('src/ds/icons', 'icons'),
         ...fileEntries('src/hooks', 'hooks'),
         ...componentEntries('src/ds/components', 'components'),
+        ...componentEntries('src/ds/layout', 'layout'),
         ...componentEntries('src/ds/new', 'new'),
       },
       formats: ['es', 'cjs'],

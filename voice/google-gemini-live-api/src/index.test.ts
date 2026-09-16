@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
@@ -167,6 +168,19 @@ describe('GeminiLiveVoice', () => {
       expect(voice.getConnectionState()).toBe('connected');
     });
 
+    it('should connect API-key sessions to the v1beta Live endpoint', async () => {
+      vi.spyOn((voice as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (voice as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await voice.connect();
+
+      expect(currentWsUrl).toContain('generativelanguage.googleapis.com');
+      expect(currentWsUrl).toContain('v1beta.GenerativeService.BidiGenerateContent');
+      expect(currentWsUrl).not.toContain('v1alpha');
+
+      await voice.disconnect();
+    });
+
     it('should handle connection errors', async () => {
       // Test that error events are properly handled
       const errorPromise = new Promise(resolve => {
@@ -230,8 +244,13 @@ describe('GeminiLiveVoice', () => {
     });
   });
 
-  describe('Audio Streaming', () => {
+  describe.each([
+    { audioConfig: undefined, inputSampleRate: 16000 },
+    { audioConfig: { inputSampleRate: undefined }, inputSampleRate: 16000 },
+    { audioConfig: { inputSampleRate: 48000 }, inputSampleRate: 48000 },
+  ])('Audio Streaming at $inputSampleRate Hz', ({ audioConfig, inputSampleRate }) => {
     beforeEach(async () => {
+      voice = new GeminiLiveVoice({ apiKey: 'test-api-key', audioConfig });
       // Setup connected state and mock WebSocket
       (voice as any).state = 'connected';
       const mockSend = vi.fn();
@@ -249,27 +268,42 @@ describe('GeminiLiveVoice', () => {
       const audioData = new Int16Array([1, 2, 3, 4, 5]);
       await voice.send(audioData);
 
-      expect(mockWs.send).toHaveBeenCalled();
+      expect(mockWs.send).toHaveBeenCalledTimes(1);
       const sentData = JSON.parse(mockWs.send.mock.calls[0][0]);
-      expect(sentData).toHaveProperty('realtime_input');
-      expect(sentData.realtime_input).toHaveProperty('audio');
+      expect(sentData).toEqual({
+        realtime_input: {
+          audio: {
+            mime_type: `audio/pcm;rate=${inputSampleRate}`,
+            data: Buffer.from(audioData.buffer).toString('base64'),
+          },
+        },
+      });
       expect(sentData.realtime_input).not.toHaveProperty('media_chunks');
     });
 
     it('should handle audio stream', async () => {
       const audioStream = new PassThrough();
-      const sendPromise = voice.send(audioStream);
+      await voice.send(audioStream);
 
-      // Write enough data to meet minimum chunk size (32 bytes = 16 samples)
-      const audioData = new Int16Array(20); // 40 bytes
-      for (let i = 0; i < 20; i++) {
-        audioData[i] = i;
+      const chunks = [new Int16Array([1, 2, 3, 4]), new Int16Array([-1, -2, -3, -4])];
+      for (const chunk of chunks) {
+        audioStream.write(Buffer.from(chunk.buffer));
       }
-      audioStream.write(Buffer.from(audioData.buffer));
       audioStream.end();
 
-      await sendPromise;
-      expect(mockWs.send).toHaveBeenCalled();
+      expect(mockWs.send).toHaveBeenCalledTimes(chunks.length);
+      for (const [index, chunk] of chunks.entries()) {
+        const sentData = JSON.parse(mockWs.send.mock.calls[index][0]);
+        expect(sentData).toEqual({
+          realtime_input: {
+            audio: {
+              mime_type: `audio/pcm;rate=${inputSampleRate}`,
+              data: Buffer.from(chunk.buffer).toString('base64'),
+            },
+          },
+        });
+        expect(sentData.realtime_input).not.toHaveProperty('media_chunks');
+      }
     });
 
     it('should throw error when not connected', async () => {
@@ -990,6 +1024,67 @@ describe('GeminiLiveVoice', () => {
         state: 'disconnected',
       });
     });
+
+    it('should surface an abnormal WebSocket close as an error so connect() rejects quickly', async () => {
+      // Wire a real EventEmitter as the socket so the production close handler runs.
+      const fakeWs: any = new EventEmitter();
+      fakeWs.readyState = 1;
+      fakeWs.send = vi.fn();
+      fakeWs.close = vi.fn();
+      (voice as any).ws = fakeWs;
+      (voice as any).setupEventListeners();
+
+      const errors: any[] = [];
+      const sessions: any[] = [];
+      voice.on('error', event => errors.push(event));
+      voice.on('session', event => sessions.push(event));
+
+      // A server-side setup rejection (e.g. bad model id) arrives as a clean close, not a socket error.
+      fakeWs.emit('close', 1007, Buffer.from('invalid model id'));
+
+      expect(sessions).toContainEqual(
+        expect.objectContaining({ state: 'disconnected', code: 1007, reason: 'invalid model id' }),
+      );
+      expect(errors).toContainEqual(
+        expect.objectContaining({
+          code: 'websocket_closed',
+          details: { code: 1007, reason: 'invalid model id' },
+        }),
+      );
+    });
+
+    it('should not emit an error for a normal (1000) WebSocket close', async () => {
+      const fakeWs: any = new EventEmitter();
+      fakeWs.readyState = 1;
+      fakeWs.send = vi.fn();
+      fakeWs.close = vi.fn();
+      (voice as any).ws = fakeWs;
+      (voice as any).setupEventListeners();
+
+      const errors: any[] = [];
+      const sessions: any[] = [];
+      voice.on('error', event => errors.push(event));
+      voice.on('session', event => sessions.push(event));
+
+      fakeWs.emit('close', 1000, Buffer.from(''));
+
+      expect(sessions).toContainEqual(expect.objectContaining({ state: 'disconnected', code: 1000 }));
+      expect(errors).toHaveLength(0);
+    });
+
+    it('should reject a pending waitForSessionCreated() on an abnormal close', async () => {
+      const fakeWs: any = new EventEmitter();
+      fakeWs.readyState = 1;
+      fakeWs.send = vi.fn();
+      fakeWs.close = vi.fn();
+      (voice as any).ws = fakeWs;
+      (voice as any).setupEventListeners();
+
+      const waitPromise = (voice as any).waitForSessionCreated() as Promise<void>;
+      fakeWs.emit('close', 1007, Buffer.from('invalid model id'));
+
+      await expect(waitPromise).rejects.toThrow(/invalid model id/);
+    });
   });
 
   describe('Integration - Realistic flows', () => {
@@ -1023,6 +1118,9 @@ describe('GeminiLiveVoice', () => {
       }, 5);
 
       await expect(listenPromise).resolves.toBe('Hello world');
+      expect(mockWs.send).toHaveBeenCalledTimes(1);
+      const sentData = JSON.parse(mockWs.send.mock.calls[0][0]);
+      expect(sentData.client_content.turns[0].parts[0].inlineData.mimeType).toBe('audio/pcm');
     });
 
     it('should emit speaking and speaker stream for inbound audio and cleanup on turnComplete', async () => {
@@ -1122,6 +1220,62 @@ describe('GeminiLiveVoice', () => {
       expect(setupMsg.setup.generation_config.speech_config.voice_config.prebuilt_voice_config.voice_name).toBe('Puck');
     });
 
+    it('connect() should forward thinkingConfig.includeThoughts as generation_config.thinking_config.include_thoughts', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k', thinkingConfig: { includeThoughts: false } });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.generation_config.thinking_config).toEqual({ include_thoughts: false });
+    });
+
+    it('connect() should forward thinkingConfig.thinkingBudget as generation_config.thinking_config.thinking_budget', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k', thinkingConfig: { thinkingBudget: 0 } });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.generation_config.thinking_config).toEqual({ thinking_budget: 0 });
+    });
+
+    it('connect() should omit generation_config.thinking_config when thinkingConfig is not set', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k' });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.generation_config.thinking_config).toBeUndefined();
+    });
+
+    it('connect() should omit generation_config.thinking_config when thinkingConfig is an empty object', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k', thinkingConfig: {} });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.generation_config.thinking_config).toBeUndefined();
+    });
+
     it('connect() should pick up apiKey and model placed on realtimeConfig root (not inside options)', async () => {
       const v = new GeminiLiveVoice({
         realtimeConfig: {
@@ -1214,6 +1368,32 @@ describe('GeminiLiveVoice', () => {
       const names = updateMsg.session.tools[0].function_declarations.map((d: any) => d.name);
       expect(names).toContain('fromConfig');
       expect(names).toContain('registered');
+    });
+
+    it('updateSessionConfig({ thinkingConfig }) should emit session.generation_config.thinking_config and update internal options', async () => {
+      setTimeout(() => {
+        (voice as any).eventManager.getEventEmitter().emit('session.updated', { ok: true } as any);
+      }, 10);
+
+      await voice.updateSessionConfig({ thinkingConfig: { includeThoughts: false } });
+
+      const calls = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const updateMsg = calls.find((p: any) => p.session?.generation_config?.thinking_config !== undefined);
+      expect(updateMsg).toBeDefined();
+      expect(updateMsg.session.generation_config.thinking_config).toEqual({ include_thoughts: false });
+      expect((voice as any).options.thinkingConfig).toEqual({ includeThoughts: false });
+    });
+
+    it('updateSessionConfig({ thinkingConfig: {} }) should not emit session.generation_config.thinking_config', async () => {
+      setTimeout(() => {
+        (voice as any).eventManager.getEventEmitter().emit('session.updated', { ok: true } as any);
+      }, 10);
+
+      await voice.updateSessionConfig({ thinkingConfig: {}, instructions: 'hi' });
+
+      const calls = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const withThinking = calls.find((p: any) => p.session?.generation_config?.thinking_config !== undefined);
+      expect(withThinking).toBeUndefined();
     });
 
     it('updateSessionConfig({ tools }) should emit the same single-container function_declarations shape as setup', async () => {

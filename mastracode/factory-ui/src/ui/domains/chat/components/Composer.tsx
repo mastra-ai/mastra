@@ -203,6 +203,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   });
 
   const onComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.defaultPrevented) return;
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (e.key === 'Tab' && e.shiftKey && kind !== 'factory' && modes.length > 1) {
       e.preventDefault();
@@ -224,8 +225,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       );
       return;
     }
-    commandMenu.inputProps.onKeyDown(e);
-    if (e.defaultPrevented) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       onSubmit(e);

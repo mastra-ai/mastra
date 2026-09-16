@@ -1,6 +1,8 @@
 import { EntityType, SpanType } from '@mastra/core/observability';
-import { describe, expect, beforeEach, it, vi } from 'vitest';
+import type { TraceQueryGroupResponse, TraceQueryTraceResponse } from '@mastra/core/storage';
+import { describe, expect, expectTypeOf, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
+import type { QueryTraceThreadsResult } from './observability';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -479,7 +481,7 @@ describe('Observability Methods', () => {
   });
 
   describe('queryTraces()', () => {
-    it('should post the advanced query body unchanged', async () => {
+    it('should post the advanced query body unchanged with a trace-only result type', async () => {
       mockSuccessfulResponse();
       const request = {
         timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
@@ -497,10 +499,56 @@ describe('Observability Methods', () => {
         page: { limit: 25 },
       };
 
-      await client.queryTraces(request);
+      const result = await client.queryTraces(request);
 
+      expectTypeOf(result).toEqualTypeOf<TraceQueryTraceResponse>();
+      expectTypeOf(result).not.toEqualTypeOf<TraceQueryGroupResponse>();
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/observability/traces/query`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ ...clientOptions.headers, 'content-type': 'application/json' }),
+          body: JSON.stringify(request),
+        }),
+      );
+    });
+  });
+
+  describe('queryTraceThreads()', () => {
+    it('should post the thread query body unchanged with an identity-only result type', async () => {
+      mockSuccessfulResponse();
+      const request = {
+        traces: {
+          timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+          where: {
+            op: 'eq' as const,
+            left: { path: 'environment' },
+            right: { literal: 'production' },
+          },
+        },
+        where: {
+          traces: {
+            some: {
+              feedback: {
+                some: {
+                  op: 'eq' as const,
+                  left: { path: 'feedbackType' },
+                  right: { literal: 'clinician-correction' },
+                },
+              },
+            },
+          },
+        },
+        page: { limit: 25 },
+      };
+
+      const result = await client.queryTraceThreads(request);
+
+      expectTypeOf(result).toEqualTypeOf<QueryTraceThreadsResult>();
+      expectTypeOf<QueryTraceThreadsResult['threads'][number]>().toEqualTypeOf<{ threadId: string }>();
+      expectTypeOf<QueryTraceThreadsResult['threads'][number]>().not.toHaveProperty('traceId');
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/threads/query`,
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({ ...clientOptions.headers, 'content-type': 'application/json' }),

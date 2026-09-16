@@ -86,6 +86,7 @@ export function linearCandidate(issue: LinearIssue): BoardCandidate {
     meta: `${issue.identifier} · ${issue.state}${issue.assignee ? ` · ${issue.assignee}` : ''}`,
     column: 'intake',
     metadata: {
+      linearIssueId: issue.id,
       identifier: issue.identifier,
       state: issue.state,
       assignee: issue.assignee,

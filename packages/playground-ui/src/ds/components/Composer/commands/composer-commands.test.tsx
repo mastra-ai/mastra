@@ -114,11 +114,14 @@ describe('Composer commands', () => {
   });
 
   describe('when command availability changes', () => {
-    it('stops intercepting keys when disabled', () => {
+    it('stops intercepting keys when disabled and resumes when enabled', () => {
       const { rerender } = render(<CommandComposer />);
       rerender(<CommandComposer enabled={false} />);
       expect(messageInput().getAttribute('aria-controls')).toBeNull();
       expect(fireEvent.keyDown(messageInput(), { key: 'Tab' })).toBe(true);
+      rerender(<CommandComposer />);
+      fireEvent.keyDown(messageInput(), { key: 'Tab' });
+      expect(messageInput().value).toBe('/review ');
     });
 
     it('keeps selection valid when the command list shrinks', () => {
