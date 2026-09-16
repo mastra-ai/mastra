@@ -1,9 +1,7 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type { UISpan } from '../types';
-import type { SpanRowContext } from './span-rows';
 import { SpanRows } from './span-rows';
-import { SpanTimelineCol } from './span-timeline-col';
-import { SpanTreeRow } from './span-tree-row';
+import { SpanTimelineRow } from './span-timeline-row';
 import { SpanTypeLegend } from './span-type-legend';
 import { TraceSpanTreeLoading } from './trace-span-tree';
 
@@ -20,8 +18,6 @@ export type TraceSpanTimelineProps = {
   revealSpanId?: string;
   /** Rendered full-width above the span type legend row. */
   leadingSlot?: ReactNode;
-  /** End-of-row cell. Defaults to the span bar on the shared time axis (`SpanTimelineCol`). */
-  renderTrailing?: (ctx: SpanRowContext) => ReactNode;
 };
 
 const TICKS = [0, 0.25, 0.5, 0.75, 1];
@@ -30,9 +26,11 @@ function formatTick(ms: number) {
   return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(2)} s`;
 }
 
-const defaultTrailing = (ctx: SpanRowContext) => <SpanTimelineCol ctx={ctx} />;
-
-/** Same hierarchy as `TraceSpanTree` (name + expansion controls) with a trailing column of bars on a shared time axis. */
+/**
+ * Gantt-style view of a trace: the same hierarchy and expansion state as `TraceSpanTree`,
+ * but each row is a compact name cell plus a bar on a shared time axis. Rendered with its
+ * own row component (`SpanTimelineRow`), independent from the tree's rows.
+ */
 export function TraceSpanTimeline({
   hierarchicalSpans = [],
   onSpanClick,
@@ -44,7 +42,6 @@ export function TraceSpanTimeline({
   featuredSpanIds,
   revealSpanId,
   leadingSlot,
-  renderTrailing = defaultTrailing,
 }: TraceSpanTimelineProps) {
   if (isLoading) return <TraceSpanTreeLoading />;
 
@@ -54,14 +51,16 @@ export function TraceSpanTimeline({
     <>
       {leadingSlot}
       <SpanTypeLegend spans={hierarchicalSpans} />
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(12rem,1fr)] content-start items-start gap-y-px overflow-hidden py-1">
-        <div
-          aria-label="Trace time axis"
-          className="text-ui-xs text-neutral3 col-start-3 flex justify-between px-1 pr-2 pb-1"
-        >
-          {TICKS.map(tick => (
-            <span key={tick}>{formatTick(overallLatency * tick)}</span>
-          ))}
+      <div className="grid grid-cols-[minmax(10rem,2fr)_minmax(12rem,3fr)] content-start gap-y-px overflow-hidden py-1">
+        {/* Header row: empty name cell, then the axis aligned with the bars (same horizontal padding, minus the duration label). */}
+        <div />
+        <div aria-label="Trace time axis" className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 px-2 pb-1">
+          <div className="text-ui-xs text-neutral3 flex justify-between tabular-nums">
+            {TICKS.map(tick => (
+              <span key={tick}>{formatTick(overallLatency * tick)}</span>
+            ))}
+          </div>
+          <div className="w-12" />
         </div>
         <SpanRows
           spans={hierarchicalSpans}
@@ -72,7 +71,7 @@ export function TraceSpanTimeline({
           featuredSpanIds={featuredSpanIds}
           expandedSpanIds={expandedSpanIds}
           setExpandedSpanIds={setExpandedSpanIds}
-          renderRow={ctx => <SpanTreeRow ctx={ctx} trailing={renderTrailing} />}
+          renderRow={ctx => <SpanTimelineRow ctx={ctx} />}
         />
       </div>
     </>
