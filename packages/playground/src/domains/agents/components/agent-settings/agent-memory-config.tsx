@@ -1,6 +1,5 @@
 import type { GetMemoryConfigResponse } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
@@ -12,7 +11,7 @@ import { useMemoryConfig } from '@/domains/memory/hooks';
 
 interface MemoryConfigSection {
   title: string;
-  items: Array<{ label: string; value: string | number | boolean; badge?: BadgeVariant }>;
+  items: Array<{ label: string; value: string | number | boolean }>;
 }
 
 const recallDisplayValueSchema = z.union([z.string(), z.number()]).optional().catch('Unavailable');
@@ -46,11 +45,7 @@ function getMemorySections(config: NonNullable<GetMemoryConfigResponse['config']
       items: [
         { label: 'Status', value: true },
         { label: 'Last Messages', value: config.lastMessages ?? 'Default' },
-        {
-          label: 'Auto-generate Titles',
-          value: 'generateTitle' in config && Boolean(config.generateTitle),
-          badge: 'blue',
-        },
+        { label: 'Auto-generate Titles', value: 'generateTitle' in config && Boolean(config.generateTitle) },
       ],
     },
   ];
@@ -101,12 +96,6 @@ function formatMemoryValue(value: string | number | boolean) {
   return value;
 }
 
-function getMemoryBadgeVariant({ value, badge }: MemoryConfigSection['items'][number]) {
-  if (value === false) return 'red';
-  if (value === true) return badge ?? 'green';
-  return 'neutral';
-}
-
 function MemoryConfigFields({ items }: Pick<MemoryConfigSection, 'items'>) {
   return (
     <KeyValueList
@@ -120,7 +109,7 @@ function MemoryConfigFields({ items }: Pick<MemoryConfigSection, 'items'>) {
         ),
         value: (
           <Badge
-            variant={getMemoryBadgeVariant(item)}
+            variant={item.value === true ? 'green' : 'neutral'}
             indicator={typeof item.value === 'boolean' ? 'dot' : undefined}
             className="h-auto min-h-5 min-w-0 break-words whitespace-normal"
           >
