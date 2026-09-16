@@ -37,6 +37,8 @@ export const queryKeys = {
     ['github', 'repository-settings', githubProjectId ?? null] as const,
   githubCommits: (projectRepositoryId: string | undefined, limit: number) =>
     ['github', 'commits', projectRepositoryId ?? null, limit] as const,
+  gitlabStatus: () => ['gitlab', 'status'] as const,
+  gitlabProjects: () => ['gitlab', 'projects'] as const,
   linearStatus: () => ['linear', 'status'] as const,
   linearProjects: () => ['linear', 'projects'] as const,
   linearTeams: () => ['linear', 'teams'] as const,

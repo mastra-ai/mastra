@@ -1,6 +1,7 @@
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
 import { GitLabApiClient, GitLabApiError } from '../../gitlab/api.js';
 import { gitlabConnection, GitLabIntegrationBase } from '../../gitlab/integration.js';
+import type { GitLabStatusConnection } from '../../gitlab/integration.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.js';
 
 interface PlatformIntegrationConnection {
@@ -42,6 +43,10 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
       '/v2/connections',
     );
     return result.connections.filter(connection => GITLAB_INTEGRATION_IDS.has(connection.integrationId));
+  }
+
+  override async statusConnections(): Promise<GitLabStatusConnection[]> {
+    return this.listConnections();
   }
 
   async hasActiveConnections(): Promise<boolean> {

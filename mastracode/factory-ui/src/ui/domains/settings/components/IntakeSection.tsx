@@ -6,8 +6,11 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
 import { useLinearProjectsQuery, useLinearStatusQuery, useLinearTeamsQuery } from '../../../../hooks/useLinearData';
+import { isGitLabAuthError, isGitLabReauthRequired } from '../../factory/services/gitlab';
+import type { GitLabProject, GitLabStatus } from '../../factory/services/gitlab';
 import { connectLinear, isLinearReauthError, linearTeamSourceId } from '../../factory/services/linear';
 import type { LinearProject, LinearStatus, LinearTeam } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
@@ -15,7 +18,7 @@ import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { SourcePicker } from './IntakeSourcePicker';
 import type { SourcePickerGroup } from './IntakeSourcePicker';
 import { GithubLabelRouting } from './GithubLabelRouting';
-import { LinearRouting } from './LinearRouting';
+import { IntakeSourceRouting, LinearRouting } from './LinearRouting';
 
 import { SettingsSubsection } from './SettingsSubsection';
 
@@ -73,6 +76,74 @@ function GithubIntakeSection({ config, busy, update, slugs }: SourceSectionProps
               }
             />
           ))}
+      </SettingsContainer>
+    </SettingsSubsection>
+  );
+}
+
+function GitLabIntakeSection({
+  config,
+  busy,
+  update,
+  status,
+  projects,
+  authError,
+  reauthRequired,
+  showPickers,
+}: SourceSectionProps & {
+  status: GitLabStatus | undefined;
+  projects: GitLabProject[];
+  authError: boolean;
+  reauthRequired: boolean;
+  showPickers: boolean;
+}) {
+  const configured = Boolean(status?.enabled && status.configured);
+  const platformManaged = status?.connections !== undefined;
+  const description = reauthRequired
+    ? 'A GitLab account needs to be reconnected in Mastra Platform.'
+    : !configured
+      ? platformManaged
+        ? 'Connect GitLab in Mastra Platform to sync issues from this organization.'
+        : 'GitLab is not configured on this server. Configure a GitLab access token to enable it.'
+      : authError
+        ? platformManaged
+          ? 'GitLab rejected a connected account. Reconnect it in Mastra Platform.'
+          : 'GitLab rejected the configured access token. Ask the operator to check it.'
+        : "Open issues from the selected projects feed every member's board.";
+  const accounts = status?.accounts ?? [];
+  const action = configured ? (
+    <Txt as="span" variant="ui-sm" className="text-icon3">
+      {accounts.length === 1 ? `Connected to ${accounts[0]}` : `${accounts.length} GitLab accounts connected`}
+    </Txt>
+  ) : undefined;
+
+  return (
+    <SettingsSubsection scope="org" title="GitLab issues" description={description} action={action}>
+      <SettingsContainer>
+        <SettingsRow label="Sync GitLab issues">
+          <Switch
+            aria-label="Sync GitLab issues"
+            checked={config.gitlab.enabled}
+            disabled={busy || !configured}
+            onCheckedChange={enabled => update({ ...config, gitlab: { ...config.gitlab, enabled } })}
+          />
+        </SettingsRow>
+
+        {showPickers && (
+          <SourcePicker
+            label="GitLab projects"
+            groups={groupGitLabProjectsByAccount(projects)}
+            selectedIds={config.gitlab.sourceIds}
+            disabled={busy}
+            pending={busy}
+            onToggleItem={projectId =>
+              update({
+                ...config,
+                gitlab: { ...config.gitlab, sourceIds: toggleId(config.gitlab.sourceIds, projectId) },
+              })
+            }
+          />
+        )}
       </SettingsContainer>
     </SettingsSubsection>
   );
@@ -164,6 +235,10 @@ export function IntakeSection() {
   const configQuery = useIntakeConfigQuery();
   const saveMutation = useSaveIntakeConfigMutation();
   const factoriesQuery = useFactoriesQuery();
+  const gitlabStatusQuery = useGitLabStatusQuery();
+  const gitlabStatus = gitlabStatusQuery.data;
+  const gitlabConfigured = Boolean(gitlabStatus?.enabled && gitlabStatus.configured);
+  const gitlabProjectsQuery = useGitLabProjectsQuery(gitlabConfigured);
   const linearStatusQuery = useLinearStatusQuery();
 
   const linearStatus = linearStatusQuery.data;
@@ -183,7 +258,7 @@ export function IntakeSection() {
   if (configQuery.isError || !config) {
     return (
       <Txt as="p" variant="ui-sm" className="text-icon3">
-        Intake configuration is unavailable. Connect GitHub or Linear first.
+        Intake configuration is unavailable. Connect GitHub, GitLab, or Linear first.
       </Txt>
     );
   }
@@ -195,6 +270,12 @@ export function IntakeSection() {
     });
   };
   const busy = saveMutation.isPending;
+  const gitlabProjects = gitlabProjectsQuery.data ?? [];
+  const gitlabAuthError = isGitLabAuthError(gitlabProjectsQuery.error);
+  const gitlabReauthRequired = isGitLabReauthRequired(gitlabStatus);
+  const gitlabSourceIds = config.gitlab.sourceIds ?? [];
+  const gitlabReady =
+    gitlabConfigured && config.gitlab.enabled && !gitlabAuthError && gitlabProjects.length > 0;
   const linearProjects = linearProjectsQuery.data ?? [];
   const linearTeams = linearTeamsQuery.data ?? [];
   const reauthRequired = isLinearReauthError(linearProjectsQuery.error);
@@ -227,6 +308,33 @@ export function IntakeSection() {
             ))}
         </SettingsSubsection>
       )}
+      <GitLabIntakeSection
+        config={config}
+        busy={busy}
+        update={update}
+        status={gitlabStatus}
+        projects={gitlabProjects}
+        authError={gitlabAuthError}
+        reauthRequired={gitlabReauthRequired}
+        showPickers={gitlabReady}
+      />
+      {gitlabReady && gitlabSourceIds.length > 0 && (
+        <SettingsSubsection
+          scope="org"
+          title="GitLab routing"
+          description="Each selected project feeds one factory board. Until a project is fully routed, its issues are not picked up."
+        >
+          <SettingsContainer>
+            <IntakeSourceRouting
+              integrationId="gitlab"
+              label="GitLab"
+              sourceIds={gitlabSourceIds}
+              sources={gitlabProjects}
+              factories={factoriesQuery.data ?? []}
+            />
+          </SettingsContainer>
+        </SettingsSubsection>
+      )}
       <LinearIntakeSection
         config={config}
         busy={busy}
@@ -257,6 +365,18 @@ export function IntakeSection() {
       )}
     </div>
   );
+}
+
+/** Group GitLab projects by connected account so same-named projects remain distinguishable. */
+function groupGitLabProjectsByAccount(projects: GitLabProject[]): SourcePickerGroup[] {
+  const byAccount = new Map<string, SourcePickerGroup>();
+  for (const project of projects) {
+    const account = project.accountLabel ?? 'GitLab';
+    const group = byAccount.get(account) ?? { id: project.connectionId ?? account, label: account, items: [] };
+    group.items.push({ id: project.id, label: project.name });
+    byAccount.set(account, group);
+  }
+  return [...byAccount.values()].toSorted((left, right) => (left.label ?? '').localeCompare(right.label ?? ''));
 }
 
 function groupLinearSourcesByTeam(
