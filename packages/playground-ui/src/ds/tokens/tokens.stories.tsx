@@ -15,7 +15,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          'Design tokens available in `packages/playground-ui`. The raw CSS contract lives in `theme.css`; TypeScript mirrors the component-facing tokens in `src/ds/tokens`. Components use semantic color roles rather than foundation values.',
+          'Design tokens available in `packages/playground-ui`. Foundation tokens live in `theme.css`; opt-in semantic tokens live in `new-theme.css` under `.mastra-theme`; TypeScript mirrors the component-facing tokens in `src/ds/tokens`. Components use semantic color roles rather than foundation values.',
       },
     },
   },
@@ -144,33 +144,33 @@ const SurfacePreview = ({ semantic }: { semantic: boolean }) => {
     <div
       className={cn(
         'grid min-h-80 grid-cols-[9rem_1fr] overflow-hidden rounded-lg border',
-        semantic ? 'text-foreground border-border' : 'border-border1 text-neutral6',
+        semantic ? 'mastra-theme border-mastra-border text-mastra-foreground' : 'border-border1 text-neutral6',
       )}
     >
-      <div className={cn('p-4', semantic ? 'bg-sidebar' : 'bg-surface1')}>
+      <div className={cn('p-4', semantic ? 'bg-mastra-sidebar' : 'bg-surface1')}>
         <Txt variant="ui-sm">Sidebar</Txt>
         <div className="mt-4 space-y-2">
-          <div className={cn('h-6 rounded', semantic ? 'bg-sidebar-accent' : 'bg-sidebar-nav-hover')} />
-          <div className={cn('h-6 rounded', semantic ? 'bg-selected' : 'bg-sidebar-nav-active')} />
+          <div className={cn('h-6 rounded', semantic ? 'bg-mastra-sidebar-accent' : 'bg-sidebar-nav-hover')} />
+          <div className={cn('h-6 rounded', semantic ? 'bg-mastra-selected' : 'bg-sidebar-nav-active')} />
         </div>
       </div>
-      <div className={cn('relative p-4', semantic ? 'bg-background' : 'bg-surface2')}>
+      <div className={cn('relative p-4', semantic ? 'bg-mastra-background' : 'bg-surface2')}>
         <Txt variant="ui-sm">Main canvas</Txt>
         <div
           className={cn(
             'mt-4 rounded-lg border p-4',
-            semantic ? 'bg-card border-border' : 'border-border1 bg-surface3',
+            semantic ? 'border-mastra-border bg-mastra-card' : 'border-border1 bg-surface3',
           )}
         >
           <Txt variant="ui-sm">Card</Txt>
-          <div className={cn('mt-3 rounded-md p-3', semantic ? 'bg-muted' : 'bg-surface4')}>
+          <div className={cn('mt-3 rounded-md p-3', semantic ? 'bg-mastra-muted' : 'bg-surface4')}>
             <Txt variant="ui-sm">Muted region</Txt>
           </div>
         </div>
         <div
           className={cn(
             'absolute right-6 bottom-6 w-36 rounded-md border p-3 shadow-lg',
-            semantic ? 'bg-popover border-border' : 'border-border1 bg-surface3',
+            semantic ? 'border-mastra-border bg-mastra-popover' : 'border-border1 bg-surface3',
           )}
         >
           <Txt variant="ui-sm">Popover</Txt>
@@ -216,8 +216,8 @@ export const SurfaceMigration: Story = {
 
 export const SemanticNeutrals: Story = {
   render: () => (
-    <div>
-      <SectionTitle note="Component-facing roles. Tailwind utilities use the same names, such as bg-card and text-muted-foreground.">
+    <div className="mastra-theme">
+      <SectionTitle note="Apply mastra-theme to the component or portal root. Semantic Tailwind utilities are namespaced, such as bg-mastra-card and text-mastra-muted-foreground.">
         Semantic neutrals
       </SectionTitle>
       <SwatchGrid entries={[...semanticEntries, ...semanticBorderEntries]} />
@@ -225,16 +225,16 @@ export const SemanticNeutrals: Story = {
         Representative combinations
       </SectionTitle>
       <div className="grid gap-4 md:grid-cols-2">
-        <div className="border-border bg-background text-foreground rounded-md border p-4">
+        <div className="border-mastra-border bg-mastra-background text-mastra-foreground rounded-md border p-4">
           <div className="text-ui-sm font-medium">Observation summary</div>
-          <div className="text-muted-foreground text-ui-sm mt-1">Today, 12 minutes ago</div>
-          <div className="bg-muted text-muted-foreground text-ui-xs mt-3 inline-flex rounded px-2 py-1">
+          <div className="text-ui-sm text-mastra-muted-foreground mt-1">Today, 12 minutes ago</div>
+          <div className="bg-mastra-muted text-ui-xs text-mastra-muted-foreground mt-3 inline-flex rounded px-2 py-1">
             Thread support-triage
           </div>
         </div>
-        <div className="border-border bg-muted rounded-md border p-4">
-          <div className="text-foreground text-ui-sm font-medium">Dataset import</div>
-          <div className="text-muted-foreground text-ui-sm mt-1">No validation issues found.</div>
+        <div className="border-mastra-border bg-mastra-muted rounded-md border p-4">
+          <div className="text-ui-sm text-mastra-foreground font-medium">Dataset import</div>
+          <div className="text-ui-sm text-mastra-muted-foreground mt-1">No validation issues found.</div>
         </div>
       </div>
     </div>
@@ -253,7 +253,7 @@ export const ColorsStory: Story = {
       Border: Object.entries(BorderColors),
     };
     return (
-      <div>
+      <div className="mastra-theme">
         <SectionTitle note="Tailwind classes: bg-{token}, text-{token}, border-{token}. Values are CSS vars, so light/dark themes swap automatically.">
           Colors
         </SectionTitle>

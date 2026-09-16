@@ -9,5 +9,5 @@ Added an opt-in semantic neutral color contract in `new-theme.css` and lightweig
 ```
 
 ```tsx
-<div className="border-border bg-background text-foreground">Content</div>
+<div className="mastra-theme border-mastra-border bg-mastra-background text-mastra-foreground">Content</div>
 ```

@@ -10,7 +10,10 @@ export type SidebarNewRootProps = MainSidebarRootProps & {
 export function SidebarNewRoot({ 'aria-label': ariaLabel = 'Sidebar', className, ...props }: SidebarNewRootProps) {
   return (
     <aside aria-label={ariaLabel} className="contents">
-      <MainSidebarRoot className={cn('sidebar-new-theme bg-sidebar text-foreground', className)} {...props} />
+      <MainSidebarRoot
+        className={cn('mastra-theme sidebar-new-theme bg-mastra-sidebar text-mastra-foreground', className)}
+        {...props}
+      />
     </aside>
   );
 }

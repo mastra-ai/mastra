@@ -1,11 +1,31 @@
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { compile } from 'tailwindcss';
+import { resolveConfig } from 'vite';
 import { describe, expect, it } from 'vitest';
 import { BorderColors, Colors } from './ds/tokens/colors';
 
 const pkgRoot = resolve(__dirname, '..');
 const pkg = JSON.parse(readFileSync(resolve(pkgRoot, 'package.json'), 'utf8'));
+
+const compileStylesheet = async (css: string, base: string) => {
+  const config = await resolveConfig({ configFile: false, root: pkgRoot }, 'build');
+  const resolveCss = config.createResolver({ conditions: ['style'], mainFields: ['style'] });
+  return compile(css, {
+    base,
+    loadStylesheet: async (id, base) => {
+      const path = await resolveCss(id, resolve(base, 'index.css'));
+      if (!path) throw new Error(`Cannot resolve stylesheet: ${id}`);
+      return { path, base: dirname(path), content: readFileSync(path, 'utf8') };
+    },
+    loadModule: async (id, base) => {
+      const require = createRequire(resolve(base, 'package.json'));
+      const path = require.resolve(id);
+      return { path, base: dirname(path), module: require(path) };
+    },
+  });
+};
 
 const semanticTokens = [
   'background',
@@ -73,22 +93,25 @@ const getThemeVariables = (themeCss: string, newThemeCss: string) => {
   const themeRootBlock = themeCss.slice(themeCss.indexOf(':root {'), themeCss.indexOf('html.light'));
   const themeLightStart = themeCss.indexOf('html.light');
   const themeLightBlock = themeCss.slice(themeLightStart, themeCss.indexOf('\n}\n\n@theme', themeLightStart) + 2);
-  const semanticRootBlock = newThemeCss.slice(newThemeCss.indexOf(':root {'), newThemeCss.indexOf('html.light'));
+  const semanticScopedBlock = newThemeCss.slice(
+    newThemeCss.indexOf('.mastra-theme {'),
+    newThemeCss.indexOf('html.light'),
+  );
   const semanticLightStart = newThemeCss.indexOf('html.light');
   const semanticLightBlock = newThemeCss.slice(
     semanticLightStart,
     newThemeCss.indexOf('\n}\n\n@theme', semanticLightStart) + 2,
   );
-  const semanticRootVariables = parseVariables(semanticRootBlock);
-  const semanticLightVariables = new Map([...semanticRootVariables, ...parseVariables(semanticLightBlock)]);
-  const darkVariables = new Map([...parseVariables(themeRootBlock), ...semanticRootVariables]);
+  const semanticScopedVariables = parseVariables(semanticScopedBlock);
+  const semanticLightVariables = new Map([...semanticScopedVariables, ...parseVariables(semanticLightBlock)]);
+  const darkVariables = new Map([...parseVariables(themeRootBlock), ...semanticScopedVariables]);
   const lightVariables = new Map([
     ...darkVariables,
     ...parseVariables(themeLightBlock),
     ...parseVariables(semanticLightBlock),
   ]);
 
-  return { semanticRootVariables, semanticLightVariables, darkVariables, lightVariables };
+  return { semanticScopedVariables, semanticLightVariables, darkVariables, lightVariables };
 };
 
 const resolveToken = (token: string, variables: Map<string, string>, seen: string[] = []): string => {
@@ -137,7 +160,7 @@ describe('theme.css export', () => {
     expect(themeCss).toMatch(/@theme\s*\{/);
     expect(themeCss).toMatch(/:root\s*\{/);
     expect(newThemeCss).toMatch(/@theme inline\s*\{/);
-    expect(newThemeCss).toMatch(/:root\s*\{/);
+    expect(newThemeCss).toMatch(/\.mastra-theme\s*\{/);
     expect(themeCss).not.toMatch(/^\/\*!\s*tailwindcss/);
     expect(newThemeCss).not.toMatch(/^\/\*!\s*tailwindcss/);
     expect(themeCss).not.toMatch(/\.bg-surface1\b/);
@@ -212,23 +235,23 @@ describe('theme.css export', () => {
   });
 
   it('defines the approved semantic alias graph in both themes', () => {
-    const { semanticRootVariables, semanticLightVariables, darkVariables, lightVariables } = getThemeVariables(
+    const { semanticScopedVariables, semanticLightVariables, darkVariables, lightVariables } = getThemeVariables(
       themeCss,
       newThemeCss,
     );
 
     for (const [token, reference] of Object.entries(darkAliases)) {
-      expect(semanticRootVariables.get(token)).toBe(`var(--${reference})`);
+      expect(semanticScopedVariables.get(`mastra-${token}`)).toBe(`var(--${reference})`);
     }
 
     for (const [token, reference] of Object.entries(lightAliases)) {
-      expect(semanticLightVariables.get(token)).toBe(`var(--${reference})`);
+      expect(semanticLightVariables.get(`mastra-${token}`)).toBe(`var(--${reference})`);
     }
 
     for (const token of semanticTokens) {
-      expect(() => resolveToken(token, darkVariables)).not.toThrow();
-      expect(() => resolveToken(token, lightVariables)).not.toThrow();
-      expect(newThemeCss).toContain(`--color-${token}: var(--${token});`);
+      expect(() => resolveToken(`mastra-${token}`, darkVariables)).not.toThrow();
+      expect(() => resolveToken(`mastra-${token}`, lightVariables)).not.toThrow();
+      expect(newThemeCss).toContain(`--color-mastra-${token}: var(--mastra-${token});`);
     }
   });
 
@@ -236,7 +259,7 @@ describe('theme.css export', () => {
     const exportedColors = { ...Colors, ...BorderColors };
 
     for (const token of semanticTokens) {
-      expect(exportedColors[token]).toBe(`var(--${token})`);
+      expect(exportedColors[token]).toBe(`var(--mastra-${token})`);
     }
   });
 
@@ -244,8 +267,8 @@ describe('theme.css export', () => {
     const exportedColors = { ...Colors, ...BorderColors };
 
     for (const token of deferredSemanticTokens) {
-      expect(newThemeCss).not.toContain(`--${token}:`);
-      expect(newThemeCss).not.toContain(`--color-${token}:`);
+      expect(newThemeCss).not.toContain(`--mastra-${token}:`);
+      expect(newThemeCss).not.toContain(`--color-mastra-${token}:`);
       expect(Object.hasOwn(exportedColors, token)).toBe(false);
     }
   });
@@ -267,17 +290,12 @@ describe('theme.css export', () => {
   });
 
   it('compiles utilities that resolve semantic tokens on the styled element', async () => {
-    const compiler = await compile(newThemeCss, {
-      loadStylesheet: async id => {
-        const path = resolve(pkgRoot, 'node_modules', id);
-        return { path, base: dirname(path), content: readFileSync(path, 'utf8') };
-      },
-    });
+    const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
     const candidates = semanticTokens.flatMap(token => [
-      `bg-${token}`,
-      `text-${token}`,
-      `border-${token}`,
-      `ring-${token}`,
+      `bg-mastra-${token}`,
+      `text-mastra-${token}`,
+      `border-mastra-${token}`,
+      `ring-mastra-${token}`,
     ]);
     const output = compiler.build(candidates);
 
@@ -288,8 +306,36 @@ describe('theme.css export', () => {
         ['border', 'border-color'],
         ['ring', '--tw-ring-color'],
       ]) {
-        expect(output).toMatch(new RegExp(`\\.${prefix}-${token} \\{\\s*${property}: var\\(--${token}\\)`));
+        expect(output).toMatch(
+          new RegExp(`\\.${prefix}-mastra-${token} \\{\\s*${property}: var\\(--mastra-${token}\\)`),
+        );
       }
+    }
+  });
+
+  it('does not emit opt-in defaults or unnamespaced semantic utilities in the shared bundle', async () => {
+    const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
+    const output = compiler.build(['bg-surface3', ...semanticTokens.map(token => `bg-${token}`)]);
+
+    expect(output).toContain('.bg-surface3');
+    expect(output).not.toContain('.mastra-theme');
+    expect(output).not.toMatch(/--mastra-[\w-]+:/);
+    for (const token of semanticTokens) {
+      expect(output).not.toContain(`.bg-${token} {`);
+    }
+  });
+
+  it('compiles the component import to scoped defaults without a second set of utilities', async () => {
+    const compiler = await compileStylesheet(newThemeCss, pkgRoot);
+    const output = compiler.build(['flex', 'bg-mastra-card', 'bg-card']);
+
+    expect(output).toContain('.mastra-theme {');
+    expect(output).toContain('html.light .mastra-theme {');
+    expect(output).not.toContain(':root');
+    expect(output).not.toContain('.flex');
+    expect(output).not.toContain('.bg-');
+    for (const token of semanticTokens) {
+      expect(output).not.toContain(`--${token}:`);
     }
   });
 
@@ -297,9 +343,9 @@ describe('theme.css export', () => {
     const { darkVariables, lightVariables } = getThemeVariables(themeCss, newThemeCss);
 
     for (const variables of [darkVariables, lightVariables]) {
-      const ringLightness = oklchLightness(resolveToken('ring', variables));
+      const ringLightness = oklchLightness(resolveToken('mastra-ring', variables));
       for (const background of ['sidebar', 'background', 'card', 'muted']) {
-        const backgroundLightness = oklchLightness(resolveToken(background, variables));
+        const backgroundLightness = oklchLightness(resolveToken(`mastra-${background}`, variables));
         expect(wcagContrast(ringLightness, backgroundLightness)).toBeGreaterThanOrEqual(3);
       }
     }
@@ -310,10 +356,10 @@ describe('theme.css export', () => {
 
     for (const variables of [darkVariables, lightVariables]) {
       for (const foreground of ['foreground', 'muted-foreground']) {
-        const foregroundLightness = oklchLightness(resolveToken(foreground, variables));
+        const foregroundLightness = oklchLightness(resolveToken(`mastra-${foreground}`, variables));
 
         for (const background of ['sidebar', 'background', 'card', 'muted']) {
-          const backgroundLightness = oklchLightness(resolveToken(background, variables));
+          const backgroundLightness = oklchLightness(resolveToken(`mastra-${background}`, variables));
           expect(wcagContrast(foregroundLightness, backgroundLightness)).toBeGreaterThanOrEqual(4.5);
           expect(Math.abs(apcaContrast(foregroundLightness, backgroundLightness))).toBeGreaterThanOrEqual(60);
         }
@@ -323,7 +369,7 @@ describe('theme.css export', () => {
 
   it('ships the semantic layer as an opt-in raw stylesheet', () => {
     expect(themeCss).not.toContain("@import './new-theme.css';");
-    expect(productionCss).not.toContain('new-theme.css');
+    expect(productionCss).not.toMatch(/@import[^;]*new-theme\.css/);
     expect(storybookCss).toContain("@import '../new-theme.css';");
     expect(pkg.exports['./theme.css']).toBe('./theme.css');
     expect(pkg.exports['./theme.css']).not.toContain('dist');

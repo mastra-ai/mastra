@@ -31,6 +31,25 @@ test('parses report options and configurable roots', () => {
   assert.throws(() => parseArguments(['--check']), /Unknown argument/);
 });
 
+test('recognizes namespaced semantic utilities and variables', () => {
+  const repository = createRepository();
+  track(
+    repository,
+    'src/Button/button.tsx',
+    "const classes = 'hover:bg-mastra-card/50 text-mastra-foreground'; const color = 'var(--mastra-sidebar)';",
+  );
+
+  const report = buildReport({ repositoryRoot: repository, roots: ['src'] });
+  assert.deepEqual(
+    report.groups.production.map(({ token, form, kind }) => ({ token, form, kind })),
+    [
+      { token: 'card', form: 'tailwind', kind: 'semantic' },
+      { token: 'foreground', form: 'tailwind', kind: 'semantic' },
+      { token: 'sidebar', form: 'css-variable', kind: 'semantic' },
+    ],
+  );
+});
+
 test('reports legacy, foundation, and achromatic usage by source group', () => {
   const repository = createRepository();
   track(

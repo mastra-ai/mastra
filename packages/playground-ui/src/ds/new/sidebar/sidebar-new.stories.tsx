@@ -39,8 +39,8 @@ function SidebarNewStory() {
   }
 
   return (
-    <div className="bg-background flex h-dvh w-dvw">
-      <SidebarNew className="border-border border-r">
+    <div className="mastra-theme bg-mastra-background flex h-dvh w-dvw">
+      <SidebarNew className="border-mastra-border border-r">
         <SidebarNew.Header>
           {state === 'collapsed' ? (
             <SidebarNew.Trigger />
@@ -125,7 +125,11 @@ function SidebarNewStory() {
                 }
               />
             </SidebarNew.NavList>
-            <DropdownMenu.Content align="start" sideOffset={8} className="w-64">
+            <DropdownMenu.Content
+              align="start"
+              sideOffset={8}
+              className="mastra-theme border-mastra-border bg-mastra-popover text-mastra-foreground w-64"
+            >
               <div className="text-ui-xs text-neutral3 px-2 py-1">justin@mastra.ai</div>
               <DropdownMenu.Separator />
               <DropdownMenu.Item onSelect={() => openSettings('account-settings')}>
