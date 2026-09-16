@@ -33,7 +33,6 @@
   },
   "dependencies": {
     "@lukeed/uuid": "^2.0.1",
-    "cloudflare": "^5.2.0",
     "mongodb": "^7.5.0"
   },
   "devDependencies": {
