@@ -251,7 +251,7 @@ describe('token-based memory history', () => {
     expect(listMessages.mock.calls.every(([input]) => input.perPage === 3 && input.includeTotal === false)).toBe(true);
   });
 
-  it('keeps token overflow inside the explicit count window', async () => {
+  it('excludes count-only overflow when the count window fits the token target', async () => {
     const store = (await new InMemoryStore().getStore('memory'))!;
     const storedMessages = Array.from({ length: 4 }, (_, index) => message(`message-${index}`, index));
     await store.saveMessages({ messages: storedMessages });
@@ -347,6 +347,58 @@ describe('token-based memory history', () => {
 
     expect(result.messages).toEqual([]);
     expect(result.overflow).toEqual([]);
+  });
+
+  it('persists full-prompt trimming from token overflow inside the explicit count window', async () => {
+    class FixedTokenMockMemory extends MockMemory {
+      protected override createMemoryTokenCounter() {
+        return { countMessage: () => 40 };
+      }
+    }
+
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('memory'))!;
+    const thread = await store.saveThread({
+      thread: {
+        id: 'thread',
+        resourceId: 'resource',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    await store.saveMessages({
+      messages: [message('count-overflow', 0), message('token-overflow', 1), message('trimmed', 2), message('kept', 3)],
+    });
+    const context = new RequestContext();
+    context.set('MastraMemory', { thread, resourceId: 'resource' });
+    const memory = new FixedTokenMockMemory({
+      storage,
+      options: { lastMessages: 3, messageHistory: { maxTokens: 150, atMaxRemoveTokens: 40 } },
+    });
+    const processors = await memory.getInputProcessors([], context);
+    const history = processors.find(p => p.id === 'message-history')!;
+    const limiter = processors.find(p => p.id === 'memory-token-limiter')!;
+    const list = new MessageList();
+
+    await history.processInput!(args(list, context));
+    expect(list.get.all.db().map(item => item.id)).toEqual(['token-overflow', 'trimmed', 'kept']);
+    list.add(message('input', 4), 'input');
+    await limiter.processInput!(args(list, context));
+
+    expect(list.get.all.db().map(item => item.id)).toEqual(['kept', 'input']);
+    const saved = (await store.getThreadById({ threadId: 'thread' }))!;
+    expect(getMemoryTokenBoundary(saved)).toMatchObject({
+      createdAt: message('trimmed', 2).createdAt.toISOString(),
+      messageIds: ['trimmed'],
+      maxTokens: 150,
+      atMaxRemoveTokens: 40,
+    });
+
+    context.set('MastraMemory', { thread: saved, resourceId: 'resource' });
+    const next = new MessageList();
+    await history.processInput!(args(next, context));
+    expect(next.get.all.db().map(item => item.id)).toEqual(['kept']);
+    expect((await store.listMessages({ threadId: 'thread', perPage: false })).messages).toHaveLength(4);
   });
 
   it('persists trimming through real storage and does not reintroduce removed history next turn', async () => {
