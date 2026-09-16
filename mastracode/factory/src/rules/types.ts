@@ -374,6 +374,12 @@ interface FactoryInvokeSkillDecisionBase extends FactoryCommitDecisionBase {
   arguments?: string;
   precedingMessage?: string;
   cancelInFlight?: boolean;
+  /**
+   * Same-stage re-entry: the skill is already active in the card's live session,
+   * so deliver a compact continuation that references it by name and carries only
+   * the fresh arguments, instead of re-pasting the whole skill document.
+   */
+  resume?: boolean;
 }
 
 /**

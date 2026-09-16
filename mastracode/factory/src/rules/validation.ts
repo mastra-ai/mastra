@@ -256,7 +256,17 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
     case 'invokeSkill': {
       assertExactKeys(
         value,
-        ['type', 'idempotencyKey', 'role', 'skillName', 'prompt', 'arguments', 'precedingMessage', 'cancelInFlight'],
+        [
+          'type',
+          'idempotencyKey',
+          'role',
+          'skillName',
+          'prompt',
+          'arguments',
+          'precedingMessage',
+          'cancelInFlight',
+          'resume',
+        ],
         'Factory invoke skill decision',
       );
       // A run activates a skill or carries a prompt, never both: they are two
@@ -274,6 +284,9 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       if (value.cancelInFlight !== undefined && typeof value.cancelInFlight !== 'boolean') {
         throw new FactoryRuleValidationError('Factory skill cancelInFlight must be a boolean.');
       }
+      if (value.resume !== undefined && typeof value.resume !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory skill resume must be a boolean.');
+      }
       return {
         type,
         ...commonCommitFields(value),
@@ -284,6 +297,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         ...(args ? { arguments: args } : {}),
         ...(precedingMessage ? { precedingMessage } : {}),
         ...(value.cancelInFlight === true ? { cancelInFlight: true } : {}),
+        ...(value.resume === true ? { resume: true } : {}),
       };
     }
     case 'sendMessage': {

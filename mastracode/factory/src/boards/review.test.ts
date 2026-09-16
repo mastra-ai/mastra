@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/types.js';
 import { reviewBoard } from './review.js';
 
-function reviewContext(headBranch: string): FactoryStageRuleContext {
+function reviewContext(headBranch: string, fromStage = 'intake'): FactoryStageRuleContext {
   const item: FactoryRuleItemContext = {
     id: 'item-1',
     source: 'github-pr',
@@ -26,7 +26,7 @@ function reviewContext(headBranch: string): FactoryStageRuleContext {
     itemRevision: 1,
     source: 'pullRequest',
     stage: 'review',
-    fromStage: 'intake',
+    fromStage,
     toStage: 'review',
   };
 }
@@ -60,5 +60,32 @@ describe('reviewBoard', () => {
     expect(argumentsText).toContain(
       'if git rev-parse --is-shallow-repository | grep -qx true; then git fetch --unshallow --filter=blob:none origin; fi && git fetch --filter=blob:none origin refs/pull/23029/head && git checkout -B factory/pr-23029 FETCH_HEAD',
     );
+  });
+
+  it('resumes the live session on a same-stage re-entry instead of re-pasting the skill', async () => {
+    const decision = await reviewBoard.rules.review?.pullRequest?.onEnter?.(
+      reviewContext('feat/review-board', 'review'),
+    );
+    expect(decision).toMatchObject({
+      type: 'invokeSkill',
+      skillName: 'factory-review',
+      cancelInFlight: true,
+      resume: true,
+    });
+  });
+
+  it('delivers the full skill on a first-time entry from intake', async () => {
+    const decision = await reviewBoard.rules.review?.pullRequest?.onEnter?.(
+      reviewContext('feat/review-board', 'intake'),
+    );
+    expect(decision).toMatchObject({ type: 'invokeSkill', skillName: 'factory-review' });
+    expect(decision).not.toHaveProperty('resume');
+    expect(decision).not.toHaveProperty('cancelInFlight');
+  });
+
+  it('delivers the full re-review skill when returning from done, without resuming', async () => {
+    const decision = await reviewBoard.rules.review?.pullRequest?.onEnter?.(reviewContext('feat/review-board', 'done'));
+    expect(decision).toMatchObject({ type: 'invokeSkill', skillName: 'factory-rereview' });
+    expect(decision).not.toHaveProperty('resume');
   });
 });

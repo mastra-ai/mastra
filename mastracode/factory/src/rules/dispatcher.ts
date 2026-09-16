@@ -13,7 +13,7 @@ import {
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { recordSessionRunStart } from '../session/run-audit.js';
-import { resolvePromptInvocation, resolveSkillInvocation } from '../skills/service.js';
+import { resolvePromptInvocation, resolveSkillInvocation, resolveSkillResumeInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
@@ -838,11 +838,17 @@ export class FactoryDecisionDispatcher {
                 resourceId: binding.resourceId,
                 prompt: decision.prompt,
               })
-            : await resolveSkillInvocation(this.#controller, {
-                resourceId: binding.resourceId,
-                name: decision.skillName,
-                arguments: decision.arguments,
-              });
+            : decision.resume === true
+              ? await resolveSkillResumeInvocation(this.#controller, {
+                  resourceId: binding.resourceId,
+                  name: decision.skillName,
+                  arguments: decision.arguments,
+                })
+              : await resolveSkillInvocation(this.#controller, {
+                  resourceId: binding.resourceId,
+                  name: decision.skillName,
+                  arguments: decision.arguments,
+                });
         await this.#switchThread(session, binding);
         const deliveryId =
           record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
