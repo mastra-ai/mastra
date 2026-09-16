@@ -79,7 +79,7 @@ import type { MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
-import { refreshFactorySessionMemorySettings } from './session/factory-session.js';
+import { createSourceControlSessionLookup, refreshFactorySessionMemorySettings } from './session/factory-session.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
@@ -565,6 +565,13 @@ export class MastraFactory {
         });
       }
     }
+    // Keep the legacy GitHub partition readable even when no GitHub
+    // integration is registered; existing sessions may outlive a config change.
+    const sourceControlIntegrationIds = [
+      ...new Set(['github', ...integrations.filter(integration => integration.versionControl).map(({ id }) => id)]),
+    ];
+    const sourceControlHandles = sourceControlIntegrationIds.map(id => sourceControlStorage.forIntegration(id));
+    const sourceControlSessions = createSourceControlSessionLookup(sourceControlHandles);
 
     // Every integration uses generic integration storage. Version-control
     // providers additionally require the source-control storage domain. Readiness
@@ -600,14 +607,24 @@ export class MastraFactory {
           })
         : undefined;
     const retireTerminalSessions =
-      sessionRetirement && githubIntegration && workItemsReady
-        ? async ({ orgId, workItemId }: { orgId: string; workItemId: string }) =>
-            sessionRetirement.retireWorkItemSessions({
-              workItems: workItemsStorage,
-              sourceControl: sourceControlStorage.forIntegration(githubIntegration.id),
-              orgId,
-              workItemId,
-            })
+      sessionRetirement && workItemsReady
+        ? async ({ orgId, workItemId }: { orgId: string; workItemId: string }) => {
+            const item = await workItemsStorage.get({ orgId, id: workItemId });
+            if (!item) return;
+            const sessionIds = [...new Set(Object.values(item.sessions).map(session => session.sessionId))];
+            await Promise.all(
+              sessionIds.map(async sessionId => {
+                const sourceControl = await sourceControlSessions.getSourceControlBySessionId(sessionId);
+                if (!sourceControl) return;
+                await sessionRetirement.retireSession({
+                  sourceControl,
+                  orgId,
+                  sessionId,
+                  deleteSession: false,
+                });
+              }),
+            );
+          }
         : undefined;
     // Terminal-stage cleanup: ingest any trailing tool results from the item's
     // bound threads, then revoke the bindings so completed items leave the
@@ -862,9 +879,7 @@ export class MastraFactory {
                       // Only offered while the source-control domain is ready — a
                       // throwing lookup would abort recovery's catch block and also
                       // skip the metadata baseRef fallback.
-                      ...(storage.isDomainReady('source-control')
-                        ? { sessions: sourceControlStorage.forIntegration('github').sessions }
-                        : {}),
+                      ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
                     }),
                   );
                   // The supervisor session has no seat, so it never gets the
@@ -1107,16 +1122,16 @@ export class MastraFactory {
     prepared.base.controller.onSessionCreated(session => {
       observeSessionFilesystem(session, {
         filesystem: filesystemStorage,
-        sourceControl: sourceControlStorage.forIntegration('github'),
+        sourceControl: { sessions: sourceControlSessions },
       });
       observeSessionFirstMessage(session, {
-        sourceControl: sourceControlStorage.forIntegration('github'),
+        sourceControl: { sessions: sourceControlSessions },
       });
       observeSessionFirstExec(session, {
-        sourceControl: sourceControlStorage.forIntegration('github'),
+        sourceControl: { sessions: sourceControlSessions },
       });
       observeSessionThreadTitle(session, {
-        sourceControl: sourceControlStorage.forIntegration('github'),
+        sourceControl: { sessions: sourceControlSessions },
       });
       observeSessionRunEnd(session, { audit: auditDomain });
     });
@@ -1144,7 +1159,7 @@ export class MastraFactory {
     prepared.base.controller.onSessionCreated(
       session =>
         hydrateSessionMemorySettings(session, {
-          sourceControl: sourceControlStorage.forIntegration('github'),
+          sourceControl: { sessions: sourceControlSessions },
           projects: factoryProjectsStorage,
           memorySettings: memorySettingsStorage,
         }),
@@ -1156,7 +1171,7 @@ export class MastraFactory {
     prepared.base.controller.onSessionCreated(
       session =>
         hydrateSessionModelPack(session, {
-          sourceControl: sourceControlStorage.forIntegration('github'),
+          sourceControl: { sessions: sourceControlSessions },
           workItems: workItemsStorage,
           modelPacks: modelPacksStorage,
         }),
@@ -1195,6 +1210,7 @@ export class MastraFactory {
           factoryStorage: storage,
           integrationStorage,
           sourceControlStorage,
+          integrations: integrationRegistrations,
           configVersion,
           boardRegistry: this.#boards,
           factoryReady,
@@ -1226,6 +1242,7 @@ export class MastraFactory {
           factoryStorage: storage,
           integrationStorage,
           sourceControlStorage,
+          integrations: integrationRegistrations,
           configVersion,
           boardRegistry: this.#boards,
           factoryReady,
@@ -1269,6 +1286,7 @@ export class MastraFactory {
                 factoryStorage: storage,
                 integrationStorage,
                 sourceControlStorage,
+                integrations: integrationRegistrations,
                 configVersion,
                 boardRegistry: this.#boards,
                 factoryReady,

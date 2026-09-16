@@ -88,7 +88,9 @@ export class FactoryStartCoordinator {
   readonly #transitionService?: Pick<FactoryTransitionService, 'transition'>;
   readonly #sourceControl?:
     | SourceControlStorageHandle
-    | ((request: FactoryStartRequest) => SourceControlStorageHandle | undefined);
+    | ((
+        request: FactoryStartRequest,
+      ) => SourceControlStorageHandle | undefined | Promise<SourceControlStorageHandle | undefined>);
   readonly #memorySettings?: MemorySettingsStorage;
 
   constructor(
@@ -97,7 +99,9 @@ export class FactoryStartCoordinator {
     transitionService?: Pick<FactoryTransitionService, 'transition'>,
     sourceControl?:
       | SourceControlStorageHandle
-      | ((request: FactoryStartRequest) => SourceControlStorageHandle | undefined),
+      | ((
+          request: FactoryStartRequest,
+        ) => SourceControlStorageHandle | undefined | Promise<SourceControlStorageHandle | undefined>),
     memorySettings?: MemorySettingsStorage,
   ) {
     this.#controller = controller;
@@ -110,7 +114,7 @@ export class FactoryStartCoordinator {
   async prepare(request: FactoryStartRequest): Promise<FactoryStartPreparedResult> {
     const storage = this.#storage;
     const sourceControl =
-      typeof this.#sourceControl === 'function' ? this.#sourceControl(request) : this.#sourceControl;
+      typeof this.#sourceControl === 'function' ? await this.#sourceControl(request) : this.#sourceControl;
     if (!sourceControl) throw new Error('Factory source control storage is unavailable');
     const sourceSession = await resolveSourceSession(sourceControl, request);
     const requestContext = request.requestContext ?? new RequestContext();

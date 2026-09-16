@@ -3,20 +3,22 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import {
+  createSourceControlSessionLookup,
   ensureFactorySourceSession,
   hydrateFactorySession,
   refreshFactorySessionMemorySettings,
   resolveFactoryDefaultModelId,
   resolveFactoryProjectForSession,
+  resolveFactorySourceControl,
   resolveFactorySourceRepository,
 } from './factory-session.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from './memory-settings-hydration.js';
 
 type FactorySessionHandle = Parameters<typeof hydrateFactorySession>[0];
 
-async function seedLinkedRepository(options?: { pinnedBranch?: string }) {
+async function seedLinkedRepository(options?: { pinnedBranch?: string; integrationId?: string }) {
   const seeded = await createFactoryStorageForTests();
-  const sourceControl = seeded.sourceControl.forIntegration('github');
+  const sourceControl = seeded.sourceControl.forIntegration(options?.integrationId ?? 'github');
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
   const installation = await sourceControl.installations.upsert({
     orgId: 'org-1',
@@ -57,6 +59,38 @@ function createSessionDouble() {
   };
   return { session: session as unknown as FactorySessionHandle, double: session, calls };
 }
+
+describe('provider-aware source-control resolution', () => {
+  it("chooses the Factory's linked GitLab repository even when GitHub is also registered", async () => {
+    const { seeded, sourceControl: gitlab, project } = await seedLinkedRepository({ integrationId: 'gitlab' });
+    const github = seeded.sourceControl.forIntegration('github');
+
+    await expect(
+      resolveFactorySourceControl({
+        sourceControls: [github, gitlab],
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+      }),
+    ).resolves.toBe(gitlab);
+  });
+
+  it('finds a GitLab session through the cross-provider lookup', async () => {
+    const { seeded, sourceControl: gitlab, project } = await seedLinkedRepository({ integrationId: 'gitlab' });
+    const github = seeded.sourceControl.forIntegration('github');
+    const session = await ensureFactorySourceSession({
+      sourceControl: gitlab,
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      branch: 'factory/gitlab-issue',
+    });
+    const sessions = createSourceControlSessionLookup([github, gitlab]);
+
+    await expect(sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+      sessionId: session.sessionId,
+      orgId: 'org-1',
+    });
+  });
+});
 
 describe('ensureFactorySourceSession', () => {
   it('creates a source-control session on the requested branch', async () => {
