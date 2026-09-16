@@ -30,14 +30,17 @@ describe('createDockerRepoTemplate', () => {
     expect(dockerfile).toContain("git -C '/workspace/repo' checkout 'a1b2c3d'");
   });
 
-  it('injects a token via an ephemeral build arg and per-invocation auth header', () => {
+  it('clones in a throwaway stage and exposes the token only there', () => {
     const withToken = createDockerRepoTemplate({ repoUrl: 'https://example.com/app.git', tokenEnv: 'GH_TOKEN' });
-    // Declared as an ARG (no baked ENV) so RUN steps can read it at build time.
-    expect(withToken.dockerfile).toContain('ARG GH_TOKEN');
-    expect(withToken.dockerfile).toContain('http.extraheader');
-    // The token value itself is supplied at build time, never written into the Dockerfile.
-    expect(withToken.dockerfile).toContain('$GH_TOKEN');
-    expect(withToken.dockerfile).not.toMatch(/ENV .*GH_TOKEN/);
+    const dockerfile = withToken.dockerfile;
+    expect(dockerfile).toContain('AS mastra-secret-');
+    expect(dockerfile).toContain('ARG GH_TOKEN');
+    expect(dockerfile).toContain('http.extraheader');
+    expect(dockerfile).toContain('$GH_TOKEN');
+    expect(dockerfile).not.toMatch(/ENV .*GH_TOKEN/);
+    expect(dockerfile).toContain("COPY --from=mastra-secret-0 '/workspace/repo' '/workspace/repo'".replace(/'/g, ''));
+    // The final stage never declares the ARG, so nothing after the COPY can see it.
+    expect(dockerfile.split('\nFROM ')[1]).not.toContain('ARG GH_TOKEN');
   });
 
   it('runs setup commands and writes the completion marker last', () => {

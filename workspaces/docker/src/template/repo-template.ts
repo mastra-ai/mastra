@@ -8,9 +8,10 @@
  * the platform repo template). Booting many sandboxes from the resulting image
  * gives each one the same prepared checkout with an independent writable layer.
  *
- * A private-repo token is injected only as an ephemeral build arg — it is read
- * from the given `tokenEnv` name at build time and never becomes part of the
- * template's content identity.
+ * A private-repo token is read from `process.env[tokenEnv]` when `build()`
+ * runs. The clone happens in a throwaway build stage and only the checkout is
+ * copied into the image, so the token is neither part of the template's
+ * content identity nor present in the built image.
  *
  * @example
  * ```typescript
@@ -54,7 +55,8 @@ export interface DockerRepoTemplateOptions {
   baseImage?: string;
   /**
    * Name of an environment variable holding a GitHub token for private repos.
-   * Its value is injected as an ephemeral build arg (excluded from identity).
+   * Read from the building process's `process.env` at `build()` time; the
+   * value is never stored in the template or the built image.
    */
   tokenEnv?: string;
   /** Commands to run after the checkout (e.g. installing dependencies). */
@@ -73,23 +75,27 @@ export function createDockerRepoTemplate(options: DockerRepoTemplateOptions): Do
     dockerOptions: options.dockerOptions,
   });
 
-  // The token is provided as an ephemeral build arg so `git` can read it during
-  // build without it entering the template's content identity.
-  if (options.tokenEnv) {
-    template = template.setEnvs({ [options.tokenEnv]: `\${${options.tokenEnv}}` }, { ephemeral: true });
-  }
+  const clone = options.commit
+    ? [
+        // Full clone so an arbitrary commit is reachable, then pin to it.
+        repoCloneCommandFull({ cloneUrl: options.repoUrl, destination, tokenEnv: options.tokenEnv }),
+        `git -C ${shellQuote(destination)} checkout ${shellQuote(options.commit)}`,
+      ]
+    : [
+        repoCloneCommand({
+          cloneUrl: options.repoUrl,
+          destination,
+          branch: options.branch,
+          tokenEnv: options.tokenEnv,
+        }),
+      ];
 
-  if (options.commit) {
-    // Full clone so an arbitrary commit is reachable, then pin to it.
-    const clone = repoCloneCommandFull({ cloneUrl: options.repoUrl, destination, tokenEnv: options.tokenEnv });
-    template = template
-      .runCmd(clone)
-      .runCmd(`git -C ${shellQuote(destination)} checkout ${shellQuote(options.commit)}`);
-  } else {
-    template = template.runCmd(
-      repoCloneCommand({ cloneUrl: options.repoUrl, destination, branch: options.branch, tokenEnv: options.tokenEnv }),
-    );
-  }
+  // The clone always runs in a throwaway stage so a token (when present) is
+  // handed to `git` but only the checkout is copied into the template image.
+  template = template.runWithSecrets(clone, {
+    secrets: options.tokenEnv ? [options.tokenEnv] : [],
+    output: destination,
+  });
 
   template = template.setWorkdir(destination);
 

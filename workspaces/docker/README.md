@@ -62,7 +62,7 @@ const workspace = new Workspace({
 > starts, otherwise the mount fails. Provision it ahead of time (for example,
 > with a one-off container that creates `conversations/abc123` in the volume).
 
-## Templates
+### Templates
 
 `DockerTemplate` prepares a reusable environment once — a base image plus ordered
 setup commands, env vars, and package installs — then spawns multiple disposable
@@ -96,20 +96,35 @@ Builder methods (`from`, `setWorkdir`, `setEnvs`, `runCmd`, `aptInstall`,
 image tag is content-addressed (`mastra-template:<hash>`), so `build()` is
 idempotent and reuses an existing image unless you pass `{ force: true }`.
 
-Build-time secrets can be supplied as ephemeral env vars — passed only as build
-args and excluded from the template identity:
+Never put secrets in `setEnvs` — they are baked into the image. For a step that
+needs a credential, use `runWithSecrets`: the command runs in a throwaway build
+stage, the named variables are read from the building process's `process.env`
+at `build()` time, and only `output` is copied into the image. The built image's
+layers, config, and history never contain the values (the local daemon's build
+cache still does until you `docker image prune`).
 
 ```typescript
 const template = new DockerTemplate()
-  .setEnvs({ NPM_TOKEN: process.env.NPM_TOKEN! }, { ephemeral: true })
+  .runWithSecrets(
+    'git -c http.extraheader="AUTHORIZATION: bearer $GITHUB_TOKEN" clone https://github.com/acme/private.git /workspace/app',
+    {
+      secrets: ['GITHUB_TOKEN'],
+      output: '/workspace/app',
+    },
+  )
+  .setWorkdir('/workspace/app')
   .runCmd('npm ci');
 ```
 
-### Repository templates
+`dispose()` removes the image; Docker refuses while a container still references
+it, so destroy the template's sandboxes first.
+
+#### Repository templates
 
 `createDockerRepoTemplate` is a convenience that prepares a repository checkout
-at an exact commit (or branch) plus setup commands. A private-repo token is read
-from the named env var and injected as an ephemeral build arg:
+at an exact commit (or branch) plus setup commands. For private repos, name an
+environment variable holding a token; it is read at `build()` time and handled
+as described above:
 
 ```typescript
 import { createDockerRepoTemplate } from '@mastra/docker';

@@ -15,9 +15,18 @@ describe('synthesizeDockerfile', () => {
     expect(synthesizeDockerfile(def())).toBe('FROM node:22-slim\n');
   });
 
-  it('declares ephemeral build args after FROM', () => {
-    const dockerfile = synthesizeDockerfile(def({ buildArgNames: ['GIT_TOKEN'] }));
-    expect(dockerfile).toBe('FROM node:22-slim\nARG GIT_TOKEN\n');
+  it('renders runWithSecrets as a throwaway stage plus COPY --from', () => {
+    const dockerfile = synthesizeDockerfile(
+      def({
+        operations: [
+          { method: 'runCmd', args: ['echo before'] },
+          { method: 'runWithSecrets', args: ['fetch', { secrets: ['B', 'A'], output: '/out' }] },
+        ],
+      }),
+    );
+    expect(dockerfile).toBe(
+      'FROM node:22-slim AS mastra-secret-1\nARG A\nARG B\nRUN fetch\nFROM node:22-slim\nRUN echo before\nCOPY --from=mastra-secret-1 /out /out\n',
+    );
   });
 
   it('renders operations in order', () => {
@@ -74,10 +83,17 @@ describe('templateIdentity', () => {
     expect(a).not.toBe(b);
   });
 
-  it('ignores ephemeral build arg names (secrets do not change identity)', () => {
-    const a = templateIdentity(def());
-    const b = templateIdentity(def({ buildArgNames: ['GIT_TOKEN'] }));
+  it('canonicalizes env insertion order and secret name order', () => {
+    const a = templateIdentity(def({ operations: [{ method: 'setEnvs', args: [{ A: '1', B: '2' }] }] }));
+    const b = templateIdentity(def({ operations: [{ method: 'setEnvs', args: [{ B: '2', A: '1' }] }] }));
     expect(a).toBe(b);
+    const c = templateIdentity(
+      def({ operations: [{ method: 'runWithSecrets', args: ['x', { secrets: ['A', 'B'], output: '/o' }] }] }),
+    );
+    const d = templateIdentity(
+      def({ operations: [{ method: 'runWithSecrets', args: ['x', { secrets: ['B', 'A'], output: '/o' }] }] }),
+    );
+    expect(c).toBe(d);
   });
 
   it('produces a mastra-template tag', () => {

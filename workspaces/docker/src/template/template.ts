@@ -38,6 +38,8 @@ import {
   type DockerTemplateDefinition,
   type DockerTemplateOperation,
   type NpmInstallOptions,
+  type RunWithSecretsOptions,
+  secretNames,
   synthesizeDockerfile,
   templateImageTag,
 } from './dockerfile';
@@ -45,17 +47,6 @@ import {
 const MAX_OPERATIONS = 256;
 const MAX_STRING_LENGTH = 32 * 1024;
 const MAX_COLLECTION_ITEMS = 512;
-
-export interface SetEnvsOptions {
-  /**
-   * Keep these values out of the Dockerfile, the content identity, and the
-   * persisted image layers' `ENV`. They are supplied only as build args to the
-   * live `docker build`, so they are available to `RUN` steps but do not become
-   * part of the template's identity. Use for short-lived build-time secrets
-   * such as a repo access token.
-   */
-  ephemeral?: boolean;
-}
 
 export interface DockerTemplateOptions {
   /**
@@ -88,7 +79,6 @@ export interface DockerTemplateBuildResult {
 export class DockerTemplate {
   readonly #baseImage: string;
   readonly #operations: readonly DockerTemplateOperation[];
-  readonly #buildEnvs: Readonly<Record<string, string>>;
   readonly #dockerOptions: Docker.DockerOptions | undefined;
   #docker: Docker | undefined;
   #built = false;
@@ -96,7 +86,6 @@ export class DockerTemplate {
   constructor(options: DockerTemplateOptions = {}, state?: DockerTemplateState) {
     this.#baseImage = state ? state.baseImage : validateString(options.baseImage ?? 'node:22-slim', 'baseImage');
     this.#operations = state?.operations ?? [];
-    this.#buildEnvs = state?.buildEnvs ?? {};
     this.#dockerOptions = options.dockerOptions;
   }
 
@@ -106,7 +95,6 @@ export class DockerTemplate {
       {
         baseImage: next.baseImage ?? this.#baseImage,
         operations: next.operations ?? this.#operations,
-        buildEnvs: next.buildEnvs ?? this.#buildEnvs,
       },
     );
   }
@@ -129,22 +117,49 @@ export class DockerTemplate {
   }
 
   /**
-   * Set environment variables. By default they are baked into the image via
-   * `ENV` and participate in the template identity. With `{ ephemeral: true }`
-   * they are passed only as build args (available to `RUN` steps) and excluded
-   * from the identity — use for short-lived build-time secrets.
+   * Set environment variables. They are baked into the image via `ENV` and
+   * participate in the template identity, so never put secrets here — use
+   * {@link runWithSecrets} for anything that must not persist in the image.
    */
-  setEnvs(envs: Record<string, string>, options?: SetEnvsOptions): DockerTemplate {
-    const copy = validateStringRecord(envs, 'envs');
-    if (options?.ephemeral === true) {
-      return this.#clone({ buildEnvs: { ...this.#buildEnvs, ...copy } });
-    }
-    return this.#append({ method: 'setEnvs', args: [copy] });
+  setEnvs(envs: Record<string, string>): DockerTemplate {
+    return this.#append({ method: 'setEnvs', args: [validateStringRecord(envs, 'envs')] });
   }
 
   /** Run a command (or `&&`-joined list of commands) as a build step. */
   runCmd(command: string | string[]): DockerTemplate {
     return this.#append({ method: 'runCmd', args: [validateStringOrStrings(command, 'command')] });
+  }
+
+  /**
+   * Run a command that needs build-time secrets, without persisting them.
+   *
+   * The command runs in a throwaway build stage that starts from the base
+   * image (earlier steps of this template do not apply to it). The named
+   * secrets are read from `process.env` when `build()` runs and exposed to the
+   * command as environment variables. Only `output` is copied into the template
+   * image; the values never appear in the image's layers, config, or history.
+   *
+   * Secret values are still handed to the local daemon as build args, so the
+   * intermediate stage cached by the daemon can reveal them to anyone with
+   * daemon access. Run `docker image prune` to drop those intermediates.
+   */
+  runWithSecrets(command: string | string[], options: RunWithSecretsOptions): DockerTemplate {
+    if (!Array.isArray(options.secrets)) throw new TypeError('secrets must be an array of strings');
+    if (options.secrets.length > MAX_COLLECTION_ITEMS) {
+      throw new RangeError(`secrets cannot contain more than ${MAX_COLLECTION_ITEMS} items`);
+    }
+    const secrets = options.secrets.map(name => {
+      if (typeof name !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+        throw new TypeError(`secrets must be environment variable names, got ${JSON.stringify(name)}`);
+      }
+      return name;
+    });
+    const output = validateString(options.output, 'output');
+    if (!output.startsWith('/')) throw new TypeError('output must be an absolute path');
+    return this.#append({
+      method: 'runWithSecrets',
+      args: [validateStringOrStrings(command, 'command'), { secrets, output }],
+    });
   }
 
   /** Install apt packages. */
@@ -158,13 +173,9 @@ export class DockerTemplate {
     return this.#append({ method: 'npmInstall', args: [validated, options] });
   }
 
-  /** The resolved definition (base image + ordered operations + ephemeral arg names). */
+  /** The resolved definition (base image + ordered operations). */
   get definition(): DockerTemplateDefinition {
-    return {
-      baseImage: this.#baseImage,
-      operations: this.#operations,
-      buildArgNames: Object.keys(this.#buildEnvs).sort(),
-    };
+    return { baseImage: this.#baseImage, operations: this.#operations };
   }
 
   /** The synthesized Dockerfile for this template. */
@@ -189,10 +200,13 @@ export class DockerTemplate {
    * computed tag already exists locally and `force` is not set, returns
    * `ready` without rebuilding. Otherwise synthesizes a Dockerfile, runs
    * `docker build`, and surfaces any build-step failure as `status: 'failed'`.
+   *
+   * @throws if a secret named by `runWithSecrets` is not set in `process.env`.
    */
   async build(options: DockerTemplateBuildOptions = {}): Promise<DockerTemplateBuildResult> {
     const docker = this.#getDocker();
     const tag = this.templateId;
+    const buildargs = this.#resolveSecrets();
 
     if (!options.force) {
       try {
@@ -209,17 +223,29 @@ export class DockerTemplate {
     context.finalize();
 
     try {
-      const stream = await docker.buildImage(context, {
-        t: tag,
-        buildargs: Object.keys(this.#buildEnvs).length > 0 ? { ...this.#buildEnvs } : undefined,
-      });
+      const stream = await docker.buildImage(context, { t: tag, buildargs });
       await this.#followBuild(docker, stream);
     } catch (error) {
+      this.#built = false;
       return { status: 'failed', templateId: tag, error: error instanceof Error ? error.message : String(error) };
     }
 
     this.#built = true;
     return { status: 'ready', templateId: tag };
+  }
+
+  #resolveSecrets(): Record<string, string> | undefined {
+    const names = secretNames(this.definition);
+    if (names.length === 0) return undefined;
+    const resolved: Record<string, string> = {};
+    for (const name of names) {
+      const value = process.env[name];
+      if (value === undefined) {
+        throw new Error(`Docker template secret ${name} is not set in the environment`);
+      }
+      resolved[name] = value;
+    }
+    return resolved;
   }
 
   #followBuild(docker: Docker, stream: NodeJS.ReadableStream): Promise<void> {
@@ -264,7 +290,9 @@ export class DockerTemplate {
 
   /**
    * Remove the built image (`docker rmi`). Tolerant of an already-removed
-   * image. Independent of any sandbox created from this template.
+   * image. Independent of any sandbox created from this template, but the
+   * daemon refuses to remove an image that a container (running or stopped)
+   * still references, so destroy those sandboxes first.
    */
   async dispose(): Promise<void> {
     const docker = this.#getDocker();
@@ -280,7 +308,6 @@ export class DockerTemplate {
 interface DockerTemplateState {
   baseImage: string;
   operations: readonly DockerTemplateOperation[];
-  buildEnvs: Readonly<Record<string, string>>;
 }
 
 // =============================================================================

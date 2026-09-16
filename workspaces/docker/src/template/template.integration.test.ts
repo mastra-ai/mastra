@@ -8,6 +8,7 @@
  * - Docker daemon running locally
  */
 
+import Docker from 'dockerode';
 import { afterAll, describe, expect, it } from 'vitest';
 import { DockerSandbox } from '../sandbox';
 import { DockerTemplate } from './template';
@@ -71,4 +72,32 @@ describe('DockerTemplate (integration)', () => {
     expect(result.status).toBe('failed');
     expect(result.error).toBeTruthy();
   }, 300000);
+
+  it('exposes secrets to runWithSecrets steps without leaving them in the image', async () => {
+    const secret = `tok-${Date.now()}`;
+    process.env.MASTRA_TEST_SECRET = secret;
+    const template = new DockerTemplate({ baseImage: 'alpine:3.20' }).runWithSecrets(
+      'mkdir -p /out && echo "len=${#MASTRA_TEST_SECRET}" > /out/proof',
+      { secrets: ['MASTRA_TEST_SECRET'], output: '/out' },
+    );
+    templates.push(template);
+    try {
+      const result = await template.build({ force: true });
+      expect(result.status).toBe('ready');
+
+      const image = new Docker().getImage(template.templateId);
+      const [history, inspect] = await Promise.all([image.history(), image.inspect()]);
+      const text = JSON.stringify({ history, inspect });
+      expect(text).not.toContain(secret);
+      expect(text).not.toContain('MASTRA_TEST_SECRET');
+
+      const sandbox = await template.createSandbox();
+      sandboxes.push(sandbox);
+      await sandbox.start();
+      const { stdout } = await sandbox.executeCommand('cat /out/proof');
+      expect(stdout.trim()).toBe(`len=${secret.length}`);
+    } finally {
+      delete process.env.MASTRA_TEST_SECRET;
+    }
+  }, 120_000);
 });

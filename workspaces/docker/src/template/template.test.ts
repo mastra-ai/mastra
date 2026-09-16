@@ -66,13 +66,29 @@ describe('DockerTemplate builder', () => {
     expect(new DockerTemplate().from('ubuntu:24.04').dockerfile).toBe('FROM ubuntu:24.04\n');
   });
 
-  it('keeps ephemeral envs out of the Dockerfile and identity', () => {
-    const withSecret = new DockerTemplate().setEnvs({ GIT_TOKEN: 'secret' }, { ephemeral: true });
-    const plain = new DockerTemplate();
-    expect(withSecret.dockerfile).not.toContain('secret');
-    expect(withSecret.dockerfile).toContain('ARG GIT_TOKEN');
-    // Identity ignores ephemeral secrets.
-    expect(withSecret.templateId).toBe(plain.templateId);
+  it('runs secret steps in a throwaway stage and keeps values out of the Dockerfile', () => {
+    const template = new DockerTemplate().runWithSecrets('git clone x /workspace/app', {
+      secrets: ['GIT_TOKEN'],
+      output: '/workspace/app',
+    });
+    expect(template.dockerfile).toBe(
+      [
+        'FROM node:22-slim AS mastra-secret-0',
+        'ARG GIT_TOKEN',
+        'RUN git clone x /workspace/app',
+        'FROM node:22-slim',
+        'COPY --from=mastra-secret-0 /workspace/app /workspace/app',
+        '',
+      ].join('\n'),
+    );
+    // Only names participate in identity, so different credentials reuse the image.
+    expect(template.templateId).not.toBe(new DockerTemplate().templateId);
+  });
+
+  it('gives the same identity regardless of env insertion order', () => {
+    const a = new DockerTemplate().setEnvs({ A: '1', B: '2' });
+    const b = new DockerTemplate().setEnvs({ B: '2', A: '1' });
+    expect(a.templateId).toBe(b.templateId);
   });
 
   it('bakes non-ephemeral envs into ENV and identity', () => {
@@ -85,6 +101,8 @@ describe('DockerTemplate builder', () => {
     expect(() => new DockerTemplate().runCmd('')).toThrow(TypeError);
     expect(() => new DockerTemplate().setWorkdir(123 as never)).toThrow(TypeError);
     expect(() => new DockerTemplate().setEnvs(['x'] as never)).toThrow(TypeError);
+    expect(() => new DockerTemplate().runWithSecrets('x', { secrets: ['bad name'], output: '/o' })).toThrow(TypeError);
+    expect(() => new DockerTemplate().runWithSecrets('x', { secrets: [], output: 'relative' })).toThrow(TypeError);
   });
 });
 
@@ -113,12 +131,35 @@ describe('DockerTemplate.build', () => {
     expect(mockDocker.buildImage).toHaveBeenCalledTimes(1);
   });
 
-  it('passes ephemeral envs as build args', async () => {
+  it('resolves secrets from process.env at build time and passes them as build args', async () => {
     mockImage.inspect.mockRejectedValueOnce(new Error('no such image'));
-    const template = new DockerTemplate().setEnvs({ GIT_TOKEN: 'secret' }, { ephemeral: true }).runCmd('echo hi');
+    vi.stubEnv('GIT_TOKEN', 'resolved-secret');
+    const template = new DockerTemplate().runWithSecrets('echo hi', { secrets: ['GIT_TOKEN'], output: '/out' });
     await template.build();
     const [, opts] = mockDocker.buildImage.mock.calls[0];
-    expect(opts.buildargs).toEqual({ GIT_TOKEN: 'secret' });
+    expect(opts.buildargs).toEqual({ GIT_TOKEN: 'resolved-secret' });
+    vi.unstubAllEnvs();
+  });
+
+  it('throws before building when a secret is missing from the environment', async () => {
+    vi.stubEnv('GIT_TOKEN', undefined as never);
+    delete process.env.GIT_TOKEN;
+    const template = new DockerTemplate().runWithSecrets('echo hi', { secrets: ['GIT_TOKEN'], output: '/out' });
+    await expect(template.build()).rejects.toThrow(/GIT_TOKEN/);
+    expect(mockDocker.buildImage).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
+
+  it('does not report built after a failed build', async () => {
+    mockImage.inspect.mockRejectedValue(new Error('no such image'));
+    mockDocker.modem.followProgress.mockImplementationOnce((_stream, onFinish) =>
+      onFinish(null, [{ errorDetail: { message: 'command failed' }, error: 'command failed' }]),
+    );
+    const template = new DockerTemplate().runCmd('false');
+    expect((await template.build()).status).toBe('failed');
+    // A later createSandbox must build again rather than trust the failed attempt.
+    await template.createSandbox();
+    expect(mockDocker.buildImage).toHaveBeenCalledTimes(2);
   });
 
   it('surfaces build-step failures from the progress stream', async () => {

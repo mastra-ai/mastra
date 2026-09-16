@@ -23,7 +23,7 @@ const b = await template.createSandbox();
 await template.dispose(); // remove the built image when done
 ```
 
-- Immutable, chainable builder methods (`from`, `setWorkdir`, `setEnvs`, `runCmd`, `aptInstall`, `npmInstall`).
+- Immutable, chainable builder methods (`from`, `setWorkdir`, `setEnvs`, `runCmd`, `runWithSecrets`, `aptInstall`, `npmInstall`).
 - Content-addressed image tag (`mastra-template:<hash>`); `build()` is idempotent and reuses an existing image unless `{ force: true }` is passed.
-- Ephemeral build-time secrets via `setEnvs(..., { ephemeral: true })` — passed only as build args and excluded from the template identity.
-- `createDockerRepoTemplate` convenience for preparing a repository checkout at an exact commit (or branch) plus setup commands, with optional private-repo token injected as an ephemeral build arg.
+- Build-time secrets via `runWithSecrets(command, { secrets, output })` — the step runs in a throwaway build stage, the named variables are read from `process.env` at `build()` time, and only `output` is copied into the image, so secret values never land in the image's layers, config, or history.
+- `createDockerRepoTemplate` convenience for preparing a repository checkout at an exact commit (or branch) plus setup commands, with an optional private-repo token read from a named environment variable and handled the same way.

@@ -3,7 +3,6 @@ export {
   type DockerTemplateOptions,
   type DockerTemplateBuildOptions,
   type DockerTemplateBuildResult,
-  type SetEnvsOptions,
 } from './template';
 export { createDockerRepoTemplate, type DockerRepoTemplateOptions } from './repo-template';
 export {
@@ -11,6 +10,8 @@ export {
   type DockerTemplateDefinition,
   type DockerTemplateOperation,
   type NpmInstallOptions,
+  type RunWithSecretsOptions,
+  secretNames,
   synthesizeDockerfile,
   templateIdentity,
   templateImageTag,

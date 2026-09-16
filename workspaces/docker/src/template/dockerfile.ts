@@ -2,10 +2,13 @@
  * Pure Dockerfile synthesis and content-addressed identity for DockerTemplate.
  *
  * A `DockerTemplate` records an ordered list of operations (setWorkdir, setEnvs,
- * runCmd, aptInstall, npmInstall) over a base image. This module turns that
- * ordered list into a deterministic Dockerfile string and a stable content hash.
- * It performs no I/O, so it is fully unit-testable without a Docker daemon.
+ * runCmd, runWithSecrets, aptInstall, npmInstall) over a base image. This module
+ * turns that ordered list into a deterministic Dockerfile string and a stable
+ * content hash. It performs no I/O, so it is fully unit-testable without a
+ * Docker daemon.
  */
+
+import { createHash } from 'node:crypto';
 
 // =============================================================================
 // Operations
@@ -25,23 +28,33 @@ export interface NpmInstallOptions {
   dev?: boolean;
 }
 
+export interface RunWithSecretsOptions {
+  /**
+   * Names of environment variables whose values are read from the building
+   * process's `process.env` at `build()` time and exposed to the command. Only
+   * the names participate in the template identity.
+   */
+  secrets: string[];
+  /**
+   * Absolute path produced by the command. Only this path is copied into the
+   * template image; everything else the command does (including the secret
+   * values) stays in a throwaway build stage.
+   */
+  output: string;
+}
+
 export type DockerTemplateOperation =
   | { method: 'setWorkdir'; args: [string] }
   | { method: 'setEnvs'; args: [Record<string, string>] }
   | { method: 'runCmd'; args: [string | string[]] }
+  | { method: 'runWithSecrets'; args: [string | string[], RunWithSecretsOptions] }
   | { method: 'aptInstall'; args: [string | string[], AptInstallOptions?] }
   | { method: 'npmInstall'; args: [(string | string[])?, NpmInstallOptions?] };
 
-/**
- * A fully-resolved template definition: the base image, the ordered operations
- * baked into image layers, and the names of build-time-only (ephemeral) args
- * that are excluded from the content identity.
- */
+/** A fully-resolved template definition: the base image and the ordered operations. */
 export interface DockerTemplateDefinition {
   baseImage: string;
   operations: readonly DockerTemplateOperation[];
-  /** Names of ephemeral build args, declared as `ARG` so RUN steps can read them. */
-  buildArgNames: readonly string[];
 }
 
 // =============================================================================
@@ -52,15 +65,15 @@ function toCommandList(command: string | string[]): string[] {
   return Array.isArray(command) ? command : [command];
 }
 
+function sortedEntries(record: Record<string, string>): Array<[string, string]> {
+  return Object.entries(record).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+}
+
 function renderEnvLine(envs: Record<string, string>): string | undefined {
-  const pairs = Object.entries(envs);
+  const pairs = sortedEntries(envs);
   if (pairs.length === 0) return undefined;
   // Deterministic order so identical envs always render identically.
-  const rendered = pairs
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
-    .join(' ');
-  return `ENV ${rendered}`;
+  return `ENV ${pairs.map(([key, value]) => `${key}=${JSON.stringify(value)}`).join(' ')}`;
 }
 
 function renderAptInstall(packages: string | string[], options?: AptInstallOptions): string {
@@ -85,65 +98,102 @@ function renderNpmInstall(packages?: string | string[], options?: NpmInstallOpti
   return `RUN npm install${flagStr} ${pkgs}`;
 }
 
+function secretStageName(index: number): string {
+  return `mastra-secret-${index}`;
+}
+
 /**
- * Render a deterministic Dockerfile from a template definition. Operations are
- * emitted in order; ephemeral build args are declared as `ARG` right after
- * `FROM` so subsequent `RUN` steps can reference them.
+ * Render a deterministic Dockerfile from a template definition.
+ *
+ * Every `runWithSecrets` operation becomes its own throwaway stage that starts
+ * from the base image, declares the secret names as `ARG`s, and runs the
+ * command. The final stage then `COPY --from`s only the declared output path.
+ * Build args are recorded in the history of the layers they touch, so keeping
+ * them in a stage the final image never inherits is what keeps the values out
+ * of the template image.
  */
 export function synthesizeDockerfile(definition: DockerTemplateDefinition): string {
-  const lines: string[] = [`FROM ${definition.baseImage}`];
+  const stages: string[] = [];
+  const main: string[] = [`FROM ${definition.baseImage}`];
 
-  for (const name of definition.buildArgNames) {
-    lines.push(`ARG ${name}`);
-  }
-
-  for (const operation of definition.operations) {
+  definition.operations.forEach((operation, index) => {
     switch (operation.method) {
       case 'setWorkdir':
-        lines.push(`WORKDIR ${operation.args[0]}`);
+        main.push(`WORKDIR ${operation.args[0]}`);
         break;
       case 'setEnvs': {
         const line = renderEnvLine(operation.args[0]);
-        if (line) lines.push(line);
+        if (line) main.push(line);
         break;
       }
-      case 'runCmd': {
-        const commands = toCommandList(operation.args[0]);
-        lines.push(`RUN ${commands.join(' && ')}`);
+      case 'runCmd':
+        main.push(`RUN ${toCommandList(operation.args[0]).join(' && ')}`);
+        break;
+      case 'runWithSecrets': {
+        const [command, { secrets, output }] = operation.args;
+        const stage = secretStageName(index);
+        stages.push(
+          `FROM ${definition.baseImage} AS ${stage}`,
+          ...[...secrets].sort().map(name => `ARG ${name}`),
+          `RUN ${toCommandList(command).join(' && ')}`,
+        );
+        main.push(`COPY --from=${stage} ${output} ${output}`);
         break;
       }
       case 'aptInstall':
-        lines.push(renderAptInstall(operation.args[0], operation.args[1]));
+        main.push(renderAptInstall(operation.args[0], operation.args[1]));
         break;
       case 'npmInstall':
-        lines.push(renderNpmInstall(operation.args[0], operation.args[1]));
+        main.push(renderNpmInstall(operation.args[0], operation.args[1]));
         break;
     }
-  }
+  });
 
-  return `${lines.join('\n')}\n`;
+  return `${[...stages, ...main].join('\n')}\n`;
+}
+
+/** Names of every secret referenced by `runWithSecrets` operations, deduplicated and sorted. */
+export function secretNames(definition: DockerTemplateDefinition): string[] {
+  const names = new Set<string>();
+  for (const operation of definition.operations) {
+    if (operation.method === 'runWithSecrets') {
+      for (const name of operation.args[1].secrets) names.add(name);
+    }
+  }
+  return [...names].sort();
 }
 
 // =============================================================================
 // Content-addressed identity
 // =============================================================================
 
-import { createHash } from 'node:crypto';
-
 /** Prefix for template image tags built locally. */
 export const TEMPLATE_IMAGE_REPO = 'mastra-template';
 
+function canonicalOperation(operation: DockerTemplateOperation): unknown {
+  switch (operation.method) {
+    case 'setEnvs':
+      return { method: 'setEnvs', args: [sortedEntries(operation.args[0])] };
+    case 'runWithSecrets': {
+      const [command, { secrets, output }] = operation.args;
+      return { method: 'runWithSecrets', args: [command, { secrets: [...secrets].sort(), output }] };
+    }
+    default:
+      return operation;
+  }
+}
+
 /**
- * Stable content hash over the base image and ordered operations. Ephemeral
- * build args are intentionally excluded (only their values would be secret, and
- * they never enter the definition), so the same definition with different
- * secrets resolves to the same image tag.
+ * Stable content hash over the base image and ordered operations. Env records
+ * and secret name lists are canonicalized so insertion order does not change
+ * the identity. Secret *values* never enter the definition, so the same
+ * definition built with different credentials resolves to the same image tag.
  */
 export function templateIdentity(definition: DockerTemplateDefinition): string {
   const canonical = JSON.stringify({
     schemaVersion: 1,
     baseImage: definition.baseImage,
-    operations: definition.operations,
+    operations: definition.operations.map(canonicalOperation),
   });
   return createHash('sha256').update(canonical).digest('hex').slice(0, 24);
 }
