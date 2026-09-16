@@ -56,6 +56,7 @@ export function TimelineNameCol({
     <div
       ref={rowRef}
       aria-label={`View details for span ${span.name}`}
+      aria-selected={isSelected}
       // The whole row selects the span; the name button is the keyboard target and its click bubbles here.
       onClick={() => onSpanClick?.(span.id)}
       className={cn(
