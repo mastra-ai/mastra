@@ -781,7 +781,11 @@ export class GithubIntegration implements FactoryIntegration {
       const pullRequests = await Promise.all(
         data.items
           .filter(
-            withinFeed(input.sourceId, { kind: 'pr', state: input.state ?? 'open', includeDrafts: input.includeDrafts }),
+            withinFeed(input.sourceId, {
+              kind: 'pr',
+              state: input.state ?? 'open',
+              includeDrafts: input.includeDrafts,
+            }),
           )
           .map(async hit => parsePullRequest((await octokit.pulls.get({ ...parts, pull_number: hit.number })).data)),
       );
