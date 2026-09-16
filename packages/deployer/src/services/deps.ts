@@ -12,6 +12,12 @@ import { createChildProcessLogger } from '../deploy/log.js';
 
 type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
 
+interface LockFileInfo {
+  path: string;
+  filename: string;
+  packageManager: PackageManager;
+}
+
 interface ArchitectureOptions {
   os?: string[];
   cpu?: string[];
@@ -169,19 +175,27 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
 export class Deps extends MastraBase {
   private packageManager: PackageManager;
   private rootDir: string;
+  private lockFile: LockFileInfo | null;
 
   constructor(rootDir = process.cwd()) {
     super({ component: 'DEPLOYER', name: 'DEPS' });
 
     this.rootDir = rootDir;
-    this.packageManager = this.getPackageManager();
+    this.lockFile = this.findLockFile(rootDir);
+    this.packageManager = this.lockFile?.packageManager ?? 'npm';
   }
 
-  private findLockFile(dir: string): string | null {
-    const lockFiles = ['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'bun.lock'];
-    for (const file of lockFiles) {
-      if (fs.existsSync(path.join(dir, file))) {
-        return file;
+  private findLockFile(dir: string): LockFileInfo | null {
+    const lockFiles: Array<{ filename: string; packageManager: PackageManager }> = [
+      { filename: 'pnpm-lock.yaml', packageManager: 'pnpm' },
+      { filename: 'package-lock.json', packageManager: 'npm' },
+      { filename: 'yarn.lock', packageManager: 'yarn' },
+      { filename: 'bun.lock', packageManager: 'bun' },
+    ];
+    for (const lockFile of lockFiles) {
+      const lockFilePath = path.join(dir, lockFile.filename);
+      if (fs.existsSync(lockFilePath)) {
+        return { ...lockFile, path: lockFilePath };
       }
     }
     const parentDir = path.resolve(dir, '..');
@@ -189,22 +203,6 @@ export class Deps extends MastraBase {
       return this.findLockFile(parentDir);
     }
     return null;
-  }
-
-  private getPackageManager(): PackageManager {
-    const lockFile = this.findLockFile(this.rootDir);
-    switch (lockFile) {
-      case 'pnpm-lock.yaml':
-        return 'pnpm';
-      case 'package-lock.json':
-        return 'npm';
-      case 'yarn.lock':
-        return 'yarn';
-      case 'bun.lock':
-        return 'bun';
-      default:
-        return 'npm';
-    }
   }
 
   public getWorkspaceDependencyPath({ pkgName, version }: { pkgName: string; version: string }) {
@@ -297,24 +295,32 @@ export class Deps extends MastraBase {
    * Depending on whether we want to install or add a package, this function returns the appropriate commands.
    * All package managers support both commands (e.g. npm install has an alias on "add")
    */
-  private getPackageManagerCommand(pm: PackageManager, type: 'install' | 'add'): string {
+  private getPackageManagerCommand(pm: PackageManager, type: 'install' | 'add', lockfileOnly = false): string {
     const cmd = type === 'install' ? 'install' : 'add';
+    const lockfileFlag =
+      type === 'install' && lockfileOnly
+        ? pm === 'npm'
+          ? ' --package-lock-only'
+          : pm === 'yarn'
+            ? ' --mode=update-lockfile'
+            : ' --lockfile-only'
+        : '';
 
     switch (pm) {
       case 'npm':
-        return `${cmd} --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false`;
+        return `${cmd}${lockfileFlag} --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false`;
       case 'yarn':
-        return `${cmd}`;
+        return `${cmd}${lockfileFlag}`;
       case 'pnpm':
-        return cmd === 'install' ? `${cmd} --loglevel=error` : `${cmd} --loglevel=error`;
+        return `${cmd}${lockfileFlag} --loglevel=error`;
       case 'bun':
-        return cmd;
+        return `${cmd}${lockfileFlag}`;
       default:
-        return cmd;
+        return `${cmd}${lockfileFlag}`;
     }
   }
 
-  public async install({
+  public async prepareLockfile({
     dir = this.rootDir,
     architecture,
     pnpmOverrides,
@@ -325,8 +331,37 @@ export class Deps extends MastraBase {
     pnpmOverrides?: Record<string, string>;
     pnpmNodeLinker?: 'hoisted';
   } = {}) {
+    if (this.lockFile) {
+      const destination = path.join(dir, this.lockFile.filename);
+      if (path.resolve(this.lockFile.path) !== path.resolve(destination)) {
+        await fsPromises.copyFile(this.lockFile.path, destination);
+      }
+    }
+
+    return this.install({
+      dir,
+      architecture,
+      pnpmOverrides,
+      pnpmNodeLinker,
+      lockfileOnly: true,
+    });
+  }
+
+  public async install({
+    dir = this.rootDir,
+    architecture,
+    pnpmOverrides,
+    pnpmNodeLinker,
+    lockfileOnly = false,
+  }: {
+    dir?: string;
+    architecture?: ArchitectureOptions;
+    pnpmOverrides?: Record<string, string>;
+    pnpmNodeLinker?: 'hoisted';
+    lockfileOnly?: boolean;
+  } = {}) {
     const pm = this.packageManager;
-    const installCommand = this.getPackageManagerCommand(pm, 'install');
+    const installCommand = this.getPackageManagerCommand(pm, 'install', lockfileOnly);
     let args: string[] = [];
 
     switch (pm) {

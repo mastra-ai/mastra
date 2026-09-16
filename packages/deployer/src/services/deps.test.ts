@@ -1,6 +1,28 @@
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { MastraError } from '@mastra/core/error';
-import { describe, expect, it } from 'vitest';
-import { copyPnpmWorkspaceSettings, getPnpmIgnoredBuildPackages } from './deps';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { copyPnpmWorkspaceSettings, DepsService, getPnpmIgnoredBuildPackages } from './deps';
+
+const { runChildProcess } = vi.hoisted(() => ({
+  runChildProcess: vi.fn(),
+}));
+
+vi.mock('../deploy/log.js', () => ({
+  createChildProcessLogger: () => runChildProcess,
+}));
+
+const tempDirs: string[] = [];
+
+beforeEach(() => {
+  runChildProcess.mockReset();
+  runChildProcess.mockResolvedValue({ success: true, stdout: '', stderr: '' });
+});
+
+afterEach(async () => {
+  await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
+});
 
 describe('getPnpmIgnoredBuildPackages', () => {
   it('extracts package names from pnpm ignored-build diagnostics', () => {
@@ -70,11 +92,11 @@ describe('copyPnpmWorkspaceSettings', () => {
 
   it('uses requested architecture over source supportedArchitectures', () => {
     const output = copyPnpmWorkspaceSettings(
-      `packages:\n  - packages/*\n\nsupportedArchitectures:\n  os: [\"linux\"]\n`,
+      `packages:\n  - packages/*\n\nsupportedArchitectures:\n  os: ["linux"]\n`,
       { os: ['darwin'], cpu: ['arm64'] },
     );
 
-    expect(output).toBe(`packages:\n  - '.'\n\nsupportedArchitectures:\n  os: [\"darwin\"]\n  cpu: [\"arm64\"]\n`);
+    expect(output).toBe(`packages:\n  - '.'\n\nsupportedArchitectures:\n  os: ["darwin"]\n  cpu: ["arm64"]\n`);
   });
 
   it('writes workspace dependency overrides for pnpm installs', () => {
@@ -85,7 +107,7 @@ describe('copyPnpmWorkspaceSettings', () => {
     });
 
     expect(output).toBe(
-      `packages:\n  - '.'\n\noverrides:\n  \"@inner/transitive-c\": \"file:./workspace-module/inner-transitive-c-1.0.0.tgz\"\n`,
+      `packages:\n  - '.'\n\noverrides:\n  "@inner/transitive-c": "file:./workspace-module/inner-transitive-c-1.0.0.tgz"\n`,
     );
   });
 
@@ -93,5 +115,89 @@ describe('copyPnpmWorkspaceSettings', () => {
     expect(copyPnpmWorkspaceSettings('', { pnpmNodeLinker: 'hoisted' })).toBe(
       `packages:\n  - '.'\n\nnodeLinker: hoisted\n`,
     );
+  });
+});
+
+describe('DepsService lockfile preparation', () => {
+  const managers = [
+    {
+      lockfile: 'package-lock.json',
+      lockfileOnlyCommand:
+        'npm install --package-lock-only --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false',
+      installCommand:
+        'npm install --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false',
+    },
+    {
+      lockfile: 'pnpm-lock.yaml',
+      lockfileOnlyCommand: 'pnpm install --lockfile-only --loglevel=error',
+      installCommand: 'pnpm install --loglevel=error',
+    },
+    {
+      lockfile: 'yarn.lock',
+      lockfileOnlyCommand: 'yarn install --mode=update-lockfile',
+      installCommand: 'yarn install',
+    },
+    {
+      lockfile: 'bun.lock',
+      lockfileOnlyCommand: 'bun install --lockfile-only',
+      installCommand: 'bun install',
+    },
+  ] as const;
+
+  it.each(managers)(
+    'copies an upward-discovered $lockfile and reconciles it before installing',
+    async ({ lockfile, lockfileOnlyCommand, installCommand }) => {
+      const root = await mkdtemp(join(tmpdir(), 'mastra-deps-lockfile-'));
+      tempDirs.push(root);
+      const appDir = join(root, 'apps', 'api');
+      const outputDir = join(root, 'output');
+      await mkdir(appDir, { recursive: true });
+      await mkdir(outputDir, { recursive: true });
+      await writeFile(join(root, lockfile), `source ${lockfile}`, 'utf-8');
+      await writeFile(join(outputDir, 'package.json'), '{"dependencies":{}}', 'utf-8');
+
+      const deps = new DepsService(appDir);
+      await deps.prepareLockfile({ dir: outputDir });
+      await deps.install({ dir: outputDir });
+
+      expect(await readFile(join(outputDir, lockfile), 'utf-8')).toBe(`source ${lockfile}`);
+      expect(runChildProcess.mock.calls.map(([options]) => options.cmd)).toEqual([lockfileOnlyCommand, installCommand]);
+      expect(runChildProcess.mock.calls.map(([options]) => options.args)).toEqual([[], []]);
+    },
+  );
+
+  it('uses npm lockfile generation when no source lockfile exists', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-deps-no-lockfile-'));
+    tempDirs.push(root);
+    const appDir = join(root, 'app');
+    const outputDir = join(root, 'output');
+    await mkdir(appDir, { recursive: true });
+    await mkdir(outputDir, { recursive: true });
+    await writeFile(join(outputDir, 'package.json'), '{"dependencies":{}}', 'utf-8');
+
+    const deps = new DepsService(appDir);
+    await deps.prepareLockfile({ dir: outputDir });
+
+    expect(runChildProcess).toHaveBeenCalledTimes(1);
+    expect(runChildProcess.mock.calls[0]?.[0]).toMatchObject({
+      cmd: 'npm install --package-lock-only --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false',
+      args: [],
+    });
+  });
+
+  it('preserves lockfile precedence when multiple formats exist together', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-deps-lockfile-precedence-'));
+    tempDirs.push(root);
+    const outputDir = join(root, 'output');
+    await mkdir(outputDir, { recursive: true });
+    await writeFile(join(root, 'pnpm-lock.yaml'), 'pnpm source', 'utf-8');
+    await writeFile(join(root, 'package-lock.json'), 'npm source', 'utf-8');
+
+    const deps = new DepsService(root);
+    await deps.prepareLockfile({ dir: outputDir });
+
+    expect(await readFile(join(outputDir, 'pnpm-lock.yaml'), 'utf-8')).toBe('pnpm source');
+    await expect(readFile(join(outputDir, 'package-lock.json'), 'utf-8')).rejects.toThrow();
+    expect(runChildProcess.mock.calls[0]?.[0].cmd).toBe('pnpm install --lockfile-only --loglevel=error');
   });
 });

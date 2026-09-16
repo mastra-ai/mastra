@@ -1,9 +1,23 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SourceDependencyConstraints } from './index';
 import { Bundler, applySourceDependencyRange, getSourceDependencyConstraints, isRegistryVersionSpec } from './index';
+
+const depsMocks = vi.hoisted(() => ({
+  setLogger: vi.fn(),
+  prepareLockfile: vi.fn(),
+  install: vi.fn(),
+}));
+
+vi.mock('../services/deps', () => ({
+  DepsService: class {
+    __setLogger = depsMocks.setLogger;
+    prepareLockfile = depsMocks.prepareLockfile;
+    install = depsMocks.install;
+  },
+}));
 
 const tempDirs: string[] = [];
 
@@ -12,6 +26,10 @@ class TestBundler extends Bundler {
 
   getEnvFiles(): Promise<string[]> {
     return Promise.resolve([]);
+  }
+
+  installForTest(outputDirectory: string, rootDir: string, pnpmOverrides?: Record<string, string>) {
+    return this.installDependencies(outputDirectory, rootDir, pnpmOverrides);
   }
 }
 
@@ -67,7 +85,30 @@ const createSourceApp = async ({
 };
 
 afterEach(async () => {
+  vi.clearAllMocks();
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
+});
+
+describe('Bundler.installDependencies', () => {
+  it('prepares the selected lockfile before installing packed workspace dependencies', async () => {
+    const bundler = new TestBundler('Test');
+    const pnpmOverrides = {
+      '@inner/transitive-c': 'file:./workspace-module/inner-transitive-c-1.0.0.tgz',
+    };
+
+    await bundler.installForTest('/tmp/build', '/tmp/source', pnpmOverrides);
+
+    const expectedOptions = {
+      dir: join('/tmp/build', 'output'),
+      pnpmOverrides,
+      pnpmNodeLinker: undefined,
+    };
+    expect(depsMocks.prepareLockfile).toHaveBeenCalledWith(expectedOptions);
+    expect(depsMocks.install).toHaveBeenCalledWith(expectedOptions);
+    expect(depsMocks.prepareLockfile.mock.invocationCallOrder[0]).toBeLessThan(
+      depsMocks.install.mock.invocationCallOrder[0]!,
+    );
+  });
 });
 
 describe('Bundler.listToolsInputOptions', () => {
