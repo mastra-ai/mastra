@@ -64,6 +64,12 @@ export type ProcessorArgs = {
   };
   forEachIndex?: number;
   nestedRunId?: string; // runId of nested workflow when reporting back to parent
+  /**
+   * Resource the run is attributed to. Carried on the `workflow.start` event
+   * for schedule-fired runs (which have no pre-existing snapshot to derive it
+   * from) so the persisted run snapshot records the schedule's `resourceId`.
+   */
+  resourceId?: string;
 };
 
 export type ParentWorkflow = {
@@ -551,10 +557,13 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (parentWorkflow?.runId) {
       this.parentChildRelationships.set(runId, parentWorkflow.runId);
     }
-    // Preserve resourceId from existing snapshot if present
+    // Preserve resourceId from an existing snapshot if present (resume /
+    // timeTravel / restart keep their original attribution); otherwise fall
+    // back to the resourceId carried on the event, which is how schedule-fired
+    // runs — that have no pre-existing snapshot — get attributed.
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
     const existingRun = await workflowsStore?.getWorkflowRunById({ runId, workflowName: workflow.id });
-    const resourceId = existingRun?.resourceId;
+    const resourceId = existingRun?.resourceId ?? (arguments[0] as any).resourceId;
 
     // Check shouldPersistSnapshot option - default to true if not specified
     // This is particularly important for resume: if shouldPersist returns false for 'running',

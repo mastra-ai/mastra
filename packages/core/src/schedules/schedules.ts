@@ -100,6 +100,8 @@ export interface WorkflowSchedule {
   inputData?: unknown;
   initialState?: unknown;
   requestContext?: Record<string, unknown>;
+  /** Resource that runs fired by this schedule are attributed to. */
+  resourceId?: string;
   metadata?: Record<string, unknown>;
   createdAt: number;
   updatedAt: number;
@@ -156,6 +158,8 @@ export interface CreateWorkflowScheduleInput {
   inputData?: unknown;
   initialState?: unknown;
   requestContext?: Record<string, unknown>;
+  /** Resource that runs fired by this schedule are attributed to. */
+  resourceId?: string;
   metadata?: Record<string, unknown>;
   /** Schedule lifecycle status. Defaults to `'active'`. */
   status?: 'active' | 'paused';
@@ -190,6 +194,8 @@ export interface UpdateWorkflowScheduleInput {
   inputData?: unknown;
   initialState?: unknown;
   requestContext?: Record<string, unknown>;
+  /** Resource that runs fired by this schedule are attributed to. */
+  resourceId?: string;
   metadata?: Record<string, unknown>;
   status?: 'active' | 'paused';
 }
@@ -373,6 +379,7 @@ export class Schedules {
       ...(input.inputData !== undefined ? { inputData: input.inputData } : {}),
       ...(input.initialState !== undefined ? { initialState: input.initialState } : {}),
       ...(input.requestContext !== undefined ? { requestContext: input.requestContext } : {}),
+      ...(input.resourceId !== undefined ? { resourceId: input.resourceId } : {}),
     };
 
     const schedule: Schedule = {
@@ -546,6 +553,7 @@ export class Schedules {
       ...(wfPatch.inputData !== undefined ? { inputData: wfPatch.inputData } : {}),
       ...(wfPatch.initialState !== undefined ? { initialState: wfPatch.initialState } : {}),
       ...(wfPatch.requestContext !== undefined ? { requestContext: wfPatch.requestContext } : {}),
+      ...(wfPatch.resourceId !== undefined ? { resourceId: wfPatch.resourceId } : {}),
     };
   }
 
@@ -626,7 +634,7 @@ export class Schedules {
     // processor consumes `workflow.start` and reuses the claim id as the run
     // id, so record the trigger row here (the scheduler is not involved in
     // manual fires).
-    const { workflowId, inputData, initialState, requestContext } = existing.target;
+    const { workflowId, inputData, initialState, requestContext, resourceId } = existing.target;
     const claimId = `sched_${existing.id}_${now}`;
     await this.#mastra.pubsub.publish(TOPIC_WORKFLOWS, {
       type: 'workflow.start',
@@ -637,6 +645,7 @@ export class Schedules {
         prevResult: { status: 'success', output: inputData ?? {} },
         requestContext: requestContext ?? {},
         initialState: initialState ?? {},
+        ...(resourceId ? { resourceId } : {}),
       },
     });
     const store = await this.#getStore();
@@ -709,6 +718,7 @@ export function toWorkflowSchedule(schedule: Schedule): WorkflowSchedule | null 
     ...(target.inputData !== undefined ? { inputData: target.inputData } : {}),
     ...(target.initialState !== undefined ? { initialState: target.initialState } : {}),
     ...(target.requestContext !== undefined ? { requestContext: target.requestContext } : {}),
+    ...(target.resourceId ? { resourceId: target.resourceId } : {}),
     ...(schedule.metadata ? { metadata: schedule.metadata } : {}),
     createdAt: schedule.createdAt,
     updatedAt: schedule.updatedAt,
