@@ -2835,9 +2835,6 @@ export class AgentThreadStreamRuntime {
     const deferredRunsByStreamId = new Map<string, AgentThreadRunRecord<any>>();
     const remoteRunLeaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
     let currentReader: ReadableStreamDefaultReader<any> | null = null;
-    let activeReaderRunId: string | null = null;
-    let activeReaderStreamId: string | null = null;
-    let currentRunRequestContext: RequestContext | undefined;
     let cancelledByAbort = false;
 
     const markActiveIfLive = async (runId: string, streamId: string, local: boolean) => {
@@ -2946,34 +2943,42 @@ export class AgentThreadStreamRuntime {
       );
     };
 
-    const isCurrentToolGatePending = async (toolCallId: string): Promise<boolean> => {
-      const run = currentRunRecord;
-      if (!run || done) return false;
-      if (localStreamIds.has(run.streamId)) {
-        const suspension = state.suspensionMetadataByRunId.get(run.runId)?.get(toolCallId);
-        return (
-          suspension?.streamId === run.streamId &&
-          this.getResumableThreadRun({ ...options, runId: run.runId, toolCallId }, resolvedPubSub) !== undefined
-        );
-      }
+    const isLocalToolGatePending = (run: AgentThreadRunRecord<OUTPUT>, toolCallId: string): boolean => {
+      const suspension = state.suspensionMetadataByRunId.get(run.runId)?.get(toolCallId);
+      if (suspension?.streamId !== run.streamId) return false;
 
-      await caughtUp.promise;
-      if (done || !toolGates.hasPendingGate(run.runId, run.streamId, toolCallId)) return false;
-      await run.output._waitUntilFinished();
-      if (done || !toolGates.hasPendingGate(run.runId, run.streamId, toolCallId)) return false;
+      return this.getResumableThreadRun({ ...options, runId: run.runId, toolCallId }, resolvedPubSub) !== undefined;
+    };
 
+    const hasSuspendedToolCall = async (runId: string, toolCallId: string): Promise<boolean> => {
       try {
         const { runs } = await agent.listSuspendedRuns(options);
-        if (done || !toolGates.hasPendingGate(run.runId, run.streamId, toolCallId)) return false;
         return runs.some(
-          suspendedRun =>
-            suspendedRun.runId === run.runId &&
-            suspendedRun.toolCalls.some(toolCall => toolCall.toolCallId === toolCallId),
+          run => run.runId === runId && run.toolCalls.some(toolCall => toolCall.toolCallId === toolCallId),
         );
       } catch (error) {
         if (error instanceof MastraError && error.id === 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') return false;
         throw error;
       }
+    };
+
+    const isRemoteToolGateUnanswered = (run: AgentThreadRunRecord<OUTPUT>, toolCallId: string): boolean => {
+      return !done && toolGates.hasPendingGate(run.runId, run.streamId, toolCallId);
+    };
+
+    const isCurrentToolGatePending = async (toolCallId: string): Promise<boolean> => {
+      const run = currentRunRecord;
+      if (!run || done) return false;
+      if (localStreamIds.has(run.streamId)) return isLocalToolGatePending(run, toolCallId);
+
+      await caughtUp.promise;
+      if (!isRemoteToolGateUnanswered(run, toolCallId)) return false;
+
+      await run.output._waitUntilFinished();
+      if (!isRemoteToolGateUnanswered(run, toolCallId)) return false;
+
+      const persisted = await hasSuspendedToolCall(run.runId, toolCallId);
+      return persisted && isRemoteToolGateUnanswered(run, toolCallId);
     };
 
     const handleEvent = async (event: Parameters<EventCallback>[0]) => {
@@ -3128,7 +3133,7 @@ export class AgentThreadStreamRuntime {
           remoteRuns.delete(data.streamId);
         }
         seenStreamIds.delete(data.streamId);
-        if (activeReaderRunId === data.runId && activeReaderStreamId === data.streamId && currentReader) {
+        if (currentRunRecord?.runId === data.runId && currentRunRecord.streamId === data.streamId && currentReader) {
           try {
             void currentReader.cancel();
           } catch {}
@@ -3179,7 +3184,7 @@ export class AgentThreadStreamRuntime {
         }
         // When a run is aborted, cancel the current subscriber stream reader so
         // the generator's inner loop unblocks and can yield the synthetic abort.
-        if (data.type === 'run-aborted' && activeReaderRunId === data.runId && currentReader) {
+        if (data.type === 'run-aborted' && currentRunRecord?.runId === data.runId && currentReader) {
           cancelledByAbort = true;
           try {
             void currentReader.cancel();
@@ -3241,7 +3246,7 @@ export class AgentThreadStreamRuntime {
 
     return {
       activeRunId,
-      __getCurrentRunRequestContext: () => currentRunRequestContext,
+      __getCurrentRunRequestContext: () => currentRunRecord?.streamOptions.requestContext,
       __isCurrentToolGatePending: isCurrentToolGatePending,
       abort: () => this.abortThread(options, resolvedPubSub),
       unsubscribe,
@@ -3260,9 +3265,6 @@ export class AgentThreadStreamRuntime {
             const subscriberStream = run.createSubscriberStream?.() ?? run.output.fullStream;
             const reader = subscriberStream.getReader();
             currentReader = reader as ReadableStreamDefaultReader<any>;
-            activeReaderRunId = run.runId;
-            activeReaderStreamId = run.streamId;
-            currentRunRequestContext = run.streamOptions.requestContext;
             if (remoteRuns.has(run.streamId)) startRemoteRunLeaseWatch(run.runId, run.streamId);
             let readerReleased = false;
             try {
@@ -3312,9 +3314,6 @@ export class AgentThreadStreamRuntime {
             } finally {
               stopRemoteRunLeaseWatch(run.streamId);
               currentReader = null;
-              activeReaderRunId = null;
-              activeReaderStreamId = null;
-              currentRunRequestContext = undefined;
               currentRunRecord = undefined;
               if (!readerReleased) {
                 reader.releaseLock();
