@@ -1,13 +1,9 @@
-/* All three must be registered: an unregistered custom property is a raw token,
-   it cannot be interpolated by a transition or a keyframe. */
 @property --composer-ring-angle {
   syntax: '<angle>';
   inherits: false;
   initial-value: 0deg;
 }
 
-/* Offset rather than a second driver of the angle: the spin picks up from
-   wherever the pointer left the arc instead of snapping back to 0deg. */
 @property --composer-ring-spin {
   syntax: '<angle>';
   inherits: false;
@@ -21,9 +17,13 @@
 }
 
 .composer-ring {
-  --composer-ring-color: var(--accent1);
+  --composer-ring-color: var(--composer-mode-color);
+  --composer-ring-edge: color-mix(in oklab, var(--neutral1) 40%, transparent);
+  --composer-spotlight-x: 50%;
+  --composer-spotlight-y: 50%;
+  --composer-spotlight-strength: 0;
 
-  background-color: var(--composer-ring-edge, color-mix(in oklab, var(--border2) 40%, transparent));
+  background-color: var(--composer-ring-edge);
   background-image: conic-gradient(
     from calc(var(--composer-ring-angle) + var(--composer-ring-spin) - 60deg),
     transparent 0deg,
@@ -35,18 +35,22 @@
     box-shadow 320ms ease-out;
 }
 
-/* The ring is the composer's only edge. */
 .composer-ring > [data-slot='composer-box'] {
-  border-color: transparent;
+  border: 0;
 }
 
 .composer-ring:focus-within {
   background-color: var(--border2);
 }
 
-/* The arc tracks the cursor, so it lights on hover only — focus brightens the edge instead. */
-.composer-ring:hover {
-  --composer-ring-strength: 0.4;
+@media (hover: hover) {
+  .composer-ring:hover {
+    --composer-ring-strength: 0.4;
+  }
+
+  .composer-ring[data-busy='false']:hover {
+    --composer-spotlight-strength: 1;
+  }
 }
 
 .composer-ring[data-busy='true'] {
@@ -73,5 +77,19 @@
 
   .composer-ring[data-busy='true'] {
     animation: none;
+  }
+}
+
+html.light .composer-ring {
+  --composer-ring-edge: color-mix(in oklab, var(--border2) 40%, transparent);
+}
+
+@media (forced-colors: active) {
+  .composer-ring {
+    outline: 1px solid CanvasText;
+  }
+
+  .composer-ring:focus-within {
+    outline: 2px solid Highlight;
   }
 }

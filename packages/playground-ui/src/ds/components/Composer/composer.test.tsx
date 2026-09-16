@@ -188,7 +188,6 @@ describe('Composer', () => {
       const pulse = document.querySelector('[data-slot="composer-sending-pulse"]');
       assert(pulse);
       expect(pulse.getAttribute('aria-hidden')).toBe('true');
-      // Three columns of colour sweeping across the composer.
       expect(pulse.childElementCount).toBe(3);
     });
   });
@@ -207,11 +206,12 @@ describe('Composer', () => {
       assert(ring);
       expect(ring.getAttribute('data-busy')).toBe('false');
 
-      // jsdom reports a zero-sized box, so the centre sits at the origin.
       fireEvent(window, new MouseEvent('pointermove', { bubbles: true, clientX: 100, clientY: 0 }));
 
       await waitFor(() => {
         expect(ring.style.getPropertyValue('--composer-ring-angle')).toBe('90deg');
+        expect(ring.style.getPropertyValue('--composer-spotlight-x')).toBe('100px');
+        expect(ring.style.getPropertyValue('--composer-spotlight-y')).toBe('0px');
       });
     });
   });
@@ -233,6 +233,7 @@ describe('Composer', () => {
       await new Promise(resolve => requestAnimationFrame(resolve));
       expect(ring.getAttribute('data-busy')).toBe('true');
       expect(ring.style.getPropertyValue('--composer-ring-angle')).toBe('');
+      expect(ring.style.getPropertyValue('--composer-spotlight-x')).toBe('');
     });
   });
 
