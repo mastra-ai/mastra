@@ -2044,6 +2044,58 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
   });
 
+  it('kicks off when the open-run entry is stale and no run is live for the binding', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'stale-open-binding-run',
+    });
+    const binding = await bindWorkRun(storage, item.id);
+    const { controller, session } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+      emitAgentEndDuringSignal: true,
+      agentEndReason: 'complete',
+    });
+    // A run that died with its process: the durable entry survives, no
+    // agent_end will ever arrive for it, and the registry shows the thread idle.
+    await session.thread.setSetting({
+      key: FACTORY_OPEN_RUNS_SETTING,
+      value: [
+        {
+          kickoffId: 'orphaned-kickoff',
+          bindingId: binding.id,
+          role: binding.role,
+          startedBy: 'factory-rule-dispatcher',
+          orgId: binding.orgId,
+          factoryProjectId: binding.factoryProjectId,
+          workItemId: binding.workItemId,
+          sessionId: binding.sessionId,
+          threadId: binding.threadId,
+          branch: binding.branch,
+          agentName: 'build',
+        },
+      ],
+    });
+    controller.listActiveThreadRuns.mockReturnValue([]);
+    observeSessionRunEnd(session, { audit: seed.audit });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      audit: seed.audit,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+  });
+
   it('serializes concurrently claimed skill decisions for the same binding', async () => {
     const seed = await createFactoryStorageForTests();
     const storage = seed.workItems;

@@ -858,23 +858,25 @@ export class FactoryDecisionDispatcher {
           await this.#switchThread(session, binding);
           const deliveryId =
             record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
+          const runStillActive = () =>
+            this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
+          // Only a *live* run on this binding can be duplicated by a second
+          // kickoff, so that is the only thing worth waiting on. A durable
+          // open-run entry with no run behind it is an orphan: the run died with
+          // its process and no `agent_end` will ever clear it. Waiting on it
+          // would wedge the binding for good; the next observed run end sweeps
+          // it out of the ledger.
           while (true) {
             const openRun = watchRun(session, {
               timeoutMs: this.#skillCompletionObservationTimeoutMs,
               approvePlans: false,
               label: 'Factory skill run',
-              runStillActive: () =>
-                this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),
+              runStillActive,
             });
             try {
               const alreadyOpen = (await listSessionOpenRuns(session)).some(open => open.bindingId === binding.id);
-              if (!alreadyOpen) break;
-              if (!(await openRun.wait())) {
-                throw new FactoryDispatchError(
-                  'run_terminal_event_missing',
-                  'Factory skill invocation is waiting on a run whose terminal event was not observed.',
-                );
-              }
+              if (!alreadyOpen || !runStillActive()) break;
+              if (!(await openRun.wait())) break;
             } finally {
               openRun.close();
             }
@@ -927,8 +929,7 @@ export class FactoryDecisionDispatcher {
             approvePlans: await this.#plansAreAutoApproved(record, item),
             onAgentEnd: () => this.#roleSuperseded(record, decision.role),
             label: 'Factory skill run',
-            runStillActive: () =>
-              this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),
+            runStillActive,
           });
 
           const sendKickoff = async () => {
