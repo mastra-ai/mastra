@@ -1,15 +1,24 @@
 import {
   encodeTraceQueryCursor,
+  parseGetTraceQueryFieldsArgs,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
   planThreadQuery,
   planTraceQuery,
+  planTraceQueryObservedFields,
+  TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
 import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { DuckDBConnection } from '../../db/index';
-import { compileDuckDBThreadQuery, compileDuckDBTraceQuery, queryThreads, queryTraces } from './trace-query';
+import {
+  compileDuckDBThreadQuery,
+  compileDuckDBTraceQuery,
+  getTraceQueryObservedFields,
+  queryThreads,
+  queryTraces,
+} from './trace-query';
 
 const TIME_RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' };
 
@@ -22,6 +31,20 @@ function threadPlan(input: Record<string, unknown> = {}): TrustedThreadQueryPlan
 }
 
 describe('DuckDB advanced trace query', () => {
+  it('normalizes discovery resource exhaustion without exposing driver details', async () => {
+    const query = vi.fn().mockRejectedValue(new Error('Out of Memory Error: failed to allocate secret query'));
+    const discoveryPlan = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+
+    await expect(getTraceQueryObservedFields({ query } as unknown as DuckDBConnection, discoveryPlan)).rejects.toEqual(
+      expect.objectContaining<Partial<TraceQueryResourceLimitError>>({
+        code: 'TRACE_QUERY_RESOURCE_LIMIT',
+        message: 'The trace query exceeded its resource limit',
+      }),
+    );
+  });
+
   it('parameterizes literals and compiles one correlated existence check per collection clause', () => {
     const compiled = compileDuckDBTraceQuery(
       plan({

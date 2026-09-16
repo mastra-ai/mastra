@@ -613,13 +613,29 @@ LIMIT ?`,
   };
 }
 
+function isDuckDBResourceLimit(error: unknown): boolean {
+  return error instanceof Error && error.message.toLowerCase().includes('out of memory');
+}
+
+async function runDuckDBDiscoveryQuery(
+  db: DuckDBConnection,
+  query: CompiledDuckDBTraceQuery,
+): Promise<Record<string, unknown>[]> {
+  try {
+    return await db.query<Record<string, unknown>>(query.sql, query.values);
+  } catch (error) {
+    if (isDuckDBResourceLimit(error)) throw new coreStorage.TraceQueryResourceLimitError();
+    throw error;
+  }
+}
+
 export async function getTraceQueryObservedFields(
   db: DuckDBConnection,
   plan: TrustedTraceQueryObservedFieldsPlan,
 ): Promise<TraceQueryObservedFieldsResult> {
   if (plan.predicateScope !== 'trace') return { observedFields: [], observedFieldsTruncated: false };
   const query = compileDuckDBTraceQueryObservedFields(plan);
-  const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
+  const rows = await runDuckDBDiscoveryQuery(db, query);
   return {
     observedFields: rows
       .slice(0, plan.limit)
@@ -633,7 +649,7 @@ export async function getTraceQueryValues(
   plan: TrustedTraceQueryValuesPlan,
 ): Promise<GetTraceQueryValuesResponse> {
   const query = compileDuckDBTraceQueryValues(plan);
-  const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
+  const rows = await runDuckDBDiscoveryQuery(db, query);
   return coreStorage.getTraceQueryValuesResponseSchema.parse({
     values: rows.slice(0, plan.limit).map(row => ({ value: String(row.value), count: Number(row.count) })),
     valuesTruncated: rows.length > plan.limit,

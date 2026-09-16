@@ -5,6 +5,7 @@ import {
   planThreadQuery,
   planTraceQuery,
   TraceQueryExecutionError,
+  TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
 import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
@@ -551,6 +552,24 @@ describe('Postgres advanced trace query', () => {
     await expect(queryTraces({ tx } as unknown as DbClient, 'public', plan(), 15_000)).rejects.toThrow(
       'Trace query returned a null timestamp',
     );
+  });
+
+  it('normalizes PostgreSQL resource exhaustion without exposing driver details', async () => {
+    const tx = vi.fn().mockRejectedValue(Object.assign(new Error('out of memory: SELECT secret'), { code: '53200' }));
+
+    await expect(queryTraces({ tx } as unknown as DbClient, 'public', plan(), 15_000)).rejects.toEqual(
+      expect.objectContaining<Partial<TraceQueryResourceLimitError>>({
+        code: 'TRACE_QUERY_RESOURCE_LIMIT',
+        message: 'The trace query exceeded its resource limit',
+      }),
+    );
+  });
+
+  it('preserves resource-limit errors through the public vNext storage wrapper', async () => {
+    const tx = vi.fn().mockRejectedValue(Object.assign(new Error('out of memory: SELECT secret'), { code: '53200' }));
+    const storage = new ObservabilityStoragePostgresVNext({ client: { tx } as unknown as DbClient });
+
+    await expect(storage.queryTraces(plan())).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
   });
 
   it('normalizes PostgreSQL statement timeouts without exposing driver details', async () => {

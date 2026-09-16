@@ -45,7 +45,7 @@ describe('Composer on a lazy user-session draft', () => {
     assert(form);
     fireEvent.drop(form, { dataTransfer: { files: [new File(['png'], 'shot.png', { type: 'image/png' })] } });
     expect(await screen.findByText('Images can be attached once the session is ready.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Remove image' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove shot.png' })).not.toBeInTheDocument();
     expect(createBodies).toEqual([]);
 
     await user.type(message, '  fix the login bug  ');

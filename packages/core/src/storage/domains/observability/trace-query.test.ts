@@ -39,6 +39,7 @@ import {
   traceQueryTraceResponseSchema,
   TraceQueryCursorError,
   TraceQueryExecutionError,
+  TraceQueryResourceLimitError,
   TraceQueryValidationError,
   type TraceQueryPredicate,
 } from './trace-query';
@@ -1504,10 +1505,14 @@ describe('trace-query execution timeout contract', () => {
     }
   });
 
-  it('exposes a stable timeout identity without a driver message', () => {
+  it('exposes stable execution-budget identities without driver messages', () => {
     expect(new TraceQueryExecutionError()).toMatchObject({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
       message: 'The trace query exceeded its execution timeout',
+    });
+    expect(new TraceQueryResourceLimitError()).toMatchObject({
+      code: 'TRACE_QUERY_RESOURCE_LIMIT',
+      message: 'The trace query exceeded its resource limit',
     });
   });
 });
