@@ -2,8 +2,10 @@ import { GatewayManager, ModelRouterLanguageModel, PROVIDER_REGISTRY, defaultGat
 import type { LanguageModel, ProviderConfig } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ProviderListItem } from '../schemas/agents';
+import { isProviderConnected } from './provider-connection';
 
 const DEFAULT_GATEWAY_IDS = new Set<string>(defaultGateways.map(gateway => gateway.id));
+const PROVIDER_AUTH_TIMEOUT_MS = 5000;
 
 function externalProvidersBlocked(): boolean {
   const flag = process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS;
@@ -14,10 +16,6 @@ function registeredGateways(mastra: Mastra) {
   return Object.values(mastra.listGateways() ?? {});
 }
 
-export function createGatewayManager(mastra: Mastra): GatewayManager {
-  return new GatewayManager(registeredGateways(mastra));
-}
-
 // models.dev rows already come from PROVIDER_REGISTRY, and its fetchProviders is a network call
 function catalogGateways(mastra: Mastra, blockExternal: boolean) {
   return registeredGateways(mastra).filter(
@@ -25,60 +23,81 @@ function catalogGateways(mastra: Mastra, blockExternal: boolean) {
   );
 }
 
-async function isProviderConnected(
+async function getConnectedModels(
   authManager: GatewayManager,
   id: string,
   provider: ProviderConfig,
-): Promise<boolean> {
+): Promise<string[]> {
+  const connectedModels: string[] = [];
+  const abortController = new AbortController();
+  const errors: unknown[] = [];
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  async function checkModels() {
+    for (const model of provider.models) {
+      if (abortController.signal.aborted) return;
+      try {
+        const connected = await authManager.hasAuth(`${id}/${model}`);
+        if (abortController.signal.aborted) return;
+        if (connected) connectedModels.push(model);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+  }
+
   try {
-    return await authManager.hasProviderAuth(id, provider.models);
-  } catch (error) {
-    console.warn(`Failed to resolve auth for provider "${id}":`, error);
-    return false;
+    await Promise.race([
+      checkModels(),
+      new Promise<void>(resolve => {
+        timeout = setTimeout(() => {
+          abortController.abort();
+          errors.push(new Error('Provider authentication check timed out'));
+          resolve();
+        }, PROVIDER_AUTH_TIMEOUT_MS);
+      }),
+    ]);
+    if (errors.length) console.warn(`Failed to resolve auth for provider "${id}":`, errors[0]);
+    return [...connectedModels];
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
-export async function buildProvidersList(mastra: Mastra): Promise<ProviderListItem[]> {
+export async function buildProvidersList(
+  mastra: Mastra,
+): Promise<(ProviderListItem & { connectedModels: string[] })[]> {
   const blockExternal = externalProvidersBlocked();
-  const providers: Record<string, ProviderConfig> = blockExternal ? {} : { ...PROVIDER_REGISTRY };
+  const providers: Record<string, ProviderConfig & Pick<ProviderListItem, 'label' | 'description'>> = blockExternal
+    ? {}
+    : { ...PROVIDER_REGISTRY };
   const gatewayProviders = await new GatewayManager(catalogGateways(mastra, blockExternal)).listProviders();
   for (const [id, provider] of Object.entries(gatewayProviders)) {
     providers[id] ??= provider;
   }
 
-  const authManager = createGatewayManager(mastra);
+  const authManager = new GatewayManager(registeredGateways(mastra));
   return Promise.all(
-    Object.entries(providers).map(async ([id, provider]) => ({
-      id,
-      name: provider.name,
-      label: (provider as any).label || provider.name,
-      description: (provider as any).description || '',
-      envVar: provider.apiKeyEnvVar,
-      connected: await isProviderConnected(authManager, id, provider),
-      docUrl: provider.docUrl,
-      models: [...provider.models],
-    })),
+    Object.entries(providers).map(async ([id, provider]) => {
+      const connectedModels = await getConnectedModels(authManager, id, provider);
+      return {
+        id,
+        name: provider.name,
+        label: provider.label || provider.name,
+        description: provider.description || '',
+        envVar: provider.apiKeyEnvVar,
+        connected: connectedModels.length > 0,
+        connectedModels,
+        docUrl: provider.docUrl,
+        models: [...provider.models],
+      };
+    }),
   );
-}
-
-function isVertexProvider(providerId: string): boolean {
-  return providerId === 'google-vertex' || providerId.startsWith('google.vertex');
-}
-
-// Vertex has no registry row and no gateway; @ai-sdk/google-vertex throws without these two
-function vertexConfigured(): boolean {
-  return !!(process.env.GOOGLE_VERTEX_PROJECT && process.env.GOOGLE_VERTEX_LOCATION);
-}
-
-// AI SDK instances report "openai.responses"; the registry knows "openai"
-function registryProviderId(providerId: string): string {
-  return providerId.replace(/\..*/, '');
 }
 
 type ModelIdentity = Pick<LanguageModel, 'provider' | 'modelId'>;
 
-export async function isModelUsable(authManager: GatewayManager, model: ModelIdentity): Promise<boolean> {
+export async function isModelUsable(model: ModelIdentity): Promise<boolean> {
   if (model instanceof ModelRouterLanguageModel) return model.hasAuth();
-  if (isVertexProvider(model.provider)) return vertexConfigured();
-  return authManager.hasAuth(`${registryProviderId(model.provider)}/${model.modelId}`);
+  return isProviderConnected(model.provider);
 }

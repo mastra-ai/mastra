@@ -2005,6 +2005,7 @@ export interface Provider {
   name: string;
   envVar: string | string[];
   connected: boolean;
+  connectedModels?: string[];
   docUrl?: string;
   models: string[];
 }

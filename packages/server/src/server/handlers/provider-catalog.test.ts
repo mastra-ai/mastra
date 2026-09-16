@@ -1,9 +1,11 @@
 import { openai } from '@ai-sdk/openai-v5';
 import { ModelRouterLanguageModel, NetlifyGateway, PROVIDER_REGISTRY } from '@mastra/core/llm';
-import type { GatewayLanguageModel, MastraModelGatewayInterface } from '@mastra/core/llm';
+import type { MastraModelGatewayInterface } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildProvidersList, createGatewayManager, isModelUsable } from './provider-catalog';
+import { GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE } from './editor-builder';
+import { buildProvidersList, isModelUsable } from './provider-catalog';
+import { createTestServerContext } from './test-utils';
 
 function createKeyedGateway(id: string, providerId: string, apiKeyEnvVar: string): MastraModelGatewayInterface {
   return {
@@ -14,7 +16,7 @@ function createKeyedGateway(id: string, providerId: string, apiKeyEnvVar: string
     }),
     buildUrl: () => undefined,
     getApiKey: async () => process.env[apiKeyEnvVar] ?? '',
-    resolveLanguageModel: () => ({}) as GatewayLanguageModel,
+    resolveLanguageModel: () => openai('gpt-4.1'),
   };
 }
 
@@ -29,7 +31,7 @@ function createOAuthGateway(handledProvider: string): MastraModelGatewayInterfac
     }),
     buildUrl: () => undefined,
     getApiKey: async () => '',
-    resolveLanguageModel: () => ({}) as GatewayLanguageModel,
+    resolveLanguageModel: () => openai('gpt-4.1'),
   };
 }
 
@@ -58,11 +60,74 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
 describe('buildProvidersList', () => {
+  it('reports and offers only the models a gateway authenticates, regardless of catalog order', async () => {
+    const gateway = {
+      ...createOAuthGateway('openai'),
+      handlesModel: (modelId: string) => modelId === 'openai/gpt-4.1',
+    };
+    const mastra = createMastra({ oauth: gateway });
+    const provider = await findProvider(mastra, 'openai');
+
+    expect(provider).toMatchObject({ connected: true, connectedModels: ['gpt-4.1'] });
+    expect(provider?.models).toContain('gpt-4');
+
+    const available = await GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE.handler(createTestServerContext({ mastra }));
+    expect(available.providers.find(provider => provider.id === 'openai')?.models).toEqual(['gpt-4.1']);
+  });
+
+  it('keeps authenticated models when another model from the same provider fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const gateway = {
+      ...createKeyedGateway('acme', 'acme', ''),
+      fetchProviders: async () => ({
+        acme: { name: 'Acme', models: ['broken', 'working'], apiKeyEnvVar: '', gateway: 'acme' },
+      }),
+      getApiKey: async (modelId: string) => {
+        if (modelId.endsWith('/broken')) throw new Error('token exchange failed');
+        return 'test-key';
+      },
+    };
+
+    expect(await findProvider(createMastra({ acme: gateway }), 'acme')).toMatchObject({
+      connected: true,
+      connectedModels: ['working'],
+    });
+    expect(warn).toHaveBeenCalledOnce();
+  });
+
+  it('returns the catalog when authentication stalls and stops checking that provider after the deadline', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('AUTO_BLOCK_EXTERNAL_PROVIDERS', 'true');
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const stalledAuth = Promise.withResolvers<string>();
+    const getApiKey = vi.fn(() => stalledAuth.promise);
+    const mastra = createMastra({
+      acme: {
+        ...createKeyedGateway('acme', 'acme', ''),
+        fetchProviders: async () => ({
+          acme: { name: 'Acme', models: ['first', 'second'], apiKeyEnvVar: '', gateway: 'acme' },
+        }),
+        getApiKey,
+      },
+    });
+
+    const catalog = buildProvidersList(mastra);
+    await vi.advanceTimersByTimeAsync(5000);
+    const providers = await catalog;
+    expect(providers).toMatchObject([{ connected: false, connectedModels: [] }]);
+
+    stalledAuth.resolve('late-key');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(providers[0]?.connectedModels).toEqual([]);
+    expect(getApiKey).toHaveBeenCalledOnce();
+  });
+
   it('lists every registry provider with its env var and models', async () => {
     const providers = await buildProvidersList(createMastra());
 
@@ -144,40 +209,37 @@ describe('isModelUsable', () => {
       'oauth-gateway': createOAuthGateway('openai'),
       acme: createKeyedGateway('acme', 'acme-openai', 'ACME_OPENAI_API_KEY'),
     });
-    const authManager = createGatewayManager(mastra);
     const gateways = Object.values(mastra.listGateways() ?? {});
     const oauthModel = new ModelRouterLanguageModel('openai/gpt-4.1', gateways);
     const prefixedModel = new ModelRouterLanguageModel('acme/acme-openai/model-a', gateways);
     const keylessModel = new ModelRouterLanguageModel('anthropic/claude-sonnet-4-5', gateways);
 
-    expect(await isModelUsable(authManager, oauthModel)).toBe(true);
-    expect(await isModelUsable(authManager, prefixedModel)).toBe(false);
-    expect(await isModelUsable(authManager, keylessModel)).toBe(false);
+    expect(await isModelUsable(oauthModel)).toBe(true);
+    expect(await isModelUsable(prefixedModel)).toBe(false);
+    expect(await isModelUsable(keylessModel)).toBe(false);
 
     vi.stubEnv('ACME_OPENAI_API_KEY', 'test-key');
-    expect(await isModelUsable(authManager, prefixedModel)).toBe(true);
+    expect(await isModelUsable(prefixedModel)).toBe(true);
   });
 
   it('strips the AI SDK provider suffix before asking the registry', async () => {
-    const authManager = createGatewayManager(createMastra());
     const model = openai('gpt-4.1');
     expect(model.provider).not.toBe('openai');
 
-    expect(await isModelUsable(authManager, model)).toBe(false);
+    expect(await isModelUsable(model)).toBe(false);
 
     vi.stubEnv('OPENAI_API_KEY', 'test-key');
-    expect(await isModelUsable(authManager, model)).toBe(true);
+    expect(await isModelUsable(model)).toBe(true);
   });
 
   it('never collapses Vertex onto the Google AI Studio key', async () => {
-    const authManager = createGatewayManager(createMastra());
     const vertexModel = { provider: 'google.vertex.chat', modelId: 'gemini-2.5-pro' };
     vi.stubEnv('GOOGLE_API_KEY', 'test-key');
 
-    expect(await isModelUsable(authManager, vertexModel)).toBe(false);
+    expect(await isModelUsable(vertexModel)).toBe(false);
 
     vi.stubEnv('GOOGLE_VERTEX_PROJECT', 'my-project');
     vi.stubEnv('GOOGLE_VERTEX_LOCATION', 'us-central1');
-    expect(await isModelUsable(authManager, vertexModel)).toBe(true);
+    expect(await isModelUsable(vertexModel)).toBe(true);
   });
 });

@@ -50,7 +50,7 @@ export interface GatewayModel {
   provider: string;
   /** Model name without provider prefix */
   modelName: string;
-  /** Whether the provider has valid authentication */
+  /** Includes OAuth and header credentials. */
   hasApiKey: boolean;
   /** Environment variable for the provider's API key */
   apiKeyEnvVar?: string;
@@ -187,12 +187,6 @@ export class GatewayManager {
     }
   }
 
-  /** Auth is per provider, so the first model stands in for every model the provider exposes. */
-  async hasProviderAuth(providerKey: string, models: string[]): Promise<boolean> {
-    const sampleModel = models[0];
-    return sampleModel ? this.hasAuth(`${providerKey}/${sampleModel}`) : false;
-  }
-
   /**
    * Fetch and flatten providers from all gateways, deduped by provider key
    * (configured / earlier gateway wins). Each gateway's `fetchProviders()`
@@ -217,10 +211,6 @@ export class GatewayManager {
     return registry;
   }
 
-  /**
-   * Build the model catalog from gateway providers, resolving auth per
-   * provider (using the first model). Returns models without use-count.
-   */
   async listAvailableModels(): Promise<GatewayModel[]> {
     const registry = await this.listProviders();
     const models: GatewayModel[] = [];
@@ -232,14 +222,12 @@ export class GatewayManager {
       const modelNames = providerConfig.models;
       if (!Array.isArray(modelNames)) continue;
 
-      const hasApiKey = await this.hasProviderAuth(provider, modelNames);
-
       for (const modelName of modelNames) {
         models.push({
           id: `${provider}/${modelName}`,
           provider,
           modelName,
-          hasApiKey,
+          hasApiKey: await this.hasAuth(`${provider}/${modelName}`),
           apiKeyEnvVar: apiKeyEnvVar || undefined,
         });
       }

@@ -5,6 +5,7 @@ import { usePlaygroundModelOptional } from '../context/playground-model-context'
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
+import { isModelConnected } from '@/domains/llm/is-model-connected';
 
 // Triggers stay transparent; the wrapper owns the shared pill border/background.
 const COMPOSER_TRIGGER_CLASS = [
@@ -115,7 +116,7 @@ export const ComposerModelWarning = () => {
     !allowedModelsError &&
     !allowedModels.some(m => cleanProviderId(m.provider) === currentModelProvider && m.model === selectedModel);
 
-  const showProviderWarning = currentProvider && !currentProvider.connected;
+  const showProviderWarning = currentProvider && !isModelConnected(currentProvider, selectedModel);
 
   if (!modelWarning && !stale && !showProviderWarning) return null;
 

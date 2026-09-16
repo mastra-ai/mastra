@@ -204,11 +204,9 @@ export const GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE = createRoute({
   requiresPermission: 'stored-agents:read',
   handler: async ({ mastra }) => {
     try {
-      // Only surface providers whose API key is configured (`connected`). The
-      // agent builder decides the agent's model from this list, so including
-      // providers without a key lets it pick a model that can never run. We
-      // scope to connected providers so every choice is actually usable.
-      const providers = (await buildProvidersList(mastra)).filter(provider => provider.connected);
+      const providers = (await buildProvidersList(mastra))
+        .filter(provider => provider.connected)
+        .map(provider => ({ ...provider, models: provider.connectedModels }));
       const policy = await resolveBuilderModelPolicy(mastra.getEditor());
 
       // Inactive policy (or no allowlist) ⇒ no allowlist filtering to apply.

@@ -198,6 +198,28 @@ Resolves credentials before Mastra creates the language model. Implement this op
 
 A `GatewayAuthResult` may include `apiKey`, `bearerToken`, `headers`, and an optional `source` field to trace where auth came from.
 
+Studio uses this hook to check which models have credentials. A provider response includes `connectedModels`, an array of authenticated model IDs without the provider prefix. `connected` is `true` when that array has at least one model. Studio checks the selected model against this list, and the agent builder offers only those models. Older servers that omit `connectedModels` retain provider-level connection checks in Studio.
+
+The server checks models sequentially within each provider, with a five-second deadline per provider. On timeout, it returns the models checked successfully so far and stops starting further checks. The deadline doesn't cancel an auth request already in progress. Unexpected auth errors are logged once per provider without preventing other providers from loading. Gateway provider discovery runs before this deadline.
+
+#### Check model authentication
+
+Use `GatewayManager.hasAuth(routerId)` to check a model through the registered gateway chain:
+
+```typescript
+import { GatewayManager } from '@mastra/core/llm'
+import { mastra } from './mastra'
+
+const gateways = new GatewayManager(Object.values(mastra.listGateways() ?? {}))
+const hasAuth = await gateways.hasAuth('__GATEWAY_OPENAI_MODEL__')
+```
+
+**Returns:** `Promise<boolean>`. Missing credentials return `false`; unexpected gateway errors reject the promise. This checks whether credentials are available, without validating them against the provider or generating a response. Auth resolution may perform network requests, such as a token exchange.
+
+`GatewayManager.listAvailableModels()` returns a `hasApiKey` flag for each model using the same check. Despite the field name, OAuth and header-based credentials count too.
+
+For an existing `ModelRouterLanguageModel`, call `model.hasAuth()` to use that instance's gateway chain and explicit `apiKey` or `url` configuration. Direct AI SDK model instances don't inherit credentials from registered gateways.
+
 ### `resolveLanguageModel()`
 
 Creates a language model instance.

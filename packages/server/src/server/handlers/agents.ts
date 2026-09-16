@@ -80,7 +80,7 @@ import type { Context } from '../types';
 import { toSlug } from '../utils';
 
 import { handleError } from './error';
-import { buildProvidersList, createGatewayManager, isModelUsable } from './provider-catalog';
+import { buildProvidersList, isModelUsable } from './provider-catalog';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
   sanitizeBody,
@@ -93,6 +93,9 @@ import {
   validateThreadOwnership,
   validateRunOwnership,
 } from './utils';
+
+export { buildProvidersList } from './provider-catalog';
+export { isProviderConnected } from './provider-connection';
 
 /**
  * Merge incoming version overrides onto a RequestContext.
@@ -3347,17 +3350,12 @@ Return your response as JSON with exactly these two fields:
 
 Remember: A good system prompt should be specific enough to guide behavior but flexible enough to handle edge cases. Focus on creating prompts that are clear, actionable, and aligned with the intended use case.`;
 
-// Helper to find the first model with a connected provider
-async function findConnectedModel(
-  agent: Agent,
-  mastra: Context['mastra'],
-): Promise<Awaited<ReturnType<Agent['getModel']>> | null> {
-  const authManager = createGatewayManager(mastra);
+async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agent['getModel']>> | null> {
   const modelList = await agent.getModelList();
 
   if (modelList && modelList.length > 0) {
     for (const modelConfig of modelList) {
-      if (modelConfig.enabled !== false && (await isModelUsable(authManager, modelConfig.model))) {
+      if (modelConfig.enabled !== false && (await isModelUsable(modelConfig.model))) {
         return modelConfig.model;
       }
     }
@@ -3365,7 +3363,7 @@ async function findConnectedModel(
   }
 
   const defaultModel = await agent.getModel();
-  return (await isModelUsable(authManager, defaultModel)) ? defaultModel : null;
+  return (await isModelUsable(defaultModel)) ? defaultModel : null;
 }
 
 type EnhanceInstructionsResponse = z.infer<typeof enhanceInstructionsResponseSchema>;
@@ -3385,8 +3383,7 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
-      // Find the first model with a connected provider (similar to how chat works)
-      const model = await findConnectedModel(agent, mastra);
+      const model = await findConnectedModel(agent);
       if (!model) {
         throw new HTTPException(400, {
           message:

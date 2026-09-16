@@ -8,6 +8,7 @@ import { useModelReset } from '../../context/model-reset-context';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
+import { isModelConnected } from '@/domains/llm/is-model-connected';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
@@ -240,8 +241,7 @@ export const AgentMetadataModelSwitcher = ({
         </div>
       )}
 
-      {/* Show warning if selected provider is not connected */}
-      {currentProvider && !currentProvider.connected && (
+      {currentProvider && !isModelConnected(currentProvider, selectedModel) && (
         <div className="p-2 pt-2">
           <Notice variant="warning" title="Provider not connected">
             <Notice.Message>

@@ -2,4 +2,8 @@
 '@mastra/server': minor
 ---
 
-Studio now reports a provider as connected when a registered gateway authenticates it through OAuth or stored credentials, for example the Mastra Code gateway with a ChatGPT subscription login. The providers list and the instructions enhancer resolve auth through the same gateway chain the model router uses instead of re-implementing environment variable checks. `@mastra/server` now requires `@mastra/core` 1.68.0 or newer. The `isProviderConnected` export of `@mastra/server/handlers/agents` is removed; use `GatewayManager.hasProviderAuth()` from `@mastra/core/llm`. Fixes #23668
+Fixed Studio reporting models as disconnected when a registered gateway supplies OAuth or stored credentials. Provider responses now include `connectedModels`, and the builder offers only models with available auth. Auth checks have a five-second deadline per provider.
+
+The instructions enhancer checks router models through their own gateway chain. Direct AI SDK instances retain their existing environment checks and fallback order. The synchronous `isProviderConnected` and `buildProvidersList` exports remain available from `@mastra/server/handlers/agents`.
+
+Requires `@mastra/core` 1.68.0 or newer, excluding older 1.68.0 prereleases. Fixes #23668.

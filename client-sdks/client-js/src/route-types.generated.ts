@@ -368,6 +368,7 @@ type Shared_Type_6 = {
   description?: string | undefined;
   envVar: string | string[];
   connected: boolean;
+  connectedModels?: string[] | undefined;
   docUrl?: string | undefined;
   models: string[];
 };
