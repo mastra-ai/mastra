@@ -1408,9 +1408,7 @@ export class A2AAgent implements SubAgent {
                 part.kind === 'text' && 'text' in part && typeof part.text === 'string' ? [part.text] : [],
               )
               .join('');
-            if (artifactText) {
-              textBuffer += artifactText;
-            }
+            textBuffer = task ? extractTaskArtifactText(task) : textBuffer + (artifactText ?? '');
           } else if (event.kind === 'status-update') {
             task = task
               ? {
