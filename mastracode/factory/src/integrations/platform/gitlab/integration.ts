@@ -15,6 +15,7 @@ interface PlatformGitLabContext {
   label: string | null;
   api: GitLabApiClient;
   connection: IntegrationConnection;
+  host: string;
 }
 
 const GITLAB_INTEGRATION_IDS = new Set(['gitlab', 'gitlab-group', 'gitlab-group-token']);
@@ -75,6 +76,8 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
       label: connection.accountLabel,
       api: new GitLabApiClient({ client: this.#client, connectionId: connection.id }),
       connection: gitlabConnection(connection.id),
+      // Platform does not currently expose the connected GitLab instance host.
+      host: 'gitlab.com',
     };
   }
 }
