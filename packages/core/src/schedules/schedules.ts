@@ -211,7 +211,7 @@ export interface ListSchedulesFilter {
   workflowId?: string;
   /** Agent-schedule only: match the target threadId. */
   threadId?: string;
-  /** Agent-schedule only: match the target resourceId. */
+  /** Match the schedule's resourceId (agent thread identity or workflow run attribution). */
   resourceId?: string;
   /** Agent-schedule only: match the free-form target name. */
   name?: string;
@@ -433,12 +433,15 @@ export class Schedules {
       // `workflowId` filters at the store level, but an `agentId` filter must
       // not surface workflow rows (and vice versa when both are set).
       .filter(s => (filter?.agentId ? s.agentId !== undefined : true));
-    const agentOnly = filter?.threadId !== undefined || filter?.resourceId !== undefined || filter?.name !== undefined;
-    if (!agentOnly) return views;
+    const agentOnly = filter?.threadId !== undefined || filter?.name !== undefined;
+    if (!agentOnly && filter?.resourceId === undefined) return views;
     return views.filter(s => {
+      // `resourceId` exists on both kinds (agent thread identity / workflow run
+      // attribution), so it filters across both; threadId/name are agent-only.
+      if (filter?.resourceId !== undefined && s.resourceId !== filter.resourceId) return false;
+      if (!agentOnly) return true;
       if (s.agentId === undefined) return false;
       if (filter?.threadId !== undefined && s.threadId !== filter.threadId) return false;
-      if (filter?.resourceId !== undefined && s.resourceId !== filter.resourceId) return false;
       if (filter?.name !== undefined && s.name !== filter.name) return false;
       return true;
     });
@@ -645,7 +648,7 @@ export class Schedules {
         prevResult: { status: 'success', output: inputData ?? {} },
         requestContext: requestContext ?? {},
         initialState: initialState ?? {},
-        ...(resourceId ? { resourceId } : {}),
+        ...(resourceId !== undefined ? { resourceId } : {}),
       },
     });
     const store = await this.#getStore();
@@ -718,7 +721,7 @@ export function toWorkflowSchedule(schedule: Schedule): WorkflowSchedule | null 
     ...(target.inputData !== undefined ? { inputData: target.inputData } : {}),
     ...(target.initialState !== undefined ? { initialState: target.initialState } : {}),
     ...(target.requestContext !== undefined ? { requestContext: target.requestContext } : {}),
-    ...(target.resourceId ? { resourceId: target.resourceId } : {}),
+    ...(target.resourceId !== undefined ? { resourceId: target.resourceId } : {}),
     ...(schedule.metadata ? { metadata: schedule.metadata } : {}),
     createdAt: schedule.createdAt,
     updatedAt: schedule.updatedAt,

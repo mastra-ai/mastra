@@ -160,7 +160,7 @@ export const listSchedulesQuerySchema = z.object({
   status: scheduleStatusSchema.optional(),
   /** Agent-schedule only: match the target threadId. */
   threadId: z.string().optional(),
-  /** Agent-schedule only: match the target resourceId. */
+  /** Match the schedule's resourceId (agent thread identity or workflow run attribution). */
   resourceId: z.string().optional(),
   /** Agent-schedule only: match the free-form target name. */
   name: z.string().optional(),
