@@ -27,8 +27,9 @@ function FilterBarSurface({ className, children }: { className?: string; childre
       data-slot="filter-bar"
       className={cn(
         // Same surface/hover/focus recipe as InputGroup (wrapper whose focus lives on the nested input),
-        // with rounded-xl since the bar wraps onto multiple lines.
-        'flex min-h-form-md w-full flex-wrap items-center gap-1 rounded-xl border border-border1 bg-surface-overlay-soft px-2 py-1',
+        // Concentric corners: chips are 24px pills (12px radius) inset by p-1 (4px), so the
+        // surface radius is 12 + 4 = 16px (rounded-2xl). Keep padding uniform for this to hold.
+        'flex min-h-form-md w-full flex-wrap items-center gap-1 rounded-2xl border border-border1 bg-surface-overlay-soft p-1',
         'cursor-text transition-all duration-normal ease-out-custom',
         'hover:bg-surface-overlay-strong',
         inputHoverBorderWithin,
