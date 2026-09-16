@@ -878,7 +878,12 @@ export class Memory extends MastraMemory {
           rawMessages = new MessageList({ threadId, resourceId })
             .add(rawMessages, 'memory')
             .add(
-              semanticMessages.messages.filter(message => !boundary || isAfterMemoryTokenBoundary(message, boundary)),
+              semanticMessages.messages.filter(
+                message =>
+                  !boundary ||
+                  (resourceScope && message.threadId !== threadId) ||
+                  isAfterMemoryTokenBoundary(message, boundary),
+              ),
               'memory',
             )
             .get.all.db();

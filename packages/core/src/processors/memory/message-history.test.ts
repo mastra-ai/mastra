@@ -171,6 +171,48 @@ describe('MessageHistory', () => {
       expect(resultMessages[2].id).toBe('msg-4');
     });
 
+    it('enforces lastMessages when token-limited history overflow is reconsidered', async () => {
+      const historicalMessages: MastraDBMessage[] = Array.from({ length: 4 }, (_, index) => ({
+        id: `history-${index + 1}`,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: `History ${index + 1}` }] },
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        createdAt: new Date(1700000000000 + index * 1000),
+      }));
+      mockStorage.setMessages(historicalMessages);
+      processor = new MessageHistory({
+        storage: mockStorage,
+        lastMessages: 3,
+        tokenLimit: { maxTokens: 240, atMaxRemoveTokens: 90 },
+        tokenCounter: { countMessage: () => 40 },
+      });
+      const input: MastraDBMessage = {
+        id: 'input',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Current input' }] },
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        createdAt: new Date(1700000010000),
+      };
+      const messageList = new MessageList();
+      messageList.add(input, 'input');
+
+      await processor.processInput({
+        messages: [input],
+        messageList,
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1', 'resource-1'),
+      });
+
+      expect(messageList.get.all.db().map(message => message.id)).toEqual([
+        'history-2',
+        'history-3',
+        'history-4',
+        'input',
+      ]);
+    });
+
     it('reuses the same history read within a memory run', async () => {
       mockStorage.setMessages([
         {
