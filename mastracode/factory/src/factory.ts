@@ -790,7 +790,18 @@ export class MastraFactory {
         workspace: createWorkspaceFactory({
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
-          ...(githubIntegration ? { github: githubIntegration } : {}),
+          sourceControls: integrations.flatMap(integration =>
+            integration.versionControl
+              ? [
+                  {
+                    id: integration.id,
+                    versionControl: integration.versionControl,
+                    storage: sourceControlStorage.forIntegration(integration.id),
+                    ...(integration.id === 'github' && githubIntegration ? { github: githubIntegration } : {}),
+                  },
+                ]
+              : [],
+          ),
           ...(factoryProjectsStorage ? { projects: factoryProjectsStorage } : {}),
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           workspaceRegistry,

@@ -21,7 +21,7 @@ export interface RepositoryInput {
 
 export interface RepositoryAccess {
   cloneUrl: string;
-  authorization?: { scheme: 'bearer'; token: string };
+  authorization?: { scheme: 'bearer'; token: string; username?: string };
 }
 
 export type PullRequestState = 'open' | 'closed';

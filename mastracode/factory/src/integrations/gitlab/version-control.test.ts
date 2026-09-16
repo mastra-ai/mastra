@@ -16,7 +16,7 @@ const POSITION: GitLabDiscussionPosition = {
   new_line: 42,
 };
 
-function setup() {
+function setup(repositoryAccessToken: string | null = 'glpat-secret') {
   const storage = new SourceControlStorageInMemory('gitlab');
   const api = new GitLabApiClient({
     baseUrl: 'https://gitlab.example.com',
@@ -27,6 +27,7 @@ function setup() {
     api,
     connection: { type: 'oauth' as const, accessToken: 'glpat-secret' },
     host: 'gitlab.example.com',
+    repositoryAccessToken: repositoryAccessToken ?? undefined,
   }));
   const versionControl = buildGitLabVersionControl({ contextForConnection });
   versionControl.initialize({ storage });
@@ -137,15 +138,24 @@ describe('buildGitLabVersionControl', () => {
       result.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: repository.id }),
     ).resolves.toEqual({
       cloneUrl: 'https://gitlab.example.com/acme/app.git',
-      authorization: { scheme: 'bearer', token: 'glpat-secret' },
+      authorization: { scheme: 'bearer', token: 'glpat-secret', username: 'oauth2' },
     });
     expect(result.contextForConnection).toHaveBeenLastCalledWith({
       type: 'oauth',
       accessToken: 'glpat-secret',
     });
-    expect(tokenUrl('gitlab.example.com', 'acme/app', 'glpat-secret')).toBe(
-      'https://oauth2:glpat-secret@gitlab.example.com/acme/app.git',
+    expect(tokenUrl('gitlab.example.com', 'acme/app', 'glpat-secret@value')).toBe(
+      'https://oauth2:glpat-secret%40value@gitlab.example.com/acme/app.git',
     );
+  });
+
+  it('does not expose a Platform connection selector as a repository credential', async () => {
+    const result = setup(null);
+    const { repository } = await register(result);
+
+    await expect(
+      result.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: repository.id }),
+    ).rejects.toMatchObject<Partial<GitLabApiError>>({ status: 501 });
   });
 
   it('lists and normalizes merge requests while filtering drafts', async () => {
@@ -228,6 +238,14 @@ describe('buildGitLabVersionControl', () => {
         commitMessage: 'Details',
       }),
     ).resolves.toEqual({ merged: true, message: 'Merge request merged.', sha: 'squash-sha' });
+    await expect(
+      result.versionControl.mergePullRequest({
+        connection: CONNECTION,
+        sourceId: 'acme/app',
+        pullRequestId: '17',
+        method: 'rebase',
+      }),
+    ).rejects.toMatchObject<Partial<GitLabApiError>>({ status: 501 });
 
     expect(create).toHaveBeenCalledWith('acme/app', {
       sourceBranch: 'feature',
@@ -336,12 +354,12 @@ describe('buildGitLabVersionControl', () => {
       nextCursor: null,
     });
     await expect(
-      result.versionControl.submitReview({
+      result.versionControl.createReview({
         connection: CONNECTION,
         sourceId: 'acme/app',
         pullRequestId: '17',
-        reviewId: '17:pending',
         event: 'approve',
+        commitId: 'head-sha',
       }),
     ).resolves.toMatchObject({ state: 'approved' });
     await expect(
@@ -355,7 +373,7 @@ describe('buildGitLabVersionControl', () => {
       }),
     ).resolves.toMatchObject({ id: '17:comment:94', state: 'commented', body: 'Reviewed' });
 
-    expect(approve).toHaveBeenCalledWith('acme/app', 17);
+    expect(approve).toHaveBeenCalledWith('acme/app', 17, 'head-sha');
     expect(createNote).toHaveBeenCalledWith('acme/app', 17, 'Reviewed');
   });
 
@@ -400,13 +418,17 @@ describe('buildGitLabVersionControl', () => {
         ],
       },
     ]);
+    vi.spyOn(result.api, 'getMergeRequestDiscussion').mockResolvedValue({
+      id: 'discussion-1',
+      notes: [{ ...note({ id: 201, body: 'Please revise' }), position: POSITION }],
+    });
     const addNote = vi.spyOn(result.api, 'addMergeRequestDiscussionNote').mockResolvedValue({
       ...note({ id: 203, body: 'Reply' }),
-      position: POSITION,
+      position: null,
     });
     const updateNote = vi.spyOn(result.api, 'updateMergeRequestDiscussionNote').mockResolvedValue({
-      ...note({ id: 201, body: 'Updated' }),
-      position: POSITION,
+      ...note({ id: 202, body: 'Updated reply' }),
+      position: null,
     });
     const deleteNote = vi.spyOn(result.api, 'deleteMergeRequestDiscussionNote').mockResolvedValue();
 
@@ -420,6 +442,8 @@ describe('buildGitLabVersionControl', () => {
         path: 'src/app.ts',
         line: 42,
         side: 'right',
+        startLine: 40,
+        startSide: 'right',
       }),
     ).resolves.toMatchObject({
       id: '17:discussion-1:201',
@@ -430,6 +454,7 @@ describe('buildGitLabVersionControl', () => {
     });
     expect(createDiscussion).toHaveBeenCalledWith('acme/app', 17, {
       body: 'Please revise',
+      commitId: 'head-sha',
       position: {
         position_type: 'text',
         base_sha: 'base-sha',
@@ -439,6 +464,20 @@ describe('buildGitLabVersionControl', () => {
         new_path: 'src/app.ts',
         old_line: undefined,
         new_line: 42,
+        line_range: {
+          start: {
+            line_code: '216381173f187cf4c2baf119193855699f4bc616_0_40',
+            type: 'new',
+            old_line: undefined,
+            new_line: 40,
+          },
+          end: {
+            line_code: '216381173f187cf4c2baf119193855699f4bc616_0_42',
+            type: 'new',
+            old_line: undefined,
+            new_line: 42,
+          },
+        },
       },
     });
 
@@ -448,21 +487,34 @@ describe('buildGitLabVersionControl', () => {
         sourceId: 'acme/app',
         pullRequestId: '17',
       }),
-    ).resolves.toMatchObject({ comments: [{ id: '17:discussion-1:201' }], nextCursor: null });
+    ).resolves.toMatchObject({
+      comments: [
+        { id: '17:discussion-1:201', replyToId: null },
+        { id: '17:discussion-1:202', replyToId: '17:discussion-1:201', path: 'src/app.ts', line: 42 },
+      ],
+      nextCursor: null,
+    });
     await expect(
       result.versionControl.createReviewComment({
         connection: CONNECTION,
         sourceId: 'acme/app',
         pullRequestId: '17',
         body: 'Reply',
-        replyToId: '17:discussion-1',
+        replyToId: '17:discussion-1:201',
       }),
-    ).resolves.toMatchObject({ id: '17:discussion-1:203', replyToId: '17:discussion-1' });
-    await result.versionControl.updateReviewComment({
-      connection: CONNECTION,
-      sourceId: 'acme/app',
-      commentId: '17:discussion-1:201',
-      body: 'Updated',
+    ).resolves.toMatchObject({ id: '17:discussion-1:203', replyToId: '17:discussion-1:201' });
+    await expect(
+      result.versionControl.updateReviewComment({
+        connection: CONNECTION,
+        sourceId: 'acme/app',
+        commentId: '17:discussion-1:202',
+        body: 'Updated reply',
+      }),
+    ).resolves.toMatchObject({
+      id: '17:discussion-1:202',
+      replyToId: '17:discussion-1:201',
+      path: 'src/app.ts',
+      line: 42,
     });
     await result.versionControl.deleteReviewComment({
       connection: CONNECTION,
@@ -471,7 +523,7 @@ describe('buildGitLabVersionControl', () => {
     });
 
     expect(addNote).toHaveBeenCalledWith('acme/app', 17, 'discussion-1', 'Reply');
-    expect(updateNote).toHaveBeenCalledWith('acme/app', 17, 'discussion-1', 201, 'Updated');
+    expect(updateNote).toHaveBeenCalledWith('acme/app', 17, 'discussion-1', 202, 'Updated reply');
     expect(deleteNote).toHaveBeenCalledWith('acme/app', 17, 'discussion-1', 201);
   });
 
@@ -491,6 +543,28 @@ describe('buildGitLabVersionControl', () => {
         side: 'right',
       }),
     ).rejects.toMatchObject<Partial<GitLabApiError>>({ status: 409 });
+  });
+
+  it('rejects a diff comment prepared against a stale merge request head', async () => {
+    const result = setup();
+    const createDiscussion = vi.spyOn(result.api, 'createMergeRequestDiscussion');
+    vi.spyOn(result.api, 'getMergeRequest').mockResolvedValue(
+      mergeRequest({ diff_refs: { base_sha: 'base-sha', start_sha: 'start-sha', head_sha: 'new-head' } }),
+    );
+
+    await expect(
+      result.versionControl.createReviewComment({
+        connection: CONNECTION,
+        sourceId: 'acme/app',
+        pullRequestId: '17',
+        body: 'Please revise',
+        commitId: 'old-head',
+        path: 'src/app.ts',
+        line: 42,
+        side: 'right',
+      }),
+    ).rejects.toMatchObject<Partial<GitLabApiError>>({ status: 409 });
+    expect(createDiscussion).not.toHaveBeenCalled();
   });
 
   it('lists, adds, and removes user reviewers while rejecting teams', async () => {
@@ -571,6 +645,13 @@ describe('buildGitLabVersionControl', () => {
         orgId: 'org-1',
         installationId: installation.id,
         repositories: [{ externalId: '102', slug: '../escape', defaultBranch: 'main' }],
+      }),
+    ).rejects.toMatchObject<Partial<GitLabApiError>>({ status: 400 });
+    await expect(
+      result.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: installation.id,
+        repositories: [{ externalId: '103', slug: 'acme/repo?token=leak', defaultBranch: 'main' }],
       }),
     ).rejects.toMatchObject<Partial<GitLabApiError>>({ status: 400 });
   });

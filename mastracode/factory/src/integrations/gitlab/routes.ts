@@ -42,7 +42,7 @@ async function resolveOrgTenant(
 }
 
 function gitlabFetchError(c: RouteContext, error: unknown) {
-  if (error instanceof GitLabApiError && error.status === 401) {
+  if (error instanceof GitLabApiError && error.code === 'gitlab_auth_failed') {
     return c.json({ error: 'gitlab_auth_failed', message: error.message }, 409);
   }
   return c.json({ error: 'gitlab_fetch_failed', message: error instanceof Error ? error.message : String(error) }, 502);
