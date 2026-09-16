@@ -163,6 +163,21 @@ describe('materializeRepo', () => {
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
+  it('preserves an existing GitHub checkout when only repository path casing differs', async () => {
+    const sandbox = new FakeSandbox(script =>
+      script.includes('remote get-url origin')
+        ? { exitCode: 0, stdout: 'https://github.com/Acme/App.git\n', stderr: '' }
+        : OK,
+    );
+    await materializeRepo(
+      makeRow({ materializedAt: new Date() }),
+      makeRepoInfo({ repoFullName: 'acme/app' }),
+      sandbox,
+      'tok',
+    );
+    expect(sandbox.calls.some(call => call.includes('git clone'))).toBe(false);
+  });
+
   it('matches self-hosted HTTPS remotes with ports without accepting a different repository', async () => {
     const cloneUrl = 'https://gitlab.example.com:8443/acme/platform/app.git';
     const sameRepo = new FakeSandbox(script =>
@@ -410,7 +425,10 @@ describe('checkoutSessionBranch', () => {
       authUsername: 'oauth2',
     });
 
-    const helper = sandbox.calls.find(call => call.includes('config credential.helper'));
+    const helper = sandbox.calls.find(call => call.includes('MASTRA_SOURCE_CONTROL_USERNAME'));
+    expect(helper).toContain('credential.https://gitlab.example.com/acme/platform/app.git.helper');
+    expect(helper).not.toContain('credential.https://gitlab.example.com/acme/platform/other.git.helper');
+    expect(helper).not.toContain('config credential.helper');
     expect(helper).toContain('MASTRA_SOURCE_CONTROL_USERNAME');
     expect(helper).toContain('MASTRA_SOURCE_CONTROL_TOKEN');
     expect(helper).not.toContain('glpat-secret');

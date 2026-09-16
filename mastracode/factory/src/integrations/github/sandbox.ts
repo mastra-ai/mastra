@@ -246,6 +246,23 @@ function authenticatedUrl(cloneUrl: string, token: string, username: string): st
   return url.toString();
 }
 
+function credentialScope(cloneUrl: string): string {
+  let url: URL;
+  try {
+    url = new URL(cloneUrl);
+  } catch {
+    throw new MaterializeError('Refusing to configure credentials for an invalid repository clone URL.', 'clone-failed');
+  }
+  if (url.protocol !== 'https:' || !url.hostname || url.username || url.password || url.search || url.hash) {
+    throw new MaterializeError('Refusing to configure credentials for an invalid repository clone URL.', 'clone-failed');
+  }
+  const repositoryPath = url.pathname.replace(/\/+$/, '');
+  if (!repositoryPath || repositoryPath === '/') {
+    throw new MaterializeError('Refusing to configure credentials for an invalid repository clone URL.', 'clone-failed');
+  }
+  return url.origin + repositoryPath;
+}
+
 function normalizedRemoteUrl(value: string): string | null {
   let url: URL;
   try {
@@ -255,7 +272,8 @@ function normalizedRemoteUrl(value: string): string | null {
   }
   if (url.protocol !== 'https:' || !url.hostname || url.search || url.hash) return null;
   const pathname = url.pathname.replace(/\/+$/, '').replace(/\.git$/i, '');
-  return `https://${url.host.toLowerCase()}${pathname}`;
+  const repositoryPath = url.hostname.toLowerCase() === 'github.com' ? pathname.toLowerCase() : pathname;
+  return 'https://' + url.host.toLowerCase() + repositoryPath;
 }
 
 /** Repo metadata needed to materialize, read from the org-owned project row. */
@@ -462,8 +480,16 @@ async function checkoutSessionBranchImpl(
   // `gh`; other providers read the credential from the sandbox environment.
   // Install before the already-on-branch early return so resumed sessions heal.
   // Neither helper persists a credential in the repository.
+  const cleanCloneUrl = cloneUrl ?? cleanUrl(repoFullName);
   const credentialHelper = authUsername ? SOURCE_CONTROL_CREDENTIAL_HELPER : GH_CREDENTIAL_HELPER;
-  await sh(sandbox, `git -C ${shellQuote(workdir)} config credential.helper ${shellQuote(credentialHelper)}`);
+  const credentialKey = authUsername
+    ? 'credential.' + credentialScope(cleanCloneUrl) + '.helper'
+    : 'credential.helper';
+  const credentialKeyArg = authUsername ? shellQuote(credentialKey) : credentialKey;
+  await sh(
+    sandbox,
+    'git -C ' + shellQuote(workdir) + ' config ' + credentialKeyArg + ' ' + shellQuote(credentialHelper),
+  );
 
   const current = await sh(sandbox, `git -C ${shellQuote(workdir)} branch --show-current`);
   if (current.exitCode === 0 && current.stdout.trim() === branch) return;
@@ -490,7 +516,6 @@ async function checkoutSessionBranchImpl(
   const shallowClone =
     pullRequestSession &&
     (await sh(sandbox, `git -C ${shellQuote(workdir)} rev-parse --is-shallow-repository`)).stdout.trim() === 'true';
-  const cleanCloneUrl = cloneUrl ?? cleanUrl(repoFullName);
   const authUrl = authenticatedUrl(cleanCloneUrl, token, authUsername ?? 'x-access-token');
   try {
     const setUrl = await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authUrl)}`, {

@@ -3,6 +3,7 @@ import { relativeTime } from '../../../lib/date/relativeTime';
 import { hasLabel } from './boardItems';
 import { itemAppearsInStage } from './boardStages';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
+import type { GitLabIssue } from './services/gitlab';
 import type { LinearIssue } from './services/linear';
 import type { WorkItem, WorkItemSource } from './services/workItems';
 import type { BoardStageId } from './stages';
@@ -15,6 +16,7 @@ import type { BoardStageId } from './stages';
 export const INTAKE_SOURCES = [
   { id: 'github', label: 'Issues' },
   { id: 'github-prs', label: 'PRs' },
+  { id: 'gitlab', label: 'GitLab' },
   { id: 'linear', label: 'Linear' },
 ] as const;
 
@@ -72,6 +74,27 @@ export function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
       requestedReviewers: pr.requestedReviewers ?? [],
       headBranch: pr.headBranch,
       baseBranch: pr.baseBranch,
+    },
+  };
+}
+
+export function gitlabCandidate(issue: GitLabIssue): BoardCandidate {
+  return {
+    sourceKey: issue.externalId,
+    source: 'gitlab-issue',
+    title: issue.title,
+    url: issue.url,
+    meta: issue.identifier + ' · ' + issue.state + (issue.assignee ? ' · ' + issue.assignee : ''),
+    column: 'intake',
+    metadata: {
+      gitlabIssueId: issue.id,
+      identifier: issue.identifier,
+      state: issue.state,
+      assignee: issue.assignee,
+      author: issue.author,
+      sourceId: issue.sourceId,
+      labels: issue.labels,
+      sourceCreatedAt: issue.createdAt,
     },
   };
 }

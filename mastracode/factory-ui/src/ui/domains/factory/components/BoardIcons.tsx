@@ -22,6 +22,7 @@ import { IntakeIcon } from './IntakeIcon';
 const SOURCE_ICONS: Record<WorkItemSource, { icon: ComponentType<SVGProps<SVGSVGElement>>; className: string }> = {
   'github-issue': { icon: GithubIcon, className: 'text-icon5' },
   'github-pr': { icon: GitPullRequest, className: 'text-accent1' },
+  'gitlab-issue': { icon: CircleDot, className: 'text-accent2' },
   'linear-issue': { icon: LinearIcon, className: 'text-accent3' },
   'slack-thread': { icon: SlackIcon, className: '' },
   manual: { icon: CircleDot, className: 'text-icon3' },
