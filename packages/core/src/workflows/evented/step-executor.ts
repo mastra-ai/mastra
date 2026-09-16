@@ -64,6 +64,7 @@ export class StepExecutor extends MastraBase {
 
   async execute(params: {
     workflowId: string;
+    rootRun?: import('../types').WorkflowRunIdentity;
     entry: SingleStepEntry;
     runId: string;
     input?: any;
@@ -182,6 +183,7 @@ export class StepExecutor extends MastraBase {
             {
               workflowId: params.workflowId,
               runId,
+              rootRun: params.rootRun,
               mastra: this.mastra!,
               requestContext,
               inputData,

@@ -238,6 +238,7 @@ export async function executeParallel(
         timeTravel,
         resume,
         executionContext: {
+          rootRun: executionContext.rootRun,
           activeStepsPath: executionContext.activeStepsPath,
           workflowId,
           runId,
@@ -564,6 +565,7 @@ export async function executeConditional(
         restart,
         timeTravel,
         executionContext: {
+          rootRun: executionContext.rootRun,
           workflowId,
           runId,
           executionPath: [...executionContext.executionPath, steps.indexOf(step)],

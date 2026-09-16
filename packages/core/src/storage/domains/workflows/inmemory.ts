@@ -280,6 +280,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return snapshot;
   }
 
+  override supportsAtomicWorkflowStarts(): boolean {
+    return true;
+  }
+
   async persistWorkflowSnapshot({
     workflowName,
     runId,
@@ -287,6 +291,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     snapshot,
     createdAt,
     updatedAt,
+    createOnly,
   }: {
     workflowName: string;
     runId: string;
@@ -294,10 +299,12 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     snapshot: WorkflowRunState;
     createdAt?: Date;
     updatedAt?: Date;
+    createOnly?: boolean;
   }): Promise<void> {
     const key = this.getWorkflowKey(workflowName, runId);
     const now = new Date();
     const existing = this.db.workflows.get(key);
+    if (createOnly && existing) return;
     const data: StorageWorkflowRun = {
       workflow_name: workflowName,
       run_id: runId,

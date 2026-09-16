@@ -21,6 +21,16 @@ const result = await run.start({
 })
 ```
 
+## Repeated starts
+
+With the default and evented execution engines, PostgreSQL and in-memory storage atomically claim a pending outer run before executing its steps. If two callers start the same outer run, only one enters execution. Later calls reject with `WORKFLOW_START_ALREADY_CLAIMED`, including after the run finishes. Create a new run to execute the workflow again. The admitted outer engine still controls nested runs, including repeated loop iterations and retries.
+
+This protection requires storage that reports both `supportsAtomicWorkflowStarts()` and `supportsConcurrentUpdates()`. The default engine also requires a snapshot policy that persists pending and running states. The evented engine always stores the initial run record for execution. Other storage adapters and execution engines retain their existing behavior. Custom storage adapters must support both create-only snapshot inserts and conditional `updateWorkflowState()` updates before enabling this capability.
+
+Input validation and `onStart` run before the claim. A rejected input or `onStart` callback leaves the run pending. Keep `onStart` safe to repeat, since competing callers can both reach that callback.
+
+The claim saves the initial input, state, and request context. If the process exits before the first step, use [`.restart()`](/reference/workflows/run-methods/restart) to recover the run after stopping the original executor. Recovery can replay an interrupted step, so external operations still need their own idempotency guarantees.
+
 ## Parameters
 
 <PropertiesTable

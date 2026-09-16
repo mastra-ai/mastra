@@ -124,8 +124,8 @@ describe('handleError', () => {
   });
 
   describe('WORKFLOW_RESUME_ALREADY_CLAIMED', () => {
-    it('maps a losing concurrent resume to 409', () => {
-      const err = Object.assign(new Error('already resumed'), { id: 'WORKFLOW_RESUME_ALREADY_CLAIMED' });
+    it.each(['WORKFLOW_RESUME_ALREADY_CLAIMED', 'WORKFLOW_START_ALREADY_CLAIMED'])('maps %s to 409', id => {
+      const err = Object.assign(new Error('already resumed'), { id });
       let caught: HTTPException | undefined;
       try {
         handleError(err, 'default');
