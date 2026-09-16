@@ -170,6 +170,38 @@ describe('toolInteraction', () => {
     });
   });
 
+  describe('when network metadata keys approvals by tool name', () => {
+    it('accepts an approval belonging to this call', () => {
+      expect(
+        toolInteraction({ mode: 'network', requireApprovalMetadata: { view: approval('call-1') } }, 'view', 'call-1')
+          .approval,
+      ).toEqual(approval('call-1'));
+    });
+
+    it('ignores an approval belonging to another call', () => {
+      expect(
+        toolInteraction(
+          { mode: 'network', requireApprovalMetadata: { view: approval('other-call') } },
+          'view',
+          'call-1',
+        ).approval,
+      ).toBeUndefined();
+    });
+
+    it('falls back to the call ID when the name entry belongs to another call', () => {
+      expect(
+        toolInteraction(
+          {
+            mode: 'network',
+            requireApprovalMetadata: { view: approval('other-call'), 'call-1': approval('call-1') },
+          },
+          'view',
+          'call-1',
+        ).approval,
+      ).toEqual(approval('call-1'));
+    });
+  });
+
   describe('when there is no metadata', () => {
     it('returns nothing', () => {
       expect(toolInteraction(undefined, 'view', 'call-1')).toEqual({ approval: undefined, suspended: undefined });
