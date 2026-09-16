@@ -1265,9 +1265,9 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
 
       // Workflow stream output: accumulate into watch-result state
       if (payloadOutput?.type?.startsWith('workflow-')) {
-        const existingWorkflowState =
-          ((toolPart.toolInvocation as any).result as WorkflowStreamResult<any, any, any, any>) ||
-          ({} as WorkflowStreamResult<any, any, any, any>);
+        const existingWorkflowState = (toolPart.toolInvocation as any).result as
+          | WorkflowStreamResult<any, any, any, any>
+          | undefined;
         const updated = mapWorkflowStreamChunkToWatchResult(existingWorkflowState, payloadOutput);
 
         parts[toolPartIndex] = {
