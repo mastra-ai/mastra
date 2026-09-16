@@ -205,6 +205,16 @@ function buildWorkflow(
       // branch() takes Array<[ConditionFunction, Step]> tuples
       const branchTuples: Array<[any, any]> = [];
 
+      // Shared fallback gating: a no-rule user default runs only when no explicit rule
+      // matched the current input, and the internal pass-through runs only when no
+      // explicit rule matched AND no user default exists. These arrays/flags are
+      // populated as branches resolve and are read at execution time by the predicates
+      // below, so their evaluation reflects only branches that were actually added.
+      const explicitRuleGroups: NonNullable<(typeof entry.conditions)[number]['rules']>[] = [];
+      let hasUserDefault = false;
+      const anyExplicitMatch = (inputData: Record<string, unknown>) =>
+        explicitRuleGroups.some(rules => evaluateRuleGroup(rules, inputData));
+
       for (const [i, condition] of entry.conditions.entries()) {
         // Each condition branch is an array of entries
         let branchStep: any;
@@ -223,13 +233,18 @@ function buildWorkflow(
         if (condition.rules) {
           // Conditional branch with RuleGroup evaluated against the previous step's output
           const rules = condition.rules;
+          explicitRuleGroups.push(rules);
           const conditionFn = async ({ inputData }: { inputData: Record<string, unknown> }) => {
             return evaluateRuleGroup(rules, inputData);
           };
           branchTuples.push([conditionFn, branchStep]);
         } else {
-          // Default branch (no rules = always matches, acts as fallback)
-          branchTuples.push([async () => true, branchStep]);
+          // Default branch (no rules): fallback that runs only when no explicit rule matched.
+          hasUserDefault = true;
+          branchTuples.push([
+            async ({ inputData }: { inputData: Record<string, unknown> }) => !anyExplicitMatch(inputData),
+            branchStep,
+          ]);
         }
       }
 
@@ -243,7 +258,13 @@ function buildWorkflow(
           outputSchema: ProcessorStepSchema,
           execute: async ({ inputData }) => inputData,
         });
-        branchTuples.push([async () => true, passthroughStep]);
+        // Internal pass-through runs only when no explicit rule matched and there is
+        // no user-defined default branch to handle the unmatched case.
+        branchTuples.push([
+          async ({ inputData }: { inputData: Record<string, unknown> }) =>
+            !anyExplicitMatch(inputData) && !hasUserDefault,
+          passthroughStep,
+        ]);
 
         workflow = (workflow as any).branch(branchTuples);
         // After branch, outputs are keyed by step ID: { [stepId]: ProcessorStepOutput }

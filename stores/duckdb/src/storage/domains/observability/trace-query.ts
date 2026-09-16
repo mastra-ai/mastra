@@ -20,6 +20,7 @@ import type {
 } from '@mastra/core/storage';
 
 import type { DuckDBConnection } from '../../db/index';
+import { parseJson } from './helpers';
 
 type ParameterType = 'scalar' | 'timestamp';
 type FieldDefinition = { sql: string; parameterType: ParameterType };
@@ -86,6 +87,11 @@ const FEEDBACK_FIELDS = {
 const TRACE_SELECT = `
   r.traceId AS traceId,
   r.spanId AS rootSpanId,
+  r.name AS name,
+  r.entityId AS entityId,
+  r.parentSpanId AS parentSpanId,
+  r.metadata AS metadata,
+  r.input AS input,
   r.threadId AS threadId,
   r.resourceId AS resourceId,
   r.startedAt AS startedAt,
@@ -638,6 +644,12 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
   const traces = visibleRows.map(row => ({
     traceId: String(row.traceId),
     rootSpanId: String(row.rootSpanId),
+    name: row.name,
+    entityId: row.entityId ?? null,
+    parentSpanId: row.parentSpanId ?? null,
+    createdAt: asIsoTimestamp(row.startedAt),
+    metadata: parseJson(row.metadata) ?? null,
+    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
     threadId: row.threadId == null ? null : String(row.threadId),
     resourceId: row.resourceId == null ? null : String(row.resourceId),
     startedAt: asIsoTimestamp(row.startedAt),
