@@ -8343,6 +8343,63 @@ export class Agent<
   }
 
   /**
+   * The run a tool approval on this thread would resume: the run this process is
+   * driving, else a suspended run recovered from storage so approvals survive a
+   * restart or land on another instance. `undefined` once the run has completed
+   * or been resumed elsewhere.
+   */
+  async findToolApprovalRun({
+    threadId,
+    resourceId,
+    toolCallId,
+  }: {
+    threadId: string;
+    resourceId: string;
+    toolCallId?: string;
+  }): Promise<{ runId: string; resolvedFromStorage: boolean } | undefined> {
+    const activeRunId = this.getActiveThreadRunId({ threadId, resourceId });
+    if (activeRunId) {
+      return { runId: activeRunId, resolvedFromStorage: false };
+    }
+
+    let suspendedRuns: AgentRun[] = [];
+    try {
+      ({ runs: suspendedRuns } = await this.listSuspendedRuns({ threadId, resourceId }));
+    } catch (error) {
+      // Only swallow the expected no-storage case — storage outages and
+      // store-driver errors must surface instead of masquerading as
+      // "no suspended run exists".
+      if (!(error instanceof MastraError) || error.id !== 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
+        throw error;
+      }
+    }
+
+    const matchingRuns = toolCallId
+      ? suspendedRuns.filter(run => run.toolCalls.some(toolCall => toolCall.toolCallId === toolCallId))
+      : suspendedRuns;
+
+    if (matchingRuns.length > 1) {
+      throw new MastraError({
+        id: 'AGENT_SEND_TOOL_APPROVAL_AMBIGUOUS_SUSPENDED_RUNS',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text:
+          `Agent "${this.name}" sendToolApproval() found ${matchingRuns.length} suspended runs for thread "${threadId}". ` +
+          `Pass a toolCallId to disambiguate, or resume a specific run with approveToolCall()/declineToolCall() and an explicit runId.`,
+        details: {
+          threadId,
+          resourceId,
+          agentName: this.name,
+          runIds: matchingRuns.map(run => run.runId).join(', '),
+        },
+      });
+    }
+
+    const storedRunId = matchingRuns[0]?.runId;
+    return storedRunId ? { runId: storedRunId, resolvedFromStorage: true } : undefined;
+  }
+
+  /**
    * Lists suspended agent runs from workflow snapshot storage — runs waiting on
    * a tool-call approval (`requireApproval` / `requireToolApproval`) or on a
    * tool that called `suspend()`.
@@ -9709,54 +9766,8 @@ export class Agent<
       return { accepted: continuation.accepted, runId: continuation.runId, toolCallId: options.toolCallId };
     }
 
-    let runId = this.getActiveThreadRunId({ threadId, resourceId });
-    // Tracks whether runId was recovered from storage (not the in-memory active-run
-    // map). This path resumes directly because the snapshot has already been
-    // discovered here, avoiding a second storage lookup in sendStreamResume().
-    let resolvedFromStorage = false;
-
-    if (!runId) {
-      // The in-memory active-run map only knows about runs started by this process.
-      // After a server restart (or on another instance) fall back to storage-backed
-      // suspended-run discovery so approvals stay durable.
-      let suspendedRuns: AgentRun[] = [];
-      try {
-        ({ runs: suspendedRuns } = await this.listSuspendedRuns({ threadId, resourceId }));
-      } catch (error) {
-        // Only swallow the expected no-storage case — storage outages and
-        // store-driver errors must surface instead of masquerading as
-        // "no suspended run exists".
-        if (!(error instanceof MastraError) || error.id !== 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
-          throw error;
-        }
-      }
-
-      const matchingRuns = options.toolCallId
-        ? suspendedRuns.filter(run => run.toolCalls.some(toolCall => toolCall.toolCallId === options.toolCallId))
-        : suspendedRuns;
-
-      if (matchingRuns.length > 1) {
-        throw new MastraError({
-          id: 'AGENT_SEND_TOOL_APPROVAL_AMBIGUOUS_SUSPENDED_RUNS',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text:
-            `Agent "${this.name}" sendToolApproval() found ${matchingRuns.length} suspended runs for thread "${threadId}". ` +
-            `Pass a toolCallId to disambiguate, or resume a specific run with approveToolCall()/declineToolCall() and an explicit runId.`,
-          details: {
-            threadId,
-            resourceId,
-            agentName: this.name,
-            runIds: matchingRuns.map(run => run.runId).join(', '),
-          },
-        });
-      }
-
-      runId = matchingRuns[0]?.runId;
-      resolvedFromStorage = runId !== undefined;
-    }
-
-    if (!runId) {
+    const approvalRun = await this.findToolApprovalRun({ threadId, resourceId, toolCallId: options.toolCallId });
+    if (!approvalRun) {
       throw new MastraError({
         id: 'AGENT_SEND_TOOL_APPROVAL_NO_ACTIVE_THREAD_RUN',
         domain: ErrorDomain.AGENT,
@@ -9771,6 +9782,7 @@ export class Agent<
         },
       });
     }
+    const { runId, resolvedFromStorage } = approvalRun;
 
     const resumeOptions = deepMerge(
       (streamOptions ?? {}) as Record<string, unknown>,

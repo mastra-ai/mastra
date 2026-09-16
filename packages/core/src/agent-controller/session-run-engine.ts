@@ -745,6 +745,18 @@ export class SessionRunEngine {
       case 'tool-call-approval': {
         const toolCallId = getString(getPayload(chunk).toolCallId) ?? '';
         const toolName = getString(getPayload(chunk).toolName) ?? '';
+        const threadId = this.#session.thread.getId();
+        // Retained transports replay finished runs to late subscribers.
+        const approvalRunAlreadyGone =
+          threadId !== null &&
+          !(await agent.findToolApprovalRun({
+            threadId,
+            resourceId: this.#session.identity.getResourceId(),
+            toolCallId,
+          }));
+        if (approvalRunAlreadyGone) {
+          break;
+        }
         const approvalTransform = getTransformedToolPayload(chunk.metadata, 'display', 'approval');
         const toolArgs = hasTransformedToolPayload(approvalTransform)
           ? approvalTransform.transformed
