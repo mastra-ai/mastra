@@ -3,12 +3,15 @@ import path from 'node:path';
 import type { ServerType } from '@hono/node-server';
 import { serve } from '@hono/node-server';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { MCPServerConfig, Repository, PackageInfo, RemoteInfo } from '@mastra/core/mcp';
+import { EntityType, SpanType, TracingEventType } from '@mastra/core/observability';
 import type { InternalCoreTool, Tool } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import { createStep, Workflow } from '@mastra/core/workflows';
+import { Observability } from '@mastra/observability';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import type {
@@ -19,7 +22,7 @@ import type {
   ListResourceTemplatesResult,
   Prompt,
 } from '@modelcontextprotocol/server';
-import { ProtocolErrorCode } from '@modelcontextprotocol/server';
+import { CLIENT_INFO_META_KEY, PROTOCOL_VERSION_META_KEY, ProtocolErrorCode } from '@modelcontextprotocol/server';
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import getPort from 'get-port';
 import { Hono } from 'hono';
@@ -3609,5 +3612,208 @@ describe('MCPServer readJsonBody compatibility', () => {
 
       await client.disconnect();
     });
+  });
+});
+
+describe('MCPServer - Tracing', () => {
+  const endedSpans: any[] = [];
+  const collectingExporter = {
+    name: 'collecting-exporter',
+    async exportTracingEvent(event: { type: string; exportedSpan?: any }) {
+      if (event.type === TracingEventType.SPAN_ENDED) {
+        endedSpans.push(event.exportedSpan);
+      }
+    },
+    async flush() {},
+    async shutdown() {},
+  };
+
+  const echoTool = createTool({
+    id: 'echoTool',
+    description: 'Echoes the message',
+    inputSchema: z.object({ message: z.string() }),
+    execute: async ({ message }) => ({ echoed: message }),
+  });
+
+  const lookupTool = createTool({
+    id: 'lookup',
+    description: 'Looks something up',
+    inputSchema: z.object({ id: z.string() }),
+    execute: async ({ id }) => ({ found: id }),
+  });
+
+  let step = 0;
+  const tracedAgent = new Agent({
+    id: 'tracedAgent',
+    name: 'tracedAgent',
+    description: 'Calls its lookup tool once, then answers',
+    instructions: 'Use the lookup tool.',
+    tools: { lookup: lookupTool },
+    model: new MockLanguageModelV2({
+      doGenerate: async () => {
+        step++;
+        const usage = { inputTokens: 10, outputTokens: 20, totalTokens: 30 };
+        if (step === 1) {
+          return {
+            finishReason: 'tool-calls' as const,
+            usage,
+            content: [{ type: 'tool-call' as const, toolCallId: 'call-1', toolName: 'lookup', input: '{"id":"42"}' }],
+            warnings: [],
+          };
+        }
+        return {
+          finishReason: 'stop' as const,
+          usage,
+          content: [{ type: 'text' as const, text: 'Found it.' }],
+          warnings: [],
+        };
+      },
+    }),
+  });
+
+  const server = new MCPServer({
+    id: 'traced-server',
+    name: 'Traced Server',
+    version: '3.2.1',
+    tools: { echoTool },
+    agents: { tracedAgent },
+    resources: {
+      listResources: async () => [{ uri: 'file://known', name: 'known' }],
+      getResourceContent: async () => ({ text: 'known content' }),
+    },
+  });
+
+  new Mastra({
+    logger: false,
+    mcpServers: { server },
+    observability: new Observability({
+      configs: { default: { serviceName: 'mcp-tracing-test', exporters: [collectingExporter] } },
+    }),
+  });
+
+  const handler = (method: string) => {
+    // @ts-expect-error - accessing internal for testing
+    return server.getServer()._requestHandlers.get(method);
+  };
+  const spansOfType = (type: SpanType) => endedSpans.filter(span => span.type === type);
+  const requestSpans = () => spansOfType(SpanType.MCP_SERVER_REQUEST);
+
+  beforeEach(() => {
+    endedSpans.length = 0;
+    step = 0;
+  });
+
+  it('wraps tools/call in a single MCP_SERVER_REQUEST root span and no TOOL_CALL span', async () => {
+    const params = { name: 'echoTool', arguments: { message: 'hi' } };
+    const result = await handler('tools/call')(
+      { jsonrpc: '2.0', id: '1', method: 'tools/call', params },
+      makeMockExtra({ sessionId: 'session-1' }),
+    );
+
+    expect(requestSpans()).toHaveLength(1);
+    expect(spansOfType(SpanType.TOOL_CALL)).toHaveLength(0);
+
+    const span = requestSpans()[0];
+    expect(span.isRootSpan).toBe(true);
+    expect(span.name).toBe('tools/call echoTool');
+    expect(span.entityType).toBe(EntityType.MCP_SERVER);
+    expect(span.entityId).toBe('traced-server');
+    expect(span.entityName).toBe('Traced Server');
+    expect(span.input).toEqual(params);
+    expect(span.output).toEqual(result);
+    expect(span.errorInfo).toBeUndefined();
+    expect(span.attributes).toEqual({
+      mcpMethod: 'tools/call',
+      targetName: 'echoTool',
+      mcpServer: 'Traced Server',
+      serverVersion: '3.2.1',
+    });
+  });
+
+  it('reads protocol version and client info from a modern request envelope', async () => {
+    const extra = makeMockExtra();
+    (extra.mcpReq as any).envelope = {
+      [PROTOCOL_VERSION_META_KEY]: '2026-07-28',
+      [CLIENT_INFO_META_KEY]: { name: 'test-client', version: '9.9.9' },
+    };
+    await handler('tools/call')(
+      { jsonrpc: '2.0', id: '1', method: 'tools/call', params: { name: 'echoTool', arguments: { message: 'hi' } } },
+      extra,
+    );
+
+    expect(requestSpans()[0].attributes).toMatchObject({
+      mcpProtocolVersion: '2026-07-28',
+      clientName: 'test-client',
+      clientVersion: '9.9.9',
+    });
+  });
+
+  it('nests an agent run under the request span and keeps the agent tool calls as TOOL_CALL', async () => {
+    await handler('tools/call')(
+      {
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'tools/call',
+        params: { name: 'ask_tracedAgent', arguments: { message: 'go' } },
+      },
+      makeMockExtra(),
+    );
+
+    const requestSpan = requestSpans()[0];
+    const agentRun = spansOfType(SpanType.AGENT_RUN)[0];
+    const toolCalls = spansOfType(SpanType.TOOL_CALL);
+
+    expect(requestSpan.name).toBe('tools/call ask_tracedAgent');
+    expect(agentRun.traceId).toBe(requestSpan.traceId);
+    expect(agentRun.parentSpanId).toBe(requestSpan.id);
+    expect(toolCalls).toHaveLength(1);
+    expect(toolCalls[0].name).toBe("tool: 'lookup'");
+    expect(toolCalls[0].traceId).toBe(requestSpan.traceId);
+    expect(toolCalls[0].isRootSpan).toBe(false);
+  });
+
+  it('fails the span when tools/call returns isError', async () => {
+    await handler('tools/call')(
+      { jsonrpc: '2.0', id: '1', method: 'tools/call', params: { name: 'missing', arguments: {} } },
+      makeMockExtra(),
+    );
+
+    const span = requestSpans()[0];
+    expect(span.errorInfo?.id).toBe('MCP_SERVER_REQUEST_FAILED');
+    expect(span.errorInfo?.message).toContain('Unknown tool: missing');
+  });
+
+  it('fails the span and rethrows when a handler throws', async () => {
+    await expect(
+      handler('resources/read')(
+        { jsonrpc: '2.0', id: '1', method: 'resources/read', params: { uri: 'file://missing' } },
+        makeMockExtra(),
+      ),
+    ).rejects.toThrow('Resource not found');
+
+    const span = requestSpans()[0];
+    expect(span.name).toBe('resources/read file://missing');
+    expect(span.errorInfo?.message).toContain('Resource not found');
+  });
+
+  it('traces list-style requests without a target', async () => {
+    const result = await handler('tools/list')({ jsonrpc: '2.0', id: '1', method: 'tools/list' }, makeMockExtra());
+
+    const span = requestSpans()[0];
+    expect(span.name).toBe('tools/list');
+    expect(span.attributes.targetName).toBeUndefined();
+    expect(span.output).toEqual(result);
+  });
+
+  it('executeTool produces an MCP_SERVER_REQUEST root and no TOOL_CALL', async () => {
+    const result = await server.executeTool('echoTool', { message: 'direct' });
+
+    expect(result).toEqual({ echoed: 'direct' });
+    expect(spansOfType(SpanType.TOOL_CALL)).toHaveLength(0);
+    const span = requestSpans()[0];
+    expect(span.isRootSpan).toBe(true);
+    expect(span.name).toBe('tools/call echoTool');
+    expect(span.input).toEqual({ name: 'echoTool', arguments: { message: 'direct' } });
+    expect(span.output).toEqual(result);
   });
 });

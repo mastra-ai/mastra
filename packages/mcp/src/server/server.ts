@@ -13,6 +13,8 @@ import type {
   MCPServerHonoSSEOptions,
   MCPServerSSEOptions,
 } from '@mastra/core/mcp';
+import { EntityType, getOrCreateSpan, SpanType } from '@mastra/core/observability';
+import type { Span } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/core/schema';
 import { createTool, isValidationError } from '@mastra/core/tools';
@@ -28,9 +30,20 @@ import {
   toNodeHandler,
 } from '@modelcontextprotocol/node';
 import type { StreamableHTTPServerTransportOptions, NodeMcpRequestHandler } from '@modelcontextprotocol/node';
-import { Server, ProtocolError, ProtocolErrorCode, createMcpHandler } from '@modelcontextprotocol/server';
+import {
+  Server,
+  ProtocolError,
+  ProtocolErrorCode,
+  CLIENT_INFO_META_KEY,
+  PROTOCOL_VERSION_META_KEY,
+  createMcpHandler,
+} from '@modelcontextprotocol/server';
 import type {
+  HandlerResultTypeMap,
+  Implementation,
   McpHttpHandler,
+  RequestMethod,
+  RequestTypeMap,
   RequestOptions,
   TextResourceContents,
   BlobResourceContents,
@@ -964,13 +977,115 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
+   * Registers a request handler wrapped in an `MCP_SERVER_REQUEST` root span.
+   * The handler receives the span so nested runs can attach to it.
+   */
+  private setTracedHandler<M extends RequestMethod>(
+    serverInstance: Server,
+    method: M,
+    handler: (
+      request: RequestTypeMap[M],
+      ctx: ServerContext,
+      trace: { requestSpan?: Span<SpanType.MCP_SERVER_REQUEST>; requestContext: RequestContext },
+    ) => Promise<HandlerResultTypeMap[M]>,
+  ): void {
+    serverInstance.setRequestHandler(method, async (request, ctx) => {
+      const extra = toMCPRequestHandlerExtra(ctx);
+      const requestContext = await this.createProxiedRequestContext(extra);
+      const requestSpan = this.startRequestSpan(method, request.params as Record<string, unknown> | undefined, {
+        extra,
+        serverInstance,
+        requestContext,
+      });
+      return this.traceRequest(requestSpan, () => handler(request, ctx, { requestSpan, requestContext }));
+    });
+  }
+
+  private startRequestSpan(
+    method: string,
+    params: Record<string, unknown> | undefined,
+    context: { extra?: MCPRequestHandlerExtra; serverInstance?: Server; requestContext?: RequestContext },
+  ): Span<SpanType.MCP_SERVER_REQUEST> | undefined {
+    const { extra, serverInstance, requestContext } = context;
+    // Modern (2026-07-28) requests carry protocol and client info in the per-request
+    // envelope; legacy connections expose what `initialize` negotiated on the instance.
+    const envelope = extra?.mcpReq.envelope as Record<string, unknown> | undefined;
+    const protocolVersion = envelope
+      ? envelope[PROTOCOL_VERSION_META_KEY]
+      : serverInstance?.getNegotiatedProtocolVersion();
+    const client = (envelope ? envelope[CLIENT_INFO_META_KEY] : serverInstance?.getClientVersion()) as
+      | Implementation
+      | undefined;
+    const target = params?.name ?? params?.uri;
+    const targetName = typeof target === 'string' ? target : undefined;
+
+    return getOrCreateSpan({
+      type: SpanType.MCP_SERVER_REQUEST,
+      name: targetName ? `${method} ${targetName}` : method,
+      entityType: EntityType.MCP_SERVER,
+      entityId: this.id,
+      entityName: this.name,
+      input: params,
+      attributes: {
+        mcpMethod: method,
+        targetName,
+        mcpServer: this.name,
+        serverVersion: this.version,
+        mcpProtocolVersion: typeof protocolVersion === 'string' ? protocolVersion : undefined,
+        clientName: client?.name,
+        clientVersion: client?.version,
+      },
+      tracingContext: {},
+      requestContext,
+      mastra: this.mastra,
+    });
+  }
+
+  /**
+   * Runs `fn` under a request span. Error-shaped results (`isError` from a
+   * handler, `error` from `executeTool`) fail the span; thrown errors end the
+   * whole span tree and are rethrown.
+   */
+  private async traceRequest<T>(
+    requestSpan: Span<SpanType.MCP_SERVER_REQUEST> | undefined,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      const result = await fn();
+      const errorResult = result as
+        | { isError?: boolean; error?: boolean; content?: Array<{ text?: string }>; message?: string }
+        | undefined;
+      if (errorResult?.isError || errorResult?.error === true) {
+        requestSpan?.error({
+          error: new MastraError({
+            id: 'MCP_SERVER_REQUEST_FAILED',
+            domain: ErrorDomain.MCP,
+            category: ErrorCategory.USER,
+            text:
+              errorResult.message ??
+              errorResult.content
+                ?.map(c => c.text)
+                .filter(Boolean)
+                .join('\n'),
+          }),
+        });
+      } else {
+        requestSpan?.end({ output: result });
+      }
+      return result;
+    } catch (error) {
+      requestSpan?.error({ error: error as Error, endTree: true });
+      throw error;
+    }
+  }
+
+  /**
    * Registers all MCP handlers on a given server instance.
    * This allows us to create multiple server instances with identical functionality.
    */
   private registerHandlersOnServer(serverInstance: Server) {
     // List tools handler
-    serverInstance.setRequestHandler('tools/list', async (_request, ctx) => {
-      const proxiedContext = await this.createProxiedRequestContext(toMCPRequestHandlerExtra(ctx));
+    this.setTracedHandler(serverInstance, 'tools/list', async (_request, _ctx, { requestContext: proxiedContext }) => {
       const tools = await this.getAuthorizedConvertedToolEntries(proxiedContext);
       return {
         tools: tools.map(([, tool]) => {
@@ -1006,7 +1121,7 @@ export class MCPServer extends MCPServerBase {
     });
 
     // Call tool handler
-    serverInstance.setRequestHandler('tools/call', async (request, ctx) => {
+    this.setTracedHandler(serverInstance, 'tools/call', async (request, ctx, trace) => {
       const startTime = Date.now();
       const extra = toMCPRequestHandlerExtra(ctx);
       let replayInterrupt: ElicitationReplayInterrupt | undefined;
@@ -1070,7 +1185,7 @@ export class MCPServer extends MCPServerBase {
               },
             };
 
-        const proxiedContext = await this.createProxiedRequestContext(extra);
+        const proxiedContext = trace.requestContext;
 
         // Session-aware log emission: sends notifications/message to the calling
         // client, honoring the minimum level it set via logging/setLevel.
@@ -1124,6 +1239,8 @@ export class MCPServer extends MCPServerBase {
           messages: [],
           toolCallId: '',
           requestContext: proxiedContext,
+          tracingContext: { currentSpan: trace.requestSpan },
+          skipToolSpan: true,
           // Pass MCP-specific context through the mcp property
           mcp: {
             elicitation: sessionElicitation,
@@ -1251,7 +1368,7 @@ export class MCPServer extends MCPServerBase {
 
     // Set logging level handler. The level is tracked per server instance so
     // each HTTP session (which gets its own instance) can set its own level.
-    serverInstance.setRequestHandler('logging/setLevel', async request => {
+    this.setTracedHandler(serverInstance, 'logging/setLevel', async request => {
       this.loggingLevels.set(serverInstance, request.params.level);
       this.logger.debug('Logging level set', { level: request.params.level });
       return {};
@@ -1277,7 +1394,7 @@ export class MCPServer extends MCPServerBase {
 
     // List resources handler
     if (capturedResourceOptions.listResources) {
-      serverInstance.setRequestHandler('resources/list', async (_request, ctx) => {
+      this.setTracedHandler(serverInstance, 'resources/list', async (_request, ctx) => {
         // Always re-evaluate the provider with the current request's `extra`. The result
         // must never be cached on the shared instance: dynamic providers scope resources
         // per caller (e.g. via `extra.authInfo`), so caching would leak one caller's
@@ -1295,7 +1412,7 @@ export class MCPServer extends MCPServerBase {
 
     // Read resource handler
     if (capturedResourceOptions.getResourceContent) {
-      serverInstance.setRequestHandler('resources/read', async (request, ctx) => {
+      this.setTracedHandler(serverInstance, 'resources/read', async (request, ctx) => {
         const startTime = Date.now();
         const uri = request.params.uri;
         this.logger.debug('Handling ReadResource request', { uri });
@@ -1360,7 +1477,7 @@ export class MCPServer extends MCPServerBase {
 
     // Resource templates handler
     if (capturedResourceOptions.resourceTemplates) {
-      serverInstance.setRequestHandler('resources/templates/list', async (_request, ctx) => {
+      this.setTracedHandler(serverInstance, 'resources/templates/list', async (_request, ctx) => {
         // Always re-evaluate the provider with the current request's `extra`, never from a
         // shared cache. Like resource lists, dynamic template providers can scope templates
         // per caller (e.g. via `extra.authInfo`), so caching would leak across callers.
@@ -1377,7 +1494,7 @@ export class MCPServer extends MCPServerBase {
     }
 
     // Subscribe/unsubscribe handlers
-    serverInstance.setRequestHandler('resources/subscribe', async (request: { params: { uri: string } }) => {
+    this.setTracedHandler(serverInstance, 'resources/subscribe', async request => {
       const uri = request.params.uri;
       this.logger.info('Received resources/subscribe request', { uri });
       let subscriptions = this.subscriptionsByInstance.get(serverInstance);
@@ -1389,7 +1506,7 @@ export class MCPServer extends MCPServerBase {
       return {};
     });
 
-    serverInstance.setRequestHandler('resources/unsubscribe', async (request: { params: { uri: string } }) => {
+    this.setTracedHandler(serverInstance, 'resources/unsubscribe', async request => {
       const uri = request.params.uri;
       this.logger.info('Received resources/unsubscribe request', { uri });
       this.subscriptionsByInstance.get(serverInstance)?.delete(uri);
@@ -1406,7 +1523,7 @@ export class MCPServer extends MCPServerBase {
 
     // List prompts handler
     if (capturedPromptOptions.listPrompts) {
-      serverInstance.setRequestHandler('prompts/list', async (_request, ctx) => {
+      this.setTracedHandler(serverInstance, 'prompts/list', async (_request, ctx) => {
         this.logger.debug('Handling ListPrompts request');
         try {
           const prompts = await capturedPromptOptions.listPrompts({ extra: toMCPRequestHandlerExtra(ctx) });
@@ -1426,7 +1543,8 @@ export class MCPServer extends MCPServerBase {
 
     // Get prompt handler
     if (capturedPromptOptions.getPromptMessages) {
-      serverInstance.setRequestHandler(
+      this.setTracedHandler(
+        serverInstance,
         'prompts/get',
         async (request: { params: { name: string; arguments?: any } }, ctx) => {
           const startTime = Date.now();
@@ -2936,6 +3054,20 @@ export class MCPServer extends MCPServerBase {
     args: any,
     executionContext?: { messages?: any[]; toolCallId?: string; requestContext?: RequestContext },
   ): Promise<any> {
+    const requestSpan = this.startRequestSpan(
+      'tools/call',
+      { name: toolId, arguments: args },
+      { requestContext: executionContext?.requestContext },
+    );
+    return this.traceRequest(requestSpan, () => this.executeConvertedTool(toolId, args, executionContext, requestSpan));
+  }
+
+  private async executeConvertedTool(
+    toolId: string,
+    args: any,
+    executionContext: { messages?: any[]; toolCallId?: string; requestContext?: RequestContext } | undefined,
+    requestSpan: Span<SpanType.MCP_SERVER_REQUEST> | undefined,
+  ): Promise<any> {
     const tool = this.convertedTools[toolId];
     let validatedArgs = args;
     try {
@@ -3014,6 +3146,8 @@ export class MCPServer extends MCPServerBase {
         messages: executionContext?.messages || [],
         toolCallId: executionContext?.toolCallId || randomUUID(),
         requestContext: executionContext?.requestContext,
+        tracingContext: { currentSpan: requestSpan },
+        skipToolSpan: true,
       };
       await this.enforceToolExecutionFGA(toolId, finalExecutionContext.requestContext);
       const result = await tool.execute(validatedArgs, finalExecutionContext);

@@ -1593,6 +1593,7 @@ type Shared_Type_70 =
   | 'model_inference'
   | 'model_chunk'
   | 'mcp_tool_call'
+  | 'mcp_server_request'
   | 'processor_run'
   | 'tool_call'
   | 'client_tool_call'
@@ -1629,6 +1630,7 @@ type Shared_Type_71 =
   | 'tool_result_processor'
   | 'workflow_step'
   | 'tool'
+  | 'mcp_server'
   | 'workflow_run'
   | 'memory';
 
@@ -9138,6 +9140,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'model_inference'
           | 'model_chunk'
           | 'mcp_tool_call'
+          | 'mcp_server_request'
           | 'processor_run'
           | 'tool_call'
           | 'client_tool_call'

@@ -10,6 +10,7 @@ import type {
   AgentRunAttributes,
   ToolCallAttributes,
   MCPToolCallAttributes,
+  MCPServerRequestAttributes,
   WorkflowRunAttributes,
   WorkflowStepAttributes,
 } from '@mastra/core/observability';
@@ -299,6 +300,26 @@ describe('SpanConverter', () => {
 
       const result = await converter.convertSpan(span);
       expect(result.kind).toBe(SpanKind.CLIENT);
+    });
+
+    it('should use SERVER for MCP server requests', async () => {
+      const span: ExportedSpan<SpanType.MCP_SERVER_REQUEST> = {
+        id: 'span-1',
+        traceId: 'trace-1',
+        name: 'tools/call lookup',
+        type: SpanType.MCP_SERVER_REQUEST,
+        startTime: new Date(),
+        endTime: new Date(),
+        isEvent: false,
+        isRootSpan: true,
+        attributes: {
+          mcpMethod: 'tools/call',
+          mcpServer: 'server-1',
+        } as MCPServerRequestAttributes,
+      };
+
+      const result = await converter.convertSpan(span);
+      expect(result.kind).toBe(SpanKind.SERVER);
     });
   });
 
