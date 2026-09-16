@@ -163,6 +163,18 @@ describe('MCPOAuthClientProvider', () => {
     expect((provider as unknown as Record<string, unknown>)['saveClientInformation']).toBeUndefined();
   });
 
+  it('rejects a pre-registered client and a metadata document URL together', () => {
+    expect(
+      () =>
+        new MCPOAuthClientProvider({
+          redirectUrl: 'http://localhost:3000/callback',
+          clientMetadata,
+          clientInformation: { client_id: 'pre-registered' },
+          clientMetadataUrl: 'https://client.example.com/oauth/client-metadata.json',
+        }),
+    ).toThrow(/either clientInformation or clientMetadataUrl, not both/);
+  });
+
   it('uses the Client ID Metadata Document URL as the client_id', () => {
     const clientMetadataUrl = 'https://client.example.com/oauth/client-metadata.json';
     const provider = new MCPOAuthClientProvider({

@@ -1,7 +1,7 @@
 import type { AuthInfo } from '@modelcontextprotocol/server';
 import { describe, expect, it, vi } from 'vitest';
 import { MCPServer } from '../server';
-import { connectClient, serveHTTP } from './harness';
+import { connectClient, serveHTTP } from './harness.mock';
 
 vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
 

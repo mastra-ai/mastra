@@ -397,28 +397,6 @@ describe('MCPClient OAuth authorization flow', () => {
     expect(authServer.registrationAttempts).toBe(0);
   });
 
-  it('prefers caller-provided client information over a metadata document', async () => {
-    const { authServer, mcpServer, callbackUrl } = await setup();
-    const preRegisteredClientId = `preregistered-${randomUUID()}`;
-    authServer.preregister({
-      client_id: preRegisteredClientId,
-      redirect_uris: getCallbackUrlCandidates(callbackUrl).map(candidate => candidate.toString()),
-    });
-    const provider = new MCPOAuthClientProvider({
-      redirectUrl: callbackUrl,
-      clientMetadata: { redirect_uris: [callbackUrl], client_name: 'Both Identities', token_endpoint_auth_method: 'none' },
-      clientMetadataUrl: CLIENT_METADATA_URL,
-      clientInformation: { client_id: preRegisteredClientId },
-      onRedirectToAuthorization: driveBrowser,
-    });
-    const mcp = track(createClient(mcpServer.url, provider));
-
-    await mcp.authenticate('fixture');
-
-    expect(authServer.registrationAttempts).toBe(0);
-    expect(authServer.authorizeClientIds).toEqual([preRegisteredClientId]);
-  });
-
   it('rejects an authorization response with the wrong issuer before exchanging the code', async () => {
     const { authServer, mcpServer, callbackUrl } = await setup();
     authServer.authorizationResponseIssuer = 'https://attacker.example.com';

@@ -6,8 +6,8 @@ import { createRequestStateCodec } from '@modelcontextprotocol/server';
 import type { AuthInfo, ElicitResult, InputRequiredResult } from '@modelcontextprotocol/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { connectClient, serveHTTP, textOf } from './__tests__/harness';
-import type { ServedHTTP } from './__tests__/harness';
+import { connectClient, serveHTTP, textOf } from './__tests__/harness.mock';
+import type { ServedHTTP } from './__tests__/harness.mock';
 import { MCPServer } from './server';
 import type { MCPServerConfig } from './server';
 

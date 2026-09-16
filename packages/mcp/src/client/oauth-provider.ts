@@ -200,6 +200,11 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
         'MCPOAuthClientProvider requires a client identity: pass clientInformation for a pre-registered client or clientMetadataUrl for a Client ID Metadata Document. Dynamic client registration is not supported.',
       );
     }
+    if (options.clientInformation && options.clientMetadataUrl) {
+      throw new Error(
+        'MCPOAuthClientProvider accepts one client identity: pass either clientInformation or clientMetadataUrl, not both.',
+      );
+    }
     if (options.clientMetadataUrl) {
       validateClientMetadataUrl(options.clientMetadataUrl);
       if (options.clientMetadata.client_id !== undefined && options.clientMetadata.client_id !== options.clientMetadataUrl) {

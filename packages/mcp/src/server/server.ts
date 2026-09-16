@@ -97,7 +97,9 @@ type JSONSchema7 = NonNullable<Extract<MCPToolExecutionResultV2, { status: 'susp
 
 const EMPTY_OBJECT_SCHEMA = { type: 'object', properties: {} } as const;
 
+/** Tool description served over Mastra's REST routes; `id` is what Studio keys tools by. */
 type ToolInfo = {
+  id: string;
   name: string;
   description?: string;
   inputSchema: Record<string, unknown>;
@@ -420,6 +422,7 @@ export class MCPServer extends MCPServerBase {
 
   private toolInfo(name: string, tool: InternalCoreTool): ToolInfo {
     return {
+      id: name,
       name,
       description: tool.description,
       inputSchema: this.hasInputSchema(name)

@@ -7,6 +7,7 @@ import { noopObserve } from '@mastra/core/tools';
 import type { InternalMastraMCPClient } from './client';
 
 type ToolInfo = {
+  id: string;
   name: string;
   description?: string;
   inputSchema: unknown;
@@ -68,6 +69,7 @@ export class MCPClientServerProxy extends MCPServerBase {
     const tools = await client.tools();
     this.cachedToolList = {
       tools: Object.entries(tools).map(([toolName, tool]) => ({
+        id: toolName,
         name: toolName,
         description: tool.description,
         inputSchema: this.convertSchema(tool.inputSchema),

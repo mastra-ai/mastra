@@ -6,8 +6,8 @@ import { createTool } from '@mastra/core/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { connectClient, serveHTTP, textOf } from './__tests__/harness';
-import type { ServedHTTP } from './__tests__/harness';
+import { connectClient, serveHTTP, textOf } from './__tests__/harness.mock';
+import type { ServedHTTP } from './__tests__/harness.mock';
 import { MCPServer } from './server';
 
 vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
@@ -123,6 +123,8 @@ describe('MCPServer', () => {
       const tool = server.tools().ask_helper!;
       expect(tool.description).toBe("Ask agent 'MyAgent' a question. Agent description: Answers questions.");
       expect(server.getToolInfo('ask_helper')).toMatchObject({
+        id: 'ask_helper',
+        name: 'ask_helper',
         toolType: 'agent',
         inputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },
       });
@@ -157,6 +159,7 @@ describe('MCPServer', () => {
       expect(server.tools().run_doubler!.description).toBe(
         "Run workflow 'doubler'. Workflow description: Doubles a number",
       );
+      expect(server.getToolListInfo()).toMatchObject({ tools: [expect.objectContaining({ id: 'run_doubler' })] });
       expect(server.getToolInfo('run_doubler')).toMatchObject({
         toolType: 'workflow',
         inputSchema: { type: 'object', properties: { n: { type: 'number' } } },

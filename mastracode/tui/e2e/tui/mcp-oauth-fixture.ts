@@ -134,7 +134,10 @@ export async function startMcpOAuthFixtureServer(options: McpOAuthFixtureOptions
       // Dynamic client registration is not offered: the client identifies
       // itself with a Client ID Metadata Document URL instead.
       if (requestUrl.pathname === '/register') {
-        sendJson(res, 404, { error: 'invalid_request', error_description: 'Dynamic client registration is not supported' });
+        sendJson(res, 404, {
+          error: 'invalid_request',
+          error_description: 'Dynamic client registration is not supported',
+        });
         return;
       }
 

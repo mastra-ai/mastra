@@ -1,12 +1,14 @@
-import type { MCPServerPrompts, Prompt, PromptMessage } from '@mastra/mcp';
+import type { MCPServerPrompts, MastraPrompt } from '@mastra/mcp';
+import type { PromptMessage } from '@modelcontextprotocol/sdk/types.js';
 
 /**
  * Migration prompts provide guided workflows for upgrading Mastra versions.
  * These prompts help users systematically work through breaking changes.
  */
-const migrationPrompts: Prompt[] = [
+const migrationPrompts: MastraPrompt[] = [
   {
     name: 'upgrade-to-v1',
+    version: 'v1',
     description:
       'Get a guided migration plan for upgrading from Mastra v0.x to v1.0. Provides step-by-step instructions for handling all breaking changes.',
     arguments: [
@@ -20,6 +22,7 @@ const migrationPrompts: Prompt[] = [
   },
   {
     name: 'migration-checklist',
+    version: 'v1',
     description:
       'Get a comprehensive checklist for migrating to Mastra v1.0. Lists all breaking changes that need to be addressed.',
   },
@@ -38,7 +41,7 @@ export const migrationPromptMessages: MCPServerPrompts = {
     }
 
     if (name === 'upgrade-to-v1') {
-      return getUpgradeToV1Messages(typeof args?.area === 'string' ? args.area : undefined);
+      return getUpgradeToV1Messages(args?.area);
     }
 
     if (name === 'migration-checklist') {

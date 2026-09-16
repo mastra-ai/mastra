@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import { MCPServer } from '@mastra/mcp';
-import { logger } from './logger';
+import { logger, createLogger } from './logger';
 import { migrationPromptMessages } from './prompts/migration';
 import {
   startMastraCourse,
@@ -14,7 +14,9 @@ import { embeddedDocsTools } from './tools/embedded-docs';
 import { migrationTool } from './tools/migration';
 import { fromPackageRoot } from './utils';
 
-const server = new MCPServer({
+let server: MCPServer;
+
+server = new MCPServer({
   name: 'Mastra Documentation Server',
   version: JSON.parse(await fs.readFile(fromPackageRoot(`package.json`), 'utf8')).version,
   tools: {
@@ -30,6 +32,9 @@ const server = new MCPServer({
   },
   prompts: migrationPromptMessages,
 });
+
+// Update logger with server instance
+Object.assign(logger, createLogger(server));
 
 async function runServer() {
   try {

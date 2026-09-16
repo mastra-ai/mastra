@@ -5,8 +5,8 @@
 import { createTool } from '@mastra/core/tools';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { connectClient, serveHTTP } from './__tests__/harness';
-import type { ServedHTTP } from './__tests__/harness';
+import { connectClient, serveHTTP } from './__tests__/harness.mock';
+import type { ServedHTTP } from './__tests__/harness.mock';
 import { MCPServer } from './server';
 
 vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });

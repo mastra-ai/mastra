@@ -54,12 +54,19 @@ const httpServer = createServer(async (req, res) => {
   const body = Buffer.concat(chunks).toString('utf8');
   seen.push({ method: req.method ?? '', headers: req.headers, body });
   res.on('finish', () => responseHeaders.push(Object.keys(res.getHeaders())));
-  await server.startHTTP({
-    url: new URL(req.url ?? '/', 'http://localhost'),
-    httpPath: '/mcp',
-    req: Object.assign(req, { body: body ? JSON.parse(body) : undefined }),
-    res,
-  });
+  try {
+    await server.startHTTP({
+      url: new URL(req.url ?? '/', 'http://localhost'),
+      httpPath: '/mcp',
+      req: Object.assign(req, { body: body ? JSON.parse(body) : undefined }),
+      res,
+    });
+  } catch (error) {
+    // Node ignores a rejected request listener; surface it as a response instead.
+    console.error('startHTTP failed:', error);
+    if (!res.headersSent) res.writeHead(500);
+    res.end();
+  }
 });
 httpServer.listen(0, '127.0.0.1');
 await once(httpServer, 'listening');

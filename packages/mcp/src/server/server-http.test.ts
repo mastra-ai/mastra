@@ -9,9 +9,9 @@ import {
 import type { AuthInfo } from '@modelcontextprotocol/server';
 import { afterAll, beforeAll, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { connectClient, rawRequest, serveHTTP, textOf } from './__tests__/harness';
-import type { ServedHTTP } from './__tests__/harness';
 import type { MCPTraceContext } from '../shared/trace-context';
+import { connectClient, rawRequest, serveHTTP, textOf } from './__tests__/harness.mock';
+import type { ServedHTTP } from './__tests__/harness.mock';
 import { MCPServer } from './server';
 import type { MCPServerHTTPOptions, MCPServerHTTPRequestOptions } from './types';
 

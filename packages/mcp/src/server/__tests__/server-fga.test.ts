@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MCPServer } from '../server';
 import type { MCPServerConfig } from '../types';
-import { connectClient, serveHTTP, textOf } from './harness';
+import { connectClient, serveHTTP, textOf } from './harness.mock';
 
 vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
 
