@@ -705,12 +705,12 @@ describe('Standalone thread page', () => {
           expect(JSON.stringify(sent.mock.calls[0][0])).toContain(JSON.stringify(contents).slice(1, -1));
           await act(async () => response.finish());
           await waitFor(() =>
-            expect(screen.queryAllByRole('button', { name: 'Remove file' })).toHaveLength(editWhilePreparing ? 1 : 0),
+            expect(screen.queryAllByRole('button', { name: 'Remove next.txt' })).toHaveLength(editWhilePreparing ? 1 : 0),
           );
           cleanup();
           renderAt(path);
           expect((await composerInput()).value).toBe(editWhilePreparing ? 'Keep the next question' : '');
-          expect(screen.queryAllByRole('button', { name: 'Remove file' })).toHaveLength(editWhilePreparing ? 1 : 0);
+          expect(screen.queryAllByRole('button', { name: 'Remove next.txt' })).toHaveLength(editWhilePreparing ? 1 : 0);
           if (editWhilePreparing) await screen.findByRole('button', { name: 'Preview next.txt' });
         } finally {
           cleanup();

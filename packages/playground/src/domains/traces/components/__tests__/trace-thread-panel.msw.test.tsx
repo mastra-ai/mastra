@@ -3,7 +3,14 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TraceThreadPanel, type TraceThreadPanelProps } from '../trace-thread-panel';
-import { THREAD_ID, spanADetail, threadTracesList, traceASpans, traceBSpans } from './fixtures/thread-traces';
+import {
+  queryPageFromList,
+  THREAD_ID,
+  spanADetail,
+  threadTracesList,
+  traceASpans,
+  traceBSpans,
+} from './fixtures/thread-traces';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -21,6 +28,9 @@ const newestFirstList = { ...threadTracesList, spans: [threadTracesList.spans[1]
 
 const installHandlers = () => {
   server.use(
+    http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () =>
+      HttpResponse.json(queryPageFromList(newestFirstList)),
+    ),
     http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(newestFirstList)),
     http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/spans/:spanId`, () => HttpResponse.json(spanADetail)),
     http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, ({ params }) =>
