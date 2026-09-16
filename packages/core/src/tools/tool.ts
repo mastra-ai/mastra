@@ -551,10 +551,14 @@ export class Tool<
                 ? {
                     ...baseContext.agent,
                     agentId: baseContext.agent.agentId ?? '',
-                    suspend: (args: any, suspendOptions?: SuspendOptions) => {
-                      suspendData = args;
-                      return baseContext.agent?.suspend?.(args, suspendOptions);
-                    },
+                    ...(baseContext.agent.suspend
+                      ? {
+                          suspend: (args: any, suspendOptions?: SuspendOptions) => {
+                            suspendData = args;
+                            return baseContext.agent?.suspend?.(args, suspendOptions);
+                          },
+                        }
+                      : {}),
                   }
                 : baseContext.agent,
               workflow: baseContext.workflow

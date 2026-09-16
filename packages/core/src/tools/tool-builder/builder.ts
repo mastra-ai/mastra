@@ -14,7 +14,6 @@ import {
 import type { SchemaCompatLayer } from '@mastra/schema-compat';
 import type { JSONSchema7Definition } from 'json-schema';
 import { z } from 'zod/v4';
-import { MastraFGAPermissions } from '../../auth/ee';
 import {
   backgroundOverrideJsonSchema,
   backgroundOverrideZodSchema,
@@ -34,6 +33,8 @@ import type { ToolOptions } from '../../utils';
 import { isZodObject, safeExtendZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
+import { authorizeToolExecution } from '../authorization';
+import type { ToolAuthorizationOrigin } from '../authorization';
 import { markBuilderValidatedInput } from '../builder-validation-context';
 import { createToolObserve } from '../observe';
 import { ToolStream } from '../stream';
@@ -861,37 +862,27 @@ export class CoreToolBuilder extends MastraBase {
         mastra: options.mastra && 'observability' in options.mastra ? (options.mastra as Mastra) : undefined,
       });
 
-      const fgaProvider = (options.mastra as any)?.getServer?.()?.fga;
-      const user = toolRequestContext?.get('user');
-      if (fgaProvider) {
-        const { getAgentToolFGAResourceId, getMCPToolFGAResourceId, getStandaloneToolFGAResourceId, requireFGA } =
-          await import('../../auth/ee/fga-check');
-        const toolResourceId = mcpMeta?.serverName
-          ? getMCPToolFGAResourceId(mcpMeta.serverName, options.name)
-          : options.agentId
-            ? getAgentToolFGAResourceId(options.agentId, options.name)
-            : getStandaloneToolFGAResourceId(options.name);
-        await requireFGA({
-          fgaProvider,
-          user,
-          resource: { type: 'tool', id: toolResourceId },
-          permission: MastraFGAPermissions.TOOLS_EXECUTE,
-          requestContext: toolRequestContext,
-          actor: execOptions?.actor,
-          context: {
-            resourceId: options.resourceId,
-          },
-          metadata: {
-            toolName: options.name,
-            agentId: options.agentId,
-            agentName: options.agentName,
-            runId: options.runId,
-            threadId: options.threadId,
-            executionResourceId: options.resourceId,
-            mcpMetadata: mcpMeta,
-          },
-        });
-      }
+      const authorizationOrigin: ToolAuthorizationOrigin = mcpMeta?.serverName
+        ? { type: 'mcp', serverName: mcpMeta.serverName }
+        : options.agentId
+          ? { type: 'agent', agentId: options.agentId }
+          : { type: 'standalone' };
+      await authorizeToolExecution({
+        mastra: options.mastra,
+        origin: authorizationOrigin,
+        toolName: options.name,
+        requestContext: toolRequestContext,
+        user: toolRequestContext?.get('user'),
+        actor: execOptions?.actor,
+        executionResourceId: options.resourceId,
+        metadata: {
+          agentId: options.agentId,
+          agentName: options.agentName,
+          runId: options.runId,
+          threadId: options.threadId,
+          mcpMetadata: mcpMeta,
+        },
+      });
 
       try {
         logger.debug(start, { ...logData, ...rest, model: logModelObject });

@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { noopLogger } from '../../logger';
 import { RequestContext } from '../../request-context';
 import { LocalSandbox } from '../../workspace/sandbox/local-sandbox';
 import { Workspace } from '../../workspace/workspace';
 import { createTool } from '../tool';
+import { CoreToolBuilder } from '../tool-builder/builder';
 import { createCodeMode } from './code-mode';
 import { StdioCodeModeTransport } from './transport';
 import type { CodeModeToolResult, CodeModeTransport } from './types';
@@ -220,5 +222,223 @@ describe('Code Mode e2e (LocalSandbox)', () => {
     expect(result).toEqual({ success: true, result: 'isolate-ran', logs: [] });
     expect(seen.sandbox).toBeUndefined();
     expect(resolver).not.toHaveBeenCalled();
+  });
+
+  it('forwards the minimal nested context and preserves observability and cancellation', async () => {
+    const events: string[] = [];
+    const observe = {
+      span: async (name: string, fn: () => any) => {
+        events.push(`span:start:${name}`);
+        const result = await fn();
+        events.push(`span:end:${name}`);
+        return result;
+      },
+      log: (_level: string, message: string) => events.push(`log:${message}`),
+    };
+    const requestContext = new RequestContext([['tenant', 'acme']]);
+    const actor = { actorKind: 'system', sourceWorkflow: 'nightly' } as const;
+    const mastra = { id: 'mastra' };
+    const workspace = { id: 'workspace' };
+    const memory = { id: 'memory' };
+    const abortController = new AbortController();
+    abortController.abort();
+    let nestedContext: any;
+
+    const recall = createTool({
+      id: 'recall',
+      description: 'Recall memory',
+      inputSchema: z.object({ query: z.string() }),
+      outputSchema: z.object({ query: z.string(), aborted: z.boolean() }),
+      execute: async ({ query }, context) => {
+        nestedContext = context;
+        context.observe.log('info', 'nested recall');
+        return context.observe.span('nested-recall', () => ({ query, aborted: context.abortSignal?.aborted ?? false }));
+      },
+    });
+    const transport: CodeModeTransport = {
+      requiresSandbox: false,
+      run: async opts => {
+        expect(opts.abortSignal).toBe(abortController.signal);
+        opts.onExternalCall?.('recall', { query: 'Maya' });
+        try {
+          const result = await opts.dispatch('recall', { query: 'Maya' });
+          opts.onExternalResult?.('recall', 1);
+          return { success: true, result, logs: [] };
+        } catch (error) {
+          opts.onExternalResult?.('recall', 1, error);
+          throw error;
+        }
+      },
+    };
+    const { tool } = createCodeMode({ tools: { recall } }, transport);
+
+    const result = await run(
+      tool,
+      `return await external_recall({ query: 'Maya' });`,
+      ctx({
+        observe,
+        mastra,
+        requestContext,
+        actor,
+        workspace,
+        memory,
+        abortSignal: abortController.signal,
+        agent: {
+          agentId: 'agent-1',
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          toolCallId: 'outer-call',
+          messages: [{ role: 'user', content: 'private' }],
+          suspend: vi.fn(),
+          resumeData: { private: true },
+          flushMessages: vi.fn(),
+        },
+        workflow: { workflowId: 'hidden' },
+        mcp: { extra: { hidden: true } },
+        browser: { hidden: true },
+        writer: { hidden: true },
+      }),
+    );
+
+    expect(result).toEqual({
+      success: true,
+      result: { query: 'Maya', aborted: true },
+      logs: [],
+    });
+    expect(nestedContext).toMatchObject({
+      mastra,
+      requestContext,
+      actor,
+      workspace,
+      memory,
+      abortSignal: abortController.signal,
+      agent: {
+        agentId: 'agent-1',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+      },
+    });
+    expect(Object.keys(nestedContext.agent).sort()).toEqual(['agentId', 'resourceId', 'threadId']);
+    expect(nestedContext.workflow).toBeUndefined();
+    expect(nestedContext).not.toHaveProperty('mcp');
+    expect(nestedContext).not.toHaveProperty('browser');
+    expect(nestedContext).not.toHaveProperty('writer');
+    expect(events).toEqual([
+      'span:start:code-mode:execute_typescript',
+      'log:code-mode external call',
+      'log:nested recall',
+      'span:start:nested-recall',
+      'span:end:nested-recall',
+      'log:code-mode external result',
+      'span:end:code-mode:execute_typescript',
+    ]);
+  });
+
+  it('enforces the nested tool FGA check independently from the Code Mode tool', async () => {
+    const requestContext = new RequestContext([['user', { id: 'user-1' }]]);
+    const fgaProvider = {
+      require: vi.fn(async (_user: unknown, input: { resource: { id: string } }) => {
+        if (input.resource.id === 'agent-1:recall') {
+          throw new Error('recall denied');
+        }
+      }),
+    };
+    const mastra = { getServer: () => ({ fga: fgaProvider }) } as any;
+    const recall = createTool({
+      id: 'recall',
+      description: 'Recall memory',
+      inputSchema: z.object({ query: z.string() }),
+      outputSchema: z.object({ query: z.string() }),
+      execute: async ({ query }) => ({ query }),
+    });
+    const transport: CodeModeTransport = {
+      requiresSandbox: false,
+      run: async opts => {
+        try {
+          const result = await opts.dispatch('recall', { query: 'Maya' });
+          return { success: true, result, logs: [] };
+        } catch (error) {
+          return {
+            success: false,
+            error: { message: error instanceof Error ? error.message : String(error) },
+            logs: [],
+          };
+        }
+      },
+    };
+    const { tool: codeModeTool } = createCodeMode({ tools: { recall } }, transport);
+    const build = (tool: any, name: string) =>
+      new CoreToolBuilder({
+        originalTool: tool,
+        options: {
+          name,
+          agentId: 'agent-1',
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          requestContext,
+          mastra,
+          logger: noopLogger,
+        },
+      }).build();
+
+    const directRecall = build(recall, 'recall');
+    await expect(directRecall.execute!({ query: 'Maya' }, { toolCallId: 'direct', messages: [] })).rejects.toThrow(
+      'recall denied',
+    );
+
+    const executeCode = build(codeModeTool, 'execute_typescript');
+    const denied = await executeCode.execute!(
+      { code: `return await external_recall({ query: 'Maya' });` },
+      { toolCallId: 'code', messages: [] },
+    );
+    expect(denied).toMatchObject({ success: false, error: { message: 'recall denied' } });
+    expect(fgaProvider.require.mock.calls.map(([, input]) => input.resource.id)).toEqual([
+      'agent-1:recall',
+      'agent-1:execute_typescript',
+      'agent-1:recall',
+    ]);
+
+    fgaProvider.require.mockResolvedValue(undefined);
+    await expect(
+      executeCode.execute!(
+        { code: `return await external_recall({ query: 'Maya' });` },
+        { toolCallId: 'code-allowed', messages: [] },
+      ),
+    ).resolves.toMatchObject({ success: true, result: { query: 'Maya' } });
+  });
+
+  it('uses MCP and standalone resource identities for nested authorization', async () => {
+    const requestContext = new RequestContext([['user', { id: 'user-1' }]]);
+    const fgaProvider = { require: vi.fn().mockResolvedValue(undefined) };
+    const mastra = { getServer: () => ({ fga: fgaProvider }) } as any;
+    const mcpTool = createTool({
+      id: 'list-files',
+      description: 'List files',
+      inputSchema: z.object({ path: z.string() }),
+      mcpMetadata: { serverName: 'filesystem' },
+      execute: async ({ path }) => ({ path }),
+    });
+    const standaloneTool = createTool({
+      id: 'weather',
+      description: 'Read weather',
+      inputSchema: z.object({ city: z.string() }),
+      execute: async ({ city }) => ({ city }),
+    });
+    const transport: CodeModeTransport = {
+      requiresSandbox: false,
+      run: async opts => {
+        await opts.dispatch('list-files', { path: '/tmp' });
+        await opts.dispatch('weather', { city: 'Paris' });
+        return { success: true, result: 'ok', logs: [] };
+      },
+    };
+    const { tool } = createCodeMode({ tools: { mcpTool, standaloneTool } }, transport);
+
+    await run(tool, `return 'ok';`, ctx({ mastra, requestContext }));
+
+    expect(fgaProvider.require.mock.calls.map(([, input]) => input.resource.id)).toEqual([
+      JSON.stringify(['filesystem', 'list-files']),
+      'weather',
+    ]);
   });
 });
