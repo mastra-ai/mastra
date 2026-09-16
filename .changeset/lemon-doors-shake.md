@@ -2,4 +2,4 @@
 '@mastra/schema-compat': patch
 ---
 
-Fixed standalone JSON Schema adapter type resolution by declaring Ajv as a production dependency, preserving compatibility with Ajv plugins.
+Fixed JSON Schema adapter declarations to use bundled Ajv types, so consumers do not need a separate Ajv installation. Ajv remains bundled as a development dependency.

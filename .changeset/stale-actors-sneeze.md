@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Removed the redundant direct Ajv dependency; schema compatibility now declares the dependency required by its public types.
+Removed the redundant direct Ajv dependency. Schema compatibility bundles its validator and standalone types without requiring a separate Ajv installation.

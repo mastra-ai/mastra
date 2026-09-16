@@ -6144,9 +6144,6 @@ importers:
 
   packages/schema-compat:
     dependencies:
-      ajv:
-        specifier: ^8.20.0
-        version: 8.20.0
       json-schema-to-zod:
         specifier: ^2.7.0
         version: 2.7.0
@@ -6199,6 +6196,9 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 4.1.10(vitest@4.1.10)
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
       arktype:
         specifier: ^2.2.0
         version: 2.2.0
