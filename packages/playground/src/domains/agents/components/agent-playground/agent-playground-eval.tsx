@@ -32,6 +32,10 @@ import { useDatasetExperimentResults, useScoresByExperimentId } from '@/domains/
 import { STATUS_LABEL } from '@/domains/experiments/components/experiment-columns';
 import { useLinkComponent } from '@/lib/framework';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function formatTimestamp(dateStr: string | Date): string {
   const date = new Date(dateStr);
   return date.toLocaleDateString(undefined, {
@@ -151,17 +155,20 @@ function TrajectoryStepsSection({ traceId }: { traceId: string }) {
           </Txt>
         ) : trajectory?.steps && trajectory.steps.length > 0 ? (
           <div className="mt-1 space-y-1">
-            {trajectory.steps.map((step: Record<string, unknown>, i: number) => (
-              <div key={i} className="bg-surface1 text-ui-sm flex items-center gap-2 rounded px-3 py-1.5">
-                <Badge size="xs" variant="purple">
-                  {String(step.stepType || 'step')}
-                </Badge>
-                <span className="text-neutral5 font-mono font-medium">{String(step.name || `Step ${i + 1}`)}</span>
-                {typeof step.durationMs === 'number' && (
-                  <span className="text-neutral2 ml-auto">{step.durationMs}ms</span>
-                )}
-              </div>
-            ))}
+            {trajectory.steps.map((step, i) => {
+              if (!isRecord(step)) return null;
+              return (
+                <div key={i} className="bg-surface1 text-ui-sm flex items-center gap-2 rounded px-3 py-1.5">
+                  <Badge size="xs" variant="purple">
+                    {String(step.stepType || 'step')}
+                  </Badge>
+                  <span className="text-neutral5 font-mono font-medium">{String(step.name || `Step ${i + 1}`)}</span>
+                  {typeof step.durationMs === 'number' && (
+                    <span className="text-neutral2 ml-auto">{step.durationMs}ms</span>
+                  )}
+                </div>
+              );
+            })}
             {typeof trajectory.totalDurationMs === 'number' && (
               <Txt variant="ui-xs" className="text-neutral3 px-3 py-1">
                 Total: {trajectory.totalDurationMs}ms

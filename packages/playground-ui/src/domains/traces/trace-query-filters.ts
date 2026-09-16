@@ -1,4 +1,5 @@
-import type { TraceQueryPredicate, TraceQueryRequest, TraceQueryScalarPredicate } from '@mastra/core/storage';
+import type { QueryTracesInput } from '@mastra/client-js';
+import type { TraceQueryPredicate, TraceQueryScalarPredicate } from '@mastra/core/storage';
 import type { buildTraceListFilters } from './trace-filters';
 
 export const TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS = new Set([
@@ -19,7 +20,7 @@ export function buildTraceQueryRequest({
   dateTo,
   tokens,
   now,
-}: Parameters<typeof buildTraceListFilters>[0] & { now: Date }): Pick<TraceQueryRequest, 'timeRange' | 'where'> {
+}: Parameters<typeof buildTraceListFilters>[0] & { now: Date }): Pick<QueryTracesInput, 'timeRange' | 'where'> {
   const args: TraceQueryPredicate[] = [];
   const predicate = (path: string, values: string[]): TraceQueryScalarPredicate =>
     values.length === 1 && values[0] !== undefined

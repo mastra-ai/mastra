@@ -1,4 +1,4 @@
-import type { DatasetRecord } from '@mastra/client-js';
+import type { DatasetRecord, GetScorersResponse } from '@mastra/client-js';
 import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
@@ -57,6 +57,7 @@ import { ScorersList } from '@/domains/scores/components/scorers-list/scorers-li
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 type AgentEvalTab = 'experiments' | 'datasets' | 'scorers' | 'review';
+type ScorerEntry = GetScorersResponse[string];
 
 type DetailView =
   | null
@@ -191,7 +192,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
     return map;
   }, [datasets]);
 
-  const scorerEntries = useMemo(() => Object.entries(scorers || {}), [scorers]);
+  const scorerEntries = useMemo(() => Object.entries<ScorerEntry>(scorers ?? {}), [scorers]);
   const attachedScorers = useMemo(
     () => scorerEntries.filter(([id]) => !!agentScorers[id]),
     [scorerEntries, agentScorers],
@@ -705,8 +706,8 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
               <Combobox
                 options={unattachedScorers.map(([id, scorer]) => ({
                   value: id,
-                  label: scorer.scorer?.name || id,
-                  description: scorer.scorer?.description ?? undefined,
+                  label: scorer.scorer?.config.name || id,
+                  description: scorer.scorer?.config.description,
                 }))}
                 value={attachScorerId}
                 onValueChange={setAttachScorerId}
@@ -728,7 +729,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
                   const [id, scorer] = entry;
                   try {
                     await attachScorer(id, scorer);
-                    toast.success(`Scorer "${scorer.scorer?.name || id}" attached`);
+                    toast.success(`Scorer "${scorer.scorer?.config.name || id}" attached`);
                     closeAttachScorerDialog();
                   } catch {
                     toast.error('Failed to attach scorer');

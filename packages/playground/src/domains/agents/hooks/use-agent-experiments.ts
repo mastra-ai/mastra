@@ -47,10 +47,8 @@ export const useAgentExperiments = (agentId: string, attachedScorerIds: string[]
         }),
       );
 
-      const getStartedAtTime = (startedAt: AgentExperiment['startedAt']) => {
-        if (!startedAt) return 0;
-        return startedAt instanceof Date ? startedAt.getTime() : new Date(startedAt).getTime();
-      };
+      const getStartedAtTime = (startedAt: AgentExperiment['startedAt']) =>
+        startedAt ? new Date(startedAt).getTime() : 0;
 
       return results.flat().sort((a, b) => getStartedAtTime(b.startedAt) - getStartedAtTime(a.startedAt));
     },

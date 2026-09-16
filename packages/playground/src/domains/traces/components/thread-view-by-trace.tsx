@@ -30,7 +30,7 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
         from: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString(),
         to: now.toISOString(),
       },
-      where: { op: 'eq', left: { path: 'threadId' }, right: threadId },
+      where: { op: 'eq', left: { path: 'threadId' }, right: { literal: threadId } },
       orderBy: [{ field: 'startedAt', direction: 'asc' }],
     }),
   });

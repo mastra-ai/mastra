@@ -1,4 +1,5 @@
 import type { RequestContext } from '@mastra/core/request-context';
+import type { Body } from '../route-types.generated.js';
 import type { ClientOptions, McpToolExecuteResponse, McpToolInfo } from '../types';
 import { requestContextQueryString } from '../utils';
 import { BaseResource } from './base';
@@ -36,26 +37,18 @@ export class MCPTool extends BaseResource {
    * `suspendPayload` to continue it.
    * @returns Promise containing `{ result }`, or the suspended shape described above.
    */
-  execute(params: {
-    data?: any;
-    requestContext?: RequestContext;
-    resumeData?: unknown;
-    suspendPayload?: unknown;
-  }): Promise<McpToolExecuteResponse> {
-    const body: {
-      data?: any;
-      requestContext?: RequestContext;
-      resumeData?: unknown;
-      suspendPayload?: unknown;
-    } = {};
-    if (params.data !== undefined) body.data = params.data;
-    if (params.requestContext !== undefined) body.requestContext = params.requestContext;
-    if (params.resumeData !== undefined) body.resumeData = params.resumeData;
-    if (params.suspendPayload !== undefined) body.suspendPayload = params.suspendPayload;
-
-    return this.request(`/mcp/${encodeURIComponent(this.serverId)}/tools/${encodeURIComponent(this.toolId)}/execute`, {
-      method: 'POST',
-      body,
-    });
+  execute(
+    params: Body<'POST /mcp/:serverId/tools/:toolId/execute'> & {
+      requestContext?: RequestContext | Record<string, unknown>;
+    },
+  ): Promise<McpToolExecuteResponse> {
+    const { requestContext, ...body } = params;
+    return this.request(
+      `/mcp/${encodeURIComponent(this.serverId)}/tools/${encodeURIComponent(this.toolId)}/execute${requestContextQueryString(requestContext)}`,
+      {
+        method: 'POST',
+        body,
+      },
+    );
   }
 }
