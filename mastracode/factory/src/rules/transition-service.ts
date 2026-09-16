@@ -83,6 +83,9 @@ export interface FactoryTransitionServiceOptions {
     workItemId: string;
     stage: FactoryRuleStage;
     revision: number;
+    /** The actor that committed this terminal transition. Lets cleanup leave
+     * the seat that drove its own transition (an agent tool call) untouched. */
+    actor: FactoryRuleActor;
   }) => Promise<void> | void;
   /** Upper bound on how long a committed transition waits for
    * `onTerminalStage` before returning (default 30s). The cleanup continues
@@ -613,6 +616,7 @@ export class FactoryTransitionService {
             workItemId: request.workItemId,
             stage: result.stage,
             revision: result.revision,
+            actor: request.actor,
           }),
         );
         // A late rejection after the timeout wins the race must not surface

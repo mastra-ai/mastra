@@ -11,7 +11,6 @@ import { OverviewPanelShortcuts } from '@/domains/agents/components/overview-pan
 import { ThreadTracesToggle } from '@/domains/agents/components/thread-traces-toggle';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
-import { ReviewQueueProvider } from '@/domains/agents/context/review-queue-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
@@ -84,9 +83,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
           defaultProvider={defaultProvider}
           defaultModel={defaultModel}
         >
-          <GenerationProvider>
-            <ReviewQueueProvider>{content}</ReviewQueueProvider>
-          </GenerationProvider>
+          <GenerationProvider>{content}</GenerationProvider>
         </PlaygroundModelProvider>
       </SchemaRequestContextProvider>
     </TracingSettingsProvider>

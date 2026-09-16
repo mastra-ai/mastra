@@ -97,7 +97,7 @@ describe('PostgresStoreVNext', () => {
       });
     });
 
-    it('advertises trace and thread queries with or without delta polling', () => {
+    it('advertises trace query discovery and queries with or without delta polling', () => {
       const observability = store.stores.observability as ObservabilityStoragePostgresVNext;
       const originalFeatures = new Set(coreFeatures);
 
@@ -108,11 +108,18 @@ describe('PostgresStoreVNext', () => {
           'logs',
           'delta-polling',
           'trace-query',
+          'trace-query-discovery',
           'thread-query',
         ]);
 
         coreFeatures.delete('observability-delta-polling');
-        expect(observability.getFeatures()).toEqual(['metrics', 'logs', 'trace-query', 'thread-query']);
+        expect(observability.getFeatures()).toEqual([
+          'metrics',
+          'logs',
+          'trace-query',
+          'trace-query-discovery',
+          'thread-query',
+        ]);
       } finally {
         coreFeatures.clear();
         for (const feature of originalFeatures) coreFeatures.add(feature);
@@ -224,6 +231,7 @@ describe.skipIf(!integrationEnabled)('PostgresStoreVNext / shared observability 
       label: 'Postgres vNext',
       preferredStrategy: 'event-sourced',
       traceQuery: true,
+      traceQueryDiscovery: true,
       threadQuery: true,
     },
     cleanup: async storage => {

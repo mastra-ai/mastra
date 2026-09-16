@@ -1,7 +1,9 @@
 import * as coreStorage from '@mastra/core/storage';
 import type {
+  GetTraceQueryValuesResponse,
   QueryThreadsResult,
   TraceQueryCanonicalField,
+  TraceQueryObservedFieldsResult,
   TraceQueryFeedbackField,
   TraceQueryField,
   TraceQueryPredicateField,
@@ -10,7 +12,9 @@ import type {
   TraceQuerySpanField,
   TrustedThreadPredicate,
   TrustedThreadQueryPlan,
+  TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
+  TrustedTraceQueryValuesPlan,
   TrustedTraceQueryPredicate,
   TrustedTraceQueryScalarPredicate,
 } from '@mastra/core/storage';
@@ -85,6 +89,11 @@ const FEEDBACK_FIELDS = {
 const TRACE_SELECT = `
   r."traceId" AS "traceId",
   r."spanId" AS "rootSpanId",
+  r."name" AS "name",
+  r."entityId" AS "entityId",
+  r."parentSpanId" AS "parentSpanId",
+  r."metadata" AS "metadata",
+  r."input" AS "input",
   r."threadId" AS "threadId",
   r."resourceId" AS "resourceId",
   r."startedAt" AS "startedAt",
@@ -552,6 +561,88 @@ LIMIT $${values.length}`,
   };
 }
 
+function discoveryRegistry(scope: TrustedTraceQueryValuesPlan['predicateScope']): Partial<FieldRegistry<string>> {
+  if (scope === 'trace') return TRACE_FIELDS;
+  if (scope === 'spans') return SPAN_FIELDS;
+  if (scope === 'scores') return SCORE_FIELDS;
+  return FEEDBACK_FIELDS;
+}
+
+function discoverySource(scope: TrustedTraceQueryValuesPlan['predicateScope']): string {
+  if (scope === 'trace') return 'root_scope r';
+  if (scope === 'spans') return 'current_spans s';
+  if (scope === 'scores') return 'current_scores s';
+  return 'current_feedback s';
+}
+
+function discoveryCollections(scope: TrustedTraceQueryValuesPlan['predicateScope']): Set<RelatedCollection> {
+  return scope === 'trace' ? new Set() : new Set([scope]);
+}
+
+export function compilePostgresTraceQueryObservedFields(
+  schema: string,
+  plan: TrustedTraceQueryObservedFieldsPlan,
+): CompiledPostgresTraceQuery {
+  const { ctes, values } = compilePostgresTraceScope(schema, plan, new Set());
+  const searchParameter = values.length + 1;
+  const search = plan.search ? `AND strpos(lower('metadata.' || entry.key), lower($${searchParameter})) > 0` : '';
+  if (plan.search) values.push(plan.search);
+  values.push(plan.limit + 1);
+  return {
+    text: `WITH ${ctes.join(',\n')}
+SELECT 'metadata.' || entry.key AS path, count(*)::bigint AS occurrences
+FROM root_scope r
+CROSS JOIN LATERAL jsonb_each(CASE WHEN jsonb_typeof(r."metadataRaw") = 'object' THEN r."metadataRaw" ELSE '{}'::jsonb END) entry
+WHERE jsonb_typeof(entry.value) = 'string'
+  AND btrim(entry.value #>> '{}') <> ''
+  AND entry.key <> ''
+  AND strpos(entry.key, '.') = 0
+  AND octet_length('metadata.' || entry.key) <= ${coreStorage.TRACE_QUERY_MAX_PATH_BYTES}
+  AND octet_length(entry.value #>> '{}') <= ${coreStorage.TRACE_QUERY_MAX_STRING_BYTES}
+  ${search}
+GROUP BY entry.key
+ORDER BY occurrences DESC, ('metadata.' || entry.key) COLLATE "C" ASC
+LIMIT $${values.length}`,
+    values,
+  };
+}
+
+export function compilePostgresTraceQueryValues(
+  schema: string,
+  plan: TrustedTraceQueryValuesPlan,
+): CompiledPostgresTraceQuery {
+  const { ctes, values } = compilePostgresTraceScope(schema, plan, discoveryCollections(plan.predicateScope));
+  let field: string;
+  if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
+    const keyParameter = `$${values.length + 1}`;
+    field = `COALESCE(
+      CASE WHEN jsonb_typeof(r."metadataSearch" -> ${keyParameter}) = 'string' THEN r."metadataSearch" ->> ${keyParameter} END,
+      CASE WHEN jsonb_typeof(r."metadataRaw" -> ${keyParameter}) = 'string' THEN NULLIF(btrim(r."metadataRaw" ->> ${keyParameter}), '') END
+    )`;
+    values.push(plan.path.slice('metadata.'.length));
+  } else {
+    field = fieldSql(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField);
+  }
+  const searchParameter = values.length + 1;
+  const search = plan.search ? `AND strpos(lower(value), lower($${searchParameter})) > 0` : '';
+  if (plan.search) values.push(plan.search);
+  values.push(plan.limit + 1);
+  return {
+    text: `WITH ${ctes.join(',\n')}, extracted AS (
+  SELECT ${field}::text AS value FROM ${discoverySource(plan.predicateScope)}
+)
+SELECT value, count(*)::bigint AS count
+FROM extracted
+WHERE value IS NOT NULL
+  AND octet_length(value) <= ${coreStorage.TRACE_QUERY_MAX_STRING_BYTES}
+  ${search}
+GROUP BY value
+ORDER BY count DESC, value COLLATE "C" ASC
+LIMIT $${values.length}`,
+    values,
+  };
+}
+
 function asIsoTimestamp(value: unknown): string {
   if (value === null || value === undefined) throw new Error('Trace query returned a null timestamp');
   return value instanceof Date ? value.toISOString() : new Date(value as string | number).toISOString();
@@ -561,6 +652,12 @@ function isPostgresStatementTimeout(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const candidate = error as { code?: unknown; message?: unknown };
   return candidate.code === '57014' && String(candidate.message ?? '').includes('statement timeout');
+}
+
+function isPostgresResourceLimit(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: unknown };
+  return candidate.code === '53200' || candidate.code === '53400';
 }
 
 export async function runWithPostgresTraceQueryTimeout<T>(
@@ -576,8 +673,44 @@ export async function runWithPostgresTraceQueryTimeout<T>(
     });
   } catch (error) {
     if (isPostgresStatementTimeout(error)) throw new coreStorage.TraceQueryExecutionError();
+    if (isPostgresResourceLimit(error)) throw new coreStorage.TraceQueryResourceLimitError();
     throw error;
   }
+}
+
+export async function getTraceQueryObservedFields(
+  client: DbClient,
+  schema: string,
+  plan: TrustedTraceQueryObservedFieldsPlan,
+  timeoutMs: number,
+): Promise<TraceQueryObservedFieldsResult> {
+  if (plan.predicateScope !== 'trace') return { observedFields: [], observedFieldsTruncated: false };
+  const query = compilePostgresTraceQueryObservedFields(schema, plan);
+  const rows = await runWithPostgresTraceQueryTimeout(client, timeoutMs, transaction =>
+    transaction.any<Record<string, unknown>>(query.text, query.values),
+  );
+  return {
+    observedFields: rows
+      .slice(0, plan.limit)
+      .map(row => coreStorage.createTraceQueryObservedFieldDescriptor(String(row.path), Number(row.occurrences))),
+    observedFieldsTruncated: rows.length > plan.limit,
+  };
+}
+
+export async function getTraceQueryValues(
+  client: DbClient,
+  schema: string,
+  plan: TrustedTraceQueryValuesPlan,
+  timeoutMs: number,
+): Promise<GetTraceQueryValuesResponse> {
+  const query = compilePostgresTraceQueryValues(schema, plan);
+  const rows = await runWithPostgresTraceQueryTimeout(client, timeoutMs, transaction =>
+    transaction.any<Record<string, unknown>>(query.text, query.values),
+  );
+  return coreStorage.getTraceQueryValuesResponseSchema.parse({
+    values: rows.slice(0, plan.limit).map(row => ({ value: String(row.value), count: Number(row.count) })),
+    valuesTruncated: rows.length > plan.limit,
+  });
 }
 
 export async function queryTraces(
@@ -609,6 +742,12 @@ export async function queryTraces(
   const traces = visibleRows.map(row => ({
     traceId: String(row.traceId),
     rootSpanId: String(row.rootSpanId),
+    name: row.name,
+    entityId: row.entityId ?? null,
+    parentSpanId: row.parentSpanId ?? null,
+    createdAt: asIsoTimestamp(row.startedAt),
+    metadata: row.metadata ?? null,
+    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
     threadId: row.threadId == null ? null : String(row.threadId),
     resourceId: row.resourceId == null ? null : String(row.resourceId),
     startedAt: asIsoTimestamp(row.startedAt),

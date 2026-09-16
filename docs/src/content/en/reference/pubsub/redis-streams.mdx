@@ -39,6 +39,36 @@ export const mastra = new Mastra({
 })
 ```
 
+### Redis Cluster
+
+Pass `cluster` instead of `url`/`redisOptions` to connect to a Redis Cluster (for example, AWS ElastiCache with cluster mode enabled). The options are forwarded to `createCluster()` from `redis`.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { RedisStreamsPubSub } from '@mastra/redis-streams'
+
+export const mastra = new Mastra({
+  pubsub: new RedisStreamsPubSub({
+    cluster: {
+      rootNodes: [{ url: 'redis://node-1:6379' }, { url: 'redis://node-2:6379' }],
+    },
+  }),
+})
+```
+
+### Bring your own client
+
+To control client construction yourself (TLS, credential providers, and so on), pass an unconnected `redis` client as `client`. The pubsub uses it as its writer and calls `client.duplicate()` for each subscription's blocking reader, so every connection stays distinct. The pubsub owns the client's lifecycle (it connects on first use and quits it on `close()`), so don't share it with the rest of your app.
+
+```typescript title="src/mastra/index.ts"
+import { RedisStreamsPubSub } from '@mastra/redis-streams'
+import { createClient } from 'redis'
+
+const pubsub = new RedisStreamsPubSub({
+  client: createClient({ url: process.env.REDIS_URL, socket: { tls: true } }),
+})
+```
+
 ## Constructor parameters
 
 <PropertiesTable
@@ -68,6 +98,20 @@ export const mastra = new Mastra({
     name: 'redisOptions',
     type: 'RedisClientOptions',
     description: 'Options passed to the underlying `redis` client for advanced configuration.',
+    isOptional: true,
+  },
+  {
+    name: 'cluster',
+    type: 'RedisClusterOptions',
+    description:
+      'Connect to a Redis Cluster. Options are passed to `createCluster()` from `redis`. Mutually exclusive with `url`, `redisOptions`, and `client`.',
+    isOptional: true,
+  },
+  {
+    name: 'client',
+    type: 'RedisClientType | RedisClusterType',
+    description:
+      'A pre-configured, unconnected `redis` client (standalone or cluster) used as the writer; readers are created with `client.duplicate()`. The pubsub owns its lifecycle (connects lazily, quits on `close()`). Mutually exclusive with `url`, `redisOptions`, and `cluster`.',
     isOptional: true,
   },
   {
