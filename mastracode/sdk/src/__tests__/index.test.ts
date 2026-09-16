@@ -796,7 +796,8 @@ describe('createMastraCode', () => {
       getPluginSignalProviders: vi.fn(() => []),
     };
 
-    await createMastraCode({ pluginManager: pluginManager as any });
+    createStorageMock.mockReturnValue({ storage: {}, backend: 'pg' });
+    const built = await createMastraCode({ pluginManager: pluginManager as any });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
       | { modes?: Array<{ id: string; availableTools?: string[] }>; initialState?: Record<string, unknown> }
@@ -804,6 +805,10 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.modes?.find(mode => mode.id === 'plan')?.availableTools).toContain('plugin_tool');
     expect(agentControllerConfig?.modes?.find(mode => mode.id === 'fast')?.availableTools).toContain('plugin_tool');
     expect(agentControllerConfig?.initialState?.pluginInstructions).toEqual(['Use plugin policy.']);
+    const shared = pluginManager.setRuntime.mock.calls[0]?.[0].getStorage();
+    expect(shared.storage).toBe(built.storage);
+    expect(shared.vector).toBe(createVectorStoreMock.mock.results[0]?.value);
+    expect(shared.storageBackend).toBe('pg');
   });
 
   it('registers the built-in state signal providers on the code agent', async () => {
