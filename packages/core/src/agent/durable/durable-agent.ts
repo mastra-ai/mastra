@@ -2036,6 +2036,7 @@ export class DurableAgent<
       if (autoCleanupTimer || cleanedUp || this.#cleanupTimeoutMs === 0) return;
       autoCleanupTimer = setTimeout(() => {
         if (!cleanedUp) {
+          streamCleanup(); // Unsubscribe from pubsub before cleanup
           this.#runRegistry.cleanup(runId);
           globalRunRegistry.delete(runId);
           this.#clearPubsubTopic(runId);
@@ -2089,6 +2090,10 @@ export class DurableAgent<
       returnScorerData: workflowInput.options.returnScorerData,
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
       messageList,
+      // Pass idleTimeoutMs through to enable auto-termination for crashed producers.
+      // observe() already passes this option; stream() does not expose it yet, but
+      // we pass the default timeout from the agent's cleanup timeout config.
+      idleTimeoutMs: options?.idleTimeoutMs ?? this.#cleanupTimeoutMs,
     });
 
     // 4. Wait for subscription to be ready, then execute workflow
