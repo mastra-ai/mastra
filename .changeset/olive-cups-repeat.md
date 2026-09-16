@@ -16,4 +16,4 @@ const result = await agent.generate('Extract the customer name.', {
 });
 ```
 
-`instructions` is also now carried across the durable agent boundary, which previously dropped it during workflow-input serialization, so durable runs no longer silently fall back to the full schema dump.
+`instructions` is also now serialized across the durable agent boundary, so the same behavior applies to durable runs.
