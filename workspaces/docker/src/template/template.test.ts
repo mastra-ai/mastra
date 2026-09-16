@@ -93,7 +93,7 @@ describe('DockerTemplate builder', () => {
       [
         'FROM node:22-slim AS mastra-main-0',
         'FROM mastra-main-0 AS mastra-secret-0',
-        'RUN --mount=type=secret,id=GIT_TOKEN export GIT_TOKEN="$(cat /run/secrets/GIT_TOKEN)" && git clone x /workspace/app',
+        'RUN --mount=type=secret,id=GIT_TOKEN,mode=0444 export GIT_TOKEN="$(cat /run/secrets/GIT_TOKEN)" && git clone x /workspace/app',
         'FROM mastra-main-0 AS mastra-main-1',
         'COPY --from=mastra-secret-0 /workspace/app /workspace/app',
         '',
@@ -151,10 +151,11 @@ describe('DockerTemplate.build', () => {
     expect(mockDocker.buildImage).toHaveBeenCalledTimes(1);
   });
 
-  it('rebuilds when force is set', async () => {
+  it('rebuilds without the layer cache when force is set', async () => {
     const template = new DockerTemplate().runCmd('echo hi');
     await template.build({ force: true });
     expect(mockDocker.buildImage).toHaveBeenCalledTimes(1);
+    expect(mockDocker.buildImage.mock.calls[0]![1]).toEqual({ t: template.templateId, nocache: true });
   });
 
   const sessionSecrets = (call = 0) => mockOpenBuildSession.mock.calls[call]![1];
@@ -168,7 +169,7 @@ describe('DockerTemplate.build', () => {
     expect(mockDocker.buildImage).not.toHaveBeenCalled();
     expect(sessionSecrets()).toEqual({ GIT_TOKEN: 'resolved-secret' });
     const [dialOpts] = mockDocker.modem.dial.mock.calls[0]!;
-    expect(dialOpts.options).toEqual({ t: template.templateId, version: '2', session: mockSession.id });
+    expect(dialOpts.options).toEqual({ t: template.templateId, version: '2', session: mockSession.id, nocache: false });
     expect(JSON.stringify(dialOpts.options)).not.toContain('resolved-secret');
     vi.unstubAllEnvs();
   });

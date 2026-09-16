@@ -29,7 +29,7 @@ describe('synthesizeDockerfile', () => {
         'FROM node:22-slim AS mastra-main-0',
         'RUN echo before',
         'FROM mastra-main-0 AS mastra-secret-1',
-        'RUN --mount=type=secret,id=A --mount=type=secret,id=B export A="$(cat /run/secrets/A)" B="$(cat /run/secrets/B)" && fetch',
+        'RUN --mount=type=secret,id=A,mode=0444 --mount=type=secret,id=B,mode=0444 export A="$(cat /run/secrets/A)" B="$(cat /run/secrets/B)" && fetch',
         'FROM mastra-main-0 AS mastra-main-1',
         'COPY --from=mastra-secret-1 /out /out',
         '',
@@ -56,12 +56,12 @@ describe('synthesizeDockerfile', () => {
         'WORKDIR /w',
         // First secret step forks the main stage after git + WORKDIR.
         'FROM mastra-main-0 AS mastra-secret-2',
-        'RUN --mount=type=secret,id=T export T="$(cat /run/secrets/T)" && git clone x /w/a',
+        'RUN --mount=type=secret,id=T,mode=0444 export T="$(cat /run/secrets/T)" && git clone x /w/a',
         'FROM mastra-main-0 AS mastra-main-1',
         'COPY --from=mastra-secret-2 /w/a /w/a',
         // Second secret step forks after the first output was copied in.
         'FROM mastra-main-1 AS mastra-secret-3',
-        'RUN --mount=type=secret,id=T export T="$(cat /run/secrets/T)" && cat /w/a/x > /w/b',
+        'RUN --mount=type=secret,id=T,mode=0444 export T="$(cat /run/secrets/T)" && cat /w/a/x > /w/b',
         'FROM mastra-main-1 AS mastra-main-2',
         'COPY --from=mastra-secret-3 /w/b /w/b',
         'RUN ls /w/a /w/b',

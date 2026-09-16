@@ -132,13 +132,16 @@ function mainStageName(index: number): string {
  * else the command wrote (caches, logs) out of the template image.
  */
 /**
- * `RUN --mount=type=secret,id=X ... export X="$(cat /run/secrets/X)" && <command>`.
+ * `RUN --mount=type=secret,id=X,mode=0444 ... export X="$(cat /run/secrets/X)" && <command>`.
  * Reading the file into a shell variable keeps the value visible only to this
  * RUN's process tree, without depending on the newer `env=` mount option.
+ * `mode=0444` because BuildKit's default is `0400 root`, which a base image
+ * with a non-root `USER` cannot read; world-readable within the RUN is no
+ * wider than the exported variable already is.
  */
 function renderSecretRun(command: string | string[], secrets: string[]): string {
   const names = [...secrets].sort();
-  const mounts = names.map(name => `--mount=type=secret,id=${name}`);
+  const mounts = names.map(name => `--mount=type=secret,id=${name},mode=0444`);
   const exports = names.map(name => `${name}="$(cat /run/secrets/${name})"`);
   const prefix = names.length > 0 ? [`export ${exports.join(' ')}`] : [];
   return `RUN ${[...mounts, ''].join(' ')}${[...prefix, ...toCommandList(command)].join(' && ')}`;

@@ -119,4 +119,20 @@ describe('DockerTemplate (integration)', () => {
       delete process.env.MASTRA_TEST_SECRET;
     }
   }, 120_000);
+
+  it('exposes secrets to steps running as a non-root USER', async () => {
+    // BuildKit's default secret mode is 0400 root; the image must still work
+    // when the base image switched to an unprivileged user.
+    const template = new DockerTemplate({ secrets: { T: 'non-root-ok' } })
+      .from('node:22-slim')
+      .runCmd('mkdir -p /out && chown node /out')
+      .runWithSecrets('su node -s /bin/sh -c \'printf "%s" "$T" > /out/proof\'', { secrets: ['T'], output: '/out' });
+    templates.push(template);
+    const result = await template.build({ force: true });
+    expect(result).toEqual({ status: 'ready', templateId: template.templateId });
+    const sandbox = await template.createSandbox();
+    sandboxes.push(sandbox);
+    await sandbox.start();
+    expect((await sandbox.executeCommand('cat /out/proof')).stdout).toBe('non-root-ok');
+  }, 120_000);
 });

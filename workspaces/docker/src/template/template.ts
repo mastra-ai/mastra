@@ -78,7 +78,12 @@ export type DockerTemplateSecrets =
   | (() => Record<string, string> | Promise<Record<string, string>>);
 
 export interface DockerTemplateBuildOptions {
-  /** Rebuild even if an image with the computed tag already exists locally. */
+  /**
+   * Rebuild even if an image with the computed tag already exists locally,
+   * re-executing every step instead of reusing the daemon's layer cache (the
+   * cache does not key on secret values or on what `git clone`/`npm install`
+   * would fetch today).
+   */
   force?: boolean;
   /**
    * Secret values for this build. Overrides the template-level `secrets`
@@ -289,9 +294,10 @@ export class DockerTemplate {
     context.finalize();
 
     try {
+      const nocache = options.force === true;
       const stream = secrets
-        ? await this.#buildWithSecrets(docker, context, tag, secrets)
-        : await docker.buildImage(context, { t: tag });
+        ? await this.#buildWithSecrets(docker, context, tag, secrets, nocache)
+        : await docker.buildImage(context, { t: tag, nocache });
       await this.#followBuild(docker, stream);
     } catch (error) {
       this.#built = false;
@@ -330,6 +336,7 @@ export class DockerTemplate {
     context: NodeJS.ReadableStream,
     tag: string,
     secrets: Record<string, string>,
+    nocache: boolean,
   ): Promise<NodeJS.ReadableStream> {
     const session = await openBuildSession(docker, secrets);
     let stream: NodeJS.ReadableStream;
@@ -340,7 +347,7 @@ export class DockerTemplate {
             path: '/build?',
             method: 'POST',
             file: context,
-            options: { t: tag, version: '2', session: session.id },
+            options: { t: tag, version: '2', session: session.id, nocache },
             isStream: true,
             statusCodes: { 200: true, 500: 'server error' },
           },

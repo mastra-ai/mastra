@@ -103,7 +103,8 @@ Builder methods (`from`, `setWorkdir`, `setEnvs`, `runCmd`, `aptInstall`,
 `pipInstall`, `npmInstall`) are immutable and chainable — each returns a new
 template, and their signatures match the E2B and platform template builders.
 The image tag is content-addressed (`mastra-template:<hash>`), so `build()` is
-idempotent and reuses an existing image unless you pass `{ force: true }`.
+idempotent and reuses an existing image unless you pass `{ force: true }`,
+which also bypasses the daemon's layer cache so every step really re-runs.
 
 Never put secrets in `setEnvs` — they are baked into the image. For a step that
 needs a credential, use `runWithSecrets`: the command runs in a throwaway build
