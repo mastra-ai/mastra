@@ -592,10 +592,14 @@ export async function runWithPostgresTraceQueryTimeout<T>(
   client: DbClient,
   timeoutMs: number,
   execute: (transaction: TxClient) => Promise<T>,
+  options: { repeatableRead?: boolean } = {},
 ): Promise<T> {
   const resolvedTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(timeoutMs);
   try {
     return await client.tx(async transaction => {
+      if (options.repeatableRead) {
+        await transaction.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+      }
       await transaction.query(`SELECT set_config('statement_timeout', $1, true)`, [`${resolvedTimeoutMs}ms`]);
       return execute(transaction);
     });
@@ -614,11 +618,16 @@ export async function queryTraces(
   if (plan.paginationMode === 'page') {
     const countQuery = compilePostgresTraceQuery(schema, plan, 'count');
     const dataQuery = compilePostgresTraceQuery(schema, plan);
-    const { total, rows } = await runWithPostgresTraceQueryTimeout(client, timeoutMs, async transaction => {
-      const countRows = await transaction.any<{ count: string }>(countQuery.text, countQuery.values);
-      const rows = await transaction.any<Record<string, unknown>>(dataQuery.text, dataQuery.values);
-      return { total: Number(countRows[0]?.count ?? 0), rows };
-    });
+    const { total, rows } = await runWithPostgresTraceQueryTimeout(
+      client,
+      timeoutMs,
+      async transaction => {
+        const countRows = await transaction.any<{ count: string }>(countQuery.text, countQuery.values);
+        const rows = await transaction.any<Record<string, unknown>>(dataQuery.text, dataQuery.values);
+        return { total: Number(countRows[0]?.count ?? 0), rows };
+      },
+      { repeatableRead: true },
+    );
     const traces = rows.map(row => ({
       traceId: String(row.traceId),
       rootSpanId: String(row.rootSpanId),

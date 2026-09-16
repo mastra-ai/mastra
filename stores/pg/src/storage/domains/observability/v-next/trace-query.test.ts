@@ -334,6 +334,9 @@ describe('Postgres advanced trace query', () => {
       15_000,
     );
 
+    expect(query).toHaveBeenNthCalledWith(1, 'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+    expect(query).toHaveBeenNthCalledWith(2, `SELECT set_config('statement_timeout', $1, true)`, ['15000ms']);
+    expect(query.mock.invocationCallOrder[1]).toBeLessThan(any.mock.invocationCallOrder[0]!);
     expect(any).toHaveBeenCalledTimes(2);
     expect(response).toMatchObject({
       traces: [{ traceId: 'trace-c' }],
