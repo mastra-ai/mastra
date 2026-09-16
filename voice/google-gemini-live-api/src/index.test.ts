@@ -167,6 +167,19 @@ describe('GeminiLiveVoice', () => {
       expect(voice.getConnectionState()).toBe('connected');
     });
 
+    it('should connect API-key sessions to the v1beta Live endpoint', async () => {
+      vi.spyOn((voice as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (voice as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await voice.connect();
+
+      expect(currentWsUrl).toContain('generativelanguage.googleapis.com');
+      expect(currentWsUrl).toContain('v1beta.GenerativeService.BidiGenerateContent');
+      expect(currentWsUrl).not.toContain('v1alpha');
+
+      await voice.disconnect();
+    });
+
     it('should handle connection errors', async () => {
       // Test that error events are properly handled
       const errorPromise = new Promise(resolve => {
