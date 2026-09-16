@@ -34,6 +34,7 @@ import posixPath from 'node:path/posix';
 import Docker from 'dockerode';
 import { pack as tarPack } from 'tar-stream';
 import { DockerSandbox, type DockerSandboxOptions } from '../sandbox';
+import { openBuildSession } from './build-session';
 import {
   type AptInstallOptions,
   type DockerTemplateDefinition,
@@ -165,12 +166,11 @@ export class DockerTemplate {
    * steps see the copied `output`. The named secrets are resolved when
    * `build()` runs — from `build({ secrets })`, then the template's `secrets`
    * option, then `process.env` — and exposed to the command as environment
-   * variables. Only `output` is copied into the template
-   * image; the values never appear in the image's layers, config, or history.
-   *
-   * Secret values are still handed to the local daemon as build args, so the
-   * intermediate stage cached by the daemon can reveal them to anyone with
-   * daemon access. Run `docker image prune` to drop those intermediates.
+   * variables. Values reach the daemon through a BuildKit secret mount
+   * (`RUN --mount=type=secret`), which is tmpfs-backed and scoped to that one
+   * RUN — never a build arg, layer, history entry, or cache metadata. Only
+   * `output` is copied into the template image. Builds that use secrets
+   * require a BuildKit-capable daemon (Docker 20.10+).
    */
   runWithSecrets(command: string | string[], options: RunWithSecretsOptions): DockerTemplate {
     if (!Array.isArray(options.secrets)) throw new TypeError('secrets must be an array of strings');
@@ -282,14 +282,16 @@ export class DockerTemplate {
 
     // Only a real build needs the secret values; reusing a cached image must not
     // require the original credentials to still be present.
-    const buildargs = await this.#resolveSecrets(options.secrets);
+    const secrets = await this.#resolveSecrets(options.secrets);
 
     const context = tarPack();
     context.entry({ name: 'Dockerfile' }, this.dockerfile);
     context.finalize();
 
     try {
-      const stream = await docker.buildImage(context, { t: tag, buildargs });
+      const stream = secrets
+        ? await this.#buildWithSecrets(docker, context, tag, secrets)
+        : await docker.buildImage(context, { t: tag });
       await this.#followBuild(docker, stream);
     } catch (error) {
       this.#built = false;
@@ -316,6 +318,43 @@ export class DockerTemplate {
       resolved[name] = value;
     }
     return resolved;
+  }
+
+  /**
+   * BuildKit build with a session serving the secret mounts. Dials `/build`
+   * directly because `docker.buildImage` replaces any session id with its own
+   * auth-only session when `version` is `'2'`.
+   */
+  async #buildWithSecrets(
+    docker: Docker,
+    context: NodeJS.ReadableStream,
+    tag: string,
+    secrets: Record<string, string>,
+  ): Promise<NodeJS.ReadableStream> {
+    const session = await openBuildSession(docker, secrets);
+    let stream: NodeJS.ReadableStream;
+    try {
+      stream = await new Promise<NodeJS.ReadableStream>((resolve, reject) => {
+        docker.modem.dial(
+          {
+            path: '/build?',
+            method: 'POST',
+            file: context,
+            options: { t: tag, version: '2', session: session.id },
+            isStream: true,
+            statusCodes: { 200: true, 500: 'server error' },
+          },
+          (err: Error | null, data: unknown) => (err ? reject(err) : resolve(data as NodeJS.ReadableStream)),
+        );
+      });
+    } catch (error) {
+      session.close();
+      throw error;
+    }
+    // The daemon keeps calling GetSecret until the build's output stream ends.
+    stream.once('end', () => session.close());
+    stream.once('error', () => session.close());
+    return stream;
   }
 
   #followBuild(docker: Docker, stream: NodeJS.ReadableStream): Promise<void> {

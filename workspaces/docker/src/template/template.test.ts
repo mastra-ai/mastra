@@ -9,11 +9,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DockerTemplate } from './template';
 
-const { mockImage, mockDocker, resetMockDefaults } = vi.hoisted(() => {
+const { mockImage, mockDocker, mockOpenBuildSession, mockSession, resetMockDefaults } = vi.hoisted(() => {
   const mockImage = {
     inspect: vi.fn(),
     remove: vi.fn(),
   };
+  const mockSession = { id: 'session-1', close: vi.fn() };
+  const mockOpenBuildSession = vi.fn(async () => mockSession);
+  const mockDial = vi.fn((_opts: unknown, cb: (err: Error | null, data?: unknown) => void) => {
+    // Minimal readable stream for the build output.
+    cb(null, { once: vi.fn(), on: vi.fn(), removeListener: vi.fn() });
+  });
 
   const mockFollowProgress = vi.fn(
     (_stream: unknown, onFinish: (err: Error | null, output: Array<Record<string, unknown>>) => void) => {
@@ -24,7 +30,7 @@ const { mockImage, mockDocker, resetMockDefaults } = vi.hoisted(() => {
   const mockDocker = {
     getImage: vi.fn().mockReturnValue(mockImage),
     buildImage: vi.fn().mockResolvedValue({}),
-    modem: { followProgress: mockFollowProgress },
+    modem: { followProgress: mockFollowProgress, dial: mockDial },
   };
 
   const resetMockDefaults = () => {
@@ -33,10 +39,15 @@ const { mockImage, mockDocker, resetMockDefaults } = vi.hoisted(() => {
     mockDocker.getImage.mockReset().mockReturnValue(mockImage);
     mockDocker.buildImage.mockReset().mockResolvedValue({});
     mockFollowProgress.mockReset().mockImplementation((_stream, onFinish) => onFinish(null, []));
+    mockDial.mockClear();
+    mockOpenBuildSession.mockClear();
+    mockSession.close.mockClear();
   };
 
-  return { mockImage, mockDocker, resetMockDefaults };
+  return { mockImage, mockDocker, mockOpenBuildSession, mockSession, resetMockDefaults };
 });
+
+vi.mock('./build-session', () => ({ openBuildSession: mockOpenBuildSession }));
 
 vi.mock('dockerode', () => {
   function MockDocker() {
@@ -82,8 +93,7 @@ describe('DockerTemplate builder', () => {
       [
         'FROM node:22-slim AS mastra-main-0',
         'FROM mastra-main-0 AS mastra-secret-0',
-        'ARG GIT_TOKEN',
-        'RUN git clone x /workspace/app',
+        'RUN --mount=type=secret,id=GIT_TOKEN export GIT_TOKEN="$(cat /run/secrets/GIT_TOKEN)" && git clone x /workspace/app',
         'FROM mastra-main-0 AS mastra-main-1',
         'COPY --from=mastra-secret-0 /workspace/app /workspace/app',
         '',
@@ -147,14 +157,27 @@ describe('DockerTemplate.build', () => {
     expect(mockDocker.buildImage).toHaveBeenCalledTimes(1);
   });
 
-  it('resolves secrets from process.env at build time and passes them as build args', async () => {
+  const sessionSecrets = (call = 0) => mockOpenBuildSession.mock.calls[call]![1];
+
+  it('resolves secrets from process.env at build time and serves them over a BuildKit session', async () => {
     mockImage.inspect.mockRejectedValueOnce(new Error('no such image'));
     vi.stubEnv('GIT_TOKEN', 'resolved-secret');
     const template = new DockerTemplate().runWithSecrets('echo hi', { secrets: ['GIT_TOKEN'], output: '/out' });
     await template.build();
-    const [, opts] = mockDocker.buildImage.mock.calls[0];
-    expect(opts.buildargs).toEqual({ GIT_TOKEN: 'resolved-secret' });
+    // Never the legacy builder with build args.
+    expect(mockDocker.buildImage).not.toHaveBeenCalled();
+    expect(sessionSecrets()).toEqual({ GIT_TOKEN: 'resolved-secret' });
+    const [dialOpts] = mockDocker.modem.dial.mock.calls[0]!;
+    expect(dialOpts.options).toEqual({ t: template.templateId, version: '2', session: mockSession.id });
+    expect(JSON.stringify(dialOpts.options)).not.toContain('resolved-secret');
     vi.unstubAllEnvs();
+  });
+
+  it('builds without a session when the template uses no secrets', async () => {
+    mockImage.inspect.mockRejectedValueOnce(new Error('no such image'));
+    await new DockerTemplate().runCmd('echo hi').build();
+    expect(mockOpenBuildSession).not.toHaveBeenCalled();
+    expect(mockDocker.buildImage).toHaveBeenCalledTimes(1);
   });
 
   it('takes secret values from build({ secrets }) without touching process.env', async () => {
@@ -162,8 +185,7 @@ describe('DockerTemplate.build', () => {
     delete process.env.GIT_TOKEN;
     const template = new DockerTemplate().runWithSecrets('echo hi', { secrets: ['GIT_TOKEN'], output: '/out' });
     await template.build({ secrets: { GIT_TOKEN: 'by-value' } });
-    const [, opts] = mockDocker.buildImage.mock.calls[0];
-    expect(opts.buildargs).toEqual({ GIT_TOKEN: 'by-value' });
+    expect(sessionSecrets()).toEqual({ GIT_TOKEN: 'by-value' });
     expect(process.env.GIT_TOKEN).toBeUndefined();
   });
 
@@ -177,10 +199,10 @@ describe('DockerTemplate.build', () => {
     });
     await template.createSandbox();
     expect(source).toHaveBeenCalledTimes(1);
-    expect(mockDocker.buildImage.mock.calls[0][1].buildargs).toEqual({ GIT_TOKEN: 'from-template' });
+    expect(sessionSecrets(0)).toEqual({ GIT_TOKEN: 'from-template' });
 
     await template.build({ force: true, secrets: { GIT_TOKEN: 'override' } });
-    expect(mockDocker.buildImage.mock.calls[1][1].buildargs).toEqual({ GIT_TOKEN: 'override' });
+    expect(sessionSecrets(1)).toEqual({ GIT_TOKEN: 'override' });
   });
 
   it('throws before building when a secret is missing from the environment', async () => {
@@ -189,7 +211,8 @@ describe('DockerTemplate.build', () => {
     delete process.env.GIT_TOKEN;
     const template = new DockerTemplate().runWithSecrets('echo hi', { secrets: ['GIT_TOKEN'], output: '/out' });
     await expect(template.build()).rejects.toThrow(/GIT_TOKEN/);
-    expect(mockDocker.buildImage).not.toHaveBeenCalled();
+    expect(mockOpenBuildSession).not.toHaveBeenCalled();
+    expect(mockDocker.modem.dial).not.toHaveBeenCalled();
     vi.unstubAllEnvs();
   });
 

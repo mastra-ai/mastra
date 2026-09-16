@@ -45,12 +45,13 @@ describe('buildRepoTemplate', () => {
     const rotated = buildRepoTemplate({ cloneUrl, token: 'tok-2', workingDirectory: '/workspace' });
     const dockerfile = withToken.dockerfile;
     expect(dockerfile).toContain('AS mastra-secret-');
-    expect(dockerfile).toContain('ARG GH_TOKEN');
+    expect(dockerfile).toContain('--mount=type=secret,id=GH_TOKEN');
+    expect(dockerfile).not.toContain('ARG ');
     expect(dockerfile).toContain('http.extraheader');
     expect(dockerfile).not.toContain('tok-1');
     expect(dockerfile).not.toMatch(/ENV .*GH_TOKEN/);
     const mainStages = dockerfile.split('\nFROM ').filter(stage => !stage.includes('AS mastra-secret-'));
-    expect(mainStages.join('\n')).not.toContain('ARG GH_TOKEN');
+    expect(mainStages.join('\n')).not.toContain('GH_TOKEN');
     expect(withToken.templateId).toBe(rotated.templateId);
   });
 

@@ -110,8 +110,10 @@ needs a credential, use `runWithSecrets`: the command runs in a throwaway build
 stage forked from the steps before it, and only `output` is copied into the
 image. Secret values are passed by value (`new DockerTemplate({ secrets })` or
 `build({ secrets })`, falling back to `process.env`) and never enter the template
-identity. The built image's layers, config, and history never contain the values
-(the local daemon's build cache still does until you `docker image prune`).
+identity. Values are delivered through BuildKit secret mounts, so they never
+land in any layer, history entry, or build-cache metadata — only in a tmpfs
+visible to that one `RUN`. Builds that use secrets require a BuildKit-capable
+daemon (Docker 20.10+).
 
 ```typescript
 const template = new DockerTemplate({ secrets: { GITHUB_TOKEN: token } })

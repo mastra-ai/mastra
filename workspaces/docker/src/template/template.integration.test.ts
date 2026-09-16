@@ -97,6 +97,18 @@ describe('DockerTemplate (integration)', () => {
       const text = JSON.stringify({ history, inspect });
       expect(text).not.toContain(secret);
       expect(text).not.toContain('MASTRA_TEST_SECRET');
+      // Nor any other image on the daemon, including intermediates.
+      const docker = new Docker();
+      const all = await docker.listImages({ all: true });
+      const histories = await Promise.all(
+        all.map(img =>
+          docker
+            .getImage(img.Id)
+            .history()
+            .catch(() => []),
+        ),
+      );
+      expect(JSON.stringify(histories)).not.toContain(secret);
 
       const sandbox = await template.createSandbox();
       sandboxes.push(sandbox);

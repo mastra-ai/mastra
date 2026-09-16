@@ -123,13 +123,27 @@ function mainStageName(index: number): string {
  *
  * Operations accumulate in a chain of "main" stages. Every `runWithSecrets`
  * operation forks a throwaway stage from the main stage as it stands at that
- * point (so it sees earlier WORKDIR/ENV/installs), declares the secret names as
- * `ARG`s, and runs the command. The next main stage then starts from the same
- * pre-secret snapshot and `COPY --from`s only the declared output path. Build
- * args are recorded in the history of the layers they touch, so keeping them
- * in a stage the final image never inherits is what keeps the values out of
- * the template image.
+ * point (so it sees earlier WORKDIR/ENV/installs) and runs the command with
+ * each secret exposed through a BuildKit secret mount, exported into the
+ * command's environment for that single RUN. The next main stage then starts
+ * from the same pre-secret snapshot and `COPY --from`s only the declared
+ * output path. Secret mounts are tmpfs-backed and never part of a layer, its
+ * history, or the build cache; the throwaway stage additionally keeps anything
+ * else the command wrote (caches, logs) out of the template image.
  */
+/**
+ * `RUN --mount=type=secret,id=X ... export X="$(cat /run/secrets/X)" && <command>`.
+ * Reading the file into a shell variable keeps the value visible only to this
+ * RUN's process tree, without depending on the newer `env=` mount option.
+ */
+function renderSecretRun(command: string | string[], secrets: string[]): string {
+  const names = [...secrets].sort();
+  const mounts = names.map(name => `--mount=type=secret,id=${name}`);
+  const exports = names.map(name => `${name}="$(cat /run/secrets/${name})"`);
+  const prefix = names.length > 0 ? [`export ${exports.join(' ')}`] : [];
+  return `RUN ${[...mounts, ''].join(' ')}${[...prefix, ...toCommandList(command)].join(' && ')}`;
+}
+
 export function synthesizeDockerfile(definition: DockerTemplateDefinition): string {
   const lines: string[] = [];
   let mainIndex = 0;
@@ -155,11 +169,7 @@ export function synthesizeDockerfile(definition: DockerTemplateDefinition): stri
         const [command, { secrets, output }] = operation.args;
         const snapshot = mainStageName(mainIndex);
         const stage = secretStageName(index);
-        lines.push(
-          `FROM ${snapshot} AS ${stage}`,
-          ...[...secrets].sort().map(name => `ARG ${name}`),
-          `RUN ${toCommandList(command).join(' && ')}`,
-        );
+        lines.push(`FROM ${snapshot} AS ${stage}`, renderSecretRun(command, secrets));
         mainIndex += 1;
         openMain(snapshot);
         lines.push(`COPY --from=${stage} ${output} ${output}`);
