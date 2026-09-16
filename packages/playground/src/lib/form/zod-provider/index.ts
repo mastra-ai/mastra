@@ -1,5 +1,5 @@
 import type { FieldConfig, ParsedField, ParsedSchema, SchemaProvider, SchemaValidation } from '@autoform/core';
-import { removeEmptyValues } from '../utils';
+import { isPlainObject } from '../utils';
 import {
   getDef,
   getBaseSchema,
@@ -152,6 +152,36 @@ export function parseSchema(schema: AnySchema): ParsedSchema {
   return { fields };
 }
 
+function normalizeFormValues(value: unknown, schema: AnySchema): unknown {
+  const baseSchema = getBaseSchema(schema);
+  const shape = getShape(baseSchema);
+  if (isPlainObject(value) && shape) {
+    const normalized: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value)) {
+      const fieldValue = shape[key] ? normalizeFormValues(child, shape[key]) : child;
+      if (fieldValue !== undefined) normalized[key] = fieldValue;
+    }
+    const isBlankGroup = Object.values(normalized).every(child => child === '' || child === undefined);
+    if (isBlankGroup && !schema.safeParse(normalized).success) {
+      const omitted = schema.safeParse(undefined);
+      if (omitted.success && omitted.data === undefined) return undefined;
+    }
+    return normalized;
+  }
+
+  if (Array.isArray(value)) {
+    const element = getArrayElement(baseSchema);
+    return element && typeof element === 'object' ? value.map(item => normalizeFormValues(item, element)) : value;
+  }
+
+  const blankControl = value === '' || (value === null && !schema.safeParse(null).success);
+  if (blankControl && isOptional(schema) && getDefaultValueInZodStack(schema) === undefined) {
+    return undefined;
+  }
+
+  return value;
+}
+
 export class CustomZodProvider<T extends AnySchema> implements SchemaProvider {
   private _schema: T;
   constructor(schema: T) {
@@ -166,26 +196,23 @@ export class CustomZodProvider<T extends AnySchema> implements SchemaProvider {
   }
 
   validateSchema(values: any): SchemaValidation {
-    const cleanedValues = removeEmptyValues(values);
-    try {
-      const validationResult = (this._schema as any).safeParse(cleanedValues);
-      if (validationResult.success) {
-        return { success: true, data: validationResult.data } as const;
-      } else {
-        const error = validationResult.error;
-        // v3: error.errors, v4: error.issues
-        const issues = error.issues ?? error.errors ?? [];
-        return {
-          success: false,
-          errors: issues.map((err: any) => ({
-            path: err.path as string[],
-            message: err.message,
-          })),
-        } as const;
-      }
-    } catch (error) {
-      throw error;
+    const cleanedValues = normalizeFormValues(values, this._schema);
+    const schema: AnySchema = this._schema;
+    const validationResult = schema.safeParse(cleanedValues);
+    if (validationResult.success) {
+      return { success: true, data: validationResult.data } as const;
     }
+
+    const error = validationResult.error;
+    // v3: error.errors, v4: error.issues
+    const issues = error.issues ?? error.errors ?? [];
+    return {
+      success: false,
+      errors: issues.map((err: any) => ({
+        path: err.path as string[],
+        message: err.message,
+      })),
+    } as const;
   }
 
   parseSchema(): ParsedSchema {

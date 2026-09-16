@@ -32,7 +32,7 @@ test.describe('Workflow graph detail page', () => {
       await page.getByRole('radio', { name: 'JSON' }).click();
       const codeEditor = await page.locator('[contenteditable="true"]');
       await expect(codeEditor).toBeVisible();
-      await expect(codeEditor).toHaveText('{}');
+      await expect(codeEditor).toContainText('"text": ""');
       await expect(codeEditor).toHaveAttribute('data-language', 'json');
     });
 

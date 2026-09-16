@@ -345,6 +345,7 @@ export function WorkflowTrigger({
         {canExecuteWorkflow && (
           <>
             <WorkflowTriggerForm
+              key={`${workflowId}:${activeRunId ?? 'new'}`}
               zodSchema={zodSchemaToUse}
               defaultValues={payload}
               isStreaming={isStreamingWorkflow || isSuspendedSteps}
