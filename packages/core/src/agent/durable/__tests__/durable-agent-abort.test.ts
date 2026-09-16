@@ -396,46 +396,49 @@ describe('DurableAgent abort signal', () => {
     cleanup();
   });
 
-  it('abortThreadStream stops a durable run that is already executing', async () => {
-    // A durable run keeps its controller on the durable run registry, not in
-    // the thread runtime's prepared-run map, so the base implementation reaches
-    // neither: without the durable abort request the run streams on.
-    // Resolves when the model is actually streaming, so the abort below lands
-    // on a run under way rather than on one that has not started yet.
-    let streaming: () => void;
-    const modelCalled = new Promise<void>(resolve => {
-      streaming = resolve;
-    });
-    const baseAgent = new Agent({
-      id: 'abort-thread-stream-agent',
-      name: 'Abort Thread Stream Agent',
-      instructions: 'Test',
-      model: createAbortableModel(() => streaming()) as LanguageModelV2,
-    });
-    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+  it.each([undefined, false, true])(
+    'abortThreadStream stops a durable run with clearPendingSignals=%s',
+    async clearPendingSignals => {
+      // A durable run keeps its controller on the durable run registry, not in
+      // the thread runtime's prepared-run map, so the base implementation reaches
+      // neither: without the durable abort request the run streams on.
+      // Resolves when the model is actually streaming, so the abort below lands
+      // on a run under way rather than on one that has not started yet.
+      let streaming: () => void;
+      const modelCalled = new Promise<void>(resolve => {
+        streaming = resolve;
+      });
+      const baseAgent = new Agent({
+        id: 'abort-thread-stream-agent',
+        name: 'Abort Thread Stream Agent',
+        instructions: 'Test',
+        model: createAbortableModel(() => streaming()) as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const threadId = 'abort-thread-stream-thread';
-    const resourceId = 'abort-thread-stream-resource';
+      const threadId = 'abort-thread-stream-thread';
+      const resourceId = 'abort-thread-stream-resource';
 
-    let abortPayload: { steps: { finishReason?: string }[] } | undefined;
-    const { output, cleanup } = await durableAgent.stream('Go', {
-      memory: { thread: threadId, resource: resourceId },
-      onAbort: data => {
-        abortPayload = data;
-      },
-    });
+      let abortPayload: { steps: { finishReason?: string }[] } | undefined;
+      const { output, cleanup } = await durableAgent.stream('Go', {
+        memory: { thread: threadId, resource: resourceId },
+        onAbort: data => {
+          abortPayload = data;
+        },
+      });
 
-    await modelCalled;
-    expect(durableAgent.abortThreadStream({ threadId, resourceId })).toBe(true);
+      await modelCalled;
+      expect(durableAgent.abortThreadStream({ threadId, resourceId, clearPendingSignals })).toBe(true);
 
-    // Awaited without a catch: the run has to end through the abort path,
-    // rather than by surfacing some unrelated stream failure.
-    await output.consumeStream();
+      // Awaited without a catch: the run has to end through the abort path,
+      // rather than by surfacing some unrelated stream failure.
+      await output.consumeStream();
 
-    expect(abortPayload?.steps.at(-1)?.finishReason).toBe('abort');
+      expect(abortPayload?.steps.at(-1)?.finishReason).toBe('abort');
 
-    cleanup();
-  });
+      cleanup();
+    },
+  );
 
   it('abortRunStream stops a durable run that is already executing', async () => {
     let streaming: () => void;

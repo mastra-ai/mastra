@@ -24,7 +24,12 @@ import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
-import type { AgentModelManagerConfig, AgentThreadIdentityOptions, ToolsInput } from '../types';
+import type {
+  AgentAbortThreadOptions,
+  AgentModelManagerConfig,
+  AgentThreadIdentityOptions,
+  ToolsInput,
+} from '../types';
 
 import { publishAbortRequest } from './abort-transport';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from './constants';
@@ -1813,7 +1818,7 @@ export class DurableAgent<
    * request below, aborting a thread whose active run is durable records an
    * intent nothing reads and lets the run stream on.
    */
-  abortThreadStream(options: AgentThreadIdentityOptions): boolean {
+  abortThreadStream(options: AgentAbortThreadOptions): boolean {
     // Resolve the run before the base call: aborting releases the thread lease,
     // after which the thread no longer has an active run to look up.
     const runId = agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
