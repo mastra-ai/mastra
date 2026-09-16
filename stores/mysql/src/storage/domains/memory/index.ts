@@ -2639,7 +2639,7 @@ export class MemoryMySQL extends MemoryStorage {
       );
     }
     params.push(limit + 1);
-    const [rows] = await this.pool.execute<RowDataPacket[]>(
+    const [rows] = await this.pool.query<RowDataPacket[]>(
       `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${conditions.join(' AND ')}
        ORDER BY JSON_UNQUOTE(JSON_EXTRACT(${omCol('archive')}, '$.archivedAt')) DESC,
          ${omCol('generationCount')} DESC,
@@ -2712,7 +2712,7 @@ export class MemoryMySQL extends MemoryStorage {
       );
       params.push(input.threadId!);
     }
-    const [rows] = await this.pool.execute<RowDataPacket[]>(
+    const [rows] = await this.pool.query<RowDataPacket[]>(
       `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${conditions.join(' AND ')}
        ORDER BY JSON_UNQUOTE(JSON_EXTRACT(${omCol('archive')}, '$.archivedAt')) DESC,
          ${omCol('generationCount')} DESC,

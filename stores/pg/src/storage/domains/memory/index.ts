@@ -2727,8 +2727,8 @@ export class MemoryPG extends MemoryStorage {
             "isObserving" = false,
             "isBufferingObservation" = false,
             "isBufferingReflection" = false,
-            "updatedAt" = $5,
-            "updatedAtZ" = $5
+            "updatedAt" = $5::timestamp,
+            "updatedAtZ" = $5::timestamptz
           WHERE id = $6 AND "generationCount" = $7
             AND COALESCE("recordState", 'active') = 'active'
             AND COALESCE("writeEpoch", 0) = $8`,
@@ -2763,13 +2763,13 @@ export class MemoryPG extends MemoryStorage {
             $1, $2, $3, $4, $5,
             'active', 0, $6, $7, NULL,
             NULL, 'archive', $8, $9,
-            $10, $10, $11, $11,
+            $10::timestamp, $10::timestamptz, $11::timestamp, $11::timestamptz,
             $12, $13, $14, $15,
             $16, NULL, NULL,
             NULL, NULL,
             $17, false, $18, false,
             $19, $20, $21, $22,
-            $23, $23, $23, $23
+            $23::timestamp, $23::timestamptz, $23::timestamp, $23::timestamptz
           ) RETURNING *`,
           [
             successorId,
@@ -2955,8 +2955,8 @@ export class MemoryPG extends MemoryStorage {
         "isReflecting" = false,
         "isBufferingReflection" = false,
         "writeEpoch" = COALESCE("writeEpoch", 0) + 1,
-        "updatedAt" = $1,
-        "updatedAtZ" = $1
+        "updatedAt" = $1::timestamp,
+        "updatedAtZ" = $1::timestamptz
        WHERE id = $2 AND COALESCE("recordState", 'active') = 'active'
          AND COALESCE("writeEpoch", 0) = $3
        RETURNING *`,
@@ -2995,8 +2995,8 @@ export class MemoryPG extends MemoryStorage {
             "reflectedObservationLineCount" = NULL,
             "isReflecting" = false,
             "isBufferingReflection" = false,
-            "updatedAt" = $1,
-            "updatedAtZ" = $1
+            "updatedAt" = $1::timestamp,
+            "updatedAtZ" = $1::timestamptz
            WHERE id = $2 AND "generationCount" = $3
              AND COALESCE("recordState", 'active') = 'active'
              AND COALESCE("writeEpoch", 0) = $4`,
@@ -3022,13 +3022,13 @@ export class MemoryPG extends MemoryStorage {
             $1, $2, $3, $4, $5,
             'active', 0, $6, NULL, NULL,
             NULL, 'reflection', $7, $8,
-            $9, $9, $10, $10,
+            $9::timestamp, $9::timestamptz, $10::timestamp, $10::timestamptz,
             0, $11, $12, NULL,
             NULL, NULL, NULL,
             NULL, NULL,
             false, false, false, false,
             0, NULL, $13, $14,
-            $10, $10, $10, $10
+            $10::timestamp, $10::timestamptz, $10::timestamp, $10::timestamptz
           ) RETURNING *`,
           [
             randomUUID(),
