@@ -193,10 +193,9 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'modelSettings',
             type: 'ObservationalMemoryModelSettings',
             description:
-              'Model settings for the Observer agent. The `temperature: 0.3` default is only applied when the resolved model is known to support temperature. The `maxOutputTokens: 100_000` default is only applied with default model selection (no model set, `"default"`, or a `ModelByInputTokens` selector). Custom models get no `maxOutputTokens` default.',
+              'Model settings for the Observer agent. The `maxOutputTokens: 100_000` default is only applied with default model selection (no model set, `"default"`, or a `ModelByInputTokens` selector). Custom models get no `maxOutputTokens` default.',
             isOptional: true,
-            defaultValue:
-              '{ temperature: 0.3 (temperature-capable models), maxOutputTokens: 100_000 (default model selection only) }',
+            defaultValue: '{ temperature: 0.3, maxOutputTokens: 100_000 (default model selection only) }',
             properties: [
               {
                 type: 'ObservationalMemoryModelSettings',
@@ -204,10 +203,9 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
                   {
                     name: 'temperature',
                     type: 'number',
-                    description:
-                      'Temperature for generation. Lower values produce more consistent output. The `0.3` default is only applied when the resolved model is known to support temperature.',
+                    description: 'Temperature for generation. Lower values produce more consistent output.',
                     isOptional: true,
-                    defaultValue: '0.3 (models that support temperature only)',
+                    defaultValue: '0.3',
                   },
                   {
                     name: 'maxOutputTokens',
@@ -337,10 +335,9 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'modelSettings',
             type: 'ObservationalMemoryModelSettings',
             description:
-              'Model settings for the Reflector agent. The `temperature: 0` default is only applied when the resolved model is known to support temperature. The `maxOutputTokens: 100_000` default is only applied with default model selection (no model set, `"default"`, or a `ModelByInputTokens` selector). Custom models get no `maxOutputTokens` default.',
+              'Model settings for the Reflector agent. The `maxOutputTokens: 100_000` default is only applied with default model selection (no model set, `"default"`, or a `ModelByInputTokens` selector). Custom models get no `maxOutputTokens` default.',
             isOptional: true,
-            defaultValue:
-              '{ temperature: 0 (temperature-capable models), maxOutputTokens: 100_000 (default model selection only) }',
+            defaultValue: '{ temperature: 0, maxOutputTokens: 100_000 (default model selection only) }',
             properties: [
               {
                 type: 'ObservationalMemoryModelSettings',
@@ -348,10 +345,9 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
                   {
                     name: 'temperature',
                     type: 'number',
-                    description:
-                      'Temperature for generation. Lower values produce more consistent output. The `0` default is only applied when the resolved model is known to support temperature.',
+                    description: 'Temperature for generation. Lower values produce more consistent output.',
                     isOptional: true,
-                    defaultValue: '0 (models that support temperature only)',
+                    defaultValue: '0',
                   },
                   {
                     name: 'maxOutputTokens',
