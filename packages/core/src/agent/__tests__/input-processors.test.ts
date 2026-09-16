@@ -2,6 +2,7 @@ import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../../memory';
+import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 
@@ -687,3 +688,74 @@ function inputProcessorTests(version: 'v1' | 'v2') {
 
 inputProcessorTests('v1');
 inputProcessorTests('v2');
+
+describe('v2 - TripWire exits do not persist terminal error parts', () => {
+  const successModel = new MockLanguageModelV2({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      content: [{ type: 'text' as const, text: 'should never run' }],
+      warnings: [],
+    }),
+    doStream: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start' as const, warnings: [] },
+        { type: 'text-start' as const, id: 'text-1' },
+        { type: 'text-delta' as const, id: 'text-1', delta: 'should never run' },
+        { type: 'text-end' as const, id: 'text-1' },
+        {
+          type: 'finish' as const,
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        },
+      ]),
+    }),
+  });
+
+  function errorPartsIn(messages: MastraDBMessage[]) {
+    return messages.flatMap(message => (message.content?.parts ?? []).filter(part => part.type === 'error'));
+  }
+
+  it('records no error part when an input processor trips the wire', async () => {
+    const mockMemory = new MockMemory();
+    const agent = new Agent({
+      id: 'tripwire-memory-agent',
+      name: 'TripWire Memory Agent',
+      instructions: 'You are a helpful assistant',
+      model: successModel,
+      memory: mockMemory,
+      inputProcessors: [
+        {
+          id: 'tripwire-abort',
+          name: 'TripWire Abort',
+          processInput: async ({ abort, messages }) => {
+            abort('Blocked by policy');
+            return messages;
+          },
+        },
+      ],
+    });
+
+    const stream = await agent.stream('blocked request', {
+      memory: { thread: 'tripwire-thread', resource: 'tripwire-resource' },
+      modelSettings: { maxRetries: 0 },
+    });
+    for await (const _chunk of stream.fullStream) {
+      // drain
+    }
+
+    const output = await stream.getFullOutput();
+    expect(output.tripwire?.reason).toBe('Blocked by policy');
+
+    const result = await mockMemory.recall({ threadId: 'tripwire-thread', resourceId: 'tripwire-resource' });
+    const messages = result?.messages ?? [];
+
+    // An input-processor TripWire bails before the model runs and before
+    // anything is persisted, so it can never reach the terminal-error branch.
+    expect(messages).toEqual([]);
+    expect(errorPartsIn(messages)).toEqual([]);
+  });
+});

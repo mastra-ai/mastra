@@ -87,6 +87,12 @@ export interface AdapterTestSuiteConfig {
   /** Name for the test suite */
   suiteName?: string;
 
+  /** Values produced by the configured framework parser for an omitted body. */
+  emptyBodyNormalization?: {
+    withoutContentType: 'undefined' | 'empty-object' | 'empty-string';
+    withJsonContentType: 'undefined' | 'empty-object' | 'empty-string';
+  };
+
   /**
    * Setup adapter and app for testing
    * Called once before all tests
@@ -565,6 +571,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       getConfiguration: () => undefined,
       getModelPolicyWarnings: () => [],
     }),
+    hasEnabledWorkflowBuilderConfig: () => true,
+    resolveWorkflowBuilder: async () => ({
+      enabled: true,
+      getAgent: () => agent,
+      getModelPolicy: () => undefined,
+    }),
     prompt: {
       preview: vi.fn().mockResolvedValue('resolved instructions preview'),
       clearCache: vi.fn(),
@@ -622,8 +634,13 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   if (storage) {
     const observability = await storage.getStore('observability');
     if (observability) {
-      vi.spyOn(observability, 'getFeatures').mockReturnValue([...observability.getFeatures(), 'trace-query']);
+      vi.spyOn(observability, 'getFeatures').mockReturnValue([
+        ...observability.getFeatures(),
+        'trace-query',
+        'thread-query',
+      ]);
       vi.spyOn(observability, 'queryTraces').mockResolvedValue({ traces: [], page: { next: null } });
+      vi.spyOn(observability, 'queryThreads').mockResolvedValue({ threads: [], page: { next: null } });
       await observability.createSpan({
         span: {
           spanId: 'test-span',

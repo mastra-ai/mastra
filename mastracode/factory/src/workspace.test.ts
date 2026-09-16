@@ -345,6 +345,12 @@ describe('bundled Factory skill assets', () => {
     expect(rereview).toContain('.artifacts/factory-rereview/pr-<number>.md');
     expect(rereview).toContain('.artifacts/factory-rereview/follow-up-pr-<number>.md');
     expect(rereview).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
+    for (const instructions of [review, rereview]) {
+      expect(instructions).toContain('approve adds `status:auto-approved` and removes `status:changes-requested`');
+      expect(instructions).toContain(
+        'request changes adds `status:changes-requested` and removes `status:auto-approved`',
+      );
+    }
   });
 
   it('guards the initial triage label when any status label is present', async () => {

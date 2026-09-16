@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-okta",
-  "version": "0.2.2",
+  "version": "0.2.3-alpha.0",
   "description": "Mastra Okta Auth and RBAC integration",
   "type": "module",
   "main": "dist/index.js",
@@ -31,7 +31,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@okta/okta-sdk-nodejs": "^8.0.0",
-    "jose": "^6.2.1",
+    "jose": "^6.2.11",
     "lru-cache": "^11.2.7"
   },
   "peerDependencies": {

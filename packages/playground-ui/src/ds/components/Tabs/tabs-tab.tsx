@@ -1,5 +1,6 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
 import { useContext, useEffect, useRef } from 'react';
+import { buttonVariants } from '../Button/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext } from './tabs-context';
 import { transitions, focusRing } from '@/ds/primitives/transitions';
@@ -51,6 +52,31 @@ export const Tab = ({
     return () => observer.disconnect();
   }, [register, value, children, disabled, onClick, onClose]);
   useEffect(() => () => unregister?.(value), [unregister, value]);
+  // The tab renders as a <div>, so the recipe's `disabled:` pseudo never matches; mirror it on the
+  // aria/data attributes Base UI sets.
+  const tabClassName =
+    list?.variant === 'pill-ghost'
+      ? cn(
+          buttonVariants({ variant: 'ghost', size: 'md' }),
+          'relative z-10 whitespace-nowrap',
+          'data-[active]:text-neutral6',
+          'aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
+          'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50',
+          className,
+        )
+      : cn(
+          'text-ui-smd font-normal text-neutral3',
+          attention && 'relative',
+          'flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
+          transitions.colors,
+          focusRing.visible,
+          'hover:text-neutral4',
+          'data-[active]:text-neutral5',
+          'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-neutral3',
+          'aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:text-neutral3',
+          'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:text-neutral3',
+          className,
+        );
   const tab = (
     <BaseTabs.Tab
       ref={ref}
@@ -62,19 +88,7 @@ export const Tab = ({
       disabled={disabled || overflowed}
       data-slot="tab"
       data-closable={onClose ? '' : undefined}
-      className={cn(
-        'text-ui-smd font-normal text-neutral3',
-        attention && 'relative',
-        'flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
-        transitions.colors,
-        focusRing.visible,
-        'hover:text-neutral4',
-        'data-[active]:text-neutral5',
-        'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-neutral3',
-        'aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:text-neutral3',
-        'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:text-neutral3',
-        className,
-      )}
+      className={tabClassName}
       onClick={onClick}
     >
       {children}

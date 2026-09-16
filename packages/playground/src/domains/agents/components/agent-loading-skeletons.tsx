@@ -2,34 +2,6 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import type { ReactNode } from 'react';
 import { SidebarPanel } from './sidebar-panel';
 
-export function AgentViewLoadingSkeleton() {
-  return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_1fr]" data-testid="agent-route-skeleton" aria-busy="true">
-      <AgentViewHeaderLoadingSkeleton />
-      <div className="min-h-0 overflow-hidden">
-        <AgentSettingsLoadingSkeleton />
-      </div>
-    </div>
-  );
-}
-
-function AgentViewHeaderLoadingSkeleton() {
-  return (
-    <div className="flex items-center justify-between gap-2 pr-3 max-lg:py-2">
-      <div className="min-w-0 flex-1 max-lg:hidden">
-        <div className="flex min-w-0 items-center gap-2 p-3">
-          <Skeleton className="size-7 shrink-0 rounded-full" />
-          <Skeleton className="h-4 w-36" />
-        </div>
-      </div>
-      <div className="ml-auto flex shrink-0 items-center gap-2">
-        <Skeleton className="h-9 w-9 rounded-lg" />
-        <Skeleton className="h-9 w-24 rounded-lg" />
-      </div>
-    </div>
-  );
-}
-
 export function AgentSidebarLoadingSkeleton() {
   return (
     <SidebarPanel>
@@ -111,18 +83,6 @@ export function AgentChatLoadingSkeleton() {
             <Skeleton className="h-8 w-8 rounded-full" />
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function AgentSettingsLoadingSkeleton() {
-  return (
-    <div className="h-full w-full min-w-0" data-testid="agent-settings-skeleton" aria-busy="true">
-      <div className="space-y-4 p-4">
-        <Skeleton className="h-28 w-full rounded-lg" />
-        <Skeleton className="h-36 w-full rounded-lg" />
-        <Skeleton className="h-24 w-5/6 rounded-lg" />
       </div>
     </div>
   );

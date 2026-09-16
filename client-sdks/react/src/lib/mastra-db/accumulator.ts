@@ -43,6 +43,24 @@ type StreamChunk = {
   from: 'AGENT' | 'WORKFLOW';
 };
 
+function toolErrorText(error: unknown): string {
+  if (error && typeof error === 'object') {
+    if ('message' in error && typeof error.message === 'string') return error.message;
+    // Recover only the delegation wrapper's model-facing message, never an
+    // arbitrary provider cause. Native Error.message can be lost over JSON.
+    if ('cause' in error) {
+      const cause = error.cause;
+      if (cause && typeof cause === 'object') {
+        const code = 'id' in cause ? cause.id : 'code' in cause ? cause.code : undefined;
+        if (code === 'AGENT_AGENT_TOOL_EXECUTION_FAILED' && 'message' in cause && typeof cause.message === 'string') {
+          return cause.message;
+        }
+      }
+    }
+  }
+  return String(error);
+}
+
 const cloneMetadata = (metadata: MastraDBMessageMetadata | undefined): MastraDBMessageMetadata =>
   metadata ? { ...metadata } : {};
 
@@ -1092,12 +1110,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
         if (isError) {
           const error =
             chunk.type === 'tool-error' || chunk.type === 'background-task-failed' ? payloadError : payloadResult;
-          const errorText =
-            typeof error === 'string'
-              ? error
-              : error instanceof Error
-                ? error.message
-                : ((error as { message?: string } | null)?.message ?? String(error));
+          const errorText = toolErrorText(error);
 
           parts[toolPartIndex] = {
             ...toolPart,
@@ -1108,6 +1121,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
               toolName,
               args,
               errorText,
+              ...(toolName?.startsWith('agent-') ? { result: toolPart.toolInvocation.result } : {}),
             } as MastraToolInvocation,
           };
         } else {

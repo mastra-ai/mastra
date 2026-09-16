@@ -9,6 +9,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { SessionHeader } from '@/components/session-header';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
 import { AgentChatLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
+import { AgentUnavailable } from '@/domains/agents/components/agent-unavailable';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
 import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
@@ -74,7 +75,7 @@ function AgentSession() {
 
   // A 404 is authoritative even if a previous fetch left stale data in the cache.
   if (error && is404NotFoundError(error)) {
-    return <div className="py-4 text-center">Agent not found</div>;
+    return <AgentUnavailable />;
   }
 
   if (error) {
@@ -82,7 +83,7 @@ function AgentSession() {
   }
 
   if (!agent) {
-    return <div className="py-4 text-center">Agent not found</div>;
+    return <AgentUnavailable />;
   }
 
   const actualThreadId = isNewThread ? newThreadId : (threadId ?? newThreadId);

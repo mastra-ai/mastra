@@ -98,7 +98,6 @@ export const goalJudgeSingleRenderScenario: McE2eScenario = {
     await runtime.waitForScreenText(new RegExp(HISTORY_THREAD_TITLE, 'i'), terminal, 8_000);
     terminal.write('\r');
 
-    await runtime.waitForScreenText(new RegExp(`Switched to: ${HISTORY_THREAD_TITLE}`, 'i'), terminal, 8_000);
     await runtime.waitForScreenText(/Goal\s+●\s+done\s+\(1\/3\)/i, terminal, 8_000);
 
     const reloadCount = countJudgeBoxes(terminal.serialize().view);

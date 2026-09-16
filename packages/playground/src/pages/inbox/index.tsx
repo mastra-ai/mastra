@@ -113,7 +113,7 @@ export default function InboxPage() {
               className="grid h-full min-h-0 grid-rows-[auto_1fr]"
             >
               <TabList variant="pill-ghost">
-                <Tab value="feedback" className="px-3 py-2.5">
+                <Tab value="feedback">
                   <Icon size="sm">
                     <MessageSquare />
                   </Icon>
@@ -126,7 +126,7 @@ export default function InboxPage() {
                     </Badge>
                   )}
                 </Tab>
-                <Tab value="dataset" className="px-3 py-2.5">
+                <Tab value="dataset">
                   <Icon size="sm">
                     <ClipboardCheck />
                   </Icon>

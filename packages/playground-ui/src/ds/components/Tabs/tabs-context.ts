@@ -19,6 +19,7 @@ export const TabsContext = createContext<{
 } | null>(null);
 
 export const TabListContext = createContext<{
+  variant: 'line' | 'pill' | 'pill-ghost';
   hiddenValues: ReadonlySet<string>;
   register(tab: TabMeasurement): void;
   unregister(value: string): void;

@@ -37,7 +37,7 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'border border-border2 bg-surface3 text-neutral6 hover:bg-surface5 hover:text-neutral6 active:bg-surface6',
+          'border border-button-default-border bg-button-default-bg font-medium text-neutral6 hover:bg-button-default-bg-hover hover:text-neutral6 active:bg-button-default-bg-active',
         primary:
           'border border-transparent bg-neutral6 font-medium text-surface1 hover:bg-neutral6/90 active:bg-neutral6/80',
         destructive:
@@ -47,19 +47,20 @@ export const buttonVariants = cva(
         ghost:
           'border border-transparent bg-transparent text-neutral4 hover:bg-neutral6/5 hover:text-neutral6 active:bg-neutral6/10',
         outline:
-          'border border-border1 bg-transparent text-neutral5 hover:bg-surface3 hover:text-neutral6 active:bg-surface4',
+          'border border-border2 bg-surface3 text-neutral6 hover:bg-surface5 hover:text-neutral6 active:bg-surface6',
       },
       size: {
         xs: cn(controlSizeClasses.xs, 'px-[.8em]', TEXT_MODE_ADORNMENTS),
         sm: cn(controlSizeClasses.sm, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
         md: cn(controlSizeClasses.md, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
-        lg: cn(controlSizeClasses.default, 'px-[1em]', TEXT_MODE_ADORNMENTS),
+        lg: cn(controlSizeClasses.lg, 'px-[1em]', TEXT_MODE_ADORNMENTS),
         // Icon sizes: square dimensions, fully rounded → circle. Active state inherits from variant
         // (e.g. `active:bg-surface5`) — same press feedback as text-mode for consistency.
+        // `icon-lg` is intentionally 32px (larger than text-mode `lg`, which shares the 28px `md` height).
         'icon-xs': cn(controlHeight.xs, 'w-form-xs rounded-full'),
         'icon-sm': cn(controlHeight.sm, 'w-form-sm rounded-full'),
         'icon-md': cn(controlHeight.md, 'w-form-md rounded-full'),
-        'icon-lg': cn(controlHeight.lg, 'w-form-lg rounded-full'),
+        'icon-lg': 'size-8 rounded-full',
       },
     },
     defaultVariants: {
@@ -132,8 +133,9 @@ function isIconOnly(children: React.ReactNode): boolean {
 
 // Type guard: narrows `ButtonSize` to `IconButtonSize` so consumers (e.g. `iconChildSizeMap`)
 // can index into icon-only structures without a cast.
-function isIconButtonSize(size: ButtonSize | null | undefined): size is IconButtonSize {
-  return typeof size === 'string' && size.startsWith('icon-');
+// eslint-disable-next-line react-refresh/only-export-components -- shared with Combobox's icon-only trigger
+export function isIconButtonSize(size: ButtonSize | null | undefined): size is IconButtonSize {
+  return size?.startsWith('icon-') ?? false;
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(

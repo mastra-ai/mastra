@@ -253,7 +253,7 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
           // Providers read `output.type` unguarded (e.g. @ai-sdk/openai-compatible).
           // An output-less tool result (lost result chunk, OM rewrite) must still
           // present a valid LanguageModelV2ToolResultOutput shape.
-          output: part.output ?? { type: 'json', value: null },
+          output: part.output ?? { type: 'json' as const, value: null },
         });
         break;
       }
