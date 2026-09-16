@@ -3,13 +3,20 @@ export {
   type DockerTemplateOptions,
   type DockerTemplateBuildOptions,
   type DockerTemplateBuildResult,
+  type DockerTemplateSecrets,
 } from './template';
-export { createDockerRepoTemplate, type DockerRepoTemplateOptions } from './repo-template';
+export {
+  createDockerRepoTemplate,
+  type DockerRepoTemplateOptions,
+  type DockerRepoTemplateResolver,
+  type RepositoryAccess,
+} from './repo-template';
 export {
   type AptInstallOptions,
   type DockerTemplateDefinition,
   type DockerTemplateOperation,
   type NpmInstallOptions,
+  type PipInstallOptions,
   type RunWithSecretsOptions,
   secretNames,
   synthesizeDockerfile,

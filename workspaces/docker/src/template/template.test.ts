@@ -62,6 +62,13 @@ describe('DockerTemplate builder', () => {
     expect(new DockerTemplate().dockerfile).toBe('FROM node:22-slim AS mastra-main-0\n');
   });
 
+  it('exposes pipInstall with the same shape as the E2B/platform builders', () => {
+    const template = new DockerTemplate().pipInstall(['numpy'], { g: false });
+    expect(template.definition.operations).toEqual([{ method: 'pipInstall', args: [['numpy'], { g: false }] }]);
+    expect(template.dockerfile).toContain('RUN pip install --user numpy');
+    expect(() => new DockerTemplate().pipInstall('')).toThrow();
+  });
+
   it('supports .from() to override the base image', () => {
     expect(new DockerTemplate().from('ubuntu:24.04').dockerfile).toBe('FROM ubuntu:24.04 AS mastra-main-0\n');
   });
@@ -142,6 +149,32 @@ describe('DockerTemplate.build', () => {
     vi.unstubAllEnvs();
   });
 
+  it('takes secret values from build({ secrets }) without touching process.env', async () => {
+    mockImage.inspect.mockRejectedValueOnce(new Error('no such image'));
+    delete process.env.GIT_TOKEN;
+    const template = new DockerTemplate().runWithSecrets('echo hi', { secrets: ['GIT_TOKEN'], output: '/out' });
+    await template.build({ secrets: { GIT_TOKEN: 'by-value' } });
+    const [, opts] = mockDocker.buildImage.mock.calls[0];
+    expect(opts.buildargs).toEqual({ GIT_TOKEN: 'by-value' });
+    expect(process.env.GIT_TOKEN).toBeUndefined();
+  });
+
+  it('resolves secrets from the template-level source on lazy builds, preferring build-time overrides', async () => {
+    mockImage.inspect.mockRejectedValue(new Error('no such image'));
+    delete process.env.GIT_TOKEN;
+    const source = vi.fn(async () => ({ GIT_TOKEN: 'from-template' }));
+    const template = new DockerTemplate({ secrets: source }).runWithSecrets('echo hi', {
+      secrets: ['GIT_TOKEN'],
+      output: '/out',
+    });
+    await template.createSandbox();
+    expect(source).toHaveBeenCalledTimes(1);
+    expect(mockDocker.buildImage.mock.calls[0][1].buildargs).toEqual({ GIT_TOKEN: 'from-template' });
+
+    await template.build({ force: true, secrets: { GIT_TOKEN: 'override' } });
+    expect(mockDocker.buildImage.mock.calls[1][1].buildargs).toEqual({ GIT_TOKEN: 'override' });
+  });
+
   it('throws before building when a secret is missing from the environment', async () => {
     mockImage.inspect.mockRejectedValueOnce(new Error('no such image'));
     vi.stubEnv('GIT_TOKEN', undefined as never);
@@ -196,6 +229,24 @@ describe('DockerTemplate.createSandbox', () => {
     const template = new DockerTemplate().runCmd('echo hi');
     const sandbox = await template.createSandbox();
     expect(sandbox.constructor.name).toBe('DockerSandbox');
+  });
+
+  it("derives the sandbox working directory from the template's last setWorkdir", async () => {
+    const template = new DockerTemplate().setWorkdir('/workspace').setWorkdir('app').setWorkdir('/srv/final');
+    expect(template.workdir).toBe('/srv/final');
+    const sandbox = await template.createSandbox();
+    expect(sandbox.workingDirectory).toBe('/srv/final');
+  });
+
+  it('resolves relative setWorkdir against the previous one', () => {
+    expect(new DockerTemplate().setWorkdir('/workspace').setWorkdir('app').workdir).toBe('/workspace/app');
+    expect(new DockerTemplate().workdir).toBeUndefined();
+  });
+
+  it('lets an explicit workingDirectory override the template workdir', async () => {
+    const template = new DockerTemplate().setWorkdir('/srv/app');
+    const sandbox = await template.createSandbox({ workingDirectory: '/elsewhere' });
+    expect(sandbox.workingDirectory).toBe('/elsewhere');
   });
 
   it('lazily builds before creating a sandbox', async () => {

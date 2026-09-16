@@ -266,6 +266,53 @@ describe('DockerSandbox', () => {
       expect(sandbox.workingDirectory).toBe('/workspace');
     });
 
+    describe('template option', () => {
+      const fakeTemplate = (overrides: Partial<{ workdir: string; status: 'ready' | 'failed' }> = {}) =>
+        ({
+          workdir: overrides.workdir,
+          build: vi.fn(async () => ({
+            status: overrides.status ?? 'ready',
+            templateId: 'mastra-template:abc',
+            error: overrides.status === 'failed' ? 'step failed' : undefined,
+          })),
+        }) as unknown as import('../template/template').DockerTemplate;
+
+      it('rejects image and template together', () => {
+        expect(() => new DockerSandbox({ image: 'x', template: fakeTemplate() })).toThrow(/mutually exclusive/);
+      });
+
+      it('builds the template on start and boots from its image, adopting its workdir', async () => {
+        const template = fakeTemplate({ workdir: '/srv/repo' });
+        const sandbox = new DockerSandbox({ template });
+        await sandbox._start();
+
+        expect(template.build).toHaveBeenCalledTimes(1);
+        expect(mockDocker.createContainer).toHaveBeenCalledWith(
+          expect.objectContaining({ Image: 'mastra-template:abc', WorkingDir: '/srv/repo' }),
+        );
+        expect(sandbox.workingDirectory).toBe('/srv/repo');
+      });
+
+      it('keeps an explicit workingDirectory over the template workdir', async () => {
+        const sandbox = new DockerSandbox({ template: fakeTemplate({ workdir: '/srv/repo' }), workingDirectory: '/x' });
+        await sandbox._start();
+        expect(mockDocker.createContainer).toHaveBeenCalledWith(expect.objectContaining({ WorkingDir: '/x' }));
+      });
+
+      it('resolves a template function on each container-creating start', async () => {
+        const resolver = vi.fn(async () => fakeTemplate());
+        const sandbox = new DockerSandbox({ template: resolver });
+        await sandbox._start();
+        expect(resolver).toHaveBeenCalledTimes(1);
+      });
+
+      it('fails start when the template build fails', async () => {
+        const sandbox = new DockerSandbox({ template: fakeTemplate({ status: 'failed' }) });
+        await expect(sandbox._start()).rejects.toThrow(/step failed/);
+        expect(mockDocker.createContainer).not.toHaveBeenCalled();
+      });
+    });
+
     it('enables an init process (HostConfig.Init) by default to reap zombies', async () => {
       const sandbox = new DockerSandbox();
       await sandbox._start();

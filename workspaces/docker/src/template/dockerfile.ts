@@ -2,7 +2,7 @@
  * Pure Dockerfile synthesis and content-addressed identity for DockerTemplate.
  *
  * A `DockerTemplate` records an ordered list of operations (setWorkdir, setEnvs,
- * runCmd, runWithSecrets, aptInstall, npmInstall) over a base image. This module
+ * runCmd, runWithSecrets, aptInstall, pipInstall, npmInstall) over a base image. This module
  * turns that ordered list into a deterministic Dockerfile string and a stable
  * content hash. It performs no I/O, so it is fully unit-testable without a
  * Docker daemon.
@@ -19,6 +19,11 @@ export interface AptInstallOptions {
   noInstallRecommends?: boolean;
   /** Pass `--fix-missing` to `apt-get install`. */
   fixMissing?: boolean;
+}
+
+export interface PipInstallOptions {
+  /** Install system-wide (default). `false` installs for the current user (`--user`). */
+  g?: boolean;
 }
 
 export interface NpmInstallOptions {
@@ -49,6 +54,7 @@ export type DockerTemplateOperation =
   | { method: 'runCmd'; args: [string | string[]] }
   | { method: 'runWithSecrets'; args: [string | string[], RunWithSecretsOptions] }
   | { method: 'aptInstall'; args: [string | string[], AptInstallOptions?] }
+  | { method: 'pipInstall'; args: [(string | string[])?, PipInstallOptions?] }
   | { method: 'npmInstall'; args: [(string | string[])?, NpmInstallOptions?] };
 
 /** A fully-resolved template definition: the base image and the ordered operations. */
@@ -83,6 +89,12 @@ function renderAptInstall(packages: string | string[], options?: AptInstallOptio
   const flagStr = flags.length > 0 ? `${flags.join(' ')} ` : '';
   const pkgs = toCommandList(packages).join(' ');
   return `RUN apt-get update && apt-get install -y ${flagStr}${pkgs} && rm -rf /var/lib/apt/lists/*`;
+}
+
+function renderPipInstall(packages?: string | string[], options?: PipInstallOptions): string {
+  const userFlag = options?.g === false ? ' --user' : '';
+  const target = packages === undefined ? '.' : toCommandList(packages).join(' ');
+  return `RUN pip install${userFlag} ${target}`;
 }
 
 function renderNpmInstall(packages?: string | string[], options?: NpmInstallOptions): string {
@@ -155,6 +167,9 @@ export function synthesizeDockerfile(definition: DockerTemplateDefinition): stri
       }
       case 'aptInstall':
         lines.push(renderAptInstall(operation.args[0], operation.args[1]));
+        break;
+      case 'pipInstall':
+        lines.push(renderPipInstall(operation.args[0], operation.args[1]));
         break;
       case 'npmInstall':
         lines.push(renderNpmInstall(operation.args[0], operation.args[1]));

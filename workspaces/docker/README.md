@@ -73,38 +73,49 @@ is produced by synthesizing a `Dockerfile` and running `docker build` (not
 layers.
 
 ```typescript
-import { DockerTemplate } from '@mastra/docker';
+import { DockerSandbox, DockerTemplate } from '@mastra/docker';
 
 const template = new DockerTemplate({ baseImage: 'node:22-slim' })
+  .aptInstall(['git', 'ca-certificates'])
   .runCmd('git clone --depth=1 https://example.com/repo /workspace/app')
   .setWorkdir('/workspace/app')
   .runCmd('npm ci');
 
+// Prepare once, spawn many — each has an independent writable filesystem.
+// The sandbox builds the image on first start() and reuses it afterwards,
+// and its working directory follows the template's last setWorkdir().
+const a = new DockerSandbox({ template });
+const b = new DockerSandbox({ template });
+
+// Or build explicitly, e.g. to surface failures before creating sandboxes.
 const result = await template.build();
 if (result.status !== 'ready') throw new Error(result.error);
-
-// Prepare once, spawn many — each has an independent writable filesystem.
-const a = await template.createSandbox();
-const b = await template.createSandbox();
 
 // Remove the built image when done (independent of any sandbox's destroy()).
 await template.dispose();
 ```
 
+`template` also accepts an async factory (`() => Promise<DockerTemplate>`),
+resolved once per container-creating `start()`; this is how repository
+templates track a moving branch.
+
 Builder methods (`from`, `setWorkdir`, `setEnvs`, `runCmd`, `aptInstall`,
-`npmInstall`) are immutable and chainable — each returns a new template. The
-image tag is content-addressed (`mastra-template:<hash>`), so `build()` is
+`pipInstall`, `npmInstall`) are immutable and chainable — each returns a new
+template, and their signatures match the E2B and platform template builders.
+The image tag is content-addressed (`mastra-template:<hash>`), so `build()` is
 idempotent and reuses an existing image unless you pass `{ force: true }`.
 
 Never put secrets in `setEnvs` — they are baked into the image. For a step that
 needs a credential, use `runWithSecrets`: the command runs in a throwaway build
-stage forked from the steps before it, the named variables are read from the building process's `process.env`
-at `build()` time, and only `output` is copied into the image. The built image's
-layers, config, and history never contain the values (the local daemon's build
-cache still does until you `docker image prune`).
+stage forked from the steps before it, and only `output` is copied into the
+image. Secret values are passed by value (`new DockerTemplate({ secrets })` or
+`build({ secrets })`, falling back to `process.env`) and never enter the template
+identity. The built image's layers, config, and history never contain the values
+(the local daemon's build cache still does until you `docker image prune`).
 
 ```typescript
-const template = new DockerTemplate()
+const template = new DockerTemplate({ secrets: { GITHUB_TOKEN: token } })
+  .aptInstall(['git', 'ca-certificates'])
   .runWithSecrets(
     'git -c http.extraheader="AUTHORIZATION: bearer $GITHUB_TOKEN" clone https://github.com/acme/private.git /workspace/app',
     {
@@ -121,23 +132,30 @@ it, so destroy the template's sandboxes first.
 
 #### Repository templates
 
-`createDockerRepoTemplate` is a convenience that prepares a repository checkout
-at an exact commit (or branch) plus setup commands. For private repos, name an
-environment variable holding a token; it is read at `build()` time and handled
-as described above:
+`createDockerRepoTemplate` prepares a repository checkout plus setup commands,
+with the same options as the E2B and platform repo templates. It returns a
+template factory for the sandbox's `template` option: on each resolution it
+calls `getRepositoryAccess`, resolves the current head of `ref` (default
+branch when omitted) with `git ls-remote`, and pins that commit into the
+template identity — so a moved branch yields a fresh image for the next sandbox
+while an unmoved one reuses the cached image. The credential is used only for
+the head lookup and the clone stage; it never enters the identity or the image.
 
 ```typescript
-import { createDockerRepoTemplate } from '@mastra/docker';
+import { DockerSandbox, createDockerRepoTemplate } from '@mastra/docker';
 
-const template = createDockerRepoTemplate({
-  repoUrl: 'https://github.com/acme/app.git',
-  commit: 'a1b2c3d',
-  setupCommands: ['npm ci', 'npm run build'],
-  tokenEnv: 'GITHUB_TOKEN', // optional, for private repos
+const sandbox = new DockerSandbox({
+  template: createDockerRepoTemplate({
+    getRepositoryAccess: async () => ({
+      cloneUrl: 'https://github.com/acme/app.git',
+      authorization: { scheme: 'bearer', token: await mintInstallationToken() }, // private repos
+    }),
+    ref: 'main', // branch, tag, or commit; omit for the default branch
+    setupCommand: ['npm ci', 'npm run build'],
+    buildEnv: { NPM_CONFIG_REGISTRY: 'https://registry.example.com' }, // non-secret, part of the identity
+    workingDirectory: '/workspace', // checkout lands at /workspace/app and becomes the cwd
+  }),
 });
-
-await template.build();
-const sandbox = await template.createSandbox();
 ```
 
 ## Documentation

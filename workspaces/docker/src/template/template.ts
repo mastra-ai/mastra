@@ -30,6 +30,7 @@
  * ```
  */
 
+import posixPath from 'node:path/posix';
 import Docker from 'dockerode';
 import { pack as tarPack } from 'tar-stream';
 import { DockerSandbox, type DockerSandboxOptions } from '../sandbox';
@@ -38,6 +39,7 @@ import {
   type DockerTemplateDefinition,
   type DockerTemplateOperation,
   type NpmInstallOptions,
+  type PipInstallOptions,
   type RunWithSecretsOptions,
   secretNames,
   synthesizeDockerfile,
@@ -56,11 +58,33 @@ export interface DockerTemplateOptions {
   baseImage?: string;
   /** Pass-through dockerode connection options (socket path, host, TLS certs). */
   dockerOptions?: Docker.DockerOptions;
+  /**
+   * Values for the secrets named by {@link DockerTemplate.runWithSecrets}.
+   * Supplying them here (rather than via `process.env`) keeps concurrent
+   * builds with different credentials from racing on shared process state.
+   * Not part of the template identity.
+   */
+  secrets?: DockerTemplateSecrets;
 }
+
+/**
+ * Values for the secrets named by `runWithSecrets`, keyed by name. Either a
+ * record or a function producing one (called once per real build, so rotated
+ * credentials are picked up without rebuilding the template object).
+ */
+export type DockerTemplateSecrets =
+  | Record<string, string>
+  | (() => Record<string, string> | Promise<Record<string, string>>);
 
 export interface DockerTemplateBuildOptions {
   /** Rebuild even if an image with the computed tag already exists locally. */
   force?: boolean;
+  /**
+   * Secret values for this build. Overrides the template-level `secrets`
+   * source for names it provides. Names still missing after both sources are
+   * read from `process.env` as a last resort.
+   */
+  secrets?: DockerTemplateSecrets;
 }
 
 export interface DockerTemplateBuildResult {
@@ -80,6 +104,7 @@ export class DockerTemplate {
   readonly #baseImage: string;
   readonly #operations: readonly DockerTemplateOperation[];
   readonly #dockerOptions: Docker.DockerOptions | undefined;
+  readonly #secrets: DockerTemplateSecrets | undefined;
   #docker: Docker | undefined;
   #built = false;
 
@@ -87,11 +112,12 @@ export class DockerTemplate {
     this.#baseImage = state ? state.baseImage : validateString(options.baseImage ?? 'node:22-slim', 'baseImage');
     this.#operations = state?.operations ?? [];
     this.#dockerOptions = options.dockerOptions;
+    this.#secrets = options.secrets;
   }
 
   #clone(next: Partial<DockerTemplateState>): DockerTemplate {
     return new DockerTemplate(
-      { dockerOptions: this.#dockerOptions },
+      { dockerOptions: this.#dockerOptions, secrets: this.#secrets },
       {
         baseImage: next.baseImage ?? this.#baseImage,
         operations: next.operations ?? this.#operations,
@@ -135,9 +161,10 @@ export class DockerTemplate {
    *
    * The command runs in a throwaway build stage forked from the template as it
    * stands at that point, so earlier WORKDIR/ENV/installs apply and later
-   * steps see the copied `output`. The named
-   * secrets are read from `process.env` when `build()` runs and exposed to the
-   * command as environment variables. Only `output` is copied into the template
+   * steps see the copied `output`. The named secrets are resolved when
+   * `build()` runs — from `build({ secrets })`, then the template's `secrets`
+   * option, then `process.env` — and exposed to the command as environment
+   * variables. Only `output` is copied into the template
    * image; the values never appear in the image's layers, config, or history.
    *
    * Secret values are still handed to the local daemon as build args, so the
@@ -168,6 +195,12 @@ export class DockerTemplate {
     return this.#append({ method: 'aptInstall', args: [validateStringOrStrings(packages, 'packages'), options] });
   }
 
+  /** Install pip packages (or `pip install .` for the current workdir when omitted). */
+  pipInstall(packages?: string | string[], options?: PipInstallOptions): DockerTemplate {
+    const validated = packages === undefined ? undefined : validateStringOrStrings(packages, 'packages');
+    return this.#append({ method: 'pipInstall', args: [validated, options] });
+  }
+
   /** Install npm packages (or run `npm install` for the current workdir when omitted). */
   npmInstall(packages?: string | string[], options?: NpmInstallOptions): DockerTemplate {
     const validated = packages === undefined ? undefined : validateStringOrStrings(packages, 'packages');
@@ -189,6 +222,22 @@ export class DockerTemplate {
     return templateImageTag(this.definition);
   }
 
+  /**
+   * The working directory the built image ends up with, i.e. the last
+   * `setWorkdir` in the chain (resolved against earlier ones when relative).
+   * `undefined` when the template never sets one, in which case the base
+   * image's `WORKDIR` (or the sandbox default) applies.
+   */
+  get workdir(): string | undefined {
+    let current: string | undefined;
+    for (const op of this.#operations) {
+      if (op.method !== 'setWorkdir') continue;
+      const next = op.args[0];
+      current = next.startsWith('/') || current === undefined ? next : posixPath.join(current, next);
+    }
+    return current;
+  }
+
   #getDocker(): Docker {
     if (!this.#docker) {
       this.#docker = new Docker(this.#dockerOptions);
@@ -202,7 +251,8 @@ export class DockerTemplate {
    * `ready` without rebuilding. Otherwise synthesizes a Dockerfile, runs
    * `docker build`, and surfaces any build-step failure as `status: 'failed'`.
    *
-   * @throws if a secret named by `runWithSecrets` is not set in `process.env`.
+   * @throws if a secret named by `runWithSecrets` cannot be resolved from
+   * `options.secrets`, the template's `secrets` option, or `process.env`.
    */
   async build(options: DockerTemplateBuildOptions = {}): Promise<DockerTemplateBuildResult> {
     const docker = this.#getDocker();
@@ -220,7 +270,7 @@ export class DockerTemplate {
 
     // Only a real build needs the secret values; reusing a cached image must not
     // require the original credentials to still be present.
-    const buildargs = this.#resolveSecrets();
+    const buildargs = await this.#resolveSecrets(options.secrets);
 
     const context = tarPack();
     context.entry({ name: 'Dockerfile' }, this.dockerfile);
@@ -238,14 +288,18 @@ export class DockerTemplate {
     return { status: 'ready', templateId: tag };
   }
 
-  #resolveSecrets(): Record<string, string> | undefined {
+  async #resolveSecrets(override: DockerTemplateSecrets | undefined): Promise<Record<string, string> | undefined> {
     const names = secretNames(this.definition);
     if (names.length === 0) return undefined;
+    const fromBuild = await readSecrets(override);
+    const fromTemplate = await readSecrets(this.#secrets);
     const resolved: Record<string, string> = {};
     for (const name of names) {
-      const value = process.env[name];
+      const value = fromBuild[name] ?? fromTemplate[name] ?? process.env[name];
       if (value === undefined) {
-        throw new Error(`Docker template secret ${name} is not set in the environment`);
+        throw new Error(
+          `Docker template secret ${name} was not provided (secrets option) and is not set in the environment`,
+        );
       }
       resolved[name] = value;
     }
@@ -276,18 +330,26 @@ export class DockerTemplate {
    * with an independent writable layer. Invocation-specific `env`/config passed
    * via `options` reaches only the container and is never baked into the image.
    *
+   * The sandbox's working directory follows the template's last `setWorkdir`
+   * unless `options.workingDirectory` overrides it, so relative paths resolve
+   * against the same directory the image was prepared in.
+   *
    * @throws if the (lazy) build fails.
    */
-  async createSandbox(options: Omit<DockerSandboxOptions, 'image'> = {}): Promise<DockerSandbox> {
+  async createSandbox(options: Omit<DockerSandboxOptions, 'image' | 'template'> = {}): Promise<DockerSandbox> {
     if (!this.#built) {
       const result = await this.build();
       if (result.status !== 'ready') {
         throw new Error(`Docker template build failed: ${result.error ?? 'unknown error'}`);
       }
     }
+    // Same wiring as `new DockerSandbox({ template })`; the build above just
+    // surfaces failures here instead of at `start()`.
+    const workingDirectory = options.workingDirectory ?? options.workingDir ?? this.workdir;
     return new DockerSandbox({
       ...options,
-      image: this.templateId,
+      ...(workingDirectory !== undefined && { workingDirectory }),
+      template: this,
       dockerOptions: options.dockerOptions ?? this.#dockerOptions,
     });
   }
@@ -351,6 +413,11 @@ function validateStringRecord(value: unknown, name: string): Record<string, stri
       return [validateString(key, `${name} key`), item];
     }),
   );
+}
+
+async function readSecrets(source: DockerTemplateSecrets | undefined): Promise<Record<string, string>> {
+  if (!source) return {};
+  return typeof source === 'function' ? await source() : source;
 }
 
 function isImageNotFoundError(error: unknown): boolean {

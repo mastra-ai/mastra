@@ -1,130 +1,290 @@
 /**
- * createDockerRepoTemplate — a convenience over {@link DockerTemplate} that
- * prepares a repository checkout at an exact ref/commit plus setup commands as
- * a reusable, content-addressed local image.
+ * createDockerRepoTemplate — a repo checkout plus setup commands as a
+ * reusable, content-addressed local image, with the same contract as the
+ * E2B and platform repo templates (`getRepositoryAccess`, `setupCommand`,
+ * `buildEnv`, `workingDirectory`).
  *
- * Because a Docker template is built locally, the clone and setup are baked into
- * image layers at `build()` time (no runtime head resolution is needed, unlike
- * the platform repo template). Booting many sandboxes from the resulting image
- * gives each one the same prepared checkout with an independent writable layer.
+ * Returns a template RESOLVER for `DockerSandbox`'s `template` option rather
+ * than a fixed template: each resolution calls `getRepositoryAccess`, looks up
+ * the current head of `ref` (`git ls-remote`, no clone) and pins that sha into
+ * the template identity. A moved branch therefore yields a fresh image on the
+ * next new sandbox, and an unmoved one reuses the cached image. When the head
+ * cannot be resolved the template degrades to cloning `ref` at build time,
+ * keyed without a sha.
  *
- * A private-repo token is read from `process.env[tokenEnv]` when `build()`
- * runs. The clone happens in a throwaway build stage and only the checkout is
- * copied into the image, so the token is neither part of the template's
- * content identity nor present in the built image.
+ * The clone runs in a throwaway build stage; the credential is passed by value
+ * to that stage only and never enters the template identity or the image.
  *
  * @example
  * ```typescript
- * const template = createDockerRepoTemplate({
- *   repoUrl: 'https://github.com/acme/app.git',
- *   commit: 'a1b2c3d',
- *   setupCommands: ['npm ci', 'npm run build'],
+ * const sandbox = new DockerSandbox({
+ *   template: createDockerRepoTemplate({
+ *     getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/acme/app.git' }),
+ *     setupCommand: ['npm ci', 'npm run build'],
+ *   }),
  * });
- * await template.build();
- * const sandbox = await template.createSandbox();
  * ```
  */
 
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { normalizeSetupCommands, repoCloneCommand, setupMarkerCommand, setupMarkerContent } from '@internal/workspace';
 import type { DockerOptions } from 'dockerode';
 import { DockerTemplate } from './template';
 
+const execFileAsync = promisify(execFile);
+
+/** Env var the build's clone reads the credential from (see `gitAuthFlag` in `repoCloneCommand`). */
+const BUILD_TOKEN_ENV = 'GH_TOKEN';
+const DEFAULT_BASE_IMAGE = 'node:22-slim';
+const DEFAULT_WORKING_DIRECTORY = '/workspace';
+const SHA_PATTERN = /^[0-9a-f]{7,40}$/i;
+
+const CLONE_URL_ALLOWED_CHARS = /^[a-z0-9:/._-]+$/i;
+const CLONE_URL_HOST_PATTERN = /^[a-z0-9.-]+$/i;
+const CLONE_URL_SEGMENT_PATTERN = /^[\w.-]+$/;
+/** Refs interpolate into shell too; git ref names are already restricted, so allowlist tightly. */
+const REF_PATTERN = /^[\w./-]+$/;
+
+/**
+ * Repository clone target plus an optional credential. Structurally identical
+ * to the E2B/platform type of the same name so a host can pass its context
+ * accessor straight through.
+ */
+export interface RepositoryAccess {
+  /** https clone URL, e.g. `https://github.com/acme/widgets.git`. */
+  cloneUrl: string;
+  /** Credential for private repositories; presented to git as `x-access-token:<token>` basic auth. */
+  authorization?: { scheme: 'bearer'; token: string };
+}
+
 export interface DockerRepoTemplateOptions {
-  /** Plain https clone URL, without embedded credentials. */
-  repoUrl: string;
   /**
-   * Exact commit SHA to check out. When set, the full history is cloned so any
-   * commit is reachable, then checked out — giving a reproducible baseline.
+   * Resolves the clone URL and, for private repositories, a short-lived
+   * credential. Called once per template resolution (each container-creating
+   * `start()`): the credential authenticates the head lookup and the build's
+   * clone. It is passed to the build by value, never through `process.env`,
+   * and is excluded from the template identity so rotation does not rebuild.
+   *
+   * `undefined` means "no repository", and {@link createDockerRepoTemplate}
+   * then returns undefined so `template: createDockerRepoTemplate(ctx)` needs
+   * no conditional.
    */
-  commit?: string;
+  getRepositoryAccess: (() => Promise<RepositoryAccess | undefined>) | undefined;
   /**
-   * Branch or tag to check out. Ignored when `commit` is set. Omit to use the
-   * remote's default branch (a shallow single-branch clone).
+   * Branch, tag, or commit to prepare. The current head of a branch/tag is
+   * resolved at each template resolution and pinned into the identity.
+   * @default the remote's default branch
    */
-  branch?: string;
+  ref?: string;
+  /** Setup command(s) run inside the checkout as separate cached build steps. */
+  setupCommand?: string | string[];
   /**
-   * Directory the repo is cloned into and the template's working directory.
-   * @default '/workspace/repo'
+   * Extra environment for every build step, including `setupCommand`. Baked
+   * into the image via `ENV` and hashed into the identity (keys and values),
+   * so it must be non-secret; put rotating credentials in
+   * {@link getRepositoryAccess} instead.
    */
-  destination?: string;
+  buildEnv?: Record<string, string> | (() => Promise<Record<string, string>>);
   /**
-   * Base image for the template. Must have `git` and `ca-certificates`
-   * available.
+   * Absolute parent for the checkout; the repo lands at
+   * `<workingDirectory>/<repo>`, which becomes the build and runtime cwd.
+   * @default '/workspace'
+   */
+  workingDirectory?: string;
+  /**
+   * Base image. A custom base must provide `git` and `ca-certificates`; the
+   * default has them apt-installed as the first (cached) layer.
    * @default 'node:22-slim'
    */
   baseImage?: string;
-  /**
-   * Name of an environment variable holding a GitHub token for private repos.
-   * Read from the building process's `process.env` at `build()` time; the
-   * value is never stored in the template or the built image.
-   */
-  tokenEnv?: string;
-  /** Commands to run after the checkout (e.g. installing dependencies). */
-  setupCommands?: string | string[];
   /** Pass-through dockerode connection options. */
   dockerOptions?: DockerOptions;
 }
 
-const DEFAULT_DESTINATION = '/workspace/repo';
+/** A resolver producing a fresh, head-pinned template on each call. */
+export type DockerRepoTemplateResolver = () => Promise<DockerTemplate>;
 
-export function createDockerRepoTemplate(options: DockerRepoTemplateOptions): DockerTemplate {
-  const destination = options.destination ?? DEFAULT_DESTINATION;
+export function createDockerRepoTemplate(options: DockerRepoTemplateOptions): DockerRepoTemplateResolver | undefined {
+  if (!options.getRepositoryAccess) return undefined;
+  if (options.ref !== undefined && !REF_PATTERN.test(options.ref)) {
+    throw new Error(`Invalid ref '${options.ref}': expected a git ref name`);
+  }
+  const workingDirectory = trimTrailingSlashes(options.workingDirectory ?? DEFAULT_WORKING_DIRECTORY);
+  if (!workingDirectory.startsWith('/')) {
+    throw new Error(`workingDirectory must be an absolute path, got '${options.workingDirectory}'`);
+  }
+  return () => resolveRepoTemplate(options, workingDirectory);
+}
 
-  let template = new DockerTemplate({
-    baseImage: options.baseImage ?? 'node:22-slim',
+async function resolveRepoTemplate(
+  options: DockerRepoTemplateOptions,
+  workingDirectory: string,
+): Promise<DockerTemplate> {
+  const access = await options.getRepositoryAccess!().catch(() => undefined);
+  const cloneUrl = access?.cloneUrl;
+  if (!cloneUrl) {
+    throw new Error('Repo template has no clone URL: repository access returned none.');
+  }
+  assertCloneUrl(cloneUrl);
+  const token = access?.authorization?.token;
+  const buildEnv = typeof options.buildEnv === 'function' ? await options.buildEnv() : options.buildEnv;
+  const sha = await resolveHead(cloneUrl, options.ref, token);
+
+  return buildRepoTemplate({
+    cloneUrl,
+    ref: options.ref,
+    sha,
+    token,
+    buildEnv,
+    setupCommand: options.setupCommand,
+    workingDirectory,
+    baseImage: options.baseImage,
     dockerOptions: options.dockerOptions,
   });
+}
 
-  const clone = options.commit
-    ? [
-        // Full clone so an arbitrary commit is reachable, then pin to it.
-        repoCloneCommandFull({ cloneUrl: options.repoUrl, destination, tokenEnv: options.tokenEnv }),
-        `git -C ${shellQuote(destination)} checkout ${shellQuote(options.commit)}`,
-      ]
-    : [
-        repoCloneCommand({
-          cloneUrl: options.repoUrl,
-          destination,
-          branch: options.branch,
-          tokenEnv: options.tokenEnv,
-        }),
-      ];
+interface RepoTemplateInputs {
+  cloneUrl: string;
+  ref?: string;
+  sha?: string;
+  token?: string;
+  buildEnv?: Record<string, string>;
+  setupCommand?: string | string[];
+  workingDirectory: string;
+  baseImage?: string;
+  dockerOptions?: DockerOptions;
+}
 
-  // The clone always runs in a throwaway stage so a token (when present) is
-  // handed to `git` but only the checkout is copied into the template image.
-  template = template.runWithSecrets(clone, {
-    secrets: options.tokenEnv ? [options.tokenEnv] : [],
-    output: destination,
+/**
+ * Pure assembly of the template from already-resolved inputs. Exported for
+ * tests so the Dockerfile can be asserted without a network head lookup.
+ * @internal
+ */
+export function buildRepoTemplate(inputs: RepoTemplateInputs): DockerTemplate {
+  const { cloneUrl, ref, sha, token, buildEnv } = inputs;
+  const destination = `${trimTrailingSlashes(inputs.workingDirectory)}/${repoDirName(cloneUrl)}`;
+
+  let template = new DockerTemplate({
+    baseImage: inputs.baseImage ?? DEFAULT_BASE_IMAGE,
+    dockerOptions: inputs.dockerOptions,
+    ...(token ? { secrets: { [BUILD_TOKEN_ENV]: token } } : {}),
   });
 
-  template = template.setWorkdir(destination);
-
-  const setupCommands = normalizeSetupCommands(options.setupCommands);
-  if (setupCommands.length > 0) {
-    for (const command of setupCommands) {
-      template = template.runCmd(command);
-    }
-    // Write the completion marker last, so it only exists when setup succeeded.
-    template = template.runCmd(setupMarkerCommand(setupMarkerContent(setupCommands)));
+  if (inputs.baseImage === undefined) {
+    // The slim default ships without git; a custom base is expected to bring its own.
+    template = template.aptInstall(['git', 'ca-certificates']);
   }
 
+  if (buildEnv && Object.keys(buildEnv).length > 0) {
+    template = template.setEnvs(buildEnv);
+  }
+
+  const tokenEnv = token ? BUILD_TOKEN_ENV : undefined;
+  const clone = sha
+    ? [
+        // Full clone so an arbitrary commit is reachable, then pin to it. The
+        // sha is in the command, so it is part of the template identity.
+        cloneFull({ cloneUrl, destination, tokenEnv }),
+        `git -C ${shellQuote(destination)} checkout --detach ${shellQuote(sha)}`,
+      ]
+    : [repoCloneCommand({ cloneUrl, destination, branch: ref, tokenEnv })];
+
+  template = template
+    .runWithSecrets(clone, { secrets: tokenEnv ? [tokenEnv] : [], output: destination })
+    .setWorkdir(destination);
+
+  const setupCommands = normalizeSetupCommands(inputs.setupCommand);
+  for (const command of setupCommands) {
+    template = template.runCmd(command);
+  }
+  if (setupCommands.length > 0) {
+    // Written last, so the marker exists only when every setup step succeeded.
+    template = template.runCmd(setupMarkerCommand(setupMarkerContent(setupCommands)));
+  }
   return template;
 }
 
-/** Full (non-shallow) clone with the same per-invocation auth semantics as the shared shallow clone. */
-function repoCloneCommandFull({
-  cloneUrl,
-  destination,
-  tokenEnv,
-}: {
-  cloneUrl: string;
-  destination: string;
-  tokenEnv?: string;
-}): string {
+/**
+ * Resolve `ref` (or the default branch) to a commit sha with `git ls-remote`
+ * on the host, without cloning. A ref that already is a sha is returned as is.
+ * Any failure yields undefined so the template degrades to an unpinned clone.
+ * @internal exported for tests.
+ */
+export async function resolveHead(
+  cloneUrl: string,
+  ref: string | undefined,
+  token: string | undefined,
+): Promise<string | undefined> {
+  if (ref && SHA_PATTERN.test(ref)) return ref.toLowerCase();
+  try {
+    const authArgs = token
+      ? ['-c', `http.extraheader=AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`]
+      : [];
+    // `--` keeps even a hostile URL from being read as an option.
+    const { stdout } = await execFileAsync('git', [...authArgs, 'ls-remote', '--', cloneUrl, ref ?? 'HEAD'], {
+      timeout: 10_000,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    });
+    // Prefer the peeled tag object (`refs/tags/x^{}`) when present.
+    const lines = stdout
+      .split('\n')
+      .filter(Boolean)
+      .map(line => line.split('\t'));
+    const peeled = lines.find(([, name]) => name?.endsWith('^{}'));
+    const sha = (peeled ?? lines[0])?.[0]?.trim();
+    return sha && SHA_PATTERN.test(sha) ? sha.toLowerCase() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function cloneFull({ cloneUrl, destination, tokenEnv }: { cloneUrl: string; destination: string; tokenEnv?: string }) {
   const auth = tokenEnv
     ? `-c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$${tokenEnv}" | base64 -w0)" `
     : '';
   return `git ${auth}clone ${shellQuote(cloneUrl)} ${shellQuote(destination)}`;
+}
+
+function assertCloneUrl(cloneUrl: string): void {
+  if (cloneUrl.length > 2048 || !CLONE_URL_ALLOWED_CHARS.test(cloneUrl)) {
+    throw new Error(`Invalid cloneUrl '${cloneUrl}': expected an https URL with a plain host and path`);
+  }
+  let url: URL;
+  try {
+    url = new URL(cloneUrl);
+  } catch {
+    throw new Error(`Invalid cloneUrl '${cloneUrl}': not a URL`);
+  }
+  const segments = url.pathname.split('/').slice(1);
+  const ok =
+    url.protocol === 'https:' &&
+    !url.username &&
+    !url.password &&
+    !url.search &&
+    !url.hash &&
+    CLONE_URL_HOST_PATTERN.test(url.hostname) &&
+    segments.length > 0 &&
+    segments.every(segment => CLONE_URL_SEGMENT_PATTERN.test(segment));
+  if (!ok) {
+    throw new Error(`Invalid cloneUrl '${cloneUrl}': expected an https URL such as https://host/owner/repo.git`);
+  }
+}
+
+function repoDirName(cloneUrl: string): string {
+  const last = trimTrailingSlashes(cloneUrl).split('/').at(-1) ?? '';
+  return (
+    last
+      .replace(/\.git$/i, '')
+      .replace(/[^\w.-]/g, '-')
+      .replace(/^\.+/, '') || 'repo'
+  );
+}
+
+function trimTrailingSlashes(path: string): string {
+  let end = path.length;
+  while (end > 1 && path[end - 1] === '/') end--;
+  return path.slice(0, end);
 }
 
 function shellQuote(value: string): string {

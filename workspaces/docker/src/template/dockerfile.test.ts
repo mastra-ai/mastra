@@ -115,6 +115,18 @@ describe('synthesizeDockerfile', () => {
       synthesizeDockerfile(def({ operations: [{ method: 'npmInstall', args: ['typescript', { g: true }] }] })),
     ).toContain('RUN npm install -g typescript');
   });
+
+  it('renders pip install variants with E2B semantics (global by default, --user when g is false)', () => {
+    expect(synthesizeDockerfile(def({ operations: [{ method: 'pipInstall', args: [] }] }))).toContain(
+      'RUN pip install .\n',
+    );
+    expect(
+      synthesizeDockerfile(def({ operations: [{ method: 'pipInstall', args: [['numpy', 'pandas']] }] })),
+    ).toContain('RUN pip install numpy pandas');
+    expect(
+      synthesizeDockerfile(def({ operations: [{ method: 'pipInstall', args: ['ruff', { g: false }] }] })),
+    ).toContain('RUN pip install --user ruff');
+  });
 });
 
 describe('templateIdentity', () => {
