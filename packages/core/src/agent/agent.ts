@@ -7433,7 +7433,9 @@ export class Agent<
       model: options.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
     })) as MastraLLMVNext;
 
-    if (resourceId && threadFromArgs && !this.hasOwnMemory()) {
+    // Memory can arrive through the request context (supervisor delegation hands
+    // its memory to sub-agents that way), so only warn when there is none at all.
+    if (resourceId && threadFromArgs && !this.#hasEffectiveMemory(requestContext)) {
       this.logger.warn('No memory is configured but resourceId and threadId were passed in args', { agent: this.name });
     }
 
