@@ -198,12 +198,15 @@ describe('AgentController.createSession — cross-session isolation', () => {
       threadId: originatingThreadId,
     });
     const controllerContext = requestContext.get('controller');
+    expect(controllerContext.isThreadActive()).toBe(true);
 
     const nextThread = await session.thread.create({ title: 'next' });
+    expect(controllerContext.isThreadActive()).toBe(false);
     await controllerContext.setThreadSetting({ key: 'delayedSetting', value: 'origin' });
 
     expect(session.thread.requireId()).toBe(nextThread.id);
     expect(await session.thread.getSetting({ key: 'delayedSetting' })).toBeUndefined();
+    expect(await controllerContext.getThreadSetting('delayedSetting')).toBe('origin');
     await session.thread.switch({ threadId: originatingThreadId });
     expect(await session.thread.getSetting({ key: 'delayedSetting' })).toBe('origin');
   });

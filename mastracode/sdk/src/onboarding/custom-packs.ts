@@ -33,4 +33,5 @@ export function removeCustomPackFromSettings(settings: GlobalSettings, packId: s
       ([sourcePackId, targetPackId]) => sourcePackId !== packId && targetPackId !== packId,
     ),
   );
+  delete settings.models.packAccountPreferences?.[packId];
 }

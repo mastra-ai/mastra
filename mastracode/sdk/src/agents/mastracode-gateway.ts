@@ -84,7 +84,7 @@ export type MastraCodeGatewayOptions = {
 let authStorageSingleton: AuthStorage | undefined;
 let authStorageSingletonDir: string | undefined;
 
-function getGlobalAuthStorage(): AuthStorage {
+export function getGlobalAuthStorage(): AuthStorage {
   // Keyed by the resolved app-data dir: in-process harnesses re-point
   // MASTRA_APP_DATA_DIR per run inside one long-lived worker, so a store
   // pinned to a previous dir must be discarded, not reused.

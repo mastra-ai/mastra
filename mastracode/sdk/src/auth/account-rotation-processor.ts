@@ -3,9 +3,9 @@
  *
  * When the active account cannot serve a request (rate limit, quota
  * exhaustion, dead token, persistent outage), the next account in insertion
- * order is activated in storage and the request retried — the OAuth fetch
- * wrappers re-read `auth.json` per HTTP request, so the retried attempt picks
- * the newly active account up with no model re-resolution. Every switch is
+ * order is selected for the request and the request retried. OAuth fetch
+ * wrappers read that request-scoped selection on every HTTP attempt, so
+ * concurrent runs can't swap each other's credentials. Every switch is
  * persisted as a non-transient `data-mastracode-account-switch` part so it
  * shows in the transcript and survives history reload.
  *
@@ -25,7 +25,13 @@ import type { ProcessAPIErrorArgs, ProcessInputArgs, ProcessInputResult, Process
 import { resolveCredentialStore } from '../agents/credential-resolver.js';
 import { listResolvableModePacks, resolveModel } from '../agents/model.js';
 import { resolveModePackFallbackChain } from '../onboarding/packs.js';
-import { findModePackForModel, loadSettings, resolveModePackModels } from '../onboarding/settings.js';
+import {
+  findModePackForModel,
+  loadSettings,
+  resolveModePackModels,
+  THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY,
+} from '../onboarding/settings.js';
+import { getRequestAccountSelection, setRequestAccountSelection } from './account-routing-context.js';
 import { ProviderAuthRequiredError, PROVIDER_AUTH_REQUIRED_ERROR } from './provider-auth-error.js';
 import { getOAuthProviders } from './storage.js';
 import type { CredentialStore } from './types.js';
@@ -43,6 +49,7 @@ export interface AccountSwitchPartData {
     | 'auth-failed'
     | 'pool-exhausted'
     | 'persistent-outage'
+    | 'preferred-routing'
     | 'starting-on-account';
   at: string;
 }
@@ -56,7 +63,7 @@ export type RotationCredentialStore = CredentialStore & {
    * don't, and the auth path degrades to plain rotation (which itself no-ops
    * without registry methods).
    */
-  forceRefreshActiveAccount?(providerId: string): Promise<string | undefined>;
+  forceRefreshActiveAccount?(providerId: string, accountInstanceId?: string): Promise<string | undefined>;
 };
 
 /** Rotatable providers = the OAuth provider registry; API-key-only providers never rotate. */
@@ -335,6 +342,7 @@ const REASON_TEXT: Record<Exclude<AccountSwitchPartData['reason'], 'starting-on-
   'auth-failed': 'auth failed',
   'pool-exhausted': 'pool exhausted',
   'persistent-outage': 'persistent outage',
+  'preferred-routing': 'subscription routing',
 };
 
 /** Validates untrusted `reason` values (e.g. persisted message parts). */
@@ -421,6 +429,206 @@ interface PackCascade {
   position: number;
 }
 
+export type AccountRoutingExhausted = Record<string, Record<string, string[]>>;
+
+interface AccountRoute {
+  packId: string;
+  modelId: string;
+  providerId: string;
+}
+
+type RoutingProcessorArgs = Pick<ProcessAPIErrorArgs, 'requestContext' | 'state' | 'writer'> | ProcessInputArgs;
+
+type RoutingControllerContext = {
+  session?: { modelId?: unknown; modeId?: unknown };
+  threadId?: unknown;
+  getState?: () => Record<string, unknown>;
+  setState?: (updates: Record<string, unknown>) => Promise<void>;
+  getThreadSetting?: (key: string) => Promise<unknown>;
+  setThreadSetting?: (setting: { key: string; value: unknown }) => Promise<void>;
+  isThreadActive?: () => boolean;
+};
+
+const exhaustedAccountPersistenceQueues = new Map<string, Promise<void>>();
+const EXHAUSTED_ACCOUNT_SELECTION_SUFFIX = ':all-exhausted';
+
+function exhaustedAccountSelectionId(providerId: string): string {
+  return `${providerId}${EXHAUSTED_ACCOUNT_SELECTION_SUFFIX}`;
+}
+
+async function serializeExhaustedAccountPersistence(key: string, operation: () => Promise<void>): Promise<void> {
+  const previous = exhaustedAccountPersistenceQueues.get(key) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(operation);
+  exhaustedAccountPersistenceQueues.set(key, current);
+  try {
+    await current;
+  } finally {
+    if (exhaustedAccountPersistenceQueues.get(key) === current) exhaustedAccountPersistenceQueues.delete(key);
+  }
+}
+
+function getRoutingController(
+  args: Pick<RoutingProcessorArgs, 'requestContext'>,
+): RoutingControllerContext | undefined {
+  return args.requestContext?.get('controller') as RoutingControllerContext | undefined;
+}
+
+function parseAccountRoutingExhausted(value: unknown): AccountRoutingExhausted {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const result: AccountRoutingExhausted = {};
+  for (const [packId, modelEntries] of Object.entries(value as Record<string, unknown>)) {
+    if (!modelEntries || typeof modelEntries !== 'object' || Array.isArray(modelEntries)) continue;
+    const models: Record<string, string[]> = {};
+    for (const [modelId, accountIds] of Object.entries(modelEntries as Record<string, unknown>)) {
+      if (Array.isArray(accountIds) && accountIds.every(accountId => typeof accountId === 'string')) {
+        models[modelId] = [...new Set(accountIds)];
+      }
+    }
+    if (Object.keys(models).length > 0) result[packId] = models;
+  }
+  return result;
+}
+
+function getExhaustedAccountIds(args: Pick<RoutingProcessorArgs, 'requestContext'>, route: AccountRoute): string[] {
+  const state = getRoutingController(args)?.getState?.();
+  const exhausted = parseAccountRoutingExhausted(state?.[THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY]);
+  return exhausted[route.packId]?.[route.modelId] ?? [];
+}
+
+function orderAccountsForRoute<T extends { id: string }>(accounts: T[], preferredId: string | undefined): T[] {
+  if (!preferredId) return accounts;
+  const preferred = accounts.find(account => account.id === preferredId);
+  return preferred ? [preferred, ...accounts.filter(account => account.id !== preferredId)] : accounts;
+}
+
+function getRequestActiveAccount(
+  args: Pick<RoutingProcessorArgs, 'requestContext'>,
+  store: CredentialStore,
+  providerId: string,
+) {
+  const selectedId = getRequestAccountSelection(args.requestContext, providerId);
+  return (
+    (selectedId ? store.listAccounts?.(providerId).find(account => account.id === selectedId) : undefined) ??
+    store.getActiveAccount?.(providerId) ??
+    store.listAccounts?.(providerId).find(account => account.active)
+  );
+}
+
+function resolveAccountRoute(
+  args: Pick<RoutingProcessorArgs, 'requestContext'>,
+  settingsPath?: string,
+  explicit?: { packId: string; modelId: string },
+): AccountRoute | null {
+  const controller = getRoutingController(args);
+  const state = controller?.getState?.();
+  const pending = state?.mastracodePendingPackFallback as
+    | { toPackId?: unknown; toModelId?: unknown; threadId?: unknown }
+    | null
+    | undefined;
+  const pendingMatchesThread =
+    pending &&
+    typeof pending.toPackId === 'string' &&
+    typeof pending.toModelId === 'string' &&
+    (pending.threadId === undefined || pending.threadId === controller?.threadId);
+  const resolvedModelId =
+    explicit?.modelId ??
+    (pendingMatchesThread ? pending.toModelId : undefined) ??
+    (typeof controller?.session?.modelId === 'string' ? controller.session.modelId : undefined);
+  if (typeof resolvedModelId !== 'string' || resolvedModelId.length === 0) return null;
+  const modelId = resolvedModelId;
+
+  const settings = loadSettings(settingsPath);
+  const packs = listResolvableModePacks(settings);
+  const modeId =
+    typeof controller?.session?.modeId === 'string' && controller.session.modeId.length > 0
+      ? controller.session.modeId
+      : 'build';
+  const explicitPackId =
+    explicit?.packId ??
+    (pendingMatchesThread ? pending.toPackId : undefined) ??
+    (typeof state?.activeModelPackId === 'string' ? state.activeModelPackId : settings.models.activeModelPackId);
+  const pack = explicitPackId
+    ? packs.find(candidate => candidate.id === explicitPackId)
+    : findModePackForModel(settings, packs, modelId, modeId, undefined);
+  if (!pack || resolveModePackModels(settings, pack)[modeId] !== modelId) return null;
+
+  const providerId = providerFromModelId(modelId);
+  return providerId ? { packId: pack.id, modelId, providerId } : null;
+}
+
+async function persistExhaustedAccount(
+  args: Pick<RoutingProcessorArgs, 'requestContext'>,
+  route: AccountRoute,
+  accountInstanceId: string,
+): Promise<void> {
+  const controller = getRoutingController(args);
+  if (!controller) return;
+  const queueKey = typeof controller.threadId === 'string' ? controller.threadId : '__threadless__';
+  await serializeExhaustedAccountPersistence(queueKey, async () => {
+    const persisted = await controller.getThreadSetting?.(THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY);
+    const exhausted = parseAccountRoutingExhausted(
+      persisted ?? controller.getState?.()?.[THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY],
+    );
+    const current = exhausted[route.packId]?.[route.modelId] ?? [];
+    if (current.includes(accountInstanceId)) return;
+    const next: AccountRoutingExhausted = {
+      ...exhausted,
+      [route.packId]: {
+        ...exhausted[route.packId],
+        [route.modelId]: [...current, accountInstanceId],
+      },
+    };
+    await controller.setThreadSetting?.({ key: THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY, value: next });
+    if (controller.isThreadActive?.() !== false) {
+      await controller.setState?.({ [THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY]: next });
+    }
+  });
+}
+
+async function applyPreferredAccountRoute(
+  args: RoutingProcessorArgs,
+  store: CredentialStore,
+  settingsPath: string | undefined,
+  route: AccountRoute,
+): Promise<boolean> {
+  const settings = loadSettings(settingsPath);
+  const preferredId = settings.models.packAccountPreferences?.[route.packId]?.[route.modelId];
+  const accounts = store.listAccounts?.(route.providerId) ?? [];
+  if (accounts.length === 0) return false;
+  const tried = getTriedInstances(args.state);
+  const unavailable = new Set([
+    ...getExhaustedAccountIds(args, route),
+    ...accounts.filter(account => tried.has(account.id)).map(account => account.id),
+  ]);
+  const ordered = orderAccountsForRoute(accounts, preferredId);
+  const selected = ordered.find(account => !unavailable.has(account.id));
+  for (const accountId of unavailable) tried.add(accountId);
+  if (!selected) {
+    setRequestAccountSelection(args.requestContext, route.providerId, exhaustedAccountSelectionId(route.providerId));
+    return false;
+  }
+
+  const active = getRequestActiveAccount(args, store, route.providerId);
+  if (active?.id === selected.id) {
+    setRequestAccountSelection(args.requestContext, route.providerId, selected.id);
+    return false;
+  }
+  // Activate before recording the request-scoped selection: a failed
+  // activation must not leave the selection claiming an account that never
+  // became the provider's active credential.
+  const activated = store.activateAccount?.(route.providerId, selected.id) ?? selected;
+  setRequestAccountSelection(args.requestContext, route.providerId, activated.id);
+
+  await emitAccountSwitchPart(args, {
+    provider: route.providerId,
+    from: active ? { id: active.id, label: active.label } : null,
+    to: { id: activated.id, label: activated.label },
+    reason: 'preferred-routing',
+    at: new Date().toISOString(),
+  });
+  return true;
+}
+
 export class AccountRotationProcessor implements Processor {
   readonly id = 'mastracode-account-rotation' as const;
 
@@ -480,7 +688,11 @@ export class AccountRotationProcessor implements Processor {
     // provides it.
     const store: RotationCredentialStore = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
     const accounts = store.listAccounts?.(providerId) ?? [];
-    const active = store.getActiveAccount?.(providerId) ?? accounts.find(account => account.active);
+    const active = getRequestActiveAccount(args, store, providerId);
+    const route =
+      currentPack && typeof cascadeModelId === 'string'
+        ? resolveAccountRoute(args, this.options.settingsPath, { packId: currentPack.packId, modelId: cascadeModelId })
+        : resolveAccountRoute(args, this.options.settingsPath);
 
     // Q7 bucket 2: force one refresh of the active instance before rotating.
     // A 401 usually means a fresh-but-rejected token; the forced refresh
@@ -495,11 +707,15 @@ export class AccountRotationProcessor implements Processor {
       const refreshKey = `${providerId}:${active?.id ?? 'active'}`;
       if (!forced.has(refreshKey) && typeof store.forceRefreshActiveAccount === 'function') {
         forced.add(refreshKey);
-        const token = await store.forceRefreshActiveAccount(providerId);
+        const token = await store.forceRefreshActiveAccount(providerId, active?.id);
         if (token !== undefined) {
           return { retry: true };
         }
       }
+    }
+
+    if (classification.kind === 'rotate' && active && route?.providerId === providerId) {
+      await persistExhaustedAccount(args, route, active.id);
     }
 
     if (classification.kind === 'hop') {
@@ -527,14 +743,15 @@ export class AccountRotationProcessor implements Processor {
       return this.declarePoolUnavailable(args, providerId, 'pool-exhausted');
     }
 
-    // Activate the first untried instance explicitly. Storage's own cursor
-    // rotation follows insertion order from wherever it currently sits, which
-    // can hand back an account this request already tried.
-    const candidate = accounts.find(account => !tried.has(account.id));
-    const next = candidate ? store.activateAccount?.(providerId, candidate.id) : undefined;
+    const preferredId = route
+      ? loadSettings(this.options.settingsPath).models.packAccountPreferences?.[route.packId]?.[route.modelId]
+      : undefined;
+    const nextCandidate = orderAccountsForRoute(accounts, preferredId).find(account => !tried.has(account.id));
+    const next = nextCandidate ? store.activateAccount?.(providerId, nextCandidate.id) : undefined;
     if (!next) {
       return this.declarePoolUnavailable(args, providerId, 'pool-exhausted');
     }
+    setRequestAccountSelection(args.requestContext, providerId, next.id);
     tried.add(next.id);
 
     // The retry replays the request from scratch (Q10): rotate the assistant
@@ -708,6 +925,23 @@ export class AccountRotationProcessor implements Processor {
     // Keep the durable marker if live state persistence fails: the transcript
     // already records the hop and thread hydration can safely resume it.
     await controller?.setState?.({ [PACK_FALLBACK_STATE_KEY]: pending });
+    // Re-arm the start notice so the retried attempt on the target pack
+    // re-applies its preferred routing even if the attempt below fails —
+    // the flag may already be set by a switch on the original pack.
+    args.state.startNoticeEmitted = false;
+    // Activate the target pack's preferred account only after the hop is
+    // durable. A failure here must not strand a provider-global account
+    // switch with no durable fallback state — the start-notice processor
+    // re-applies routing when the retried request begins on the target pack.
+    const targetRoute = resolveAccountRoute(args, this.options.settingsPath, { packId: to.packId, modelId: toModelId });
+    if (targetRoute) {
+      await applyPreferredAccountRoute(
+        args,
+        this.options.credentialStore,
+        this.options.settingsPath,
+        targetRoute,
+      ).catch(() => undefined);
+    }
     // Live visibility: data parts never ride controller message events, so
     // emit the same line as an info event (see emitAccountSwitchPart).
     controller?.emitEvent?.({ type: 'info', message: packFallbackNoticeText(data) });
@@ -733,7 +967,7 @@ export class AccountRotationProcessor implements Processor {
     const tried = getTriedInstances(args.state);
     for (const account of accounts) tried.add(account.id);
 
-    const active = store.getActiveAccount?.(providerId) ?? accounts.find(account => account.active);
+    const active = getRequestActiveAccount(args, store, providerId);
 
     await emitAccountSwitchPart(args, {
       provider: providerId,
@@ -761,12 +995,36 @@ export class AccountRotationProcessor implements Processor {
 export class AccountStartNoticeProcessor implements Processor {
   readonly id = 'mastracode-account-start-notice' as const;
 
-  constructor(private readonly options: { credentialStore: CredentialStore }) {}
+  constructor(private readonly options: { credentialStore: CredentialStore; settingsPath?: string }) {}
 
   async processInput(args: ProcessInputArgs): Promise<ProcessInputResult> {
     if (args.state.startNoticeEmitted) return args.messageList;
 
-    const providerId = providerFromSession(args);
+    const route = resolveAccountRoute(args, this.options.settingsPath);
+    if (route) {
+      const switched = await applyPreferredAccountRoute(
+        args,
+        this.options.credentialStore,
+        this.options.settingsPath,
+        route,
+      );
+      if (switched) {
+        args.state.startNoticeEmitted = true;
+        return args.messageList;
+      }
+    }
+
+    if (
+      route &&
+      getRequestAccountSelection(args.requestContext, route.providerId) ===
+        exhaustedAccountSelectionId(route.providerId)
+    ) {
+      throw new ProviderAuthRequiredError(
+        `All saved ${route.providerId} subscriptions are exhausted for ${route.packId} · ${route.modelId}.`,
+      );
+    }
+
+    const providerId = route?.providerId ?? providerFromSession(args);
     if (!providerId) return args.messageList;
 
     // Deployed requests resolve the tenant-scoped store so host accounts are

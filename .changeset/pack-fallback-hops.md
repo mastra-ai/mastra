@@ -3,4 +3,4 @@
 'mastracode': patch
 ---
 
-Add fallback model packs: `settings.models.packFallbacks` (pack → pack, chains allowed, cycles capped at one revisit per cascade) editable from each pack's action menu in `/models` via "Set fallback…". When every account serving the active pack's provider is unavailable, the turn hops to the fallback pack's model for the current mode, renders a persisted notice in the transcript, and the thread stays on the landed pack until you switch back manually.
+Added fallback model packs and pack-specific subscription routing. In `/models`, you can configure a fallback chain and choose a preferred OAuth account for each model in a pack. Requests try the preferred account, then the provider's remaining accounts in insertion order. Exhausted accounts stay skipped for that model and thread, and a fallback pack applies its own routing. Pack hops remain visible in the transcript and persist when you reopen the thread.

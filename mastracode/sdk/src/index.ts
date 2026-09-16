@@ -95,6 +95,7 @@ import {
   resolveModelDefaults,
   resolveOmRoleModel,
   saveSettings,
+  THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
@@ -782,6 +783,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       'thinkingLevel',
       'notifications',
       THREAD_ACTIVE_MODEL_PACK_ID_KEY,
+      THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY,
       PACK_FALLBACK_STATE_KEY,
     ] as const;
     for (const key of persistedStateKeys) {
@@ -809,7 +811,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       getState: getNotificationState,
       setState: setNotificationState,
       updateState: updateNotificationState,
+      getThreadSetting: key => session.thread.getSettingOn({ threadId, key }),
       setThreadSetting: setting => session.thread.setSettingOn({ threadId, key: setting.key, value: setting.value }),
+      isThreadActive: () => session.thread.getId() === threadId,
       threadId,
       resourceId,
       session: {
@@ -1045,7 +1049,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // Input-lane notice ONLY (no processAPIError — see the class doc): the
       // runner walks input processors first in runProcessAPIError, so an
       // input-lane processAPIError would rotate before transient retries run.
-      new AccountStartNoticeProcessor({ credentialStore: authStorage }),
+      new AccountStartNoticeProcessor({ credentialStore: authStorage, settingsPath: config?.settingsPath }),
       ...readPluginProcessors().input.map(entry => entry.value),
       ...(pluginSignalLane?.getInputProcessors() ?? []),
     ],

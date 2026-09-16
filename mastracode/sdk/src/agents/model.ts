@@ -2,6 +2,8 @@ import type { ModelWithRetries } from '@mastra/core/agent';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { GatewayLanguageModel, MastraModelGatewayInterface } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
+import { getRequestAccountSelection } from '../auth/account-routing-context.js';
+import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
 import { listBuiltinModePacks, resolveModePackFallbackChain } from '../onboarding/packs.js';
 import {
   findModePackForModel,
@@ -19,6 +21,7 @@ import {
   MASTRA_GATEWAY_PREFIX,
   MASTRACODE_GATEWAY_ID,
   MastraCodeGateway,
+  getGlobalAuthStorage,
   reloadAuthStorage,
   stripMastraGatewayPrefix,
 } from './mastracode-gateway.js';
@@ -57,6 +60,46 @@ function getAgentControllerHeaders(requestContext?: RequestContext): ModelReques
   };
 
   return Object.keys(headers).length > 0 ? headers : undefined;
+}
+
+function accountCredential(account: OAuthAccountRecord) {
+  const { type: _type, id: _id, label: _label, addedAt: _addedAt, active: _active, ...credential } = account;
+  return { type: 'oauth' as const, ...credential };
+}
+
+export function createRequestScopedCredentialStore(
+  base: CredentialStore,
+  requestContext?: RequestContext,
+): CredentialStore {
+  const selectedId = (providerId: string) => getRequestAccountSelection(requestContext, providerId);
+  const selectedAccount = (providerId: string) => {
+    const accountInstanceId = selectedId(providerId);
+    return accountInstanceId
+      ? base.listAccounts?.(providerId).find(account => account.id === accountInstanceId)
+      : undefined;
+  };
+
+  return {
+    allowEnvironmentFallback: base.allowEnvironmentFallback,
+    reload: () => base.reload(),
+    get: providerId => {
+      const selected = selectedAccount(providerId);
+      return selected ? accountCredential(selected) : base.get(providerId);
+    },
+    getStoredApiKey: providerId => base.getStoredApiKey(providerId),
+    getApiKey: providerId => base.getApiKey(providerId, selectedId(providerId)),
+    getOAuthCredential: base.getOAuthCredential
+      ? providerId => base.getOAuthCredential!(providerId, selectedId(providerId))
+      : undefined,
+    listAccounts: base.listAccounts ? providerId => base.listAccounts!(providerId) : undefined,
+    getActiveAccount: base.getActiveAccount ? providerId => base.getActiveAccount!(providerId) : undefined,
+    activateAccount: base.activateAccount
+      ? (providerId, accountInstanceId) => base.activateAccount!(providerId, accountInstanceId)
+      : undefined,
+    removeAccount: base.removeAccount
+      ? (providerId, accountInstanceId) => base.removeAccount!(providerId, accountInstanceId)
+      : undefined,
+  };
 }
 
 export function createMastraCodeGateway(options: MastraCodeGatewayOptions): MastraCodeGateway {
@@ -146,7 +189,8 @@ export function resolveModel(
   // Deployed web registers a per-tenant credential store provider; when the
   // request carries an authenticated tenant, resolve credentials through the
   // caller's own store (user > org > env). Undefined = global AuthStorage.
-  const credentialStore = resolveCredentialStore(options?.requestContext);
+  const baseCredentialStore = resolveCredentialStore(options?.requestContext) ?? getGlobalAuthStorage();
+  const credentialStore = createRequestScopedCredentialStore(baseCredentialStore, options?.requestContext);
   const gateway = createMastraCodeGateway({
     mastraGatewayBaseUrl: rawGatewayBase.replace(/\/+$/, '').replace(/\/v1$/, ''),
     mastraGatewayApiKey: mgApiKey,

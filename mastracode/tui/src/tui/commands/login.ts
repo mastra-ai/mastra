@@ -1,5 +1,11 @@
 import { getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
 import type { OAuthAccountRecord } from '@mastra/code-sdk/auth/types';
+import {
+  loadSettings,
+  migrateAccountPreferences,
+  pruneRemovedAccountPreferences,
+  saveSettings,
+} from '@mastra/code-sdk/onboarding/settings';
 import { LoginAccountManagerComponent } from '../components/login-account-manager.js';
 import { LoginDialogComponent } from '../components/login-dialog.js';
 import { promptAuthMode } from '../components/login-mode-selector.js';
@@ -10,6 +16,12 @@ import type { SlashCommandContext } from './types.js';
 
 function toManagedAccounts(accounts: OAuthAccountRecord[]) {
   return accounts.map(account => ({ id: account.id, label: account.label, active: account.active }));
+}
+
+function removeAccountRoutingPreferences(accountIds: Iterable<string>): void {
+  const settings = loadSettings();
+  pruneRemovedAccountPreferences(settings, accountIds);
+  saveSettings(settings);
 }
 
 function withProviderPrefix(providerName: string, label: string): string {
@@ -101,6 +113,11 @@ async function performLogin(
         opts,
       )
       .then(async account => {
+        if (opts?.replaceAccountId) {
+          const settings = loadSettings();
+          migrateAccountPreferences(settings, opts.replaceAccountId, account.id);
+          saveSettings(settings);
+        }
         await promptForAccountName(ctx, dialog, providerId, account);
         ctx.state.ui.hideOverlay();
         ctx.state.controller.invalidateAvailableModelsCache();
@@ -176,6 +193,7 @@ async function openAccountManager(
         const label =
           ctx.authStorage?.listAccounts(providerId).find(account => account.id === accountId)?.label ?? accountId;
         ctx.authStorage?.removeAccount(providerId, accountId);
+        removeAccountRoutingPreferences([accountId]);
         ctx.state.controller.invalidateAvailableModelsCache();
         ctx.showInfo(`Removed ${label}`);
         finish();
@@ -251,7 +269,9 @@ export async function handleLoginCommand(ctx: SlashCommandContext, mode: 'login'
             }
           } else {
             if (ctx.authStorage) {
+              const removedAccountIds = ctx.authStorage.listAccounts(provider.id).map(account => account.id);
               ctx.authStorage.logout(provider.id);
+              removeAccountRoutingPreferences(removedAccountIds);
               ctx.state.controller.invalidateAvailableModelsCache();
               ctx.showInfo(`Logged out from ${provider.name}`);
             } else {

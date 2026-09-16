@@ -149,13 +149,13 @@ export interface CredentialStore {
    * Ready-to-use key/token for a provider, refreshing expired OAuth
    * credentials first. Implementations own refresh serialization.
    */
-  getApiKey(provider: string): Promise<string | undefined>;
+  getApiKey(provider: string, accountInstanceId?: string): Promise<string | undefined>;
   /**
    * Ready-to-use OAuth credential snapshot. Optional because deployed stores
    * have no local account registry. Local wrappers use this to keep the access
    * token and account-specific metadata from the same account.
    */
-  getOAuthCredential?(provider: string): Promise<OAuthCredentialSnapshot | undefined>;
+  getOAuthCredential?(provider: string, accountInstanceId?: string): Promise<OAuthCredentialSnapshot | undefined>;
 
   /**
    * Registered OAuth accounts for a provider, in insertion order. Optional so

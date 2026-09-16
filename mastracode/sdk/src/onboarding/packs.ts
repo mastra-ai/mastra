@@ -149,6 +149,30 @@ export function pruneUnknownModePackFallbacks(
   return result;
 }
 
+/** Drop preferred-account bindings for missing packs or models no longer used by that pack. */
+export function pruneUnknownPackAccountPreferences(
+  preferences: Record<string, Record<string, string>>,
+  savedCustomPacks: Array<{ name: string; models: Record<string, string> }> = [],
+  modePackOverrides: Record<string, Record<string, string>> = {},
+): Record<string, Record<string, string>> {
+  const packModels = new Map<string, Set<string>>();
+  for (const pack of listBuiltinModePacks()) {
+    packModels.set(pack.id, new Set(Object.values({ ...pack.models, ...modePackOverrides[pack.id] })));
+  }
+  for (const pack of savedCustomPacks) {
+    packModels.set(`custom:${pack.name}`, new Set(Object.values(pack.models)));
+  }
+
+  const result: Record<string, Record<string, string>> = {};
+  for (const [packId, modelPreferences] of Object.entries(preferences)) {
+    const models = packModels.get(packId);
+    if (!models) continue;
+    const validEntries = Object.entries(modelPreferences).filter(([modelId]) => models.has(modelId));
+    if (validEntries.length > 0) result[packId] = Object.fromEntries(validEntries);
+  }
+  return result;
+}
+
 /**
  * Walk `settings.models.packFallbacks` from `startPackId`, returning the pack
  * ids in cascade order starting with the pack itself. Cycles are allowed but

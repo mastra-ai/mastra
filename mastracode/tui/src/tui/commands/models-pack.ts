@@ -1,6 +1,7 @@
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
+import { providerFromModelId } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { setClipboardText } from '@mastra/code-sdk/clipboard/index';
 import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
@@ -16,6 +17,7 @@ import {
   resolveThreadActiveModelPackId,
   saveSettings,
   stripMastraCodeCustomProviderPrefix,
+  THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
   THREAD_FALLBACK_STATUS_KEY,
 } from '@mastra/code-sdk/onboarding/settings';
@@ -158,6 +160,49 @@ function fallbackActionDetail(packs: ModePack[], packId: string): string {
     : theme.fg('dim', '  No fallback — when this pack is unavailable the error surfaces.');
 }
 
+type AccountLabelLookup = (providerId: string) => Array<{ id: string; label: string }>;
+
+function packRoutingEntries(
+  pack: ModePack,
+): Array<{ modelId: string; modes: string[]; providerId: string | undefined }> {
+  const byModel = new Map<string, string[]>();
+  for (const mode of ['plan', 'build', 'fast'] as const) {
+    const modelId = pack.models[mode];
+    if (!modelId) continue;
+    const modes = byModel.get(modelId) ?? [];
+    modes.push(mode);
+    byModel.set(modelId, modes);
+  }
+  return [...byModel].map(([modelId, modes]) => ({ modelId, modes, providerId: providerFromModelId(modelId) }));
+}
+
+export function formatPackAccountRoutingSummary(
+  settings: GlobalSettings,
+  pack: ModePack,
+  lookupAccounts: AccountLabelLookup = () => [],
+): string {
+  const preferences = settings.models.packAccountPreferences?.[pack.id] ?? {};
+  return packRoutingEntries(pack)
+    .map(({ modelId, modes, providerId }) => {
+      const preferredId = preferences[modelId];
+      const label = preferredId
+        ? ((providerId ? lookupAccounts(providerId).find(account => account.id === preferredId)?.label : undefined) ??
+          preferredId)
+        : 'Automatic';
+      return `  ${modes.join('/')} → ${label}`;
+    })
+    .join('\n');
+}
+
+function accountRoutingActionDetail(ctx: SlashCommandContext, pack: ModePack): string {
+  const summary = formatPackAccountRoutingSummary(
+    loadSettings(),
+    pack,
+    providerId => ctx.authStorage?.listAccounts(providerId) ?? [],
+  );
+  return `${theme.fg('dim', '  Request order for each resolved model:')}\n${theme.fg('textHighlight', summary)}`;
+}
+
 /** "Activate" detail: the pack's model lines plus its fallback chain when one is set. */
 export function activateActionDetail(
   baseDetail: string,
@@ -173,11 +218,12 @@ async function askCustomPackAction(
   ctx: SlashCommandContext,
   pack: ModePack,
   packs: ModePack[],
-): Promise<'activate' | 'fallback' | 'edit' | 'share' | 'delete' | null> {
+): Promise<'activate' | 'routing' | 'fallback' | 'edit' | 'share' | 'delete' | null> {
   const actions = [
     { id: 'activate', label: 'Activate', description: 'Use this pack as-is' },
     { id: 'edit', label: 'Edit', description: 'Update this pack' },
     { id: 'share', label: 'Share', description: 'Copy to clipboard' },
+    { id: 'routing', label: 'Set subscription routing…', description: 'Choose a preferred account per model' },
     { id: 'fallback', label: 'Set fallback…', description: 'Hop to another pack when this one is unavailable' },
     { id: 'delete', label: 'Delete', description: 'Remove this custom pack' },
   ] as const;
@@ -196,6 +242,7 @@ async function askCustomPackAction(
     const detailText = new Text('', 0, 0);
     const detailById: Record<string, string> = {
       activate: activateActionDetail(getPackDetail(pack), loadSettings(), packs, pack.id),
+      routing: accountRoutingActionDetail(ctx, pack),
       fallback: fallbackActionDetail(packs, pack.id),
       edit: theme.fg('dim', '  Edit one setting at a time (Rename, plan, build, fast).'),
       share: theme.fg('dim', '  Copy shareable config to clipboard. Paste it to import elsewhere.'),
@@ -214,7 +261,7 @@ async function askCustomPackAction(
 
     selectList.onSelect = item => {
       closeOverlay();
-      resolve(item.value as 'activate' | 'fallback' | 'edit' | 'share' | 'delete');
+      resolve(item.value as 'activate' | 'routing' | 'fallback' | 'edit' | 'share' | 'delete');
     };
 
     selectList.onCancel = () => {
@@ -243,9 +290,10 @@ async function askBuiltinPackAction(
   ctx: SlashCommandContext,
   pack: ModePack,
   packs: ModePack[],
-): Promise<'activate' | 'fallback' | null> {
+): Promise<'activate' | 'routing' | 'fallback' | null> {
   const actions = [
     { id: 'activate', label: 'Activate', description: 'Switch to this pack' },
+    { id: 'routing', label: 'Set subscription routing…', description: 'Choose a preferred account per model' },
     { id: 'fallback', label: 'Set fallback…', description: 'Hop to another pack when this one is unavailable' },
   ] as const;
 
@@ -262,6 +310,7 @@ async function askBuiltinPackAction(
     const detailText = new Text('', 0, 0);
     const detailById: Record<string, string> = {
       activate: activateActionDetail(getPackDetail(pack), loadSettings(), packs, pack.id),
+      routing: accountRoutingActionDetail(ctx, pack),
       fallback: fallbackActionDetail(packs, pack.id),
     };
 
@@ -276,7 +325,7 @@ async function askBuiltinPackAction(
     };
     selectList.onSelect = item => {
       closeOverlay();
-      resolve(item.value as 'activate' | 'fallback');
+      resolve(item.value as 'activate' | 'routing' | 'fallback');
     };
     selectList.onCancel = () => {
       closeOverlay();
@@ -301,10 +350,11 @@ async function askModifiedBuiltinPackAction(
   pack: ModePack,
   builtinPack: ModePack,
   packs: ModePack[],
-): Promise<'activate' | 'reset' | 'fallback' | null> {
+): Promise<'activate' | 'reset' | 'routing' | 'fallback' | null> {
   const actions = [
     { id: 'activate', label: 'Activate', description: 'Use the modified models' },
     { id: 'reset', label: 'Reset to built-in models', description: 'Remove all overrides' },
+    { id: 'routing', label: 'Set subscription routing…', description: 'Choose a preferred account per model' },
     { id: 'fallback', label: 'Set fallback…', description: 'Hop to another pack when this one is unavailable' },
   ] as const;
 
@@ -327,6 +377,7 @@ async function askModifiedBuiltinPackAction(
         pack.id,
       ),
       reset: `${theme.fg('dim', '  Restore the original built-in models:')}\n${getPackDetail(builtinPack)}`,
+      routing: accountRoutingActionDetail(ctx, pack),
       fallback: fallbackActionDetail(packs, pack.id),
     };
 
@@ -341,7 +392,7 @@ async function askModifiedBuiltinPackAction(
     };
     selectList.onSelect = item => {
       closeOverlay();
-      resolve(item.value as 'activate' | 'reset' | 'fallback');
+      resolve(item.value as 'activate' | 'reset' | 'routing' | 'fallback');
     };
     selectList.onCancel = () => {
       closeOverlay();
@@ -520,6 +571,19 @@ export function fallbackPackCandidates(packs: ModePack[], packId: string): ModeP
 
 export function resetBuiltinPackOverrides(settings: GlobalSettings, packId: string): void {
   delete settings.models.modePackOverrides?.[packId];
+  const builtinPack = getBuiltinModePack(packId);
+  const accountPreferences = settings.models.packAccountPreferences?.[packId];
+  if (builtinPack && accountPreferences) {
+    const modelIds = new Set(Object.values(builtinPack.models));
+    const nextPreferences = Object.fromEntries(
+      Object.entries(accountPreferences).filter(([modelId]) => modelIds.has(modelId)),
+    );
+    if (Object.keys(nextPreferences).length > 0) {
+      settings.models.packAccountPreferences[packId] = nextPreferences;
+    } else {
+      delete settings.models.packAccountPreferences[packId];
+    }
+  }
   if (settings.models.activeModelPackId === packId) {
     settings.models.modeDefaults = {};
   }
@@ -541,8 +605,12 @@ export function upsertCustomPackInSettings(
         targetPackId === previousPackId ? pack.id : targetPackId,
       ]),
     );
+    const previousAccountPreferences = settings.models.packAccountPreferences?.[previousPackId];
     removeCustomPackFromSettings(settings, previousPackId);
     settings.models.packFallbacks = migratedFallbacks;
+    if (previousAccountPreferences) {
+      settings.models.packAccountPreferences[pack.id] = previousAccountPreferences;
+    }
   }
 
   const customName = pack.id.slice('custom:'.length);
@@ -553,6 +621,20 @@ export function upsertCustomPackInSettings(
   } else {
     settings.customModelPacks.push(entry);
   }
+
+  const accountPreferences = settings.models.packAccountPreferences?.[pack.id];
+  if (accountPreferences) {
+    const modelIds = new Set(Object.values(modeDefaults));
+    const nextPreferences = Object.fromEntries(
+      Object.entries(accountPreferences).filter(([modelId]) => modelIds.has(modelId)),
+    );
+    if (Object.keys(nextPreferences).length > 0) {
+      settings.models.packAccountPreferences[pack.id] = nextPreferences;
+    } else {
+      delete settings.models.packAccountPreferences[pack.id];
+    }
+  }
+
   if (setActive) {
     settings.models.activeModelPackId = pack.id;
     settings.models.modeDefaults = modeDefaults;
@@ -919,6 +1001,147 @@ async function runSetFallbackForPack(ctx: SlashCommandContext, pack: ModePack, p
   ctx.showInfo(fallbackName ? `Fallback for ${pack.name}: ${fallbackName}` : `Cleared the fallback for ${pack.name}`);
 }
 
+async function askRoutingModel(ctx: SlashCommandContext, pack: ModePack): Promise<string | undefined> {
+  const settings = loadSettings();
+  const preferences = settings.models.packAccountPreferences?.[pack.id] ?? {};
+  const entries = packRoutingEntries(pack);
+  const items: SelectItem[] = entries.map(({ modelId, modes, providerId }) => {
+    const preferredId = preferences[modelId];
+    const account = preferredId
+      ? ctx.authStorage?.listAccounts(providerId ?? '').find(candidate => candidate.id === preferredId)
+      : undefined;
+    return {
+      value: modelId,
+      label: `  ${modes.join('/')}  ${theme.fg('dim', modelId)}  ${theme.fg(preferredId ? 'textHighlight' : 'dim', account?.label ?? preferredId ?? 'Automatic')}`,
+    };
+  });
+
+  return new Promise(resolve => {
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
+    container.addChild(new Text(theme.bold(theme.fg('accent', `Subscription routing: ${pack.name}`)), 0, 0));
+    container.addChild(new Spacer(1));
+    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    selectList.onSelect = item => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+      resolve(item.value);
+    };
+    selectList.onCancel = () => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+      resolve(undefined);
+    };
+    container.addChild(selectList);
+    container.addChild(new Spacer(1));
+    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc back'), 0, 0));
+    (container as Box & { handleInput: (data: string) => void }).handleInput = data => selectList.handleInput(data);
+    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+  });
+}
+
+async function askPreferredAccount(
+  ctx: SlashCommandContext,
+  pack: ModePack,
+  modelId: string,
+): Promise<string | null | undefined> {
+  const providerId = providerFromModelId(modelId);
+  const accounts = providerId ? (ctx.authStorage?.listAccounts(providerId) ?? []) : [];
+  const current = loadSettings().models.packAccountPreferences?.[pack.id]?.[modelId];
+  const items: SelectItem[] = [
+    {
+      value: '__automatic__',
+      label: `  Automatic  ${theme.fg('dim', 'Use account insertion order')}${!current ? theme.fg('accent', ' (current)') : ''}`,
+    },
+    ...accounts.map(account => ({
+      value: account.id,
+      label: `  ${account.label}${account.active ? theme.fg('success', ' (active)') : ''}${account.id === current ? theme.fg('accent', ' (preferred)') : ''}`,
+    })),
+  ];
+
+  return new Promise(resolve => {
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
+    container.addChild(new Text(theme.bold(theme.fg('accent', `Preferred subscription for ${modelId}`)), 0, 0));
+    container.addChild(new Spacer(1));
+    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const preview = new Text('', 0, 0);
+    const updatePreview = (selectedId: string) => {
+      const preferred = selectedId === '__automatic__' ? null : selectedId;
+      const preferredAccount = preferred ? accounts.find(account => account.id === preferred) : undefined;
+      const ordered = preferredAccount
+        ? [preferredAccount, ...accounts.filter(account => account.id !== preferredAccount.id)]
+        : accounts;
+      const labels = ordered.map(account => `${account.label}${account.active ? ' (active)' : ''}`);
+      preview.setText(
+        labels.length > 0
+          ? `${theme.fg('dim', '  Request order: ')}${theme.fg('textHighlight', labels.join(' → '))}`
+          : theme.fg('dim', '  No OAuth subscriptions available for this model.'),
+      );
+      ctx.state.ui.requestRender();
+    };
+    selectList.onSelectionChange = item => updatePreview(item.value);
+    selectList.onSelect = item => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+      resolve(item.value === '__automatic__' ? null : item.value);
+    };
+    selectList.onCancel = () => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+      resolve(undefined);
+    };
+    updatePreview(current ?? '__automatic__');
+    container.addChild(selectList);
+    container.addChild(new Spacer(1));
+    container.addChild(preview);
+    container.addChild(new Spacer(1));
+    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc back'), 0, 0));
+    (container as Box & { handleInput: (data: string) => void }).handleInput = data => selectList.handleInput(data);
+    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+  });
+}
+
+async function clearAccountRoutingExhaustion(ctx: SlashCommandContext, packId: string, modelId: string): Promise<void> {
+  const state = ctx.state.session.state.get() as Record<string, unknown>;
+  const exhausted = state[THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY];
+  if (!exhausted || typeof exhausted !== 'object' || Array.isArray(exhausted)) return;
+  const next = structuredClone(exhausted) as Record<string, Record<string, string[]>>;
+  if (!next[packId]?.[modelId]) return;
+  delete next[packId][modelId];
+  if (Object.keys(next[packId]).length === 0) delete next[packId];
+  const value = Object.keys(next).length > 0 ? next : undefined;
+  await ctx.state.session.thread.setSetting({ key: THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY, value });
+  await ctx.state.session.state.set({ [THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY]: value });
+}
+
+async function runSetSubscriptionRouting(ctx: SlashCommandContext, pack: ModePack): Promise<void> {
+  while (true) {
+    const modelId = await askRoutingModel(ctx, pack);
+    if (!modelId) return;
+    const accountId = await askPreferredAccount(ctx, pack, modelId);
+    if (accountId === undefined) continue;
+
+    const settings = loadSettings();
+    const packPreferences = settings.models.packAccountPreferences[pack.id] ?? {};
+    if (accountId === null) {
+      delete packPreferences[modelId];
+    } else {
+      packPreferences[modelId] = accountId;
+    }
+    if (Object.keys(packPreferences).length > 0) {
+      settings.models.packAccountPreferences[pack.id] = packPreferences;
+    } else {
+      delete settings.models.packAccountPreferences[pack.id];
+    }
+    saveSettings(settings);
+    await clearAccountRoutingExhaustion(ctx, pack.id, modelId);
+    const providerId = providerFromModelId(modelId);
+    const accountLabel = accountId
+      ? (ctx.authStorage?.listAccounts(providerId ?? '').find(account => account.id === accountId)?.label ?? accountId)
+      : 'Automatic';
+    ctx.showInfo(`${pack.name} · ${modelId}: ${accountLabel}`);
+  }
+}
+
 export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise<void> {
   if (ctx.state.pendingNewThread) {
     await ctx.state.session.thread.create();
@@ -1007,8 +1230,15 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
       const pack = packs.find(p => p.id === packId);
       if (!pack) return;
       const fallbackChain = formatPackFallbackChain(settings, packs, packId);
+      const routingSummary = settings.models.packAccountPreferences?.[packId]
+        ? formatPackAccountRoutingSummary(settings, pack, providerId => ctx.authStorage?.listAccounts(providerId) ?? [])
+        : null;
       detailText.setText(
-        getPackDetail(pack) + (fallbackChain ? `\n${fallbackChainLine('  fallback → ', fallbackChain)}` : ''),
+        getPackDetail(pack) +
+          (routingSummary
+            ? `\n${theme.fg('dim', '  subscription routing:')}\n${theme.fg('textHighlight', routingSummary)}`
+            : '') +
+          (fallbackChain ? `\n${fallbackChainLine('  fallback → ', fallbackChain)}` : ''),
       );
       ctx.state.ui.requestRender();
     };
@@ -1091,6 +1321,11 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
             return;
           }
 
+          if (action === 'routing') {
+            await runSetSubscriptionRouting(ctx, pack);
+            continue;
+          }
+
           if (action === 'fallback') {
             await runSetFallbackForPack(ctx, pack, packs);
             continue;
@@ -1140,6 +1375,10 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
             await handleModelsPackCommand(ctx);
             resolve();
             return;
+          }
+          if (action === 'routing') {
+            await runSetSubscriptionRouting(ctx, pack);
+            continue;
           }
           if (action === 'fallback') {
             await runSetFallbackForPack(ctx, pack, packs);

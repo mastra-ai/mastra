@@ -21,6 +21,7 @@ vi.hoisted(() => {
 });
 
 import { setCredentialStoreProvider } from '../agents/credential-resolver.js';
+import { THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY } from '../onboarding/settings.js';
 import {
   ACCOUNT_SWITCH_PART_TYPE,
   PACK_FALLBACK_PART_TYPE,
@@ -32,6 +33,7 @@ import {
   providerFromError,
   providerFromModelId,
 } from './account-rotation-processor.js';
+import { getRequestAccountSelection, setRequestAccountSelection } from './account-routing-context.js';
 import { ProviderAuthRequiredError } from './provider-auth-error.js';
 import { anthropicOAuthProvider } from './providers/anthropic.js';
 import { AuthStorage } from './storage.js';
@@ -88,6 +90,12 @@ async function makeTwoAccountStorage(): Promise<SeededStorage> {
   storage.activateAccount(PROVIDER, storage.listAccounts(PROVIDER)[0]!.id);
   const [a, b] = storage.listAccounts(PROVIDER);
   return { storage, authPath, accountA: { id: a.id, label: a.label }, accountB: { id: b.id, label: b.label } };
+}
+
+function addThirdAccount(storage: AuthStorage) {
+  storage.addAccount(PROVIDER, { access: 'token-c', refresh: 'refresh-c', expires: FUTURE }, { label: 'Account C' });
+  const account = storage.listAccounts(PROVIDER)[2]!;
+  return { id: account.id, label: account.label };
 }
 
 function readAuthJson(authPath: string): Record<string, any> {
@@ -645,17 +653,193 @@ describe('AccountStartNoticeProcessor.processInput', () => {
     await processor.processInput(noModel as any);
     expect(noModel.writer.custom).not.toHaveBeenCalled();
   });
-});
 
-describe('pack-fallback parts', () => {
-  function seedSettingsWithFallbacks(packFallbacks: Record<string, string>) {
+  it('selects the pack/model preferred account before the request and skips sticky exhausted accounts', async () => {
+    const seeded = makeTwoAccountStorage();
     const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
     mkdirSync(appDataDir, { recursive: true });
     writeFileSync(
       join(appDataDir, 'settings.json'),
       JSON.stringify({
         onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
-        models: { packFallbacks },
+        models: {
+          activeModelPackId: 'anthropic',
+          packAccountPreferences: {
+            anthropic: { 'anthropic/claude-fable-5': seeded.accountA.id },
+          },
+        },
+      }),
+      'utf-8',
+    );
+    const controllerState = {
+      activeModelPackId: 'anthropic',
+      [THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY]: {
+        anthropic: { 'anthropic/claude-fable-5': [seeded.accountA.id] },
+      },
+    };
+    const requestContext = new RequestContext();
+    requestContext.set('controller', {
+      session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
+      threadId: 'thread-1',
+      getState: () => controllerState,
+    });
+    const args = makeInputArgs({ requestContext });
+    const processor = new AccountStartNoticeProcessor({ credentialStore: seeded.storage });
+
+    await processor.processInput(args as any);
+
+    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountB.id);
+    expect(args.writer.custom).toHaveBeenCalledTimes(1);
+    expect(args.writer.custom.mock.calls[0]![0]).toMatchObject({
+      type: ACCOUNT_SWITCH_PART_TYPE,
+      data: {
+        from: { id: seeded.accountA.id },
+        to: { id: seeded.accountB.id },
+        reason: 'preferred-routing',
+      },
+    });
+  });
+
+  it('tries a preferred account before the remaining accounts in insertion order', async () => {
+    const seeded = makeTwoAccountStorage();
+    const accountC = addThirdAccount(seeded.storage);
+    const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
+    mkdirSync(appDataDir, { recursive: true });
+    writeFileSync(
+      join(appDataDir, 'settings.json'),
+      JSON.stringify({
+        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
+        models: {
+          activeModelPackId: 'anthropic',
+          packAccountPreferences: {
+            anthropic: { 'anthropic/claude-fable-5': seeded.accountB.id },
+          },
+        },
+      }),
+      'utf-8',
+    );
+    let controllerState: Record<string, unknown> = { activeModelPackId: 'anthropic' };
+    const requestContext = new RequestContext();
+    requestContext.set('controller', {
+      session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
+      threadId: 'thread-1',
+      getState: () => controllerState,
+      setState: async (updates: Record<string, unknown>) => {
+        controllerState = { ...controllerState, ...updates };
+      },
+      setThreadSetting: vi.fn(async () => {}),
+    });
+    const inputArgs = makeInputArgs({ requestContext });
+    const startProcessor = new AccountStartNoticeProcessor({ credentialStore: seeded.storage });
+    await startProcessor.processInput(inputArgs as any);
+
+    const errorArgs = makeArgs({
+      state: inputArgs.state,
+      writer: inputArgs.writer,
+      requestContext,
+    });
+    const rotationProcessor = new AccountRotationProcessor({
+      credentialStore: seeded.storage,
+      maxProcessorRetries: 22,
+    });
+    expect((await rotationProcessor.processAPIError({ ...errorArgs, error: apiError(429) } as never)).retry).toBe(true);
+    expect((await rotationProcessor.processAPIError({ ...errorArgs, error: apiError(429) } as never)).retry).toBe(true);
+
+    const destinations = inputArgs.writer.custom.mock.calls
+      .map(call => call[0])
+      .filter(part => part.type === ACCOUNT_SWITCH_PART_TYPE && part.data.to)
+      .map(part => part.data.to.id);
+    expect(destinations).toEqual([seeded.accountB.id, seeded.accountA.id, accountC.id]);
+  });
+
+  it('fails before provider execution when every routed account is already exhausted', async () => {
+    const seeded = makeTwoAccountStorage();
+    const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
+    mkdirSync(appDataDir, { recursive: true });
+    writeFileSync(
+      join(appDataDir, 'settings.json'),
+      JSON.stringify({
+        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
+        models: { activeModelPackId: 'anthropic', packAccountPreferences: {} },
+      }),
+      'utf-8',
+    );
+    const requestContext = new RequestContext();
+    requestContext.set('controller', {
+      session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
+      threadId: 'thread-1',
+      getState: () => ({
+        activeModelPackId: 'anthropic',
+        [THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY]: {
+          anthropic: { 'anthropic/claude-fable-5': [seeded.accountA.id, seeded.accountB.id] },
+        },
+      }),
+    });
+    const args = makeInputArgs({ requestContext });
+
+    await expect(
+      new AccountStartNoticeProcessor({ credentialStore: seeded.storage }).processInput(args as any),
+    ).rejects.toThrow('All saved anthropic subscriptions are exhausted');
+    expect(args.writer.custom).not.toHaveBeenCalled();
+  });
+
+  it('applies sticky exhaustion when subscription routing is Automatic', async () => {
+    const seeded = makeTwoAccountStorage();
+    const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
+    mkdirSync(appDataDir, { recursive: true });
+    writeFileSync(
+      join(appDataDir, 'settings.json'),
+      JSON.stringify({
+        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
+        models: { activeModelPackId: 'anthropic', packAccountPreferences: {} },
+      }),
+      'utf-8',
+    );
+    let controllerState: Record<string, unknown> = {
+      activeModelPackId: 'anthropic',
+      [THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY]: {
+        anthropic: { 'anthropic/claude-fable-5': [seeded.accountA.id] },
+      },
+    };
+    const setState = vi.fn(async (updates: Record<string, unknown>) => {
+      controllerState = { ...controllerState, ...updates };
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('controller', {
+      session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
+      threadId: 'thread-1',
+      getState: () => controllerState,
+      setState,
+      setThreadSetting: vi.fn(async () => {}),
+      isThreadActive: () => false,
+    });
+    const inputArgs = makeInputArgs({ requestContext });
+    await new AccountStartNoticeProcessor({ credentialStore: seeded.storage }).processInput(inputArgs as any);
+
+    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountB.id);
+    const errorArgs = makeArgs({ state: inputArgs.state, writer: inputArgs.writer, requestContext });
+    const result = await new AccountRotationProcessor({
+      credentialStore: seeded.storage,
+      maxProcessorRetries: 22,
+    }).processAPIError({ ...errorArgs, error: apiError(429) } as never);
+    expect(result.retry).toBe(false);
+    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountB.id);
+    expect(setState).not.toHaveBeenCalled();
+  });
+});
+
+describe('pack-fallback parts', () => {
+  function seedSettingsWithFallbacks(
+    packFallbacks: Record<string, string>,
+    packAccountPreferences?: Record<string, Record<string, string>>,
+  ) {
+    const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
+    mkdirSync(appDataDir, { recursive: true });
+    writeFileSync(
+      join(appDataDir, 'settings.json'),
+      JSON.stringify({
+        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
+        models: { packFallbacks, packAccountPreferences },
       }),
       'utf-8',
     );
@@ -714,8 +898,246 @@ describe('pack-fallback parts', () => {
       args.writer.custom.mock.invocationCallOrder.at(-1)!,
     );
     expect(args.writer.custom.mock.invocationCallOrder.at(-1)!).toBeLessThan(
-      args.setState.mock.invocationCallOrder[0]!,
+      args.setState.mock.invocationCallOrder.at(-1)!,
     );
+  });
+
+  it('re-evaluates subscription routing when a fallback pack lands', async () => {
+    const seeded = makeTwoAccountStorage();
+    seeded.storage.addAccount(
+      'openai-codex',
+      { access: 'openai-a', refresh: 'openai-refresh-a', expires: FUTURE },
+      { label: 'OpenAI A' },
+    );
+    seeded.storage.addAccount(
+      'openai-codex',
+      { access: 'openai-b', refresh: 'openai-refresh-b', expires: FUTURE },
+      { label: 'OpenAI B' },
+    );
+    const [openaiA, openaiB] = seeded.storage.listAccounts('openai-codex');
+    seeded.storage.activateAccount('openai-codex', openaiA!.id);
+    seedSettingsWithFallbacks({ anthropic: 'openai' }, { openai: { 'openai/gpt-5.6-sol': openaiB!.id } });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+    const args = makeControllerArgs('anthropic/claude-fable-5');
+
+    await processor.processAPIError({ ...args, error: apiError(429) } as never);
+    await processor.processAPIError({ ...args, error: apiError(429) } as never);
+
+    expect(seeded.storage.getActiveAccount('openai-codex')?.id).toBe(openaiB!.id);
+    expect(
+      args.writer.custom.mock.calls.map(([part]) => part).find(part => part.data?.reason === 'preferred-routing'),
+    ).toMatchObject({
+      type: ACCOUNT_SWITCH_PART_TYPE,
+      data: {
+        provider: 'openai-codex',
+        from: { id: openaiA!.id },
+        to: { id: openaiB!.id },
+      },
+    });
+  });
+
+  it('does not activate the target pack preferred account when the hop transcript write fails', async () => {
+    const seeded = makeTwoAccountStorage();
+    seeded.storage.addAccount(
+      'openai-codex',
+      { access: 'openai-a', refresh: 'openai-refresh-a', expires: FUTURE },
+      { label: 'OpenAI A' },
+    );
+    seeded.storage.addAccount(
+      'openai-codex',
+      { access: 'openai-b', refresh: 'openai-refresh-b', expires: FUTURE },
+      { label: 'OpenAI B' },
+    );
+    const [openaiA, openaiB] = seeded.storage.listAccounts('openai-codex');
+    seeded.storage.activateAccount('openai-codex', openaiA!.id);
+    seedSettingsWithFallbacks({ anthropic: 'openai' }, { openai: { 'openai/gpt-5.6-sol': openaiB!.id } });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+    const args = makeControllerArgs('anthropic/claude-fable-5');
+    args.writer.custom.mockImplementation(async part => {
+      if (part.type === PACK_FALLBACK_PART_TYPE) throw new Error('transcript unavailable');
+    });
+
+    await processor.processAPIError({ ...args, error: apiError(429) } as never);
+    await expect(processor.processAPIError({ ...args, error: apiError(429) } as never)).rejects.toThrow(
+      'transcript unavailable',
+    );
+
+    // The provider-global active account for the target pack is untouched:
+    // activation happens only after the hop is durable.
+    expect(seeded.storage.getActiveAccount('openai-codex')?.id).toBe(openaiA!.id);
+    expect(
+      args.writer.custom.mock.calls.map(([part]) => part).find(part => part.data?.reason === 'preferred-routing'),
+    ).toBeUndefined();
+  });
+
+  it('re-arms the start notice on a hop so the retried request re-applies target-pack routing', async () => {
+    const seeded = makeTwoAccountStorage();
+    seeded.storage.addAccount(
+      'openai-codex',
+      { access: 'openai-a', refresh: 'openai-refresh-a', expires: FUTURE },
+      { label: 'OpenAI A' },
+    );
+    seeded.storage.addAccount(
+      'openai-codex',
+      { access: 'openai-b', refresh: 'openai-refresh-b', expires: FUTURE },
+      { label: 'OpenAI B' },
+    );
+    const [openaiA, openaiB] = seeded.storage.listAccounts('openai-codex');
+    seeded.storage.activateAccount('openai-codex', openaiA!.id);
+    seedSettingsWithFallbacks({ anthropic: 'openai' }, { openai: { 'openai/gpt-5.6-sol': openaiB!.id } });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+    const args = makeControllerArgs('anthropic/claude-fable-5');
+    // A switch on the original attempt set the once-per-request guard; the
+    // hop must clear it so the retry on the target pack re-applies routing.
+    args.state.startNoticeEmitted = true;
+    // Force the hop-time best-effort activation to fail (swallowed), leaving
+    // only the start-notice backstop to land the preferred account.
+    const originalActivate = seeded.storage.activateAccount.bind(seeded.storage);
+    let openaiActivations = 0;
+    seeded.storage.activateAccount = ((providerId: string, accountId: string) => {
+      if (providerId === 'openai-codex' && openaiActivations++ === 0) {
+        throw new Error('activation unavailable');
+      }
+      return originalActivate(providerId, accountId);
+    }) as typeof seeded.storage.activateAccount;
+
+    await processor.processAPIError({ ...args, error: apiError(429) } as never);
+    await processor.processAPIError({ ...args, error: apiError(429) } as never);
+
+    expect(args.state.startNoticeEmitted).toBe(false);
+    expect(seeded.storage.getActiveAccount('openai-codex')?.id).toBe(openaiA!.id);
+
+    args.writer.custom.mockImplementation(async () => {});
+    const pendingHop = args.setState.mock.calls
+      .map(([updates]) => (updates as Record<string, unknown>)[PACK_FALLBACK_STATE_KEY])
+      .find(value => value && typeof value === 'object');
+    const retryContext = new RequestContext();
+    retryContext.set('controller', {
+      session: { modelId: 'openai/gpt-5.6-sol', modeId: 'build' },
+      threadId: 'thread-1',
+      getState: () => ({ mastracodePendingPackFallback: pendingHop }),
+    });
+    const retryArgs = {
+      state: args.state,
+      messageList: { marker: 'message-list' },
+      writer: args.writer,
+      requestContext: retryContext,
+    };
+    await new AccountStartNoticeProcessor({ credentialStore: seeded.storage }).processInput(retryArgs as any);
+
+    expect(seeded.storage.getActiveAccount('openai-codex')?.id).toBe(openaiB!.id);
+    expect(
+      args.writer.custom.mock.calls.map(([part]) => part).find(part => part.data?.reason === 'preferred-routing'),
+    ).toMatchObject({ data: { to: { id: openaiB!.id } } });
+  });
+
+  it('does not reuse exhausted accounts when the fallback pack uses the same provider', async () => {
+    const seeded = makeTwoAccountStorage();
+    const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
+    mkdirSync(appDataDir, { recursive: true });
+    writeFileSync(
+      join(appDataDir, 'settings.json'),
+      JSON.stringify({
+        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
+        customModelPacks: [
+          { name: 'Primary', models: { build: 'anthropic/claude-fable-5' } },
+          { name: 'Fallback', models: { build: 'anthropic/claude-fable-5' } },
+        ],
+        models: { packFallbacks: { 'custom:Primary': 'custom:Fallback' }, packAccountPreferences: {} },
+      }),
+      'utf-8',
+    );
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+    const args = makeControllerArgs('anthropic/claude-fable-5', 'build', 'custom:Primary');
+
+    expect(await processor.processAPIError({ ...args, error: apiError(429) } as never)).toEqual({ retry: true });
+    expect(await processor.processAPIError({ ...args, error: apiError(429) } as never)).toEqual({ retry: false });
+
+    expect(getRequestAccountSelection(args.requestContext, PROVIDER)).toBe('anthropic:all-exhausted');
+    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountB.id);
+  });
+
+  it('persists exhausted accounts per pack/model so later requests do not retry the preference', async () => {
+    const seeded = makeTwoAccountStorage();
+    seedSettingsWithFallbacks(
+      {},
+      {
+        anthropic: { 'anthropic/claude-fable-5': seeded.accountA.id },
+      },
+    );
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+    const args = makeControllerArgs('anthropic/claude-fable-5');
+
+    expect(await processor.processAPIError({ ...args, error: apiError(429) } as never)).toEqual({ retry: true });
+
+    const routingWrite = args.setThreadSetting.mock.calls.find(
+      ([setting]) => setting.key === THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY,
+    )?.[0];
+    expect(routingWrite).toEqual({
+      key: THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY,
+      value: {
+        anthropic: { 'anthropic/claude-fable-5': [seeded.accountA.id] },
+      },
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('controller', {
+      session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
+      threadId: 'thread-1',
+      getState: () => ({
+        activeModelPackId: 'anthropic',
+        [THREAD_ACCOUNT_ROUTING_EXHAUSTED_KEY]: routingWrite?.value,
+      }),
+    });
+    const nextArgs = {
+      state: {} as Record<string, unknown>,
+      messages: [],
+      messageList: { marker: 'message-list' },
+      systemMessages: [],
+      writer: { custom: vi.fn(async () => {}) },
+      requestContext,
+    };
+    await new AccountStartNoticeProcessor({ credentialStore: seeded.storage }).processInput(nextArgs as any);
+
+    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountB.id);
+    expect(nextArgs.writer.custom.mock.calls[0]![0].data).toMatchObject({
+      to: { id: seeded.accountB.id },
+      reason: 'starting-on-account',
+    });
+  });
+
+  it('serializes concurrent sticky-exhaustion merges for the same thread', async () => {
+    const seeded = makeTwoAccountStorage();
+    seedSettingsWithFallbacks({});
+    let persisted: unknown;
+    const makeConcurrentArgs = (accountId: string) => {
+      const requestContext = new RequestContext();
+      setRequestAccountSelection(requestContext, PROVIDER, accountId);
+      requestContext.set('controller', {
+        session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
+        threadId: 'thread-1',
+        getState: () => ({ activeModelPackId: 'anthropic' }),
+        getThreadSetting: vi.fn(async () => persisted),
+        setThreadSetting: vi.fn(async ({ value }: { value: unknown }) => {
+          await new Promise(resolve => setTimeout(resolve, 5));
+          persisted = value;
+        }),
+        isThreadActive: () => false,
+      });
+      return makeArgs({ requestContext });
+    };
+    const argsA = makeConcurrentArgs(seeded.accountA.id);
+    const argsB = makeConcurrentArgs(seeded.accountB.id);
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+
+    await Promise.all([
+      processor.processAPIError({ ...argsA, error: apiError(429) } as never),
+      processor.processAPIError({ ...argsB, error: apiError(429) } as never),
+    ]);
+
+    expect(persisted).toEqual({
+      anthropic: { 'anthropic/claude-fable-5': [seeded.accountA.id, seeded.accountB.id] },
+    });
   });
 
   it('does not notify live fallback state when the transcript hop cannot be written', async () => {
@@ -732,7 +1154,9 @@ describe('pack-fallback parts', () => {
       'transcript unavailable',
     );
 
-    expect(args.setState).not.toHaveBeenCalled();
+    expect(args.setState).not.toHaveBeenCalledWith(
+      expect.objectContaining({ [PACK_FALLBACK_STATE_KEY]: expect.anything() }),
+    );
     expect(args.setThreadSetting).toHaveBeenLastCalledWith({ key: PACK_FALLBACK_STATE_KEY, value: undefined });
     expect(args.emitEvent).not.toHaveBeenCalledWith(
       expect.objectContaining({ message: expect.stringContaining('Switched model pack') }),

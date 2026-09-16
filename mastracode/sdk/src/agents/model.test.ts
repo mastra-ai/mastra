@@ -14,9 +14,11 @@ import { join } from 'node:path';
 import { MastraGateway } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
+import { setRequestAccountSelection } from '../auth/account-routing-context.js';
+import type { CredentialStore } from '../auth/types.js';
 import { setCredentialStoreProvider } from './credential-resolver.js';
 import { MastraCodeGateway } from './mastracode-gateway.js';
-import { getDynamicModel, resolveModel } from './model.js';
+import { createRequestScopedCredentialStore, getDynamicModel, resolveModel } from './model.js';
 
 afterEach(() => {
   if (previousEnv.kimiApiKey === undefined) delete process.env.KIMI_API_KEY;
@@ -31,6 +33,59 @@ afterAll(() => {
   if (previousEnv.appDataDir === undefined) delete process.env.MASTRA_APP_DATA_DIR;
   else process.env.MASTRA_APP_DATA_DIR = previousEnv.appDataDir;
   rmSync(appDataDir, { recursive: true, force: true });
+});
+
+describe('request-scoped credentials', () => {
+  it('keeps concurrent request account selections independent', async () => {
+    const accounts = [
+      {
+        type: 'oauth-account' as const,
+        id: 'anthropic:a',
+        label: 'Account A',
+        addedAt: '2026-01-01T00:00:00.000Z',
+        active: true,
+        access: 'token-a',
+        refresh: 'refresh-a',
+        expires: Date.now() + 60_000,
+      },
+      {
+        type: 'oauth-account' as const,
+        id: 'anthropic:b',
+        label: 'Account B',
+        addedAt: '2026-01-01T00:00:00.000Z',
+        active: false,
+        access: 'token-b',
+        refresh: 'refresh-b',
+        expires: Date.now() + 60_000,
+      },
+    ];
+    const base = {
+      reload: vi.fn(),
+      get: vi.fn(() => ({ type: 'oauth', access: 'token-a', refresh: 'refresh-a', expires: Date.now() + 60_000 })),
+      getStoredApiKey: vi.fn(),
+      getApiKey: vi.fn(async (_providerId: string, accountId?: string) =>
+        accountId === accounts[1]!.id ? 'token-b' : 'token-a',
+      ),
+      getOAuthCredential: vi.fn(async (_providerId: string, accountId?: string) => ({
+        type: 'oauth' as const,
+        access: accountId === accounts[1]!.id ? 'token-b' : 'token-a',
+        refresh: accountId === accounts[1]!.id ? 'refresh-b' : 'refresh-a',
+        expires: Date.now() + 60_000,
+        accountInstanceId: accountId,
+      })),
+      listAccounts: vi.fn(() => accounts),
+    } satisfies CredentialStore;
+    const requestA = new RequestContext();
+    const requestB = new RequestContext();
+    setRequestAccountSelection(requestA, 'anthropic', accounts[0]!.id);
+    setRequestAccountSelection(requestB, 'anthropic', accounts[1]!.id);
+    const scopedA = createRequestScopedCredentialStore(base, requestA);
+    const scopedB = createRequestScopedCredentialStore(base, requestB);
+
+    await expect(scopedA.getOAuthCredential?.('anthropic')).resolves.toMatchObject({ access: 'token-a' });
+    await expect(scopedB.getOAuthCredential?.('anthropic')).resolves.toMatchObject({ access: 'token-b' });
+    await expect(scopedA.getOAuthCredential?.('anthropic')).resolves.toMatchObject({ access: 'token-a' });
+  });
 });
 
 describe('getDynamicModel error branches', () => {

@@ -2308,10 +2308,12 @@ export class AgentController<TState = {}> {
       getState: () => session.state.get(),
       setState: updates => session.state.set(updates),
       updateState: updater => session.state.update(updater),
+      getThreadSetting: key => (threadId ? session.thread.getSettingOn({ threadId, key }) : Promise.resolve(undefined)),
       setThreadSetting: setting =>
         threadId
           ? session.thread.setSettingOn({ threadId, key: setting.key, value: setting.value })
           : Promise.resolve(),
+      isThreadActive: () => session.thread.getId() === threadId,
       threadId,
       resourceId: scope?.resourceId ?? session.identity.getResourceId(),
       scope: this.#sessionScopes.get(session),

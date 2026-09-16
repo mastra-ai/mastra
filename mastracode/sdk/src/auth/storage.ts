@@ -832,57 +832,76 @@ export class AuthStorage {
    * the account-rotation processor owns switching so it can persist a visible
    * account-switch notice with the request that triggered the change.
    */
-  async getOAuthCredential(providerId: string): Promise<OAuthCredentialSnapshot | undefined> {
+  async getOAuthCredential(
+    providerId: string,
+    accountInstanceId?: string,
+  ): Promise<OAuthCredentialSnapshot | undefined> {
     this.reload();
-    const cred = this.data[providerId];
-    if (cred?.type !== 'oauth') return undefined;
+    const activeEntry = this.getActiveAccount(providerId);
+    const selectedEntry = accountInstanceId
+      ? this.accountEntries(providerId).find(entry => entry.id === accountInstanceId)
+      : activeEntry;
+    const slot = this.data[providerId];
+    let credential: OAuthCredentials | undefined;
+    if (selectedEntry) {
+      const {
+        type: _type,
+        id: _id,
+        label: _label,
+        addedAt: _addedAt,
+        active: _active,
+        ...accountCredential
+      } = selectedEntry;
+      credential = accountCredential;
+    } else if (!accountInstanceId && slot?.type === 'oauth') {
+      credential = slot;
+    }
+    if (!credential) return undefined;
 
     const provider = getOAuthProvider(providerId);
     if (!provider) return undefined;
-
-    const activeEntry = this.getActiveAccount(providerId);
+    const selectedInstanceId = selectedEntry?.id;
     const toSnapshot = (credentials: OAuthCredentials): OAuthCredentialSnapshot => ({
       type: 'oauth',
       ...credentials,
-      accountInstanceId: activeEntry?.id,
+      accountInstanceId: selectedInstanceId,
     });
 
-    if (Date.now() < cred.expires) return toSnapshot(cred);
+    if (Date.now() < credential.expires) return toSnapshot(credential);
 
-    // Share one refresh when concurrent requests observe the same expired
-    // token, keyed to the observed active account instance.
-    const refreshKey = activeEntry ? `${providerId}:${activeEntry.id}` : providerId;
-    const pendingRefresh = this.refreshPromises.get(refreshKey);
-    if (pendingRefresh) {
-      const creds = await pendingRefresh;
-      return creds ? toSnapshot(creds) : undefined;
+    if (selectedInstanceId) {
+      const refreshed = await this.refreshInstance(providerId, selectedInstanceId, credential);
+      return refreshed ? toSnapshot(refreshed) : undefined;
     }
 
-    const refresh = (async (): Promise<OAuthCredentials | undefined> => {
-      try {
-        const fresh = await provider.refreshToken(cred);
-        this.persistRefreshedCredential(providerId, activeEntry?.id, fresh);
-        return fresh;
-      } catch {
-        return undefined;
-      }
-    })();
-    this.refreshPromises.set(refreshKey, refresh);
+    const pendingRefresh = this.refreshPromises.get(providerId);
+    const refresh =
+      pendingRefresh ??
+      (async (): Promise<OAuthCredentials | undefined> => {
+        try {
+          const fresh = await provider.refreshToken(credential);
+          this.persistRefreshedCredential(providerId, undefined, fresh);
+          return fresh;
+        } catch {
+          return undefined;
+        }
+      })();
+    if (!pendingRefresh) this.refreshPromises.set(providerId, refresh);
     try {
-      const creds = await refresh;
-      return creds ? toSnapshot(creds) : undefined;
+      const refreshed = await refresh;
+      return refreshed ? toSnapshot(refreshed) : undefined;
     } finally {
-      this.refreshPromises.delete(refreshKey);
+      if (!pendingRefresh) this.refreshPromises.delete(providerId);
     }
   }
 
   /** Get API key for a provider, refreshing OAuth tokens if needed. */
-  async getApiKey(providerId: string): Promise<string | undefined> {
+  async getApiKey(providerId: string, accountInstanceId?: string): Promise<string | undefined> {
     this.reload();
     const cred = this.data[providerId];
     if (cred?.type === 'api_key') return cred.key;
 
-    const oauth = await this.getOAuthCredential(providerId);
+    const oauth = await this.getOAuthCredential(providerId, accountInstanceId);
     const provider = oauth ? getOAuthProvider(providerId) : undefined;
     return oauth && provider ? provider.getApiKey(oauth) : undefined;
   }
@@ -895,22 +914,39 @@ export class AuthStorage {
    * undefined when the refresh fails or there is no OAuth credential.
    * Shares the per-instance refresh dedupe with `getApiKey`.
    */
-  async forceRefreshActiveAccount(providerId: string): Promise<string | undefined> {
+  async forceRefreshActiveAccount(providerId: string, accountInstanceId?: string): Promise<string | undefined> {
     this.reload();
-    const cred = this.get(providerId);
-    if (cred?.type !== 'oauth') return undefined;
+    const activeEntry = this.getActiveAccount(providerId);
+    const selectedEntry = accountInstanceId
+      ? this.accountEntries(providerId).find(entry => entry.id === accountInstanceId)
+      : activeEntry;
+    const slot = this.get(providerId);
+    let cred: OAuthCredentials | undefined;
+    if (selectedEntry) {
+      const {
+        type: _type,
+        id: _id,
+        label: _label,
+        addedAt: _addedAt,
+        active: _active,
+        ...accountCredential
+      } = selectedEntry;
+      cred = accountCredential;
+    } else if (!accountInstanceId && slot?.type === 'oauth') {
+      cred = slot;
+    }
+    if (!cred) return undefined;
     const provider = getOAuthProvider(providerId);
     if (!provider) return undefined;
 
-    const activeEntry = this.getActiveAccount(providerId);
-    const refreshKey = activeEntry ? `${providerId}:${activeEntry.id}` : providerId;
+    const refreshKey = selectedEntry ? `${providerId}:${selectedEntry.id}` : providerId;
     const pending = this.refreshPromises.get(refreshKey);
     const refresh =
       pending ??
       (async (): Promise<OAuthCredentials | undefined> => {
         try {
           const fresh = await provider.refreshToken(cred);
-          this.persistRefreshedCredential(providerId, activeEntry?.id, fresh);
+          this.persistRefreshedCredential(providerId, selectedEntry?.id, fresh);
           return fresh;
         } catch {
           return undefined;

@@ -987,6 +987,9 @@ describe('syncInitialThreadState', () => {
       reason: 'pool-exhausted',
       at: '2026-09-14T20:00:00.000Z',
     };
+    const exhaustedRouting = {
+      anthropic: { 'anthropic/claude-fable-5': ['anthropic:account-a'] },
+    };
     const stateSet = vi.fn(async () => {});
     const state = {
       session: {
@@ -997,7 +1000,10 @@ describe('syncInitialThreadState', () => {
             {
               id: 'thread-1',
               title: 'Pending fallback',
-              metadata: { mastracodePendingPackFallback: pending },
+              metadata: {
+                mastracodePendingPackFallback: pending,
+                mastracodeAccountRoutingExhausted: exhaustedRouting,
+              },
             },
           ]),
         },
@@ -1013,7 +1019,10 @@ describe('syncInitialThreadState', () => {
 
     await syncInitialThreadState(state);
 
-    expect(stateSet).toHaveBeenCalledWith({ mastracodePendingPackFallback: pending });
+    expect(stateSet).toHaveBeenCalledWith({
+      mastracodePendingPackFallback: pending,
+      mastracodeAccountRoutingExhausted: exhaustedRouting,
+    });
   });
 
   it('clears stale pending fallback state when the target thread has no durable marker', async () => {

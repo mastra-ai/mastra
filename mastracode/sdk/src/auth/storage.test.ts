@@ -441,6 +441,30 @@ describe('AuthStorage multi-account registry', () => {
     });
   });
 
+  it('reads and refreshes a selected account without changing the active account', async () => {
+    const entry1 = accountRecord('r1', 'a1', { active: true });
+    const entry2 = accountRecord('r2', 'a2', { expires: PAST });
+    const { storage } = makeStorage({
+      [PROVIDER]: oauthCred('r1', 'a1'),
+      [`accounts:${entry1.id}`]: entry1,
+      [`accounts:${entry2.id}`]: entry2,
+    });
+    const refreshMock = vi.spyOn(anthropicOAuthProvider, 'refreshToken').mockResolvedValue({
+      refresh: 'r2-fresh',
+      access: 'a2-fresh',
+      expires: FUTURE,
+    });
+
+    await expect(storage.getApiKey(PROVIDER, entry2.id)).resolves.toBe('a2-fresh');
+    await expect(storage.getOAuthCredential(PROVIDER, entry2.id)).resolves.toMatchObject({
+      access: 'a2-fresh',
+      accountInstanceId: entry2.id,
+    });
+    expect(refreshMock).toHaveBeenCalledTimes(1);
+    expect(storage.getActiveAccount(PROVIDER)?.id).toBe(entry1.id);
+    expect(storage.get(PROVIDER)).toMatchObject({ access: 'a1' });
+  });
+
   it('dedupes concurrent refreshes per instance', async () => {
     const { storage } = makeStorage({ [PROVIDER]: oauthCred('r1', 'a1', PAST) }); // migrated: one active entry
 

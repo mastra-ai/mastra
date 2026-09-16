@@ -257,8 +257,8 @@ export const packFallbackScenario: McE2eScenario = {
     // The Activate detail shows the pack's fallback chain (item: activate preview).
     await runtime.waitForScreenText(/fallback → anthropic/i, terminal, 8_000);
 
-    // Rows: [Activate, Edit, Share, Set fallback…, Delete].
-    terminal.write('\x1b[B\x1b[B\x1b[B');
+    // Rows: [Activate, Edit, Share, Set subscription routing…, Set fallback…, Delete].
+    terminal.write('\x1b[B\x1b[B\x1b[B\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/Fallback for hop-kimi/i, terminal, 8_000);
 
@@ -285,7 +285,7 @@ export const packFallbackScenario: McE2eScenario = {
     terminal.write('\r');
     await runtime.waitForScreenText(/Custom pack: chain-b/i, terminal, 8_000);
     await runtime.waitForScreenText(/fallback → chain-c/i, terminal, 8_000);
-    terminal.write('\x1b[B\x1b[B\x1b[B');
+    terminal.write('\x1b[B\x1b[B\x1b[B\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/Fallback for chain-b/i, terminal, 8_000);
     await runtime.waitForScreenText(/chain-c\s+.*\(current\)/i, terminal, 8_000);

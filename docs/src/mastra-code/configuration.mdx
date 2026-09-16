@@ -77,7 +77,7 @@ Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes
 
 `/models` switches model packs. Built-in packs keep every mode on one provider. Use `/model` to override the current mode with another model from that provider. Modified built-in packs are labeled in `/models`; selecting one highlights the overridden modes and lets you activate its overrides or reset it to the original built-in models. To mix providers, create or edit a custom pack with `/models`.
 
-`/models` also configures **fallback packs**: select a pack and choose **Set fallback…** from its action menu. When every account serving the active pack's provider is unavailable — all accounts rate-limited or the provider down after retries — the turn hops to the fallback pack's model for that mode. Fallbacks work for built-in and custom packs, and chains are allowed (A → B → C). Cycles are safe: a cascade revisits any one pack at most once (A → B → A), then the error surfaces. Every hop renders a notice in the transcript and is saved in the thread history. After a hop, the thread stays on the landed pack until you switch back with `/models` — there is no automatic recovery.
+`/models` also configures **fallback packs**: select a pack and choose **Set fallback…** from its action menu. When every account serving the active pack's provider is unavailable, either rate-limited or down after retries, the turn hops to the fallback pack's model for that mode. Fallbacks work for built-in and custom packs, and chains are allowed (A → B → C). Cycles are capped at one revisit per cascade (A → B → A), then the error surfaces. Every hop renders a notice in the transcript and is saved in the thread history. After a hop, the thread stays on the landed pack until you switch back with `/models`. There is no automatic recovery.
 
 If the selected model needs a provider key, Mastra Code prompts for the key and displays its environment variable name, such as `ANTHROPIC_API_KEY`.
 
@@ -114,7 +114,15 @@ The account manager lists every registered account with its label and marks the 
 
 **Add another account** runs the normal sign-in flow and appends the account, then returns to the manager. The new account is not activated — open its submenu and choose **Set as active** to switch to it.
 
-Exactly one account per provider is active at a time; when a request fails over, the provider's other accounts are tried in the order you added them. After a successful sign-in you can name the account — ChatGPT and xAI accounts pre-fill the account's email and GitHub Copilot accounts pre-fill the GitHub login when available. `/logout` still signs out of the provider entirely, removing every registered account.
+Exactly one account per provider is active at a time; the others are kept for rotation and switching. After a successful sign-in you can name the account. ChatGPT and xAI accounts pre-fill the account's email, and GitHub Copilot accounts pre-fill the GitHub login when available. `/logout` still signs out of the provider entirely, removing every registered account.
+
+#### Subscription routing by model pack
+
+A model pack can prefer a different account for each model. In `/models`, select a pack, choose **Set subscription routing…**, select a model, then select an account. The routing preview shows the request order before you save it.
+
+The preferred account is tried first. If it fails, Mastra Code tries the provider's remaining accounts in the order they were added. Exhausted accounts stay skipped for that model and thread on later messages. Select **Automatic** to use insertion order without a preferred account.
+
+Preferences belong to the pack and resolved model. Two packs that use the same model can prefer different accounts. When a request hops to a fallback pack, that pack's own subscription routing applies.
 
 #### Automatic account rotation
 
@@ -124,7 +132,7 @@ For eligible failures on the active account, Mastra Code automatically rotates t
 - **Auth failures** (HTTP 401/403) first force one token refresh of the current account; if the refreshed token still fails, the pool rotates.
 - **Server errors and network outages** first exhaust the normal transient retry budget; if the provider still can't serve the request, the error surfaces without another account being activated.
 
-Rotation walks the remaining accounts in the order they were added; each account is tried at most once per request. When every account in the pool has been tried, the error surfaces normally. Other errors — malformed requests (HTTP 400 with no provider usage-limit message) and anything unrecognized — never rotate; they surface immediately.
+Rotation starts with the account selected by the pack's subscription routing, then walks the remaining accounts in the order they were added. Each account is tried at most once per request. When every account in the pool has been tried, the error surfaces normally or the request moves to the configured fallback pack. Other errors — malformed requests (HTTP 400 with no provider usage-limit message) and anything unrecognized — never rotate; they surface immediately.
 
 Rotation and transient retries share one retry budget, so after a rotation the remaining accounts may see fewer transient retries each — the next account is always preferred over further retries on a failing one.
 

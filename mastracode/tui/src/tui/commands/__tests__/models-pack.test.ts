@@ -9,6 +9,7 @@ import {
   fallbackPackCandidates,
   formatFallbackChainPreview,
   formatFallbackChainPreviewStyled,
+  formatPackAccountRoutingSummary,
   formatPackFallbackChain,
   getOverriddenPackModes,
   handleModelsPackCommand,
@@ -31,6 +32,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     },
     models: {
       activeModelPackId: null,
+      packAccountPreferences: {},
       modeDefaults: {},
       activeOmPackId: null,
       omModelOverride: null,
@@ -118,6 +120,9 @@ describe('upsertCustomPackInSettings', () => {
           'custom:Alpha': 'openai',
           anthropic: 'custom:Alpha',
         },
+        packAccountPreferences: {
+          'custom:Alpha': { [alphaPack.models.plan]: 'openai-codex:account-a' },
+        },
       },
       onboarding: {
         ...createSettings().onboarding,
@@ -141,6 +146,31 @@ describe('upsertCustomPackInSettings', () => {
     expect(settings.models.packFallbacks).toEqual({
       'custom:Renamed': 'openai',
       anthropic: 'custom:Renamed',
+    });
+    expect(settings.models.packAccountPreferences).toEqual({
+      'custom:Renamed': { [alphaPack.models.plan]: 'openai-codex:account-a' },
+    });
+  });
+
+  it('drops subscription preferences for models removed from a custom pack', () => {
+    const settings = createSettings({
+      customModelPacks: [{ name: 'Alpha', models: alphaPack.models, createdAt: '2026-01-01T00:00:00.000Z' }],
+      models: {
+        ...createSettings().models,
+        packAccountPreferences: {
+          'custom:Alpha': {
+            [alphaPack.models.plan]: 'openai-codex:account-a',
+            [alphaPack.models.fast]: 'openai-codex:account-b',
+          },
+        },
+      },
+    });
+    const edited = { ...alphaPack, models: { ...alphaPack.models, fast: 'anthropic/claude-haiku-4-5' } };
+
+    upsertCustomPackInSettings(settings, edited, edited.models);
+
+    expect(settings.models.packAccountPreferences).toEqual({
+      'custom:Alpha': { [alphaPack.models.plan]: 'openai-codex:account-a' },
     });
   });
 
@@ -315,6 +345,36 @@ describe('fallbackPackCandidates', () => {
   });
 });
 
+describe('formatPackAccountRoutingSummary', () => {
+  it('groups shared models and distinguishes preferred subscriptions from Automatic routing', () => {
+    const settings = createSettings({
+      models: {
+        ...createSettings().models,
+        packAccountPreferences: {
+          'custom:Alpha': { [alphaPack.models.plan]: 'openai-codex:team' },
+        },
+      },
+    });
+
+    const summary = formatPackAccountRoutingSummary(settings, alphaPack, providerId =>
+      providerId === 'openai-codex' ? [{ id: 'openai-codex:team', label: 'OpenAI Team' }] : [],
+    );
+
+    expect(summary).toContain('plan → OpenAI Team');
+    expect(summary).toContain('build → Automatic');
+    expect(summary).toContain('fast → Automatic');
+  });
+
+  it('shows one route when multiple modes resolve to the same model', () => {
+    const pack: ModePack = {
+      ...alphaPack,
+      models: { ...alphaPack.models, fast: alphaPack.models.plan },
+    };
+
+    expect(formatPackAccountRoutingSummary(createSettings(), pack)).toContain('plan/fast → Automatic');
+  });
+});
+
 describe('formatPackFallbackChain', () => {
   const packs: ModePack[] = [
     { id: 'anthropic', name: 'Anthropic', description: '', models: {} },
@@ -474,6 +534,10 @@ describe('removeCustomPackFromSettings', () => {
           anthropic: 'custom:Alpha',
           openai: 'github-copilot',
         },
+        packAccountPreferences: {
+          'custom:Alpha': { [alphaPack.models.plan]: 'openai-codex:account-a' },
+          openai: { 'openai/gpt-5.6-sol': 'openai-codex:account-b' },
+        },
       },
       onboarding: {
         ...createSettings().onboarding,
@@ -487,6 +551,9 @@ describe('removeCustomPackFromSettings', () => {
     expect(settings.models.activeModelPackId).toBeNull();
     expect(settings.models.modeDefaults).toEqual({});
     expect(settings.models.packFallbacks).toEqual({ openai: 'github-copilot' });
+    expect(settings.models.packAccountPreferences).toEqual({
+      openai: { 'openai/gpt-5.6-sol': 'openai-codex:account-b' },
+    });
     expect(settings.onboarding.modePackId).toBeNull();
   });
 
