@@ -211,6 +211,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
           description: 'Filtered out of this step',
           inputSchema: z.object({ value: z.string() }),
           outputSchema: z.object({ value: z.string() }),
+          onInputAvailable: async () => record('input-available-a'),
           execute: async ({ value }) => {
             record('execute-a');
             return { value };
@@ -238,6 +239,9 @@ describe('eager tool dispatch — excluded tool classes', () => {
     // A filtered tool is also absent from the resolved set, so the explicit activeTools
     // check is belt-and-braces; this pins the behaviour, whichever guard delivers it.
     expect(events.indexOf('execute-a')).toBe(-1);
+    // Distinguishes "never dispatched" from "dispatched but execute was not reached":
+    // onInputAvailable fires early on the eager path and not at all on this one.
+    expect(events.indexOf('input-available-a')).toBe(-1);
   });
 
   it('does not eagerly execute a suspendable tool', async () => {
@@ -842,6 +846,125 @@ describe('eager tool dispatch — discarded model attempt', () => {
     // adopting the cancelled promise that shares its id.
     expect(withEager).toEqual(['execute-discarded', 'aborted-discarded', 'execute-retried']);
     expect(withEager).not.toContain('aborted-retried');
+  });
+});
+
+describe('eager tool dispatch across steps', () => {
+  it('still dispatches eagerly on the second step', async () => {
+    // Dispatch is closed at the end of every step now, including a clean one, so the
+    // per-step reset is what keeps the feature alive past step 1. Without a multi-step
+    // test, moving or gating that reset would turn this into "eager for the first step
+    // only" and every other test here would stay green.
+    const { events, record } = createRecorder();
+    let step = 0;
+
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        step += 1;
+        const call = step === 1 ? 'call-a' : 'call-b';
+        const lastStep = step > 2;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: `response-${step}`,
+                modelId: 'mock-model',
+                timestamp: new Date(0),
+              });
+              if (!lastStep) {
+                record(`complete-${call}`);
+                controller.enqueue({
+                  type: 'tool-call',
+                  toolCallId: call,
+                  toolName: 'tool-a',
+                  input: JSON.stringify({ value: call }),
+                });
+                await new Promise(resolve => setTimeout(resolve, 100));
+                record(`later-output-${step}`);
+              }
+              controller.enqueue({ type: 'text-start', id: `text-${step}` });
+              controller.enqueue({ type: 'text-delta', id: `text-${step}`, delta: 'later' });
+              controller.enqueue({ type: 'text-end', id: `text-${step}` });
+              record(`finish-${step}`);
+              controller.enqueue({
+                type: 'finish',
+                finishReason: lastStep ? 'stop' : 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'eager-multi-step-agent',
+      name: 'Eager multi step agent',
+      instructions: 'Call tool-a, then answer.',
+      model,
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Plain tool',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          execute: async ({ value }) => {
+            record(`execute-${value}`);
+            return { value };
+          },
+        }),
+      },
+    });
+
+    await drain(
+      await agent.stream('go', { maxSteps: 3, eagerToolExecution: true } as Record<string, unknown> as never),
+    );
+
+    // Step 1 dispatched early, which the single-step tests already cover. The load-bearing
+    // assertion is the second one: step 2's call also runs before that step's own output.
+    expect(events.indexOf('execute-call-a')).toBeLessThan(events.indexOf('later-output-1'));
+    expect(events.indexOf('execute-call-b')).toBeLessThan(events.indexOf('later-output-2'));
+  });
+});
+
+describe('eager tool dispatch — the terminal window', () => {
+  it('does not promote a queued call when an execution settles as the model finishes', async () => {
+    // The hole this closes: dispatch used to be shut after the stream loop returned, so
+    // an execution settling between the model's terminal chunk and that moment would free
+    // its permit and promote the next queued call. That call then ran under a limit that
+    // had already been handed to the foreach.
+    const coordinator = new EagerToolExecutionCoordinator(() => 1);
+    let started = 0;
+    let releaseA!: () => void;
+    const aHeld = new Promise<void>(resolve => {
+      releaseA = resolve;
+    });
+
+    coordinator.start('call-a', async () => {
+      started++;
+      await aHeld;
+      return { result: 'a' } as never;
+    });
+    coordinator.start('call-b', async () => {
+      started++;
+      return { result: 'b' } as never;
+    });
+    expect(started).toBe(1);
+
+    // Terminal chunk accepted: dispatch closes here, synchronously, before anything else
+    // gets a turn. Only then does A settle and give its permit back.
+    coordinator.stop();
+    releaseA();
+    await vi.waitFor(() => expect(coordinator.running).toBe(0));
+
+    // B was never promoted, and is no longer adoptable, so the foreach runs it itself.
+    expect(started).toBe(1);
+    expect(coordinator.take('call-b')).toBeUndefined();
   });
 });
 
