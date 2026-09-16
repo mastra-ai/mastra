@@ -230,8 +230,8 @@ export const AgentMetadataBrowserToolsList = ({ tools }: AgentMetadataBrowserToo
 };
 
 export interface AgentMetadataCombinedProcessorListProps {
-  inputProcessors: Array<{ id: string; name: string }>;
-  outputProcessors: Array<{ id: string; name: string }>;
+  inputProcessors: Array<{ id: string; name?: string }>;
+  outputProcessors: Array<{ id: string; name?: string }>;
 }
 
 export const AgentMetadataCombinedProcessorList = ({
