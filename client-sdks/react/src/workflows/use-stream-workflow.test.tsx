@@ -98,6 +98,25 @@ const operations = ['start', 'observe', 'resume', 'time travel'] as const;
 afterEach(cleanup);
 
 describe('useStreamWorkflow stream ownership', () => {
+  it('marks a live per-step run paused when only the paused chunk arrives', async () => {
+    const { result, streams } = renderWorkflow();
+    const remote = streamResponse();
+    streams.set('stepped', remote.response);
+    let run!: Promise<void>;
+    act(() => {
+      run = result.current.streamWorkflow.mutateAsync({ workflowId: 'workflow', runId: 'stepped', inputData: {} });
+    });
+    await act(async () => {
+      remote.send('workflow-start', {});
+      remote.send('workflow-step-result', { id: 'first', status: 'success', output: 1 });
+      remote.send('workflow-paused', {});
+      remote.close();
+      await run;
+    });
+    expect(result.current.streamResult).toMatchObject({ status: 'paused', steps: { first: { status: 'success' } } });
+    expect(result.current.isStreaming).toBe(false);
+  });
+
   it('continues observing a paused run and preserves opaque outputs, custom IDs and metadata', async () => {
     const { result, streams } = renderWorkflow();
     const remote = streamResponse();

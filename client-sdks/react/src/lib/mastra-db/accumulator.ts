@@ -264,6 +264,10 @@ export const mapWorkflowStreamChunkToWatchResult = (
     return { ...previous, status: 'canceled' };
   }
 
+  if (chunk.type === 'workflow-paused') {
+    return { ...previous, status: 'paused' };
+  }
+
   if (chunk.type === 'workflow-finish') {
     const finalStatus = chunk.payload.workflowStatus;
     const lastStep = Object.values(previous.steps).pop();
