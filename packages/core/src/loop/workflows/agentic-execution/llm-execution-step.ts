@@ -92,7 +92,11 @@ import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { buildMessagesFromChunks } from './build-messages-from-chunks';
 import type { CollectedChunk } from './build-messages-from-chunks';
-import { EAGER_TOOL_EXECUTION_MARKER, EagerToolExecutionIneligible } from './eager-tool-execution';
+import {
+  EAGER_TOOL_EXECUTION_MARKER,
+  EagerToolExecutionNotRun,
+  isEagerlyExecutableToolCall,
+} from './eager-tool-execution';
 import type { EagerToolExecutionCoordinator } from './eager-tool-execution';
 import type { PendingProviderToolCall } from './provider-tool-spans';
 import { endPendingProviderToolSpan } from './provider-tool-spans';
@@ -1250,6 +1254,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
 
   let currentIteration = 0;
+  let eagerAbortListenerRegistered = false;
   const pendingProviderToolCallsByToolCallId = new Map<string, PendingProviderToolCall>();
 
   const cleanupProviderToolSpans = (terminal: boolean) => {
@@ -1274,8 +1279,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       if (eagerCoordinator) {
         writeScoped(scopeCtx, EAGER_TOOL_EXECUTION_KEY, 'eagerToolExecutionCoordinator', eagerCoordinator);
         // A caller abort stops further eager dispatch. Executions already in flight
-        // observe the same signal through the tool execution options.
-        options?.abortSignal?.addEventListener('abort', () => eagerCoordinator.stop(), { once: true });
+        // observe the same signal through the tool execution options. Registered once
+        // for the whole run rather than per iteration, so long loops do not pile up
+        // listeners on the same signal.
+        if (!eagerAbortListenerRegistered) {
+          eagerAbortListenerRegistered = true;
+          options?.abortSignal?.addEventListener('abort', () => eagerCoordinator.stop(), { once: true });
+        }
       }
 
       // Insert a step-start boundary between loop iterations so that
@@ -1943,24 +1953,24 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             onCompleteToolCall:
               eagerCoordinator && eagerToolCallStep
                 ? toolCall => {
-                    const tool = currentStep.tools?.[toolCall.toolName];
-                    const hasPostStreamProcessor = outputProcessors?.some(
-                      processor => 'processLLMResponse' in processor || 'processOutputStep' in processor,
-                    );
+                    if (options?.abortSignal?.aborted) return;
                     if (
-                      hasPostStreamProcessor ||
-                      options?.abortSignal?.aborted ||
-                      toolCall.args === undefined ||
-                      toolCall.providerExecuted ||
-                      !tool ||
-                      isProviderTool(tool) ||
-                      !('execute' in tool) ||
-                      typeof tool.execute !== 'function' ||
-                      ('hasSuspendSchema' in tool && Boolean(tool.hasSuspendSchema)) ||
-                      requireToolApproval === true ||
-                      typeof requireToolApproval === 'function' ||
-                      ('requireApproval' in tool && Boolean(tool.requireApproval)) ||
-                      Boolean(getNeedsApprovalFn(tool))
+                      !isEagerlyExecutableToolCall({
+                        toolCall,
+                        tool: currentStep.tools?.[toolCall.toolName],
+                        activeTools: readScoped(scopeCtx, STEP_ACTIVE_TOOLS_KEY, 'stepActiveTools') as
+                          | string[]
+                          | undefined,
+                        requireToolApproval: requireToolApproval ?? requestContext?.get('__mastra_requireToolApproval'),
+                        autoResumeSuspendedTools,
+                        hasPostStreamProcessor: Boolean(
+                          outputProcessors?.some(
+                            processor => 'processLLMResponse' in processor || 'processOutputStep' in processor,
+                          ),
+                        ),
+                        isProviderTool,
+                        getNeedsApprovalFn,
+                      })
                     ) {
                       return;
                     }
@@ -1973,10 +1983,16 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                         requestContext,
                         abortSignal: options?.abortSignal,
                         writer: outputWriter,
+                        // The eligibility whitelist excludes every tool shape that can
+                        // suspend or bail, so neither of these should be reachable. They
+                        // stay as a loud, fail-safe assertion: raising "did not run" hands
+                        // the call back to the foreach rather than half-completing it here.
                         suspend: async () => {
-                          throw new EagerToolExecutionIneligible('the call requested suspension');
+                          throw new EagerToolExecutionNotRun(`"${toolCall.toolName}" requested suspension`);
                         },
-                        bail: async () => undefined,
+                        bail: async () => {
+                          throw new EagerToolExecutionNotRun(`"${toolCall.toolName}" bailed`);
+                        },
                         resumeData: undefined,
                         tracingContext,
                         [EAGER_TOOL_EXECUTION_MARKER]: true,
@@ -1986,6 +2002,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 : undefined,
           });
           toolResultTripwireFromStream = streamToolResultTripwire;
+
+          // The model stream is over, so no further call can become eligible. Stop the
+          // coordinator when the turn ended in a way that must not produce new tool work:
+          // a tripwire, an error, or a terminal reason other than a normal tool-call/stop.
+          // Executions already running keep their abort signal and are still adopted by the
+          // foreach, so a real side effect is never left unrecorded; only work that had not
+          // started is dropped back to the normal path.
+          if (eagerCoordinator) {
+            const finishReason = runState.state.stepResult?.reason;
+            const unsafeTermination =
+              Boolean(toolResultTripwireFromStream) ||
+              runState.state.hasErrored ||
+              (finishReason !== undefined && finishReason !== 'tool-calls' && finishReason !== 'stop');
+            if (unsafeTermination) {
+              eagerCoordinator.stop();
+            }
+          }
 
           if (toolResultTripwireFromStream) {
             return buildTripWireBailResponse({

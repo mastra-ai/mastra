@@ -104,7 +104,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       // Adopt an execution the LLM step started eagerly for this call, if any. The
       // eager invocation itself carries the marker so it never adopts itself.
       if (!(executionContext as any)[EAGER_TOOL_EXECUTION_MARKER]) {
-        const eagerExecution = readScoped(scopeCtx, EAGER_TOOL_EXECUTION_KEY, 'eagerToolExecutionCoordinator')?.get(
+        // Take rather than read: adoption is exactly-once, so a later iteration that
+        // reuses this toolCallId executes again instead of replaying a stale result.
+        const eagerExecution = readScoped(scopeCtx, EAGER_TOOL_EXECUTION_KEY, 'eagerToolExecutionCoordinator')?.take(
           inputData.toolCallId,
         );
         if (eagerExecution) {
