@@ -3,6 +3,7 @@ import { PlatformApiClient, PlatformApiError } from '../platform/api-client.js';
 export const GITLAB_PROJECTS_PAGE_SIZE = 100;
 export const GITLAB_ISSUES_PAGE_SIZE = 30;
 export const GITLAB_NOTES_PAGE_SIZE = 100;
+export const GITLAB_MIN_ACCESS_LEVEL = 20;
 
 export type GitLabApiErrorCode = 'gitlab_auth_failed' | 'gitlab_request_failed';
 
@@ -43,7 +44,7 @@ export interface GitLabIssue {
   assignee?: GitLabUser | null;
   assignees?: GitLabUser[];
   labels?: string[];
-  severity?: string | null;
+  weight?: number | null;
   user_notes_count?: number;
   created_at: string;
   updated_at: string;
@@ -105,6 +106,7 @@ export class GitLabApiClient {
         membership: 'true',
         simple: 'true',
         with_issues_enabled: 'true',
+        min_access_level: GITLAB_MIN_ACCESS_LEVEL,
         order_by: 'last_activity_at',
         sort: 'desc',
         page: options.page ?? 1,
