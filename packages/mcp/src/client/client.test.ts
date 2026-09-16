@@ -2743,10 +2743,12 @@ describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', 
     await client.connect();
     expect(Object.keys(await client.tools())).toContain('ping');
 
-    // Reconnect attempt during the outage fails and used to poison the SDK client.
+    // The negotiated revision is reused, so reconnecting sends nothing until the
+    // first request; the outage surfaces there and used to poison the SDK client.
     failing = true;
     httpServer.closeAllConnections();
-    await expect(client.forceReconnect()).rejects.toThrow();
+    await client.forceReconnect();
+    await expect(client.tools()).rejects.toThrow();
 
     failing = false;
     await client.forceReconnect();
@@ -2830,7 +2832,8 @@ describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', 
       { content: [{ type: 'text', text: 'pong' }] },
       { content: [{ type: 'text', text: 'pong' }] },
     ]);
-    expect(discoverCount).toBe(2);
+    // The reconnect reuses the negotiated revision instead of probing again.
+    expect(discoverCount).toBe(1);
   }, 20000);
 });
 

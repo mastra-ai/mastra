@@ -426,6 +426,8 @@ describe('MCPClient OAuth authorization flow', () => {
     authServer.validTokens.delete(tokens!.access_token);
 
     await mcp.reconnectServer('fixture');
+    // The reconnect reuses the negotiated revision; the first request carries the stale token.
+    await mcp.listTools();
 
     expect(mcp.getServerAuthState('fixture')).toBe('authorized');
     expect(authServer.refreshGrantCount).toBe(1);

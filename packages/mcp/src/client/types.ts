@@ -19,8 +19,21 @@ export type { ToolAnnotations } from '@modelcontextprotocol/client';
 // Re-export the MCP LoggingLevel for convenience
 export type { LoggingLevel } from '@modelcontextprotocol/client';
 
-/** The only protocol revision this client speaks. */
+/** The current protocol revision; the one `/mcp` servers speak. */
 export const MCP_CLIENT_PROTOCOL_VERSION = '2026-07-28' as const;
+
+/**
+ * Which protocol revision to speak to a server.
+ *
+ * - `'2026-07-28'`: the current revision only. No probe, no fallback; a server
+ *   that does not offer it fails to connect.
+ * - `'legacy'`: the pre-2026 `initialize` handshake only. Use it for servers known
+ *   not to have upgraded, to skip the probe.
+ *
+ * When omitted the client probes with `server/discover` and speaks whichever
+ * revision the server offers.
+ */
+export type MCPClientProtocolVersion = typeof MCP_CLIENT_PROTOCOL_VERSION | 'legacy';
 
 /**
  * Extended fetch function type that receives the current request context as a third argument.
@@ -174,6 +187,14 @@ export type RequireToolApproval = boolean | RequireToolApprovalFn;
 export type BaseServerOptions = {
   /** Optional handler for server log messages */
   logger?: LogHandler;
+  /**
+   * Pin the protocol revision instead of probing for it. See {@link MCPClientProtocolVersion}.
+   *
+   * Features the pre-2026 revisions lack (`subscriptions/listen`, embedded input
+   * requests) fail with an error naming the negotiated revision when the server
+   * turned out to be legacy.
+   */
+  protocolVersion?: MCPClientProtocolVersion;
   /** Optional timeout in milliseconds for server operations */
   timeout?: number;
   /** Optional client capabilities to advertise to the server */

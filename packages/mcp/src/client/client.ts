@@ -24,7 +24,9 @@ import type {
   McpSubscription,
   ReadResourceResult,
   ClientCapabilities,
+  PriorDiscovery,
   SubscriptionFilter,
+  VersionNegotiationMode,
 } from '@modelcontextprotocol/client';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { asyncExitHook, gracefulExit } from 'exit-hook';
@@ -41,6 +43,7 @@ import type {
   ProgressHandler,
   MastraMCPServerDefinition,
   InternalMastraMCPClientOptions,
+  MCPClientProtocolVersion,
   RequireToolApproval,
   SerializableMCPToolDefinition,
 } from './types';
@@ -55,6 +58,7 @@ export type {
   MastraFetchLike,
   MastraMCPServerDefinition,
   MCPClientCapabilities,
+  MCPClientProtocolVersion,
   MCPInputRequest,
   MCPInputRequestHandler,
   InternalMastraMCPClientOptions,
@@ -295,13 +299,21 @@ function convertLogLevelToLoggerMethod(level: LoggingLevel): 'debug' | 'info' | 
   }
 }
 
+/** Maps the per-server `protocolVersion` option onto the SDK negotiation mode. */
+function negotiationMode(protocolVersion: MCPClientProtocolVersion | undefined): VersionNegotiationMode {
+  if (protocolVersion === undefined) return 'auto';
+  return protocolVersion === 'legacy' ? 'legacy' : { pin: protocolVersion };
+}
+
 /**
  * Internal MCP client implementation for connecting to a single MCP server.
  *
- * Speaks the 2026-07-28 revision only: connections are established with
- * `server/discover`, there is no session, embedded input requests are answered
- * through the configured `inputRequests` handler, and change notifications arrive
- * on `subscriptions/listen` streams opened with {@link listen}.
+ * Probes the server with `server/discover` unless `protocolVersion` pins a
+ * revision, then speaks whichever revision was negotiated. On 2026-07-28 there is
+ * no session, embedded input requests are answered through the configured
+ * `inputRequests` handler, and change notifications arrive on `subscriptions/listen`
+ * streams opened with {@link listen}. Those two facilities fail on a legacy
+ * negotiation; everything else works on either revision.
  *
  * @internal
  */
@@ -323,6 +335,8 @@ export class InternalMastraMCPClient extends MastraBase {
   private sigTermHandler?: () => void;
   private sigHupHandler?: () => void;
   private serverInstructions?: string;
+  /** The verdict of the last successful probe, reused so reconnects skip it. */
+  private priorDiscovery?: PriorDiscovery;
   private readonly requireToolApproval: RequireToolApproval | undefined;
   private readonly onToolError: 'throw' | 'return';
 
@@ -368,7 +382,7 @@ export class InternalMastraMCPClient extends MastraBase {
       {
         capabilities: clientCapabilities,
         ...(server.jsonSchemaValidator ? { jsonSchemaValidator: server.jsonSchemaValidator } : {}),
-        versionNegotiation: { mode: { pin: MCP_CLIENT_PROTOCOL_VERSION } },
+        versionNegotiation: { mode: negotiationMode(server.protocolVersion) },
       },
     );
 
@@ -452,7 +466,10 @@ export class InternalMastraMCPClient extends MastraBase {
         stderr: this.serverConfig.stderr,
         cwd: this.serverConfig.cwd,
       });
-      await this.client.connect(this.transport, { timeout: this.serverConfig.timeout ?? this.timeout });
+      await this.client.connect(this.transport, {
+        timeout: this.serverConfig.timeout ?? this.timeout,
+        prior: this.priorDiscovery,
+      });
       this.log('debug', `Successfully connected to MCP server via Stdio`);
     } catch (e) {
       this.log('error', e instanceof Error ? e.stack || e.message : JSON.stringify(e));
@@ -501,7 +518,10 @@ export class InternalMastraMCPClient extends MastraBase {
     // transport that started the authorization flow (finishAuth must run on it).
     const transport = new StreamableHTTPClientTransport(url, { requestInit, authProvider, fetch });
     try {
-      await this.client.connect(transport, { timeout: connectTimeout ?? DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC });
+      await this.client.connect(transport, {
+        timeout: connectTimeout ?? DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC,
+        prior: this.priorDiscovery,
+      });
       this.transport = transport;
       this.log('debug', 'Successfully connected using Streamable HTTP transport.');
       // Close any transport left pending from an earlier 401: authorization is satisfied.
@@ -650,6 +670,7 @@ export class InternalMastraMCPClient extends MastraBase {
         }
 
         this.serverInstructions = this.client.getInstructions();
+        this.rememberNegotiation();
 
         resolve(true);
 
@@ -680,6 +701,8 @@ export class InternalMastraMCPClient extends MastraBase {
         this.client.onclose = connectionOnClose;
       } catch (e) {
         this.isConnected = null;
+        // A failed connect invalidates the cached verdict so a legacy verdict cannot stick.
+        this.priorDiscovery = undefined;
         reject(e);
       }
     });
@@ -721,6 +744,29 @@ export class InternalMastraMCPClient extends MastraBase {
 
   get instructions(): string | undefined {
     return this.serverInstructions;
+  }
+
+  /** The protocol revision negotiated with the server; `undefined` until connected. */
+  get negotiatedProtocolVersion(): string | undefined {
+    return this.client.getNegotiatedProtocolVersion();
+  }
+
+  private rememberNegotiation(): void {
+    if (this.serverConfig.protocolVersion !== undefined) return;
+    const discover = this.client.getDiscoverResult();
+    this.priorDiscovery =
+      this.client.getProtocolEra() === 'modern' && discover ? { kind: 'modern', discover } : { kind: 'legacy' };
+    this.log('debug', `Negotiated protocol revision ${this.negotiatedProtocolVersion}`);
+  }
+
+  /** Fails a call that only the 2026-07-28 revision supports when the server negotiated an older one. */
+  private assertCurrentRevision(feature: string): void {
+    const negotiated = this.negotiatedProtocolVersion;
+    if (negotiated !== undefined && negotiated !== MCP_CLIENT_PROTOCOL_VERSION) {
+      throw new Error(
+        `${feature} needs MCP ${MCP_CLIENT_PROTOCOL_VERSION}, but server '${this.name}' negotiated ${negotiated}`,
+      );
+    }
   }
 
   get forwardInstructions(): boolean {
@@ -896,6 +942,7 @@ export class InternalMastraMCPClient extends MastraBase {
    * stream dispatch to the handlers registered via the `on*` methods below.
    */
   async listen(filter: SubscriptionFilter): Promise<McpSubscription> {
+    this.assertCurrentRevision('subscriptions/listen');
     this.log('debug', 'Opening subscriptions/listen stream', { filter });
     return await this.client.listen(filter, { timeout: this.timeout });
   }

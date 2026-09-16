@@ -907,6 +907,18 @@ To fix this you have three different options:
   }
 
   /**
+   * The protocol revision negotiated with each configured server, keyed by
+   * server name. Servers that have not connected yet return `undefined`.
+   */
+  public getServerProtocolVersions(): Record<string, string | undefined> {
+    const versions: Record<string, string | undefined> = {};
+    for (const serverName of Object.keys(this.serverConfigs)) {
+      versions[serverName] = this.mcpClientsById.get(serverName)?.negotiatedProtocolVersion;
+    }
+    return versions;
+  }
+
+  /**
    * Retrieves all tools from all configured servers with namespaced names.
    *
    * Tool names are namespaced as `serverName_toolName` to prevent conflicts between servers.
