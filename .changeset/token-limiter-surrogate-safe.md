@@ -2,4 +2,6 @@
 '@mastra/core': patch
 ---
 
-Fix `TokenLimiterProcessor` truncation (`strategy: 'truncate'`) splitting UTF-16 surrogate pairs. When a truncation boundary landed inside a multi-byte character (e.g. an emoji), the output could contain an unpaired surrogate, producing invalid UTF-16 that fails a UTF-8 round-trip and can break downstream consumers with strict JSON parsers. Truncated text now has any lone surrogates replaced with the Unicode replacement character (`U+FFFD`), matching the existing policy used for workspace tool output.
+Fixed `TokenLimiterProcessor` truncation (`strategy: 'truncate'`) splitting UTF-16 surrogate pairs.
+
+Truncated text that ends inside an emoji or other astral character no longer contains a lone surrogate. Lone surrogates are replaced with `U+FFFD`, so the output round-trips through UTF-8 unchanged and strict JSON consumers can reuse truncated messages as history. This matches the repair already applied to workspace tool output.
