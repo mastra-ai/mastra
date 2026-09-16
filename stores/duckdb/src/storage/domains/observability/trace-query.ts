@@ -396,10 +396,7 @@ function compileDuckDBTraceScope(relatedCollections: Set<RelatedCollection>): st
   return ctes;
 }
 
-export function compileDuckDBTraceQuery(
-  plan: TrustedTraceQueryPlan,
-  mode: 'data' | 'count' = 'data',
-): CompiledDuckDBTraceQuery {
+export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDuckDBTraceQuery {
   const values: unknown[] = [plan.timeRange.from, plan.timeRange.to];
   const conditions = [
     `r.endedAt IS NOT NULL`,
@@ -424,15 +421,6 @@ export function compileDuckDBTraceQuery(
 
   const candidates = `WITH ${ctes.join(',\n  ')}`;
 
-  if (plan.paginationMode === 'page' && mode === 'count') {
-    return {
-      sql: `${candidates}
-SELECT COUNT(*) AS total
-FROM candidates`,
-      values,
-    };
-  }
-
   if (plan.result === 'groups') {
     const pageCondition = plan.cursor ? `AND threadId > ?` : '';
     if (plan.cursor) values.push(plan.cursor.threadId);
@@ -454,11 +442,21 @@ LIMIT ?`,
   if (plan.paginationMode === 'page') {
     values.push(plan.perPage, plan.page * plan.perPage);
     return {
-      sql: `${candidates}
-SELECT *
-FROM candidates
-ORDER BY ${orderField} ${direction}, traceId ASC
-LIMIT ? OFFSET ?`,
+      sql: `${candidates},
+  page_rows AS (
+    SELECT *, row_number() OVER (ORDER BY ${orderField} ${direction}, traceId ASC) AS __row_position
+    FROM candidates
+    ORDER BY ${orderField} ${direction}, traceId ASC
+    LIMIT ? OFFSET ?
+  ),
+  page_total AS (
+    SELECT COUNT(*) AS total
+    FROM candidates
+  )
+SELECT page_rows.*, page_total.total
+FROM page_total
+LEFT JOIN page_rows ON TRUE
+ORDER BY page_rows.__row_position ASC NULLS LAST`,
       values,
     };
   }
@@ -538,23 +536,23 @@ function asIsoTimestamp(value: unknown): string {
 
 export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
   if (plan.paginationMode === 'page') {
-    const countQuery = compileDuckDBTraceQuery(plan, 'count');
-    const dataQuery = compileDuckDBTraceQuery(plan);
-    const countRows = await db.query<{ total: number | bigint }>(countQuery.sql, countQuery.values);
-    const rows = await db.query<Record<string, unknown>>(dataQuery.sql, dataQuery.values);
-    const total = Number(countRows[0]?.total ?? 0);
-    const traces = rows.map(row => ({
-      traceId: String(row.traceId),
-      rootSpanId: String(row.rootSpanId),
-      threadId: row.threadId == null ? null : String(row.threadId),
-      resourceId: row.resourceId == null ? null : String(row.resourceId),
-      startedAt: asIsoTimestamp(row.startedAt),
-      endedAt: asIsoTimestamp(row.endedAt),
-      entityName: row.entityName == null ? null : String(row.entityName),
-      entityType: row.entityType == null ? null : String(row.entityType),
-      environment: row.environment == null ? null : String(row.environment),
-      status: row.status,
-    }));
+    const query = compileDuckDBTraceQuery(plan);
+    const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
+    const total = Number(rows[0]?.total ?? 0);
+    const traces = rows
+      .filter(row => row.traceId != null)
+      .map(row => ({
+        traceId: String(row.traceId),
+        rootSpanId: String(row.rootSpanId),
+        threadId: row.threadId == null ? null : String(row.threadId),
+        resourceId: row.resourceId == null ? null : String(row.resourceId),
+        startedAt: asIsoTimestamp(row.startedAt),
+        endedAt: asIsoTimestamp(row.endedAt),
+        entityName: row.entityName == null ? null : String(row.entityName),
+        entityType: row.entityType == null ? null : String(row.entityType),
+        environment: row.environment == null ? null : String(row.environment),
+        status: row.status,
+      }));
     return coreStorage.traceQueryResponseSchema.parse({
       traces,
       pagination: {

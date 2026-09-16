@@ -294,19 +294,20 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.values.at(-1)).toBe(5);
   });
 
-  it('compiles list-compatible count and offset queries over the same candidates', () => {
-    const pagePlan = plan({
-      orderBy: [{ field: 'endedAt', direction: 'asc' }],
-      pagination: { page: 2, perPage: 25 },
-    });
-    const count = compileDuckDBTraceQuery(pagePlan, 'count');
-    const data = compileDuckDBTraceQuery(pagePlan);
+  it('compiles list-compatible rows and metadata into one query', () => {
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        orderBy: [{ field: 'endedAt', direction: 'asc' }],
+        pagination: { page: 2, perPage: 25 },
+      }),
+    );
 
-    expect(count.sql).toContain('SELECT COUNT(*) AS total\nFROM candidates');
-    expect(data.sql).toContain('ORDER BY endedAt ASC, traceId ASC');
-    expect(data.sql).toContain('LIMIT ? OFFSET ?');
-    expect(data.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 25, 50]);
-    expect(count.sql.split('candidates AS')[0]).toBe(data.sql.split('candidates AS')[0]);
+    expect(compiled.sql).toContain('page_rows AS');
+    expect(compiled.sql).toContain('ORDER BY endedAt ASC, traceId ASC');
+    expect(compiled.sql).toContain('LIMIT ? OFFSET ?');
+    expect(compiled.sql).toContain('SELECT COUNT(*) AS total\n    FROM candidates');
+    expect(compiled.sql).toContain('LEFT JOIN page_rows ON TRUE');
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 25, 50]);
   });
 
   it('compiles thread qualification over full eligible roots with dependencies from both scopes', () => {
@@ -428,22 +429,36 @@ describe('DuckDB advanced trace query', () => {
     expect(Object.keys(response.traces[0]!)).toHaveLength(10);
   });
 
-  it('returns exact list-compatible pagination metadata', async () => {
-    const query = vi
-      .fn()
-      .mockResolvedValueOnce([{ total: 3n }])
-      .mockResolvedValueOnce([traceRow('trace-c', '2026-01-01T10:00:00.000Z')]);
+  it('returns exact list-compatible pagination metadata from one statement', async () => {
+    const query = vi.fn().mockResolvedValue([{ ...traceRow('trace-c', '2026-01-01T10:00:00.000Z'), total: 3n }]);
     const response = await queryTraces(
       { query } as unknown as DuckDBConnection,
       plan({ pagination: { page: 1, perPage: 2 } }),
     );
 
-    expect(query).toHaveBeenCalledTimes(2);
+    expect(query).toHaveBeenCalledTimes(1);
     expect(response).toMatchObject({
       traces: [{ traceId: 'trace-c' }],
       pagination: { total: 3, page: 1, perPage: 2, hasMore: false },
     });
     expect(response).not.toHaveProperty('page');
+  });
+
+  it.each([
+    ['empty', 0, 0],
+    ['out-of-range', 3, 7],
+  ])('preserves totals for %s pages without trace rows', async (_case, page, total) => {
+    const query = vi.fn().mockResolvedValue([{ traceId: null, total: BigInt(total) }]);
+
+    const response = await queryTraces(
+      { query } as unknown as DuckDBConnection,
+      plan({ pagination: { page, perPage: 2 } }),
+    );
+
+    expect(response).toEqual({
+      traces: [],
+      pagination: { total, page, perPage: 2, hasMore: false },
+    });
   });
 
   it('returns fixed thread identities and computes the next cursor from the last visible row', async () => {
