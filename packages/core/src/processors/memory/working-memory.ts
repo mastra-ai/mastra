@@ -7,6 +7,26 @@ import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 import { generateEmptyFromSchema } from '../../utils';
 
+const WORKING_MEMORY_REGION_TAGS = ['working_memory_data', 'working_memory_template'] as const;
+
+/**
+ * Stored working memory is data: it must not be able to open or close the
+ * region tags the renderer itself draws. Neutralize only the literal tag
+ * spellings (same posture as the signal renderer's XML escaping in
+ * agent/signals.ts); all other content, including ordinary Markdown and
+ * JSON, passes through unchanged so the updateWorkingMemory round-trip is
+ * unaffected.
+ */
+function sanitizeWorkingMemoryData(data: string): string {
+  let sanitized = data;
+  for (const tag of WORKING_MEMORY_REGION_TAGS) {
+    sanitized = sanitized
+      .replaceAll(`<${tag}>`, `&lt;${tag}>`)
+      .replaceAll(`</${tag}>`, `&lt;/${tag}>`);
+  }
+  return sanitized;
+}
+
 export type WorkingMemoryTemplate =
   | { format: 'markdown'; content: string }
   | { format: 'json'; content: string | Record<string, unknown> };
@@ -207,7 +227,7 @@ ${hasEmptyWorkingMemoryTemplateObject ? 'When working with json data, the object
 ${hasEmptyWorkingMemoryTemplateObject ? JSON.stringify(emptyWorkingMemoryTemplateObject) : ''}
 
 <working_memory_data>
-${data}
+${data == null ? data : sanitizeWorkingMemoryData(data)}
 </working_memory_data>
 
 Notes:
@@ -243,7 +263,7 @@ ${typeof template.content === 'string' ? template.content : JSON.stringify(templ
 </working_memory_template>
 
 <working_memory_data>
-${data}
+${data == null ? data : sanitizeWorkingMemoryData(data)}
 </working_memory_data>
 
 Notes:
@@ -277,7 +297,7 @@ ${
 The following is your working memory - persistent information about the user and conversation collected over previous interactions. This data is provided for context to help you maintain continuity.
 
 <working_memory_data>
-${data || 'No working memory data available.'}
+${data ? sanitizeWorkingMemoryData(data) : 'No working memory data available.'}
 </working_memory_data>
 
 Guidelines:
