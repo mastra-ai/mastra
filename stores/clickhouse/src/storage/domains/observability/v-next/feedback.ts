@@ -299,15 +299,21 @@ function feedbackNotFoundError(feedbackId: string): MastraError {
   });
 }
 
+/**
+ * Applied markers are inserted with quorum. On replicated clusters the guard
+ * reads with `select_sequential_consistency` so it cannot answer from a replica
+ * that has not yet received a quorum-inserted marker; single-node deployments
+ * keep the plain read.
+ */
 async function hasFeedbackDeletionRequest(
   client: ClickHouseClient,
   feedbackId: string,
   organizationId: string | null,
   resourceId: string | null,
+  replication?: ClickhouseReplicationConfig,
 ): Promise<boolean> {
-  const rows = await queryJson<{ found: number }>(
-    client,
-    `SELECT 1 AS found FROM ${TABLE_DELETION_REQUESTS} FINAL
+  const result = await client.query({
+    query: `SELECT 1 AS found FROM ${TABLE_DELETION_REQUESTS} FINAL
      WHERE signal = 'feedback'
        AND predicateType = 'itemIds'
        AND has(predicateValues, {feedbackId:String})
@@ -315,8 +321,13 @@ async function hasFeedbackDeletionRequest(
        AND (organizationId = '' OR organizationId = {organizationId:String})
        AND (resourceId = '' OR resourceId = {resourceId:String})
      LIMIT 1`,
-    { feedbackId, organizationId: organizationId ?? '', resourceId: resourceId ?? '' },
-  );
+    query_params: { feedbackId, organizationId: organizationId ?? '', resourceId: resourceId ?? '' },
+    format: 'JSONEachRow',
+    clickhouse_settings: isReplicationConfigured(replication)
+      ? { ...CH_SETTINGS, select_sequential_consistency: '1' }
+      : CH_SETTINGS,
+  });
+  const rows = (await result.json()) as Array<{ found: number }>;
   return rows.length > 0;
 }
 
@@ -340,14 +351,30 @@ export async function updateFeedbackReviewStatus(
     throw feedbackNotFoundError(feedbackId);
   }
 
-  if (await hasFeedbackDeletionRequest(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
+  if (
+    await hasFeedbackDeletionRequest(
+      client,
+      feedbackId,
+      existingRow.organizationId,
+      existingRow.resourceId,
+      replication,
+    )
+  ) {
     throw feedbackNotFoundError(feedbackId);
   }
 
   const updated = rowToFeedbackRecord({ ...existingRow, reviewStatus });
   await batchCreateFeedback(client, { feedbacks: [updated] });
 
-  if (await hasFeedbackDeletionRequest(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
+  if (
+    await hasFeedbackDeletionRequest(
+      client,
+      feedbackId,
+      existingRow.organizationId,
+      existingRow.resourceId,
+      replication,
+    )
+  ) {
     await deleteFeedback(
       client,
       {

@@ -195,6 +195,13 @@ describe('ClickHouse deletion lifecycle', () => {
     expect(query.mock.calls[1]?.[0].query).toContain("predicateType = 'itemIds'");
     expect(query.mock.calls[1]?.[0].query).toContain('has(predicateValues, {feedbackId:String})');
     expect(query.mock.calls[1]?.[0].query).toContain('lastAppliedAt > toDateTime64(0, 3)');
+    // Quorum-inserted markers are read with sequential consistency on replicated clusters.
+    expect(query.mock.calls[1]?.[0].clickhouse_settings).toEqual(
+      expect.objectContaining({ select_sequential_consistency: '1' }),
+    );
+    expect(query.mock.calls[3]?.[0].clickhouse_settings).toEqual(
+      expect.objectContaining({ select_sequential_consistency: '1' }),
+    );
     expect(query).toHaveBeenNthCalledWith(
       3,
       expect.objectContaining({
@@ -228,6 +235,30 @@ describe('ClickHouse deletion lifecycle', () => {
       clickhouse_settings: { lightweight_deletes_sync: '2' },
     });
     expect(insert.mock.invocationCallOrder[1]).toBeLessThan(command.mock.invocationCallOrder[0]!);
+  });
+
+  it('reads the guard without sequential consistency when replication is not configured', async () => {
+    const { client, query } = createClient();
+    const existingRow = feedbackRecordToRow({
+      feedbackId: 'feedback-1',
+      timestamp: new Date('2026-09-03T12:00:00Z'),
+      traceId: 'trace-1',
+      feedbackSource: 'user',
+      feedbackType: 'rating',
+      value: 1,
+      reviewStatus: 'needs-review',
+    });
+    query
+      .mockResolvedValueOnce(queryResult([existingRow]))
+      .mockResolvedValueOnce(queryResult([]))
+      .mockResolvedValueOnce(queryResult([{ feedbackId: 'feedback-1', writeVersion: '0' }]))
+      .mockResolvedValueOnce(queryResult([]));
+
+    await updateFeedbackReviewStatus(client, { feedbackId: 'feedback-1', reviewStatus: 'reviewed' });
+
+    expect(query.mock.calls[1]?.[0].query).toContain('has(predicateValues, {feedbackId:String})');
+    expect(query.mock.calls[1]?.[0].clickhouse_settings).not.toHaveProperty('select_sequential_consistency');
+    expect(query.mock.calls[3]?.[0].clickhouse_settings).not.toHaveProperty('select_sequential_consistency');
   });
 
   it('is a complete no-op for empty id arrays', async () => {
