@@ -251,7 +251,7 @@ export function execute<OUTPUT = undefined>({
             // `schemaSuffix` slot (with no schema) suppresses the AI SDK's default generic
             // suffix, which would otherwise be appended when `schema` is nullish.
             ...(compactInstructions
-              ? { schema: undefined, schemaSuffix: compactInstructions }
+              ? { schema: undefined, schemaPrefix: undefined, schemaSuffix: compactInstructions }
               : { schema: responseFormat.schema }),
           });
   }
