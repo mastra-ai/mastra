@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed a subscription leak in DurableAgent. When a run finished, the auto-cleanup timer deleted the run's pubsub topic but never unsubscribed the stream reader, leaking one subscription per run (a dangling in-process listener, or a dedicated client connection and XREADGROUP loop on Redis/Valkey streams transports). `stream()`, `resume()`, and `recover()` now unsubscribe the reader when the auto-cleanup timer fires, matching `observe()`. Fixes #24070.
+Fixed a memory and connection leak in `DurableAgent`. After a run finished, the automatic cleanup timer released the run's registry state but left the stream subscription attached for the life of the process, so memory (and on Redis/Valkey streams, a client connection per run) grew with every turn. `stream()`, `resume()`, and `recover()` now release the subscription during automatic cleanup, the same way `observe()` already did. Fixes #24070.
