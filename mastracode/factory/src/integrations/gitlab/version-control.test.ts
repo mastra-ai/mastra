@@ -2,10 +2,19 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory.js';
 import { GitLabApiClient, GitLabApiError } from './api.js';
-import type { GitLabMergeRequest, GitLabNote } from './api.js';
+import type { GitLabDiscussionPosition, GitLabMergeRequest, GitLabNote } from './api.js';
 import { buildGitLabVersionControl, tokenUrl } from './version-control.js';
 
 const CONNECTION = { type: 'oauth' as const, accessToken: 'glpat-secret' };
+const POSITION: GitLabDiscussionPosition = {
+  position_type: 'text',
+  base_sha: 'base-sha',
+  start_sha: 'start-sha',
+  head_sha: 'head-sha',
+  old_path: 'src/app.ts',
+  new_path: 'src/app.ts',
+  new_line: 42,
+};
 
 function setup() {
   const storage = new SourceControlStorageInMemory('gitlab');
@@ -303,6 +312,242 @@ describe('buildGitLabVersionControl', () => {
         body: 'Invalid',
       }),
     ).rejects.toMatchObject<Partial<GitLabApiError>>({ status: 400 });
+  });
+
+  it('maps approvals to reviews and submits approve and comment reviews', async () => {
+    const result = setup();
+    vi.spyOn(result.api, 'getMergeRequestApprovals').mockResolvedValue({
+      approved: true,
+      approved_by: [{ user: { id: 3, username: 'carol' } }],
+    });
+    const approve = vi.spyOn(result.api, 'approveMergeRequest').mockResolvedValue(mergeRequest());
+    const createNote = vi
+      .spyOn(result.api, 'createMergeRequestNote')
+      .mockResolvedValue(note({ id: 94, body: 'Reviewed' }));
+
+    await expect(
+      result.versionControl.listReviews({
+        connection: CONNECTION,
+        sourceId: 'acme/app',
+        pullRequestId: '17',
+      }),
+    ).resolves.toMatchObject({
+      reviews: [{ id: '17:approval:3', author: 'carol', state: 'approved' }],
+      nextCursor: null,
+    });
+    await expect(
+      result.versionControl.submitReview({
+        connection: CONNECTION,
+        sourceId: 'acme/app',
+        pullRequestId: '17',
+        reviewId: '17:pending',
+        event: 'approve',
+      }),
+    ).resolves.toMatchObject({ state: 'approved' });
+    await expect(
+      result.versionControl.submitReview({
+        connection: CONNECTION,
+        sourceId: 'acme/app',
+        pullRequestId: '17',
+        reviewId: '17:pending',
+        event: 'comment',
+        body: ' Reviewed ',
+      }),
+    ).resolves.toMatchObject({ id: '17:comment:94', state: 'commented', body: 'Reviewed' });
+
+    expect(approve).toHaveBeenCalledWith('acme/app', 17);
+    expect(createNote).toHaveBeenCalledWith('acme/app', 17, 'Reviewed');
+  });
+
+  it('rejects ambiguous review operations with explicit 501 errors', async () => {
+    const result = setup();
+    const reference = {
+      connection: CONNECTION,
+      sourceId: 'acme/app',
+      pullRequestId: '17',
+      reviewId: '17:pending',
+    };
+
+    await expect(
+      result.versionControl.submitReview({ ...reference, event: 'request-changes', body: 'Please revise' }),
+    ).rejects.toMatchObject<Partial<GitLabApiError>>({ status: 501 });
+    await expect(result.versionControl.updateReview({ ...reference, body: 'Updated' })).rejects.toMatchObject<
+      Partial<GitLabApiError>
+    >({ status: 501 });
+    await expect(result.versionControl.dismissReview({ ...reference, message: 'Dismiss' })).rejects.toMatchObject<
+      Partial<GitLabApiError>
+    >({ status: 501 });
+    await expect(result.versionControl.deletePendingReview(reference)).rejects.toMatchObject<Partial<GitLabApiError>>({
+      status: 501,
+    });
+  });
+
+  it('creates, lists, replies to, updates, and deletes diff discussion comments', async () => {
+    const result = setup();
+    vi.spyOn(result.api, 'getMergeRequest').mockResolvedValue(
+      mergeRequest({ diff_refs: { base_sha: 'base-sha', start_sha: 'start-sha', head_sha: 'head-sha' } }),
+    );
+    const createDiscussion = vi.spyOn(result.api, 'createMergeRequestDiscussion').mockResolvedValue({
+      id: 'discussion-1',
+      notes: [{ ...note({ id: 201, body: 'Please revise' }), position: POSITION }],
+    });
+    vi.spyOn(result.api, 'listMergeRequestDiscussions').mockResolvedValue([
+      {
+        id: 'discussion-1',
+        notes: [
+          { ...note({ id: 201, body: 'Please revise' }), position: POSITION },
+          { ...note({ id: 202, body: 'General reply' }), position: null },
+        ],
+      },
+    ]);
+    const addNote = vi.spyOn(result.api, 'addMergeRequestDiscussionNote').mockResolvedValue({
+      ...note({ id: 203, body: 'Reply' }),
+      position: POSITION,
+    });
+    const updateNote = vi.spyOn(result.api, 'updateMergeRequestDiscussionNote').mockResolvedValue({
+      ...note({ id: 201, body: 'Updated' }),
+      position: POSITION,
+    });
+    const deleteNote = vi.spyOn(result.api, 'deleteMergeRequestDiscussionNote').mockResolvedValue();
+
+    await expect(
+      result.versionControl.createReviewComment({
+        connection: CONNECTION,
+        sourceId: 'acme/app',
+        pullRequestId: '17',
+        body: 'Please revise',
+        commitId: 'head-sha',
+        path: 'src/app.ts',
+        line: 42,
+        side: 'right',
+      }),
+    ).resolves.toMatchObject({
+      id: '17:discussion-1:201',
+      path: 'src/app.ts',
+      line: 42,
+      side: 'right',
+      commitId: 'head-sha',
+    });
+    expect(createDiscussion).toHaveBeenCalledWith('acme/app', 17, {
+      body: 'Please revise',
+      position: {
+        position_type: 'text',
+        base_sha: 'base-sha',
+        start_sha: 'start-sha',
+        head_sha: 'head-sha',
+        old_path: 'src/app.ts',
+        new_path: 'src/app.ts',
+        old_line: undefined,
+        new_line: 42,
+      },
+    });
+
+    await expect(
+      result.versionControl.listReviewComments({
+        connection: CONNECTION,
+        sourceId: 'acme/app',
+        pullRequestId: '17',
+      }),
+    ).resolves.toMatchObject({ comments: [{ id: '17:discussion-1:201' }], nextCursor: null });
+    await expect(
+      result.versionControl.createReviewComment({
+        connection: CONNECTION,
+        sourceId: 'acme/app',
+        pullRequestId: '17',
+        body: 'Reply',
+        replyToId: '17:discussion-1',
+      }),
+    ).resolves.toMatchObject({ id: '17:discussion-1:203', replyToId: '17:discussion-1' });
+    await result.versionControl.updateReviewComment({
+      connection: CONNECTION,
+      sourceId: 'acme/app',
+      commentId: '17:discussion-1:201',
+      body: 'Updated',
+    });
+    await result.versionControl.deleteReviewComment({
+      connection: CONNECTION,
+      sourceId: 'acme/app',
+      commentId: '17:discussion-1:201',
+    });
+
+    expect(addNote).toHaveBeenCalledWith('acme/app', 17, 'discussion-1', 'Reply');
+    expect(updateNote).toHaveBeenCalledWith('acme/app', 17, 'discussion-1', 201, 'Updated');
+    expect(deleteNote).toHaveBeenCalledWith('acme/app', 17, 'discussion-1', 201);
+  });
+
+  it('rejects new diff comments while GitLab diff refs are unavailable', async () => {
+    const result = setup();
+    vi.spyOn(result.api, 'getMergeRequest').mockResolvedValue(mergeRequest({ diff_refs: null }));
+
+    await expect(
+      result.versionControl.createReviewComment({
+        connection: CONNECTION,
+        sourceId: 'acme/app',
+        pullRequestId: '17',
+        body: 'Please revise',
+        commitId: 'head-sha',
+        path: 'src/app.ts',
+        line: 42,
+        side: 'right',
+      }),
+    ).rejects.toMatchObject<Partial<GitLabApiError>>({ status: 409 });
+  });
+
+  it('lists, adds, and removes user reviewers while rejecting teams', async () => {
+    const result = setup();
+    const existing = mergeRequest({ reviewers: [{ id: 2, username: 'bob' }] });
+    const withAlice = mergeRequest({
+      reviewers: [
+        { id: 2, username: 'bob' },
+        { id: 1, username: 'alice' },
+      ],
+    });
+    const aliceOnly = mergeRequest({ reviewers: [{ id: 1, username: 'alice' }] });
+    vi.spyOn(result.api, 'getMergeRequest')
+      .mockResolvedValueOnce(existing)
+      .mockResolvedValueOnce(existing)
+      .mockResolvedValueOnce(withAlice);
+    vi.spyOn(result.api, 'listProjectMembers').mockResolvedValue([{ id: 1, username: 'alice', name: 'Alice' }]);
+    const setReviewers = vi
+      .spyOn(result.api, 'setMergeRequestReviewers')
+      .mockResolvedValueOnce(withAlice)
+      .mockResolvedValueOnce(aliceOnly);
+
+    await expect(
+      result.versionControl.listRequestedReviewers({
+        connection: CONNECTION,
+        sourceId: 'acme/app',
+        pullRequestId: '17',
+      }),
+    ).resolves.toEqual({ users: ['bob'], teams: [] });
+    await expect(
+      result.versionControl.requestReviewers({
+        connection: CONNECTION,
+        sourceId: 'acme/app',
+        pullRequestId: '17',
+        users: ['alice'],
+      }),
+    ).resolves.toEqual({ users: ['bob', 'alice'], teams: [] });
+    await expect(
+      result.versionControl.removeRequestedReviewers({
+        connection: CONNECTION,
+        sourceId: 'acme/app',
+        pullRequestId: '17',
+        users: ['bob'],
+      }),
+    ).resolves.toEqual({ users: ['alice'], teams: [] });
+
+    expect(result.api.listProjectMembers).toHaveBeenCalledWith('acme/app', { query: 'alice' });
+    expect(setReviewers).toHaveBeenNthCalledWith(1, 'acme/app', 17, [2, 1]);
+    expect(setReviewers).toHaveBeenNthCalledWith(2, 'acme/app', 17, [1]);
+    await expect(
+      result.versionControl.requestReviewers({
+        connection: CONNECTION,
+        sourceId: 'acme/app',
+        pullRequestId: '17',
+        teams: ['backend'],
+      }),
+    ).rejects.toMatchObject<Partial<GitLabApiError>>({ status: 501 });
   });
 
   it('rejects malformed connection metadata and repository references', async () => {
