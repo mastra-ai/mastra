@@ -1283,7 +1283,7 @@ export class DatasetsMySQL extends DatasetsStorage {
         historyRows = rows.map(row => this.mapItemFull(row));
       }
 
-      const plan = this.planDatasetItemBatch(input.items, historyRows, randomUUID);
+      const plan = this.planDatasetItemBatch(input.items, historyRows, () => globalThis.crypto.randomUUID());
       const existingItems = new Map<string, DatasetItem>(
         [...plan.existingCurrentItems].map(([id, row]) => [id, this.datasetItemFromRow(row)]),
       );

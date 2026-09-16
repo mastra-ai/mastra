@@ -951,7 +951,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         const plan = this.planDatasetItemBatch(
           input.items,
           historyRows.map(row => this.transformItemRowFull(row)),
-          randomUUID,
+          () => globalThis.crypto.randomUUID(),
         );
         const resolved = new Map<string, DatasetItem>(
           [...plan.existingCurrentItems].map(([id, row]) => [id, this.datasetItemFromRow(row)]),

@@ -1311,7 +1311,9 @@ export const mastra = new Mastra({
           const toolBundlePaths = Object.keys(first).filter(path => path.startsWith('tools/') && path.endsWith('.mjs'));
           expect(toolBundlePaths.length).toBeGreaterThan(0);
           expect(toolBundlePaths).toEqual(
-            expect.arrayContaining([expect.stringMatching(/^tools\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\.mjs$/)]),
+            expect.arrayContaining([
+              expect.stringMatching(/^tools\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\.mjs$/),
+            ]),
           );
           expect(second).toEqual(first);
         } finally {

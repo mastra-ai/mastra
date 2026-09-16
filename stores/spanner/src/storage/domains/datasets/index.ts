@@ -1266,7 +1266,7 @@ export class DatasetsSpanner extends DatasetsStorage {
               });
               historyRows = (rows as Array<Record<string, any>>).map(rowToItemRow);
             }
-            const plan = this.planDatasetItemBatch(input.items, historyRows, randomUUID);
+            const plan = this.planDatasetItemBatch(input.items, historyRows, () => globalThis.crypto.randomUUID());
             const resolved = new Map<string, DatasetItem>(
               [...plan.existingCurrentItems].map(([id, row]) => [id, this.datasetItemFromRow(row)]),
             );

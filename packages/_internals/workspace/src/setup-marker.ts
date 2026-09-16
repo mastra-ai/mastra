@@ -19,7 +19,10 @@ export function normalizeSetupCommands(setupCommand: string | readonly string[] 
 /** The marker content for a setup command list: `sha256:<hex>` over the commands joined by newlines. */
 export async function setupMarkerContent(setupCommand: string | readonly string[] | undefined): Promise<string> {
   const digest = Buffer.from(
-    await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalizeSetupCommands(setupCommand).join('\n'))),
+    await globalThis.crypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(normalizeSetupCommands(setupCommand).join('\n')),
+    ),
   ).toString('hex');
   return `sha256:${digest}`;
 }

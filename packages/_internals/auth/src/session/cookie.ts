@@ -268,5 +268,4 @@ export class CookieSessionProvider implements ISessionProvider {
     }
     return new TextDecoder().decode(bytes);
   }
-
 }

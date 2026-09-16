@@ -6170,8 +6170,7 @@ export class Agent<
               // A supplied id is only trusted alongside resumeData: on fresh calls any
               // echoed id — model-authored or hook-pinned — is replaced with a unique id,
               // otherwise two independent calls collide on one cached Run (#23739).
-              runIdToUse =
-                resumeData && suspendedToolRunId ? suspendedToolRunId : globalThis.crypto.randomUUID();
+              runIdToUse = resumeData && suspendedToolRunId ? suspendedToolRunId : globalThis.crypto.randomUUID();
               this.logger.debug('Executing workflow as tool', {
                 agent: this.name,
                 workflow: workflowName,

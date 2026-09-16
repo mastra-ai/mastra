@@ -359,17 +359,21 @@ export async function buildCapabilities(
       const license = await getSafeLicenseSummary();
       try {
         const ip = getRequestIp(request);
-        captureEEEvent('ee_feature_used', user.id || license.anonymousId || (await getEETelemetryFallbackDistinctId()), {
-          feature: 'rbac',
-          user_id: user.id,
-          organization_membership_id: user.metadata?.['organizationMembershipId'],
-          role_count: roles.length,
-          permission_count: permissions.length,
-          $ip: ip,
-          license_valid: license.valid,
-          license_hash: license.licenseHash,
-          is_dev_environment: license.isDevEnvironment,
-        });
+        captureEEEvent(
+          'ee_feature_used',
+          user.id || license.anonymousId || (await getEETelemetryFallbackDistinctId()),
+          {
+            feature: 'rbac',
+            user_id: user.id,
+            organization_membership_id: user.metadata?.['organizationMembershipId'],
+            role_count: roles.length,
+            permission_count: permissions.length,
+            $ip: ip,
+            license_valid: license.valid,
+            license_hash: license.licenseHash,
+            is_dev_environment: license.isDevEnvironment,
+          },
+        );
       } catch {
         // Telemetry must never affect auth or EE feature behavior.
       }
