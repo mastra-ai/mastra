@@ -194,7 +194,8 @@ unsubscribe()
   {
     name: 'browser',
     type: 'DynamicArgument<MastraBrowser | undefined>',
-    description: 'Static browser or per-session browser factory.',
+    description:
+      'Static browser or per-session browser factory. A factory result is owned by its live session and is resolved into agent tools using that session identity.',
     isOptional: true,
   },
   {
@@ -707,3 +708,9 @@ await controller.stopIntervals()
 - [Agents](/docs/agents/overview)
 - [Sandbox](/docs/sandbox/overview)
 - [Channels](/docs/channels)
+
+### Session browser ownership
+
+A browser factory runs when the controller creates a session. Agent preparation retrieves that same live session's browser; it doesn't invoke the factory again. An explicitly configured agent browser takes precedence. Session identity includes the controller, resource, scope, thread, and live session incarnation, so a deleted session's request context can't resolve a replacement browser.
+
+The controller closes factory-owned browsers when their final owning session is deleted. A failed close keeps the session registered for a later deletion retry. Static controller browsers and explicit session overrides remain caller-owned. Changing a session's resource or thread makes its previous factory browser unavailable to new runs; deletion still closes that retained browser. Keep factories lazy: don't launch a provider session during construction or initialization hooks.

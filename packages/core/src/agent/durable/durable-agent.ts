@@ -1535,6 +1535,10 @@ export class DurableAgent<
     return this.#wrappedAgent.browser;
   }
 
+  override getBrowser(options?: Parameters<Agent['getBrowser']>[0]) {
+    return this.#wrappedAgent.getBrowser(options);
+  }
+
   override setBrowser(browser: any) {
     this.#wrappedAgent.setBrowser(browser);
   }

@@ -1013,6 +1013,8 @@ export interface AgentControllerRequestState<TState = unknown> {
 }
 
 export interface AgentControllerRequestSession<TState = unknown> {
+  /** Identifies this live session incarnation; never use it as persisted identity. */
+  runtimeId?: string;
   /** Stable session identifier (mirrors SessionRecord.id in storage). */
   id: string;
   /** Stable session owner (mirrors SessionRecord.ownerId in storage). */

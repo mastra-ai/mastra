@@ -2952,7 +2952,29 @@ export class Session<TState = unknown> {
    */
   readonly #tags: Record<string, string>;
   readonly #workspace: Workspace | undefined;
-  browser?: MastraBrowser;
+  #browser?: MastraBrowser;
+  #browserIdentity?: { resourceId: string; threadId: string | null };
+
+  /** The browser bound to this session's current identity, if available. */
+  get browser(): MastraBrowser | undefined {
+    if (
+      this.#browserIdentity &&
+      (this.#browserIdentity.resourceId !== this.identity.getResourceId() ||
+        this.#browserIdentity.threadId !== this.thread.getId())
+    )
+      return undefined;
+    return this.#browser;
+  }
+
+  set browser(browser: MastraBrowser | undefined) {
+    this.#browser = browser;
+    this.#browserIdentity = undefined;
+  }
+
+  /** @internal Bind a controller factory result to the identity it was created for. */
+  __bindBrowserIdentity(): void {
+    this.#browserIdentity = { resourceId: this.identity.getResourceId(), threadId: this.thread.getId() };
+  }
 
   constructor({
     resourceId,

@@ -685,7 +685,7 @@ export class Agent<
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
   #maxProcessorRetries?: number;
   #errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
-  #browser?: MastraBrowser;
+  #browser?: DynamicArgument<MastraBrowser | undefined, TRequestContext>;
   #hasExplicitBrowser = false;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
@@ -884,7 +884,7 @@ export class Agent<
     if (config.browser) {
       // Runtime check: Agent requires SDK providers (AgentBrowser, StagehandBrowser)
       // CLI providers (BrowserViewer) should be used with Workspace instead
-      if (config.browser.providerType !== 'sdk') {
+      if (typeof config.browser !== 'function' && config.browser.providerType !== 'sdk') {
         const mastraError = new MastraError({
           id: 'AGENT_INVALID_BROWSER_PROVIDER',
           domain: ErrorDomain.AGENT,
@@ -1333,7 +1333,29 @@ export class Agent<
    * like screencast streaming and input injection.
    */
   get browser(): MastraBrowser | undefined {
-    return this.#browser;
+    return typeof this.#browser === 'function' ? undefined : this.#browser;
+  }
+
+  /** Resolve the browser for this request without changing shared agent state. */
+  async getBrowser({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}): Promise<
+    MastraBrowser | undefined
+  > {
+    const browser =
+      typeof this.#browser === 'function'
+        ? await this.#browser({
+            requestContext: requestContext as RequestContext<TRequestContext>,
+            mastra: this.#mastra,
+          })
+        : this.#browser;
+    if (browser && browser.providerType !== 'sdk' && this.#hasExplicitBrowser) {
+      throw new MastraError({
+        id: 'AGENT_INVALID_BROWSER_PROVIDER',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent.browser requires an SDK provider (providerType: 'sdk'), but received '${browser.providerType}'.`,
+      });
+    }
+    return browser;
   }
 
   /**
@@ -1407,7 +1429,7 @@ export class Agent<
    *
    * @param browser - The new browser instance, or undefined to disable browser tools
    */
-  setBrowser(browser: MastraBrowser | undefined): void {
+  setBrowser(browser: DynamicArgument<MastraBrowser | undefined, TRequestContext>): void {
     this.#browser = browser;
     // Mark as explicit so workspace browser doesn't overwrite
     // Setting to undefined is also explicit (disabling browser tools)
@@ -2000,7 +2022,8 @@ export class Agent<
     const channelProcessors = this.#agentChannels ? this.#agentChannels.getInputProcessors(configuredProcessors) : [];
 
     // Get browser context processors (with deduplication)
-    const browserProcessors = this.#browser ? this.#browser.getInputProcessors(configuredProcessors) : [];
+    const browser = await this.getBrowser({ requestContext });
+    const browserProcessors = browser ? browser.getInputProcessors(configuredProcessors) : [];
 
     // Memory processors should run first (to fetch history, semantic recall, working memory)
     // Workspace instructions run after memory
@@ -4195,12 +4218,13 @@ export class Agent<
     }
 
     // Check if browser is configured
-    if (!this.#browser) {
+    const browser = await this.getBrowser({ requestContext });
+    if (!browser) {
       return convertedBrowserTools;
     }
 
     // Get browser tools from the provider
-    const browserTools = this.#browser.getTools();
+    const browserTools = browser.getTools();
 
     if (Object.keys(browserTools).length > 0) {
       this.logger.debug(`[Agent:${this.name}] - Adding browser tools: ${Object.keys(browserTools).join(', ')}`, {
@@ -7439,7 +7463,10 @@ export class Agent<
 
     // Inject browser context for BrowserContextProcessor
     // Check both agent's browser (SDK providers) and workspace's browser (CLI providers)
-    const browser = this.#browser ?? earlyWorkspace?.browser;
+    const browser =
+      (await this.getBrowser({ requestContext })) ?? (this.#hasExplicitBrowser ? undefined : earlyWorkspace?.browser);
+    // A context may be reused for another session; never retain closures over its browser.
+    if (typeof this.#browser === 'function') requestContext.delete('browser');
     if (browser && !requestContext.has('browser')) {
       // Get threadId early for browser context - can come from requestContext, options, or snapshot
       // Normalize memory.thread which can be a string or { id, ... } object

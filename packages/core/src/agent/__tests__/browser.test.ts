@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import type { MastraBrowser } from '../../browser';
 import { createTool } from '../../tools';
+import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 
 function createMockModel() {
@@ -68,6 +69,51 @@ function createMockBrowser(
 }
 
 describe('Agent browser integration', () => {
+  it('resolves concurrent request browsers without exposing the last browser on the shared agent', async () => {
+    const a = createMockBrowser(['browser_a']);
+    const b = createMockBrowser(['browser_b']);
+    const agent = new Agent({
+      id: 'dynamic-browser',
+      name: 'dynamic-browser',
+      instructions: 'test',
+      model: createMockModel(),
+      browser: async ({ requestContext }) => (requestContext.get('owner') === 'a' ? a : b),
+    });
+    const contextA = new RequestContext();
+    contextA.set('owner', 'a');
+    const contextB = new RequestContext();
+    contextB.set('owner', 'b');
+    expect(
+      await Promise.all([
+        agent.getBrowser({ requestContext: contextA }),
+        agent.getBrowser({ requestContext: contextB }),
+      ]),
+    ).toEqual([a, b]);
+    expect(agent.browser).toBeUndefined();
+    await Promise.all([
+      agent.generate('test', { requestContext: contextA }),
+      agent.generate('test', { requestContext: contextB }),
+    ]);
+    expect(a.getInputProcessors).toHaveBeenCalled();
+    expect(b.getInputProcessors).toHaveBeenCalled();
+    expect(contextA.get('browser').sessionId).toBe(a.id);
+    contextA.set('owner', 'b');
+    await agent.generate('test', { requestContext: contextA });
+    expect(contextA.get('browser').sessionId).toBe(b.id);
+    expect(agent.browser).toBeUndefined();
+  });
+
+  it('validates a dynamically resolved SDK provider', async () => {
+    const agent = new Agent({
+      id: 'invalid-dynamic-browser',
+      name: 'invalid-dynamic-browser',
+      instructions: 'test',
+      model: createMockModel(),
+      browser: async () => ({ providerType: 'cli' }) as MastraBrowser,
+    });
+    await expect(agent.getBrowser()).rejects.toThrow('SDK provider');
+  });
+
   describe('browser getter', () => {
     it('returns undefined when no browser is configured', () => {
       const agent = new Agent({
