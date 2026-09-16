@@ -1055,7 +1055,7 @@ export const mastra = new Mastra({
           });
           const output = `${buildResult.stdout}\n${buildResult.stderr}`;
 
-          expect(buildResult.exitCode, output).not.toBe(0);
+          expect(buildResult.exitCode, output).toBe(1);
           expect(output).toContain('Missing "./missing" specifier in "@inner/subpath-only" package');
           expect(output).toContain('@inner/subpath-only/missing');
         } finally {
