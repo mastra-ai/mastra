@@ -12,6 +12,7 @@ import type { APIRequestContext, APIResponse, Page, TestInfo } from '@playwright
 
 const VERSION_LABELS_BASE_URL = 'http://localhost:4112';
 const AGENT_ID = 'version-label-pinning-agent';
+const AGENT_NAME = 'Version Label Pinning Agent';
 const CUSTOM_LABEL = 'pr-101';
 const VERSION_ONE_INSTRUCTIONS = 'E2E_VERSION_ONE Ask the user before completing the pinned run.';
 const VERSION_TWO_INSTRUCTIONS = 'E2E_VERSION_TWO Ask the user before completing the pinned run.';
@@ -33,7 +34,7 @@ async function resetVersionLabelStorage(request: APIRequestContext) {
 async function seedVersionHistory(request: APIRequestContext) {
   const createInput = {
     id: AGENT_ID,
-    name: 'Version Label Pinning Agent',
+    name: AGENT_NAME,
     instructions: VERSION_ONE_INSTRUCTIONS,
     model: { provider: 'openai', name: 'gpt-4o-mini' },
     autoPublish: true,
@@ -95,6 +96,36 @@ async function expectCustomLabelTarget(request: APIRequestContext, versionId: st
 async function chooseOption(page: Page, triggerName: string, optionName: string) {
   await page.getByLabel(triggerName, { exact: true }).click();
   await page.getByRole('option', { name: optionName, exact: true }).click();
+}
+
+async function openVersionLabelManagerFromAgents(page: Page) {
+  await page.goto('/agents');
+  const agentLink = page.getByRole('link', { name: new RegExp(AGENT_NAME) }).first();
+  await expect(agentLink).toBeVisible({ timeout: 10_000 });
+  await agentLink.click();
+  await expect(page).toHaveURL(new RegExp(`/agents/${AGENT_ID}/chat/new(?:\\?.*)?$`));
+
+  const editorTab = page.getByRole('tab', { name: 'Editor', exact: true });
+  await expect(editorTab).toBeEnabled();
+  await editorTab.click();
+  await expect(page).toHaveURL(new RegExp(`/agents/${AGENT_ID}/editor(?:\\?.*)?$`));
+
+  const manageLabels = page.getByRole('button', { name: 'Manage labels', exact: true });
+  await expect(manageLabels).toBeVisible({ timeout: 10_000 });
+  await manageLabels.click();
+
+  const editorManager = page.getByRole('dialog', { name: 'Manage version labels' });
+  await expect(editorManager).toBeVisible();
+  await editorManager.getByRole('button', { name: 'Close' }).click();
+  await expect(editorManager).toBeHidden();
+
+  await page.getByRole('link', { name: 'Full configuration', exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/cms/agents/${AGENT_ID}/edit(?:/instruction-blocks)?(?:\\?.*)?$`));
+
+  await page.getByRole('button', { name: 'Manage labels', exact: true }).click();
+  const manager = page.getByRole('dialog', { name: 'Manage version labels' });
+  await expect(manager).toBeVisible();
+  return manager;
 }
 
 async function chooseRunTargetOption(page: Page, optionName: string) {
@@ -255,9 +286,7 @@ test.describe('Agent version-label run pinning', () => {
 
       // A release manager creates the movable pointer through Studio. The
       // nested dialog must return keyboard focus before the pointer is saved.
-      await managementPage.goto(`/cms/agents/${AGENT_ID}/edit/instruction-blocks`);
-      await managementPage.getByRole('button', { name: 'Manage labels' }).click();
-      const manager = managementPage.getByRole('dialog', { name: 'Manage version labels' });
+      const manager = await openVersionLabelManagerFromAgents(managementPage);
       const createTrigger = manager.getByRole('button', { name: 'Create custom label' });
       await createTrigger.click();
       const createDialog = managementPage.getByRole('dialog', { name: 'Create custom label' });
@@ -275,8 +304,7 @@ test.describe('Agent version-label run pinning', () => {
       await managementPage.keyboard.press('Enter');
       const createTargetListbox = managementPage.getByRole('listbox');
       await expect(createTargetListbox).toBeVisible();
-      await managementPage.keyboard.press('End');
-      await managementPage.keyboard.press('Enter');
+      await createTargetListbox.getByRole('option', { name: 'v1 · Initial version', exact: true }).press('Enter');
       await expect(createTargetListbox).toBeHidden();
       await expect(createTarget).toContainText('v1 · Initial version');
       await expect(createTarget).toBeFocused();
@@ -297,9 +325,7 @@ test.describe('Agent version-label run pinning', () => {
       // A second manager opens a v1 move intent before the first manager changes
       // the pointer. Its later submit must use the stale v1 revision exactly once.
       const staleManagementPage = await context.newPage();
-      await staleManagementPage.goto(`/cms/agents/${AGENT_ID}/edit/instruction-blocks`);
-      await staleManagementPage.getByRole('button', { name: 'Manage labels' }).click();
-      const staleManager = staleManagementPage.getByRole('dialog', { name: 'Manage version labels' });
+      const staleManager = await openVersionLabelManagerFromAgents(staleManagementPage);
       const staleLabelRow = staleManager
         .getByRole('list', { name: 'Agent version labels' })
         .getByRole('listitem')
@@ -330,6 +356,7 @@ test.describe('Agent version-label run pinning', () => {
       );
       await runPage.goto(`/agents/${AGENT_ID}/editor`);
       await expectSuccessfulResponse(await subscriptionReady);
+      await expect(runPage.getByLabel('Run target', { exact: true })).toBeEnabled({ timeout: 20_000 });
       await chooseRunTargetOption(runPage, `${CUSTOM_LABEL} · v1`);
       const runTarget = runPage.getByLabel('Run target', { exact: true });
       const composer = runPage.getByPlaceholder('Enter your message...');

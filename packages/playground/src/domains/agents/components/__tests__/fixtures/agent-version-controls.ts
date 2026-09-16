@@ -1,11 +1,33 @@
 import type { ListAgentVersionsResponse } from '@mastra/client-js';
 
+import type { AuthCapabilities } from '@/domains/auth/types';
+
 export const VERSION_CONTROLS_AGENT_ID = 'version-controls-agent';
 export const OLDER_VERSION_ID = 'version-1';
 export const PRODUCTION_VERSION_ID = 'version-2';
 export const NEWER_VERSION_ID = 'version-3';
 export const PAGINATED_PRODUCTION_VERSION_ID = 'version-5';
 export const PAGINATED_OLDER_VERSION_ID = 'version-4';
+
+export const versionControlsPublisherCapabilities = {
+  enabled: true,
+  login: null,
+  user: { id: 'publisher-1' },
+  capabilities: {
+    user: true,
+    session: true,
+    sso: false,
+    rbac: true,
+    acl: false,
+  },
+  access: {
+    roles: ['publisher'],
+    permissions: [
+      `stored-agents:read:${VERSION_CONTROLS_AGENT_ID}`,
+      `stored-agents:publish:${VERSION_CONTROLS_AGENT_ID}`,
+    ],
+  },
+} satisfies AuthCapabilities;
 
 type AgentVersion = ListAgentVersionsResponse['versions'][number];
 

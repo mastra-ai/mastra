@@ -1,14 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { Check, Link as LinkIcon, Pencil, SlidersHorizontal, X } from 'lucide-react';
+import { Check, Link as LinkIcon, SlidersHorizontal, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router';
 
-import { useAgent } from '../hooks/use-agent';
 import { AgentEntityHeader } from './agent-entity-header';
-import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
-import { useLinkComponent } from '@/lib/framework';
 import { withStudioBasePath } from '@/lib/studio-base-path';
 
 export interface AgentViewHeaderProps {
@@ -19,19 +15,12 @@ export interface AgentViewHeaderProps {
 export function AgentViewHeader({ agentId, view }: AgentViewHeaderProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { data: agent } = useAgent(agentId);
-  const { canCreateAgent } = useCanCreateAgent();
-  const { Link: FrameworkLink, paths } = useLinkComponent();
 
   const sessionUrl = `${window.location.origin}${withStudioBasePath(`/agents/${encodeURIComponent(agentId)}/session`)}`;
   const { handleCopy: handleShareLink, isCopied: isShareCopied } = useCopyToClipboard({
     text: sessionUrl,
     copyMessage: 'Session URL copied to clipboard!',
   });
-
-  const isStoredAgent = agent?.source === 'stored';
-  const editPath = paths.cmsAgentEditLink(agentId);
-  const showEditButton = canCreateAgent && isStoredAgent && Boolean(editPath);
 
   const handleToggle = () => {
     if (view === 'chat') {
@@ -56,14 +45,6 @@ export function AgentViewHeader({ agentId, view }: AgentViewHeaderProps) {
           <AgentEntityHeader agentId={agentId} />
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          {showEditButton && (
-            <Button variant="outline" size="sm" as={FrameworkLink} to={editPath}>
-              <Icon size="sm">
-                <Pencil />
-              </Icon>
-              Edit
-            </Button>
-          )}
           <Button
             variant="default"
             type="button"

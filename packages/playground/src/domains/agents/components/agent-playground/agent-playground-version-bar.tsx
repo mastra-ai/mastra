@@ -26,6 +26,8 @@ import { useMemo, useState, useCallback } from 'react';
 import type { AgentVersionLabelErrorCode } from '../../hooks/agent-version-label-error';
 import type { AgentVersionIntegrityRecovery } from '../../hooks/use-agent-version-mutation-integrity';
 import { useAllAgentVersions } from '../../hooks/use-agent-versions';
+import type { AgentVersionLabelRefreshOptions } from '../agent-version-label-dialogs';
+import { AgentVersionLabelManager } from '../agent-version-label-manager';
 
 type AgentVersionListItem = NonNullable<ReturnType<typeof useAllAgentVersions>['data']>['versions'][number];
 
@@ -61,11 +63,13 @@ interface AgentPlaygroundVersionBarProps {
   readOnly: boolean;
   canPublish: boolean;
   isPublishAccessLoading: boolean;
+  isPublishAccessError?: boolean;
   isVersionHistoryError?: boolean;
   isProductionStateError?: boolean;
   isProductionStateFetching?: boolean;
   onRetryProductionState?: () => Promise<void>;
   integrityRecovery?: AgentVersionIntegrityRecovery;
+  isSourceProviderBacked?: boolean;
   isCodeSourceAgent?: boolean;
   showCodeModeActions?: boolean;
   canOpenPr?: boolean;
@@ -105,11 +109,13 @@ export function AgentPlaygroundVersionBar({
   readOnly,
   canPublish,
   isPublishAccessLoading,
+  isPublishAccessError = false,
   isVersionHistoryError = false,
   isProductionStateError = false,
   isProductionStateFetching = false,
   onRetryProductionState,
   integrityRecovery,
+  isSourceProviderBacked = false,
   isCodeSourceAgent = false,
   showCodeModeActions = false,
   canOpenPr = false,
@@ -129,7 +135,12 @@ export function AgentPlaygroundVersionBar({
   const [changeMessage, setChangeMessage] = useState('');
   const isUpdatingProduction = isPublishing || isProductionSubmitting;
 
-  const { data, isError: isVersionQueryError } = useAllAgentVersions({
+  const {
+    data,
+    isLoading: isVersionHistoryLoading,
+    isError: isVersionQueryError,
+    refetch: refetchVersions,
+  } = useAllAgentVersions({
     agentId,
     params: { orderBy: { direction: 'DESC' } },
   });
@@ -218,6 +229,14 @@ export function AgentPlaygroundVersionBar({
     if (!onRetryProductionState) return;
     void onRetryProductionState().catch(() => undefined);
   }, [onRetryProductionState]);
+
+  const handleRefreshVersions = useCallback(
+    async (options?: AgentVersionLabelRefreshOptions): Promise<string | null> => {
+      const result = await refetchVersions({ throwOnError: options?.throwOnError });
+      return result.data?.versions.find(version => version.labels?.includes('production'))?.id ?? null;
+    },
+    [refetchVersions],
+  );
 
   const openProductionDialog = useCallback(() => {
     if (!selectedVersion || isVersionHistoryUnverified || isProductionMutationBlocked) return;
@@ -353,7 +372,7 @@ export function AgentPlaygroundVersionBar({
 
   return {
     versionSelector: (
-      <div className="border-border1 bg-surface3 flex items-center gap-2 border-b px-4 py-3">
+      <div className="border-border1 bg-surface3 flex flex-wrap items-center gap-2 border-b px-4 py-3">
         {versions.length > 0 ? (
           <Combobox
             options={versionOptions}
@@ -386,6 +405,23 @@ export function AgentPlaygroundVersionBar({
             {versionInfoText}
           </TooltipContent>
         </Tooltip>
+
+        <AgentVersionLabelManager
+          agentId={agentId}
+          versions={versions}
+          activeVersionId={activeVersionId}
+          isSourceProviderBacked={isSourceProviderBacked}
+          canPublish={canPublish}
+          isPublishPermissionLoading={isPublishAccessLoading}
+          isPublishPermissionError={isPublishAccessError}
+          isVersionHistoryLoading={isVersionHistoryLoading}
+          isVersionHistoryError={isVersionHistoryUnverified}
+          isProductionStateError={isProductionStateError}
+          isProductionStateFetching={isProductionStateFetching}
+          onRetryProductionState={onRetryProductionState}
+          integrityRecovery={integrityRecovery}
+          onRefreshVersions={handleRefreshVersions}
+        />
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {readOnly && <Badge variant="warning">Read-only</Badge>}

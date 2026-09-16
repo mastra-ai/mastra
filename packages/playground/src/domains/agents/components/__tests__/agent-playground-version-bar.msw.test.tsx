@@ -12,8 +12,10 @@ import {
   PRODUCTION_VERSION_ID,
   secondVersionControlsPage,
   VERSION_CONTROLS_AGENT_ID,
+  versionControlsPublisherCapabilities,
   versionControlsHistory,
 } from './fixtures/agent-version-controls';
+import { mutableManagerVersionLabels, mutableVersionLabelPackages } from './fixtures/agent-version-labels';
 import { agentVersionQueryKeys } from '@/domains/agents/hooks/agent-version-query-keys';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -65,6 +67,28 @@ async function openVersionSelector() {
 afterEach(() => cleanup());
 
 describe('AgentPlaygroundVersionBar', () => {
+  describe('when an authorized publisher opens a stored agent in the normal Editor', () => {
+    it('opens the existing version-label manager from the version bar', async () => {
+      registerVersions();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(mutableVersionLabelPackages)),
+        http.get(`${TEST_BASE_URL}/api/auth/capabilities`, () =>
+          HttpResponse.json(versionControlsPublisherCapabilities),
+        ),
+        http.get(`${TEST_BASE_URL}/api/stored/agents/${VERSION_CONTROLS_AGENT_ID}/labels`, () =>
+          HttpResponse.json(mutableManagerVersionLabels),
+        ),
+      );
+      renderWithProviders(<VersionBarHarness {...createProps()} />);
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Manage labels' }));
+
+      const manager = await screen.findByRole('dialog', { name: 'Manage version labels' });
+      const labelList = await within(manager).findByRole('list', { name: 'Agent version labels' });
+      expect(within(labelList).getByText('preview')).not.toBeNull();
+    });
+  });
+
   it('uses Production for the active stored-agent version and explains that activation only moves a pointer', async () => {
     registerVersions();
     renderWithProviders(<VersionBarHarness {...createProps()} />);

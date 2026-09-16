@@ -1,5 +1,8 @@
 import { coreFeatures } from '@mastra/core/features';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { SlidersHorizontal } from 'lucide-react';
 import { useParams, useLocation } from 'react-router';
 import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
 import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
@@ -7,18 +10,22 @@ import { AgentTopBarRunOptions } from '@/domains/agents/components/agent-top-bar
 import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
 import { ReviewQueueProvider } from '@/domains/agents/context/review-queue-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
+import { useAgentVersionAccess } from '@/domains/auth/hooks/use-agent-version-access';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
 import { GenerationProvider } from '@/domains/datasets/context/generation-context';
 import { cleanProviderId } from '@/domains/llm/utils';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
+import { useLinkComponent } from '@/lib/framework';
 
 export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const { agentId } = useParams();
   const location = useLocation();
   const { isCmsAvailable } = useIsCmsAvailable();
   const { hasObservability } = useHasObservability();
+  const { Link: FrameworkLink, paths } = useLinkComponent();
+  const versionAccess = useAgentVersionAccess(agentId);
 
   const isExperimentalFeatures = coreFeatures.has('datasets');
   const showPlayground = isCmsAvailable && isExperimentalFeatures;
@@ -45,6 +52,8 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
 
   const showTopBarRunOptions =
     (activeTab === 'evaluate' || activeTab === 'review') && (showPlayground || showObservability);
+  const fullConfigurationPath = agentId ? paths.cmsAgentEditLink(agentId) : '';
+  const showFullConfiguration = isCmsAvailable && versionAccess.canRead && Boolean(fullConfigurationPath);
 
   const content = (
     <MainContentLayout>
@@ -54,7 +63,19 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
         showPlayground={showPlayground}
         showObservability={showObservability}
         rightSlot={
-          showTopBarRunOptions ? <AgentTopBarRunOptions requestContextSchema={requestContextSchema} /> : undefined
+          showTopBarRunOptions || showFullConfiguration ? (
+            <>
+              {showTopBarRunOptions ? <AgentTopBarRunOptions requestContextSchema={requestContextSchema} /> : null}
+              {showFullConfiguration ? (
+                <Button variant="default" size="sm" as={FrameworkLink} to={fullConfigurationPath}>
+                  <Icon size="sm">
+                    <SlidersHorizontal />
+                  </Icon>
+                  Full configuration
+                </Button>
+              ) : null}
+            </>
+          ) : undefined
         }
       />
       {children}

@@ -87,7 +87,9 @@ function LeftPanel({
   readOnly,
   canPublish,
   isPublishAccessLoading,
+  isPublishAccessError,
   isVersionHistoryError,
+  isSourceProviderBacked,
   isCodeSourceAgent,
   showCodeModeActions,
   canOpenPr,
@@ -116,7 +118,9 @@ function LeftPanel({
   readOnly: boolean;
   canPublish: boolean;
   isPublishAccessLoading: boolean;
+  isPublishAccessError: boolean;
   isVersionHistoryError: boolean;
+  isSourceProviderBacked: boolean;
   isCodeSourceAgent?: boolean;
   showCodeModeActions?: boolean;
   canOpenPr?: boolean;
@@ -145,7 +149,9 @@ function LeftPanel({
     readOnly,
     canPublish,
     isPublishAccessLoading,
+    isPublishAccessError,
     isVersionHistoryError,
+    isSourceProviderBacked,
     isCodeSourceAgent,
     showCodeModeActions,
     canOpenPr,
@@ -392,7 +398,9 @@ export function AgentPlaygroundView({
           readOnly={readOnly}
           canPublish={versionAccess.canPublish}
           isPublishAccessLoading={versionAccess.isLoading || versionAccess.isError}
+          isPublishAccessError={versionAccess.isError}
           isVersionHistoryError={isVersionsError}
+          isSourceProviderBacked={isSourceProviderBacked}
           isCodeSourceAgent={isCodeSourceAgent}
           showCodeModeActions={showCodeModeActions}
           canOpenPr={canOpenPr}
