@@ -1154,6 +1154,42 @@ describe('om-tools', () => {
         expect(result.text).toContain('Same resource other thread message');
       });
 
+      it('should fall back to the next message in the cursor message thread, not the active thread', async () => {
+        await seedSameResourceSiblingThread();
+
+        await memory.saveMessages({
+          messages: [
+            {
+              id: 'same-resource-other-msg-2',
+              threadId: 'same-resource-other-thread',
+              resourceId,
+              role: 'assistant',
+              content: { format: 2, parts: [{ type: 'text', text: 'Sibling thread follow-up' }] },
+              createdAt: new Date('2024-01-01T12:30:00Z'),
+            },
+            {
+              id: 'active-thread-later-msg',
+              threadId,
+              resourceId,
+              role: 'assistant',
+              content: { format: 2, parts: [{ type: 'text', text: 'Active thread later message' }] },
+              createdAt: new Date('2024-01-01T13:00:00Z'),
+            },
+          ],
+        });
+
+        const tool = recallTool(undefined, { retrievalScope: 'resource', searchEnabled: false });
+
+        const result: any = await tool.execute?.(
+          { mode: 'messages', cursor: 'same-resource-other-msg-1', partIndex: 99 },
+          { memory, agent: { threadId, resourceId } } as any,
+        );
+
+        expect(result.messageId).toBe('same-resource-other-msg-2');
+        expect(result.text).toContain('Sibling thread follow-up');
+        expect(result.text).not.toContain('Active thread later message');
+      });
+
       it('should reject a cross-resource cursor outright in thread scope without disclosing anything', async () => {
         const tool = recallTool(undefined, { retrievalScope: 'thread', searchEnabled: false });
 
