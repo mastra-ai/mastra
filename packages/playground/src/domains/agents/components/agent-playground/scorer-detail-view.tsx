@@ -39,10 +39,10 @@ export function ScorerDetailView({
     );
   }
 
-  const name = scorerData.scorer?.name || scorerId;
-  const description = scorerData.scorer?.description;
+  const name = scorerData.scorer.config.name || scorerId;
+  const description = scorerData.scorer.config.description;
   const isCode = scorerData.source === 'code';
-  const isTrajectory = scorerData.scorer?.config?.type === 'trajectory';
+  const isTrajectory = scorerData.scorer.config.type === 'trajectory';
 
   return (
     <div className="flex h-full flex-col overflow-hidden">

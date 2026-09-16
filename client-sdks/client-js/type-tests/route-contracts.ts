@@ -9,6 +9,8 @@ import type {
   CreateDatasetParams,
   CreateResponseParams,
   DatasetExperiment,
+  DatasetItem,
+  DatasetItemVersionResponse,
   DatasetRecord,
   GetAgentResponse,
   GetToolResponse,
@@ -101,8 +103,8 @@ type _ConversationResponse = Expect<Equal<Conversation['thread']['createdAt'], s
 type _ConversationItems = Expect<
   Equal<ConversationItemsPage, RouteResponse<'GET /v1/conversations/:conversationId/items'>>
 >;
-type _AgentDetails = Expect<Equal<GetAgentResponse, RouteResponse<'GET /agents/:agentId'>>>;
-type _AgentDetailsDoNotExposeHandlerAbsentId = Expect<Equal<'id' extends keyof GetAgentResponse ? true : false, false>>;
+type _AgentDetailsName = Expect<Equal<GetAgentResponse['name'], RouteResponse<'GET /agents/:agentId'>['name']>>;
+type _AgentDetailsIncludesCompatibilityId = Expect<Equal<'id' extends keyof GetAgentResponse ? true : false, true>>;
 type _ToolDetails = Expect<Equal<GetToolResponse, RouteResponse<'GET /tools/:toolId'>>>;
 type _WorkflowDetails = Expect<Equal<GetWorkflowResponse, RouteResponse<'GET /workflows/:workflowId'>>>;
 type _WorkflowRunDates = Expect<Equal<ListWorkflowRunsResponse['runs'][number]['createdAt'], string>>;
@@ -143,13 +145,47 @@ const processorExecution = {
 type _ProcessorDetails = Expect<Equal<GetProcessorDetailResponse, RouteResponse<'GET /processors/:processorId'>>>;
 type _McpServers = Expect<Equal<McpServerListResponse, RouteResponse<'GET /mcp/v0/servers'>>>;
 type _McpTool = Expect<Equal<McpToolInfo, RouteResponse<'GET /mcp/:serverId/tools/:toolId'>>>;
+type _ListScorers = Expect<
+  Equal<ReturnType<MastraClient['listScorers']>, Promise<RouteResponse<'GET /scores/scorers'>>>
+>;
+type _ListAgents = Expect<Equal<ReturnType<MastraClient['listAgents']>, Promise<Record<string, GetAgentResponse>>>>;
+type _ListTools = Expect<Equal<ReturnType<MastraClient['listTools']>, Promise<RouteResponse<'GET /tools'>>>>;
+type _ListProcessors = Expect<
+  Equal<ReturnType<MastraClient['listProcessors']>, Promise<RouteResponse<'GET /processors'>>>
+>;
+type _ListWorkflows = Expect<
+  Equal<ReturnType<MastraClient['listWorkflows']>, Promise<RouteResponse<'GET /workflows'>>>
+>;
 type _ScheduleQuery = Expect<Equal<ListSchedulesParams, QueryParams<'GET /schedules'>>>;
 type _ScheduleResponse = Expect<Equal<ScheduleResponse, RouteResponse<'GET /schedules'>['schedules'][number]>>;
 type _ScheduleTrigger = Expect<
   Equal<ScheduleTriggerResponse, RouteResponse<'GET /schedules/:scheduleId/triggers'>['triggers'][number]>
 >;
 type _DatasetCreateInput = Expect<CreateDatasetParams extends Body<'POST /datasets'> ? true : false>;
-type _DatasetRecord = Expect<Equal<keyof DatasetRecord, keyof RouteResponse<'GET /datasets/:datasetId'>>>;
+type _DatasetRecord = Expect<
+  Equal<
+    Pick<DatasetRecord, 'id' | 'createdAt'>,
+    { id: RouteResponse<'GET /datasets'>['datasets'][number]['id']; createdAt: string }
+  >
+>;
+type _DatasetItem = Expect<
+  Equal<
+    Pick<DatasetItem, 'id' | 'createdAt'>,
+    { id: RouteResponse<'GET /datasets/:datasetId/items'>['items'][number]['id']; createdAt: string }
+  >
+>;
+type _DatasetItemVersion = Expect<
+  Equal<
+    Pick<DatasetItemVersionResponse, 'id' | 'createdAt'>,
+    { id: RouteResponse<'GET /datasets/:datasetId/items/:itemId/versions/:datasetVersion'>['id']; createdAt: string }
+  >
+>;
+type _DatasetItemVersionIsNonNullable = Expect<
+  Equal<
+    null extends RouteResponse<'GET /datasets/:datasetId/items/:itemId/versions/:datasetVersion'> ? true : false,
+    false
+  >
+>;
 type _DatasetExperiment = Expect<
   Equal<DatasetExperiment['id'], RouteResponse<'GET /experiments'>['experiments'][number]['id']>
 >;

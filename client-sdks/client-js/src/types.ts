@@ -7,6 +7,8 @@ import type {
   SerializableStructuredOutputOptions,
   ToolsInput,
   UIMessageWithMetadata,
+  AgentInstructions,
+  AgentEditorConfig,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry } from '@mastra/core/agent-builder/ee';
@@ -341,7 +343,24 @@ export type NetworkStreamParams<OUTPUT = undefined> = {
   tracingOptions?: TracingOptions;
 } & Omit<MultiPrimitiveExecutionOptions<OUTPUT>, 'model'>;
 
-export type GetAgentResponse = GeneratedResponse<'GET /agents/:agentId'>;
+export type GetAgentResponse = GeneratedResponse<'GET /agents/:agentId'> & {
+  /** Handler-provided identifier omitted from the serialized route schema's value shape. */
+  id: string;
+  instructions: AgentInstructions;
+  tools: Record<string, GetToolResponse>;
+  workflows: Record<string, GetWorkflowResponse>;
+  agents: Record<string, { id: string; name: string }>;
+  skills?: SkillMetadata[];
+  workspaceTools?: string[];
+  browserTools?: string[];
+  hasBrowser?: boolean;
+  workspaceId?: string;
+  defaultOptions: WithoutMethods<AgentExecutionOptions>;
+  defaultGenerateOptionsLegacy: WithoutMethods<AgentGenerateOptions>;
+  defaultStreamOptionsLegacy: WithoutMethods<AgentStreamOptions>;
+  requestContextSchema?: string;
+  editor?: AgentEditorConfig;
+};
 
 /**
  * Response from the deployer-provided browser session probe endpoint.
@@ -640,7 +659,7 @@ export type McpToolExecuteResponse = RouteResponse<'POST /mcp/:serverId/tools/:t
  */
 export type ClientScoreRowData = Omit<ScoreRowData, 'createdAt' | 'updatedAt'> & {
   createdAt: string;
-  updatedAt: string;
+  updatedAt: string | null;
 };
 
 /**
@@ -960,13 +979,7 @@ export interface StoredAgentSkillConfig {
   strategy?: 'latest' | 'live';
 }
 
-/**
- * Workspace reference stored in agent snapshots.
- * Can reference a stored workspace by ID or provide inline workspace config.
- */
-export type StoredWorkspaceRef =
-  | { type: 'id'; workspaceId: string }
-  | { type: 'inline'; config: Record<string, unknown> };
+export type StoredWorkspaceRef = NonNullable<GeneratedRequest<Body<'POST /stored/agents'>>['workspace']>;
 
 export interface StoredBrowserConfig {
   provider: string;
@@ -1942,16 +1955,13 @@ export interface DatasetItemToolMock {
 }
 
 /** Diagnostic receipt for item-level tool mocks, returned on experiment results. */
-export interface ToolMockReport {
-  served: Array<{ mockIndex: number; toolName: string; args: unknown }>;
-  unconsumed: Array<{ mockIndex: number; toolName: string; args: unknown }>;
-  liveCalls: Array<{ toolName: string; args: unknown }>;
-  failure?: { code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED'; toolName: string; args: unknown };
-}
+export type ToolMockReport = NonNullable<
+  GeneratedResponse<'GET /datasets/:datasetId/experiments/:experimentId/results'>['results'][number]['toolMockReport']
+>;
 
-export type DatasetItem = GeneratedResponse<'GET /datasets/:datasetId/items/:itemId'>;
+export type DatasetItem = NonNullable<GeneratedResponse<'GET /datasets/:datasetId/items/:itemId'>>;
 
-export type DatasetRecord = GeneratedResponse<'GET /datasets/:datasetId'>;
+export type DatasetRecord = NonNullable<GeneratedResponse<'GET /datasets/:datasetId'>>;
 
 export type ExperimentTargetType = NonNullable<QueryParams<'GET /experiments'>['targetType']>;
 
@@ -2047,6 +2057,13 @@ export type RunExperimentItemParams =
  * `error` object and no aggregated `scores` (scores live in the scores
  * store, keyed by `runId = experimentId`).
  */
+export type ListDatasetExperimentResultsResponse = Omit<
+  GeneratedResponse<'GET /datasets/:datasetId/experiments/:experimentId/results'>,
+  'results'
+> & {
+  results: DatasetExperimentResult[];
+};
+
 export type DatasetExperimentResultRow = Omit<DatasetExperimentResult, 'scores'>;
 
 export type RunExperimentItemResponse =
@@ -2060,8 +2077,9 @@ export type FinalizeExperimentParams = PathParams<'POST /datasets/:datasetId/exp
 export type CompareExperimentsParams = PathParams<'POST /datasets/:datasetId/compare'> &
   WithoutIndexSignatures<GeneratedRequest<Body<'POST /datasets/:datasetId/compare'>>>;
 
-export type DatasetItemVersionResponse =
-  GeneratedResponse<'GET /datasets/:datasetId/items/:itemId/versions/:datasetVersion'>;
+export type DatasetItemVersionResponse = NonNullable<
+  GeneratedResponse<'GET /datasets/:datasetId/items/:itemId/versions/:datasetVersion'>
+>;
 
 export type DatasetVersionResponse = GeneratedResponse<'GET /datasets/:datasetId/versions'>['versions'][number];
 

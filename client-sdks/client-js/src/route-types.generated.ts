@@ -4386,6 +4386,7 @@ type Shared_Type_94 = {
         [key: string]: unknown;
       }
     | undefined;
+  resourceId?: string | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -19096,7 +19097,7 @@ export type GetDatasetsDatasetIdItemsItemId_PathParams = {
   itemId: string;
 };
 
-export type GetDatasetsDatasetIdItemsItemId_Response = Shared_Type_82 | null;
+export type GetDatasetsDatasetIdItemsItemId_Response = PostDatasetsDatasetIdItems_Response;
 
 export type GetDatasetsDatasetIdItemsItemId_Request = Simplify<
   (GetDatasetsDatasetIdItemsItemId_PathParams extends never
@@ -19337,7 +19338,7 @@ export type GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_PathParams = {
   datasetVersion: number;
 };
 
-export type GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_Response = GetDatasetsDatasetIdItemsItemId_Response;
+export type GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_Response = PostDatasetsDatasetIdItems_Response;
 
 export type GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_Request = Simplify<
   (GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_PathParams extends never
@@ -21259,6 +21260,7 @@ export type PostSchedules_Body =
             [key: string]: unknown;
           }
         | undefined;
+      resourceId?: string | undefined;
       metadata?:
         | {
             [key: string]: unknown;
@@ -21324,6 +21326,7 @@ export type PatchSchedulesScheduleId_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  resourceId?: string | undefined;
 };
 
 export type PatchSchedulesScheduleId_Response = GetSchedulesScheduleId_Response;

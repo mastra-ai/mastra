@@ -130,6 +130,8 @@ import type {
   McpServerListResponse,
   McpServerToolListResponse,
   GetScorerResponse,
+  GetScorersResponse,
+  ListDatasetExperimentResultsResponse,
   ListScoresByScorerIdParams,
   ListScoresByRunIdParams,
   ListScoresByEntityIdParams,
@@ -986,9 +988,7 @@ export class MastraClient extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing list of available scorers
    */
-  public listScorers(
-    requestContext?: RequestContext | Record<string, any>,
-  ): Promise<Record<string, GetScorerResponse>> {
+  public listScorers(requestContext?: RequestContext | Record<string, any>): Promise<GetScorersResponse> {
     return this.request(`/scores/scorers${requestContextQueryString(requestContext)}`);
   }
 
@@ -2305,7 +2305,7 @@ export class MastraClient extends BaseResource {
     datasetId: PathParams<'GET /datasets/:datasetId/experiments/:experimentId/results'>['datasetId'],
     experimentId: PathParams<'GET /datasets/:datasetId/experiments/:experimentId/results'>['experimentId'],
     options?: QueryParams<'GET /datasets/:datasetId/experiments/:experimentId/results'>,
-  ): Promise<SerializedRouteResponse<'GET /datasets/:datasetId/experiments/:experimentId/results'>> {
+  ): Promise<ListDatasetExperimentResultsResponse> {
     const searchParams = new URLSearchParams();
     if (options?.page !== undefined) searchParams.set('page', String(options.page));
     if (options?.perPage !== undefined) searchParams.set('perPage', String(options.perPage));
