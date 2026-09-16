@@ -269,8 +269,7 @@ export async function swapBufferedReflectionToActive(
 
       const updateResult = await connection.execute(
         `UPDATE ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
-           SET ${OM_RECORD_STATE} = 'sealed',
-               ${OM_BUFFERED_REFLECTION} = NULL,
+           SET ${OM_BUFFERED_REFLECTION} = NULL,
                ${OM_BUFFERED_REFLECTION_TOKENS} = NULL,
                ${OM_BUFFERED_REFLECTION_INPUT_TOKENS} = NULL,
                ${OM_REFLECTED_OBSERVATION_LINE_COUNT} = NULL,

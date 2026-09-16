@@ -3182,7 +3182,7 @@ type Shared_Type_52 = {
   bufferedObservations?: string | undefined;
   bufferedObservationChunks?: Shared_Type_51[] | undefined;
   bufferedReflection?: string | undefined;
-  originType: 'initial' | 'observation' | 'reflection';
+  originType: 'initial' | 'observation' | 'reflection' | 'archive';
   generationCount: number;
   lastObservedAt?: Date | undefined;
   totalTokensObserved: number;
@@ -10045,14 +10045,6 @@ export type PostObservabilityTracesQuery_Response =
       traces: {
         traceId: string;
         rootSpanId: string;
-        name: string;
-        entityId: string | null;
-        parentSpanId: string | null;
-        createdAt: string;
-        metadata: {
-          [key: string]: unknown;
-        } | null;
-        inputPreview: string | null;
         threadId: string | null;
         resourceId: string | null;
         startedAt: string;

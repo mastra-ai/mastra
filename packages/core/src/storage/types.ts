@@ -1263,7 +1263,11 @@ export interface ObservationalMemoryRecord {
   threadId: string | null;
   /** Resource ID (always present) */
   resourceId: string;
-  /** Active generations accept writes; sealed generations are immutable history. Defaults to active for legacy rows. */
+  /**
+   * Active generations accept writes; archive retirement seals immutable history.
+   * Reflection supersession preserves legacy writable-history behavior, while current
+   * reads still resolve the highest active generation. Defaults to active for legacy rows.
+   */
   recordState?: ObservationalMemoryRecordState;
   /** Compare-and-set epoch used to fence stale observational-memory writers. Defaults to 0 for legacy rows. */
   writeEpoch?: number;
@@ -1586,9 +1590,17 @@ export interface CreateObservationArchiveGenerationInput {
 export interface ObservationArchiveScopeInput {
   scope: ObservationalMemoryScope;
   resourceId: string;
-  /** Required for thread scope; omitted for resource scope. */
+  /**
+   * Required for thread scope; omitted for resource scope. Thread-scoped archives
+   * resolve ownership from the record's thread ID and do not require groups to
+   * repeat it in `sourceThreadId`.
+   */
   threadId?: string;
-  /** Optional group-attributed thread projection within an authorized resource scope. */
+  /**
+   * Optional thread projection within an authorized resource scope. Resource-scoped
+   * archive groups must carry `sourceThreadId`; thread-scoped records derive it from
+   * their owning record.
+   */
   filterThreadId?: string;
 }
 

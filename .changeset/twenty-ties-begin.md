@@ -2,4 +2,4 @@
 '@mastra/memory': patch
 ---
 
-Improved observational memory writes with stale-write fencing.
+Prepared observational memory write paths for archive-generation fencing.

@@ -658,7 +658,7 @@ describe('MemoryConvex observational memory', () => {
     expect(result).toEqual(serverResult);
   });
 
-  it('createReflectionGeneration atomically seals the current record and inserts the next generation', async () => {
+  it('createReflectionGeneration atomically clears reflection state and inserts the next generation', async () => {
     const { calls, memory } = createMemoryDomain(() => undefined);
 
     const currentRecord = {

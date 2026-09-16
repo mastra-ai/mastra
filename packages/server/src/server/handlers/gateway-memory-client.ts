@@ -266,7 +266,7 @@ export function toLocalOMRecord(gr: GatewayOMRecord) {
     createdAt: new Date(gr.createdAt),
     updatedAt: new Date(gr.updatedAt),
     lastObservedAt: gr.lastObservedAt ? new Date(gr.lastObservedAt) : undefined,
-    originType: gr.originType as 'initial' | 'reflection' | 'observation',
+    originType: gr.originType as 'initial' | 'reflection' | 'observation' | 'archive',
     generationCount: gr.generationCount,
     activeObservations: (gr.activeObservations ?? '') as string,
     totalTokensObserved: gr.totalTokensObserved,

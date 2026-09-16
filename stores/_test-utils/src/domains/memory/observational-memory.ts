@@ -1504,6 +1504,21 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         expect(reflection.id).not.toBe(record.id);
         expect(originalRecord?.activeObservations).toBe('Original observations');
         expect(originalRecord?.observationTokenCount).toBe(25);
+        expect(originalRecord?.recordState ?? 'active').toBe('active');
+
+        await memoryStorage.updateActiveObservations({
+          id: record.id,
+          expectedWriteEpoch: record.writeEpoch ?? 0,
+          observations: 'Late observations on superseded reflection generation',
+          tokenCount: 30,
+          lastObservedAt: new Date(),
+        });
+
+        const updatedHistory = await memoryStorage.getObservationalMemoryHistory(input.threadId, input.resourceId);
+        expect(updatedHistory.find(item => item.id === record.id)?.activeObservations).toBe(
+          'Late observations on superseded reflection generation',
+        );
+        expect((await memoryStorage.getObservationalMemory(input.threadId, input.resourceId))?.id).toBe(reflection.id);
       });
     });
 
@@ -1587,7 +1602,6 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
             summary: 'Retired summary',
             searchText: 'retired summary retired observation',
             messageRange: 'message-a:message-b',
-            sourceThreadId: threadId,
             observedAt: { from: archivedAt, to: archivedAt },
             tokenCount: 3,
             textStart: 0,
@@ -1600,7 +1614,6 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
             summary: 'Retained summary',
             searchText: 'retained summary retained observation',
             messageRange: 'message-c:message-d',
-            sourceThreadId: threadId,
             observedAt: { from: archivedAt, to: archivedAt },
             tokenCount: 3,
           },

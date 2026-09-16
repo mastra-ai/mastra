@@ -2267,9 +2267,8 @@ export class MemoryMySQL extends MemoryStorage {
       const expectedWriteEpoch = input.expectedWriteEpoch ?? input.currentRecord.writeEpoch ?? 0;
       const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
 
-      const [sealed] = await connection.execute(
+      const [updated] = await connection.execute(
         `UPDATE ${OM_TABLE_QUOTED} SET
-          ${omCol('recordState')} = 'sealed',
           ${omCol('bufferedReflection')} = NULL,
           ${omCol('bufferedReflectionTokens')} = NULL,
           ${omCol('bufferedReflectionInputTokens')} = NULL,
@@ -2283,7 +2282,7 @@ export class MemoryMySQL extends MemoryStorage {
           AND COALESCE(${omCol('writeEpoch')}, 0) = ?`,
         [nowSql, input.currentRecord.id, input.currentRecord.generationCount, expectedWriteEpoch],
       );
-      if ((sealed as ResultSetHeader).affectedRows !== 1) {
+      if ((updated as ResultSetHeader).affectedRows !== 1) {
         throwOMNotFound(input.currentRecord.id, 'CREATE_REFLECTION_GENERATION');
       }
 

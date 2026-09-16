@@ -476,7 +476,7 @@ export async function handleObservationalMemoryOperation(
         Number(doc.reflectedObservationLineCount || 0),
       );
 
-      // Create the new generation record after sealing the predecessor in this transaction.
+      // Create the new generation record after clearing buffered state on the predecessor.
       const newRecord = {
         id: newId,
         lookupKey: currentRecord.lookupKey,
@@ -506,9 +506,9 @@ export async function handleObservationalMemoryOperation(
         createdAt: now,
         updatedAt: now,
       };
-      // Seal and clear buffered state on the old record.
+      // Clear buffered state on the old record. Reflection supersession keeps
+      // legacy generations writable; only archive retirement seals a generation.
       await ctx.db.patch(doc._id, {
-        recordState: 'sealed',
         bufferedReflection: null,
         bufferedReflectionTokens: null,
         bufferedReflectionInputTokens: null,
@@ -548,7 +548,6 @@ export async function handleObservationalMemoryOperation(
         throw new Error(`Observational memory record is stale: ${request.currentRecordId}`);
       }
       await ctx.db.patch(doc._id, {
-        recordState: 'sealed',
         bufferedReflection: null,
         bufferedReflectionTokens: null,
         bufferedReflectionInputTokens: null,

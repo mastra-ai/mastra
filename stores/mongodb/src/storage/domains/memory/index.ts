@@ -1980,12 +1980,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
     const limit = Math.min(Math.max(input.limit ?? 20, 1), 20);
     const filter: Record<string, any> = { resourceId: input.resourceId, archive: { $ne: null } };
-    if (input.scope === 'thread') {
-      filter.$and = [{ $or: [{ scope: 'resource' }, { scope: 'thread', threadId: input.threadId }] }];
-    }
     const projectedThreadId = input.scope === 'thread' ? input.threadId : input.filterThreadId;
     const groupMatch: Record<string, any> = {};
-    if (projectedThreadId) groupMatch.sourceThreadId = projectedThreadId;
     if (input.from) groupMatch['observedAt.to'] = { $gte: input.from };
     if (input.to) groupMatch['observedAt.from'] = { $lte: input.to };
     if (input.text) {
@@ -1996,7 +1992,25 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           .replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
       };
     }
-    if (Object.keys(groupMatch).length > 0) filter['archive.groups'] = { $elemMatch: groupMatch };
+    if (projectedThreadId) {
+      filter.$and = [
+        {
+          $or: [
+            {
+              scope: 'thread',
+              threadId: projectedThreadId,
+              ...(Object.keys(groupMatch).length > 0 ? { 'archive.groups': { $elemMatch: groupMatch } } : {}),
+            },
+            {
+              scope: 'resource',
+              'archive.groups': { $elemMatch: { ...groupMatch, sourceThreadId: projectedThreadId } },
+            },
+          ],
+        },
+      ];
+    } else if (Object.keys(groupMatch).length > 0) {
+      filter['archive.groups'] = { $elemMatch: groupMatch };
+    }
     if (input.cursor) {
       const cursor = this.decodeObservationArchiveCursor(input.cursor);
       const afterCursor = {
@@ -2065,12 +2079,22 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     if (input.scope === 'thread' && !input.threadId) {
       throw new Error('threadId is required for thread-scoped observation archive access');
     }
-    const filter: Record<string, any> = {
-      resourceId: input.resourceId,
-      'archive.groups.groupId': { $in: groupIds },
-    };
-    if (input.scope === 'thread') {
-      filter.$or = [{ scope: 'resource' }, { scope: 'thread', threadId: input.threadId }];
+    const filter: Record<string, any> = { resourceId: input.resourceId };
+    const projectedThreadId = input.scope === 'thread' ? input.threadId : input.filterThreadId;
+    if (projectedThreadId) {
+      filter.$or = [
+        {
+          scope: 'thread',
+          threadId: projectedThreadId,
+          'archive.groups': { $elemMatch: { groupId: { $in: groupIds } } },
+        },
+        {
+          scope: 'resource',
+          'archive.groups': { $elemMatch: { groupId: { $in: groupIds }, sourceThreadId: projectedThreadId } },
+        },
+      ];
+    } else {
+      filter['archive.groups.groupId'] = { $in: groupIds };
     }
     const collection = await this.getCollection(OM_TABLE);
     const docs = await collection
@@ -2150,7 +2174,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       const collection = await this.getCollection(OM_TABLE);
       await this.#connector.withTransaction(async session => {
-        const sealed = await collection.updateOne(
+        const updated = await collection.updateOne(
           {
             id: input.currentRecord.id,
             generationCount: input.currentRecord.generationCount,
@@ -2159,7 +2183,6 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           },
           {
             $set: {
-              recordState: 'sealed',
               updatedAt: now,
               isReflecting: false,
               isBufferingReflection: false,
@@ -2173,7 +2196,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           },
           { session },
         );
-        if (sealed.matchedCount !== 1) {
+        if (updated.matchedCount !== 1) {
           throw new Error(`Observational memory record is stale or sealed: ${input.currentRecord.id}`);
         }
         await collection.insertOne(

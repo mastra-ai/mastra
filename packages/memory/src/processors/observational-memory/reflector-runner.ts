@@ -1442,10 +1442,14 @@ export class ReflectorRunner {
       omError('[OM] Reflection failed', error);
     } finally {
       try {
-        const activeRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+        const activeRecord = await this.storage.getObservationalMemory?.(record.threadId, record.resourceId);
         if (activeRecord?.id === record.id) {
           await this.storage.setReflectingFlag(record.id, false, record.writeEpoch ?? 0);
         }
+      } catch (error) {
+        omDebug(
+          `[OM:reflect] Failed to clear reflection state during cleanup: ${error instanceof Error ? error.message : String(error)}`,
+        );
       } finally {
         unregisterOp(record.id, 'reflecting');
       }

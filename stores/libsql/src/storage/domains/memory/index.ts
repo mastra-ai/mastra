@@ -2160,8 +2160,8 @@ export class MemoryLibSQL extends MemoryStorage {
       observedTimezone: input.currentRecord.observedTimezone,
     };
 
-    const sealed = await tx.execute({
-      sql: `UPDATE "${OM_TABLE}" SET "recordState" = 'sealed', "bufferedReflection" = NULL,
+    const updated = await tx.execute({
+      sql: `UPDATE "${OM_TABLE}" SET "bufferedReflection" = NULL,
         "bufferedReflectionTokens" = NULL, "bufferedReflectionInputTokens" = NULL,
         "reflectedObservationLineCount" = NULL, "isReflecting" = 0, "isBufferingReflection" = 0, "updatedAt" = ?
         WHERE id = ? AND "generationCount" = ? AND COALESCE("recordState", 'active') = 'active'
@@ -2173,7 +2173,7 @@ export class MemoryLibSQL extends MemoryStorage {
         input.expectedWriteEpoch ?? input.currentRecord.writeEpoch ?? 0,
       ],
     });
-    if (sealed.rowsAffected !== 1) {
+    if (updated.rowsAffected !== 1) {
       throw new Error(`Observational memory record is stale or sealed: ${input.currentRecord.id}`);
     }
 

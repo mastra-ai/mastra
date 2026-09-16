@@ -3945,6 +3945,10 @@ ${formattedMessages}
         if (activeRecord?.id === record.id) {
           await this.storage.setReflectingFlag(record.id, false, record.writeEpoch ?? 0);
         }
+      } catch (error) {
+        omDebug(
+          `[OM:reflect] Failed to clear reflection state during cleanup: ${error instanceof Error ? error.message : String(error)}`,
+        );
       } finally {
         unregisterOp(record.id, 'reflecting');
       }

@@ -1100,7 +1100,6 @@ export class InMemoryMemory extends MemoryStorage {
 
     const key = this.getObservationalMemoryKey(record.threadId, record.resourceId);
     const now = new Date();
-    record.recordState = 'sealed';
     record.updatedAt = now;
     record.bufferedReflection = undefined;
     record.bufferedReflectionTokens = undefined;

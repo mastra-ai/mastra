@@ -2824,7 +2824,10 @@ export class MemoryPG extends MemoryStorage {
     const groupConditions: string[] = [];
     if (projectedThreadId) {
       params.push(projectedThreadId);
-      groupConditions.push(`group_value->>'sourceThreadId' = $${params.length}`);
+      const threadParam = `$${params.length}`;
+      groupConditions.push(
+        `((scope = 'thread' AND "threadId" = ${threadParam}) OR (scope = 'resource' AND group_value->>'sourceThreadId' = ${threadParam}))`,
+      );
     }
     if (input.from) {
       params.push(input.from.toISOString());
@@ -2909,13 +2912,15 @@ export class MemoryPG extends MemoryStorage {
     const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.#schema) });
     const conditions = [`"resourceId" = $1`, `archive IS NOT NULL`];
     const params: unknown[] = [input.resourceId, groupIds];
-    conditions.push(
-      `EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(archive->'groups', '[]'::jsonb)) AS group_value WHERE group_value->>'groupId' = ANY($2::text[]))`,
-    );
-    if (input.scope === 'thread') {
-      params.push(input.threadId);
+    const projectedThreadId = input.scope === 'thread' ? input.threadId : input.filterThreadId;
+    if (projectedThreadId) {
+      params.push(projectedThreadId);
       conditions.push(
-        `EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(archive->'groups', '[]'::jsonb)) AS group_value WHERE group_value->>'sourceThreadId' = $3 AND group_value->>'groupId' = ANY($2::text[]))`,
+        `EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(archive->'groups', '[]'::jsonb)) AS group_value WHERE group_value->>'groupId' = ANY($2::text[]) AND ((scope = 'thread' AND "threadId" = $3) OR (scope = 'resource' AND group_value->>'sourceThreadId' = $3)))`,
+      );
+    } else {
+      conditions.push(
+        `EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(archive->'groups', '[]'::jsonb)) AS group_value WHERE group_value->>'groupId' = ANY($2::text[]))`,
       );
     }
     const rows = await this.#db.readClient.manyOrNone(
@@ -2982,9 +2987,8 @@ export class MemoryPG extends MemoryStorage {
         const now = new Date();
         const nowStr = now.toISOString();
         const lastObservedAt = current.lastObservedAt ?? now;
-        const sealed = await t.query(
+        const updated = await t.query(
           `UPDATE ${tableName} SET
-            "recordState" = 'sealed',
             "bufferedReflection" = NULL,
             "bufferedReflectionTokens" = NULL,
             "bufferedReflectionInputTokens" = NULL,
@@ -2998,7 +3002,7 @@ export class MemoryPG extends MemoryStorage {
              AND COALESCE("writeEpoch", 0) = $4`,
           [nowStr, current.id, current.generationCount, expectedWriteEpoch],
         );
-        if (sealed.rowCount !== 1) {
+        if (updated.rowCount !== 1) {
           throw new Error(`Observational memory record is stale or sealed: ${current.id}`);
         }
 
