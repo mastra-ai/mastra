@@ -1,5 +1,18 @@
 # @mastra/code-sdk
 
+## 1.7.3-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`291a694`](https://github.com/mastra-ai/mastra/commit/291a694b3f9b7d9a17af7d10ed3c9c357bed7a6c), [`291a694`](https://github.com/mastra-ai/mastra/commit/291a694b3f9b7d9a17af7d10ed3c9c357bed7a6c), [`467e0a6`](https://github.com/mastra-ai/mastra/commit/467e0a630db09a1750ce9271bddb38e46681bf04), [`f5bfa09`](https://github.com/mastra-ai/mastra/commit/f5bfa0934a6d62c0ecb99106586ab7f68a4c283a), [`5085475`](https://github.com/mastra-ai/mastra/commit/5085475c0da226e618eb3ee2676d347788c3fb00), [`c016c9b`](https://github.com/mastra-ai/mastra/commit/c016c9bd051612714e662588e5928b72bd6a6ac6), [`644ac13`](https://github.com/mastra-ai/mastra/commit/644ac131110a9f24a8d92b62dd3777384211a2e7), [`9c98331`](https://github.com/mastra-ai/mastra/commit/9c9833151205c8e9115bf91db2c3914e21bd3e40), [`aa38e6f`](https://github.com/mastra-ai/mastra/commit/aa38e6f424a0eae0e43a5c2ae0b387e404f5e6a6), [`8d9eadb`](https://github.com/mastra-ai/mastra/commit/8d9eadb59ccbcae054600128aa15d95ea4d1141a), [`5085475`](https://github.com/mastra-ai/mastra/commit/5085475c0da226e618eb3ee2676d347788c3fb00), [`5085475`](https://github.com/mastra-ai/mastra/commit/5085475c0da226e618eb3ee2676d347788c3fb00), [`76c7d98`](https://github.com/mastra-ai/mastra/commit/76c7d989f691510d7bfc016723cc78d7e08ac108), [`9c98331`](https://github.com/mastra-ai/mastra/commit/9c9833151205c8e9115bf91db2c3914e21bd3e40), [`f8683b3`](https://github.com/mastra-ai/mastra/commit/f8683b3f45fcc1b92cebe74991b94653a1fafab2), [`61f953a`](https://github.com/mastra-ai/mastra/commit/61f953a79736ac0d8a9650f0561c6dab1b097c8e), [`32edb03`](https://github.com/mastra-ai/mastra/commit/32edb0371b8d884bee66897f236e852a959ae07a), [`6c781fd`](https://github.com/mastra-ai/mastra/commit/6c781fda62eb0b0b74d016f188ed0b2db5cfdceb), [`bc12e6c`](https://github.com/mastra-ai/mastra/commit/bc12e6cd9cc74fb078b006ed5d14429e2101cbb2)]:
+  - @mastra/observability@1.17.9-alpha.1
+  - @mastra/core@1.68.0-alpha.2
+  - @mastra/schema-compat@1.3.11-alpha.1
+  - @mastra/duckdb@1.10.0-alpha.0
+  - @mastra/memory@1.31.0-alpha.1
+  - @mastra/pg@1.26.0-alpha.1
+  - @mastra/mcp@1.18.1-alpha.1
+
 ## 1.7.3-alpha.1
 
 ### Patch Changes

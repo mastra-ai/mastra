@@ -1,3 +1,4 @@
+import type { MastraClient } from '@mastra/client-js';
 import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 import { resetStorage } from '../__utils__/reset-storage';
@@ -51,13 +52,11 @@ const toolSpan = {
 async function mockPartialThread(page: Page) {
   let comments: Array<Record<string, unknown>> = [];
 
-  await page.route('**/api/observability/traces/light?**', route =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ spans: [], pagination: { page: 0, perPage: 25, total: 0, hasMore: false } }),
-    }),
-  );
+  await page.route('**/api/observability/traces/query', route => {
+    expect(route.request().method()).toBe('POST');
+    const response: Awaited<ReturnType<MastraClient['queryTraces']>> = { traces: [], page: { next: null } };
+    return route.fulfill({ json: response });
+  });
   await page.route(`**/api/observability/traces/${TRACE_ID}`, route =>
     route.fulfill({
       status: 200,

@@ -1,9 +1,7 @@
 import type { DatasetRecord } from '@mastra/client-js';
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import {
   Dialog,
   DialogContent,
@@ -22,6 +20,7 @@ import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   CircleSlashIcon,
   ChevronLeft,
@@ -36,24 +35,25 @@ import type { ReactNode } from 'react';
 import { useWatch } from 'react-hook-form';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { useReviewQueue } from '../../context/review-queue-context';
 import { useAgentExperiments } from '../../hooks/use-agent-experiments';
-import type { AgentExperiment } from '../../hooks/use-agent-experiments';
 import { useStoredAgentMutations } from '../../hooks/use-stored-agents';
 import { mapScorersToApi, mapInstructionBlocksToApi } from '../../utils/agent-form-mappers';
 import { AgentTopBarRunOptions } from '../agent-top-bar-controls';
 import { ExperimentResultsPanel } from './agent-playground-eval';
-import { AgentPlaygroundReview } from './agent-playground-review';
 import { AttachButton } from './attach-button';
 import { DatasetDetailView } from './dataset-detail-view';
-import { formatVersionLabel } from './format-version-label';
+import { RunExperimentButton } from './run-experiment-button';
 import { ScorerDetailView } from './scorer-detail-view';
 import { ScorerMiniEditor } from './scorer-mini-editor';
+import { DatasetsList } from '@/domains/datasets/components/datasets-list/datasets-list';
+import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
 import { GenerateConfigDialog, GenerateReviewDialog } from '@/domains/datasets/components/generate-items-dialog';
 import { useGenerationTasks } from '@/domains/datasets/context/generation-context';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
-import { STATUS_LABEL, STATUS_VARIANT } from '@/domains/experiments/components/experiment-columns';
+import { ExperimentsList } from '@/domains/experiments/components/experiments-list';
+import { DatasetReview } from '@/domains/review/components/dataset-review';
+import { ScorersList } from '@/domains/scores/components/scorers-list/scorers-list';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 type AgentEvalTab = 'experiments' | 'datasets' | 'scorers' | 'review';
@@ -88,17 +88,6 @@ function parseIdList(ids: unknown): string[] {
   return [];
 }
 
-function formatDate(dateStr: string | Date | undefined | null): string {
-  if (!dateStr) return '—';
-  const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-function getExperimentStartedAtTime(startedAt: AgentExperiment['startedAt']): number {
-  if (!startedAt) return 0;
-  return startedAt instanceof Date ? startedAt.getTime() : new Date(startedAt).getTime();
-}
-
 function EvaluateDocsLink({ href, children }: { href: string; children: ReactNode }) {
   return (
     <Button variant="ghost" as="a" href={href} target="_blank" rel="noopener noreferrer" icon={<ExternalLinkIcon />}>
@@ -109,6 +98,7 @@ function EvaluateDocsLink({ href, children }: { href: string; children: ReactNod
 
 export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: AgentPlaygroundEvaluateProps) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
   const activeTab: AgentEvalTab =
@@ -127,7 +117,8 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
   const [showAttachDialog, setShowAttachDialog] = useState(false);
   const [attachDatasetId, setAttachDatasetId] = useState('');
   const [showAttachScorerDialog, setShowAttachScorerDialog] = useState(false);
-  const [attachScorerSearch, setAttachScorerSearch] = useState('');
+  const [attachScorerId, setAttachScorerId] = useState('');
+  const [showRunExperimentDialog, setShowRunExperimentDialog] = useState(false);
   const [generateDatasetId, setGenerateDatasetId] = useState<string | null>(null);
   const [reviewDatasetId, setReviewDatasetId] = useState<string | null>(null);
 
@@ -137,9 +128,9 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
   const [scorersSearch, setScorersSearch] = useState('');
 
   const { form, isCodeAgentOverride } = useAgentEditFormContext();
-  const { addItems } = useReviewQueue();
 
-  const agentScorers = useWatch({ control: form.control, name: 'scorers' }) ?? {};
+  const watchedScorers = useWatch({ control: form.control, name: 'scorers' });
+  const agentScorers = useMemo(() => watchedScorers ?? {}, [watchedScorers]);
   const agentInstructions = useWatch({ control: form.control, name: 'instructions' });
   const agentDescription = useWatch({ control: form.control, name: 'description' });
   const agentTools = useWatch({ control: form.control, name: 'tools' });
@@ -189,13 +180,10 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
     setAttachDatasetId('');
   };
 
-  const datasetExperimentMap = (experiments || []).reduce<Record<string, AgentExperiment>>((acc, exp) => {
-    const current = acc[exp.datasetId];
-    if (!current || getExperimentStartedAtTime(exp.startedAt) > getExperimentStartedAtTime(current.startedAt)) {
-      acc[exp.datasetId] = exp;
-    }
-    return acc;
-  }, {});
+  const closeAttachScorerDialog = () => {
+    setShowAttachScorerDialog(false);
+    setAttachScorerId('');
+  };
 
   const datasetMap = useMemo(() => {
     const map = new Map<string, DatasetRecord>();
@@ -203,9 +191,15 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
     return map;
   }, [datasets]);
 
-  const scorerEntries = Object.entries(scorers || {});
-  const attachedScorers = scorerEntries.filter(([id]) => !!agentScorers[id]);
-  const unattachedScorers = scorerEntries.filter(([id]) => !agentScorers[id]);
+  const scorerEntries = useMemo(() => Object.entries(scorers || {}), [scorers]);
+  const attachedScorers = useMemo(
+    () => scorerEntries.filter(([id]) => !!agentScorers[id]),
+    [scorerEntries, agentScorers],
+  );
+  const unattachedScorers = useMemo(
+    () => scorerEntries.filter(([id]) => !agentScorers[id]),
+    [scorerEntries, agentScorers],
+  );
 
   // --- Scorer actions ---
 
@@ -294,19 +288,6 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
       }
     }
 
-    addItems(
-      selectedItems.map(item => ({
-        id: item.id,
-        itemId: item.itemId,
-        input: item.input,
-        output: item.output,
-        error: item.error,
-        scores: item.scores,
-        experimentId: item.experimentId,
-        datasetId: item.datasetId,
-        traceId: item.traceId,
-      })),
-    );
     setActiveTab('review');
     setDetailView(null);
   };
@@ -323,52 +304,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
     });
   };
 
-  // --- Filtered data for each tab ---
-
-  const filteredExperiments = useMemo(() => {
-    const exps = [...(experiments || [])].sort((a, b) => {
-      const da = getExperimentStartedAtTime(a.startedAt);
-      const db = getExperimentStartedAtTime(b.startedAt);
-      return db - da;
-    });
-    if (!experimentsSearch) return exps;
-    const term = experimentsSearch.toLowerCase();
-    return exps.filter(exp => {
-      const dsName = datasetMap.get(exp.datasetId)?.name ?? '';
-      return (
-        exp.id.toLowerCase().includes(term) ||
-        dsName.toLowerCase().includes(term) ||
-        (exp.targetId ?? '').toLowerCase().includes(term)
-      );
-    });
-  }, [experiments, experimentsSearch, datasetMap]);
-
-  const filteredDatasets = useMemo(() => {
-    if (!datasetsSearch) return datasets;
-    const term = datasetsSearch.toLowerCase();
-    return datasets.filter(
-      ds => ds.name.toLowerCase().includes(term) || (ds.description ?? '').toLowerCase().includes(term),
-    );
-  }, [datasets, datasetsSearch]);
-
-  const filteredScorers = useMemo(() => {
-    if (!scorersSearch) return attachedScorers;
-    const term = scorersSearch.toLowerCase();
-    return attachedScorers.filter(([id, scorer]) => {
-      const name = scorer.scorer?.name || id;
-      return name.toLowerCase().includes(term);
-    });
-  }, [attachedScorers, scorersSearch]);
-
-  const { containerRef: experimentsContainerRef, getRowProps: getExperimentRowProps } = useDataListKeyboard({
-    count: filteredExperiments.length,
-  });
-  const { containerRef: datasetsContainerRef, getRowProps: getDatasetRowProps } = useDataListKeyboard({
-    count: filteredDatasets.length,
-  });
-  const { containerRef: scorersContainerRef, getRowProps: getScorerRowProps } = useDataListKeyboard({
-    count: filteredScorers.length,
-  });
+  const attachedScorersRecord = useMemo(() => Object.fromEntries(attachedScorers), [attachedScorers]);
 
   // Close detail view when switching tabs
   const handleTabChange = (tab: AgentEvalTab) => {
@@ -514,7 +450,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
 
   function renderExperimentsTab() {
     if (isLoadingExperiments) {
-      return <DataListSkeleton columns="auto minmax(15rem,1fr) auto auto auto auto auto" />;
+      return <ExperimentsList experiments={[]} isLoading />;
     }
 
     if (!experiments?.length) {
@@ -526,7 +462,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
             descriptionSlot="Run an experiment against a dataset to see results here."
             actionSlot={
               <div className="flex flex-col items-center gap-2">
-                <Button variant="primary" onClick={() => setActiveTab('datasets')} icon={<Plus />}>
+                <Button variant="primary" onClick={() => setShowRunExperimentDialog(true)} icon={<Plus />}>
                   Run Experiment
                 </Button>
                 <EvaluateDocsLink href="https://mastra.ai/docs/evals/experiments">
@@ -540,61 +476,23 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
     }
 
     return (
-      <DataList
-        columns="auto minmax(15rem,1fr) auto auto auto auto auto"
-        className="min-w-0"
-        scrollRef={experimentsContainerRef}
-      >
-        <DataList.Top>
-          <DataList.TopCell>Experiment</DataList.TopCell>
-          <DataList.TopCell>Dataset</DataList.TopCell>
-          <DataList.TopCell>Status</DataList.TopCell>
-          <DataList.TopCell className="text-center">Items</DataList.TopCell>
-          <DataList.TopCell className="text-center">Processed</DataList.TopCell>
-          <DataList.TopCell className="text-center">Errored</DataList.TopCell>
-          <DataList.TopCell>Date</DataList.TopCell>
-        </DataList.Top>
-
-        {filteredExperiments.map((exp, index) => {
-          const dsName = datasetMap.get(exp.datasetId)?.name ?? exp.datasetId.slice(0, 8);
-          const status = exp.status ?? 'pending';
-          const succeeded = exp.succeededCount ?? 0;
-          const failed = exp.failedCount ?? 0;
-          const total = exp.totalItems ?? 0;
-          const isFeatured = detailView?.type === 'experiment' && detailView.id === exp.id;
-
-          return (
-            <DataList.RowButton
-              key={exp.id}
-              featured={isFeatured}
-              onClick={() => setDetailView({ type: 'experiment', id: exp.id, datasetId: exp.datasetId })}
-              {...getExperimentRowProps(index)}
-            >
-              <DataList.IdCell id={exp.id} />
-              <DataList.Cell className="min-w-0">
-                <span className="block truncate">{dsName}</span>
-              </DataList.Cell>
-              <DataList.Cell>
-                <Badge variant={STATUS_VARIANT[status] ?? 'neutral'} indicator="dot">
-                  {STATUS_LABEL[status] ?? status}
-                </Badge>
-              </DataList.Cell>
-              <DataList.Cell className="text-center">{total}</DataList.Cell>
-              <DataList.Cell className="text-center">{succeeded}</DataList.Cell>
-              <DataList.Cell className="text-center">
-                <span className={failed > 0 ? 'text-accent2' : ''}>{failed}</span>
-              </DataList.Cell>
-              <DataList.Cell>{formatDate(exp.startedAt)}</DataList.Cell>
-            </DataList.RowButton>
-          );
-        })}
-      </DataList>
+      <ExperimentsList
+        experiments={experiments}
+        datasets={datasets}
+        isLoading={false}
+        search={experimentsSearch}
+        keyboardGlobal={false}
+        selectedExperimentId={detailView?.type === 'experiment' ? detailView.id : undefined}
+        onSelectExperiment={exp => {
+          if (exp.datasetId) setDetailView({ type: 'experiment', id: exp.id, datasetId: exp.datasetId });
+        }}
+      />
     );
   }
 
   function renderDatasetsTab() {
     if (isLoadingDatasets) {
-      return <DataListSkeleton columns="minmax(10rem,1fr) auto auto auto auto" />;
+      return <DatasetsList datasets={[]} experiments={[]} isLoading />;
     }
 
     if (!datasets.length) {
@@ -630,73 +528,42 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
     }
 
     return (
-      <DataList columns="minmax(10rem,1fr) auto auto auto auto" className="min-w-0" scrollRef={datasetsContainerRef}>
-        <DataList.Top>
-          <DataList.TopCell>Name</DataList.TopCell>
-          <DataList.TopCell>Tags</DataList.TopCell>
-          <DataList.TopCell>Latest Experiment</DataList.TopCell>
-          <DataList.TopCell>Status</DataList.TopCell>
-          <DataList.TopCell>Updated</DataList.TopCell>
-        </DataList.Top>
-
-        {filteredDatasets.map((ds, index) => {
-          const exp = datasetExperimentMap[ds.id];
+      <DatasetsList
+        datasets={datasets}
+        experiments={experiments ?? []}
+        isLoading={false}
+        search={datasetsSearch}
+        keyboardGlobal={false}
+        selectedDatasetId={detailView?.type === 'dataset' ? detailView.id : undefined}
+        onSelectDataset={ds => setDetailView({ type: 'dataset', id: ds.id })}
+        renderTrailingCell={ds => {
           const genTask = generationTasks[ds.id];
-          const isGenerating = genTask?.status === 'generating';
-          const isFeatured = detailView?.type === 'dataset' && detailView.id === ds.id;
-
-          return (
-            <DataList.RowButton
-              key={ds.id}
-              featured={isFeatured}
-              onClick={() => setDetailView({ type: 'dataset', id: ds.id })}
-              {...getDatasetRowProps(index)}
-            >
-              <DataList.Cell className="text-neutral4 min-w-0">
-                <span className="block truncate">{ds.name}</span>
-              </DataList.Cell>
-              <DataList.Cell>
-                {ds.tags?.length ? (
-                  <div className="flex gap-1">
-                    {ds.tags.slice(0, 2).map(tag => (
-                      <Badge key={tag}>{tag}</Badge>
-                    ))}
-                    {ds.tags.length > 2 && <Badge>+{ds.tags.length - 2}</Badge>}
-                  </div>
-                ) : (
-                  <span className="text-neutral2">—</span>
-                )}
-              </DataList.Cell>
-              <DataList.Cell>
-                {exp ? <ExperimentBadge experiment={exp} /> : <span className="text-neutral2">No experiments</span>}
-              </DataList.Cell>
-              <DataList.Cell>
-                {isGenerating ? (
-                  <div className="flex items-center gap-1">
-                    <Spinner className="size-3" />
-                    <Txt variant="ui-xs" className="text-warning1">
-                      Generating...
-                    </Txt>
-                  </div>
-                ) : genTask?.error ? (
-                  <Txt variant="ui-xs" className="text-negative1">
-                    Failed
-                  </Txt>
-                ) : (
-                  <span className="text-neutral2">—</span>
-                )}
-              </DataList.Cell>
-              <DataList.Cell>{formatDate(ds.updatedAt)}</DataList.Cell>
-            </DataList.RowButton>
-          );
-        })}
-      </DataList>
+          if (genTask?.status === 'generating') {
+            return (
+              <div className="flex items-center gap-1">
+                <Spinner className="size-3" />
+                <Txt variant="ui-xs" className="text-warning1">
+                  Generating...
+                </Txt>
+              </div>
+            );
+          }
+          if (genTask?.error) {
+            return (
+              <Txt variant="ui-xs" className="text-negative1">
+                Failed
+              </Txt>
+            );
+          }
+          return null;
+        }}
+      />
     );
   }
 
   function renderScorersTab() {
     if (isLoadingScorers) {
-      return <DataListSkeleton columns="minmax(10rem,1fr) auto auto auto" />;
+      return <ScorersList scorers={{}} isLoading />;
     }
 
     if (!attachedScorers.length) {
@@ -705,10 +572,14 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
           <EmptyState
             iconSlot={<CircleSlashIcon />}
             titleSlot="No Scorers yet"
-            descriptionSlot="Attach or create a scorer to evaluate this agent's responses."
+            descriptionSlot={
+              isCodeAgentOverride
+                ? 'Attaching scorers from Studio is only available for agents created in the editor. Configure scorers for this agent in code.'
+                : "Attach or create a scorer to evaluate this agent's responses."
+            }
             actionSlot={
               <div className="flex flex-col items-center gap-2">
-                {unattachedScorers.length > 0 ? (
+                {isCodeAgentOverride ? null : unattachedScorers.length > 0 ? (
                   <Button variant="primary" onClick={() => setShowAttachScorerDialog(true)} icon={<Paperclip />}>
                     Attach Scorer
                   </Button>
@@ -726,55 +597,30 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
     }
 
     return (
-      <DataList columns="minmax(10rem,1fr) auto auto auto" className="min-w-0" scrollRef={scorersContainerRef}>
-        <DataList.Top>
-          <DataList.TopCell>Name</DataList.TopCell>
-          <DataList.TopCell>Source</DataList.TopCell>
-          <DataList.TopCell>Description</DataList.TopCell>
-          <DataList.TopCell>Datasets</DataList.TopCell>
-        </DataList.Top>
-
-        {filteredScorers.map(([id, scorer], index) => {
-          const name = scorer.scorer?.name || id;
-          const description = scorer.scorer?.description || '';
-          const source = scorer.source ?? 'stored';
-          const linkedCount = allDatasets.filter(ds => {
-            const scorerIds = ds.scorerIds ?? [];
-            return scorerIds.includes(id);
-          }).length;
-          const isFeatured = detailView?.type === 'scorer' && detailView.id === id;
-
-          return (
-            <DataList.RowButton
-              key={id}
-              featured={isFeatured}
-              onClick={() => setDetailView({ type: 'scorer', id })}
-              {...getScorerRowProps(index)}
-            >
-              <DataList.Cell className="text-neutral4 min-w-0">
-                <span className="block truncate">{name}</span>
-              </DataList.Cell>
-              <DataList.Cell>
-                <Badge variant={source === 'code' ? 'neutral' : 'green'}>{source}</Badge>
-              </DataList.Cell>
-              <DataList.Cell className="min-w-0">
-                <span className="block max-w-[200px] truncate">
-                  {description || <span className="text-neutral2">—</span>}
-                </span>
-              </DataList.Cell>
-              <DataList.Cell>
-                {linkedCount > 0 ? `${linkedCount} dataset${linkedCount > 1 ? 's' : ''}` : '—'}
-              </DataList.Cell>
-            </DataList.RowButton>
-          );
-        })}
-      </DataList>
+      <ScorersList
+        scorers={attachedScorersRecord}
+        isLoading={false}
+        search={scorersSearch}
+        keyboardGlobal={false}
+        selectedScorerId={detailView?.type === 'scorer' ? detailView.id : undefined}
+        onSelectScorer={scorer => setDetailView({ type: 'scorer', id: scorer.id })}
+      />
     );
   }
 
   function renderDialogs() {
     return (
       <>
+        {showRunExperimentDialog && (
+          <ExperimentTriggerDialog
+            open
+            onOpenChange={setShowRunExperimentDialog}
+            initialTargetType="agent"
+            initialTargetId={agentId}
+            onSuccess={() => void queryClient.invalidateQueries({ queryKey: ['agent-experiments', agentId] })}
+          />
+        )}
+
         {/* Generate Config Dialog */}
         {generateDatasetId && (
           <GenerateConfigDialog
@@ -847,67 +693,51 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
         </Dialog>
 
         {/* Attach Existing Scorer Dialog */}
-        <Dialog open={showAttachScorerDialog} onOpenChange={setShowAttachScorerDialog}>
+        <Dialog
+          open={showAttachScorerDialog}
+          onOpenChange={open => (open ? setShowAttachScorerDialog(true) : closeAttachScorerDialog())}
+        >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Attach Existing Scorer</DialogTitle>
             </DialogHeader>
-            <DialogBody className="max-h-[50vh] overflow-y-auto">
-              <InputGroup variant="outline">
-                <InputGroupAddon align="inline-start">
-                  <SearchIcon />
-                </InputGroupAddon>
-                <InputGroupInput
-                  type="search"
-                  aria-label="Search scorers"
-                  placeholder="Search scorers..."
-                  value={attachScorerSearch}
-                  onChange={event => setAttachScorerSearch(event.target.value)}
-                />
-              </InputGroup>
-              {unattachedScorers
-                .filter(([id, scorer]) => {
-                  if (!attachScorerSearch) return true;
-                  const name = scorer.scorer?.name || id;
-                  return name.toLowerCase().includes(attachScorerSearch.toLowerCase());
-                })
-                .map(([id, scorer]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className="hover:bg-surface3 flex w-full items-center justify-between rounded-md px-3 py-2 text-left transition-colors"
-                    onClick={async () => {
-                      try {
-                        await attachScorer(id, scorer);
-                        toast.success(`Scorer "${scorer.scorer?.name || id}" attached`);
-                        setShowAttachScorerDialog(false);
-                      } catch {
-                        toast.error('Failed to attach scorer');
-                      }
-                    }}
-                  >
-                    <div>
-                      <Txt variant="ui-sm" className="font-medium">
-                        {scorer.scorer?.name || id}
-                      </Txt>
-                      {scorer.scorer?.description && (
-                        <Txt variant="ui-xs" className="text-neutral3 block">
-                          {scorer.scorer.description}
-                        </Txt>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              {unattachedScorers.filter(([id, scorer]) => {
-                if (!attachScorerSearch) return true;
-                const name = scorer.scorer?.name || id;
-                return name.toLowerCase().includes(attachScorerSearch.toLowerCase());
-              }).length === 0 && (
-                <Txt variant="ui-sm" className="text-neutral3 block py-4 text-center">
-                  No scorers available to attach
-                </Txt>
-              )}
+            <DialogBody>
+              <Combobox
+                options={unattachedScorers.map(([id, scorer]) => ({
+                  value: id,
+                  label: scorer.scorer?.name || id,
+                  description: scorer.scorer?.description ?? undefined,
+                }))}
+                value={attachScorerId}
+                onValueChange={setAttachScorerId}
+                placeholder="Select a scorer..."
+                searchPlaceholder="Search scorers..."
+                emptyText="No scorers available to attach"
+                className="w-full"
+              />
             </DialogBody>
+            <DialogFooter>
+              <Button onClick={closeAttachScorerDialog}>Cancel</Button>
+              <Button
+                variant="primary"
+                icon={<Paperclip />}
+                disabled={!attachScorerId || updateStoredAgent.isPending || createStoredAgent.isPending}
+                onClick={async () => {
+                  const entry = unattachedScorers.find(([id]) => id === attachScorerId);
+                  if (!entry) return;
+                  const [id, scorer] = entry;
+                  try {
+                    await attachScorer(id, scorer);
+                    toast.success(`Scorer "${scorer.scorer?.name || id}" attached`);
+                    closeAttachScorerDialog();
+                  } catch {
+                    toast.error('Failed to attach scorer');
+                  }
+                }}
+              >
+                Attach
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </>
@@ -924,8 +754,8 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
         onValueChange={handleTabChange}
         className="flex h-full flex-col overflow-hidden"
       >
-        {/* Same p-1.5 as the parent agent tab bar so the pills line up. */}
-        <div className="border-border1 flex items-center justify-between gap-x-2 border-b p-1.5">
+        {/* Same spacing as PageLayout.TopArea (p-4 / pb-3) so the tabs line up with the traces toolbar. */}
+        <div className="flex items-center justify-between gap-x-2 px-4 pt-4 pb-3">
           <TabList variant="pill-ghost" className="min-w-0 flex-nowrap overflow-x-auto">
             <Tab value="experiments">
               <Icon size="sm">
@@ -955,6 +785,9 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
 
           {/* Tab-specific actions */}
           <div className="ml-auto flex shrink-0 items-center gap-2 whitespace-nowrap">
+            {activeTab === 'experiments' && !!experiments?.length && (
+              <RunExperimentButton onClick={() => setShowRunExperimentDialog(true)} />
+            )}
             {activeTab === 'datasets' && (
               <>
                 <CreateButton
@@ -972,7 +805,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
                 )}
               </>
             )}
-            {activeTab === 'scorers' && (
+            {activeTab === 'scorers' && !isCodeAgentOverride && (
               <>
                 <CreateButton
                   variant="ghost"
@@ -993,7 +826,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
 
         {/* Search bar below tabs */}
         {activeTab !== 'review' && (
-          <div className="px-1.5 py-2">
+          <div className="px-4 pb-3">
             {activeTab === 'experiments' && (
               <InputGroup variant="outline">
                 <InputGroupAddon align="inline-start">
@@ -1039,11 +872,16 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
           </div>
         )}
 
-        <div className="flex-1 overflow-hidden px-1.5 pb-4">
-          <TabContent value="review" className="h-full overflow-hidden">
-            <AgentPlaygroundReview agentId={agentId} onCreateScorer={handleCreateScorerFromFailures} />
+        <div className="flex-1 overflow-hidden px-4 pb-4">
+          <TabContent value="review" className="grid h-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden py-0">
+            <DatasetReview
+              experiments={experiments ?? []}
+              isLoadingExperiments={isLoadingExperiments}
+              detailPanelVariant="inline"
+              onCreateScorer={handleCreateScorerFromFailures}
+            />
           </TabContent>
-          <TabContent value="experiments" className="h-full overflow-hidden">
+          <TabContent value="experiments" className="h-full overflow-hidden py-0">
             <Columns className={hasDetailPanel && detailView?.type === 'experiment' ? 'grid-cols-[1fr_1fr]' : ''}>
               <Column>
                 <Column.Content
@@ -1056,7 +894,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
             </Columns>
           </TabContent>
 
-          <TabContent value="datasets" className="h-full overflow-hidden">
+          <TabContent value="datasets" className="h-full overflow-hidden py-0">
             <Columns className={hasDetailPanel && detailView?.type === 'dataset' ? 'grid-cols-[1fr_1fr]' : ''}>
               <Column>
                 <Column.Content className={!isLoadingDatasets && !datasets.length ? 'content-stretch' : undefined}>
@@ -1067,7 +905,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
             </Columns>
           </TabContent>
 
-          <TabContent value="scorers" className="h-full overflow-hidden">
+          <TabContent value="scorers" className="h-full overflow-hidden py-0">
             <Columns
               className={
                 hasDetailPanel &&
@@ -1095,56 +933,6 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
       </Tabs>
 
       {renderDialogs()}
-    </div>
-  );
-}
-
-// --- Sub-components ---
-
-function ExperimentBadge({ experiment }: { experiment: AgentExperiment }) {
-  const { status, failedCount, totalItems } = experiment;
-
-  const versionTags = [
-    experiment.datasetVersion != null ? formatVersionLabel('Dataset', experiment.datasetVersion) : null,
-    experiment.agentVersion ? formatVersionLabel('Agent', experiment.agentVersion) : null,
-  ].filter(Boolean);
-
-  const versionLine =
-    versionTags.length > 0 ? (
-      <Txt variant="ui-xs" className="text-neutral3">
-        {versionTags.join(' · ')}
-      </Txt>
-    ) : null;
-
-  if (status === 'running' || status === 'pending') {
-    return (
-      <div className="flex flex-col">
-        <Txt variant="ui-xs" className="text-warning1">
-          {status === 'running' ? 'Running...' : 'Pending...'}
-        </Txt>
-        {versionLine}
-      </div>
-    );
-  }
-
-  if (totalItems === 0) {
-    return (
-      <div className="flex flex-col">
-        <Txt variant="ui-xs" className="text-neutral3">
-          No results
-        </Txt>
-        {versionLine}
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col">
-      <Txt variant="ui-xs" className="text-neutral3">
-        {totalItems} items
-        {failedCount > 0 && <span className="text-error"> · {failedCount} errored</span>}
-      </Txt>
-      {versionLine}
     </div>
   );
 }
