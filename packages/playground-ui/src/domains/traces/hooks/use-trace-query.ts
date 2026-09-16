@@ -66,10 +66,12 @@ export function useTraceQuery({
   >({
     queryKey: ['trace-query', query, limit] as const,
     queryFn: query
-      ? ({ pageParam }) => {
+      ? async ({ pageParam }) => {
           // Capability failures must reach the fallback without the SDK retrying 501 responses.
           const queryClient = new MastraClient({ ...client.options, retries: 0 });
-          return queryClient.queryTraces({ ...query, page: { limit, after: pageParam ?? null } });
+          const response = await queryClient.queryTraces({ ...query, page: { limit, after: pageParam ?? null } });
+          if ('page' in response) return response;
+          throw new Error('Expected a cursor-paginated trace query response');
         }
       : skipToken,
     initialPageParam: undefined,
