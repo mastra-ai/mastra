@@ -64,6 +64,17 @@ export interface RedisStreamsPubSubConfig {
   blockMs?: number;
   redisOptions?: RedisClientOptions;
   /**
+   * Factory that produces an UNCONNECTED redis client. When provided it is
+   * called once for the shared writer and once for each subscription's blocking
+   * reader, and takes precedence over `redisOptions`/`url` for client creation.
+   *
+   * Use this to back the pubsub with a Redis Cluster client
+   * (`createCluster(...)`) or any pre-configured client. The returned client
+   * must not already be connected — this class owns its connection lifecycle
+   * (connect on first use, quit on close).
+   */
+  clientFactory?: () => RedisClientType;
+  /**
    * Approximate maximum number of entries kept per stream. On every publish we
    * issue MAXLEN ~ N which lets Redis trim opportunistically. Defaults to
    * 10_000 — set to 0 to disable trimming.
@@ -145,6 +156,10 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
 
   #writeClient: RedisClientType;
   #connectOptions: RedisClientOptions;
+  #clientFactory?: () => RedisClientType;
+  // Dedupes concurrent cold callers onto a single writer connect(); see
+  // #ensureWriterConnected.
+  #writerConnecting?: Promise<void>;
   #keyPrefix: string;
   #blockMs: number;
   #maxStreamLength: number;
@@ -172,7 +187,8 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     super();
     const url = options.url ?? options.redisOptions?.url ?? 'redis://localhost:6379';
     this.#connectOptions = { ...options.redisOptions, url };
-    this.#writeClient = createClient(this.#connectOptions) as RedisClientType;
+    this.#clientFactory = options.clientFactory;
+    this.#writeClient = this.#createClient();
     this.#logger = options.logger;
     this.#attachErrorLogger(this.#writeClient, 'write');
     this.#keyPrefix = options.keyPrefix ?? 'mastra:topic';
@@ -211,6 +227,15 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   }
 
   /**
+   * Create an unconnected client via the caller-supplied `clientFactory` (used
+   * for Cluster clients), falling back to a standalone `createClient` built from
+   * `redisOptions`/`url`. Called once for the writer and once per reader.
+   */
+  #createClient(): RedisClientType {
+    return this.#clientFactory ? this.#clientFactory() : (createClient(this.#connectOptions) as RedisClientType);
+  }
+
+  /**
    * Attach the `'error'` listener node-redis requires on every client. Without
    * one, a mid-life socket close makes the client emit an unhandled `'error'`,
    * which (per EventEmitter semantics) throws from inside RedisSocket's error
@@ -246,10 +271,25 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     return `${topic}::${cbId}`;
   }
 
-  /** Lazily connect the shared writer client. Idempotent. */
+  /** Lazily connect the shared writer client. Idempotent and safe under concurrent callers. */
   async #ensureWriterConnected(): Promise<void> {
     if (this.#writeClient.isOpen) return;
-    await this.#writeClient.connect();
+    // Dedupe concurrent cold callers onto a single connect(). On a Cluster
+    // client `isOpen` flips true only after slot discovery finishes, so a second
+    // connect() racing the first crashes inside slot lookup ("Cannot read
+    // properties of undefined (reading 'master')"). We still gate on `isOpen`
+    // (not `isReady`) so node-redis's own automatic reconnect — which reopens
+    // an already-open socket mid-life — is never fought with a second connect().
+    if (!this.#writerConnecting) {
+      this.#writerConnecting = this.#writeClient
+        .connect()
+        .then(() => undefined)
+        .finally(() => {
+          // Clear so a failed initial connect can be retried on the next call.
+          this.#writerConnecting = undefined;
+        });
+    }
+    return this.#writerConnecting;
   }
 
   #streamKey(topic: string): string {
@@ -392,7 +432,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
 
     // Each subscription gets a dedicated reader connection because XREADGROUP
     // with BLOCK > 0 holds the connection until a message arrives.
-    const readClient = createClient(this.#connectOptions) as RedisClientType;
+    const readClient = this.#createClient();
     this.#attachErrorLogger(readClient, 'read', { topic });
     await readClient.connect();
 

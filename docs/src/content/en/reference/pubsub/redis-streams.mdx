@@ -39,6 +39,25 @@ export const mastra = new Mastra({
 })
 ```
 
+### Redis Cluster
+
+Pass a `clientFactory` to back the pubsub with a Redis Cluster client. The factory is called once for the shared writer and once for each subscription's blocking reader, so every connection is a distinct client.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { RedisStreamsPubSub } from '@mastra/redis-streams'
+import { createCluster } from 'redis'
+
+export const mastra = new Mastra({
+  pubsub: new RedisStreamsPubSub({
+    clientFactory: () =>
+      createCluster({
+        rootNodes: [{ url: 'redis://node-1:6379' }, { url: 'redis://node-2:6379' }],
+      }),
+  }),
+})
+```
+
 ## Constructor parameters
 
 <PropertiesTable
@@ -68,6 +87,13 @@ export const mastra = new Mastra({
     name: 'redisOptions',
     type: 'RedisClientOptions',
     description: 'Options passed to the underlying `redis` client for advanced configuration.',
+    isOptional: true,
+  },
+  {
+    name: 'clientFactory',
+    type: '() => RedisClientType',
+    description:
+      'Factory returning an unconnected `redis` client, called once for the writer and once per subscription reader. Use it to back the pubsub with a Redis Cluster client (`createCluster(...)`) or any pre-configured client. When set, `url`/`redisOptions` are not used to create clients.',
     isOptional: true,
   },
   {
