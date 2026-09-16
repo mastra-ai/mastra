@@ -13,9 +13,9 @@ let gitlab!: GitLabIntegration;
 let projectId = '';
 const getIssue = vi.fn();
 
-function requestContextFor(resourceId: string | undefined): RequestContext {
+function requestContextFor(resourceId: string | undefined, factoryProjectId?: string): RequestContext {
   const context = new RequestContext();
-  if (resourceId) context.set('controller', { resourceId });
+  if (resourceId) context.set('controller', { resourceId, getState: () => ({ factoryProjectId }) });
   return context;
 }
 
@@ -41,6 +41,15 @@ describe('buildGitLabAgentTools', () => {
   it('exposes a read-only issue tool for org-owned factory projects', async () => {
     await seedProject();
     const tools = await buildGitLabAgentTools({ gitlab, requestContext: requestContextFor(projectId) });
+    expect(Object.keys(tools)).toEqual(['gitlab_get_issue']);
+  });
+
+  it('uses the factory project id for board-run sessions', async () => {
+    await seedProject();
+    const tools = await buildGitLabAgentTools({
+      gitlab,
+      requestContext: requestContextFor('work-item-session-id', projectId),
+    });
     expect(Object.keys(tools)).toEqual(['gitlab_get_issue']);
   });
 

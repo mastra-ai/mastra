@@ -253,7 +253,7 @@ function normalizedRemoteUrl(value: string): string | null {
   } catch {
     return null;
   }
-  if (url.protocol !== 'https:' || !url.hostname || url.port || url.search || url.hash) return null;
+  if (url.protocol !== 'https:' || !url.hostname || url.search || url.hash) return null;
   const pathname = url.pathname.replace(/\/+$/, '').replace(/\.git$/i, '');
   return `https://${url.host.toLowerCase()}${pathname}`;
 }
@@ -575,7 +575,9 @@ async function existingCheckoutRemote(
   const result = await sh(sandbox, `git -C ${shellQuote(workdir)} remote get-url origin`);
   if (result.exitCode !== 0) return null;
   const url = result.stdout.trim();
-  return normalizedRemoteUrl(url) === normalizedRemoteUrl(cloneUrl) ? url : null;
+  const actual = normalizedRemoteUrl(url);
+  const expected = normalizedRemoteUrl(cloneUrl);
+  return actual !== null && expected !== null && actual === expected ? url : null;
 }
 
 /** Probed without `git -C` so a missing workdir returns false instead of throwing. */

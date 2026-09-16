@@ -44,9 +44,13 @@ export async function buildGitLabAgentTools({
   gitlab: GitLabIntegrationBase;
 }): Promise<Record<string, ReturnType<typeof createGitLabGetIssueTool>>> {
   if (!gitlab.authEnabled) return {};
-  const ctx = requestContext.get('controller') as AgentControllerRequestContext | undefined;
-  if (!ctx?.resourceId) return {};
-  const orgId = await gitlab.resolveOrgId(ctx.resourceId);
+  const ctx = requestContext.get('controller') as
+    | AgentControllerRequestContext<{ factoryProjectId?: string }>
+    | undefined;
+  if (!ctx) return {};
+  const projectId = ctx.getState().factoryProjectId ?? ctx.resourceId;
+  if (!projectId) return {};
+  const orgId = await gitlab.resolveOrgId(projectId);
   if (!orgId || !(await gitlab.hasActiveConnections())) return {};
   return { gitlab_get_issue: createGitLabGetIssueTool(gitlab) };
 }

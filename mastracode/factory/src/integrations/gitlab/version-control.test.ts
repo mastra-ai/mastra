@@ -197,6 +197,27 @@ describe('buildGitLabVersionControl', () => {
     expect(result.api.listMergeRequests).toHaveBeenCalledWith('acme/app', { page: 2, state: 'opened' });
   });
 
+  it('includes both closed and merged requests in provider-neutral closed listings', async () => {
+    const result = setup();
+    vi.spyOn(result.api, 'listMergeRequests').mockResolvedValue([
+      mergeRequest({ iid: 17, state: 'closed' }),
+      mergeRequest({ iid: 18, state: 'merged', merged_at: '2026-09-05T00:00:00Z' }),
+      mergeRequest({ iid: 19, state: 'opened' }),
+    ]);
+
+    const page = await result.versionControl.listPullRequests({
+      connection: CONNECTION,
+      sourceId: 'acme/app',
+      state: 'closed',
+    });
+
+    expect(page.pullRequests.map(pullRequest => ({ id: pullRequest.id, merged: pullRequest.merged }))).toEqual([
+      { id: '17', merged: false },
+      { id: '18', merged: true },
+    ]);
+    expect(result.api.listMergeRequests).toHaveBeenCalledWith('acme/app', { page: 1, state: 'all' });
+  });
+
   it('creates, closes, and squash-merges merge requests with GitLab request fields', async () => {
     const result = setup();
     const create = vi
@@ -338,7 +359,9 @@ describe('buildGitLabVersionControl', () => {
     const approve = vi.spyOn(result.api, 'approveMergeRequest').mockResolvedValue(mergeRequest());
     const createNote = vi
       .spyOn(result.api, 'createMergeRequestNote')
-      .mockResolvedValue(note({ id: 94, body: 'Reviewed' }));
+      .mockImplementation(async (_projectId, _iid, body) =>
+        note({ id: body === 'Approved with note' ? 93 : 94, body }),
+      );
 
     await expect(
       result.versionControl.listReviews({
@@ -356,9 +379,10 @@ describe('buildGitLabVersionControl', () => {
         sourceId: 'acme/app',
         pullRequestId: '17',
         event: 'approve',
+        body: ' Approved with note ',
         commitId: 'head-sha',
       }),
-    ).resolves.toMatchObject({ state: 'approved' });
+    ).resolves.toMatchObject({ state: 'approved', body: 'Approved with note' });
     await expect(
       result.versionControl.submitReview({
         connection: CONNECTION,
@@ -371,7 +395,8 @@ describe('buildGitLabVersionControl', () => {
     ).resolves.toMatchObject({ id: '17:comment:94', state: 'commented', body: 'Reviewed' });
 
     expect(approve).toHaveBeenCalledWith('acme/app', 17, 'head-sha');
-    expect(createNote).toHaveBeenCalledWith('acme/app', 17, 'Reviewed');
+    expect(createNote).toHaveBeenNthCalledWith(1, 'acme/app', 17, 'Approved with note');
+    expect(createNote).toHaveBeenNthCalledWith(2, 'acme/app', 17, 'Reviewed');
   });
 
   it('rejects ambiguous review operations with explicit 501 errors', async () => {
