@@ -307,11 +307,11 @@ Tool names must be unique across all workspace tools. Setting a custom name that
 
 ### Read-before-write tracking
 
-When `requireReadBeforeWrite` is enabled, write tools reject changes to files the agent hasn't read. When the agent runs with a memory thread inside a Mastra instance, read records are kept per thread in the `threadState` storage domain — the same store that holds task lists and goal objectives. Records automatically survive suspend/resume cycles (for example, a tool awaiting approval), later turns on the same thread, and process restarts on serverless runtimes when the configured storage adapter persists thread state. No configuration is needed beyond registering the agent with a Mastra instance that has storage.
+When `requireReadBeforeWrite` is enabled, write tools reject changes to files the agent hasn't read. When the agent runs with a memory thread inside a Mastra instance, read records are kept per thread in the `threadState` storage domain, the same store that holds task lists and goal objectives. Records automatically survive suspend/resume cycles (for example, a tool awaiting approval), later turns on the same thread, and process restarts on serverless runtimes when the configured storage adapter persists thread state. No configuration is needed beyond registering the agent with a Mastra instance that has storage.
 
 If a file changes on disk after it was read, the write is still rejected until the agent re-reads it, and a successful write always clears the record so the next edit requires a fresh read. Runs without a memory thread or without Mastra storage track reads per run.
 
-Read records are scoped to the filesystem they were read from, identified by the filesystem's provider and base path. If a thread resolves a different filesystem between requests — for example, a dynamic workspace or filesystem that varies by request context — previously read files must be re-read on the new filesystem before writing. Filesystems with the same configuration (such as two `LocalFilesystem` instances with the same `basePath`) share read records.
+Read records are scoped to the filesystem they were read from, identified by the filesystem's provider and base path. If a thread resolves a different filesystem between requests (for example, a dynamic workspace or filesystem that varies by request context), previously read files must be re-read on the new filesystem before writing. Filesystems with the same configuration (such as two `LocalFilesystem` instances with the same `basePath`) share read records.
 
 ### Tool hooks
 
