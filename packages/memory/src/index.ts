@@ -70,8 +70,12 @@ import type {
   SummarizeConversationResult,
 } from './processors/observational-memory/summarize';
 import { TokenCounter } from './processors/observational-memory/token-counter';
-import type { WidenedObservationalMemoryModel } from './processors/observational-memory/types';
+import type {
+  MemoryRecallCodeModeConfig,
+  WidenedObservationalMemoryModel,
+} from './processors/observational-memory/types';
 import { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
+import { createMemoryRecallCodeMode, MEMORY_RECALL_CODE_MODE_TOOL_ID } from './tools/memory-code-mode';
 import { recallTool } from './tools/om-tools';
 import { createWorkingMemoryTool, deepMergeWorkingMemory } from './tools/working-memory';
 
@@ -115,6 +119,12 @@ export type {
   ObservationRecallResult,
   ObservationRecallSource,
 } from './tools/observation-recall';
+export type {
+  MemoryRecallCodeModeConfig,
+  MemoryRecallCodeModeSandbox,
+  MemoryRecallCodeModeTransport,
+  MemoryRecallCodeModeToolResult,
+} from './processors/observational-memory/types';
 
 /**
  * Normalize a `boolean | object` observational memory config.
@@ -152,7 +162,14 @@ type RuntimeMemoryConfig = Omit<MemoryConfig, 'observationalMemory'> & {
 };
 
 type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
-  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string };
+  retrieval?:
+    | boolean
+    | {
+        vector?: boolean;
+        scope?: 'thread' | 'resource';
+        instructions?: string;
+        codeMode?: true | MemoryRecallCodeModeConfig;
+      };
 };
 
 /*
@@ -1955,6 +1972,11 @@ ${workingMemory}`;
       }
     }
 
+    const memoryRecallCodeModeInstructions = this.getMemoryRecallCodeModeInstructions(config);
+    if (memoryRecallCodeModeInstructions) {
+      systemParts.push(memoryRecallCodeModeInstructions);
+    }
+
     // 2. Working memory system message
     const workingMemoryMessage = await this.getSystemMessage({
       threadId,
@@ -2770,6 +2792,18 @@ Notes:
     return !!retrieval.vector && !!this.vector && !!this.embedder;
   }
 
+  private getMemoryRecallCodeModeInstructions(config: MemoryConfigInternal): string | undefined {
+    const omConfig = normalizeObservationalMemoryConfig(config.observationalMemory);
+    if (typeof omConfig?.retrieval !== 'object' || !omConfig.retrieval.codeMode) return undefined;
+
+    const recall = recallTool(config, {
+      retrievalScope: omConfig.retrieval.scope ?? 'resource',
+      searchEnabled: this.hasRetrievalSearch(omConfig.retrieval),
+      observationsEnabled: omConfig.observation?.archive !== undefined,
+    });
+    return createMemoryRecallCodeMode(recall, omConfig.retrieval.codeMode).instructions;
+  }
+
   public listTools(config?: MemoryConfigInternal): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
     this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);
@@ -2793,12 +2827,17 @@ Notes:
           : archiveEnabled
             ? (omConfig?.scope ?? 'thread')
             : 'resource';
-      tools.recall = recallTool(mergedConfig, {
+      const recall = recallTool(mergedConfig, {
         retrievalScope,
         searchEnabled: this.hasRetrievalSearch(omConfig?.retrieval),
         observationsEnabled: archiveEnabled,
         obscureThreadIds: omConfig?.obscureThreadIds === true,
       });
+      tools.recall = recall;
+
+      if (typeof omConfig?.retrieval === 'object' && omConfig.retrieval.codeMode) {
+        tools[MEMORY_RECALL_CODE_MODE_TOOL_ID] = createMemoryRecallCodeMode(recall, omConfig.retrieval.codeMode).tool;
+      }
     }
     if (
       omConfig?.experimental_subconscious instanceof Subconscious &&

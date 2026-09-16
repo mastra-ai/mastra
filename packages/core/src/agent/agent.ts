@@ -255,6 +255,9 @@ import type { AgentCapabilities } from './workflows/prepare-stream/schema';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 
+const MEMORY_RECALL_CODE_MODE_TOOL_ID = 'execute_memory_recall';
+const MEMORY_RECALL_CODE_MODE_MARKER = '__mastraMemoryRecallCodeMode';
+
 // Structural shape of the lazily-built `DurableAgent` wrapper used by
 // `Agent`'s standalone-durable delegators. Declared as a concrete interface
 // (rather than `Record<string, Function>`) so that under
@@ -3978,6 +3981,9 @@ export class Agent<
           autoResumeSuspendedTools,
           backgroundTaskEnabled,
         );
+        if ((toolObj as unknown as Record<string, unknown>)[MEMORY_RECALL_CODE_MODE_MARKER] === true) {
+          Object.defineProperty(convertedToCoreTool, MEMORY_RECALL_CODE_MODE_MARKER, { value: true });
+        }
         convertedMemoryTools[toolName] = convertedToCoreTool;
       }
     }
@@ -6617,6 +6623,17 @@ export class Agent<
       getModel: getResolvedModel,
     });
 
+    this.assertMemoryRecallCodeModeToolIsReserved(memoryTools, {
+      assignedTools,
+      toolsetTools,
+      clientSideTools,
+      agentTools,
+      workflowTools,
+      workspaceTools,
+      skillTools,
+      browserTools,
+    });
+
     const requestResolvedTools = {
       ...assignedTools,
       ...memoryTools,
@@ -6644,10 +6661,16 @@ export class Agent<
       getModel: getResolvedModel,
     });
 
+    this.assertMemoryRecallCodeModeToolIsReserved(memoryTools, {
+      requestResolvedTools,
+      inputProcessorLoadedTools,
+    });
+
     const allTools = {
       ...requestResolvedTools,
       ...inputProcessorLoadedTools,
     };
+    this.assertMemoryRecallCodeModeToolIsReserved(memoryTools, { allTools });
 
     const formattedTools = this.formatTools(allTools);
     return this.wrapToolsWithHooks(formattedTools, this.resolveToolHooks(hooks));
@@ -6663,6 +6686,37 @@ export class Agent<
    */
   getConfiguredToolHooks(): ToolHooks | undefined {
     return this.#hooks;
+  }
+
+  private assertMemoryRecallCodeModeToolIsReserved(
+    memoryTools: Record<string, CoreTool>,
+    sources: Record<string, Record<string, CoreTool>>,
+  ): void {
+    const managedTool = memoryTools[MEMORY_RECALL_CODE_MODE_TOOL_ID];
+    if (!managedTool || (managedTool as Record<string, unknown>)[MEMORY_RECALL_CODE_MODE_MARKER] !== true) return;
+
+    for (const [sourceName, tools] of Object.entries(sources)) {
+      if (
+        Object.prototype.hasOwnProperty.call(tools, MEMORY_RECALL_CODE_MODE_TOOL_ID) &&
+        tools[MEMORY_RECALL_CODE_MODE_TOOL_ID] !== managedTool
+      ) {
+        const mastraError = new MastraError({
+          id: 'AGENT_TOOL_NAME_COLLISION',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+            toolName: MEMORY_RECALL_CODE_MODE_TOOL_ID,
+            sourceName,
+          },
+          text:
+            `The tool name "${MEMORY_RECALL_CODE_MODE_TOOL_ID}" is reserved by Memory-managed Code Mode. ` +
+            'Rename the colliding tool or disable observationalMemory.retrieval.codeMode.',
+        });
+        this.logger.trackException(mastraError);
+        throw mastraError;
+      }
+    }
   }
 
   private resolveToolHooks(runHooks?: ToolHooks): ToolHooks | undefined {

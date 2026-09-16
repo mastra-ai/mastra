@@ -13,6 +13,7 @@ import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
+import { getSingleDummyResponseModel } from './mock-model';
 
 const mockFindUser = vi.fn().mockImplementation(async data => {
   const list = [
@@ -1773,5 +1774,111 @@ describe('sub-agent prompt input normalization (GitHub #14154)', () => {
     expect(secondSubAgentTool).not.toBe(firstSubAgentTool);
     expect(secondSchemas.inputSchema).toBe(firstSchemas.inputSchema);
     expect(secondSchemas.outputSchema).toBe(firstSchemas.outputSchema);
+  });
+});
+
+describe('Memory-managed Code Mode tool reservation', () => {
+  const createManagedMemory = () => {
+    const recall = createTool({
+      id: 'recall',
+      description: 'Recall memory.',
+      inputSchema: z.object({}),
+      execute: async () => 'recalled',
+    });
+    const executeMemoryRecall = createTool({
+      id: 'execute_memory_recall',
+      description: 'Execute recall code.',
+      inputSchema: z.object({ code: z.string() }),
+      execute: async () => ({ success: true }),
+    }) as ReturnType<typeof createTool> & { __mastraMemoryRecallCodeMode: true };
+    executeMemoryRecall.__mastraMemoryRecallCodeMode = true;
+
+    return {
+      listTools: () => ({ recall, execute_memory_recall: executeMemoryRecall }),
+    } as any;
+  };
+
+  const createCollision = () =>
+    createTool({
+      id: 'colliding-tool',
+      description: 'Collides with Memory-managed Code Mode.',
+      inputSchema: z.object({}),
+      execute: async () => 'collision',
+    });
+
+  const getTools = (agent: Agent, options: Record<string, unknown> = {}) =>
+    agent.getToolsForExecution({
+      requestContext: new RequestContext(),
+      threadId: 'thread',
+      resourceId: 'resource',
+      ...options,
+    });
+
+  it('keeps the exact managed proxy while unrelated Code Mode ids retain existing behavior', async () => {
+    const executeTypescript = createTool({
+      id: 'execute_typescript',
+      description: 'An independently configured Code Mode tool.',
+      inputSchema: z.object({ code: z.string() }),
+      execute: async () => ({ success: true }),
+    });
+    const agent = new Agent({
+      id: 'memory-code-mode-agent',
+      name: 'memory-code-mode-agent',
+      instructions: 'Use memory.',
+      model: getSingleDummyResponseModel('v2'),
+      memory: createManagedMemory(),
+      tools: { execute_typescript: executeTypescript },
+    });
+
+    const tools = await getTools(agent);
+
+    expect(tools.execute_memory_recall?.id).toBe('execute_memory_recall');
+    expect(tools.execute_typescript?.id).toBe('execute_typescript');
+  });
+
+  it.each([
+    ['agent-assigned tools', { tools: { execute_memory_recall: createCollision() } }, {} as Record<string, unknown>],
+    [
+      'toolsets',
+      {},
+      { toolsets: { runtime: { execute_memory_recall: createCollision() } } } as Record<string, unknown>,
+    ],
+    ['client tools', {}, { clientTools: { execute_memory_recall: createCollision() } } as Record<string, unknown>],
+  ])('rejects collisions from %s', async (source, agentOptions, executionOptions) => {
+    const agent = new Agent({
+      id: `memory-code-mode-collision-${source}`,
+      name: `memory-code-mode-collision-${source}`,
+      instructions: 'Use memory.',
+      model: getSingleDummyResponseModel('v2'),
+      memory: createManagedMemory(),
+      ...agentOptions,
+    });
+
+    await expect(getTools(agent, executionOptions)).rejects.toMatchObject({
+      id: 'AGENT_TOOL_NAME_COLLISION',
+      details: { toolName: 'execute_memory_recall' },
+    });
+  });
+
+  it('rejects a processor-loaded tool that overwrites the managed proxy', async () => {
+    const processor = {
+      id: 'memory-code-mode-collision-processor',
+      name: 'Memory Code Mode collision processor',
+      processInputStep: async ({ messages }: { messages: unknown }) => messages,
+      getLoadedToolsForRequestContext: () => ({ execute_memory_recall: createCollision() }),
+    };
+    const agent = new Agent({
+      id: 'memory-code-mode-processor-collision',
+      name: 'memory-code-mode-processor-collision',
+      instructions: 'Use memory.',
+      model: getSingleDummyResponseModel('v2'),
+      memory: createManagedMemory(),
+      inputProcessors: [processor as any],
+    });
+
+    await expect(getTools(agent)).rejects.toMatchObject({
+      id: 'AGENT_TOOL_NAME_COLLISION',
+      details: { toolName: 'execute_memory_recall', sourceName: 'inputProcessorLoadedTools' },
+    });
   });
 });
