@@ -77,11 +77,14 @@ async function captureDependenciesToOptimize(
     logger,
     shouldCheckTransitiveDependencies,
     analyzeCache,
+    activeEntries,
   }: {
     logger: IMastraLogger;
     shouldCheckTransitiveDependencies: boolean;
     /** Shared cache to avoid re-analyzing the same entry across recursive calls */
     analyzeCache?: Map<string, AnalyzeEntryResult>;
+    /** Resolved entries currently being analyzed in this recursion path */
+    activeEntries: Set<string>;
   },
 ): Promise<Map<string, DependencyMetadata>> {
   const depsToOptimize = new Map<string, DependencyMetadata>();
@@ -166,12 +169,18 @@ async function captureDependenciesToOptimize(
         continue;
       }
 
+      const resolvedEntry = slash(resolvedPath);
+      if (activeEntries.has(resolvedEntry)) {
+        continue;
+      }
+
       const analysis = await analyzeEntry({ entry: resolvedPath, isVirtualFile: false }, '', {
         workspaceMap,
         projectRoot,
         logger,
         sourcemapEnabled: false,
         analyzeCache,
+        activeEntries,
       });
 
       if (!analysis?.dependencies) {
@@ -283,6 +292,7 @@ export async function analyzeEntry(
     projectRoot,
     shouldCheckTransitiveDependencies = false,
     analyzeCache,
+    activeEntries: providedActiveEntries,
   }: {
     logger: IMastraLogger;
     sourcemapEnabled: boolean;
@@ -291,6 +301,8 @@ export async function analyzeEntry(
     shouldCheckTransitiveDependencies?: boolean;
     /** Shared cache to avoid re-analyzing the same entry across recursive calls */
     analyzeCache?: Map<string, AnalyzeEntryResult>;
+    /** Resolved entries currently being analyzed in this recursion path */
+    activeEntries?: Set<string>;
   },
 ): Promise<AnalyzeEntryResult> {
   // Deduplicate: if this entry was already analyzed, return cached result
@@ -299,40 +311,53 @@ export async function analyzeEntry(
     return analyzeCache.get(cacheKey)!;
   }
 
-  const optimizerBundler = await rollup({
-    logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
-    input: isVirtualFile ? '#entry' : entry,
-    treeshake: false,
-    preserveSymlinks: true,
-    plugins: getInputPlugins({ entry, isVirtualFile }, mastraEntry, { sourcemapEnabled }),
-    external: DEPS_TO_IGNORE,
-  });
-
-  const { output } = await optimizerBundler.generate({
-    format: 'esm',
-    inlineDynamicImports: true,
-  });
-
-  await optimizerBundler.close();
-
-  const depsToOptimize = await captureDependenciesToOptimize(output[0] as OutputChunk, workspaceMap, projectRoot, {
-    logger,
-    shouldCheckTransitiveDependencies,
-    analyzeCache,
-  });
-
-  const result: AnalyzeEntryResult = {
-    dependencies: depsToOptimize,
-    output: {
-      code: output[0].code,
-      map: output[0].map as SourceMap,
-    },
-  };
-
-  // Cache the result so recursive calls for the same entry are instant
-  if (cacheKey && analyzeCache) {
-    analyzeCache.set(cacheKey, result);
+  const activeEntries = providedActiveEntries ?? new Set<string>();
+  const shouldTrackEntry = Boolean(cacheKey && !activeEntries.has(cacheKey));
+  if (cacheKey && shouldTrackEntry) {
+    activeEntries.add(cacheKey);
   }
 
-  return result;
+  try {
+    const optimizerBundler = await rollup({
+      logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
+      input: isVirtualFile ? '#entry' : entry,
+      treeshake: false,
+      preserveSymlinks: true,
+      plugins: getInputPlugins({ entry, isVirtualFile }, mastraEntry, { sourcemapEnabled }),
+      external: DEPS_TO_IGNORE,
+    });
+
+    const { output } = await optimizerBundler.generate({
+      format: 'esm',
+      inlineDynamicImports: true,
+    });
+
+    await optimizerBundler.close();
+
+    const depsToOptimize = await captureDependenciesToOptimize(output[0] as OutputChunk, workspaceMap, projectRoot, {
+      logger,
+      shouldCheckTransitiveDependencies,
+      analyzeCache,
+      activeEntries,
+    });
+
+    const result: AnalyzeEntryResult = {
+      dependencies: depsToOptimize,
+      output: {
+        code: output[0].code,
+        map: output[0].map as SourceMap,
+      },
+    };
+
+    // Cache the result so recursive calls for the same entry are instant
+    if (cacheKey && analyzeCache) {
+      analyzeCache.set(cacheKey, result);
+    }
+
+    return result;
+  } finally {
+    if (cacheKey && shouldTrackEntry) {
+      activeEntries.delete(cacheKey);
+    }
+  }
 }

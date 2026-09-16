@@ -28,7 +28,9 @@ import {
 import type { BundlerPlatform } from './utils';
 
 type ErrorId =
-  'DEPLOYER_ANALYZE_MODULE_NOT_FOUND' | 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD' | 'DEPLOYER_ANALYZE_TYPE_ERROR';
+  | 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND'
+  | 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD'
+  | 'DEPLOYER_ANALYZE_TYPE_ERROR';
 
 function preferDependencyInfo(
   existing: ExternalDependencyInfo | undefined,
@@ -426,6 +428,7 @@ export async function analyzeBundle(
   const allUsedExternals = new Map<string, ExternalDependencyInfo>();
   // Shared cache prevents re-analyzing the same workspace package across entries and recursive calls.
   const analyzeCache = new Map<string, Awaited<ReturnType<typeof analyzeEntry>>>();
+  const activeAnalyzeEntries = new Set<string>();
   for (const entry of entries) {
     const isVirtualFile = entry.includes('\n') || !existsSync(entry);
     const analyzeResult = await analyzeEntry({ entry, isVirtualFile }, mastraEntry, {
@@ -435,6 +438,7 @@ export async function analyzeBundle(
       projectRoot,
       shouldCheckTransitiveDependencies: true,
       analyzeCache,
+      activeEntries: activeAnalyzeEntries,
     });
 
     // Detect pino transports in the bundled output
