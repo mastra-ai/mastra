@@ -93,6 +93,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
           inputSchema: z.object({ value: z.string() }),
           outputSchema: z.object({ value: z.string() }),
           requireApproval: true,
+          onInputAvailable: async () => record('input-available-a'),
           execute: async ({ value }) => {
             record('execute-a');
             return { value };
@@ -105,10 +106,14 @@ describe('eager tool dispatch — excluded tool classes', () => {
       await agent.stream('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as any),
     );
 
-    // The approval-gated tool must never run ahead of the model's finish; the
-    // approval decision itself only exists inside toolCallStep.
+    // Stronger than "it did not execute": `onInputAvailable` fires inside toolCallStep
+    // *before* the approval gate is consulted, so an eager dispatch would show up here
+    // even though the tool body never ran. Its absence proves dispatch never happened.
+    expect(events.slice(0, 3)).toEqual(['complete-call-a', 'later-output', 'finish']);
+    const finishIndex = events.indexOf('finish');
+    expect(events.indexOf('input-available-a')).toBeGreaterThan(finishIndex);
+    // The approval gate is reached, so the body never runs at all.
     expect(events.indexOf('execute-a')).toBe(-1);
-    expect(events).toEqual(['complete-call-a', 'later-output', 'finish']);
     // Existing approval behaviour is preserved end to end: the run asks for approval
     // rather than erroring out of a half-started eager execution.
     expect(chunks.map(chunk => chunk.type)).toContain('tool-call-approval');
@@ -132,6 +137,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
           outputSchema: z.object({ value: z.string() }),
           suspendSchema: z.object({ reason: z.string() }),
           resumeSchema: z.object({ value: z.string() }),
+          onInputAvailable: async () => record('input-available-a'),
           execute: async ({ value }) => {
             record('execute-a');
             return { value };
@@ -142,9 +148,140 @@ describe('eager tool dispatch — excluded tool classes', () => {
 
     await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as any));
 
-    const executeIndex = events.indexOf('execute-a');
+    // Dispatch itself must not happen — see the approval case for why
+    // `onInputAvailable` is the discriminating signal.
     const finishIndex = events.indexOf('finish');
-    expect(executeIndex === -1 || executeIndex > finishIndex).toBe(true);
+    for (const event of ['input-available-a', 'execute-a']) {
+      const index = events.indexOf(event);
+      expect(index === -1 || index > finishIndex).toBe(true);
+    }
+  });
+
+  it('does not eagerly execute an agent-derived tool, which can suspend without a suspend schema', async () => {
+    const { events, record } = createRecorder();
+    const model = createToolCallModel(
+      [{ toolCallId: 'call-a', toolName: 'agent-helper', input: { value: 'a' } }],
+      record,
+    );
+
+    const agent = new Agent({
+      id: 'eager-agent-tool-agent',
+      name: 'Eager agent-tool agent',
+      instructions: 'Call the sub-agent once.',
+      model,
+      tools: {
+        // Named with the `agent-` prefix the runtime itself uses to identify resumable
+        // sub-agent tools (see tools/tool-builder/builder.ts isResumableTool).
+        'agent-helper': createTool({
+          id: 'agent-helper',
+          description: 'Stands in for a sub-agent tool',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          onInputAvailable: async () => record('input-available-a'),
+          execute: async ({ value }) => {
+            record('execute-a');
+            return { value };
+          },
+        }),
+      },
+    });
+
+    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as any));
+
+    const finishIndex = events.indexOf('finish');
+    expect(finishIndex).toBeGreaterThan(-1);
+    for (const event of ['input-available-a', 'execute-a']) {
+      const index = events.indexOf(event);
+      expect(index === -1 || index > finishIndex).toBe(true);
+    }
+  });
+
+  it('does not eagerly execute when the call is dispatched as a background task', async () => {
+    const { events, record } = createRecorder();
+    const model = createToolCallModel(
+      [{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a', _background: true } }],
+      record,
+    );
+
+    const agent = new Agent({
+      id: 'eager-background-agent',
+      name: 'Eager background agent',
+      instructions: 'Call tool-a once.',
+      model,
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Background dispatched',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          onInputAvailable: async () => record('input-available-a'),
+          execute: async ({ value }) => {
+            record('execute-a');
+            return { value };
+          },
+        }),
+      },
+    });
+
+    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as any));
+
+    const finishIndex = events.indexOf('finish');
+    for (const event of ['input-available-a', 'execute-a']) {
+      const index = events.indexOf(event);
+      expect(index === -1 || index > finishIndex).toBe(true);
+    }
+  });
+});
+
+describe('eager tool dispatch — entry points', () => {
+  it('leaves regular generate() on the normal path when the option is set', async () => {
+    const { events, record } = createRecorder();
+    const model = new MockLanguageModelV2({
+      doGenerate: async () => {
+        record('generate');
+        return {
+          finishReason: 'tool-calls' as const,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'call-a',
+              toolName: 'tool-a',
+              input: JSON.stringify({ value: 'a' }),
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'eager-generate-agent',
+      name: 'Eager generate agent',
+      instructions: 'Call tool-a once.',
+      model,
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Plain tool',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          execute: async ({ value }) => {
+            record('execute-a');
+            return { value };
+          },
+        }),
+      },
+    });
+
+    await agent.generate('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as any);
+
+    // Honest limitation: generate() resolves through `doGenerate`, so there is no
+    // chunk-level window in which an eager dispatch could happen even without the
+    // `methodType === 'stream'` gate in createAgenticExecutionWorkflow. What this does
+    // prove is that carrying the option on the shared options type neither enables a
+    // second execution nor breaks the generate path.
+    expect(events).toEqual(['generate', 'execute-a']);
   });
 });
 
@@ -302,11 +439,243 @@ describe('eager tool dispatch — ordering and exactly-once', () => {
       ['b', 1],
     ]);
   });
+
+  it('does not run eager work in parallel when an approval-capable tool joins the step', async () => {
+    const { record } = createRecorder();
+    const peak = { current: 0, max: 0 };
+    const model = createToolCallModel(
+      [
+        { toolCallId: 'call-a', toolName: 'safe-a', input: { value: 'a' } },
+        { toolCallId: 'call-b', toolName: 'safe-b', input: { value: 'b' } },
+      ],
+      record,
+    );
+
+    const tracked = (id: string) =>
+      createTool({
+        id,
+        description: 'Tracks peak concurrency',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        execute: async ({ value }) => {
+          peak.current++;
+          peak.max = Math.max(peak.max, peak.current);
+          await new Promise(resolve => setTimeout(resolve, 20));
+          peak.current--;
+          return { value };
+        },
+      });
+
+    const safeTools = { 'safe-a': tracked('safe-a'), 'safe-b': tracked('safe-b') };
+    const gated = createTool({
+      id: 'gated',
+      description: 'Requires approval',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      requireApproval: true,
+      execute: async ({ value }) => ({ value }),
+    });
+
+    const agent = new Agent({
+      id: 'eager-mixed-batch-agent',
+      name: 'Eager mixed batch agent',
+      instructions: 'Call the tools.',
+      model,
+      // The agent's own tool set is entirely safe, so the concurrency resolved when the
+      // workflow is built is the configured 5.
+      tools: safeTools,
+    });
+
+    await drain(
+      await agent.stream('go', {
+        maxSteps: 1,
+        eagerToolExecution: true,
+        toolCallConcurrency: 5,
+        // The approval-capable tool only enters at step level, which is exactly when
+        // llm-execution recomputes the foreach limit down to 1. A coordinator holding a
+        // construction-time copy of the limit would still run the two safe calls in
+        // parallel; reading the limit late keeps one source of truth.
+        prepareStep: () => ({ tools: { ...safeTools, gated } }),
+      } as Record<string, unknown> as any),
+    );
+
+    expect(peak.max).toBe(1);
+  });
+});
+
+describe('eager tool dispatch — unsafe terminations', () => {
+  it('drops eager work that has not started when the model terminates unsafely', async () => {
+    const { events, record } = createRecorder();
+    // Two calls, limit 1: the first occupies the permit, the second is queued.
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: new ReadableStream({
+          async start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({
+              type: 'response-metadata',
+              id: 'response-1',
+              modelId: 'mock-model',
+              timestamp: new Date(0),
+            });
+            for (const id of ['call-a', 'call-b']) {
+              record(`complete-${id}`);
+              controller.enqueue({
+                type: 'tool-call',
+                toolCallId: id,
+                toolName: 'tool-a',
+                input: JSON.stringify({ value: id }),
+              });
+            }
+            await new Promise(resolve => setTimeout(resolve, 60));
+            record('finish');
+            controller.enqueue({
+              // Truncated output: the turn must not spawn new tool work.
+              type: 'finish',
+              finishReason: 'length',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            });
+            controller.close();
+          },
+        }),
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'eager-terminal-agent',
+      name: 'Eager terminal agent',
+      instructions: 'Call tool-a twice.',
+      model,
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Slow tool',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          execute: async ({ value }) => {
+            record(`execute-${value}`);
+            // Long enough to still hold the single permit when the model terminates.
+            await new Promise(resolve => setTimeout(resolve, 200));
+            return { value };
+          },
+        }),
+      },
+    });
+
+    await drain(
+      await agent.stream('go', {
+        maxSteps: 1,
+        eagerToolExecution: true,
+        toolCallConcurrency: 1,
+      } as Record<string, unknown> as any),
+    );
+
+    const finishIndex = events.indexOf('finish');
+    // The first call was already running and is still adopted — a real side effect is
+    // never discarded. The queued one never started eagerly.
+    expect(events.indexOf('execute-call-a')).toBeLessThan(finishIndex);
+    const secondIndex = events.indexOf('execute-call-b');
+    expect(secondIndex === -1 || secondIndex > finishIndex).toBe(true);
+  });
+});
+
+describe('eager tool dispatch — processor tripwire', () => {
+  /**
+   * Runs the same tripwire scenario in both modes. The tripwire fires on the first
+   * tool's *result*, i.e. after that tool has run, so it cannot un-start work that is
+   * already in flight — in either mode. What must hold is parity: eager dispatch must
+   * not execute anything the normal pipeline would not have executed.
+   */
+  async function runTripwireScenario(eagerToolExecution: boolean) {
+    const { events, record } = createRecorder();
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: new ReadableStream({
+          async start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({
+              type: 'response-metadata',
+              id: 'response-1',
+              modelId: 'mock-model',
+              timestamp: new Date(0),
+            });
+            for (const id of ['call-a', 'call-b', 'call-c']) {
+              controller.enqueue({
+                type: 'tool-call',
+                toolCallId: id,
+                toolName: 'tool-a',
+                input: JSON.stringify({ value: id }),
+              });
+            }
+            await new Promise(resolve => setTimeout(resolve, 60));
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            });
+            controller.close();
+          },
+        }),
+      }),
+    });
+
+    const agent = new Agent({
+      id: `eager-tripwire-agent-${eagerToolExecution}`,
+      name: 'Eager tripwire agent',
+      instructions: 'Call tool-a three times.',
+      model,
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Slow tool',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          execute: async ({ value }) => {
+            record(`execute-${value}`);
+            await new Promise(resolve => setTimeout(resolve, 40));
+            return { value };
+          },
+        }),
+      },
+      outputProcessors: [
+        {
+          id: 'trip-on-tool-result',
+          // Per-chunk only: a post-stream processor disables eager dispatch entirely,
+          // which is a different contract covered elsewhere.
+          processOutputStream: async ({ part, abort }: any) => {
+            if (part?.type === 'tool-result') abort('blocked');
+            return part;
+          },
+        } as any,
+      ],
+    });
+
+    await drain(
+      await agent.stream('go', {
+        maxSteps: 1,
+        eagerToolExecution,
+        toolCallConcurrency: 1,
+      } as Record<string, unknown> as any),
+    ).catch(() => {});
+
+    return events.filter(event => event.startsWith('execute-')).sort();
+  }
+
+  it('executes no more than the normal pipeline would when the wire trips', async () => {
+    const withoutEager = await runTripwireScenario(false);
+    const withEager = await runTripwireScenario(true);
+
+    expect(withEager).toEqual(withoutEager);
+  });
 });
 
 describe('EagerToolExecutionCoordinator', () => {
   it('never starts queued work after stop(), and marks it as not executed', async () => {
-    const coordinator = new EagerToolExecutionCoordinator(1);
+    const coordinator = new EagerToolExecutionCoordinator(() => 1);
     const executed: string[] = [];
     let releaseA: () => void = () => {};
     const aStarted = new Promise<void>(resolve => {
@@ -324,18 +693,18 @@ describe('EagerToolExecutionCoordinator', () => {
       return 'b';
     });
 
-    const queued = coordinator.get('call-b')!;
+    const queued = coordinator.take('call-b')!;
     coordinator.stop();
     releaseA();
 
     await expect(queued).rejects.toSatisfy(eagerToolCallDidNotExecute);
     // The entry is dropped so the normal foreach path owns the call again.
-    expect(coordinator.get('call-b')).toBeUndefined();
+    expect(coordinator.take('call-b')).toBeUndefined();
     expect(executed).toEqual(['a']);
   });
 
   it('dispatches a given toolCallId at most once', async () => {
-    const coordinator = new EagerToolExecutionCoordinator(4);
+    const coordinator = new EagerToolExecutionCoordinator(() => 4);
     let runs = 0;
     const execute = async () => {
       runs++;
@@ -344,9 +713,44 @@ describe('EagerToolExecutionCoordinator', () => {
 
     expect(coordinator.start('call-a', execute)).toBe(true);
     expect(coordinator.start('call-a', execute)).toBe(false);
-    await coordinator.get('call-a');
+    await coordinator.take('call-a');
 
     expect(runs).toBe(1);
+  });
+
+  it('forgets an execution once it is adopted, so a reused id runs again', async () => {
+    const coordinator = new EagerToolExecutionCoordinator(() => 4);
+    let runs = 0;
+    const execute = async () => `run-${++runs}`;
+
+    coordinator.start('call-a', execute);
+    await expect(coordinator.take('call-a')).resolves.toBe('run-1');
+    // Same id in a later iteration: the settled result must not be replayed.
+    expect(coordinator.take('call-a')).toBeUndefined();
+    expect(coordinator.start('call-a', execute)).toBe(true);
+    await expect(coordinator.take('call-a')).resolves.toBe('run-2');
+  });
+
+  it('reads the concurrency limit late, so a recomputed limit applies', async () => {
+    let limit = 4;
+    const coordinator = new EagerToolExecutionCoordinator(() => limit);
+    const started: string[] = [];
+    const hold = () => new Promise<string>(() => {});
+
+    coordinator.start('a', async () => {
+      started.push('a');
+      return hold();
+    });
+    // The step recomputes the limit down to 1 (an approval-capable tool joined the step).
+    limit = 1;
+    coordinator.start('b', async () => {
+      started.push('b');
+      return hold();
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(started).toEqual(['a']);
+    expect(coordinator.running).toBe(1);
   });
 });
 

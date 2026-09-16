@@ -40,9 +40,14 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     }),
   };
 
+  // Eager dispatch is a regular-streaming-only contract. The 'called' strategy is
+  // excluded because its limit depends on the full set of tools the model ends up
+  // calling, which is unknowable while the model is still streaming.
   const eagerCoordinator =
-    rest.eagerToolExecution && toolCallConcurrencyStrategy === 'available'
-      ? new EagerToolExecutionCoordinator(toolCallForeachOptions.concurrency)
+    rest.eagerToolExecution && rest.methodType === 'stream' && toolCallConcurrencyStrategy === 'available'
+      ? // Read the limit late: map-tool-calls recomputes it per step, and the eager
+        // path must honour the same recomputed value rather than a construction-time copy.
+        new EagerToolExecutionCoordinator(() => toolCallForeachOptions.concurrency)
       : undefined;
 
   const toolCallStep = createToolCallStep({
