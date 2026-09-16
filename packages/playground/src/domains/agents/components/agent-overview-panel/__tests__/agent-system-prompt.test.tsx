@@ -3,7 +3,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { AgentSystemPrompt } from '../agent-system-prompt';
 
-const instructions = 'Follow **these instructions**.\n\n- Keep `source_text` unchanged.\n- Ask before publishing.';
+const instructions =
+  '\n  Follow **these instructions**.\n\n- Keep `source_text` unchanged.\n- Ask before publishing.\n\n';
 
 describe('AgentSystemPrompt', () => {
   describe('when the prompt contains markdown', () => {
