@@ -34,33 +34,59 @@ class RetainingLeasePubSub extends LeasePubSub {
   }
 }
 
-async function publishFinishedApprovalRunFromAnotherInstance(pubsub: RetainingLeasePubSub) {
-  const runId = 'triage-run';
-  const streamId = 'triage-stream';
-  const publish = (data: Record<string, unknown>) =>
-    pubsub.publish(threadTopic, { type: 'agent.thread-stream', runId, data });
+const runId = 'triage-run';
 
+async function publishFromAnotherInstance(pubsub: RetainingLeasePubSub, streams: Record<string, unknown>[][]) {
   await pubsub.acquireLease(threadKey, runId);
-  await publish({ type: 'run-registered', runId, streamId, streamSeq: 1, sourceId: 'instance-a' });
-  await publish({
+  for (const [index, events] of streams.entries()) {
+    const streamId = `triage-stream-${index + 1}`;
+    await pubsub.publish(threadTopic, {
+      type: 'agent.thread-stream',
+      runId,
+      data: { type: 'run-registered', runId, streamId, streamSeq: index + 1, sourceId: 'instance-a' },
+    });
+    for (const event of events) {
+      const data =
+        event.type === 'stream-part'
+          ? { ...event, runId, streamId, sourceId: 'instance-a' }
+          : { ...event, runId, streamId };
+      await pubsub.publish(threadTopic, { type: 'agent.thread-stream', runId, data });
+    }
+  }
+  await pubsub.releaseLease(threadKey, runId);
+}
+
+const finishPart = { type: 'stream-part', part: { type: 'finish', payload: { stepResult: { reason: 'stop' } } } };
+const completed = { type: 'run-completed', persisted: true };
+
+function publishFinishedApprovalRunFromAnotherInstance(pubsub: RetainingLeasePubSub) {
+  const approvalPart = {
     type: 'stream-part',
-    runId,
-    streamId,
-    sourceId: 'instance-a',
     part: {
       type: 'tool-call-approval',
       payload: { toolCallId: 'call-1', toolName: TOOL_NAME, args: { stage: 'Planning' } },
     },
-  });
-  await publish({
+  };
+  return publishFromAnotherInstance(pubsub, [[approvalPart, finishPart, completed]]);
+}
+
+function publishResumedSuspensionRunFromAnotherInstance(pubsub: RetainingLeasePubSub) {
+  const suspendedPart = {
     type: 'stream-part',
-    runId,
-    streamId,
-    sourceId: 'instance-a',
-    part: { type: 'finish', payload: { stepResult: { reason: 'stop' } } },
-  });
-  await publish({ type: 'run-completed', runId, streamId, persisted: true });
-  await pubsub.releaseLease(threadKey, runId);
+    part: {
+      type: 'tool-call-suspended',
+      payload: {
+        toolCallId: 'call-1',
+        toolName: TOOL_NAME,
+        args: { stage: 'Planning' },
+        suspendPayload: { question: 'Which stage?' },
+      },
+    },
+  };
+  return publishFromAnotherInstance(pubsub, [
+    [suspendedPart, { type: 'run-suspended' }],
+    [finishPart, completed],
+  ]);
 }
 
 async function createSessionOn(pubsub: LeasePubSub) {
@@ -129,6 +155,21 @@ describe('run engine: replayed tool-call-approval of a run that already finished
 
     expect(await waitFor(() => eventTypes(events).includes('agent_end'))).toBe(true);
     expect(eventTypes(events)).not.toContain('tool_approval_required');
+    expect(events.filter(event => event.type === 'error')).toEqual([]);
+  });
+
+  it('tool that suspended and was resumed elsewhere: does not park the session on the stale question', async () => {
+    const pubsub = new RetainingLeasePubSub();
+    await publishResumedSuspensionRunFromAnotherInstance(pubsub);
+    const { session, events } = await createSessionOn(pubsub);
+
+    await session.thread.create({ id: threadId });
+
+    expect(await waitFor(() => eventTypes(events).includes('agent_end'))).toBe(true);
+    expect(eventTypes(events)).not.toContain('tool_suspended');
+    expect(events.filter(event => event.type === 'agent_end')).not.toContainEqual(
+      expect.objectContaining({ reason: 'suspended' }),
+    );
     expect(events.filter(event => event.type === 'error')).toEqual([]);
   });
 });

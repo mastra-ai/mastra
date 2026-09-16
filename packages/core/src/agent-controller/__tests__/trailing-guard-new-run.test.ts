@@ -119,7 +119,7 @@ describe('Trailing guard does not swallow new-run null-runId chunks', () => {
     ]);
 
     vi.spyOn(session, 'resolveToolApproval').mockReturnValue('allow');
-    vi.spyOn(session.machinery.getAgent(), 'findToolApprovalRun').mockImplementation(async ({ toolCallId }) => ({
+    vi.spyOn(session.machinery.getAgent(), 'findThreadRunToResume').mockImplementation(async ({ toolCallId }) => ({
       runId: toolCallId === 'tool-call-1' ? 'run-a' : 'run-b',
       resolvedFromStorage: false,
     }));

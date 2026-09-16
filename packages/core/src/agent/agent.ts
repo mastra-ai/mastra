@@ -8343,12 +8343,12 @@ export class Agent<
   }
 
   /**
-   * The run a tool approval on this thread would resume: the run this process is
-   * driving, else a suspended run recovered from storage so approvals survive a
-   * restart or land on another instance. `undefined` once the run has completed
-   * or been resumed elsewhere.
+   * The run a tool approval or tool resume on this thread would target: the run
+   * this process is driving, else a suspended run recovered from storage so the
+   * gate survives a restart or lands on another instance. `undefined` once the
+   * run has completed or been resumed elsewhere.
    */
-  async findToolApprovalRun({
+  async findThreadRunToResume({
     threadId,
     resourceId,
     toolCallId,
@@ -9766,8 +9766,8 @@ export class Agent<
       return { accepted: continuation.accepted, runId: continuation.runId, toolCallId: options.toolCallId };
     }
 
-    const approvalRun = await this.findToolApprovalRun({ threadId, resourceId, toolCallId: options.toolCallId });
-    if (!approvalRun) {
+    const runToResume = await this.findThreadRunToResume({ threadId, resourceId, toolCallId: options.toolCallId });
+    if (!runToResume) {
       throw new MastraError({
         id: 'AGENT_SEND_TOOL_APPROVAL_NO_ACTIVE_THREAD_RUN',
         domain: ErrorDomain.AGENT,
@@ -9782,7 +9782,7 @@ export class Agent<
         },
       });
     }
-    const { runId, resolvedFromStorage } = approvalRun;
+    const { runId, resolvedFromStorage } = runToResume;
 
     const resumeOptions = deepMerge(
       (streamOptions ?? {}) as Record<string, unknown>,

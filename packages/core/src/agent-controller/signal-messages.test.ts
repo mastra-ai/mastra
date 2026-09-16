@@ -1174,7 +1174,7 @@ describe('AgentController signal messages', () => {
       abort: vi.fn(),
       activeRunId: () => 'run-1',
     });
-    vi.spyOn(agent, 'findToolApprovalRun').mockResolvedValue({ runId: 'run-1', resolvedFromStorage: false });
+    vi.spyOn(agent, 'findThreadRunToResume').mockResolvedValue({ runId: 'run-1', resolvedFromStorage: false });
     const sendToolApproval = vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({
       accepted: true,
       runId: 'run-1',

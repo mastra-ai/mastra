@@ -745,18 +745,6 @@ export class SessionRunEngine {
       case 'tool-call-approval': {
         const toolCallId = getString(getPayload(chunk).toolCallId) ?? '';
         const toolName = getString(getPayload(chunk).toolName) ?? '';
-        const threadId = this.#session.thread.getId();
-        // Retained transports replay finished runs to late subscribers.
-        const approvalRunAlreadyGone =
-          threadId !== null &&
-          !(await agent.findToolApprovalRun({
-            threadId,
-            resourceId: this.#session.identity.getResourceId(),
-            toolCallId,
-          }));
-        if (approvalRunAlreadyGone) {
-          break;
-        }
         const approvalTransform = getTransformedToolPayload(chunk.metadata, 'display', 'approval');
         const toolArgs = hasTransformedToolPayload(approvalTransform)
           ? approvalTransform.transformed
@@ -1328,6 +1316,23 @@ export class SessionRunEngine {
     }
   }
 
+  /** Retained transports replay finished runs to late subscribers; a tool gate whose run is gone is history, not a request. */
+  private async toolGateRunIsGone(chunk: StreamChunk, agent: Agent): Promise<boolean> {
+    if (chunk.type !== 'tool-call-approval' && chunk.type !== 'tool-call-suspended') {
+      return false;
+    }
+    const threadId = this.#session.thread.getId();
+    if (threadId === null) {
+      return false;
+    }
+    const runToResume = await agent.findThreadRunToResume({
+      threadId,
+      resourceId: this.#session.identity.getResourceId(),
+      toolCallId: getString(getPayload(chunk).toolCallId),
+    });
+    return runToResume === undefined;
+  }
+
   private async handleSubscribedStreamError(error: unknown): Promise<void> {
     if (error instanceof Error && error.name === 'AbortError') {
       await this.#session.finishAgentRun('aborted');
@@ -1371,6 +1376,9 @@ export class SessionRunEngine {
         }
 
         try {
+          if (await this.toolGateRunIsGone(chunk, agent)) {
+            continue;
+          }
           const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext, agent);
           if (
             streamResult ||
