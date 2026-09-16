@@ -89,6 +89,7 @@ async function partitionMessages(
   LoadMessageHistoryResult & {
     cutoff?: MastraDBMessage;
     overflowReason?: 'messages' | 'tokens';
+    hasPotentiallyIncompleteLinkedGroup: boolean;
   }
 > {
   const maxTokens = limits.maxTokens === undefined ? undefined : limits.maxTokens - (limits.atMaxRemoveTokens ?? 0);
@@ -139,7 +140,10 @@ async function partitionMessages(
     .reverse();
   const cutoff = messagesDescending.find(message => !retainedIds.has(message.id));
   const overflowReason = reachedTokenLimit ? 'tokens' : reachedMessageLimit ? 'messages' : undefined;
-  return { messages, overflow, cutoff, overflowReason };
+  const hasPotentiallyIncompleteLinkedGroup = countWindowGroups.some(
+    group => group.length === 1 && getToolCallIds(group[0]!).length > 0,
+  );
+  return { messages, overflow, cutoff, overflowReason, hasPotentiallyIncompleteLinkedGroup };
 }
 
 function laterDate(left: Date | undefined, right: Date | undefined): Date | undefined {
@@ -223,7 +227,12 @@ export async function loadMessageHistory(args: LoadMessageHistoryArgs): Promise<
       oldestTimestamp !== undefined &&
       oldestTimestamp < new Date(args.boundary.createdAt).getTime();
 
-    if (!result.hasMore || crossedCutoff || reachedBoundary || result.messages.length === 0) {
+    if (
+      !result.hasMore ||
+      (crossedCutoff && !partitioned.hasPotentiallyIncompleteLinkedGroup) ||
+      reachedBoundary ||
+      result.messages.length === 0
+    ) {
       return args.includeOverflow && partitioned.overflowReason === 'tokens'
         ? partitioned
         : { messages: partitioned.messages, overflow: [] };

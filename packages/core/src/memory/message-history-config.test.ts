@@ -349,6 +349,48 @@ describe('token-based memory history', () => {
     expect(result.overflow).toEqual([]);
   });
 
+  it('does not split linked tool messages separated across history pages', async () => {
+    const store = (await new InMemoryStore().getStore('memory'))!;
+    const toolMessage = (id: string, state: 'call' | 'result', seconds: number): MastraDBMessage => ({
+      ...message(id, seconds),
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state,
+              toolCallId: 'tool-call',
+              toolName: 'lookup',
+              args: {},
+              ...(state === 'result' ? { result: 'done' } : {}),
+            },
+          },
+        ],
+      },
+    });
+    await store.saveMessages({
+      messages: [
+        toolMessage('call', 'call', 0),
+        message('ordinary-2', 1),
+        message('ordinary-1', 2),
+        toolMessage('result', 'result', 3),
+      ],
+    });
+
+    const result = await loadMessageHistory({
+      storage: store,
+      threadId: 'thread',
+      resourceId: 'resource',
+      maxMessages: 1,
+      pageSize: 2,
+    });
+
+    expect(result.messages).toEqual([]);
+    expect(result.overflow).toEqual([]);
+  });
+
   it('persists full-prompt trimming from token overflow inside the explicit count window', async () => {
     class FixedTokenMockMemory extends MockMemory {
       protected override createMemoryTokenCounter() {
