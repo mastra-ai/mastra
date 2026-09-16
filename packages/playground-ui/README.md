@@ -21,7 +21,7 @@ export function SaveButton() {
 }
 ```
 
-## Opt-in semantic theme
+### Opt-in semantic theme
 
 `SidebarNew` imports `new-theme.css` and applies `new-theme` to its root, including the mobile drawer. Keep importing `style.css` once in the app: it provides the compiled utilities. The theme import only adds scoped token values.
 
