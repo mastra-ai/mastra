@@ -118,15 +118,21 @@ export function resolveTraceImportWindow(
   now = new Date(),
 ): TraceImportWindow {
   const nowMs = now.getTime();
+  const retentionStartMs = nowMs - DEFAULT_WINDOW_MS;
   const snapshotMs = options.to ? parseDate(options.to, '--to') : nowMs;
-  const cutoffMs = options.from ? parseDate(options.from, '--from') : snapshotMs - DEFAULT_WINDOW_MS;
+  const cutoffMs = options.from
+    ? parseDate(options.from, '--from')
+    : Math.max(snapshotMs - DEFAULT_WINDOW_MS, retentionStartMs);
 
   if (snapshotMs > nowMs) throw new Error('--to cannot be in the future.');
+  if (snapshotMs <= retentionStartMs) {
+    throw new Error('--to must be within the last 30 days because older Platform telemetry is not retained.');
+  }
   if (cutoffMs >= snapshotMs) throw new Error('--from must be earlier than --to.');
   if (snapshotMs - cutoffMs > DEFAULT_WINDOW_MS) {
     throw new Error('The trace import window cannot exceed 30 days.');
   }
-  if (cutoffMs < nowMs - DEFAULT_WINDOW_MS) {
+  if (cutoffMs < retentionStartMs) {
     throw new Error('--from must be within the last 30 days because older Platform telemetry is not retained.');
   }
 

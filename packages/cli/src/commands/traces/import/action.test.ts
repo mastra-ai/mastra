@@ -118,11 +118,19 @@ describe('resolveTraceImportWindow', () => {
     });
   });
 
+  it('clamps an implicit start to the Platform retention window when --to is in the past', () => {
+    expect(resolveTraceImportWindow({ to: '2026-09-10T12:00:00Z' }, NOW)).toEqual({
+      cutoffAt: '2026-08-12T12:00:00.000Z',
+      snapshotAt: '2026-09-10T12:00:00.000Z',
+    });
+  });
+
   it('rejects invalid, future, reversed, older, and wider windows', () => {
     expect(() => resolveTraceImportWindow({ from: 'not-a-date' }, NOW)).toThrow('--from');
     expect(() => resolveTraceImportWindow({ to: '2026-09-12' }, NOW)).toThrow('future');
     expect(() => resolveTraceImportWindow({ from: '2026-09-10', to: '2026-09-01' }, NOW)).toThrow('earlier');
     expect(() => resolveTraceImportWindow({ from: '2026-08-01', to: '2026-08-20' }, NOW)).toThrow('last 30 days');
+    expect(() => resolveTraceImportWindow({ to: '2026-08-12T12:00:00Z' }, NOW)).toThrow('last 30 days');
     expect(() => resolveTraceImportWindow({ from: '2026-08-12T11:59:59Z', to: '2026-09-11T12:00:00Z' }, NOW)).toThrow(
       'cannot exceed',
     );
