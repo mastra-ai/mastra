@@ -10,18 +10,17 @@ import type { InternalCoreTool, Tool } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import { createStep, Workflow } from '@mastra/core/workflows';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import type {
   Resource,
-  ResourceTemplate,
+  ResourceTemplateType,
   ListResourcesResult,
   ReadResourceResult,
   ListResourceTemplatesResult,
   Prompt,
-} from '@modelcontextprotocol/sdk/types.js';
+} from '@modelcontextprotocol/server';
+import { ProtocolErrorCode } from '@modelcontextprotocol/server';
+import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import getPort from 'get-port';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
@@ -29,6 +28,7 @@ import { z } from 'zod/v3';
 import { mockWeatherTool } from '../__fixtures__/tools';
 import { InternalMastraMCPClient } from '../client/client';
 import { MCPClient } from '../client/configuration';
+import { makeMockExtra } from './__tests__/mock-extra';
 import { MCPServer } from './server';
 import type { MastraPrompt, MCPServerResources, MCPServerResourceContent, MCPRequestHandlerExtra } from './types';
 
@@ -561,7 +561,7 @@ describe('MCPServer', () => {
     it('should throw an error when reading a non-existent resource URI', async () => {
       const uri = 'weather://nonexistent';
       await expect(resourceTestInternalClient.readResource(uri)).rejects.toMatchObject({
-        code: ErrorCode.InvalidParams,
+        code: ProtocolErrorCode.InvalidParams,
         message: expect.stringContaining('Resource not found: weather://nonexistent'),
       });
     });
@@ -599,7 +599,7 @@ describe('MCPServer', () => {
       'test://resource/2': { text: JSON.stringify({ data: 'Initial for R2' }) },
     };
 
-    const mockResourceTemplates: ResourceTemplate[] = [
+    const mockResourceTemplates: ResourceTemplateType[] = [
       {
         uriTemplate: 'test://template/{id}',
         name: 'Test Template',
@@ -712,7 +712,7 @@ describe('MCPServer', () => {
     it('should throw an error when reading a non-existent resource', async () => {
       const uri = 'test://resource/nonexistent';
       await expect(notificationTestInternalClient.readResource(uri)).rejects.toMatchObject({
-        code: ErrorCode.InvalidParams,
+        code: ProtocolErrorCode.InvalidParams,
         message: expect.stringContaining('Resource not found: test://resource/nonexistent'),
       });
     });
@@ -887,7 +887,7 @@ describe('MCPServer', () => {
       await expect(
         promptInternalClient.getPrompt({ name: 'explain-code', args: {} }), // missing 'code'
       ).rejects.toMatchObject({
-        code: ErrorCode.InvalidParams,
+        code: ProtocolErrorCode.InvalidParams,
         message: expect.stringContaining('Missing required argument: code'),
       });
     });
@@ -1183,8 +1183,7 @@ describe('MCPServer', () => {
     });
 
     it('should pass auth information through extra parameter', async () => {
-      const mockExtra: MCPRequestHandlerExtra = {
-        signal: new AbortController().signal,
+      const mockExtra = makeMockExtra({
         sessionId: 'test-session-id',
         authInfo: {
           token: TOKEN,
@@ -1192,9 +1191,7 @@ describe('MCPServer', () => {
           scopes: ['read'],
         },
         requestId: 'test-request-id',
-        sendNotification: vi.fn(),
-        sendRequest: vi.fn(),
-      };
+      });
 
       const mockRequest = {
         jsonrpc: '2.0' as const,
@@ -1635,10 +1632,13 @@ describe('MCPServer', () => {
         await client.connect(transport);
 
         const progressUpdates: Array<{ progress: number; total?: number }> = [];
-        const result = await client.callTool({ name: 'progressTool', arguments: {} }, undefined, {
-          onprogress: notification =>
-            progressUpdates.push({ progress: notification.progress, total: notification.total }),
-        });
+        const result = await client.callTool(
+          { name: 'progressTool', arguments: {} },
+          {
+            onprogress: notification =>
+              progressUpdates.push({ progress: notification.progress, total: notification.total }),
+          },
+        );
 
         // The client received the request-scoped progress notifications
         expect(progressUpdates).toEqual([
@@ -1937,9 +1937,8 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     ).toThrow('must have a non-empty description');
   });
 
-  it('should pass MCP context to tools both directly and through agents', async () => {
-    const mockExtra: MCPRequestHandlerExtra = {
-      signal: new AbortController().signal,
+  it('should preserve MCP request metadata and elicitation through an agent tool', async () => {
+    const mockExtra = makeMockExtra({
       sessionId: 'auth-test-session',
       authInfo: {
         token: 'test-auth-token-123',
@@ -1947,21 +1946,34 @@ describe('MCPServer - Agent to Tool Conversion', () => {
         scopes: ['read', 'write'],
       },
       requestId: 'auth-test-request',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
+    });
+    const elicitationRequest = {
+      message: 'Choose an onboarding path',
+      requestedSchema: {
+        type: 'object' as const,
+        properties: {
+          path: {
+            type: 'string' as const,
+            enum: ['guided', 'self-serve'],
+            description: 'How the user wants to complete onboarding',
+          },
+        },
+        required: ['path'],
+      },
+    };
+    const elicitationResponse = {
+      action: 'accept' as const,
+      content: { path: 'guided' },
     };
 
     let directToolOptions: any = null;
-    const directAuthCheckTool: ToolsInput = {
-      authCheck: {
-        description: 'Tool that checks for auth context',
+    const directProbeTool: ToolsInput = {
+      directProbe: {
+        description: 'Tool that probes MCP elicitation directly',
         parameters: z.object({ query: z.string().optional() }),
-        execute: async (args, options) => {
+        execute: async (_args, options) => {
           directToolOptions = options;
-          return {
-            source: 'direct-mcp',
-            authInfo: options?.mcp?.extra?.authInfo,
-          };
+          return options?.mcp?.elicitation.sendRequest(elicitationRequest);
         },
       },
     };
@@ -1969,10 +1981,11 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     server = new MCPServer({
       name: 'DirectToolServer',
       version: '1.0.0',
-      tools: directAuthCheckTool,
+      tools: directProbeTool,
     });
 
     const serverInstance = server.getServer();
+    const directElicitInput = vi.spyOn(serverInstance, 'elicitInput').mockResolvedValue(elicitationResponse);
     // @ts-expect-error - accessing internal for testing
     const requestHandlers = serverInstance._requestHandlers;
     const callToolHandler = requestHandlers.get('tools/call');
@@ -1983,43 +1996,29 @@ describe('MCPServer - Agent to Tool Conversion', () => {
         id: 'test-direct-tool-1',
         method: 'tools/call' as const,
         params: {
-          name: 'authCheck',
+          name: 'directProbe',
           arguments: { query: 'direct call' },
         },
       },
       mockExtra,
     );
 
-    expect(directToolOptions).toBeDefined();
+    // Positive control: the direct tool receives this request's live MCP context.
     expect(directToolOptions.mcp).toBeDefined();
-    expect(directToolOptions.mcp.extra.authInfo.token).toBe('test-auth-token-123');
-    expect(directToolOptions.mcp.extra.authInfo.clientId).toBe('test-client-456');
-    expect(directToolOptions.mcp.extra.sessionId).toBe('auth-test-session');
+    expect(directToolOptions.mcp.extra.authInfo).toEqual(mockExtra.authInfo);
+    expect(directToolOptions.mcp.extra.sessionId).toBe(mockExtra.sessionId);
+    expect(directToolOptions.mcp.extra.requestId).toBe(mockExtra.requestId);
+    expect(directElicitInput).toHaveBeenCalledWith(elicitationRequest, undefined);
 
-    // Verify requestContext is populated from mcp.extra for regular tools
-    expect(directToolOptions.requestContext).toBeDefined();
-    expect(directToolOptions.requestContext.get('authInfo')).toEqual({
-      token: 'test-auth-token-123',
-      clientId: 'test-client-456',
-      scopes: ['read', 'write'],
-    });
-    expect(directToolOptions.requestContext.get('sessionId')).toBe('auth-test-session');
-
-    let agentContextObj: any = null;
-    let agentExecOptions: any = null;
+    let agentToolOptions: any = null;
 
     const agentAuthCheckToolInstance = createTool({
       id: 'authCheck',
       description: 'Tool that checks for auth context',
       inputSchema: z.object({ query: z.string().optional() }),
-      execute: async (inputData, context) => {
-        agentContextObj = context;
-        agentExecOptions = context;
-        const mcpExtra = context?.requestContext?.get('mcp.extra');
-        return {
-          source: 'agent-request-context',
-          authInfo: mcpExtra?.authInfo,
-        };
+      execute: async (_inputData, context) => {
+        agentToolOptions = context;
+        return context?.mcp?.elicitation.sendRequest(elicitationRequest);
       },
     });
 
@@ -2113,6 +2112,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     });
 
     const serverInstance2 = server.getServer();
+    const agentElicitInput = vi.spyOn(serverInstance2, 'elicitInput').mockResolvedValue(elicitationResponse);
     // @ts-expect-error - accessing internal for testing
     const requestHandlers2 = serverInstance2._requestHandlers;
     const callToolHandler2 = requestHandlers2.get('tools/call');
@@ -2130,19 +2130,16 @@ describe('MCPServer - Agent to Tool Conversion', () => {
       mockExtra,
     );
 
-    expect(agentContextObj).toBeDefined();
-    expect(agentContextObj.requestContext).toBeDefined();
-    expect(typeof agentContextObj.requestContext.get).toBe('function');
-
-    // All keys from extra are spread directly on the requestContext
-    const authInfo = agentContextObj.requestContext.get('authInfo');
-    expect(authInfo).toBeDefined();
-    expect(authInfo.token).toBe('test-auth-token-123');
-    expect(authInfo.clientId).toBe('test-client-456');
-    expect(authInfo.scopes).toEqual(['read', 'write']);
-    expect(agentContextObj.requestContext.get('sessionId')).toBe('auth-test-session');
-    expect(agentContextObj.requestContext.get('requestId')).toBe('auth-test-request');
-    expect(agentExecOptions.mcp).toBeUndefined();
+    // Preserve the legacy RequestContext access path in addition to the live MCP context.
+    expect(agentToolOptions.requestContext.get('authInfo')).toEqual(mockExtra.authInfo);
+    expect(agentToolOptions.requestContext.get('sessionId')).toBe(mockExtra.sessionId);
+    expect(agentToolOptions.requestContext.get('requestId')).toBe(mockExtra.requestId);
+    expect(agentToolOptions.mcp).toBeDefined();
+    expect(agentToolOptions.mcp.extra.authInfo).toEqual(mockExtra.authInfo);
+    expect(agentToolOptions.mcp.extra.sessionId).toBe(mockExtra.sessionId);
+    expect(agentToolOptions.mcp.extra.requestId).toBe(mockExtra.requestId);
+    expect(agentToolOptions.mcp.elicitation).toBeDefined();
+    expect(agentElicitInput).toHaveBeenCalledWith(elicitationRequest, undefined);
   });
 });
 
@@ -2284,8 +2281,7 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
   });
 
   it('should pass MCP context through requestContext to workflow steps', async () => {
-    const mockExtra: MCPRequestHandlerExtra = {
-      signal: new AbortController().signal,
+    const mockExtra = makeMockExtra({
       sessionId: 'workflow-auth-test-session',
       authInfo: {
         token: 'workflow-auth-token-456',
@@ -2293,9 +2289,7 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
         scopes: ['workflow:read', 'workflow:write'],
       },
       requestId: 'workflow-request-id',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
-    };
+    });
 
     let capturedRequestContext: any = null;
 
@@ -2868,6 +2862,18 @@ describe('MCPServer with Tool Output Schema', () => {
         timestamp: mockDateISO,
       }),
     },
+    authoredContentTool: {
+      description: 'A tool that returns authored MCP content alongside structured output',
+      parameters: z.object({ input: z.string() }),
+      outputSchema: z.object({
+        processedInput: z.string(),
+        timestamp: z.string(),
+      }),
+      execute: async ({ input }: { input: string }) => ({
+        processedInput: `processed: ${input}`,
+        timestamp: mockDateISO,
+      }),
+    },
   };
 
   beforeAll(async () => {
@@ -2920,7 +2926,7 @@ describe('MCPServer with Tool Output Schema', () => {
         timestamp: { type: 'string' },
       },
     });
-    // MCP SDK validates output; Mastra schema is documentation-only (always passes).
+    // The MCP client validates output; Mastra schema is documentation-only (always passes).
     expect(tool.outputSchema?.['~standard'].validate({ not: 'valid' })).toEqual({ value: { not: 'valid' } });
   });
 
@@ -2930,10 +2936,53 @@ describe('MCPServer with Tool Output Schema', () => {
     const result = await tool.execute!({ input: 'hello' });
 
     expect(result).toBeDefined();
-    // When a tool has outputSchema, the MCP client returns structuredContent directly
-    // so output validation can work correctly
     expect(result.processedInput).toBe('processed: hello');
     expect(result.timestamp).toBe(mockDateISO);
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'text',
+      value: JSON.stringify({
+        processedInput: 'processed: hello',
+        timestamp: mockDateISO,
+      }),
+    });
+  });
+
+  it('should preserve authored content in CallTool response when structuredContent is also present', async () => {
+    const expectedStructuredContent = {
+      processedInput: 'processed: hello',
+      timestamp: mockDateISO,
+    };
+
+    // @ts-expect-error - accessing internal for testing
+    const authoredTool = serverWithOutputSchema.convertedTools.authoredContentTool;
+    vi.spyOn(authoredTool, 'execute').mockResolvedValue({
+      structuredContent: expectedStructuredContent,
+      content: [{ type: 'text', text: 'Summary: processed hello' }],
+    });
+
+    const serverInstance = serverWithOutputSchema.getServer();
+    // @ts-expect-error - accessing internal for testing
+    const callToolHandler = serverInstance._requestHandlers.get('tools/call');
+    expect(callToolHandler).toBeDefined();
+
+    const result = await callToolHandler!(
+      {
+        jsonrpc: '2.0' as const,
+        id: 'test-authored-content',
+        method: 'tools/call' as const,
+        params: {
+          name: 'authoredContentTool',
+          arguments: { input: 'hello' },
+        },
+      },
+      makeMockExtra(),
+    );
+
+    expect(result.structuredContent).toEqual(expectedStructuredContent);
+    expect(result.content).toEqual([{ type: 'text', text: 'Summary: processed hello' }]);
+    expect((result.content as Array<{ type: string; text: string }>)[0].text).not.toBe(
+      JSON.stringify(expectedStructuredContent),
+    );
   });
 });
 
@@ -3259,13 +3308,7 @@ describe('MCPServer - Tool Input Validation', () => {
     const callToolHandler = requestHandlers.get('tools/call');
     expect(callToolHandler).toBeDefined();
 
-    const mockExtra = {
-      signal: new AbortController().signal,
-      sessionId: 'test-session',
-      requestId: 'test-request',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
-    };
+    const mockExtra = makeMockExtra({ sessionId: 'test-session', requestId: 'test-request' });
 
     // "bad" is a valid string (passes JSON Schema) but fails the .refine() check
     const result = await callToolHandler(

@@ -2,7 +2,6 @@ import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Ticket } from 'lucide-react';
 
-import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
 import type { WorkItemSearchResult } from '../services/searchResults';
 
 export function GlobalSearchWorkItemResults({
@@ -10,7 +9,7 @@ export function GlobalSearchWorkItemResults({
   onSelect,
 }: {
   results: WorkItemSearchResult[];
-  onSelect: GlobalSearchSelectHandler;
+  onSelect: (result: WorkItemSearchResult) => void;
 }) {
   if (results.length === 0) return null;
 
@@ -24,7 +23,7 @@ export function GlobalSearchWorkItemResults({
           subtitle={result.context}
           badge={result.identifier}
           value={result.value}
-          onSelect={() => onSelect(result.path, false)}
+          onSelect={() => onSelect(result)}
         />
       ))}
     </CommandGroup>

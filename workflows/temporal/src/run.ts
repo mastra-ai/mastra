@@ -84,6 +84,53 @@ export class TemporalRun<
     }
   }
 
+  async cancel() {
+    await this.client.workflow.getHandle(this.runId).cancel();
+    await super.cancel();
+  }
+
+  private unsupported(method: string): never {
+    throw new Error(`@mastra/temporal does not support ${method}() yet. Use start() or startAsync() instead.`);
+  }
+
+  override stream(
+    ..._args: Parameters<Run<TemporalEngineType, TSteps, TState, TInput, TOutput, TRequestContext>['stream']>
+  ): never {
+    return this.unsupported('stream');
+  }
+
+  override streamLegacy(
+    ..._args: Parameters<Run<TemporalEngineType, TSteps, TState, TInput, TOutput, TRequestContext>['streamLegacy']>
+  ): never {
+    return this.unsupported('streamLegacy');
+  }
+
+  override resumeStream(..._args: unknown[]): never {
+    return this.unsupported('resumeStream');
+  }
+
+  override resume(..._args: unknown[]): never {
+    return this.unsupported('resume');
+  }
+
+  override resumeAsync(..._args: unknown[]): never {
+    return this.unsupported('resumeAsync');
+  }
+
+  override restart(
+    ..._args: Parameters<Run<TemporalEngineType, TSteps, TState, TInput, TOutput, TRequestContext>['restart']>
+  ): never {
+    return this.unsupported('restart');
+  }
+
+  override timeTravel(..._args: unknown[]): never {
+    return this.unsupported('timeTravel');
+  }
+
+  override timeTravelStream(..._args: unknown[]): never {
+    return this.unsupported('timeTravelStream');
+  }
+
   async startAsync(args: TemporalRunStartArgs<TState, TInput, TRequestContext> = {}) {
     const input = await this._validateInput(args.inputData);
     const initialState = await this._validateInitialState(args.initialState);

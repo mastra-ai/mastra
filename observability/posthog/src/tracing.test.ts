@@ -7,6 +7,7 @@ import { PosthogExporter } from './tracing';
 
 // Mock PostHog client
 const mockCapture = vi.fn();
+const mockLegacyCapture = vi.fn();
 const mockShutdown = vi.fn();
 const mockPostHogConstructor = vi.fn();
 
@@ -16,7 +17,8 @@ vi.mock('posthog-node', () => {
       constructor(...args: any[]) {
         mockPostHogConstructor(...args);
       }
-      capture = mockCapture;
+      captureAi = mockCapture;
+      capture = mockLegacyCapture;
       shutdown = mockShutdown;
     },
   };
@@ -166,6 +168,22 @@ describe('PosthogExporter', () => {
           }),
         }),
       );
+    });
+
+    it('sends events through the dedicated AI capture endpoint, never the analytics endpoint', async () => {
+      exporter = new TestPosthogExporter(validConfig);
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: mockSpan,
+      });
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: mockSpan,
+      });
+
+      expect(mockCapture).toHaveBeenCalledTimes(1);
+      expect(mockLegacyCapture).not.toHaveBeenCalled();
     });
 
     it('should cleanup span from cache after capture', async () => {
@@ -408,6 +426,57 @@ describe('PosthogExporter', () => {
           ],
         },
       ]);
+    });
+
+    it('should map tool definitions to $ai_tools in OpenAI format', async () => {
+      const generation = createSpan({
+        type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
+        attributes: {
+          model: 'gpt-4o',
+          provider: 'openai',
+          tools: [
+            {
+              type: 'function',
+              name: 'get_weather',
+              description: 'Get the weather for a city',
+              parameters: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
+            },
+            { type: 'provider-defined', name: 'web_search', id: 'anthropic.web_search_20250305' },
+          ],
+        },
+      });
+
+      await exportSpanLifecycle(exporter, generation);
+
+      const props = mockCapture.mock.calls[0][0].properties;
+      expect(props.$ai_tools).toEqual([
+        {
+          type: 'function',
+          function: {
+            name: 'get_weather',
+            description: 'Get the weather for a city',
+            parameters: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
+          },
+        },
+        { type: 'provider-defined', name: 'web_search', id: 'anthropic.web_search_20250305' },
+      ]);
+    });
+
+    it.each([
+      ['absent', { model: 'gpt-4o', provider: 'openai' }],
+      ['empty', { model: 'gpt-4o', provider: 'openai', tools: [] }],
+    ])('should not set $ai_tools when tool definitions are %s', async (_case, attributes) => {
+      const generation = createSpan({
+        type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
+        attributes,
+      });
+
+      await exportSpanLifecycle(exporter, generation);
+
+      const props = mockCapture.mock.calls[0][0].properties;
+      expect(props).not.toHaveProperty('$ai_tools');
     });
 
     it('should handle minimal LLM attributes gracefully with defaults', async () => {

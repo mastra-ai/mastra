@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createFeedbackArgsSchema,
   createFeedbackRecordSchema,
+  deleteFeedbackArgsSchema,
   feedbackFilterSchema,
   feedbackInputSchema,
   feedbackRecordSchema,
@@ -37,18 +38,43 @@ describe('Feedback Schemas', () => {
         executionSource: 'cloud',
         tags: ['prod'],
         metadata: { page: '/chat' },
+        reviewStatus: 'needs-review',
       });
       expect(record.feedbackSource).toBe('user');
       expect(record.feedbackType).toBe('thumbs');
       expect(record.value).toBe(1);
       expect(record.feedbackUserId).toBe('user-123');
       expect(record.userId).toBe('trace-user-123');
+      expect(record.reviewStatus).toBe('needs-review');
+    });
+
+    it('requires reviewStatus on stored records', () => {
+      const result = feedbackRecordSchema.safeParse({
+        timestamp: now,
+        traceId: 'trace-1',
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('lets createFeedbackRecordSchema omit reviewStatus', () => {
+      const record = createFeedbackRecordSchema.parse({
+        timestamp: now,
+        traceId: 'trace-1',
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+      });
+      expect(record.reviewStatus).toBeUndefined();
     });
 
     it('accepts string value', () => {
       const record = feedbackRecordSchema.parse({
         id: 'fb-2',
         timestamp: now,
+        reviewStatus: 'needs-review',
         traceId: 'trace-1',
         feedbackSource: 'qa',
         feedbackType: 'correction',
@@ -63,6 +89,7 @@ describe('Feedback Schemas', () => {
       const record = feedbackRecordSchema.parse({
         id: 'fb-3',
         timestamp: now,
+        reviewStatus: 'needs-review',
         traceId: 'trace-1',
         feedbackSource: 'user',
         feedbackType: 'rating',
@@ -78,6 +105,7 @@ describe('Feedback Schemas', () => {
       const record = feedbackRecordSchema.parse({
         id: 'fb-4',
         timestamp: now,
+        reviewStatus: 'needs-review',
         feedbackSource: 'user',
         feedbackType: 'thumbs',
         value: 1,
@@ -145,6 +173,21 @@ describe('Feedback Schemas', () => {
     });
   });
 
+  describe('deleteFeedbackArgsSchema', () => {
+    it('limits the number of feedback IDs in a batch', () => {
+      expect(
+        deleteFeedbackArgsSchema.safeParse({
+          feedbackIds: Array.from({ length: 1000 }, (_, index) => `feedback-${index}`),
+        }).success,
+      ).toBe(true);
+      expect(
+        deleteFeedbackArgsSchema.safeParse({
+          feedbackIds: Array.from({ length: 1001 }, (_, index) => `feedback-${index}`),
+        }).success,
+      ).toBe(false);
+    });
+  });
+
   describe('feedbackFilterSchema', () => {
     it('accepts all filter options', () => {
       const filter = feedbackFilterSchema.parse({
@@ -159,10 +202,12 @@ describe('Feedback Schemas', () => {
         tags: ['prod'],
         environment: 'production',
         executionSource: 'cloud',
+        reviewStatus: 'reviewed',
       });
       expect(filter.feedbackType).toEqual(['thumbs', 'rating']);
       expect(filter.feedbackSource).toBe('user');
       expect(filter.executionSource).toBe('cloud');
+      expect(filter.reviewStatus).toBe('reviewed');
     });
 
     it('accepts single feedback type as string', () => {
@@ -200,6 +245,7 @@ describe('Feedback Schemas', () => {
           {
             id: 'fb-1',
             timestamp: now,
+            reviewStatus: 'needs-review',
             traceId: 'trace-1',
             feedbackSource: 'user',
             feedbackType: 'thumbs',

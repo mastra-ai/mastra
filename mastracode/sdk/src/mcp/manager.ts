@@ -17,6 +17,14 @@ import {
   getClaudeSettingsPath,
   resolveOAuthRedirectUrl,
 } from './config.js';
+import type { ExternalMcpDiscoveryOptions } from './config.js';
+import {
+  loadGlobalDisableState,
+  loadProjectServerOverrides,
+  saveGlobalDisableState,
+  saveProjectServerOverrides,
+} from './state.js';
+import type { McpProjectServerOverride } from './state.js';
 import type {
   McpConfig,
   McpHttpOAuthConfig,
@@ -68,6 +76,31 @@ export interface McpManager {
    * so it can be retried. Returns `true` if a flow was cancelled.
    */
   cancelServerAuthentication(name: string): Promise<boolean>;
+  /**
+   * Disable or enable a single server by name. The change is persisted (in
+   * mastracode's app data, not the user's config files) and survives restarts.
+   * With `global: true`, this changes the default for every project. Otherwise
+   * it records an explicit project override, which can override a global
+   * per-server disable. The global all-MCP kill switch remains absolute.
+   * Connections are rebuilt, so other servers reconnect — same behavior as
+   * {@link reload}. Returns the server's resulting status.
+   */
+  setServerDisabled(name: string, disabled: boolean, options?: { global?: boolean }): Promise<McpServerStatus>;
+  /** Clear a server's explicit project override so it inherits the global default. */
+  inheritServer(name: string): Promise<McpServerStatus>;
+  /**
+   * Disable or enable all servers at once. Project scope records an explicit
+   * override for every currently configured server. Global scope sets/clears a
+   * persisted all-MCP kill switch (and, when enabling, also clears globally
+   * disabled server names). Persisted like {@link setServerDisabled}.
+   */
+  setAllDisabled(disabled: boolean, options?: { global?: boolean }): Promise<void>;
+  /** Clear every explicit project override so all servers inherit global defaults. */
+  inheritAllServers(): Promise<void>;
+  /** Names of configured servers that are currently disabled (any scope). */
+  getDisabledServers(): string[];
+  /** Whether all MCP is disabled globally (across every project). */
+  isAllDisabledGlobally(): boolean;
   /** Disconnect from all MCP servers and clean up. */
   disconnect(): Promise<void>;
   /** Get all tools from connected MCP servers (namespaced as serverName_toolName). */
@@ -166,6 +199,7 @@ export function createMcpManager(
   projectDir: string,
   configDirName = DEFAULT_CONFIG_DIR,
   extraServers?: Record<string, McpServerConfig>,
+  externalDiscovery?: ExternalMcpDiscoveryOptions,
 ): McpManager {
   /** Merge programmatic servers into a base config (highest priority). */
   const applyExtraServers = (base: McpConfig): McpConfig => {
@@ -173,7 +207,29 @@ export function createMcpManager(
     return { ...base, mcpServers: { ...base.mcpServers, ...extraServers } };
   };
 
-  let config = applyExtraServers(loadMcpConfig(projectDir, configDirName));
+  let config = applyExtraServers(loadMcpConfig(projectDir, configDirName, externalDiscovery));
+  let projectServerOverrides = new Map<string, McpProjectServerOverride>(
+    Object.entries(loadProjectServerOverrides(projectDir)),
+  );
+  let globalDisableState = loadGlobalDisableState();
+  let globallyDisabledServers = new Set(globalDisableState.disabledServers);
+
+  /** Whether a server is disabled after applying the kill switch, project override, and global default. */
+  const isDisabled = (name: string): boolean => {
+    if (globalDisableState.allDisabled) return true;
+    const projectOverride = projectServerOverrides.get(name);
+    if (projectOverride) return projectOverride === 'disabled';
+    return globallyDisabledServers.has(name);
+  };
+
+  /** Which scope currently disables a server. The global kill switch remains absolute. */
+  const disabledScopeOf = (name: string): 'project' | 'global' | undefined => {
+    if (globalDisableState.allDisabled) return 'global';
+    const projectOverride = projectServerOverrides.get(name);
+    if (projectOverride === 'disabled') return 'project';
+    if (!projectOverride && globallyDisabledServers.has(name)) return 'global';
+    return undefined;
+  };
   let client: MCPClient | null = null;
   let serverDefs: Record<string, MastraMCPServerDefinition> = {};
   let tools: Record<string, any> = {};
@@ -201,9 +257,14 @@ export function createMcpManager(
    */
   const cancelledAuthServers = new Set<string>();
 
-  /** Overlay the manager-owned `authenticating` flag onto a status snapshot. */
-  const withAuthenticating = (status: McpServerStatus): McpServerStatus =>
-    authenticatingServers.has(status.name) ? { ...status, authenticating: true } : status;
+  /** Overlay manager-owned state onto a status snapshot. */
+  const withManagerState = (status: McpServerStatus): McpServerStatus => ({
+    ...status,
+    ...(authenticatingServers.has(status.name) ? { authenticating: true } : {}),
+    ...(projectServerOverrides.has(status.name) ? { projectOverride: projectServerOverrides.get(status.name) } : {}),
+    globalDefault: globallyDisabledServers.has(status.name) ? 'disabled' : 'enabled',
+    globalKillSwitch: globalDisableState.allDisabled,
+  });
 
   const MAX_STDERR_LINES = 200;
 
@@ -296,9 +357,28 @@ export function createMcpManager(
     return defs;
   }
 
+  /** Seed a `disabled` status for every disabled server so it stays visible. */
+  function setDisabledStatuses(): void {
+    for (const [name, cfg] of Object.entries(config.mcpServers ?? {})) {
+      const scope = disabledScopeOf(name);
+      if (!scope) continue;
+      serverStatuses.set(name, {
+        name,
+        connected: false,
+        toolCount: 0,
+        toolNames: [],
+        transport: getTransport(cfg),
+        disabled: true,
+        disabledScope: scope,
+      });
+    }
+  }
+
   async function connectAndCollectTools(): Promise<void> {
-    const servers = config.mcpServers;
-    if (!servers || Object.keys(servers).length === 0) {
+    setDisabledStatuses();
+
+    const servers = Object.fromEntries(Object.entries(config.mcpServers ?? {}).filter(([name]) => !isDisabled(name)));
+    if (Object.keys(servers).length === 0) {
       return;
     }
 
@@ -504,6 +584,51 @@ export function createMcpManager(
     }
   }
 
+  /** Tear down all connections and reconnect every enabled server. */
+  async function rebuildConnections(): Promise<void> {
+    await disconnect();
+    tools = {};
+    serverStatuses = new Map();
+    stderrLogs = new Map();
+    initialized = false;
+    await connectAndCollectTools();
+    initialized = true;
+  }
+
+  function disabledStatus(name: string): McpServerStatus {
+    const cfg = config.mcpServers?.[name];
+    return {
+      name,
+      connected: false,
+      toolCount: 0,
+      toolNames: [],
+      transport: cfg ? getTransport(cfg) : 'stdio',
+      disabled: true,
+      disabledScope: disabledScopeOf(name),
+    };
+  }
+
+  // Read-merge-write persistence: re-read the persisted state and apply this
+  // operation's delta on top, then adopt the merged result in memory. This
+  // way a concurrent mastracode process's changes (e.g. another window
+  // flipping the global kill switch) are never clobbered by this manager's
+  // construction-time snapshot.
+  function persistProjectDelta(mutate: (overrides: Map<string, McpProjectServerOverride>) => void): void {
+    const fresh = new Map<string, McpProjectServerOverride>(Object.entries(loadProjectServerOverrides(projectDir)));
+    mutate(fresh);
+    projectServerOverrides = fresh;
+    saveProjectServerOverrides(projectDir, Object.fromEntries(fresh));
+  }
+
+  function persistGlobalDelta(mutate: (state: { allDisabled: boolean; disabledServers: Set<string> }) => void): void {
+    const onDisk = loadGlobalDisableState();
+    const fresh = { allDisabled: onDisk.allDisabled, disabledServers: new Set(onDisk.disabledServers) };
+    mutate(fresh);
+    globallyDisabledServers = fresh.disabledServers;
+    globalDisableState = { allDisabled: fresh.allDisabled, disabledServers: Array.from(fresh.disabledServers) };
+    saveGlobalDisableState(globalDisableState);
+  }
+
   return {
     async init() {
       if (initialized) return;
@@ -513,9 +638,9 @@ export function createMcpManager(
 
     async initInBackground(): Promise<McpInitResult> {
       await this.init();
-      const statuses = Array.from(serverStatuses.values());
+      const statuses = Array.from(serverStatuses.values(), withManagerState);
       const connected = statuses.filter(s => s.connected);
-      const failed = statuses.filter(s => !s.connected);
+      const failed = statuses.filter(s => !s.connected && !s.disabled);
       return {
         connected,
         failed,
@@ -525,17 +650,128 @@ export function createMcpManager(
     },
 
     async reload() {
-      await disconnect();
-      config = applyExtraServers(loadMcpConfig(projectDir, configDirName));
-      tools = {};
-      serverStatuses = new Map();
-      stderrLogs = new Map();
-      initialized = false;
-      await connectAndCollectTools();
-      initialized = true;
+      config = applyExtraServers(loadMcpConfig(projectDir, configDirName, externalDiscovery));
+      projectServerOverrides = new Map(Object.entries(loadProjectServerOverrides(projectDir)));
+      globalDisableState = loadGlobalDisableState();
+      globallyDisabledServers = new Set(globalDisableState.disabledServers);
+      await rebuildConnections();
+    },
+
+    async setServerDisabled(name: string, disabled: boolean, options?: { global?: boolean }): Promise<McpServerStatus> {
+      if (!config.mcpServers?.[name]) {
+        return {
+          name,
+          connected: false,
+          toolCount: 0,
+          toolNames: [],
+          transport: 'stdio',
+          error: `Server "${name}" not found in config`,
+        };
+      }
+
+      const wasEffectivelyDisabled = isDisabled(name);
+
+      if (options?.global) {
+        persistGlobalDelta(state => {
+          if (disabled) {
+            state.disabledServers.add(name);
+          } else {
+            state.disabledServers.delete(name);
+          }
+        });
+      } else {
+        persistProjectDelta(overrides => {
+          overrides.set(name, disabled ? 'disabled' : 'enabled');
+        });
+      }
+
+      // Only rebuild connections when the server's effective state actually
+      // flipped. State changes that only alter an inherited default or an
+      // override beneath the global kill switch leave connections alone.
+      if (isDisabled(name) !== wasEffectivelyDisabled) {
+        await rebuildConnections();
+        return withManagerState(serverStatuses.get(name) ?? disabledStatus(name));
+      }
+      return withManagerState(
+        isDisabled(name) ? disabledStatus(name) : (serverStatuses.get(name) ?? disabledStatus(name)),
+      );
+    },
+
+    async inheritServer(name: string): Promise<McpServerStatus> {
+      if (!config.mcpServers?.[name]) {
+        return {
+          name,
+          connected: false,
+          toolCount: 0,
+          toolNames: [],
+          transport: 'stdio',
+          error: `Server "${name}" not found in config`,
+        };
+      }
+
+      const wasEffectivelyDisabled = isDisabled(name);
+      persistProjectDelta(overrides => {
+        overrides.delete(name);
+      });
+      if (isDisabled(name) !== wasEffectivelyDisabled) {
+        await rebuildConnections();
+      }
+      return withManagerState(
+        isDisabled(name) ? disabledStatus(name) : (serverStatuses.get(name) ?? disabledStatus(name)),
+      );
+    },
+
+    async setAllDisabled(disabled: boolean, options?: { global?: boolean }): Promise<void> {
+      const configuredNames = Object.keys(config.mcpServers ?? {});
+      const effectiveBefore = configuredNames.filter(name => isDisabled(name)).join(',');
+      if (options?.global) {
+        persistGlobalDelta(state => {
+          state.allDisabled = disabled;
+          if (!disabled) {
+            // Enabling globally also clears globally disabled server names so
+            // "/mcp enable all --global" fully restores global defaults.
+            state.disabledServers.clear();
+          }
+        });
+      } else {
+        persistProjectDelta(overrides => {
+          for (const name of configuredNames) {
+            overrides.set(name, disabled ? 'disabled' : 'enabled');
+          }
+        });
+      }
+      const effectiveAfter = configuredNames.filter(name => isDisabled(name)).join(',');
+      if (effectiveAfter !== effectiveBefore) {
+        await rebuildConnections();
+      }
+    },
+
+    async inheritAllServers(): Promise<void> {
+      const configuredNames = Object.keys(config.mcpServers ?? {});
+      const effectiveBefore = configuredNames.filter(name => isDisabled(name)).join(',');
+      persistProjectDelta(overrides => {
+        overrides.clear();
+      });
+      const effectiveAfter = configuredNames.filter(name => isDisabled(name)).join(',');
+      if (effectiveAfter !== effectiveBefore) {
+        await rebuildConnections();
+      }
+    },
+
+    getDisabledServers() {
+      return Object.keys(config.mcpServers ?? {})
+        .filter(name => isDisabled(name))
+        .sort();
+    },
+
+    isAllDisabledGlobally() {
+      return globalDisableState.allDisabled;
     },
 
     async reconnectServer(name: string): Promise<McpServerStatus> {
+      if (isDisabled(name)) {
+        return { ...disabledStatus(name), error: `Server "${name}" is disabled — enable it first` };
+      }
       const cfg = config.mcpServers?.[name];
       if (!cfg) {
         return {
@@ -577,6 +813,10 @@ export function createMcpManager(
           transport: 'stdio',
           error: `Server "${name}" not found in config`,
         };
+      }
+
+      if (isDisabled(name)) {
+        return { ...disabledStatus(name), error: `Server "${name}" is disabled — enable it first` };
       }
 
       if (!client) {
@@ -687,7 +927,7 @@ export function createMcpManager(
     },
 
     getServerStatuses() {
-      return Array.from(serverStatuses.values(), withAuthenticating);
+      return Array.from(serverStatuses.values(), withManagerState);
     },
 
     getSkippedServers() {

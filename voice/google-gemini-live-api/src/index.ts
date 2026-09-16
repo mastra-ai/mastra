@@ -30,6 +30,10 @@ type GeminiEventName = Extract<keyof GeminiLiveEventMap, string>;
 const DEFAULT_MODEL: GeminiVoiceModel = 'gemini-3.1-flash-live-preview';
 const DEFAULT_VOICE: GeminiVoiceName = 'Puck';
 
+// How many recently handled tool call ids to keep for duplicate suppression.
+// Insertion-ordered; the oldest id is evicted once the bound is reached.
+const MAX_TRACKED_TOOL_CALL_IDS = 512;
+
 // Treats only plain objects (own prototype chain ends at `Object.prototype` or `null`) as
 // proto-struct compatible — `Date`, `Map`, `Set`, `Error`, `RegExp`, and class instances all
 // JSON-serialize to `{}` if forwarded bare and need wrapping for Gemini Live's `response` field.
@@ -128,6 +132,12 @@ export class GeminiLiveVoice extends MastraVoice<
   // Tool integration properties
   private tools?: ToolsInput;
   private requestContext?: any;
+  // Provider call ids already handled on this connection. Gemini Live can deliver the same
+  // function call through both inbound representations — a top-level `toolCall` message and
+  // `serverContent.modelTurn.parts[].functionCall` — so deduplicate by call id to execute
+  // each call exactly once. Calls without a provider id get a fresh UUID and are never
+  // suppressed.
+  private processedToolCallIds = new Set<string>();
 
   // Store the configuration options
   private options: GeminiLiveVoiceConfig;
@@ -447,6 +457,10 @@ export class GeminiLiveVoice extends MastraVoice<
       return;
     }
 
+    // Dedup state must not leak across connections: ids used by a prior
+    // connection are valid again once a fresh one is opened.
+    this.processedToolCallIds.clear();
+
     // Store request context for tool execution
     this.requestContext = requestContext;
 
@@ -469,7 +483,7 @@ export class GeminiLiveVoice extends MastraVoice<
         this.log('Using Vertex AI authentication with OAuth token');
       } else {
         // Live API endpoint - this is specifically for the Live API
-        wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent`;
+        wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent`;
         headers = {
           headers: {
             'x-goog-api-key': this.options.apiKey || '',
@@ -934,6 +948,25 @@ export class GeminiLiveVoice extends MastraVoice<
         this.log('Updating speaker to:', config.speaker);
       }
 
+      // Update thinking configuration if provided. Mirrors `sendInitialConfig`: public config is
+      // camelCase, the wire format is snake_case. Merge into any existing generation_config so a
+      // speaker + thinkingConfig update in the same call don't clobber each other. Only emit when a
+      // sub-field is set, so an empty `thinkingConfig: {}` is a no-op rather than a bare object.
+      const tc = config.thinkingConfig;
+      if (tc && (tc.includeThoughts !== undefined || tc.thinkingBudget !== undefined)) {
+        hasUpdates = true;
+        updateMessage.session.generation_config = {
+          ...updateMessage.session.generation_config,
+          thinking_config: {
+            ...(tc.includeThoughts !== undefined && { include_thoughts: tc.includeThoughts }),
+            ...(tc.thinkingBudget !== undefined && { thinking_budget: tc.thinkingBudget }),
+          },
+        };
+
+        this.options.thinkingConfig = tc;
+        this.log('Updating thinkingConfig');
+      }
+
       // Update instructions if provided
       if (config.instructions !== undefined) {
         hasUpdates = true;
@@ -1226,9 +1259,22 @@ export class GeminiLiveVoice extends MastraVoice<
     });
 
     this.ws.on('close', (code: number, reason: Buffer) => {
-      this.log('WebSocket connection closed', { code, reason: reason.toString() });
+      const reasonText = reason.toString();
+      this.log('WebSocket connection closed', { code, reason: reasonText });
       this.state = 'disconnected';
-      this.emit('session', { state: 'disconnected', code, reason: reason.toString() });
+      this.emit('session', { state: 'disconnected', code, reason: reasonText });
+
+      // A clean server-initiated close (e.g. 1007 invalid-argument for a bad model id or a
+      // malformed setup frame) arrives as `close`, not as a socket `error`. Surface it as an
+      // `error` so a pending connect() (waitForSessionCreated) rejects immediately with the
+      // real close code and reason instead of waiting out the 30s setup timeout.
+      if (code !== 1000) {
+        this.emit('error', {
+          message: `WebSocket closed during/after setup (code ${code})${reasonText ? `: ${reasonText}` : ''}`,
+          code: 'websocket_closed',
+          details: { code, reason: reasonText },
+        });
+      }
     });
 
     this.ws.on('error', (error: Error) => {
@@ -1285,11 +1331,13 @@ export class GeminiLiveVoice extends MastraVoice<
     } else if (data.toolCall) {
       this.log('Processing tool call message');
       await this.handleToolCall(data);
-    } else if (data.usageMetadata) {
+    }
+
+    // Usage metadata and session resumption updates can accompany any primary message.
+    // Handle them independently so content, setup, and tool frames do not suppress them.
+    if (data.usageMetadata) {
       this.log('Processing usage metadata message');
       this.handleUsageUpdate(data);
-      // sessionResumptionUpdate may arrive in the same frame as usageMetadata
-      // so we handle it here too, not in a separate else-if branch
     }
     if (data.sessionResumptionUpdate) {
       this.log('Processing session resumption update', data.sessionResumptionUpdate);
@@ -1622,6 +1670,21 @@ export class GeminiLiveVoice extends MastraVoice<
   private async processSingleToolCall(toolName: string, toolArgs: Record<string, any>, toolId: string): Promise<void> {
     this.log('Processing tool call', { toolName, toolArgs, toolId });
 
+    // Skip duplicates: the same call id may arrive through both inbound
+    // representations (top-level `toolCall` and
+    // `serverContent.modelTurn.parts[].functionCall`).
+    if (this.processedToolCallIds.has(toolId)) {
+      this.log('Duplicate tool call ignored', { toolName, toolId });
+      return;
+    }
+    this.processedToolCallIds.add(toolId);
+    if (this.processedToolCallIds.size > MAX_TRACKED_TOOL_CALL_IDS) {
+      const oldest = this.processedToolCallIds.values().next().value;
+      if (oldest !== undefined) {
+        this.processedToolCallIds.delete(oldest);
+      }
+    }
+
     // Emit tool call event
     this.emit('toolCall', {
       name: toolName,
@@ -1633,6 +1696,24 @@ export class GeminiLiveVoice extends MastraVoice<
     const tool = this.tools?.[toolName];
     if (!tool) {
       this.log('Tool not found', { toolName });
+
+      // Gemini blocks the turn until every `functionCall` id in the batch is answered. Returning
+      // without a `functionResponse` leaves the call unanswered forever, so the model never speaks
+      // again (dead air until hangup). Send an error response for this id before emitting.
+      const notFoundMessage = {
+        toolResponse: {
+          functionResponses: [
+            {
+              id: toolId,
+              name: toolName,
+              response: { error: `Tool "${toolName}" not found` },
+            },
+          ],
+        },
+      };
+
+      this.sendEvent('toolResponse', notFoundMessage);
+
       this.createAndEmitError(GeminiLiveErrorCode.TOOL_NOT_FOUND, `Tool "${toolName}" not found`, {
         toolName,
         availableTools: Object.keys(this.tools || {}),
@@ -1847,6 +1928,10 @@ export class GeminiLiveVoice extends MastraVoice<
             };
           };
         };
+        thinking_config?: {
+          include_thoughts?: boolean;
+          thinking_budget?: number;
+        };
       };
       system_instruction?: {
         parts: Array<{
@@ -1916,6 +2001,19 @@ export class GeminiLiveVoice extends MastraVoice<
             voice_name: this.options.speaker,
           },
         },
+      };
+    }
+
+    // Forward caller-supplied thinking configuration. Public config is camelCase; the wire
+    // format is snake_case (`thinking_config.include_thoughts` / `thinking_budget`), matching
+    // the translation done for `speech_config` above. Only emit `thinking_config` when at least
+    // one sub-field is set, so an empty `thinkingConfig: {}` is a no-op and the setup frame stays
+    // byte-for-byte unchanged — a bare `thinking_config: {}` may be rejected by non-thinking models.
+    const setupThinking = this.options.thinkingConfig;
+    if (setupThinking && (setupThinking.includeThoughts !== undefined || setupThinking.thinkingBudget !== undefined)) {
+      generationConfig.thinking_config = {
+        ...(setupThinking.includeThoughts !== undefined && { include_thoughts: setupThinking.includeThoughts }),
+        ...(setupThinking.thinkingBudget !== undefined && { thinking_budget: setupThinking.thinkingBudget }),
       };
     }
 

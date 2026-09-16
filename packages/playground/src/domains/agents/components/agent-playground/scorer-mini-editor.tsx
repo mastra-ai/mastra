@@ -10,7 +10,7 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
-import { ArrowLeft, Play, Save, Plus, Trash2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Play, Save, Plus, Trash2, CheckCircle2, XCircle, AlertCircle, Check, X } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
@@ -154,6 +154,7 @@ export function ScorerMiniEditor({
         }
       })
       .finally(() => setIsLoadingScorer(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reload when the edited scorer changes
   }, [editScorerId]);
 
   const { provider, model } = usePlaygroundModel();
@@ -373,17 +374,14 @@ export function ScorerMiniEditor({
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="border-border1 flex items-center gap-2 border-b px-4 py-3">
-        <Button variant="ghost" size="sm" onClick={onBack}>
-          <Icon>
-            <ArrowLeft />
-          </Icon>
+        <Button variant="ghost" size="sm" onClick={onBack} icon={<ArrowLeft />}>
           Back
         </Button>
         <Txt as="h3" variant="header-sm" className="ml-2">
           {isEditing || savedScorerId ? 'Edit Scorer' : 'New Scorer'}
         </Txt>
         {(isEditing || savedScorerId) && (
-          <Badge variant="success" className="ml-2">
+          <Badge variant="green" className="ml-2">
             Saved
           </Badge>
         )}
@@ -391,7 +389,7 @@ export function ScorerMiniEditor({
 
       <ScrollArea className="flex-1">
         {isLoadingScorer ? (
-          <div className="flex items-center justify-center p-8">
+          <div className="flex items-center justify-center p-5">
             <Spinner className="mr-2" /> Loading scorer...
           </div>
         ) : (
@@ -472,16 +470,13 @@ export function ScorerMiniEditor({
                     </Txt>
                   )}
                 </div>
-                <Button variant="outline" size="sm" onClick={addTestItem}>
-                  <Icon>
-                    <Plus />
-                  </Icon>
+                <Button variant="outline" size="sm" onClick={addTestItem} icon={<Plus />}>
                   Add Item
                 </Button>
               </div>
 
               {testItems.length === 0 && (
-                <div className="border-border1 rounded-lg border border-dashed p-6 text-center">
+                <div className="border-border1 rounded-lg border border-dashed p-4 text-center">
                   <Txt variant="ui-sm" className="text-icon3">
                     No test items yet. Add items with expected scoring direction to verify your scorer works correctly.
                   </Txt>
@@ -520,10 +515,10 @@ export function ScorerMiniEditor({
                         <Txt variant="ui-sm" className="font-medium">
                           Item {index + 1}
                         </Txt>
-                        {item.label && <Badge variant="default">{item.label}</Badge>}
+                        {item.label && <Badge>{item.label}</Badge>}
                         <button
                           className={cn(
-                            'px-2 py-0.5 rounded text-xs font-medium transition-colors',
+                            'px-2 py-0.5 rounded text-ui-sm font-medium transition-colors',
                             item.expectedDirection === 'high' ? 'bg-success/20 text-success' : 'bg-error/20 text-error',
                           )}
                           onClick={() =>
@@ -561,7 +556,7 @@ export function ScorerMiniEditor({
                           value={typeof item.input === 'string' ? item.input : JSON.stringify(item.input, null, 2)}
                           onChange={e => updateTestItem(index, 'input', e.target.value)}
                           rows={3}
-                          className="text-sm"
+                          className="text-ui-md"
                         />
                       </div>
                       <div className="space-y-1">
@@ -573,7 +568,7 @@ export function ScorerMiniEditor({
                           value={typeof item.output === 'string' ? item.output : JSON.stringify(item.output, null, 2)}
                           onChange={e => updateTestItem(index, 'output', e.target.value)}
                           rows={3}
-                          className="text-sm"
+                          className="text-ui-md"
                         />
                       </div>
                     </div>
@@ -618,7 +613,7 @@ export function ScorerMiniEditor({
                     let correct = 0;
                     let incorrect = 0;
                     let errors = 0;
-                    experimentResults.forEach((result: { output: unknown; error: string | null }, i: number) => {
+                    experimentResults.forEach((result, i: number) => {
                       const item = testItems[i];
                       if (!item) return;
                       if (result.error) {
@@ -634,9 +629,9 @@ export function ScorerMiniEditor({
                     });
                     return (
                       <>
-                        {correct > 0 && <Badge variant="success">{correct} correct</Badge>}
-                        {incorrect > 0 && <Badge variant="error">{incorrect} incorrect</Badge>}
-                        {errors > 0 && <Badge variant="default">{errors} errors</Badge>}
+                        {correct > 0 && <Badge variant="green">{correct} correct</Badge>}
+                        {incorrect > 0 && <Badge variant="red">{incorrect} incorrect</Badge>}
+                        {errors > 0 && <Badge>{errors} errors</Badge>}
                       </>
                     );
                   })()}
@@ -721,7 +716,13 @@ export function ScorerMiniEditor({
             </Button>
           </>
         )}
-        <Button variant="ghost" size="sm" onClick={onBack} className="ml-auto">
+        <Button
+          icon={isEditing || savedScorerId ? <Check /> : <X />}
+          variant="ghost"
+          size="sm"
+          onClick={onBack}
+          className="ml-auto"
+        >
           {isEditing || savedScorerId ? 'Done' : 'Cancel'}
         </Button>
       </div>

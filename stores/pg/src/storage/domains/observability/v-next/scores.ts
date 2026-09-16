@@ -9,6 +9,7 @@ import { listScoresArgsSchema } from '@mastra/core/storage';
 import type {
   BatchCreateScoresArgs,
   CreateScoreArgs,
+  DeleteScoresArgs,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
   GetScoreBreakdownArgs,
@@ -60,6 +61,13 @@ function applyScoreFilters(
     acc.conditions.push(`"scoreSource" = $${acc.next++}`);
     acc.params.push(filters.scoreSource ?? filters.source);
   }
+  if (filters?.metadata && Object.keys(filters.metadata).length > 0) {
+    // Per-top-level-key exact equality (jsonb `=` normalizes formatting), matching in-memory semantics
+    for (const [key, value] of Object.entries(filters.metadata)) {
+      acc.conditions.push(`"metadata"->($${acc.next++}::text) = $${acc.next++}::jsonb`);
+      acc.params.push(key, JSON.stringify(value ?? null));
+    }
+  }
 }
 
 /** OLAP queries take an explicit scorerId / scoreSource pair as identity. */
@@ -91,6 +99,32 @@ export async function batchCreateScores(client: DbClient, schema: string, args: 
   const rows = args.scores.map(scoreRecordToRow);
   const insert = buildInsert(schema, TABLE_SCORE_EVENTS, rows);
   if (insert) await client.query(insert.text, insert.values);
+}
+
+// ---------------------------------------------------------------------------
+// Deletes
+// ---------------------------------------------------------------------------
+
+/**
+ * Delete score events by scoreId. Optional `organizationId` and `resourceId`
+ * values are ANDed into the predicate to restrict deletion to records with
+ * matching scope fields.
+ */
+export async function deleteScores(client: DbClient, schema: string, args: DeleteScoresArgs): Promise<void> {
+  if (args.scoreIds.length === 0) return;
+  const table = qualifiedTable(schema, TABLE_SCORE_EVENTS);
+  const values: unknown[] = [...args.scoreIds];
+  const placeholders = args.scoreIds.map((_, i) => `$${i + 1}`).join(', ');
+  const conditions = [`"scoreId" IN (${placeholders})`];
+  if (args.organizationId !== undefined) {
+    values.push(args.organizationId);
+    conditions.push(`"organizationId" = $${values.length}`);
+  }
+  if (args.resourceId !== undefined) {
+    values.push(args.resourceId);
+    conditions.push(`"resourceId" = $${values.length}`);
+  }
+  await client.query(`DELETE FROM ${table} WHERE ${conditions.join(' AND ')}`, values);
 }
 
 // ---------------------------------------------------------------------------

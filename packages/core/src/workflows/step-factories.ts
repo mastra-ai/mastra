@@ -3,6 +3,7 @@ import type { Agent } from '../agent/agent';
 import type { AgentExecutionOptions } from '../agent/agent.types';
 import type { SubAgent } from '../agent/subagent';
 import type { AgentStreamOptions } from '../agent/types';
+import type { ActorSignal } from '../auth/ee';
 import type { MastraScorers } from '../evals';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
@@ -47,7 +48,7 @@ export function createStepFromAgent<TStepId extends string, TStepOutput>(
   // Determine output schema based on structuredOutput option
   const outputSchema = toStandardSchema(
     (options?.structuredOutput?.schema ?? z.object({ text: z.string() })) as PublicSchema<TStepOutput>,
-  ) as StandardSchemaWithJSON<TStepOutput>;
+  );
   const { retries, scorers, metadata } =
     options ??
     ({} as AgentStepOptions<TStepOutput> & {
@@ -82,7 +83,16 @@ export function createStepFromAgent<TStepId extends string, TStepOutput>(
 
 export function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
   params: ToolStep<TStepInput, TSuspend, TResume, TStepOutput, any>,
-  toolOpts?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
+  toolOpts?: {
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+    metadata?: StepMetadata;
+    /**
+     * Overrides the FGA actor for this tool call. Wins over a propagating run
+     * actor; pass `undefined` explicitly to drop back to user-actor resolution.
+     */
+    actor?: ActorSignal;
+  },
 ): Step<string, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType> {
   if (!params.inputSchema || !params.outputSchema) {
     throw new Error('Tool must have input and output schemas defined');

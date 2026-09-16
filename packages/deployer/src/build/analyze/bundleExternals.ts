@@ -2,18 +2,16 @@ import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { basename } from 'node:path/posix';
 import { ErrorCategory, ErrorDomain, MastraBaseError } from '@mastra/core/error';
-import type { Config } from '@mastra/core/mastra';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import virtual from '@rollup/plugin-virtual';
-import { getPackageInfo } from 'local-pkg';
 import * as resolve from 'resolve.exports';
 import { rollup } from 'rollup';
 import type { OutputChunk, OutputAsset, Plugin } from 'rollup';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
-import { getPackageRootPath } from '../package-info';
+import { getPackageRootPath, getPackageInfo } from '../package-info';
 import { esbuild } from '../plugins/esbuild';
 import { esmShim } from '../plugins/esm-shim';
 import { aliasHono } from '../plugins/hono-alias';
@@ -31,7 +29,8 @@ import {
   slash,
 } from '../utils';
 import type { BundlerPlatform } from '../utils';
-import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS, DEPRECATED_EXTERNALS } from './constants';
+import { DEPS_TO_IGNORE } from './constants';
+import type { NormalizedExternals } from './externals';
 
 type VirtualDependency = {
   name: string;
@@ -464,11 +463,10 @@ export async function bundleExternals(
   depsToOptimize: Map<string, DependencyMetadata>,
   outputDir: string,
   options: {
-    bundlerOptions?:
-      | ({
-          isDev?: boolean;
-        } & Config['bundler'])
-      | null;
+    bundlerOptions: NormalizedExternals & {
+      isDev?: boolean;
+      transpilePackages?: string[];
+    };
     projectRoot?: string;
     workspaceRoot?: string;
     workspaceMap?: Map<string, WorkspacePackageInfo>;
@@ -479,22 +477,10 @@ export async function bundleExternals(
     workspaceRoot = null,
     workspaceMap = new Map(),
     projectRoot = outputDir,
-    bundlerOptions = {},
+    bundlerOptions,
     platform = 'node',
   } = options;
-  const { externals: customExternals = [], transpilePackages = [], isDev = false } = bundlerOptions || {};
-  /**
-   * A user can set `externals: true` to indicate they want to externalize all dependencies. In this case, we set `externalsPreset` to true to skip bundling any externals.
-   */
-  let externalsPreset = false;
-
-  if (customExternals === true) {
-    externalsPreset = true;
-  }
-
-  // If `externals` is an array (and not `true`), we proceed as normal
-  const externalsList = Array.isArray(customExternals) ? customExternals : [];
-  const allExternals = [...GLOBAL_EXTERNALS, ...DEPRECATED_EXTERNALS, ...externalsList];
+  const { externalsPreset, mergedExternals, transpilePackages = [], isDev = false } = bundlerOptions;
 
   const workspacePackagesNames = Array.from(workspaceMap.keys());
   const packagesToTranspile = new Set([...transpilePackages, ...workspacePackagesNames]);
@@ -526,7 +512,7 @@ export async function bundleExternals(
   });
 
   const output = await buildExternalDependencies(optimizedDependencyEntries, {
-    externals: allExternals,
+    externals: mergedExternals,
     packagesToTranspile,
     workspaceMap,
     rootDir: workspaceRoot || projectRoot,
@@ -542,7 +528,7 @@ export async function bundleExternals(
   const filteredChunks = output.filter(o => o.type === 'chunk');
 
   for (const o of filteredChunks.filter(o => o.isEntry || o.isDynamicEntry)) {
-    for (const external of allExternals) {
+    for (const external of mergedExternals) {
       if (DEPS_TO_IGNORE.includes(external)) {
         continue;
       }

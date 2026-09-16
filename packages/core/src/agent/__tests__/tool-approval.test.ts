@@ -147,9 +147,11 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
 
           const stream = await agentOne.stream('Find the user with name - Dero Israel', { memory });
           let toolName = '';
+          let toolCallId = '';
           for await (const _chunk of stream.fullStream) {
             if (_chunk.type === 'tool-call-approval') {
               toolName = _chunk.payload.toolName;
+              toolCallId = _chunk.payload.toolCallId;
             }
           }
           const durationAtApproval = (await agentOne.getObjective({ threadId: memory.thread }))?.activeDurationMs ?? 0;
@@ -158,9 +160,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           expect((await agentOne.getObjective({ threadId: memory.thread }))?.activeDurationMs).toBe(durationAtApproval);
 
           if (toolName) {
-            const resumeStream = await agentOne.stream('Approve', {
-              memory,
-            });
+            const resumeStream = await agentOne.approveToolCall({ runId: stream.runId, toolCallId });
             for await (const _chunk of resumeStream.fullStream) {
             }
 
@@ -262,7 +262,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         expect(execute).toHaveBeenCalled();
       }, 500000);
 
-      it('honors a function-valued global requireToolApproval across suspend and resume', async () => {
+      it('honors a function-valued global requireToolApproval with explicit approval', async () => {
         // The function policy lives only in the live JS call (RequestContext.toJSON strips it from
         // the persisted suspend snapshot). This proves the resume call re-supplies and re-evaluates
         // the function, so approval survives a real suspend -> resume cycle without serialization.
@@ -344,24 +344,28 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           requireToolApproval,
         });
         let toolName = '';
+        let toolCallId = '';
         for await (const chunk of suspendStream.fullStream) {
           if (chunk.type === 'tool-call-approval') {
             toolName = chunk.payload.toolName;
+            toolCallId = chunk.payload.toolCallId;
           }
         }
         expect(toolName).toBe('findUserTool');
         expect(mockFindUser).not.toHaveBeenCalled();
 
-        // Resume call: re-supplies the same function policy. Approval is granted, tool executes.
-        const resumeStream = await agent.stream('Approve', { memory, requireToolApproval });
+        // Resume through the explicit approval boundary. The stored suspend payload
+        // preserves the function policy even though the helper only needs run and call IDs.
+        const resumeStream = await agent.approveToolCall({ runId: suspendStream.runId, toolCallId });
         for await (const _chunk of resumeStream.fullStream) {
           // drain
         }
         const toolResults = await resumeStream.toolResults;
         const toolCall = toolResults?.find((result: any) => result.payload.toolName === 'findUserTool')?.payload;
 
-        // The policy was evaluated on both the suspend and resume passes (function survived resume).
-        expect(requireToolApproval.mock.calls.length).toBeGreaterThanOrEqual(2);
+        // The function policy gates the initial call. The explicit approval helper then
+        // resumes from the persisted approval suspension without re-evaluating it.
+        expect(requireToolApproval).toHaveBeenCalledTimes(1);
         expect(mockFindUser).toHaveBeenCalled();
         expect((toolCall?.result as any)?.name).toBe('Dero Israel');
       }, 500000);

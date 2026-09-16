@@ -311,6 +311,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "format",
       "model",
+      "reason",
       "requestContext",
       "runId",
       "toolCallId"
@@ -414,6 +415,24 @@ export const API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [],
     "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /agents/:agentId/plans/file": {
+    "method": "GET",
+    "path": "/agents/:agentId/plans/file",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [
+      "path",
+      "status",
+      "versionId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "single"
@@ -528,6 +547,18 @@ export const API_ROUTE_METADATA = {
     ],
     "bodyParams": [],
     "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "record"
+    }
+  },
+  "GET /workflows/run-counts": {
+    "method": "GET",
+    "path": "/workflows/run-counts",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
     "hasBody": false,
     "responseShape": {
       "kind": "record"
@@ -1334,6 +1365,24 @@ export const API_ROUTE_METADATA = {
       "listProperty": "clonedMessages"
     }
   },
+  "POST /memory/threads/:threadId/transfer": {
+    "method": "POST",
+    "path": "/memory/threads/:threadId/transfer",
+    "pathParams": [
+      "threadId"
+    ],
+    "queryParams": [
+      "agentId"
+    ],
+    "bodyParams": [
+      "resourceId"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /memory/threads/:threadId/working-memory": {
     "method": "POST",
     "path": "/memory/threads/:threadId/working-memory",
@@ -1716,6 +1765,7 @@ export const API_ROUTE_METADATA = {
     "path": "/observability/traces/light",
     "pathParams": [],
     "queryParams": [
+      "after",
       "dateRange",
       "direction",
       "endedAt",
@@ -1727,7 +1777,9 @@ export const API_ROUTE_METADATA = {
       "experimentId",
       "field",
       "hasChildError",
+      "limit",
       "metadata",
+      "mode",
       "name",
       "organizationId",
       "page",
@@ -1894,6 +1946,20 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /observability/traces/delete": {
+    "method": "POST",
+    "path": "/observability/traces/delete",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "traceIds"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /observability/traces/score": {
     "method": "POST",
     "path": "/observability/traces/score",
@@ -1927,6 +1993,42 @@ export const API_ROUTE_METADATA = {
       "kind": "object-property",
       "listProperty": "scores",
       "paginationProperty": "pagination"
+    }
+  },
+  "POST /observability/traces/query": {
+    "method": "POST",
+    "path": "/observability/traces/query",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "group",
+      "orderBy",
+      "page",
+      "timeRange",
+      "where"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /observability/threads/query": {
+    "method": "POST",
+    "path": "/observability/threads/query",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "page",
+      "traces",
+      "where"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "threads",
+      "paginationProperty": "page"
     }
   },
   "GET /observability/metrics": {
@@ -2045,6 +2147,7 @@ export const API_ROUTE_METADATA = {
       "experimentId",
       "field",
       "limit",
+      "metadata",
       "mode",
       "organizationId",
       "page",
@@ -2086,6 +2189,22 @@ export const API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "score"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /observability/scores": {
+    "method": "DELETE",
+    "path": "/observability/scores",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "organizationId",
+      "resourceId",
+      "scoreIds"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -2210,6 +2329,7 @@ export const API_ROUTE_METADATA = {
       "perPage",
       "requestId",
       "resourceId",
+      "reviewStatus",
       "rootEntityName",
       "rootEntityType",
       "rootEntityVersionId",
@@ -2240,6 +2360,38 @@ export const API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "feedback"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /observability/feedback": {
+    "method": "DELETE",
+    "path": "/observability/feedback",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "feedbackIds",
+      "organizationId",
+      "resourceId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PATCH /observability/feedback/:feedbackId/review-status": {
+    "method": "PATCH",
+    "path": "/observability/feedback/:feedbackId/review-status",
+    "pathParams": [
+      "feedbackId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "reviewStatus"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -3196,7 +3348,9 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
-      "data"
+      "data",
+      "resumeData",
+      "suspendPayload"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -3302,6 +3456,7 @@ export const API_ROUTE_METADATA = {
       "browser",
       "defaultOptions",
       "description",
+      "durable",
       "inputProcessors",
       "instructions",
       "integrationTools",
@@ -3337,6 +3492,7 @@ export const API_ROUTE_METADATA = {
       "changeMessage",
       "defaultOptions",
       "description",
+      "durable",
       "inputProcessors",
       "inspectOnly",
       "instructions",
@@ -3389,6 +3545,7 @@ export const API_ROUTE_METADATA = {
       "browser",
       "defaultOptions",
       "description",
+      "durable",
       "id",
       "inputProcessors",
       "instructions",
@@ -3429,6 +3586,7 @@ export const API_ROUTE_METADATA = {
       "changeMessage",
       "defaultOptions",
       "description",
+      "durable",
       "inputProcessors",
       "instructions",
       "integrationTools",
@@ -3646,11 +3804,11 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "GET /stored/workflows/:storedWorkflowId": {
+  "GET /stored/workflows/:dynamicWorkflowId": {
     "method": "GET",
-    "path": "/stored/workflows/:storedWorkflowId",
+    "path": "/stored/workflows/:dynamicWorkflowId",
     "pathParams": [
-      "storedWorkflowId"
+      "dynamicWorkflowId"
     ],
     "queryParams": [],
     "bodyParams": [],
@@ -3660,11 +3818,11 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "DELETE /stored/workflows/:storedWorkflowId": {
+  "DELETE /stored/workflows/:dynamicWorkflowId": {
     "method": "DELETE",
-    "path": "/stored/workflows/:storedWorkflowId",
+    "path": "/stored/workflows/:dynamicWorkflowId",
     "pathParams": [
-      "storedWorkflowId"
+      "dynamicWorkflowId"
     ],
     "queryParams": [],
     "bodyParams": [],
@@ -4829,7 +4987,9 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [
       "page",
-      "perPage"
+      "perPage",
+      "targetIds",
+      "targetType"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -5043,6 +5203,24 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "DELETE /datasets/:datasetId/items/:itemId/purge": {
+    "method": "DELETE",
+    "path": "/datasets/:datasetId/items/:itemId/purge",
+    "pathParams": [
+      "datasetId",
+      "itemId"
+    ],
+    "queryParams": [
+      "organizationId",
+      "projectId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "DELETE /datasets/:datasetId/items/:itemId": {
     "method": "DELETE",
     "path": "/datasets/:datasetId/items/:itemId",
@@ -5114,8 +5292,14 @@ export const API_ROUTE_METADATA = {
     "path": "/experiments",
     "pathParams": [],
     "queryParams": [
+      "comparisonId",
+      "experimentSetId",
       "page",
-      "perPage"
+      "perPage",
+      "targetId",
+      "targetType",
+      "trialIndex",
+      "variantId"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -5139,6 +5323,23 @@ export const API_ROUTE_METADATA = {
       "listProperty": "counts"
     }
   },
+  "DELETE /experiments/:experimentId": {
+    "method": "DELETE",
+    "path": "/experiments/:experimentId",
+    "pathParams": [
+      "experimentId"
+    ],
+    "queryParams": [
+      "organizationId",
+      "projectId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /datasets/:datasetId/experiments": {
     "method": "GET",
     "path": "/datasets/:datasetId/experiments",
@@ -5146,8 +5347,14 @@ export const API_ROUTE_METADATA = {
       "datasetId"
     ],
     "queryParams": [
+      "comparisonId",
+      "experimentSetId",
       "page",
-      "perPage"
+      "perPage",
+      "targetId",
+      "targetType",
+      "trialIndex",
+      "variantId"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -5167,9 +5374,16 @@ export const API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "agentVersion",
+      "description",
+      "grouping",
+      "id",
       "maxConcurrency",
+      "metadata",
+      "name",
+      "provenance",
       "requestContext",
       "scorerIds",
+      "start",
       "targetId",
       "targetType",
       "version",
@@ -5177,6 +5391,67 @@ export const API_ROUTE_METADATA = {
     ],
     "hasQuery": false,
     "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run": {
+    "method": "POST",
+    "path": "/datasets/:datasetId/experiments/:experimentId/items/:itemId/run",
+    "pathParams": [
+      "datasetId",
+      "experimentId",
+      "itemId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "attempt",
+      "requestContext"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "scores"
+    }
+  },
+  "POST /datasets/:datasetId/experiments/:experimentId/results": {
+    "method": "POST",
+    "path": "/datasets/:datasetId/experiments/:experimentId/results",
+    "pathParams": [
+      "datasetId",
+      "experimentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "attempt",
+      "completedAt",
+      "error",
+      "groundTruth",
+      "input",
+      "itemId",
+      "output",
+      "scores",
+      "startedAt",
+      "traceId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /datasets/:datasetId/experiments/:experimentId/finalize": {
+    "method": "POST",
+    "path": "/datasets/:datasetId/experiments/:experimentId/finalize",
+    "pathParams": [
+      "datasetId",
+      "experimentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
     "responseShape": {
       "kind": "single"
     }
@@ -5196,6 +5471,43 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "DELETE /datasets/:datasetId/experiments/:experimentId": {
+    "method": "DELETE",
+    "path": "/datasets/:datasetId/experiments/:experimentId",
+    "pathParams": [
+      "datasetId",
+      "experimentId"
+    ],
+    "queryParams": [
+      "organizationId",
+      "projectId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PATCH /datasets/:datasetId/experiments/:experimentId": {
+    "method": "PATCH",
+    "path": "/datasets/:datasetId/experiments/:experimentId",
+    "pathParams": [
+      "datasetId",
+      "experimentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "description",
+      "metadata",
+      "name"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /datasets/:datasetId/experiments/:experimentId/results": {
     "method": "GET",
     "path": "/datasets/:datasetId/experiments/:experimentId/results",
@@ -5205,7 +5517,8 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [
       "page",
-      "perPage"
+      "perPage",
+      "tags"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -5337,6 +5650,18 @@ export const API_ROUTE_METADATA = {
   "GET /editor/builder/settings": {
     "method": "GET",
     "path": "/editor/builder/settings",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /editor/workflow-builder/settings": {
+    "method": "GET",
+    "path": "/editor/workflow-builder/settings",
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [],
@@ -5734,6 +6059,7 @@ export const API_ROUTE_METADATA = {
       "prompt",
       "providerOptions",
       "requestContext",
+      "resourceId",
       "signalType",
       "status",
       "tagName",
@@ -5921,6 +6247,21 @@ export const API_ROUTE_METADATA = {
       "listProperty": "models"
     }
   },
+  "GET /agent-controller/:controllerId/active-runs": {
+    "method": "GET",
+    "path": "/agent-controller/:controllerId/active-runs",
+    "pathParams": [
+      "controllerId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "runs"
+    }
+  },
   "POST /agent-controller/:controllerId/sessions": {
     "method": "POST",
     "path": "/agent-controller/:controllerId/sessions",
@@ -5948,7 +6289,8 @@ export const API_ROUTE_METADATA = {
       "resourceId"
     ],
     "queryParams": [
-      "sessionScope"
+      "sessionScope",
+      "threadId"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -6063,7 +6405,12 @@ export const API_ROUTE_METADATA = {
       "threadId"
     ],
     "queryParams": [
+      "filter",
+      "include",
       "limit",
+      "orderBy",
+      "page",
+      "perPage",
       "sessionScope"
     ],
     "bodyParams": [],
@@ -6071,7 +6418,8 @@ export const API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "object-property",
-      "listProperty": "messages"
+      "listProperty": "messages",
+      "paginationProperty": "page"
     }
   },
   "POST /agent-controller/:controllerId/sessions/:resourceId/messages": {

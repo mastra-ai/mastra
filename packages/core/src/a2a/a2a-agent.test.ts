@@ -1,4 +1,4 @@
-import type { AgentCard, Message, Task } from '@a2a-js/sdk';
+import type { AgentCard, Message, Task } from '@a2a-js/sdk-v0_3';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { SubAgent } from '../agent';
@@ -45,6 +45,31 @@ const baseCard: AgentCard = {
   security: [],
   securitySchemes: {},
   additionalInterfaces: [],
+  supportsAuthenticatedExtendedCard: false,
+};
+
+const v1Card = {
+  name: 'Remote Agent',
+  description: 'A remote agent',
+  supportedInterfaces: [
+    {
+      url: 'https://remote.example.com/a2a/remote',
+      protocolBinding: 'JSONRPC',
+      protocolVersion: '1.0',
+    },
+  ],
+  version: '1.0',
+  skills: [],
+  defaultInputModes: ['text/plain'],
+  defaultOutputModes: ['text/plain'],
+  capabilities: {
+    streaming: true,
+    pushNotifications: false,
+    stateTransitionHistory: false,
+    extensions: [],
+  },
+  securityRequirements: [],
+  securitySchemes: {},
   supportsAuthenticatedExtendedCard: false,
 };
 
@@ -417,7 +442,7 @@ describe('A2AAgent', () => {
     expect(output.messages[0]?.resourceId).toBe('subagent-resource-1');
   });
 
-  it('uses cached run state in resumeGenerate() and sends a follow-up message with context/reference task ids', async () => {
+  it('uses cached run state in resumeGenerate() and continues with context and task ids', async () => {
     const inputRequiredTask = createTask({
       id: 'task-input',
       contextId: 'ctx-input',
@@ -442,8 +467,11 @@ describe('A2AAgent', () => {
         const body = JSON.parse(String(init?.body ?? '{}'));
         expect(body.method).toBe('message/send');
         expect(body.params.message.contextId).toBe('ctx-input');
-        expect(body.params.message.referenceTaskIds).toEqual(['task-input']);
+        expect(body.params.message.taskId).toBe('task-input');
+        expect(body.params.message).not.toHaveProperty('referenceTaskIds');
         expect(body.params.message.parts[0].text).toContain('user follow-up');
+        // Structured resume data also travels as a data part (spec-idiomatic carrier).
+        expect(body.params.message.parts[1]).toEqual({ kind: 'data', data: { note: 'user follow-up' } });
         return jsonRpcResult(createMessage('Follow-up complete'));
       },
     ]);
@@ -465,6 +493,101 @@ describe('A2AAgent', () => {
     const resumed = await agent.resumeGenerate({ note: 'user follow-up' }, { runId: 'run-1' });
     expect(resumed.text).toBe('Follow-up complete');
     expect(resumed.message?.kind).toBe('message');
+  });
+
+  it('surfaces auth-required as a resumable interruption instead of polling', async () => {
+    const authRequiredTask = createTask({
+      id: 'task-auth',
+      status: {
+        state: 'auth-required',
+        timestamp: new Date().toISOString(),
+        message: {
+          kind: 'message',
+          role: 'agent',
+          messageId: 'm-auth',
+          parts: [{ kind: 'text', text: 'Authentication required' }],
+        } as Message,
+      },
+    });
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify({ ...baseCard, capabilities: { ...baseCard.capabilities, streaming: false } }), {
+        status: 200,
+      }),
+      jsonRpcResult(authRequiredTask),
+    ]);
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+      backoffMs: 0,
+      maxBackoffMs: 0,
+    });
+
+    const result = await agent.generate('Authenticate', { runId: 'run-auth' });
+
+    expect(result.finishReason).toBe('suspended');
+    expect(result.resumePayload).toMatchObject({ taskId: 'task-auth', waitingForInput: true });
+    expect(result.task?.status.state).toBe('auth-required');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('continues an input-required task over message/stream with the task id when resuming', async () => {
+    const inputRequiredStreamTask = createTask({
+      id: 'task-stream-input',
+      contextId: 'ctx-stream-input',
+      status: {
+        state: 'input-required',
+        timestamp: new Date().toISOString(),
+        message: {
+          kind: 'message',
+          role: 'agent',
+          messageId: 'm-stream-input',
+          parts: [{ kind: 'text', text: 'Which city?' }],
+        } as Message,
+      },
+    });
+
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify(baseCard), { status: 200 }),
+      createSseResponse([inputRequiredStreamTask]),
+      (input, init) => {
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        expect(body.method).toBe('message/stream');
+        expect(body.params.message.contextId).toBe('ctx-stream-input');
+        expect(body.params.message.taskId).toBe('task-stream-input');
+        expect(body.params.message).not.toHaveProperty('referenceTaskIds');
+        expect(body.params.message.parts[0].text).toContain('Paris');
+        // Structured resume data also travels as a data part (spec-idiomatic carrier).
+        expect(body.params.message.parts[1]).toEqual({ kind: 'data', data: { city: 'Paris' } });
+
+        return createSseResponse([
+          createTask({ id: 'task-stream-input', contextId: 'ctx-stream-input' }),
+          {
+            kind: 'status-update',
+            taskId: 'task-stream-input',
+            contextId: 'ctx-stream-input',
+            final: true,
+            status: {
+              state: 'completed',
+              timestamp: new Date().toISOString(),
+            },
+          },
+        ]);
+      },
+    ]);
+
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const initial = await agent.stream('Book a flight', { runId: 'stream-run-hitl' });
+    expect(await initial.suspendPayload).toMatchObject({
+      taskId: 'task-stream-input',
+      waitingForInput: true,
+    });
+
+    const resumed = await agent.resumeStream({ city: 'Paris' }, { runId: 'stream-run-hitl' });
+    expect((await resumed.task)?.status.state).toBe('completed');
   });
 
   it('falls back to generate() when remote streaming is unsupported', async () => {
@@ -701,6 +824,7 @@ describe('A2AAgent', () => {
           kind: 'artifact-update',
           taskId: 'task-1',
           contextId: 'ctx-1',
+          append: false,
           lastChunk: false,
           artifact: {
             artifactId: 'response:text',
@@ -712,6 +836,7 @@ describe('A2AAgent', () => {
           kind: 'artifact-update',
           taskId: 'task-1',
           contextId: 'ctx-1',
+          append: true,
           lastChunk: true,
           artifact: {
             artifactId: 'response:text',
@@ -730,6 +855,139 @@ describe('A2AAgent', () => {
     const stream = await agent.stream('Chunked stream', { runId: 'stream-run-chunked' });
 
     expect(await stream.text).toBe('Hello world');
+    expect((await stream.task)?.artifacts).toEqual([
+      {
+        artifactId: 'response:text',
+        name: 'response.txt',
+        parts: [
+          { kind: 'text', text: 'Hello' },
+          { kind: 'text', text: ' world' },
+        ],
+      },
+    ]);
+  });
+
+  it('replaces streamed artifact text when append is false', async () => {
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify(baseCard), { status: 200 }),
+      createSseResponse([
+        createTask(),
+        {
+          kind: 'artifact-update',
+          taskId: 'task-1',
+          contextId: 'ctx-1',
+          append: false,
+          lastChunk: false,
+          artifact: {
+            artifactId: 'response:text',
+            name: 'response.txt',
+            parts: [{ kind: 'text', text: 'Hello' }],
+          },
+        },
+        {
+          kind: 'artifact-update',
+          taskId: 'task-1',
+          contextId: 'ctx-1',
+          append: false,
+          lastChunk: true,
+          artifact: {
+            artifactId: 'response:text',
+            name: 'response.txt',
+            parts: [{ kind: 'text', text: 'Goodbye' }],
+          },
+        },
+      ]),
+    ]);
+    const agent = new A2AAgent({ url: 'https://remote.example.com', fetch: fetchMock as typeof fetch });
+
+    const stream = await agent.stream('Replace artifact', { runId: 'stream-run-replace' });
+
+    expect(await stream.text).toBe('Goodbye');
+    expect((await stream.task)?.artifacts).toMatchObject([
+      {
+        artifactId: 'response:text',
+        parts: [{ kind: 'text', text: 'Goodbye' }],
+      },
+    ]);
+  });
+
+  it('throws the remote JSON-RPC error returned with HTTP 200', async () => {
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify({ ...baseCard, capabilities: { ...baseCard.capabilities, streaming: false } }), {
+        status: 200,
+      }),
+      new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: '1',
+          error: { code: -32001, message: 'Task not found', data: { taskId: 'missing' } },
+        }),
+        { status: 200 },
+      ),
+    ]);
+    const agent = new A2AAgent({ url: 'https://remote.example.com', fetch: fetchMock as typeof fetch });
+
+    await expect(agent.generate('Continue missing task')).rejects.toMatchObject({
+      code: -32001,
+      message: 'Task not found',
+      data: { taskId: 'missing' },
+    });
+  });
+
+  it('accepts a JSON-RPC success response with a null error field', async () => {
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify({ ...baseCard, capabilities: { ...baseCard.capabilities, streaming: false } }), {
+        status: 200,
+      }),
+      new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: '1',
+          result: createMessage('Successful response'),
+          error: null,
+        }),
+        { status: 200 },
+      ),
+    ]);
+    const agent = new A2AAgent({ url: 'https://remote.example.com', fetch: fetchMock as typeof fetch });
+
+    await expect(agent.generate('Accept null error')).resolves.toMatchObject({ text: 'Successful response' });
+  });
+
+  it('throws JSON-RPC errors received through SSE', async () => {
+    const encoder = new TextEncoder();
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify(baseCard), { status: 200 }),
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  jsonrpc: '2.0',
+                  id: '1',
+                  error: { code: -32006, message: 'Invalid agent response' },
+                })}\n\n`,
+              ),
+            );
+            controller.close();
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'text/event-stream' } },
+      ),
+    ]);
+    const agent = new A2AAgent({ url: 'https://remote.example.com', fetch: fetchMock as typeof fetch });
+    const stream = await agent.stream('Stream error');
+    const resultPromises = [stream.text, stream.task, stream.suspendPayload, stream.resumeSchema, stream.getResult()];
+
+    await expect(async () => {
+      for await (const _chunk of stream.fullStream) {
+        // Consume the stream so protocol errors surface to callers.
+      }
+    }).rejects.toMatchObject({ code: -32006, message: 'Invalid agent response' });
+    const settled = await Promise.allSettled(resultPromises);
+    expect(settled).toHaveLength(5);
+    expect(settled.every(result => result.status === 'rejected' && result.reason.code === -32006)).toBe(true);
   });
 
   it('does not retry non-transient 4xx request failures', async () => {
@@ -847,5 +1105,203 @@ describe('A2AAgent', () => {
     expect(resumedEvents).toEqual(['text-start', 'text-delta', 'text-end', 'finish']);
     expect(await resumed.text).toBe('Resubscribed text');
     expect((await resumed.task)?.status.state).toBe('completed');
+  });
+
+  it('delegates to a v1-only remote using v1 headers and wire messages', async () => {
+    const fetchMock = createFetchMock([
+      (input, init) => {
+        expect(input.toString()).toBe('https://remote.example.com/.well-known/agent-card.json');
+        expect(new Headers(init?.headers).get('A2A-Version')).toBe('1.0');
+        return new Response(JSON.stringify(v1Card), { status: 200 });
+      },
+      (_input, init) => {
+        expect(new Headers(init?.headers).get('A2A-Version')).toBe('1.0');
+        const request = JSON.parse(String(init?.body));
+        expect(request.method).toBe('SendMessage');
+        expect(request.params.message).toMatchObject({ role: 'ROLE_USER' });
+        expect(request.params.message).not.toHaveProperty('kind');
+        return jsonRpcResult({
+          message: {
+            messageId: 'v1-message-1',
+            role: 'ROLE_AGENT',
+            parts: [{ text: 'V1 delegation complete' }],
+          },
+        });
+      },
+    ]);
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      protocolVersion: '1.0',
+      headers: { 'a2a-version': '0.3' },
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const output = await agent.generate('Use A2A v1');
+
+    expect(output.text).toBe('V1 delegation complete');
+    expect(output.message?.role).toBe('agent');
+  });
+
+  it('uses GetTask when resuming a non-terminal v1 task', async () => {
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify(v1Card), { status: 200 }),
+      createSseResponse([
+        {
+          task: {
+            id: 'v1-task-1',
+            contextId: 'v1-context-1',
+            status: { state: 'TASK_STATE_WORKING' },
+          },
+        },
+      ]),
+      (_input, init) => {
+        const request = JSON.parse(String(init?.body));
+        expect(request.method).toBe('GetTask');
+        expect(request.method).not.toBe('tasks/get');
+        expect(request.params.id).toBe('v1-task-1');
+        return jsonRpcResult({
+          id: 'v1-task-1',
+          contextId: 'v1-context-1',
+          status: { state: 'TASK_STATE_COMPLETED' },
+          artifacts: [{ artifactId: 'v1-artifact-1', parts: [{ text: 'V1 resumed result' }] }],
+        });
+      },
+    ]);
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      protocolVersion: '1.0',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const initial = await agent.stream('Start v1 work', { runId: 'v1-generate-resume' });
+    expect(await initial.suspendPayload).toMatchObject({ taskId: 'v1-task-1', waitingForInput: false });
+
+    const resumed = await agent.resumeGenerate(undefined, { runId: 'v1-generate-resume' });
+
+    expect(resumed.text).toBe('V1 resumed result');
+    expect(resumed.task?.status.state).toBe('completed');
+  });
+
+  it('uses SubscribeToTask when resuming a non-terminal v1 stream', async () => {
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify(v1Card), { status: 200 }),
+      createSseResponse([
+        {
+          task: {
+            id: 'v1-task-1',
+            contextId: 'v1-context-1',
+            status: { state: 'TASK_STATE_WORKING' },
+          },
+        },
+      ]),
+      (_input, init) => {
+        const request = JSON.parse(String(init?.body));
+        expect(request.method).toBe('SubscribeToTask');
+        expect(request.method).not.toBe('tasks/resubscribe');
+        expect(request.params.id).toBe('v1-task-1');
+        return createSseResponse([
+          {
+            artifactUpdate: {
+              taskId: 'v1-task-1',
+              contextId: 'v1-context-1',
+              artifact: { artifactId: 'v1-artifact-1', parts: [{ text: 'V1 resubscribed result' }] },
+              append: false,
+              lastChunk: true,
+            },
+          },
+          {
+            statusUpdate: {
+              taskId: 'v1-task-1',
+              contextId: 'v1-context-1',
+              status: { state: 'TASK_STATE_COMPLETED' },
+            },
+          },
+        ]);
+      },
+    ]);
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      protocolVersion: '1.0',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const initial = await agent.stream('Start v1 stream', { runId: 'v1-stream-resume' });
+    expect(await initial.suspendPayload).toMatchObject({ taskId: 'v1-task-1', waitingForInput: false });
+
+    const resumed = await agent.resumeStream(undefined, { runId: 'v1-stream-resume' });
+
+    expect(await resumed.text).toBe('V1 resubscribed result');
+    expect((await resumed.task)?.status.state).toBe('completed');
+  });
+
+  it('decodes v1 streaming task, artifact, and status payloads', async () => {
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify(v1Card), { status: 200 }),
+      (_input, init) => {
+        expect(new Headers(init?.headers).get('A2A-Version')).toBe('1.0');
+        const request = JSON.parse(String(init?.body));
+        expect(request.method).toBe('SendStreamingMessage');
+        return createSseResponse([
+          {
+            task: {
+              id: 'v1-task-1',
+              contextId: 'v1-context-1',
+              status: { state: 'TASK_STATE_WORKING' },
+            },
+          },
+          {
+            artifactUpdate: {
+              taskId: 'v1-task-1',
+              contextId: 'v1-context-1',
+              artifact: { artifactId: 'v1-artifact-1', parts: [{ text: 'V1 streamed ' }] },
+              append: false,
+              lastChunk: false,
+            },
+          },
+          {
+            artifactUpdate: {
+              taskId: 'v1-task-1',
+              contextId: 'v1-context-1',
+              artifact: { artifactId: 'v1-artifact-1', parts: [{ text: 'text' }] },
+              append: true,
+              lastChunk: true,
+            },
+          },
+          {
+            statusUpdate: {
+              taskId: 'v1-task-1',
+              contextId: 'v1-context-1',
+              status: { state: 'TASK_STATE_COMPLETED' },
+            },
+          },
+        ]);
+      },
+    ]);
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      protocolVersion: '1.0',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const output = await agent.stream('Stream over A2A v1');
+    const eventTypes: string[] = [];
+    for await (const event of output.fullStream) {
+      eventTypes.push(event.type);
+    }
+
+    expect(eventTypes).toEqual(['start', 'text-start', 'text-delta', 'text-delta', 'text-end', 'finish']);
+    expect(await output.text).toBe('V1 streamed text');
+    expect(await output.task).toMatchObject({
+      status: { state: 'completed' },
+      artifacts: [
+        {
+          artifactId: 'v1-artifact-1',
+          parts: [
+            { kind: 'text', text: 'V1 streamed ' },
+            { kind: 'text', text: 'text' },
+          ],
+        },
+      ],
+    });
   });
 });

@@ -44,6 +44,15 @@ export function createChildProcessLogger({ logger, root }: { logger: IMastraLogg
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 
+      let stdout = '';
+      let stderr = '';
+      subprocess.stdout?.on('data', chunk => {
+        stdout += chunk.toString();
+      });
+      subprocess.stderr?.on('data', chunk => {
+        stderr += chunk.toString();
+      });
+
       // Pipe stdout and stderr through the logging stream.
       // { end: false } prevents the first stream to close from ending pinoStream
       // while the other may still be writing.
@@ -55,9 +64,9 @@ export function createChildProcessLogger({ logger, root }: { logger: IMastraLogg
         subprocess.on('close', code => {
           pinoStream.end();
           if (code === 0) {
-            resolve({ success: true });
+            resolve({ success: true, stdout, stderr });
           } else {
-            reject(new Error(`Process exited with code ${code}`));
+            reject(Object.assign(new Error(`Process exited with code ${code}`), { stdout, stderr }));
           }
         });
 

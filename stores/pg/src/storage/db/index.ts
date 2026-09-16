@@ -28,6 +28,8 @@ import type { SchemaSnapshot } from './schema-snapshot';
 // Re-export DbClient for external use
 export type { DbClient } from '../client';
 
+const POSTGRES_MAX_BIND_PARAMETERS = 65_535;
+
 /**
  * Configuration for standalone domain usage.
  * Accepts either:
@@ -40,8 +42,10 @@ export type PgDomainConfig = PgDomainClientConfig | PgDomainPoolConfig | PgDomai
  * Pass an existing database client (DbClient)
  */
 export interface PgDomainClientConfig {
-  /** The database client */
+  /** The writer database client */
   client: DbClient;
+  /** Optional reader database client. Falls back to `client`. */
+  readClient?: DbClient;
   /** Optional schema name (defaults to 'public') */
   schemaName?: string;
   /** When true, default indexes will not be created during initialization */
@@ -54,8 +58,10 @@ export interface PgDomainClientConfig {
  * Pass an existing pg.Pool
  */
 export interface PgDomainPoolConfig {
-  /** Pre-configured pg.Pool */
+  /** Pre-configured writer pg.Pool */
   pool: Pool;
+  /** Optional reader pg.Pool. Falls back to `pool`. */
+  readPool?: Pool;
   /** Optional schema name (defaults to 'public') */
   schemaName?: string;
   /** When true, default indexes will not be created during initialization */
@@ -95,6 +101,7 @@ export type PgDomainRestConfig = {
  */
 export function resolvePgConfig(config: PgDomainConfig): {
   client: DbClient;
+  readClient: DbClient;
   schemaName?: string;
   skipDefaultIndexes?: boolean;
   indexes?: CreateIndexOptions[];
@@ -103,6 +110,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
   if ('client' in config) {
     return {
       client: config.client,
+      readClient: config.readClient ?? config.client,
       schemaName: config.schemaName,
       skipDefaultIndexes: config.skipDefaultIndexes,
       indexes: config.indexes,
@@ -111,8 +119,10 @@ export function resolvePgConfig(config: PgDomainConfig): {
 
   // Existing pool
   if ('pool' in config) {
+    const client = new PoolAdapter(config.pool);
     return {
-      client: new PoolAdapter(config.pool),
+      client,
+      readClient: config.readPool && config.readPool !== config.pool ? new PoolAdapter(config.readPool) : client,
       schemaName: config.schemaName,
       skipDefaultIndexes: config.skipDefaultIndexes,
       indexes: config.indexes,
@@ -147,8 +157,10 @@ export function resolvePgConfig(config: PgDomainConfig): {
     );
   });
 
+  const client = new PoolAdapter(pool);
   return {
-    client: new PoolAdapter(pool),
+    client,
+    readClient: client,
     schemaName: config.schemaName,
     skipDefaultIndexes: config.skipDefaultIndexes,
     indexes: config.indexes,
@@ -403,6 +415,7 @@ $mastra_timestamps_trigger$;`;
  */
 export interface PgDBInternalConfig {
   client: DbClient;
+  readClient?: DbClient;
   schemaName?: string;
   skipDefaultIndexes?: boolean;
 }
@@ -425,11 +438,15 @@ function assertPositiveLimit(limit: number): void {
 
 export class PgDB extends MastraBase {
   public client: DbClient;
+  public readClient: DbClient;
   public schemaName?: string;
   public skipDefaultIndexes?: boolean;
 
   /** Cache of actual table columns: tableName -> Set<columnName> */
   private tableColumnsCache = new Map<string, Set<string>>();
+
+  /** Cache of column Postgres data types: tableName -> columnName -> data_type */
+  private columnTypeCache = new Map<string, Map<string, string>>();
 
   constructor(config: PgDBInternalConfig) {
     super({
@@ -438,6 +455,7 @@ export class PgDB extends MastraBase {
     });
 
     this.client = config.client;
+    this.readClient = config.readClient ?? config.client;
     this.schemaName = config.schemaName;
     this.skipDefaultIndexes = config.skipDefaultIndexes;
   }
@@ -512,7 +530,9 @@ export class PgDB extends MastraBase {
       }
     }
     this.tableColumnsCache.delete(oldName);
+    this.columnTypeCache.delete(oldName);
     this.tableColumnsCache.delete(newName);
+    this.columnTypeCache.delete(newName);
   }
 
   /**
@@ -529,8 +549,10 @@ export class PgDB extends MastraBase {
     if (snapshot) {
       snapshot.tables.delete(tableName);
       snapshot.columns.delete(tableName);
+      snapshot.columnTypes.delete(tableName);
     }
     this.tableColumnsCache.delete(tableName);
+    this.columnTypeCache.delete(tableName);
   }
 
   /**
@@ -541,6 +563,7 @@ export class PgDB extends MastraBase {
     const snapshot = this.schemaSnapshot;
     if (snapshot) this.snapshotColumns(snapshot, tableName).add(column);
     this.tableColumnsCache.delete(tableName);
+    this.columnTypeCache.delete(tableName);
   }
 
   /**
@@ -601,6 +624,55 @@ export class PgDB extends MastraBase {
     );
 
     return !!result;
+  }
+
+  /**
+   * Returns the Postgres data type of a column (e.g. `jsonb`, `json`, `text`),
+   * or null when the table or column does not exist.
+   *
+   * Answered from the init snapshot when one is installed, so a warm `init()`
+   * issues no catalog probe. Outside init, results are cached per instance and
+   * the cache is invalidated alongside {@link tableColumnsCache} whenever DDL
+   * changes a table.
+   */
+  async getColumnType(table: string, column: string): Promise<string | null> {
+    const snapshot = this.schemaSnapshot;
+    if (snapshot) {
+      const types = snapshot.columnTypes.get(table);
+      const known = types?.get(column) ?? types?.get(column.toLowerCase());
+      if (known) return known;
+      // The table exists in the snapshot but the column does not: nothing to probe for.
+      // A table created during this init has no snapshot types yet, so fall through.
+      if (types) return null;
+    }
+
+    const cached = this.columnTypeCache.get(table)?.get(column);
+    if (cached !== undefined) return cached;
+
+    const schema = this.schemaName || 'public';
+    const result = await this.client.oneOrNone<{ data_type: string }>(
+      `SELECT data_type FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4)`,
+      [schema, table, column, column.toLowerCase()],
+    );
+
+    const dataType = result?.data_type ?? null;
+    if (dataType) {
+      if (snapshot) {
+        let snapshotTypes = snapshot.columnTypes.get(table);
+        if (!snapshotTypes) {
+          snapshotTypes = new Map<string, string>();
+          snapshot.columnTypes.set(table, snapshotTypes);
+        }
+        snapshotTypes.set(column, dataType);
+      }
+      let types = this.columnTypeCache.get(table);
+      if (!types) {
+        types = new Map();
+        this.columnTypeCache.set(table, types);
+      }
+      types.set(column, dataType);
+    }
+    return dataType;
   }
 
   /**
@@ -791,6 +863,145 @@ export class PgDB extends MastraBase {
     }
   }
 
+  private getChunkRowLimit(columnCount: number): number {
+    if (columnCount === 0) {
+      return 0;
+    }
+    return Math.max(1, Math.floor(POSTGRES_MAX_BIND_PARAMETERS / columnCount));
+  }
+
+  private getSpanConflictIdentifier(record: Record<string, any>): string | undefined {
+    const traceId = record.traceId as unknown;
+    const spanId = record.spanId as unknown;
+
+    if (traceId === undefined || spanId === undefined) {
+      return undefined;
+    }
+
+    return `${String(traceId)}|${String(spanId)}`;
+  }
+
+  private async normalizeForInsert(
+    tableName: TABLE_NAMES,
+    record: Record<string, any>,
+  ): Promise<{
+    columns: string[];
+    values: QueryValues;
+    conflictKey: string | undefined;
+  }> {
+    this.addTimestampZColumns(record);
+    const filteredRecord = await this.filterRecordToKnownColumns(tableName, record);
+    const columns = Object.keys(filteredRecord).map(column => parseSqlIdentifier(column, 'column name'));
+    const values = this.prepareValuesForInsert(filteredRecord, tableName);
+
+    return {
+      columns,
+      values,
+      conflictKey: tableName === TABLE_SPANS ? this.getSpanConflictIdentifier(filteredRecord) : undefined,
+    };
+  }
+
+  private buildMultiRowInsertStatement({
+    tableName,
+    columns,
+    rows,
+  }: {
+    tableName: TABLE_NAMES;
+    columns: string[];
+    rows: QueryValues[];
+  }): { query: string; values: QueryValues } {
+    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+    const columnList = columns.map(column => `"${column}"`).join(', ');
+
+    const bindParams: string[] = [];
+    const values: QueryValues = [];
+    let bindIndex = 1;
+
+    for (const rowValues of rows) {
+      const placeholders = rowValues.map(() => `$${bindIndex++}`);
+      bindParams.push(`(${placeholders.join(', ')})`);
+      values.push(...rowValues);
+    }
+
+    let query = `INSERT INTO ${fullTableName} (${columnList}) VALUES ${bindParams.join(', ')}`;
+
+    if (tableName === TABLE_SPANS) {
+      const updateColumns = columns.filter(column => column !== 'traceId' && column !== 'spanId');
+      if (updateColumns.length > 0) {
+        const updateClause = updateColumns.map(column => `"${column}" = EXCLUDED."${column}"`).join(', ');
+        query += ` ON CONFLICT ("traceId", "spanId") DO UPDATE SET ${updateClause}`;
+      } else {
+        query += ` ON CONFLICT ("traceId", "spanId") DO NOTHING`;
+      }
+    }
+
+    return { query, values };
+  }
+
+  private async executeBatchInsert(
+    client: Pick<DbClient, 'none'> | Pick<TxClient, 'none'>,
+    { tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] },
+  ): Promise<void> {
+    const preparedRecords: Awaited<ReturnType<PgDB['normalizeForInsert']>>[] = [];
+    for (const record of records) {
+      preparedRecords.push(await this.normalizeForInsert(tableName, record));
+    }
+
+    let pendingColumns: string[] | undefined;
+    let pendingConflictKeys = new Set<string>();
+    let pendingRows: QueryValues[] = [];
+    let pendingLimit = 0;
+
+    const flush = async () => {
+      if (!pendingColumns || pendingRows.length === 0) {
+        return;
+      }
+
+      const statement = this.buildMultiRowInsertStatement({
+        tableName,
+        columns: pendingColumns,
+        rows: pendingRows,
+      });
+      await client.none(statement.query, statement.values);
+
+      pendingColumns = undefined;
+      pendingRows = [];
+      pendingConflictKeys = new Set();
+      pendingLimit = 0;
+    };
+
+    for (const { columns, values, conflictKey } of preparedRecords) {
+      if (columns.length === 0) {
+        continue;
+      }
+
+      const columnsSignature = columns.join('\u0000');
+      const currentPendingColumns = pendingColumns;
+      const isSpans = tableName === TABLE_SPANS;
+      const conflictDuplicate = isSpans && conflictKey !== undefined && pendingConflictKeys.has(conflictKey);
+      const exceedsLimit = pendingRows.length >= pendingLimit;
+      const incompatibleColumns =
+        currentPendingColumns === undefined || columnsSignature !== currentPendingColumns.join('\u0000');
+
+      if (incompatibleColumns || conflictDuplicate || exceedsLimit) {
+        await flush();
+
+        pendingColumns = columns;
+        pendingLimit = this.getChunkRowLimit(columns.length);
+        pendingRows = [values];
+        pendingConflictKeys = new Set();
+      } else {
+        pendingRows.push(values);
+      }
+
+      if (isSpans && conflictKey !== undefined) {
+        pendingConflictKeys.add(conflictKey);
+      }
+    }
+
+    await flush();
+  }
+
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
       await this.executeInsert(this.client, { tableName, record });
@@ -965,6 +1176,7 @@ export class PgDB extends MastraBase {
     } finally {
       // Clear cached columns so subsequent inserts see the fresh schema
       this.tableColumnsCache.delete(tableName);
+      this.columnTypeCache.delete(tableName);
     }
   }
 
@@ -1420,6 +1632,7 @@ export class PgDB extends MastraBase {
     } finally {
       // Invalidate cached columns after DDL completes so concurrent writers see the new schema
       this.tableColumnsCache.delete(tableName);
+      this.columnTypeCache.delete(tableName);
     }
   }
 
@@ -1465,9 +1678,7 @@ export class PgDB extends MastraBase {
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     try {
       await this.client.tx(async tx => {
-        for (const record of records) {
-          await this.executeInsert(tx, { tableName, record });
-        }
+        await this.executeBatchInsert(tx, { tableName, records });
       });
     } catch (error) {
       throw new MastraError(
@@ -1505,6 +1716,7 @@ export class PgDB extends MastraBase {
     } finally {
       // Clear cached columns so subsequent createTable+insert sees the fresh schema
       this.tableColumnsCache.delete(tableName);
+      this.columnTypeCache.delete(tableName);
     }
   }
 

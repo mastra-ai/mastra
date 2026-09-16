@@ -21,6 +21,7 @@ export type {
   ToolCallChunk,
   PendingToolCall,
   ToolResultChunk,
+  ToolOutputDeniedChunk,
 
   // Result Types
   LLMStepResult,
@@ -32,6 +33,7 @@ export type {
   DynamicToolResultPayload,
   ToolCallPayload,
   ToolResultPayload,
+  ToolOutputDeniedPayload,
   ReasoningDeltaPayload,
   ReasoningStartPayload,
   TextDeltaPayload,

@@ -278,6 +278,53 @@ export const getUserMessageFromRunInput = (input?: unknown): string | undefined 
   );
 };
 
+const DEFAULT_CONVERSATION_HISTORY_MESSAGES = 10;
+
+/**
+ * Renders the remembered conversation history from an agent scorer run input as a transcript.
+ *
+ * Only agent run inputs carry `rememberedMessages`; any other input shape (a bare string,
+ * a plain `{ prompt }` object, `ModelMessage[]`) returns `undefined` so callers can safely
+ * fall back to single-turn behaviour.
+ *
+ * @param input - The scorer run input
+ * @param options.maxMessages - How many of the most recent remembered messages to keep (default 10)
+ * @returns A newline separated `role: text` transcript, or `undefined` if there is no history
+ *
+ * @example
+ * ```ts
+ * const scorer = createScorer({ ... })
+ *   .preprocess(({ run }) => {
+ *     const history = getConversationHistoryFromRunInput(run.input, { maxMessages: 4 });
+ *     return { history };
+ *   });
+ * ```
+ */
+export const getConversationHistoryFromRunInput = (
+  input?: unknown,
+  options?: { maxMessages?: number },
+): string | undefined => {
+  if (!isScorerRunInputForAgent(input)) return undefined;
+
+  const maxMessages = options?.maxMessages ?? DEFAULT_CONVERSATION_HISTORY_MESSAGES;
+  if (maxMessages <= 0) return undefined;
+
+  const lines = input.rememberedMessages
+    .slice(-maxMessages)
+    .map(message => {
+      if (!isRecord(message)) return undefined;
+
+      const role = getEffectiveMessageRole(message);
+      const text = getTextContentFromMastraDBMessage(message as MastraDBMessage).trim();
+      if (!role || !text) return undefined;
+
+      return `${role}: ${text}`;
+    })
+    .filter((line): line is string => Boolean(line));
+
+  return lines.length > 0 ? lines.join('\n') : undefined;
+};
+
 /**
  * Extracts all system messages from a scorer run input.
  *
@@ -380,6 +427,9 @@ export const getCombinedSystemPrompt = (input?: unknown): string => {
  * output (`{ text }`), task output (`{ content }`), a single assistant message
  * object, and a bare string.
  *
+ * For array outputs the final assistant message is used, so multi-step agent
+ * responses are scored on the last response rather than an intermediate one.
+ *
  * @param output - The scorer run output
  * @returns The assistant message text, or `undefined` if none can be extracted
  *
@@ -394,7 +444,18 @@ export const getCombinedSystemPrompt = (input?: unknown): string => {
  */
 export const getAssistantMessageFromRunOutput = (output?: unknown) => {
   if (typeof output === 'string') return output;
-  if (Array.isArray(output)) return getTextFromMessages(output, 'assistant');
+  if (Array.isArray(output)) {
+    const assistantMessages = output.filter(
+      message => isRecord(message) && getEffectiveMessageRole(message) === 'assistant',
+    );
+    // Prefer the last assistant message that carries text; a trailing assistant
+    // message may hold only tool-call or data parts.
+    for (let i = assistantMessages.length - 1; i >= 0; i--) {
+      const text = getTextFromValue(assistantMessages[i]);
+      if (text) return text;
+    }
+    return undefined;
+  }
   if (!isRecord(output)) return undefined;
 
   const isAssistantOutput = output.role === undefined || output.role === 'assistant';
@@ -485,8 +546,10 @@ export const getReasoningFromRunOutput = (output?: ScorerRunOutputForAgent): str
  * @param options.toolCallId - Unique identifier for the tool call
  * @param options.toolName - Name of the tool being called
  * @param options.args - Arguments passed to the tool
- * @param options.result - Result returned by the tool
+ * @param options.result - Result returned by the tool (absent for a thrown call)
  * @param options.state - State of the invocation (default: 'result')
+ * @param options.errorText - Error text recorded when a tool threw (`state: 'output-error'`)
+ * @param options.isError - Set alongside `state: 'result'` when the executor reported a failure
  * @returns A tool invocation object
  *
  * @example
@@ -497,6 +560,15 @@ export const getReasoningFromRunOutput = (output?: ScorerRunOutputForAgent): str
  *   args: { location: 'London' },
  *   result: { temperature: 20, condition: 'sunny' },
  * });
+ *
+ * // A tool that threw
+ * const thrown = createToolInvocation({
+ *   toolCallId: 'call-456',
+ *   toolName: 'saveTool',
+ *   args: { value: 'x' },
+ *   state: 'output-error',
+ *   errorText: 'Save failed',
+ * });
  * ```
  */
 export const createToolInvocation = ({
@@ -505,19 +577,33 @@ export const createToolInvocation = ({
   args,
   result,
   state = 'result',
+  errorText,
+  isError,
 }: {
   toolCallId: string;
   toolName: string;
   args: Record<string, any>;
-  result: Record<string, any>;
-  state?: 'call' | 'partial-call' | 'result';
-}): { toolCallId: string; toolName: string; args: Record<string, any>; result: Record<string, any>; state: string } => {
+  result?: Record<string, any>;
+  state?: 'call' | 'partial-call' | 'result' | 'output-error';
+  errorText?: string;
+  isError?: boolean;
+}): {
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, any>;
+  result: Record<string, any> | undefined;
+  state: 'call' | 'partial-call' | 'result' | 'output-error';
+  errorText?: string;
+  isError?: boolean;
+} => {
   return {
     toolCallId,
     toolName,
     args,
     result,
     state,
+    ...(errorText !== undefined && { errorText }),
+    ...(isError !== undefined && { isError }),
   };
 };
 
@@ -552,6 +638,25 @@ export const createToolInvocation = ({
  *     state: 'result',
  *   }],
  * });
+ *
+ * // With native V2 parts — the only form that can carry a thrown call
+ * const messageWithThrownTool = createTestMessage({
+ *   content: 'That failed.',
+ *   role: 'assistant',
+ *   parts: [
+ *     { type: 'text', text: 'That failed.' },
+ *     {
+ *       type: 'tool-invocation',
+ *       toolInvocation: createToolInvocation({
+ *         toolCallId: 'call-2',
+ *         toolName: 'saveTool',
+ *         args: { value: 'x' },
+ *         state: 'output-error',
+ *         errorText: 'Save failed',
+ *       }),
+ *     },
+ *   ],
+ * });
  * ```
  */
 export function createTestMessage({
@@ -559,6 +664,7 @@ export function createTestMessage({
   role,
   id = 'test-message',
   toolInvocations = [],
+  parts,
 }: {
   content: string;
   role: 'user' | 'assistant' | 'system';
@@ -567,16 +673,22 @@ export function createTestMessage({
     toolCallId: string;
     toolName: string;
     args: Record<string, any>;
-    result: Record<string, any>;
+    result?: Record<string, any>;
     state: any;
   }>;
+  /**
+   * Native V2 message parts. Replaces the default single text part when provided.
+   * Needed to express invocations the legacy array cannot carry, such as a thrown
+   * call (`state: 'output-error'` with `errorText`).
+   */
+  parts?: MastraDBMessage['content']['parts'];
 }): MastraDBMessage {
   return {
     id,
     role,
     content: {
       format: 2,
-      parts: [{ type: 'text', text: content }],
+      parts: parts ?? [{ type: 'text', text: content }],
       content,
       ...(toolInvocations.length > 0 && {
         toolInvocations: toolInvocations.map(ti => ({
@@ -726,10 +838,62 @@ export type ToolCallInfo = {
 };
 
 /**
+ * Merges the two places a message can store tool invocations into one list.
+ *
+ * A native message may carry `content.parts` tool-invocation entries, the legacy
+ * `content.toolInvocations` array, or both. Neither form is a superset of the
+ * other: thrown calls are recorded in parts as `state: 'output-error'` and can be
+ * missing from the legacy array, while older persisted messages may only carry the
+ * legacy array. Reading one form exclusively therefore hides real calls.
+ *
+ * Parts win when the same `toolCallId` appears in both, since they hold the real
+ * terminal state. Legacy-only calls are retained before their next shared anchor so
+ * compatible call order survives instead of being appended.
+ *
+ * Mirrors `extractTrajectory` in `@mastra/core` (`packages/core/src/evals/types.ts`)
+ * so tool-use checks and trajectory scorers agree on what a run actually called.
+ * Keep the two in step.
+ *
+ * @param message - A single message from the scorer run output
+ * @returns The merged tool invocations for that message
+ */
+export function mergeToolInvocations(message: MastraDBMessage | undefined) {
+  const legacy = message?.content?.toolInvocations;
+  const fromParts =
+    message?.content?.parts
+      ?.filter((p): p is Extract<typeof p, { type: 'tool-invocation' }> => p.type === 'tool-invocation')
+      .map(p => p.toolInvocation)
+      .filter(Boolean) ?? [];
+  const partCallIds = new Set(fromParts.map(invocation => invocation.toolCallId).filter(Boolean));
+  const legacyInvocations = legacy ?? [];
+  const legacyPositions = new Map(legacyInvocations.map((invocation, index) => [invocation?.toolCallId, index]));
+  const toolInvocations: typeof fromParts = [];
+  let legacyIndex = 0;
+  for (const invocation of fromParts) {
+    const sharedIndex = invocation.toolCallId ? legacyPositions.get(invocation.toolCallId) : undefined;
+    if (sharedIndex !== undefined && sharedIndex >= legacyIndex) {
+      // Retain legacy-only calls before their next shared anchor.
+      for (; legacyIndex < sharedIndex; legacyIndex++) {
+        const previous = legacyInvocations[legacyIndex];
+        if (previous && !partCallIds.has(previous.toolCallId)) toolInvocations.push(previous);
+      }
+      legacyIndex++;
+    }
+    toolInvocations.push(invocation);
+  }
+  for (; legacyIndex < legacyInvocations.length; legacyIndex++) {
+    const invocation = legacyInvocations[legacyIndex];
+    if (invocation && !partCallIds.has(invocation.toolCallId)) toolInvocations.push(invocation);
+  }
+  return toolInvocations;
+}
+
+/**
  * Extracts all tool calls from a scorer run output.
  *
- * Iterates through all messages and their tool invocations to collect
- * information about tools that were called (with state 'result' or 'call').
+ * Iterates through all messages and their tool invocations to collect information
+ * about tools that were called. A call counts regardless of outcome, so the states
+ * `'result'`, `'call'`, and `'output-error'` (a tool that threw) are all included.
  *
  * @param output - The scorer run output (array of MastraDBMessage)
  * @returns An object containing tool names and detailed tool call info
@@ -752,21 +916,19 @@ export function extractToolCalls(output: ScorerRunOutputForAgent): { tools: stri
 
   for (let messageIndex = 0; messageIndex < output.length; messageIndex++) {
     const message = output[messageIndex];
-    // Prefer the legacy toolInvocations array when present; fall back to
-    // V2 content.parts for messages that only store tool calls there.
-    const legacy = message?.content?.toolInvocations;
-    const fromParts = legacy
-      ? undefined
-      : message?.content?.parts
-          ?.filter((p): p is Extract<typeof p, { type: 'tool-invocation' }> => p.type === 'tool-invocation')
-          .map(p => p.toolInvocation);
-    const toolInvocations = legacy ?? fromParts;
+    const toolInvocations = mergeToolInvocations(message);
 
-    if (!toolInvocations?.length) continue;
+    if (!toolInvocations.length) continue;
 
     for (let invocationIndex = 0; invocationIndex < toolInvocations.length; invocationIndex++) {
       const invocation = toolInvocations[invocationIndex];
-      if (invocation && invocation.toolName && (invocation.state === 'result' || invocation.state === 'call')) {
+      // A thrown call (`output-error`) still counts: the tool ran. Partial calls do not.
+      // Same state set core's `extractTrajectory` accepts.
+      if (
+        invocation &&
+        invocation.toolName &&
+        (invocation.state === 'result' || invocation.state === 'call' || invocation.state === 'output-error')
+      ) {
         toolCalls.push(invocation.toolName);
         toolCallInfos.push({
           toolName: invocation.toolName,
@@ -864,19 +1026,12 @@ export function extractToolResults(output: ScorerRunOutputForAgent): ToolResultI
   const results: ToolResultInfo[] = [];
 
   for (const message of output) {
-    // Prefer the legacy toolInvocations array when present; fall back to
-    // V2 content.parts for messages that only store tool calls there.
-    const legacy = message?.content?.toolInvocations;
-    const fromParts = legacy
-      ? undefined
-      : message?.content?.parts
-          ?.filter((p): p is Extract<typeof p, { type: 'tool-invocation' }> => p.type === 'tool-invocation')
-          .map(p => p.toolInvocation);
-    const toolInvocations = legacy ?? fromParts;
+    const toolInvocations = mergeToolInvocations(message);
 
-    if (!toolInvocations?.length) continue;
+    if (!toolInvocations.length) continue;
 
     for (const invocation of toolInvocations) {
+      // A thrown call carries `errorText` rather than a result, so it yields no entry here.
       if (invocation.state === 'result' && invocation.result !== undefined) {
         results.push({
           toolName: invocation.toolName,
@@ -1241,6 +1396,7 @@ export type TrajectoryEfficiencyResult = {
 
 /**
  * Evaluate trajectory efficiency against budgets and redundancy checks.
+ * Throws when a configured budget is invalid or its required measurements are incomplete or invalid.
  */
 export function checkTrajectoryEfficiency(
   trajectory: Trajectory,
@@ -1253,19 +1409,54 @@ export function checkTrajectoryEfficiency(
 ): TrajectoryEfficiencyResult {
   const { maxSteps, maxTotalTokens, maxTotalDurationMs, noRedundantCalls = true } = options;
 
-  const totalSteps = trajectory.steps.length;
-
-  // Calculate total tokens from model_generation steps
-  let totalTokens = 0;
-  for (const step of trajectory.steps) {
-    if (step.stepType === 'model_generation') {
-      totalTokens += (step.promptTokens ?? 0) + (step.completionTokens ?? 0);
+  const isMeasurement = (value: number | undefined): value is number =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0;
+  for (const [name, limit] of Object.entries({ maxSteps, maxTotalTokens, maxTotalDurationMs })) {
+    if (limit !== undefined && !isMeasurement(limit)) {
+      throw new Error(`Invalid ${name} budget: expected a finite nonnegative number`);
     }
   }
 
-  // Calculate total duration
+  const totalSteps = trajectory.steps.length;
+
+  // Count each model generation, including nested agents, without counting container aggregates.
+  let totalTokens = 0;
+  let modelGenerations = 0;
+  const remaining = [...trajectory.steps];
+  while (remaining.length > 0) {
+    const step = remaining.pop()!;
+    if (step.stepType === 'model_generation') {
+      modelGenerations++;
+      if (
+        maxTotalTokens !== undefined &&
+        (!isMeasurement(step.promptTokens) || !isMeasurement(step.completionTokens))
+      ) {
+        throw new Error(
+          `Cannot evaluate token budget: model generation "${step.name}" has missing or invalid token counts`,
+        );
+      }
+      totalTokens += (step.promptTokens ?? 0) + (step.completionTokens ?? 0);
+    }
+    if (step.children) {
+      for (const child of step.children) remaining.push(child);
+    }
+  }
+  if (maxTotalTokens !== undefined && (modelGenerations === 0 || !isMeasurement(totalTokens))) {
+    throw new Error('Cannot evaluate token budget: missing model-generation measurements or invalid total tokens');
+  }
+
+  // A parent duration already covers its children; never add both.
   const totalDurationMs =
     trajectory.totalDurationMs ?? trajectory.steps.reduce((sum, s) => sum + (s.durationMs ?? 0), 0);
+  if (maxTotalDurationMs !== undefined) {
+    const hasDuration =
+      trajectory.totalDurationMs !== undefined
+        ? isMeasurement(trajectory.totalDurationMs)
+        : trajectory.steps.length > 0 && trajectory.steps.every(step => isMeasurement(step.durationMs));
+    if (!hasDuration || !isMeasurement(totalDurationMs)) {
+      throw new Error('Cannot evaluate duration budget: missing or invalid duration measurements');
+    }
+  }
 
   // Detect redundant calls (same tool name + same args in consecutive calls)
   const redundantCalls: Array<{ name: string; index: number }> = [];

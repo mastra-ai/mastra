@@ -6,6 +6,12 @@ import type { BrowserToolName } from './tools/constants';
  */
 export interface AgentBrowserConfigExtensions {
   /**
+   * Headers passed to chromium.connectOverCDP when using `cdpUrl`.
+   * Required for providers like Cloudflare Browser Rendering (Authorization bearer token).
+   * Distinct from page `extraHTTPHeaders` / navigation headers.
+   */
+  cdpHeaders?: Record<string, string>;
+  /**
    * Path to a Playwright storage state file (JSON) containing cookies and localStorage.
    * This is a lighter-weight alternative to `profile` — it only persists
    * authentication state, not the full browser profile.

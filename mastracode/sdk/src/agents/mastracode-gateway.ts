@@ -23,10 +23,12 @@ import { getCustomProviderId, loadSettings, MASTRA_GATEWAY_PROVIDER } from '../o
 import {
   buildAnthropicOAuthFetch,
   claudeCodeMiddleware,
+  createAnthropicThinkingMiddleware,
   opencodeClaudeMaxProvider,
   promptCacheMiddleware,
 } from '../providers/claude-max.js';
 import { getCopilotModelCatalog, githubCopilotProvider } from '../providers/github-copilot.js';
+import { KIMI_CODING_MODELS, kimiCodingProvider } from '../providers/kimi-coding.js';
 import {
   buildOpenAICodexOAuthFetch,
   createCodexMiddleware,
@@ -135,11 +137,17 @@ export function getOpenAIApiKey(credentials: CredentialStore = authStorage): str
   return credentials.allowEnvironmentFallback === false ? undefined : process.env.OPENAI_API_KEY?.trim() || undefined;
 }
 
-function anthropicApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders) {
+function anthropicApiKeyProvider(
+  modelId: string,
+  apiKey: string,
+  headers?: ModelRequestHeaders,
+  thinkingLevel?: ThinkingLevel,
+) {
   const anthropic = createAnthropic({ apiKey, headers });
+  const thinkingMiddleware = createAnthropicThinkingMiddleware(modelId, thinkingLevel);
   return wrapLanguageModel({
     model: anthropic(modelId),
-    middleware: [promptCacheMiddleware],
+    middleware: [promptCacheMiddleware, ...(thinkingMiddleware ? [thinkingMiddleware] : [])],
   });
 }
 
@@ -161,7 +169,10 @@ function getProviderAuthKey(providerId: string, credentials: CredentialStore = a
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
     return storedCred.key.trim();
   }
-  return credentials.getStoredApiKey(authProviderId)?.trim() || undefined;
+  const dedicatedKey = credentials.getStoredApiKey(authProviderId)?.trim();
+  if (dedicatedKey) return dedicatedKey;
+  if (credentials.allowEnvironmentFallback === false) return undefined;
+  return authProviderId === 'kimi-for-coding' ? process.env.KIMI_API_KEY?.trim() || undefined : undefined;
 }
 
 export function resolveAuth(request: GatewayAuthRequest, mastraGatewayApiKey?: string): GatewayAuthResult | undefined {
@@ -325,7 +336,8 @@ export class MastraCodeGateway extends MastraModelGateway {
       return { apiKey: mastraGatewayApiKey, source: 'gateway' };
     }
 
-    const storedCred = credentials.get(getAuthProviderId(request.providerId));
+    const authProviderId = getAuthProviderId(request.providerId);
+    const storedCred = credentials.get(authProviderId);
     if (storedCred?.type === 'oauth') {
       return { bearerToken: 'oauth', source: 'gateway' };
     }
@@ -390,6 +402,14 @@ export class MastraCodeGateway extends MastraModelGateway {
         models,
       };
     }
+
+    providers['kimi-for-coding'] = {
+      name: 'Kimi For Coding',
+      apiKeyEnvVar: 'KIMI_API_KEY',
+      apiKeyHeader: 'Authorization',
+      gateway: this.id,
+      models: [...KIMI_CODING_MODELS],
+    };
 
     try {
       const copilotModels = await getCopilotModelCatalog({ authStorage });
@@ -497,6 +517,14 @@ export class MastraCodeGateway extends MastraModelGateway {
       return this.#mastraGateway.resolveLanguageModel(args) as GatewayLanguageModel;
     }
 
+    if (args.providerId === 'kimi-for-coding') {
+      return kimiCodingProvider(args.modelId, {
+        apiKey: args.apiKey,
+        headers: args.headers,
+        credentialStore: this.#credentials,
+      }) as unknown as GatewayLanguageModel;
+    }
+
     return new ModelRouterLanguageModel({
       id: `${args.providerId}/${args.modelId}` as `${string}/${string}`,
       apiKey: args.apiKey,
@@ -514,6 +542,7 @@ export class MastraCodeGateway extends MastraModelGateway {
   }): GatewayLanguageModel {
     const bareModelId = normalizeAnthropicModelId(args.modelId);
     const storedCred = this.#credentials.get('anthropic');
+    const thinkingMiddleware = createAnthropicThinkingMiddleware(bareModelId, this.#thinkingLevel);
 
     if (this.#routeThroughMastraGateway) {
       if (storedCred?.type === 'oauth') {
@@ -529,17 +558,30 @@ export class MastraCodeGateway extends MastraModelGateway {
 
         return wrapLanguageModel({
           model: anthropic(bareModelId),
-          middleware: [claudeCodeMiddleware, promptCacheMiddleware],
+          middleware: [
+            claudeCodeMiddleware,
+            promptCacheMiddleware,
+            ...(thinkingMiddleware ? [thinkingMiddleware] : []),
+          ],
         }) as unknown as GatewayLanguageModel;
       }
 
-      return this.#mastraGateway.resolveLanguageModel({ ...args, modelId: bareModelId }) as GatewayLanguageModel;
+      const gatewayModel = this.#mastraGateway.resolveLanguageModel({
+        ...args,
+        modelId: bareModelId,
+      }) as GatewayLanguageModel;
+      if (!thinkingMiddleware) return gatewayModel;
+      return wrapLanguageModel({
+        model: gatewayModel as any,
+        middleware: [thinkingMiddleware],
+      }) as unknown as GatewayLanguageModel;
     }
 
     if (storedCred?.type === 'oauth') {
       return opencodeClaudeMaxProvider(bareModelId, {
         headers: args.headers,
         authStorage: this.#credentials,
+        thinkingLevel: this.#thinkingLevel,
       }) as unknown as GatewayLanguageModel;
     }
 
@@ -548,18 +590,25 @@ export class MastraCodeGateway extends MastraModelGateway {
         bareModelId,
         storedCred.key.trim(),
         args.headers,
+        this.#thinkingLevel,
       ) as unknown as GatewayLanguageModel;
     }
 
     const apiKey = getAnthropicApiKey(this.#credentials);
     if (apiKey) {
-      return anthropicApiKeyProvider(bareModelId, apiKey, args.headers) as unknown as GatewayLanguageModel;
+      return anthropicApiKeyProvider(
+        bareModelId,
+        apiKey,
+        args.headers,
+        this.#thinkingLevel,
+      ) as unknown as GatewayLanguageModel;
     }
 
     // No stored credentials: use the OAuth-backed provider so the first request can trigger login.
     return opencodeClaudeMaxProvider(bareModelId, {
       headers: args.headers,
       authStorage: this.#credentials,
+      thinkingLevel: this.#thinkingLevel,
     }) as unknown as GatewayLanguageModel;
   }
 

@@ -1,11 +1,17 @@
 ---
 title: "Reference: createInngestAgent() | Agents"
-description: "API reference for createInngestAgent(), which wraps an Agent with Inngest-powered durable execution and resumable streams."
+description: "createInngestAgent() wraps an existing Agent with Inngest-powered durable execution."
 packages:
   - "@mastra/inngest"
 ---
 
 # `createInngestAgent()`
+
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
 
 `createInngestAgent()` wraps an existing [`Agent`](/reference/agents/agent) with [Inngest](https://www.inngest.com/docs)-powered durable execution. Like [`createDurableAgent()`](/reference/agents/durable-agent#createdurableagentoptions), it streams events over [PubSub](/docs/server/pubsub) and supports resumable streams, but runs the agentic loop on Inngest's execution engine instead of in-process. Use it when a run must survive process restarts or run in a distributed environment.
 
@@ -121,12 +127,19 @@ Returns: [`InngestAgent`](#inngestagent-interface)
     isOptional: true,
     description: 'Mastra instance for observability. Set automatically when the agent is registered with Mastra.',
   },
+  {
+    name: 'shouldPersistSnapshot',
+    type: '(params: { stepResults, workflowStatus }) => boolean',
+    isOptional: true,
+    description:
+      "Accepted for API symmetry with `createDurableAgent`, but ignored: Inngest's step memoization and replay own durability, so InngestAgent always persists `suspended` snapshots only (for human-in-the-loop resume). A warning is logged if set.",
+  },
 ]}
 />
 
 ## `InngestAgent` interface
 
-The object returned by `createInngestAgent()`. It provides the durable execution methods below. Any property or method not explicitly defined (e.g., `listTools()` and `getMemory()`) is forwarded to the underlying agent via a Proxy.
+The object returned by `createInngestAgent()`. It provides the durable execution methods below. Any property or method not explicitly defined (e.g., `listTools()` and `getMemory()`) is forwarded to the underlying agent via a Proxy. Thread APIs such as `sendSignal()`, `sendStateSignal()`, `sendNotificationSignal()`, and `subscribeToThread()` are forwarded too, but a signal that wakes an idle thread starts the run through the durable `stream()`.
 
 ### Properties
 
@@ -187,7 +200,7 @@ Returns: [`Promise<InngestAgentStreamResult>`](#inngestagentstreamresult)
 
 #### `resume(runId, resumeData, options?)`
 
-Resumes a suspended Inngest run, for example after a tool approval. Loads the workflow snapshot from storage, finds the suspended step, and sends a resume event to Inngest.
+Resumes a suspended Inngest run, for example after a tool approval. Loads the workflow snapshot from storage and finds the suspended step before sending a resume event to Inngest.
 
 ```typescript
 const { output, cleanup } = await durableAgent.resume(
@@ -607,5 +620,5 @@ export const { GET, POST, PUT } = serveNext({ mastra, inngest })
 
 - [DurableAgent reference](/reference/agents/durable-agent)
 - [Agent class](/reference/agents/agent)
-- [Inngest deployment guide](/guides/deployment/inngest)
+- [Inngest deployment guide](/integrations/deploy/inngest)
 - [PubSub](/docs/server/pubsub)

@@ -10,6 +10,7 @@ import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
 import { createTool } from '../../tools';
 import type { AgentControllerChannels } from '../agent-controller-channels';
+import { ChannelSessionRejectedError } from '../errors';
 
 // Minimal mock adapter satisfying the Chat SDK Adapter interface
 function createMockAdapter(name: string) {
@@ -126,6 +127,9 @@ async function createSetup({
   toolDisplay,
   stateSchema,
   agentMemory,
+  onSessionStart,
+  resolveSession,
+  onStaleToolApproval,
 }: {
   responseText?: string;
   model?: MockLanguageModelV2;
@@ -134,6 +138,9 @@ async function createSetup({
   stateSchema?: z.ZodTypeAny;
   /** Memory for the mode agent — required for signal persistence assertions. */
   agentMemory?: MockMemory;
+  onSessionStart?: (ctx: any) => void | Promise<void>;
+  resolveSession?: (ctx: any) => any;
+  onStaleToolApproval?: (ctx: any) => void | Promise<void>;
 } = {}) {
   const adapter = createMockAdapter('discord');
   const agent = new Agent({
@@ -153,6 +160,9 @@ async function createSetup({
     defaultModeId: 'build',
     channels: {
       adapters: { discord: toolDisplay ? { adapter, toolDisplay } : adapter },
+      ...(onSessionStart ? { onSessionStart } : {}),
+      ...(resolveSession ? { resolveSession } : {}),
+      ...(onStaleToolApproval ? { onStaleToolApproval } : {}),
     },
     ...(stateSchema ? { stateSchema } : {}),
   });
@@ -267,6 +277,27 @@ describe('AgentControllerChannels', () => {
     });
   }, 30_000);
 
+  it('stamps newly mapped threads with the controller id as channel_ownerId', async () => {
+    const { adapter, mastra, channels } = await createSetup();
+    const chatThread = createChatThread(adapter, 'chan-agent:t-1');
+
+    await (channels as any).processChatMessage(
+      chatThread,
+      createMessage('m-1', 'hello controller'),
+      mastra,
+      new RequestContext(),
+    );
+
+    const threads = await getChannelThreads(mastra, 'chan-agent:t-1');
+    expect(threads).toHaveLength(1);
+    expect(threads[0]!.metadata).toMatchObject({
+      channel_platform: 'discord',
+      channel_externalThreadId: 'chan-agent:t-1',
+      channel_externalChannelId: 'chan-agent',
+      channel_ownerId: 'ctrl-1',
+    });
+  }, 30_000);
+
   it('reuses the same session and Mastra thread for a second message in the same chat thread', async () => {
     const { adapter, controller, mastra, channels } = await createSetup();
     const chatThread = createChatThread(adapter, 'chan-1:t-1');
@@ -292,6 +323,336 @@ describe('AgentControllerChannels', () => {
     const threads = await getChannelThreads(mastra, 'chan-1:t-1');
     expect(threads).toHaveLength(1);
   }, 30_000);
+
+  /**
+   * A host can name a session (`resolveResourceId`) but never receives the
+   * `Session` object — it is created in here. This hook is the only seam where
+   * a channel-created session can be configured before it answers anything.
+   */
+  describe('session start hook', () => {
+    it('fires once per session, with the session already bound to its mapped thread', async () => {
+      const starts: Array<{ resourceId: string; boundThreadId: string }> = [];
+      const { adapter, mastra, channels } = await createSetup({
+        onSessionStart: ({ session, thread }) =>
+          void starts.push({ resourceId: thread.resourceId, boundThreadId: session.thread.getId() }),
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-1');
+
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'first'),
+        mastra,
+        new RequestContext(),
+      );
+      await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'first reply' });
+
+      const threads = await getChannelThreads(mastra, 'chan-1:t-1');
+      expect(starts).toEqual([{ resourceId: 'channel:chan-1:t-1', boundThreadId: threads[0]!.id }]);
+
+      // A second message reuses the session, so it must not be reconfigured —
+      // that would overwrite anything set on the thread since.
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-2', 'second'),
+        mastra,
+        new RequestContext(),
+      );
+      await waitFor(() => chatThread.post.mock.calls.length >= 2, { what: 'second reply' });
+      expect(starts).toHaveLength(1);
+    }, 30_000);
+
+    it('makes concurrent first messages wait for the hook instead of dispatching unconfigured', async () => {
+      // Hold the hook open: any message that dispatches while it is pending
+      // would run on an unconfigured session, which is exactly the race a
+      // skip-style once-guard allows.
+      let releaseHook!: () => void;
+      const hookGate = new Promise<void>(resolve => (releaseHook = resolve));
+      let hookCalls = 0;
+      const { adapter, mastra, channels } = await createSetup({
+        onSessionStart: async () => {
+          hookCalls += 1;
+          await hookGate;
+        },
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-1');
+
+      const dispatches = Promise.all([
+        (channels as any).processChatMessage(chatThread, createMessage('m-1', 'first'), mastra, new RequestContext()),
+        (channels as any).processChatMessage(chatThread, createMessage('m-2', 'second'), mastra, new RequestContext()),
+      ]);
+
+      // Give a leaked dispatch every chance to happen before asserting.
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(chatThread.post).not.toHaveBeenCalled();
+
+      releaseHook();
+      await dispatches;
+      // Concurrent messages on one session may supersede each other, so only
+      // require that replies exist at all - the claim under test is that none
+      // happened before the hook finished, asserted above.
+      await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'a reply after the hook' });
+      expect(hookCalls).toBe(1);
+    }, 30_000);
+
+    it('still answers the message when the hook throws', async () => {
+      const { adapter, mastra, channels } = await createSetup({
+        onSessionStart: () => {
+          throw new Error('configuration backend down');
+        },
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-1');
+
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
+
+      await waitFor(() => postedText(chatThread).includes('Hello from the controller!'), {
+        what: 'reply posted despite the failing hook',
+      });
+    }, 30_000);
+  });
+
+  /**
+   * `onSessionStart` cannot authorize: it runs after the session exists and its
+   * errors are swallowed. `resolveSession` runs before any session is created
+   * and its errors propagate, which is what makes a fail-closed shared install
+   * possible.
+   */
+  describe('session resolver', () => {
+    it('creates the session in place of the default, with the inbound requestContext', async () => {
+      const calls: Array<{ resourceId: string; tenant: unknown }> = [];
+      const { adapter, controller, mastra, channels } = await createSetup({
+        resolveSession: async ({ controller, thread, requestContext }: any) => {
+          calls.push({ resourceId: thread.resourceId, tenant: requestContext?.get('tenantId') });
+          return controller.createSession({
+            resourceId: thread.resourceId,
+            id: `tenant-acme:${thread.resourceId}`,
+            ownerId: controller.id,
+            requestContext,
+          });
+        },
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-resolve');
+      const requestContext = new RequestContext();
+      requestContext.set('tenantId', 'acme');
+
+      await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'hello'), mastra, requestContext);
+      await waitFor(() => postedText(chatThread).includes('Hello from the controller!'), {
+        what: 'reply from the resolved session',
+      });
+
+      // The resolver saw the routing inputs, and the session it built (its own
+      // id, not the default one) is the session that answered on the mapped
+      // thread.
+      expect(calls).toEqual([{ resourceId: 'channel:chan-1:t-resolve', tenant: 'acme' }]);
+      const resolved = (await controller.getSessionByResource('channel:chan-1:t-resolve'))!;
+      expect(resolved.identity.getId()).toBe('tenant-acme:channel:chan-1:t-resolve');
+      const threads = await getChannelThreads(mastra, 'chan-1:t-resolve');
+      expect(resolved.thread.getId()).toBe(threads[0]!.id);
+    }, 30_000);
+
+    it('explains the mismatch when the resolved session cannot own the mapped thread', async () => {
+      const { adapter, mastra, channels } = await createSetup({
+        resolveSession: ({ controller, thread, requestContext }: any) =>
+          controller.createSession({
+            resourceId: `tenant-acme:${thread.resourceId}`,
+            id: `tenant-acme:${thread.resourceId}`,
+            ownerId: controller.id,
+            requestContext,
+          }),
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-mismatch');
+
+      // Without the guard this surfaces as an opaque "Thread not found" thrown
+      // from inside the session's ownership check.
+      await expect(
+        (channels as any).processChatMessage(chatThread, createMessage('m-1', 'hello'), mastra, new RequestContext()),
+      ).rejects.toThrow(/resolveSession returned a session for resourceId=.*resolveResourceId/s);
+    }, 30_000);
+
+    it('fails closed: a rejecting resolver produces no session, no model call, and no output', async () => {
+      const model = createTextStreamModel('should never be reached');
+      const doStream = vi.spyOn(model, 'doStream' as any);
+      const { adapter, controller, mastra, channels } = await createSetup({
+        model,
+        resolveSession: () => {
+          throw new Error('not authorized for this install');
+        },
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-denied');
+
+      // `handleChatMessage`, not `processChatMessage`: the error boundary that
+      // decides whether anything reaches the channel lives in the caller, so
+      // testing one frame lower cannot show what the sender sees.
+      await (channels as any).handleChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
+
+      expect(await controller.getSessionByResource('channel:chan-1:t-denied')).toBeUndefined();
+      expect(doStream).not.toHaveBeenCalled();
+      // Silence includes the error card: posting it would echo the host's
+      // authorization message into a shared channel.
+      expect(chatThread.post).not.toHaveBeenCalled();
+    }, 30_000);
+
+    it('surfaces the refusal to the host as a tagged error rather than swallowing it', async () => {
+      const { adapter, mastra, channels } = await createSetup({
+        resolveSession: async () => {
+          throw new Error('not authorized for this install');
+        },
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-denied-cause');
+
+      const rejection = await (channels as any)
+        .processChatMessage(chatThread, createMessage('m-1', 'hello'), mastra, new RequestContext())
+        .catch((err: unknown) => err);
+
+      expect(rejection).toBeInstanceOf(ChannelSessionRejectedError);
+      expect((rejection as Error).message).toBe('not authorized for this install');
+      expect((rejection as Error).cause).toBeInstanceOf(Error);
+    }, 30_000);
+
+    it('still reports genuine failures to the channel, so a broken host is not silently silent', async () => {
+      const { adapter, mastra, channels } = await createSetup({
+        resolveSession: ({ controller, thread, requestContext }: any) =>
+          controller.createSession({
+            resourceId: thread.resourceId,
+            id: thread.resourceId,
+            ownerId: controller.id,
+            requestContext,
+          }),
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-broken');
+      // A failure from anywhere other than the resolver keeps the old
+      // behavior: the sender is told, instead of waiting on a bot that quietly
+      // gave up.
+      vi.spyOn(channels as any, 'dispatchInboundMessage').mockRejectedValue(new Error('engine exploded'));
+
+      await (channels as any).handleChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
+
+      expect(chatThread.post).toHaveBeenCalledWith('❌ Error: engine exploded');
+    }, 30_000);
+
+    it('runs on approval continuations with the action requestContext, so routing can be revalidated', async () => {
+      const seen: Array<unknown> = [];
+      const { adapter, mastra, channels } = await createSetup({
+        resolveSession: ({ controller, thread, requestContext }: any) => {
+          seen.push(requestContext?.get('actor'));
+          return controller.createSession({
+            resourceId: thread.resourceId,
+            id: thread.resourceId,
+            ownerId: controller.id,
+            requestContext,
+          });
+        },
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-recheck');
+
+      const messageContext = new RequestContext();
+      messageContext.set('actor', 'author');
+      await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'hello'), mastra, messageContext);
+      await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'reply' });
+
+      const threads = await getChannelThreads(mastra, 'chan-1:t-recheck');
+      const actionContext = new RequestContext();
+      actionContext.set('actor', 'approver');
+      await (channels as any).dispatchApproval({
+        runId: 'run-gone',
+        toolCallId: 'no-such-tool-call',
+        requestContext: actionContext,
+        memory: { thread: threads[0]!.id, resource: threads[0]!.resourceId },
+      });
+
+      // Previously the approval path resolved the session with no context at
+      // all, so a host could only ever check the message that opened the
+      // session.
+      expect(seen).toEqual(['author', 'approver']);
+    }, 30_000);
+  });
+
+  /**
+   * An armed gate is in-memory, so every approval recovered after a restart is
+   * stale. Core still refuses to run the tool; the hook is the only signal a
+   * durable host gets that a user clicked on an attempt it must now settle.
+   */
+  describe('stale tool approval hook', () => {
+    it('reports the stale action instead of dropping it, without executing the tool', async () => {
+      const stale: any[] = [];
+      const { adapter, controller, mastra, channels } = await createSetup({
+        onStaleToolApproval: (ctx: any) => void stale.push(ctx),
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-stale-hook');
+
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
+      await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'reply' });
+      const session = (await controller.getSessionByResource('channel:chan-1:t-stale-hook'))!;
+      const respondSpy = vi.spyOn(session, 'respondToToolApproval');
+      const threads = await getChannelThreads(mastra, 'chan-1:t-stale-hook');
+      const memory = { thread: threads[0]!.id, resource: threads[0]!.resourceId };
+
+      await (channels as any).dispatchApproval({
+        runId: 'run-gone',
+        toolCallId: 'tool-call-gone',
+        requestContext: new RequestContext(),
+        memory,
+      });
+      await (channels as any).dispatchDecline({
+        runId: 'run-gone',
+        toolCallId: 'tool-call-gone',
+        requestContext: new RequestContext(),
+        memory,
+      });
+
+      expect(stale.map(ctx => ctx.decision)).toEqual(['approve', 'decline']);
+      // The action's own runId, which is what a durable host settles against.
+      // The session's current run is reported separately and is not it.
+      expect(stale[0]).toMatchObject({ toolCallId: 'tool-call-gone', runId: 'run-gone', memory });
+      expect(stale[0].currentRunId).not.toBe('run-gone');
+      expect(stale[0].session).toBe(session);
+      // Core still never resumes the engine for a stale action.
+      expect(respondSpy).not.toHaveBeenCalled();
+    }, 30_000);
+
+    it('does not fire when the gate matches the action', async () => {
+      const stale: any[] = [];
+      const { adapter, controller, mastra, channels } = await createSetup({
+        model: createApprovalFlowModel(),
+        tools: { deployTool: createDeployTool().tool },
+        onStaleToolApproval: (ctx: any) => void stale.push(ctx),
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-live-hook');
+
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'deploy'),
+        mastra,
+        new RequestContext(),
+      );
+      const session = (await controller.getSessionByResource('channel:chan-1:t-live-hook'))!;
+      await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
+      const toolCallId = session.approval.getToolCallId()!;
+
+      await simulateAction(channels, adapter, 'chan-1:t-live-hook', `tool_approve:${toolCallId}`);
+      await waitFor(() => !session.approval.isArmed(), { what: 'gate resolved' });
+      expect(stale).toEqual([]);
+    }, 30_000);
+  });
 
   it('produces distinct sessions for distinct chat threads', async () => {
     const { adapter, controller, mastra, channels } = await createSetup();

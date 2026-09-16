@@ -34,9 +34,15 @@ export interface ChannelAccountsPayload {
   /** Whether the server has the "Sign in with Slack" (OIDC) connect flow configured. */
   canConnect: boolean;
   /**
-   * The server has no channel integration mounted at all. Slack routes only
-   * exist when the Slack app env is set, so an unconfigured deployment answers
-   * this path with the SPA's own `index.html` instead of JSON. That is a
+   * Machine-readable reason the server reports for an empty payload. Modern
+   * factories serve `'not_registered'` from a stub when no Slack integration
+   * is registered at all — a definite state the UI can explain precisely.
+   */
+  reason?: 'not_registered';
+  /**
+   * The path answered with a 404 or non-JSON (the SPA's own `index.html`) —
+   * an older server with no channel route and no stub. The UI can only say
+   * Slack isn't available here, without knowing exactly why. That is a
    * configuration state to explain, not a request failure to raise.
    */
   unavailable: boolean;
@@ -54,11 +60,17 @@ export async function listChannelAccounts(baseUrl: string): Promise<ChannelAccou
   // The SPA fallback returns 200 with HTML, so the content type is the only
   // signal that no channel route handled this.
   if (!res.headers.get('content-type')?.includes('application/json')) return unavailable;
-  const { accounts, canConnect } = (await res.json()) as {
+  const { accounts, canConnect, reason } = (await res.json()) as {
     accounts: ConnectedChannelAccount[];
     canConnect?: boolean;
+    reason?: string;
   };
-  return { accounts, canConnect: canConnect === true, unavailable: false };
+  return {
+    accounts,
+    canConnect: canConnect === true,
+    unavailable: false,
+    ...(reason === 'not_registered' ? { reason } : {}),
+  };
 }
 
 /**

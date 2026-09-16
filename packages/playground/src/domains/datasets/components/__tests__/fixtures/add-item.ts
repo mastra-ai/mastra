@@ -14,3 +14,13 @@ export const createdDatasetItemWithoutMocks: DatasetItem = {
   ...createdDatasetItem,
   toolMocks: undefined,
 };
+
+export const createdDatasetItemWithScorers: DatasetItem = {
+  ...createdDatasetItemWithoutMocks,
+  scorerIds: ['stored-judge'],
+};
+
+export const createdDatasetItemWithEmptyScorers: DatasetItem = {
+  ...createdDatasetItemWithoutMocks,
+  scorerIds: [],
+};

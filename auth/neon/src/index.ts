@@ -2,9 +2,11 @@ import type {
   IUserProvider,
   ICredentialsProvider,
   ISessionProvider,
+  MastraAuthRequest,
   Session,
   CredentialsResult,
 } from '@mastra/core/auth';
+import { getRequestHeader } from '@mastra/core/auth';
 import type { EEUser } from '@mastra/core/auth/ee';
 import type { MastraAuthProviderOptions } from '@mastra/core/server';
 import { MastraAuthProvider } from '@mastra/core/server';
@@ -14,21 +16,6 @@ import type { JWTPayload } from 'jose';
 
 export { MastraRBACNeon } from './rbac-provider';
 export type { MastraRBACNeonOptions, NeonRoleMappingOptions } from './rbac-provider';
-
-type HonoRequestLike = {
-  raw?: Request;
-  headers?: Headers;
-  header(name: string): string | undefined;
-};
-
-type MastraAuthRequest = Request | HonoRequestLike;
-
-function getRequestHeader(request: MastraAuthRequest, name: string): string | null {
-  if (request instanceof Request) {
-    return request.headers.get(name);
-  }
-  return request.raw?.headers.get(name) ?? request.headers?.get(name) ?? request.header(name) ?? null;
-}
 
 function stripTrailingSlashes(url: string): string {
   let end = url.length;

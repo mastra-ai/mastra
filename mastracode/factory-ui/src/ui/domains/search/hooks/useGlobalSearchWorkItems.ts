@@ -6,6 +6,7 @@ export function useGlobalSearchWorkItems(factoryId: string | undefined) {
 
   return {
     items: query.data ?? [],
+    refetch: query.refetch,
     pending: query.isLoading,
     failed: query.isError,
     retry: () => {

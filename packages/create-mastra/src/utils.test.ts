@@ -16,12 +16,14 @@ const mockDistTags = (stdout: string) => {
   vi.mocked(x).mockResolvedValue({ stdout } as Awaited<ReturnType<typeof x>>);
 };
 
+const CREATE_PKG_REGEX = /create-mastra[/\\]package\.json$/;
+
 describe('getPackageVersion', () => {
   it('reads the package version from the package manifest', async () => {
     vi.mocked(fsPromises.readFile).mockResolvedValue(JSON.stringify({ version: '1.2.3' }));
 
     await expect(getPackageVersion()).resolves.toBe('1.2.3');
-    expect(fsPromises.readFile).toHaveBeenCalledWith(expect.stringMatching(/create-mastra[/\\]package\.json$/), 'utf8');
+    expect(fsPromises.readFile).toHaveBeenCalledWith(expect.stringMatching(CREATE_PKG_REGEX), 'utf8');
   });
 });
 
@@ -82,9 +84,20 @@ describe('getCreateVersionTag', () => {
   });
 
   it.each([
+    ['no tag has the exact version', () => mockDistTags('latest: 1.2.4\nalpha: 1.2.3-alpha.7')],
+    ['the registry command fails', () => vi.mocked(x).mockRejectedValue(new Error('registry unavailable'))],
+  ])('uses the prerelease channel from the package version when %s', async (_name, arrange) => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    arrange();
+
+    await expect(getCreateVersionTag('1.2.3-alpha.8')).resolves.toBe('alpha');
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it.each([
     ['no tag has the exact version', () => mockDistTags('latest: 1.2.4\nbeta: 1.2.3-beta.1')],
     ['the registry command fails', () => vi.mocked(x).mockRejectedValue(new Error('registry unavailable'))],
-  ])('warns and falls back to latest when %s', async (_name, arrange) => {
+  ])('warns and falls back to latest for a stable version when %s', async (_name, arrange) => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     arrange();
 

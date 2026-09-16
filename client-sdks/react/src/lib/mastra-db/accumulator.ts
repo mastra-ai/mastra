@@ -43,6 +43,24 @@ type StreamChunk = {
   from: 'AGENT' | 'WORKFLOW';
 };
 
+function toolErrorText(error: unknown): string {
+  if (error && typeof error === 'object') {
+    if ('message' in error && typeof error.message === 'string') return error.message;
+    // Recover only the delegation wrapper's model-facing message, never an
+    // arbitrary provider cause. Native Error.message can be lost over JSON.
+    if ('cause' in error) {
+      const cause = error.cause;
+      if (cause && typeof cause === 'object') {
+        const code = 'id' in cause ? cause.id : 'code' in cause ? cause.code : undefined;
+        if (code === 'AGENT_AGENT_TOOL_EXECUTION_FAILED' && 'message' in cause && typeof cause.message === 'string') {
+          return cause.message;
+        }
+      }
+    }
+  }
+  return String(error);
+}
+
 const cloneMetadata = (metadata: MastraDBMessageMetadata | undefined): MastraDBMessageMetadata =>
   metadata ? { ...metadata } : {};
 
@@ -589,7 +607,8 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     }
 
     case 'start': {
-      const messageId = typeof chunk.payload.messageId === 'string' ? chunk.payload.messageId : undefined;
+      // Retained stream history may contain `start` chunks emitted without a payload.
+      const messageId = typeof chunk.payload?.messageId === 'string' ? chunk.payload.messageId : undefined;
       if (messageId && result.some(message => message.id === messageId)) return result;
       return [...result, newAssistantMessage(messageId ?? `start-${chunk.runId + Date.now()}`, [], metadata)];
     }
@@ -597,10 +616,16 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     case 'text-start': {
       const lastMessage = result[result.length - 1];
       const textId = chunk.payload.id || `text-${Date.now()}`;
+      // Dedupe a repeated text-start only when the currently open (tail) text
+      // part already carries this id. Matching anywhere in the message would
+      // wrongly swallow a post-tool continuation that reuses the same text id
+      // (text → tool → text), leaving the second segment without its own part.
+      const tailPart = lastMessage?.content.parts[lastMessage.content.parts.length - 1];
       if (
         chunk.payload.id &&
         lastMessage?.role === 'assistant' &&
-        lastMessage.content.parts.some(part => part.type === 'text' && partTextId(part) === textId)
+        tailPart?.type === 'text' &&
+        partTextId(tailPart) === textId
       ) {
         return result;
       }
@@ -680,6 +705,19 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
 
       if (textPartIndex === -1) {
         textPartIndex = parts.findLastIndex(part => part.type === 'text' && partState(part) === 'streaming');
+      }
+
+      // A text run is closed once ANY non-text part is emitted after it — a tool
+      // call, reasoning, a source/citation, a file, a step marker, etc. If the
+      // matched text part is followed by such a part (e.g. text → tool → text or
+      // text → reasoning → text, where a provider like DeepSeek reuses the same
+      // text id across segments), this delta belongs to a NEW text segment.
+      // Appending to the earlier part would merge the two text blocks and push
+      // the intervening part out of order in the live view (issue #18964).
+      // Storage persists them as separate parts, which is why a reload already
+      // renders correctly.
+      if (textPartIndex !== -1 && parts.some((part, index) => index > textPartIndex && part.type !== 'text')) {
+        textPartIndex = -1;
       }
 
       if (textPartIndex === -1) {
@@ -989,6 +1027,31 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       return replaceAt(result, messageIndex, withParts(targetMessage, parts));
     }
 
+    case 'tool-output-denied': {
+      const location = locateToolPart(result, chunk.payload.toolCallId, false);
+      if (!location || location.toolPartIndex < 0) return result;
+      const { messageIndex, toolPartIndex } = location;
+      const targetMessage = result[messageIndex];
+      if (!targetMessage || targetMessage.role !== 'assistant') return result;
+
+      const parts = [...targetMessage.content.parts];
+      const toolPart = parts[toolPartIndex];
+      if (!isToolPart(toolPart)) return result;
+
+      parts[toolPartIndex] = {
+        ...toolPart,
+        toolInvocation: {
+          ...toolPart.toolInvocation,
+          state: 'output-denied',
+          toolName: chunk.payload.toolName,
+          args: chunk.payload.args ?? toolPart.toolInvocation.args,
+          approval: chunk.payload.approval,
+        },
+      } as MastraMessagePart;
+
+      return replaceAt(result, messageIndex, withParts(targetMessage, parts));
+    }
+
     case 'tool-error':
     case 'tool-result':
     case 'background-task-completed':
@@ -1047,12 +1110,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
         if (isError) {
           const error =
             chunk.type === 'tool-error' || chunk.type === 'background-task-failed' ? payloadError : payloadResult;
-          const errorText =
-            typeof error === 'string'
-              ? error
-              : error instanceof Error
-                ? error.message
-                : ((error as { message?: string } | null)?.message ?? String(error));
+          const errorText = toolErrorText(error);
 
           parts[toolPartIndex] = {
             ...toolPart,
@@ -1063,6 +1121,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
               toolName,
               args,
               errorText,
+              ...(toolName?.startsWith('agent-') ? { result: toolPart.toolInvocation.result } : {}),
             } as MastraToolInvocation,
           };
         } else {
@@ -1344,7 +1403,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
             mode: 'stream',
             requireApprovalMetadata: {
               ...lastRequireApproval,
-              [chunk.payload.toolName]: {
+              [chunk.payload.toolCallId]: {
                 toolCallId: chunk.payload.toolCallId,
                 toolName: chunk.payload.toolName,
                 args: chunk.payload.args as Record<string, unknown>,
@@ -1530,11 +1589,12 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     case 'network-validation-end':
     case 'network-object':
     case 'network-object-result':
+    case 'tool-output-denied':
       return result;
 
     default:
       // Exhaustiveness check: any new `ChunkType` variant must be added above.
-      return assertExhaustive(chunk, result);
+      return assertExhaustive(chunk as never, result);
   }
 };
 

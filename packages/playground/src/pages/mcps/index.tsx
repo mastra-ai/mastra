@@ -46,7 +46,7 @@ const MCPs = () => {
   }
 
   return (
-    <PageLayout>
+    <PageLayout height="full">
       <PageLayout.TopArea>
         <div className="max-w-120">
           <ListSearch onSearch={setSearch} label="Filter MCP servers" placeholder="Filter by name" />

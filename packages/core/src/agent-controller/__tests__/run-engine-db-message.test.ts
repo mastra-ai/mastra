@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { MastraDBMessage } from '../../agent/message-list/state/types';
+
 import { RequestContext } from '../../request-context';
 import { Workspace } from '../../workspace';
 import { LocalFilesystem } from '../../workspace/filesystem/local-filesystem';
@@ -8,21 +8,11 @@ import { Session } from '../session';
 import { SessionRunEngine } from '../session-run-engine';
 import type { AgentControllerEvent } from '../types';
 
-/**
- * BDD spec for the DB-native message contract of the run engine.
- *
- * Given a streamed run, the engine must build and emit `MastraDBMessage`s:
- * `content.format === 2` with nested `content.parts` accumulating
- * `text` / `reasoning` / `tool-invocation` parts in stream order — NOT the
- * legacy flat `AgentControllerMessageContent` union.
- */
-
 type StreamChunk = Parameters<SessionRunEngine['processStreamChunk']>[1];
 
 function createHarness() {
   const events: AgentControllerEvent[] = [];
   let idCounter = 0;
-
   const session = new Session({
     resourceId: 'resource-1',
     id: 'session-1',
@@ -38,9 +28,8 @@ function createHarness() {
   });
 
   const machinery: SessionMachinery = {
-    getAgent: () => {
-      throw new Error('getAgent is not used by these stream-folding tests');
-    },
+    getAgent: () => ({ id: 'agent-stub' }) as unknown as ReturnType<SessionMachinery['getAgent']>,
+    getRunScope: () => undefined,
     subscribeToThread: async () => {
       throw new Error('subscribeToThread is not used by these stream-folding tests');
     },
@@ -54,194 +43,229 @@ function createHarness() {
     saveSystemReminder: vi.fn(async () => null),
   };
 
-  const engine = new SessionRunEngine(session, machinery);
-  return { engine, events, session };
-}
-
-function isMastraDBMessage(value: unknown): value is MastraDBMessage {
-  return typeof value === 'object' && value !== null && 'content' in value && 'role' in value;
-}
-
-function lastMessageEvent(events: AgentControllerEvent[]): MastraDBMessage {
-  for (const event of [...events].reverse()) {
-    if ('message' in event && isMastraDBMessage(event.message)) {
-      return event.message;
-    }
-  }
-  throw new Error('no message event emitted');
-}
-
-function requestContext(): RequestContext {
-  return new RequestContext();
+  return { engine: new SessionRunEngine(session, machinery), events };
 }
 
 function chunk(value: StreamChunk): StreamChunk {
   return value;
 }
 
-describe('SessionRunEngine — MastraDBMessage contract', () => {
-  it('Given a text stream, When chunks arrive, Then it emits a MastraDBMessage with a text part', async () => {
+function assistantStarts(events: AgentControllerEvent[]) {
+  return events.filter(
+    (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> =>
+      event.type === 'message_start' && event.message.role === 'assistant',
+  );
+}
+
+describe('SessionRunEngine compact message lifecycle', () => {
+  it('emits one start, ordered text deltas, and one end when assistant text completes', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();
-    const ctx = requestContext();
+    const context = new RequestContext();
 
-    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
-    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'Hello' } }), ctx);
-    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: ' world' } }), ctx);
-
-    const message = lastMessageEvent(events);
-    expect(message.content.format).toBe(2);
-    expect(message.content.parts).toEqual([{ type: 'text', text: 'Hello world' }]);
-    expect(message.role).toBe('assistant');
-  });
-
-  it('Given a reasoning stream, When chunks arrive, Then it emits a reasoning part', async () => {
-    const { engine, events } = createHarness();
-    const state = engine.createStreamState();
-    const ctx = requestContext();
-
-    await engine.processStreamChunk(state, chunk({ type: 'reasoning-start', payload: { id: 'r1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), context);
     await engine.processStreamChunk(
       state,
-      chunk({ type: 'reasoning-delta', payload: { id: 'r1', text: 'thinking…' } }),
-      ctx,
-    );
-
-    const message = lastMessageEvent(events);
-    const reasoningPart = message.content.parts.find(part => part.type === 'reasoning');
-    expect(reasoningPart).toMatchObject({ type: 'reasoning', reasoning: 'thinking…' });
-  });
-
-  it('Given a tool call + result, When chunks arrive, Then it emits a tool-invocation part', async () => {
-    const { engine, events } = createHarness();
-    const state = engine.createStreamState();
-    const ctx = requestContext();
-
-    await engine.processStreamChunk(
-      state,
-      chunk({ type: 'tool-call', payload: { toolCallId: 'tc1', toolName: 'read', args: { path: 'a.ts' } } }),
-      ctx,
+      chunk({ type: 'text-delta', payload: { id: 't1', text: 'Hello' } }),
+      context,
     );
     await engine.processStreamChunk(
       state,
-      chunk({
-        type: 'tool-result',
-        payload: { toolCallId: 'tc1', toolName: 'read', result: 'ok', isError: true },
-      }),
-      ctx,
+      chunk({ type: 'text-delta', payload: { id: 't1', text: ' world' } }),
+      context,
     );
+    await engine.processStreamChunk(state, chunk({ type: 'text-end', payload: { id: 't1' } }), context);
 
-    const message = lastMessageEvent(events);
-    const toolPart = message.content.parts.find(part => part.type === 'tool-invocation');
-    if (!toolPart || toolPart.type !== 'tool-invocation') throw new Error('no tool invocation part emitted');
-    expect(toolPart.toolInvocation.toolCallId).toBe('tc1');
-    expect(toolPart.toolInvocation.toolName).toBe('read');
-    expect(toolPart.toolInvocation.state).toBe('result');
-    expect(toolPart.toolInvocation.result).toBe('ok');
-    expect((toolPart.toolInvocation as { isError?: boolean }).isError).toBe(true);
-  });
-
-  it('Given a signal data chunk, When it arrives, Then it emits a DB-native signal message', async () => {
-    const { engine, events } = createHarness();
-    const state = engine.createStreamState();
-    const ctx = requestContext();
-    const payload = { signalId: 'sig-1', message: 'hello' };
-
-    await engine.processStreamChunk(state, chunk({ type: 'data-signal', data: payload }), ctx);
-
-    const message = lastMessageEvent(events);
-    const [part] = message.content.parts;
-    expect(message.role).toBe('signal');
-    expect(message.content.format).toBe(2);
-    expect(part).toEqual({ type: 'data-signal', data: payload });
-    expect(message.content.metadata?.signal).toEqual(payload);
-  });
-
-  it('Given a user-message signal after assistant text, When it arrives, Then it ends the assistant and emits a separate signal message', async () => {
-    const { engine, events } = createHarness();
-    const state = engine.createStreamState();
-    const ctx = requestContext();
-    const payload = { id: 'user-signal-1', message: 'next input', createdAt: '2026-01-02T03:04:05.000Z' };
-
-    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
-    await engine.processStreamChunk(
-      state,
-      chunk({ type: 'text-delta', payload: { id: 't1', text: 'assistant text' } }),
-      ctx,
-    );
-    await engine.processStreamChunk(state, chunk({ type: 'data-user-message', data: payload }), ctx);
-
-    const messageEnds = events.filter(event => event.type === 'message_end');
-    expect(messageEnds).toHaveLength(2);
-    expect(messageEnds[0].message.role).toBe('assistant');
-    expect(messageEnds[0].message.content).toMatchObject({
-      format: 2,
-      parts: [{ type: 'text', text: 'assistant text' }],
-      metadata: { stopReason: 'complete' },
+    const [started] = assistantStarts(events);
+    expect(started).toMatchObject({
+      type: 'message_start',
+      message: { id: 'msg-1', content: { format: 2, parts: [{ type: 'text', text: '' }] } },
     });
-    expect(messageEnds[1].message).toMatchObject({
-      id: 'user-signal-1',
-      role: 'signal',
-      content: {
-        format: 2,
-        parts: [{ type: 'data-user-message', data: payload }],
-        metadata: { signal: payload },
-      },
-    });
-    expect(messageEnds[1].message.createdAt.toISOString()).toBe('2026-01-02T03:04:05.000Z');
+    expect(events.filter(event => event.type === 'message_update')).toEqual([
+      { type: 'message_update', id: 'msg-1', event: { type: 'text-delta', delta: 'Hello' } },
+      { type: 'message_update', id: 'msg-1', event: { type: 'text-delta', delta: ' world' } },
+    ]);
+    expect(events.some(event => event.type === 'message_end')).toBe(false);
+
+    await engine.processStreamChunk(state, chunk({ type: 'data-user-message', data: { id: 'user-1' } }), context);
+
+    expect(events.filter(event => event.type === 'message_end')).toEqual([
+      { type: 'message_end', id: 'msg-1' },
+      { type: 'message_end', id: 'user-1' },
+    ]);
   });
 
-  it('Given an emitted snapshot, When later chunks mutate the message in place, Then the snapshot is unchanged', async () => {
+  it('emits one lifecycle for multiple text parts in one assistant message', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();
-    const ctx = requestContext();
+    const context = new RequestContext();
 
-    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
-    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'Hello' } }), ctx);
-    const textSnapshot = lastMessageEvent(events);
-
-    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: ' world' } }), ctx);
-    expect(textSnapshot.content.parts).toEqual([{ type: 'text', text: 'Hello' }]);
-
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), context);
     await engine.processStreamChunk(
       state,
-      chunk({ type: 'tool-call', payload: { toolCallId: 'tc1', toolName: 'read', args: { path: 'a.ts' } } }),
-      ctx,
+      chunk({ type: 'text-delta', payload: { id: 't1', text: 'first' } }),
+      context,
     );
-    const callSnapshot = lastMessageEvent(events);
-
+    await engine.processStreamChunk(state, chunk({ type: 'text-end', payload: { id: 't1' } }), context);
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't2' } }), context);
     await engine.processStreamChunk(
       state,
-      chunk({ type: 'tool-result', payload: { toolCallId: 'tc1', toolName: 'read', result: 'ok' } }),
-      ctx,
+      chunk({ type: 'text-delta', payload: { id: 't2', text: ' second' } }),
+      context,
     );
+    await engine.processStreamChunk(state, chunk({ type: 'data-user-message', data: { id: 'user-1' } }), context);
 
-    const callPart = callSnapshot.content.parts.find(part => part.type === 'tool-invocation');
-    if (!callPart || callPart.type !== 'tool-invocation') throw new Error('no tool invocation part in snapshot');
-    expect(callPart.toolInvocation.state).toBe('call');
-    expect(callPart.toolInvocation).not.toHaveProperty('result');
+    expect(assistantStarts(events)).toHaveLength(1);
+    expect(events.filter(event => event.type === 'message_update')).toEqual([
+      { type: 'message_update', id: 'msg-1', event: { type: 'text-delta', delta: 'first' } },
+      { type: 'message_update', id: 'msg-1', event: { type: 'part', index: 1, part: { type: 'text', text: '' } } },
+      { type: 'message_update', id: 'msg-1', event: { type: 'text-delta', delta: ' second' } },
+    ]);
+    expect(events.filter(event => event.type === 'message_end')).toContainEqual({ type: 'message_end', id: 'msg-1' });
   });
 
-  it('Given a non-success finish reason, When the stream finishes, Then terminal state lives on message metadata', async () => {
+  it('sends compact part snapshots and reasoning deltas after the initial message start', async () => {
     const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const context = new RequestContext();
 
-    const result = await engine.processStream(
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 'text-1' } }), context);
+    await engine.processStreamChunk(state, chunk({ type: 'reasoning-start', payload: { id: 'reasoning-1' } }), context);
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'reasoning-delta', payload: { id: 'reasoning-1', text: 'Checking the files.' } }),
+      context,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'tool-call', payload: { toolCallId: 'tool-1', toolName: 'view', args: { path: 'a.ts' } } }),
+      context,
+    );
+
+    expect(events.filter(event => event.type === 'message_update')).toEqual([
       {
-        fullStream: (async function* () {
-          yield chunk({ type: 'text-start', payload: { id: 't1' } });
-          yield chunk({ type: 'text-delta', payload: { id: 't1', text: 'partial' } });
-          yield chunk({ type: 'finish', payload: { stepResult: { reason: 'content-filter' } } });
-        })(),
+        type: 'message_update',
+        id: 'msg-1',
+        event: {
+          type: 'part',
+          index: 1,
+          part: expect.objectContaining({
+            type: 'reasoning',
+            reasoning: '',
+            details: [{ type: 'text', text: '' }],
+          }),
+        },
       },
-      requestContext(),
-    );
+      {
+        type: 'message_update',
+        id: 'msg-1',
+        event: { type: 'reasoning-delta', index: 1, delta: 'Checking the files.' },
+      },
+      {
+        type: 'message_update',
+        id: 'msg-1',
+        event: {
+          type: 'part',
+          index: 2,
+          part: {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: { path: 'a.ts' } },
+          },
+        },
+      },
+    ]);
+  });
 
-    expect(result?.message.content.format).toBe(2);
-    expect(result?.message.content.parts).toEqual([{ type: 'text', text: 'partial' }]);
-    expect(result?.message.content.metadata?.stopReason).toBe('error');
-    expect(result?.message.content.metadata?.errorMessage).toEqual(expect.stringContaining('content filter'));
-    const messageEnd = events.find(event => event.type === 'message_end');
-    expect(messageEnd?.message.content.metadata?.stopReason).toBe('error');
-    expect(events).toContainEqual({ type: 'agent_end', reason: 'error' });
+  it('ends the active assistant before rotating to a new response id', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const context = new RequestContext();
+
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'step-start', payload: { messageId: 'response-1' } }),
+      context,
+    );
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), context);
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'text-delta', payload: { id: 't1', text: 'first' } }),
+      context,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'step-start', payload: { messageId: 'response-2' } }),
+      context,
+    );
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't2' } }), context);
+
+    expect(events.filter(event => event.type === 'message_start').map(event => event.message.id)).toEqual([
+      'response-1',
+      'response-2',
+    ]);
+    expect(events.filter(event => event.type === 'message_end')).toEqual([{ type: 'message_end', id: 'response-1' }]);
+  });
+
+  it('emits immediate compact start/end pairs for signal messages', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const context = new RequestContext();
+    const payload = { id: 'signal-1', message: 'hello', createdAt: '2026-01-02T03:04:05.000Z' };
+
+    await engine.processStreamChunk(state, chunk({ type: 'data-signal', data: payload }), context);
+
+    expect(events.filter(event => event.type === 'message_start' || event.type === 'message_end')).toEqual([
+      {
+        type: 'message_start',
+        message: expect.objectContaining({
+          id: 'signal-1',
+          role: 'signal',
+          content: { format: 2, parts: [{ type: 'data-signal', data: payload }], metadata: { signal: payload } },
+        }),
+      },
+      { type: 'message_end', id: 'signal-1' },
+    ]);
+  });
+
+  it('streams tool-only assistant message part updates', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const context = new RequestContext();
+
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'tool-call', payload: { toolCallId: 'tool-1', toolName: 'read', args: { path: 'a.ts' } } }),
+      context,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'tool-result', payload: { toolCallId: 'tool-1', toolName: 'read', result: 'ok' } }),
+      context,
+    );
+    await engine.processStreamChunk(state, chunk({ type: 'data-user-message', data: { id: 'user-1' } }), context);
+
+    expect(assistantStarts(events)).toHaveLength(1);
+    expect(events.filter(event => event.type === 'message_update')).toEqual([
+      {
+        type: 'message_update',
+        id: 'msg-1',
+        event: {
+          type: 'part',
+          index: 0,
+          part: {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'read',
+              args: { path: 'a.ts' },
+              result: 'ok',
+              isError: false,
+            },
+          },
+        },
+      },
+    ]);
+    expect(events.filter(event => event.type === 'message_end')).toContainEqual({ type: 'message_end', id: 'msg-1' });
   });
 });

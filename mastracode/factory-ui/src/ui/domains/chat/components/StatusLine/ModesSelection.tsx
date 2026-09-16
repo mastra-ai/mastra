@@ -1,11 +1,11 @@
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
-import { cn } from '@mastra/playground-ui/utils/cn';
+import { ComposerToneLabel } from '@mastra/playground-ui/components/Composer';
 import { Circle, Hammer, Map, Zap } from 'lucide-react';
 import { useState } from 'react';
 
+import { getComposerTone } from '../composer-tone';
 import { useChatModes } from '../../context/useChatModes';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
-import { getModeColorClass } from '../mode-colors';
 
 function ModeIcon({ modeId }: { modeId: string }) {
   const iconProps = { size: 12, 'aria-hidden': true };
@@ -31,19 +31,15 @@ function ModeLabel({ modeId, name }: { modeId: string; name: string }) {
   );
 }
 
-/**
- * Session mode selector; switches modes through the agent controller. Only
- * shown for personal (user) sessions — factory sessions are driven by the
- * factory's own run prompts, so mode switching is hidden there.
- */
 export function ModesSelection() {
-  const { kind } = useChatSessionContext();
+  const { kind, sessionEnabled, draftSessionId } = useChatSessionContext();
   const { modes, activeModeId, setMode } = useChatModes();
   const [pendingModeId, setPendingModeId] = useState<string>();
   const selectedModeId = pendingModeId ?? activeModeId ?? modes[0]?.id;
   const selectedMode = modes.find(mode => mode.id === selectedModeId) ?? modes[0];
 
   if (kind === 'factory') return null;
+  if (!sessionEnabled && !draftSessionId) return null;
   if (!selectedMode) return null;
 
   return (
@@ -64,9 +60,11 @@ export function ModesSelection() {
         size="xs"
         aria-label="Session mode"
         aria-busy={Boolean(pendingModeId)}
-        className={cn('chat-mode-text w-auto', getModeColorClass(selectedMode.id))}
+        className="w-auto"
       >
-        <ModeLabel modeId={selectedMode.id} name={selectedMode.name ?? selectedMode.id} />
+        <ComposerToneLabel tone={getComposerTone(selectedMode.id)}>
+          <ModeLabel modeId={selectedMode.id} name={selectedMode.name ?? selectedMode.id} />
+        </ComposerToneLabel>
       </SelectTrigger>
       <SelectContent>
         {modes.map(mode => (

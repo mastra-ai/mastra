@@ -174,7 +174,6 @@ values
     terminal.write('incremental subscription');
     await runtime.waitForScreenText(/E2E GitHub incremental subscription fixture/i, terminal);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Switched to: E2E GitHub incremental subscription fixture/i, terminal);
 
     terminal.submit('/github sync');
     await runtime.waitForScreenText(/notification from github/i, terminal, 30_000);

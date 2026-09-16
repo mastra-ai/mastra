@@ -1,42 +1,77 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowUpRight, Plus, Stethoscope } from 'lucide-react';
+import { ArrowUpRight, EllipsisVertical, Plus } from 'lucide-react';
+import type { ReactElement } from 'react';
+import { useId } from 'react';
 
-import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
+import { useCardMorph } from '../hooks/useCardMorph';
+import { boardCardStatus } from '../boardCardStatus';
 import type { BoardCandidate } from '../boardCandidates';
 import { setDragPayload } from '../boardDrag';
-import { AUTO_TRIAGED_LABEL, externalLinkLabel, hasLabel, metadataLabels } from '../boardItems';
-import type { RunAction } from '../boardRunSpecs';
-import { CardLabels, CardTitleTooltip, SourceTitle } from './BoardCardParts';
-import { FactoryItemActions } from './FactoryItemActions';
+import { externalLinkLabel } from '../boardItems';
+import { cardMoves } from '../cardPrimaryAction';
+import type { CardMove } from '../cardPrimaryAction';
+import { CardActions, CardDetailsHint, REVEAL_ON_CARD_HOVER } from './BoardCardParts';
+import { actionIcon } from './BoardIcons';
+import { CandidateCardRows } from './CandidateCardRows';
+import { CandidateDetailsPanel } from './CandidateDetailsPanel';
 
+// Acting on it is what files the record.
 export function CandidateCard({
   candidate,
-  pendingRunRoles,
-  triageStarting,
-  disabled,
+  projectRepositoryId,
+  factoryProjectId,
   onRun,
   onFile,
-  onTriage,
 }: {
   candidate: BoardCandidate;
-  pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
-  triageStarting: boolean;
-  disabled: boolean;
-  /** Start a run; `prompt` undefined = the action's default prompt. */
-  onRun: (action: RunAction, prompt?: string) => void;
-  /** File the candidate onto the board without starting a run. */
+  /** Repository id resolving GitHub descriptions in the detail panel. */
+  projectRepositoryId: string;
+  /** Factory project id resolving Linear descriptions in the detail panel. */
+  factoryProjectId: string;
+  /** File the candidate and move it into the lane; `prompt` undefined = no typed guidance. */
+  onRun: (move: CardMove, prompt?: string) => void;
   onFile: () => void;
-  /** Run first-contact issue triage without leaving the board. */
-  onTriage?: () => void;
 }) {
-  const Icon = candidate.icon;
-  const labels = metadataLabels(candidate.metadata);
-  const showTriage = candidate.source === 'github-issue' && !hasLabel(labels, AUTO_TRIAGED_LABEL) && onTriage;
-  const [defaultAction, ...otherActions] = candidate.runActions;
+  const detailsTitleId = useId();
+  const morph = useCardMorph();
+
+  const moves = cardMoves(candidate, candidate.column);
+  const [defaultMove] = moves;
+  const status = boardCardStatus({});
+
+  const fileFromDetails = () => {
+    morph.closeDetails();
+    onFile();
+  };
+
+  const menuItems: ReactElement[] = [
+    ...moves.map(move => (
+      <DropdownMenu.Item
+        key={move.label}
+        onClick={() => {
+          morph.closeDetails();
+          onRun(move);
+        }}
+      >
+        {actionIcon(move.label)}
+        <span>{move.label}</span>
+      </DropdownMenu.Item>
+    )),
+    <DropdownMenu.Item key="file" onClick={fileFromDetails}>
+      <Plus aria-hidden />
+      <span>Add to board</span>
+    </DropdownMenu.Item>,
+    <DropdownMenu.Item key="source" render={<a href={candidate.url} target="_blank" rel="noreferrer" />}>
+      <ArrowUpRight aria-hidden />
+      <span>{externalLinkLabel(candidate.source)}</span>
+    </DropdownMenu.Item>,
+  ];
+
   return (
-    <CardTitleTooltip title={candidate.title}>
+    <>
       <article
+        ref={morph.cardRef}
         draggable
         aria-label={candidate.title}
         data-testid="candidate-card"
@@ -52,67 +87,62 @@ export function CandidateCard({
             },
           })
         }
-        className="group border-border1/50 bg-neutral6/5 hover:bg-surface3 flex cursor-grab flex-col gap-3 rounded-xl border p-3 transition-colors outline-none active:cursor-grabbing"
+        // Offscreen cards skip layout and paint; an Intake column can hold hundreds.
+        className="group border-border1/50 bg-neutral6/5 hover:bg-surface3 rounded-card relative flex min-h-36 cursor-grab flex-col gap-3 border p-2 transition-colors outline-none [contain-intrinsic-size:auto_9rem] [content-visibility:auto] active:cursor-grabbing"
       >
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-ui-xs text-icon2 block truncate">{candidate.meta}</span>
-          <div className="flex min-w-0 items-center gap-1.5">
-            <Icon size={16} className={cn('shrink-0', candidate.iconClassName)} aria-hidden />
-            <button
-              type="button"
-              disabled={disabled}
-              aria-busy={pendingRunRoles.has(defaultAction.role) || undefined}
-              // Title click starts the default run — same as the primary action
-              // button — so clicking a candidate always kicks off its work.
-              onClick={() => onRun(defaultAction)}
-              className="text-ui-smd text-icon6 min-w-0 flex-1 truncate text-left font-semibold hover:underline disabled:opacity-60"
-            >
-              <SourceTitle source={candidate.source} title={candidate.title} />
-            </button>
-            <a
-              href={candidate.url}
-              target="_blank"
-              rel="noreferrer"
-              aria-label={externalLinkLabel(candidate.source)}
-              className="text-icon3 hover:text-icon5 shrink-0 transition-[opacity,translate] focus-visible:translate-x-0 focus-visible:translate-y-0 focus-visible:opacity-100 motion-reduce:transition-none pointer-fine:-translate-x-1 pointer-fine:translate-y-1 pointer-fine:opacity-0 pointer-fine:group-hover:translate-x-0 pointer-fine:group-hover:translate-y-0 pointer-fine:group-hover:opacity-100"
-            >
-              <ArrowUpRight size={12} aria-hidden />
-            </a>
-          </div>
-        </div>
-        <CardLabels labels={labels} />
-        <FactoryItemActions
-          actionLabel={defaultAction.label}
-          itemLabel={candidate.title}
-          starting={pendingRunRoles.has(defaultAction.role)}
-          disabled={disabled}
-          onAction={() => onRun(defaultAction)}
-          extraActions={otherActions.map(action => ({
-            label: action.label,
-            starting: pendingRunRoles.has(action.role),
-            onAction: () => onRun(action),
-          }))}
-          onRunPrompt={prompt => onRun(defaultAction, prompt)}
-          menuExtras={
+        <button
+          type="button"
+          draggable={false}
+          aria-label={`Details for ${candidate.title}`}
+          aria-expanded={morph.open}
+          className="focus-visible:outline-accent1 rounded-card absolute inset-0 cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+          onClick={morph.openDetails}
+        />
+        <CandidateCardRows
+          candidate={candidate}
+          status={status}
+          actions={
+            defaultMove === undefined ? undefined : (
+              <CardActions actions={[{ label: defaultMove.label, start: () => onRun(defaultMove) }]} />
+            )
+          }
+          controls={
             <>
-              <DropdownMenu.Item render={<a href={candidate.url} target="_blank" rel="noreferrer" />}>
-                <ArrowUpRight aria-hidden />
-                <span>{externalLinkLabel(candidate.source)}</span>
-              </DropdownMenu.Item>
-              {showTriage && (
-                <DropdownMenu.Item disabled={triageStarting} onClick={onTriage}>
-                  <Stethoscope aria-hidden />
-                  <span>{triageStarting ? 'Starting…' : 'Triage issue'}</span>
-                </DropdownMenu.Item>
-              )}
-              <DropdownMenu.Item onClick={onFile}>
-                <Plus aria-hidden />
-                <span>Add to board</span>
-              </DropdownMenu.Item>
+              <CardDetailsHint />
+              <DropdownMenu>
+                <DropdownMenu.Trigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`Actions for ${candidate.title}`}
+                      className={REVEAL_ON_CARD_HOVER}
+                    >
+                      <EllipsisVertical size={13} aria-hidden />
+                    </Button>
+                  }
+                />
+                <DropdownMenu.Content align="end" className="min-w-44">
+                  {menuItems}
+                </DropdownMenu.Content>
+              </DropdownMenu>
             </>
           }
         />
       </article>
-    </CardTitleTooltip>
+
+      <CandidateDetailsPanel
+        candidate={candidate}
+        labelledBy={detailsTitleId}
+        morph={morph}
+        status={status}
+        projectRepositoryId={projectRepositoryId}
+        factoryProjectId={factoryProjectId}
+        menu={menuItems}
+        defaultMove={defaultMove}
+        onRun={onRun}
+      />
+    </>
   );
 }

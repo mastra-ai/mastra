@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { MaterializationSandbox, SandboxCommandResult } from '../../sandbox/fleet.js';
+import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
 import { createPullRequest, MaterializeError, pushBranch } from './sandbox.js';
 
 type Responder = (script: string) => SandboxCommandResult;
@@ -10,7 +10,7 @@ const OK: SandboxCommandResult = { exitCode: 0, stdout: '', stderr: '' };
  * Records every shell script the helper runs so the scenario can assert the
  * security invariant across the WHOLE operation, not a single command.
  */
-class RecordingSandbox implements MaterializationSandbox {
+class RecordingSandbox implements ExecutableSandbox {
   readonly id = 'logical-id';
   readonly calls: string[] = [];
   startCount = 0;

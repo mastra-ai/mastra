@@ -198,7 +198,9 @@ export class AIV4Adapter {
               // Raw base64 - convert to data URI
               normalizedUrl = createDataUri(fileData, fileMimeType || 'application/octet-stream');
             } else {
-              // Already a URL or data URI
+              // Already a URL, data URI, or provider file ID (e.g. OpenAI "file-...").
+              // Provider file IDs are not parseable URLs; attachmentsToParts handles
+              // them explicitly before constructing a URL.
               normalizedUrl = fileData;
             }
           } else {
@@ -220,12 +222,16 @@ export class AIV4Adapter {
         } else if (part.type === 'tool-invocation') {
           // Handle tool invocations with step number logic
           const isDeniedApproval = part.toolInvocation.state === 'output-denied';
+          const isOutputError = part.toolInvocation.state === 'output-error';
           const toolInvocation = {
             ...part.toolInvocation,
-            // v4 has no denied state and AI SDK v4's convertToCoreMessages requires every
-            // tool invocation to carry a result. Downgrade a declined approval to a normal
-            // result whose value is the decline reason so the conversion accepts it.
-            ...(isDeniedApproval ? { state: 'result' as const } : {}),
+            // v4 has no denied or output-error state and AI SDK v4's convertToCoreMessages
+            // requires every completed tool invocation to carry a result. Downgrade both to
+            // normal results so the error or denial is sent back to the model.
+            // A downgraded output-error still has to read as a failure, so keep the isError
+            // marker on it — otherwise a failed terminal tool looks like it succeeded.
+            ...(isDeniedApproval || isOutputError ? { state: 'result' as const } : {}),
+            ...(isOutputError ? { isError: true } : {}),
             args: getDisplayTransform(
               part.providerMetadata,
               'input-available',
@@ -248,7 +254,9 @@ export class AIV4Adapter {
                 }
               : isDeniedApproval
                 ? { result: part.toolInvocation.approval?.reason ?? 'Tool call was not approved by the user' }
-                : {}),
+                : isOutputError
+                  ? { result: part.toolInvocation.errorText }
+                  : {}),
           };
 
           // Find the step number for this tool invocation
@@ -588,7 +596,13 @@ export class AIV4Adapter {
             } else if (typeof aiV4Part.data === 'string') {
               const categorized = categorizeFileData(aiV4Part.data, aiV4Part.mimeType);
 
-              if (categorized.type === 'url' || categorized.type === 'dataUri') {
+              if (
+                categorized.type === 'url' ||
+                categorized.type === 'dataUri' ||
+                // Provider file IDs (e.g. OpenAI "file-...") must be stored untouched,
+                // not base64-converted, so they can be forwarded as { file_id } later.
+                categorized.type === 'providerFileId'
+              ) {
                 const part: MastraDBMessage['content']['parts'][number] = {
                   type: 'file' as const,
                   data: aiV4Part.data,

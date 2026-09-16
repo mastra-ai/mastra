@@ -16,8 +16,10 @@ import {
 import { getLastObservedMessageCursor } from '../message-utils';
 
 import { buildMessageRange } from '../observational-memory';
+import { formatMessagesForObserver } from '../observer-agent';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
+import { resolveThreadTitleUpdate } from './thread-title';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
 
 export class SyncObservationStrategy extends ObservationStrategy {
@@ -113,7 +115,9 @@ export class SyncObservationStrategy extends ObservationStrategy {
       priorSuggestedResponse: omMeta?.suggestedResponse,
       priorThreadTitle: omMeta?.threadTitle,
       priorExtractedValues: this.priorExtractedValues,
+      threadId: this.opts.threadId,
       resourceId: this.opts.resourceId,
+      trigger: this.opts.trigger,
       mainAgent: this.opts.agent,
     });
     const hookedValues = await applyExtractorHooks({
@@ -122,11 +126,16 @@ export class SyncObservationStrategy extends ObservationStrategy {
       values: result.extractedValues,
       failures: result.extractionFailures,
       previousValues: this.priorExtractedValues,
+      rawObservations: result.observations,
+      recentMessages: formatMessagesForObserver(this.opts.messages, { maxPartLength: 500 }),
       threadId: this.opts.threadId,
       resourceId: this.opts.resourceId,
       mainAgent: this.opts.agent,
       memory: this.deps.memory,
       sendSignal: this.opts.sendSignal,
+      sendStateSignal: this.opts.sendStateSignal,
+      writer: this.opts.writer,
+      abortSignal: this.opts.abortSignal,
       requestContext: this.opts.requestContext,
     });
     const output = {
@@ -195,8 +204,8 @@ export class SyncObservationStrategy extends ObservationStrategy {
 
     if (thread) {
       const oldTitle = thread.title?.trim();
-      const newTitle = processed.threadTitle?.trim();
-      const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
+      const newTitle = resolveThreadTitleUpdate(thread, processed.threadTitle);
+      const shouldUpdateThreadTitle = newTitle !== undefined;
       const previousOmMetadata = getThreadOMMetadata(thread.metadata);
       const metadataUpdate = buildThreadMetadataFromExtractedValues(
         processed.extractors ?? this.observationConfig.extractors,
@@ -212,9 +221,9 @@ export class SyncObservationStrategy extends ObservationStrategy {
         },
         lastObservedMessageCursor: getLastObservedMessageCursor(messages),
       });
-      await this.storage.updateThread({
+      await this.storage.patchThread({
         id: threadId,
-        title: shouldUpdateThreadTitle ? newTitle : (thread.title ?? ''),
+        ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),
         metadata: newMetadata,
       });
 
@@ -271,7 +280,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
         operationType: 'observation',
         startedAt: this.startedAt,
         tokensAttempted: this.tokensToObserve,
-        error: error instanceof Error ? error.message : String(error),
+        error,
         recordId: this.opts.record.id,
         threadId: this.opts.threadId,
       });

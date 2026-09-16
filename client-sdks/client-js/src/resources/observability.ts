@@ -1,11 +1,17 @@
-import type { ListScoresResponse, Trajectory } from '@mastra/core/evals';
 import type { SpanType } from '@mastra/core/observability';
+import type { QueryThreadsInput, QueryThreadsResult, TraceQueryPredicate } from '@mastra/core/storage';
+import type { ClientOptions, ListFeedbackResponse } from '../types';
+import { toQueryParams } from '../utils';
+import { BaseResource } from './base';
 import type {
   TraceRecord,
   GetTraceLightResponse,
   GetSpanResponse,
   ListTracesArgs,
   ListTracesResponse,
+  ListTracesLightResponse,
+  TraceQueryRequest,
+  TraceQueryResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -16,14 +22,18 @@ import type {
   PaginationInfo,
   ScoreTracesRequest,
   ScoreTracesResponse,
-  // Logs
+  DeleteTracesRequest,
+  DeleteTracesResponse,
+  ListScoresResponse,
+  Trajectory,
   ListLogsArgs,
   ListLogsResponse,
-  // Scores (observability)
   ListScoresArgs,
-  ListScoresResponse as ListScoresResponseNew,
+  ListScoresResponseNew,
   CreateScoreBody,
   CreateScoreResponse,
+  DeleteScoresArgs,
+  DeleteScoresResponse,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
   GetScoreBreakdownArgs,
@@ -32,11 +42,13 @@ import type {
   GetScoreTimeSeriesResponse,
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
-  // Feedback
   ListFeedbackArgs,
-  ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
+  DeleteFeedbackArgs,
+  DeleteFeedbackResponse,
+  UpdateFeedbackReviewStatusArgs,
+  FeedbackRecord,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -45,7 +57,6 @@ import type {
   GetFeedbackTimeSeriesResponse,
   GetFeedbackPercentilesArgs,
   GetFeedbackPercentilesResponse,
-  // Metrics OLAP
   GetMetricAggregateArgs,
   GetMetricAggregateResponse,
   GetMetricBreakdownArgs,
@@ -54,7 +65,6 @@ import type {
   GetMetricTimeSeriesResponse,
   GetMetricPercentilesArgs,
   GetMetricPercentilesResponse,
-  // Discovery
   GetMetricNamesArgs,
   GetMetricNamesResponse,
   GetMetricLabelKeysArgs,
@@ -68,10 +78,7 @@ import type {
   GetEnvironmentsResponse,
   GetTagsArgs,
   GetTagsResponse,
-} from '@mastra/core/storage';
-import type { ClientOptions } from '../types';
-import { toQueryParams } from '../utils';
-import { BaseResource } from './base';
+} from './observability-route-types.js';
 
 // ============================================================================
 // Legacy Types (for backward compatibility with main branch API)
@@ -114,6 +121,13 @@ export interface LegacyGetTracesResponse {
 }
 
 export type ListScoresBySpanParams = SpanIds & PaginationArgs;
+
+export type QueryTracesInput = Omit<TraceQueryRequest, 'group' | 'where'> & {
+  where?: TraceQueryPredicate;
+  group?: never;
+};
+export type QueryTraceThreadsInput = QueryThreadsInput;
+export type QueryTraceThreadsResult = QueryThreadsResult;
 
 // ============================================================================
 // Observability Resource
@@ -227,6 +241,41 @@ export class Observability extends BaseResource {
   }
 
   /**
+   * Queries completed logical traces using recursive trace and related-record predicates.
+   *
+   * @param params - Advanced trace query, including its required time range
+   * @returns Matching lightweight traces
+   */
+  queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse> {
+    return this.request('/observability/traces/query', { method: 'POST', body: params });
+  }
+
+  /**
+   * Queries thread identities using eligible-trace and cross-trace predicates.
+   *
+   * @param params - Thread query with its eligible trace selection
+   * @returns Matching thread identities
+   */
+  queryTraceThreads(params: QueryTraceThreadsInput): Promise<QueryTraceThreadsResult> {
+    return this.request('/observability/threads/query', { method: 'POST', body: params });
+  }
+
+  /**
+   * Retrieves paginated list of traces carrying only the fields a trace list renders.
+   *
+   * Same filtering, ordering and delta-polling contract as {@link listTraces}, but rows
+   * omit the `attributes`/`input`/`output` blobs and carry a short `inputPreview`
+   * instead. Prefer this for list views and fetch the full record on selection.
+   *
+   * @param params - Parameters for pagination, filtering, and ordering
+   * @returns Promise containing paginated lightweight traces and pagination info
+   */
+  listTracesLight(params: ListTracesArgs = {}): Promise<ListTracesLightResponse> {
+    const queryString = toQueryParams(params, ['filters', 'pagination', 'orderBy']);
+    return this.request(`/observability/traces/light${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
    * Retrieves a paginated list of trace branches with optional filtering and sorting.
    *
    * Each row is a single branch-anchor span (e.g., AGENT_RUN, WORKFLOW_RUN, TOOL_CALL),
@@ -284,6 +333,22 @@ export class Observability extends BaseResource {
     });
   }
 
+  /**
+   * Deletes traces by ID, cascading to all associated data: spans, trace
+   * roots/branches, and signal events (scores, feedback, metrics, logs) that
+   * reference the deleted traces. Signals without a trace ID are untouched.
+   * On ClickHouse-backed stores, reads may briefly return deleted rows until
+   * the lightweight delete is fully applied.
+   * @param params - IDs of the traces to delete
+   * @returns Promise resolving to `{ success: true }` once the delete is issued
+   */
+  deleteTraces(params: DeleteTracesRequest): Promise<DeleteTracesResponse> {
+    return this.request(`/observability/traces/delete`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
   // --------------------------------------------------------------------------
   // Logs
   // --------------------------------------------------------------------------
@@ -315,6 +380,18 @@ export class Observability extends BaseResource {
   createScore(params: CreateScoreBody): Promise<CreateScoreResponse> {
     return this.request(`/observability/scores`, {
       method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Deletes score records by scoreId, optionally scoped to a tenant.
+   * Idempotent: deleting missing ids succeeds. Depending on the storage
+   * backend (e.g. ClickHouse), deletion may be eventually consistent.
+   */
+  deleteScores(params: DeleteScoresArgs): Promise<DeleteScoresResponse> {
+    return this.request(`/observability/scores`, {
+      method: 'DELETE',
       body: params,
     });
   }
@@ -378,6 +455,26 @@ export class Observability extends BaseResource {
   createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
     return this.request(`/observability/feedback`, {
       method: 'POST',
+      body: params,
+    });
+  }
+
+  /** Updates a feedback record's review workflow status. */
+  updateFeedbackReviewStatus(params: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    return this.request(`/observability/feedback/${encodeURIComponent(params.feedbackId)}/review-status`, {
+      method: 'PATCH',
+      body: { reviewStatus: params.reviewStatus },
+    });
+  }
+
+  /**
+   * Deletes feedback records by feedbackId, optionally scoped to a tenant.
+   * Idempotent: deleting missing ids succeeds. Depending on the storage
+   * backend (e.g. ClickHouse), deletion may be eventually consistent.
+   */
+  deleteFeedback(params: DeleteFeedbackArgs): Promise<DeleteFeedbackResponse> {
+    return this.request(`/observability/feedback`, {
+      method: 'DELETE',
       body: params,
     });
   }

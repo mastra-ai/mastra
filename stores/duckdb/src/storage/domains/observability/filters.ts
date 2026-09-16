@@ -12,9 +12,60 @@ export function buildJsonPath(key: string): string {
 
 function normalizeJsonFilterValue(value: unknown): string | null {
   if (value === undefined) return null;
-  if (typeof value === 'string') return value;
+  // Serialize to JSON text for comparison against raw json_extract output.
   const json = JSON.stringify(value);
   return json ?? null;
+}
+
+/**
+ * Add structural equality conditions for a JSON value at `path` inside `column`.
+ *
+ * Scalars compare against their raw JSON text (preserving types: 5 !== '5',
+ * null matches JSON null). Objects and arrays are decomposed recursively into
+ * per-leaf comparisons plus key/length-count checks, so nested objects match
+ * regardless of key serialization order while still requiring complete
+ * (exact, not partial) equality.
+ */
+function addStructuralJsonConditions(
+  column: string,
+  path: string,
+  value: unknown,
+  conditions: string[],
+  params: unknown[],
+): void {
+  if (value !== null && typeof value === 'object') {
+    if (Array.isArray(value)) {
+      conditions.push(`json_array_length(${column}, ?) = ?`);
+      params.push(path, value.length);
+      value.forEach((item, i) => {
+        addStructuralJsonConditions(column, `${path}[${i}]`, item, conditions, params);
+      });
+    } else {
+      const entries = Object.entries(value).filter(([, v]) => v !== undefined);
+      conditions.push(`json_array_length(json_keys(${column}, ?)) = ?`);
+      params.push(path, entries.length);
+      for (const [subKey, subValue] of entries) {
+        const escaped = subKey.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        addStructuralJsonConditions(column, `${path}."${escaped}"`, subValue, conditions, params);
+      }
+    }
+    return;
+  }
+
+  if (typeof value === 'number') {
+    // Compare numbers numerically so JSON spelling differences (5 vs 5.0) still
+    // match, with a type guard so JSON strings like "5" don't coerce and match.
+    conditions.push(
+      `(json_type(${column}, ?) IN ('UBIGINT', 'BIGINT', 'DOUBLE') AND CAST(json_extract(${column}, ?) AS DOUBLE) = ?)`,
+    );
+    params.push(path, path, value);
+    return;
+  }
+
+  const normalized = normalizeJsonFilterValue(value);
+  if (normalized === null) return;
+  conditions.push(`CAST(json_extract(${column}, ?) AS VARCHAR) = ?`);
+  params.push(path, normalized);
 }
 
 function sanitizeColumn(column: string): string {
@@ -93,10 +144,8 @@ export function buildWhereClause(
     if (key === 'metadata' || key === 'scope') {
       const jsonObj = value as Record<string, unknown>;
       for (const [jsonKey, jsonValue] of Object.entries(jsonObj)) {
-        const normalized = normalizeJsonFilterValue(jsonValue);
-        if (normalized === null) continue;
-        conditions.push(`json_extract_string(${column}, ?) = ?`);
-        params.push(buildJsonPath(jsonKey), normalized);
+        if (jsonValue === undefined) continue;
+        addStructuralJsonConditions(column, buildJsonPath(jsonKey), jsonValue, conditions, params);
       }
       continue;
     }

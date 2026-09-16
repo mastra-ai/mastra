@@ -311,6 +311,34 @@ describe('AgentBrowser', () => {
       // Should have re-launched
       expect(mockManager.launch).toHaveBeenCalledTimes(2);
     });
+
+    it('forwards cdpUrl and cdpHeaders to BrowserManager.launch', async () => {
+      const cdpHeaders = { Authorization: 'Bearer test-token' };
+      const browserWithCdp = new AgentBrowser({
+        scope: 'shared',
+        cdpUrl: 'wss://example.com/cdp',
+        cdpHeaders,
+      });
+
+      try {
+        await browserWithCdp.ensureReady();
+        expect(mockManager.launch).toHaveBeenCalledWith(
+          expect.objectContaining({
+            cdpUrl: 'wss://example.com/cdp',
+            cdpHeaders,
+          }),
+        );
+      } finally {
+        await browserWithCdp.close();
+      }
+    });
+
+    it('omits cdpHeaders from launch options when not configured', async () => {
+      await browser.ensureReady();
+      const launchOptions = mockManager.launch.mock.calls[0]?.[0];
+      expect(launchOptions).toBeDefined();
+      expect(launchOptions).not.toHaveProperty('cdpHeaders');
+    });
   });
 
   describe('isBrowserRunning', () => {

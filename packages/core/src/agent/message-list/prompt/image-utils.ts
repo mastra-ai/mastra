@@ -187,7 +187,7 @@ export function categorizeFileData(
   data: string,
   fallbackMimeType?: string,
 ): {
-  type: 'url' | 'dataUri' | 'raw';
+  type: 'url' | 'dataUri' | 'raw' | 'providerFileId';
   mimeType?: string;
   data: string;
 } {
@@ -199,6 +199,19 @@ export function categorizeFileData(
   if (parsed.isDataUri) {
     return {
       type: 'dataUri',
+      mimeType,
+      data,
+    };
+  }
+
+  // Check if it's an OpenAI Files API file ID — pass through as-is so
+  // @ai-sdk/openai can forward it as { file_id: "file-..." } to the API.
+  // Distinct from 'url': the value is NOT parseable by `new URL()`, so call
+  // sites that construct URLs must handle it explicitly. Collision risk with
+  // raw base64 is negligible (standard base64 has no '-').
+  if (data.startsWith('file-')) {
+    return {
+      type: 'providerFileId',
       mimeType,
       data,
     };

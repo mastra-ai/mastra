@@ -104,21 +104,25 @@ describe('ChatShell', () => {
     // A sticky direct child of the scroller is clamped to the scroller's own box.
     expect(screen.getByTestId('dock').parentElement).toBe(track);
     expect(track?.className).toContain('min-h-full');
+    // An overlay pinned to the scroller itself spans one screen, not the transcript.
+    expect(track?.className).toContain('relative');
   });
 
-  it('veils the dock and leaves the air above it clear', () => {
+  it('ramps the veil in over its own band of air, never past full strength', () => {
     renderShell();
 
     const dock = screen.getByTestId('dock');
-    // A background, not an overlay: it passes behind the composer card, dimming
-    // the transcript in its rounded corners too.
-    expect(dock.className).toContain('bg-(--chat-veil)');
-    expect(dock.className).toContain('pb-(--chat-gutter)');
-    // The matching room above belongs to the content, which paints nothing.
-    expect(screen.getByTestId('content').className).toContain('pb-(--chat-gutter)');
-    expect(screen.getByTestId('shell').className).toContain(
-      '[--chat-veil:color-mix(in_oklab,var(--chat-surface)_70%,transparent)]',
+    // Rise and margin match, so the ramp starts exactly where resting content
+    // ends; anything shorter dims the last row on a still transcript.
+    expect(dock.className).toContain('mt-(--chat-fade)');
+    expect(dock.className).toContain('before:-top-(--chat-fade)');
+    expect(dock.className).toContain(
+      'before:[mask-image:linear-gradient(to_bottom,transparent,rgb(0_0_0/var(--chat-veil))_calc(var(--chat-fade)*3))]',
     );
+    expect(dock.className).toContain('pb-(--chat-gutter)');
+    expect(screen.getByTestId('content').className).not.toContain('pb-');
+    expect(screen.getByTestId('shell').className).toContain('[--chat-fade:1.5rem]');
+    expect(screen.getByTestId('shell').className).toContain('[--chat-veil:70%]');
   });
 
   it('anchors the scroll button on the dock, not the page', () => {
@@ -140,5 +144,34 @@ describe('ChatShell', () => {
     // The panel floats inside the stage, below the bars: insetting a bar only
     // notches the top edge of the page.
     expect(screen.getByTestId('bar').className).not.toContain('pe-(--chat-inset-end)');
+  });
+});
+
+describe('ChatShell.Turn', () => {
+  afterEach(cleanup);
+
+  it('reserves the reply room only while the turn holds it, and lets a restored turn skip the opening', () => {
+    render(
+      <>
+        <ChatShell.Turn data-testid="settled" opensTurn />
+        <ChatShell.Turn data-testid="live" opensTurn holdsRoom />
+        <ChatShell.Turn data-testid="restored" opensTurn holdsRoom restored />
+        <ChatShell.Turn data-testid="orphan" />
+      </>,
+    );
+
+    const settled = screen.getByTestId('settled').className;
+    expect(settled).toContain('min-h-0');
+    expect(settled).toContain('duration-[1500ms]');
+    expect(settled).not.toContain('70cqh');
+
+    const live = screen.getByTestId('live').className;
+    expect(live).toContain('min-h-[70cqh]');
+    expect(live).toContain('starting:min-h-0');
+    expect(live).toContain('duration-[440ms]');
+    expect(live).not.toContain('duration-[1500ms]');
+
+    expect(screen.getByTestId('restored').className).toContain('transition-none');
+    expect(screen.getByTestId('orphan').className).not.toContain('min-h');
   });
 });

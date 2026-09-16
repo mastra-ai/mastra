@@ -23,12 +23,13 @@ import { createHonoServer } from '@mastra/deployer/server';
 import { DefaultStorage } from '@mastra/libsql';
 import { Observability } from '@mastra/observability';
 import { MockLanguageModelV1 } from 'ai/test';
-import { execaCommand } from 'execa';
+import { execa, execaCommand } from 'execa';
 import type { ResultPromise } from 'execa';
 import { Inngest } from 'inngest';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { z } from 'zod';
+import { ensureInngestCliBinary } from './__tests__/inngest-cli';
 import type { InngestWorkflow } from './workflow';
 import { init, serve as inngestServe } from './index';
 
@@ -191,8 +192,9 @@ async function resetInngest(expectedFnIds: string[] = []) {
   }
 
   // Start inngest-cli dev server
-  standaloneInngestProcess = execaCommand(
-    `npx inngest-cli dev -p 4000 -u http://localhost:4001/inngest/api --poll-interval=1 --retry-interval=1`,
+  standaloneInngestProcess = execa(
+    ensureInngestCliBinary(),
+    ['dev', '-p', '4000', '-u', 'http://localhost:4001/inngest/api', '--poll-interval=1', '--retry-interval=1'],
     { cwd: import.meta.dirname, stdio: 'ignore', reject: false },
   );
 
@@ -266,8 +268,10 @@ describe('MastraInngestWorkflow', () => {
   let globServer: any;
 
   beforeEach<LocalTestContext>(async ctx => {
-    ctx.inngestPort = 4100;
-    ctx.handlerPort = 4101;
+    // Must match the ports used by `resetInngest()` / docker-compose.yaml (4000/4001).
+    // The durable-agent suites intentionally use 4100/4101 for their own isolated infra.
+    ctx.inngestPort = 4000;
+    ctx.handlerPort = 4001;
 
     globServer?.close();
 
@@ -10127,6 +10131,90 @@ describe('MastraInngestWorkflow', () => {
 
         srv.close();
       });
+
+      it('propagates a nested step resume label into the parent snapshot', async ctx => {
+        // A step inside a nested workflow suspends with `resumeLabel`. That label
+        // must survive the nested->parent suspend boundary, otherwise the parent
+        // snapshot only names the wrapping step and a caller has no way to target
+        // the actual parked leaf — which is exactly how concurrently suspended
+        // tool calls become impossible to resume individually.
+        const inngest = new Inngest({
+          id: 'mastra',
+          baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        });
+
+        const { createWorkflow, createStep } = init(inngest);
+
+        const innerStep = createStep({
+          id: 'inner-approval',
+          inputSchema: z.object({ item: z.string() }),
+          outputSchema: z.object({ item: z.string(), ok: z.boolean() }),
+          suspendSchema: z.object({ msg: z.string() }),
+          resumeSchema: z.object({ ok: z.boolean() }),
+          execute: async ({ inputData, resumeData, suspend }) => {
+            if (!resumeData) {
+              await suspend({ msg: `approve ${inputData.item}` }, { resumeLabel: 'nested-approve' });
+              return { item: inputData.item, ok: false };
+            }
+            return { item: inputData.item, ok: resumeData.ok };
+          },
+        });
+
+        const innerWorkflow = createWorkflow({
+          id: 'inner-label-wf',
+          inputSchema: z.object({ item: z.string() }),
+          outputSchema: z.object({ item: z.string(), ok: z.boolean() }),
+          options: { validateInputs: false },
+        })
+          .then(innerStep)
+          .commit();
+
+        const outerWorkflow = createWorkflow({
+          id: 'outer-label-wf',
+          inputSchema: z.object({ item: z.string() }),
+          outputSchema: z.object({ item: z.string(), ok: z.boolean() }),
+          options: { validateInputs: false },
+        })
+          .then(innerWorkflow)
+          .commit();
+
+        const storage = new DefaultStorage({ id: 'test-storage', url: ':memory:' });
+        const mastra = new Mastra({
+          storage,
+          workflows: { 'outer-label-wf': outerWorkflow, 'inner-label-wf': innerWorkflow },
+          server: {
+            apiRoutes: [
+              {
+                path: '/inngest/api',
+                method: 'ALL',
+                createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
+              },
+            ],
+          },
+        });
+
+        const app = await createHonoServer(mastra);
+        const srv = (globServer = serve({ fetch: app.fetch, port: (ctx as any).handlerPort }));
+        await resetInngest();
+
+        try {
+          const run = await outerWorkflow.createRun();
+          const result = await run.start({ inputData: { item: 'gadget' } });
+          expect(result.status).toBe('suspended');
+
+          const store = await storage.getStore('workflows');
+          const snapshot: any = await store?.loadWorkflowSnapshot({
+            workflowName: 'outer-label-wf',
+            runId: run.runId,
+          });
+
+          expect(snapshot?.resumeLabels?.['nested-approve']).toBeDefined();
+          // The label resolves to the outer step wrapping the nested workflow.
+          expect(snapshot?.resumeLabels?.['nested-approve']?.stepId).toBe('inner-label-wf');
+        } finally {
+          srv.close();
+        }
+      });
     });
 
     describe('Workflow results', () => {
@@ -14886,10 +14974,19 @@ async function startSharedInngest(expectedFnIds: string[] = []) {
     return;
   }
 
-  // Start the inngest dev server as a background process using the npm CLI
+  // Start the inngest dev server as a background process
   console.log('[startSharedInngest] Starting Inngest dev server via inngest-cli...');
-  sharedInngestProcess = execaCommand(
-    `npx inngest-cli dev -p ${SHARED_INNGEST_PORT} -u http://localhost:${SHARED_HANDLER_PORT}/inngest/api --poll-interval=1 --retry-interval=1`,
+  sharedInngestProcess = execa(
+    ensureInngestCliBinary(),
+    [
+      'dev',
+      '-p',
+      String(SHARED_INNGEST_PORT),
+      '-u',
+      `http://localhost:${SHARED_HANDLER_PORT}/inngest/api`,
+      '--poll-interval=1',
+      '--retry-interval=1',
+    ],
     { cwd: import.meta.dirname, stdio: 'ignore', reject: false },
   );
 

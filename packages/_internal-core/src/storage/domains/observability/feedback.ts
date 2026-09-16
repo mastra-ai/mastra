@@ -16,12 +16,14 @@ import {
   deltaCursorSchema,
   listModeSchema,
   normalizeObservabilityListArgs,
+  organizationIdField,
   paginationArgsSchema,
   paginationInfoSchema,
   percentileField,
   percentileBucketValueField,
   percentilesSchema,
   refineObservabilityListMode,
+  resourceIdField,
   sortDirectionSchema,
   spanIdField,
   traceIdField,
@@ -38,6 +40,8 @@ const feedbackValueField = z
   .describe('Feedback value (rating number or correction text)');
 const feedbackCommentField = z.string().describe('Additional comment or context');
 const feedbackUserIdField = z.string().describe('User who provided the feedback');
+export const feedbackReviewStatusSchema = z.enum(['needs-review', 'reviewed']);
+export type FeedbackReviewStatus = z.infer<typeof feedbackReviewStatusSchema>;
 
 function normalizeLegacyFeedbackActor<T>(input: T): T {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
@@ -93,6 +97,13 @@ const feedbackRecordObjectSchema = z.object({
 
   // User-defined metadata (context fields stored here)
   metadata: z.record(z.string(), z.unknown()).nullish().describe('User-defined metadata'),
+
+  reviewStatus: feedbackReviewStatusSchema.describe('Feedback review workflow status'),
+});
+
+/** Feedback record fields accepted on creation: `reviewStatus` is optional and defaults to `needs-review` in storage */
+const createFeedbackRecordObjectSchema = feedbackRecordObjectSchema.extend({
+  reviewStatus: feedbackReviewStatusSchema.optional().describe('Feedback review workflow status'),
 });
 
 export const feedbackRecordSchema = z
@@ -139,7 +150,9 @@ export type FeedbackInput = z.infer<typeof feedbackInputSchema>;
 // ============================================================================
 
 /** Schema for creating a feedback record */
-export const createFeedbackRecordSchema = feedbackRecordSchema;
+export const createFeedbackRecordSchema = z
+  .object(createFeedbackRecordObjectSchema.shape)
+  .describe('Feedback record accepted on creation');
 
 /** Feedback record for creation */
 export type CreateFeedbackRecord = z.infer<typeof createFeedbackRecordSchema>;
@@ -147,7 +160,7 @@ export type CreateFeedbackRecord = z.infer<typeof createFeedbackRecordSchema>;
 /** Schema for createFeedback operation arguments */
 export const createFeedbackArgsSchema = z
   .object({
-    feedback: z.preprocess(normalizeLegacyFeedbackActor, feedbackRecordObjectSchema),
+    feedback: z.preprocess(normalizeLegacyFeedbackActor, createFeedbackRecordObjectSchema),
   })
   .describe('Arguments for creating feedback');
 
@@ -157,7 +170,7 @@ export type CreateFeedbackArgs = z.infer<typeof createFeedbackArgsSchema>;
 /** Schema for createFeedback operation body in client/server */
 export const createFeedbackBodySchema = z
   .object({
-    feedback: feedbackRecordObjectSchema.omit({ timestamp: true }),
+    feedback: createFeedbackRecordObjectSchema.omit({ timestamp: true }),
   })
   .describe('Arguments for creating feedback');
 
@@ -175,12 +188,52 @@ export type CreateFeedbackResponse = z.infer<typeof createFeedbackResponseSchema
 /** Schema for batchCreateFeedback operation arguments */
 export const batchCreateFeedbackArgsSchema = z
   .object({
-    feedbacks: z.array(z.preprocess(normalizeLegacyFeedbackActor, feedbackRecordObjectSchema)),
+    feedbacks: z.array(z.preprocess(normalizeLegacyFeedbackActor, createFeedbackRecordObjectSchema)),
   })
   .describe('Arguments for batch recording feedback');
 
 /** Arguments for batch creating feedback */
 export type BatchCreateFeedbackArgs = z.infer<typeof batchCreateFeedbackArgsSchema>;
+
+/** Schema for updating a feedback record's review status */
+export const updateFeedbackReviewStatusArgsSchema = z
+  .object({
+    feedbackId: z.string(),
+    reviewStatus: feedbackReviewStatusSchema,
+  })
+  .describe("Arguments for updating a feedback record's review status");
+
+/** Arguments for updating a feedback record's review status */
+export type UpdateFeedbackReviewStatusArgs = z.infer<typeof updateFeedbackReviewStatusArgsSchema>;
+
+// ============================================================================
+// Delete Feedback Schemas
+// ============================================================================
+
+const DELETE_FEEDBACK_MAX_IDS = 1000;
+
+/** Schema for deleteFeedback operation arguments */
+export const deleteFeedbackArgsSchema = z
+  .object({
+    feedbackIds: z
+      .array(z.string())
+      .max(DELETE_FEEDBACK_MAX_IDS)
+      .describe(`IDs of the feedback events to delete (maximum ${DELETE_FEEDBACK_MAX_IDS})`),
+    organizationId: organizationIdField.optional().describe('Restrict deletion to feedback in this organization'),
+    resourceId: resourceIdField.optional().describe('Restrict deletion to feedback for this resource'),
+  })
+  .describe('Arguments for deleting feedback by id');
+
+/** Arguments for deleting feedback */
+export type DeleteFeedbackArgs = z.infer<typeof deleteFeedbackArgsSchema>;
+
+/** Schema for deleteFeedback operation response */
+export const deleteFeedbackResponseSchema = z
+  .object({ success: z.boolean() })
+  .describe('Response from deleting feedback');
+
+/** Response from deleting feedback */
+export type DeleteFeedbackResponse = z.infer<typeof deleteFeedbackResponseSchema>;
 
 // ============================================================================
 // Feedback Filter Schema
@@ -201,6 +254,7 @@ const feedbackFilterObjectSchema = z.object({
    */
   source: feedbackSourceField.optional(),
   feedbackUserId: feedbackUserIdField.optional(),
+  reviewStatus: feedbackReviewStatusSchema.optional(),
 });
 
 export const feedbackFilterSchema = z

@@ -19,11 +19,18 @@ import { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
 const TOPIC_DISPATCH = 'background-tasks';
 const TOPIC_RESULT = 'background-tasks-result';
 const WORKER_GROUP = 'background-task-workers';
+const SHUTDOWN_GRACE_PERIOD_MS = 5_000;
+const SHUTDOWN_ABORT_MESSAGE = 'Background task manager is shutting down';
 
 export class BackgroundTaskManager {
   private pubsub!: PubSub;
+  private readonly workerId = randomUUID();
+  private readonly processAffineDispatchTopic = `${TOPIC_DISPATCH}:${this.workerId}`;
   config: Required<
-    Pick<BackgroundTaskManagerConfig, 'globalConcurrency' | 'perAgentConcurrency' | 'backpressure' | 'defaultTimeoutMs'>
+    Pick<
+      BackgroundTaskManagerConfig,
+      'globalConcurrency' | 'perAgentConcurrency' | 'backpressure' | 'defaultTimeoutMs' | 'recoverStaleTasksOnStart'
+    >
   > &
     BackgroundTaskManagerConfig;
 
@@ -44,6 +51,17 @@ export class BackgroundTaskManager {
   /** @internal — read by the workflow-engine step bodies in workflow.ts */
   activeAbortControllers: Map<string, AbortController> = new Map();
 
+  // Process-affine executors are runtime closures and cannot participate in
+  // storage-wide concurrency accounting without persisted ownership/leases.
+  // Keep their admission and queue ownership local to the manager that owns
+  // the closure so abandoned rows from another process cannot block them.
+  // TODO: Replace this POC boundary with persisted ownership, leases,
+  // heartbeats, atomic claims, and fenced terminal writes before treating
+  // process-affine work as recoverable across worker crashes.
+  private localReservations = new Map<string, string>();
+  private localPendingTaskIds = new Set<string>();
+  private drainingPending = false;
+
   // Pubsub callbacks (kept for unsubscribe)
   private workerCallback?: EventCallback;
   private resultCallback?: EventCallback;
@@ -61,13 +79,24 @@ export class BackgroundTaskManager {
   // before doing work.
   private initPromise?: Promise<void>;
 
+  // Serializes teardown and makes repeated shutdown calls safe. Shutdown may
+  // race the constructor-owned, fire-and-forget init path, so cleanup must not
+  // run until initialization has either completed or failed.
+  private shutdownPromise?: Promise<void>;
+
+  // Wall-clock deadline shared by every step of the teardown sequence. Set once
+  // when shutdown begins; steps that start after it has passed fire their
+  // cleanup without blocking on it.
+  private shutdownDeadline?: number;
+
   constructor(config: BackgroundTaskManagerConfig = { enabled: false }) {
     this.config = {
+      ...config,
       globalConcurrency: config.globalConcurrency ?? 10,
       perAgentConcurrency: config.perAgentConcurrency ?? 5,
       backpressure: config.backpressure ?? 'queue',
       defaultTimeoutMs: config.defaultTimeoutMs ?? 300_000,
-      ...config,
+      recoverStaleTasksOnStart: config.recoverStaleTasksOnStart ?? true,
     };
   }
 
@@ -88,6 +117,9 @@ export class BackgroundTaskManager {
   }
 
   async init(pubsub: PubSub): Promise<void> {
+    if (this.shuttingDown) {
+      throw new Error('BackgroundTaskManager is shutting down, cannot initialize');
+    }
     if (this.initPromise) return this.initPromise;
     this.initPromise = this.#doInit(pubsub);
     return this.initPromise;
@@ -103,7 +135,12 @@ export class BackgroundTaskManager {
     // to receive completion/failure notifications for dispatched tasks.
     this.resultCallback = async (event: Event, ack?: () => Promise<void>) => {
       if (event.type === 'task.completed' || event.type === 'task.failed') {
-        await this.handleResult(event);
+        try {
+          await this.handleResult(event);
+        } finally {
+          await ack?.();
+        }
+        return;
       }
       await ack?.();
     };
@@ -111,14 +148,19 @@ export class BackgroundTaskManager {
     if (!isProducerOnly) {
       // Worker: subscribes with group so only one worker processes each task.
       this.workerCallback = async (event: Event, ack?: () => Promise<void>) => {
+        // A grouped delivery consumed while this process is shutting down must
+        // remain unacked so a durable broker can redeliver it to a live worker.
+        if (this.shuttingDown) return;
+
+        let handled = true;
         if (event.type === 'task.dispatch' || event.type === 'task.restart') {
-          await this.handleDispatch(event);
+          handled = await this.handleDispatch(event);
         } else if (event.type === 'task.resume') {
-          await this.handleResume(event);
+          handled = await this.handleResume(event);
         } else if (event.type === 'task.cancel') {
           this.handleCancel(event);
         }
-        await ack?.();
+        if (handled) await ack?.();
       };
 
       // Register the workflow BEFORE subscribing the worker so that any
@@ -148,19 +190,40 @@ export class BackgroundTaskManager {
       }
 
       await this.pubsub.subscribe(TOPIC_DISPATCH, this.workerCallback, { group: WORKER_GROUP });
+      await this.pubsub.subscribe(this.processAffineDispatchTopic, this.workerCallback);
+
+      if (this.shuttingDown) {
+        await this.#releaseLateInitSubscriptions([
+          [TOPIC_DISPATCH, this.workerCallback],
+          [this.processAffineDispatchTopic, this.workerCallback],
+        ]);
+        return;
+      }
+
+      if (this.config.recoverStaleTasksOnStart) {
+        // Recover stale tasks from a previous process — only workers should
+        // attempt recovery since they own execution.
+        await this.recoverStaleTasks();
+      }
     }
 
     await this.pubsub.subscribe(TOPIC_RESULT, this.resultCallback);
-
-    if (!isProducerOnly) {
-      // Recover stale tasks from a previous process — only workers should
-      // attempt recovery since they own execution.
-      await this.recoverStaleTasks();
+    if (this.shuttingDown) {
+      // Producer mode never registers a worker callback, so only include the
+      // dispatch subscriptions when they actually exist.
+      const lateSubscriptions: Array<[string, EventCallback]> = [];
+      if (this.workerCallback) {
+        lateSubscriptions.push([TOPIC_DISPATCH, this.workerCallback]);
+        lateSubscriptions.push([this.processAffineDispatchTopic, this.workerCallback]);
+      }
+      lateSubscriptions.push([TOPIC_RESULT, this.resultCallback]);
+      await this.#releaseLateInitSubscriptions(lateSubscriptions);
+      return;
     }
 
     // Start periodic cleanup if configured
     const cleanupConfig = this.config.cleanup;
-    if (cleanupConfig) {
+    if (cleanupConfig && !this.shuttingDown) {
       const intervalMs = cleanupConfig.cleanupIntervalMs ?? 60_000;
       this.cleanupInterval = setInterval(() => {
         void this.cleanup();
@@ -183,6 +246,21 @@ export class BackgroundTaskManager {
    */
   deregisterTaskContext(taskId: string): void {
     this.taskContexts.delete(taskId);
+  }
+
+  /** @internal — called by the workflow step immediately before executor invocation. */
+  registerActiveAbortController(taskId: string, controller: AbortController): boolean {
+    if (this.shuttingDown) {
+      controller.abort(new Error(SHUTDOWN_ABORT_MESSAGE));
+      return false;
+    }
+    this.activeAbortControllers.set(taskId, controller);
+    return true;
+  }
+
+  /** @internal — read by workflow error classification during graceful shutdown. */
+  isShuttingDown(): boolean {
+    return this.shuttingDown;
   }
 
   /**
@@ -257,10 +335,29 @@ export class BackgroundTaskManager {
     const storage = await this.getStorage();
     await storage.createTask(task);
 
-    const canRun = await this.checkConcurrency(task.agentId);
+    const isProcessAffine = Boolean(context);
+    const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
 
     if (canRun) {
-      await this.dispatch(task);
+      try {
+        await this.dispatch(task);
+      } catch (error) {
+        const failed = await storage.updateTask(
+          task.id,
+          {
+            status: 'failed',
+            error: { message: error instanceof Error ? error.message : String(error) },
+            completedAt: new Date(),
+          },
+          { expectedStatus: 'pending' },
+        );
+        if (failed) {
+          this.releaseLocalSlot(task.id);
+          this.deregisterTaskContext(task.id);
+          void this.drainPending();
+        }
+        throw error;
+      }
       return { task };
     }
 
@@ -278,7 +375,10 @@ export class BackgroundTaskManager {
 
       case 'queue':
       default:
-        // Task stays pending in storage, will be dispatched when a slot opens
+        // Queue ownership stays local. A persisted pending row does not carry
+        // enough information to distinguish an invocation-bound closure from
+        // a portable static executor in another process.
+        this.localPendingTaskIds.add(task.id);
         return { task };
     }
   }
@@ -286,83 +386,85 @@ export class BackgroundTaskManager {
   async cancel(taskId: string): Promise<void> {
     if (this.initPromise) await this.initPromise;
     const storage = await this.getStorage();
-    const task = await storage.getTask(taskId);
+    let task = await storage.getTask(taskId);
     if (!task) {
       throw new Error(`Task not found: ${taskId}`);
     }
 
-    if (
-      task.status === 'completed' ||
-      task.status === 'failed' ||
-      task.status === 'cancelled' ||
-      task.status === 'timed_out'
-    ) {
-      return; // no-op for terminal states
-    }
+    while (true) {
+      if (
+        task.status === 'completed' ||
+        task.status === 'failed' ||
+        task.status === 'cancelled' ||
+        task.status === 'timed_out'
+      ) {
+        return; // no-op for terminal states
+      }
 
-    if (task.status === 'pending') {
-      await storage.updateTask(taskId, { status: 'cancelled', completedAt: new Date() });
-      const cancelledTask = await storage.getTask(taskId);
-      if (cancelledTask) await this.publishLifecycleEvent('task.cancelled', cancelledTask);
-      this.deregisterTaskContext(taskId);
-      return;
-    }
+      const previousStatus = task.status;
+      const isProcessAffine = this.taskContexts.has(taskId);
+      const cancelled = await storage.updateTask(
+        taskId,
+        { status: 'cancelled', completedAt: new Date() },
+        { expectedStatus: previousStatus },
+      );
+      if (!cancelled) {
+        task = await storage.getTask(taskId);
+        if (!task) return;
+        continue;
+      }
 
-    if (task.status === 'suspended') {
-      // No active executor or AbortController to tear down — the task is
-      // sitting on a workflow snapshot. Flip storage, publish, and tell the
-      // workflow run to cancel so the snapshot is cleaned up too.
-      await storage.updateTask(taskId, { status: 'cancelled', completedAt: new Date() });
-      if (this.#mastra) {
-        try {
-          const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
-          const wrapper = await workflow.createRun({ runId: taskId });
-          await wrapper.cancel();
-        } catch (err) {
-          this.#mastra?.getLogger?.()?.warn(`background-task workflow cancel failed for ${taskId}:`, err as any);
+      if (previousStatus === 'pending') {
+        this.localPendingTaskIds.delete(taskId);
+        this.releaseLocalSlot(taskId);
+      }
+
+      if (previousStatus === 'running') {
+        // Abort the running tool
+        const controller = this.activeAbortControllers.get(taskId);
+        if (controller) {
+          controller.abort(new Error('Task cancelled'));
+          this.activeAbortControllers.delete(taskId);
         }
       }
-      const cancelledTask = await storage.getTask(taskId);
-      if (cancelledTask) await this.publishLifecycleEvent('task.cancelled', cancelledTask);
-      this.deregisterTaskContext(taskId);
-      return;
-    }
 
-    if (task.status === 'running') {
-      await storage.updateTask(taskId, { status: 'cancelled', completedAt: new Date() });
-
-      // Abort the running tool
-      const controller = this.activeAbortControllers.get(taskId);
-      if (controller) {
-        controller.abort(new Error('Task cancelled'));
-        this.activeAbortControllers.delete(taskId);
-      }
-
-      // Also cancel the workflow run so workflow storage reflects the
-      // cancellation (run status flips to 'canceled' and the workflow's
-      // abortSignal fires — redundant with the local AbortController above
-      // but keeps run history clean and propagates cross-process via the
-      // workflow.cancel pubsub event).
-      if (this.#mastra) {
-        try {
-          const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
-          const wrapper = await workflow.createRun({ runId: taskId });
-          await wrapper.cancel();
-        } catch (err) {
-          this.#mastra?.getLogger?.()?.warn(`background-task workflow cancel failed for ${taskId}:`, err as any);
+      if (previousStatus === 'running' || previousStatus === 'suspended') {
+        // Cancel the workflow run so workflow storage reflects the
+        // cancellation and any stored suspended snapshot is cleaned up.
+        if (this.#mastra) {
+          try {
+            const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
+            const wrapper = await workflow.createRun({ runId: taskId });
+            await wrapper.cancel();
+          } catch (err) {
+            this.#mastra?.getLogger?.()?.warn(`background-task workflow cancel failed for ${taskId}:`, err as any);
+          }
         }
       }
 
       const cancelledTask = await storage.getTask(taskId);
-      if (cancelledTask) await this.publishLifecycleEvent('task.cancelled', cancelledTask);
+      if (cancelledTask) {
+        await this.publishLifecycleEvent('task.cancelled', cancelledTask);
+        try {
+          await this.config.onTaskCancelled?.(cancelledTask);
+        } catch (error) {
+          this.#mastra
+            ?.getLogger?.()
+            ?.warn(`background-task cancellation callback failed for ${taskId}:`, error as any);
+        }
+      }
       this.deregisterTaskContext(taskId);
 
-      // Also publish cancel on dispatch topic for distributed worker abort
-      await this.pubsub.publish(TOPIC_DISPATCH, {
-        type: 'task.cancel',
-        data: { taskId },
-        runId: taskId,
-      });
+      if (previousStatus === 'running') {
+        // Route cancellation to the same process that owns an invocation-bound executor.
+        const dispatchTopic = isProcessAffine ? this.processAffineDispatchTopic : TOPIC_DISPATCH;
+        await this.pubsub.publish(dispatchTopic, {
+          type: 'task.cancel',
+          data: { taskId },
+          runId: taskId,
+        });
+      }
+      return;
     }
   }
 
@@ -376,6 +478,9 @@ export class BackgroundTaskManager {
    * resumed run.
    */
   async resume(taskId: string, resumeData?: unknown): Promise<BackgroundTask> {
+    if (this.shuttingDown) {
+      throw new Error('BackgroundTaskManager is shutting down, cannot resume tasks');
+    }
     if (!this.#mastra) {
       throw new Error('Mastra is not registered with this manager');
     }
@@ -391,7 +496,8 @@ export class BackgroundTaskManager {
       throw new Error(`Cannot resume task in status '${task.status}' (expected 'suspended')`);
     }
 
-    const canRun = await this.checkConcurrency(task.agentId);
+    const isProcessAffine = this.taskContexts.has(taskId);
+    const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
     if (!canRun) {
       // Resume sits outside the queue/fallback-sync paths — there's no
       // synchronous caller to fall back to, and silently leaving the task
@@ -404,15 +510,19 @@ export class BackgroundTaskManager {
     // lazy worker start for the library-mode process-restart case.
     await this.#ensureExecutionWorkersStarted();
 
-    // Hand off to the worker subscriber. `task.resume` rides the same
-    // `TOPIC_DISPATCH` + `WORKER_GROUP` exactly-once channel as
-    // `task.dispatch`, so any worker (including a different process from
-    // the one that suspended the task) can pick it up.
-    await this.pubsub.publish(TOPIC_DISPATCH, {
-      type: 'task.resume',
-      data: { taskId, resumeData },
-      runId: taskId,
-    });
+    // Resume invocation-bound executors on their owning manager. A task
+    // without local context remains portable through the shared worker group.
+    const dispatchTopic = isProcessAffine ? this.processAffineDispatchTopic : TOPIC_DISPATCH;
+    try {
+      await this.pubsub.publish(dispatchTopic, {
+        type: 'task.resume',
+        data: { taskId, resumeData },
+        runId: taskId,
+      });
+    } catch (error) {
+      if (isProcessAffine) this.releaseLocalSlot(taskId);
+      throw error;
+    }
 
     return task;
   }
@@ -425,6 +535,9 @@ export class BackgroundTaskManager {
    *
    */
   async restart(taskId: string, context?: TaskContext): Promise<BackgroundTask> {
+    if (this.shuttingDown) {
+      throw new Error('BackgroundTaskManager is shutting down, cannot restart tasks');
+    }
     if (!this.#mastra) {
       throw new Error('Mastra is not registered with this manager');
     }
@@ -444,7 +557,8 @@ export class BackgroundTaskManager {
       this.registerTaskContext(task.id, context);
     }
 
-    const canRun = await this.checkConcurrency(task.agentId);
+    const isProcessAffine = this.taskContexts.has(taskId);
+    const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
     if (!canRun) {
       // Restart sits outside the queue/fallback-sync paths — there's no
       // synchronous caller to fall back to, and silently leaving the task
@@ -453,7 +567,12 @@ export class BackgroundTaskManager {
       throw new Error(`Concurrency limit reached, cannot restart task "${taskId}" — retry once a slot is available`);
     }
 
-    await this.dispatch(task, true);
+    try {
+      await this.dispatch(task, true);
+    } catch (error) {
+      if (isProcessAffine) this.releaseLocalSlot(taskId);
+      throw error;
+    }
 
     return task;
   }
@@ -500,6 +619,7 @@ export class BackgroundTaskManager {
       timeoutMs?: number;
       onProgress?: (elapsedMs: number) => void;
       progressIntervalMs?: number;
+      abortSignal?: AbortSignal;
     },
   ): Promise<BackgroundTask> {
     const storage = await this.getStorage();
@@ -516,28 +636,45 @@ export class BackgroundTaskManager {
 
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      let progressInterval: ReturnType<typeof setInterval> | undefined;
+      let pollInterval: ReturnType<typeof setInterval> | undefined;
 
-      const timeout = options?.timeoutMs
+      const cleanup = () => {
+        if (pollInterval) clearInterval(pollInterval);
+        if (timeout) clearTimeout(timeout);
+        if (progressInterval) clearInterval(progressInterval);
+        options?.abortSignal?.removeEventListener('abort', handleAbort);
+      };
+      const handleAbort = () => {
+        cleanup();
+        reject(options?.abortSignal?.reason ?? new Error('Background task wait aborted'));
+      };
+
+      if (options?.abortSignal?.aborted) {
+        handleAbort();
+        return;
+      }
+      options?.abortSignal?.addEventListener('abort', handleAbort, { once: true });
+
+      timeout = options?.timeoutMs
         ? setTimeout(() => {
-            clearInterval(pollInterval);
-            if (progressInterval) clearInterval(progressInterval);
+            cleanup();
             reject(new Error('Timed out waiting for background task'));
           }, options.timeoutMs)
         : undefined;
 
-      const progressInterval = options?.onProgress
+      progressInterval = options?.onProgress
         ? setInterval(() => {
             options.onProgress!(Date.now() - startTime);
           }, options.progressIntervalMs ?? 3000)
         : undefined;
 
-      const pollInterval = setInterval(async () => {
+      pollInterval = setInterval(async () => {
         for (const id of taskIds) {
           const task = await storage.getTask(id);
           if (task && isTerminal(task.status)) {
-            clearInterval(pollInterval);
-            if (timeout) clearTimeout(timeout);
-            if (progressInterval) clearInterval(progressInterval);
+            cleanup();
             resolve(task);
             return;
           }
@@ -571,10 +708,11 @@ export class BackgroundTaskManager {
     resourceId?: string;
     taskId?: string;
     abortSignal?: AbortSignal;
+    includeExisting?: boolean;
   }): ReadableStream<Record<string, unknown>> {
     const manager = this;
     const pubsub = this.pubsub;
-    const { agentId, runId, threadId, resourceId, abortSignal, taskId } = options ?? {};
+    const { agentId, runId, threadId, resourceId, abortSignal, taskId, includeExisting = true } = options ?? {};
 
     const EVENT_STATUS_MAP: Record<string, BackgroundTaskStatus> = {
       'task.running': 'running',
@@ -658,18 +796,24 @@ export class BackgroundTaskManager {
           }
         };
 
-        void pubsub.subscribe(TOPIC_RESULT, handler);
+        await pubsub.subscribe(TOPIC_RESULT, handler);
 
-        abortSignal?.addEventListener('abort', () => {
+        const close = () => {
           void pubsub.unsubscribe(TOPIC_RESULT, handler);
           try {
             controller.close();
           } catch {
             // Already closed
           }
-        });
+        };
+        if (abortSignal?.aborted) {
+          close();
+          return;
+        }
+        abortSignal?.addEventListener('abort', close, { once: true });
 
         // 2. Emit snapshot of existing in-flight tasks (running + suspended).
+        if (!includeExisting) return;
         try {
           const storage = await manager.getStorage();
           if (taskId) {
@@ -724,23 +868,169 @@ export class BackgroundTaskManager {
     });
   }
 
-  async shutdown(): Promise<void> {
+  /**
+   * @param options.deadline - Absolute wall-clock deadline (ms since epoch) to
+   *   bound teardown by. `Mastra.shutdown()` passes the deadline shared with
+   *   its workflow drain so the two do not stack. Defaults to
+   *   `SHUTDOWN_GRACE_PERIOD_MS` from now when called standalone.
+   */
+  shutdown(options?: { deadline?: number }): Promise<void> {
+    if (this.shutdownPromise) return this.shutdownPromise;
     this.shuttingDown = true;
+    this.shutdownDeadline = options?.deadline ?? Date.now() + SHUTDOWN_GRACE_PERIOD_MS;
+    this.shutdownPromise = this.#shutdown();
+    return this.shutdownPromise;
+  }
+
+  async #shutdown(): Promise<void> {
+    // Stop an already-running cleanup loop immediately. Init may still be in
+    // flight and install one later, so repeat this check after awaiting it.
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = undefined;
+    }
+
+    // `Mastra` starts init without awaiting it. Give initialization a bounded
+    // chance to settle; if it completes later, #doInit observes shuttingDown
+    // and releases any subscription it installed after this teardown pass.
+    // Initialization failures are handled by Mastra's original init catch.
+    if (this.initPromise) {
+      await this.#waitForShutdownStep(
+        'background task manager initialization',
+        this.initPromise.catch(() => {}),
+      );
+    }
+
+    // Abort user code first, without waiting on storage or a remote broker.
+    // Retryable running tasks intentionally remain `running` in storage so
+    // the next process can recover them through recoverStaleTasks(). Tasks
+    // without retries retain the existing terminal cancellation behavior.
+    const activeTaskIds = [...this.activeAbortControllers.keys()];
+    this.#abortActiveControllers();
+    const cancellationResults = await this.#waitForShutdownStep(
+      'background task cancellation',
+      Promise.allSettled(activeTaskIds.map(taskId => this.#cancelTaskForShutdown(taskId))),
+    );
+    cancellationResults?.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.#mastra
+          ?.getLogger?.()
+          ?.warn(`Failed to cancel background task ${activeTaskIds[index]} during shutdown:`, result.reason as any);
+      }
+    });
 
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = undefined;
     }
 
+    const subscriptions: Array<[string, EventCallback]> = [];
     if (this.workerCallback) {
-      await this.pubsub.unsubscribe(TOPIC_DISPATCH, this.workerCallback);
+      subscriptions.push([TOPIC_DISPATCH, this.workerCallback]);
+      subscriptions.push([this.processAffineDispatchTopic, this.workerCallback]);
     }
-    if (this.resultCallback) {
-      await this.pubsub.unsubscribe(TOPIC_RESULT, this.resultCallback);
-    }
+    if (this.resultCallback) subscriptions.push([TOPIC_RESULT, this.resultCallback]);
+    const unsubscribeResults = await this.#waitForShutdownStep(
+      'background task subscription cleanup',
+      Promise.allSettled(subscriptions.map(([topic, callback]) => this.pubsub.unsubscribe(topic, callback))),
+    );
+    unsubscribeResults?.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.#mastra
+          ?.getLogger?.()
+          ?.warn(
+            `Failed to unsubscribe from ${subscriptions[index]?.[0]} during background task shutdown:`,
+            result.reason,
+          );
+      }
+    });
+
+    // Defensive final sweep for any workflow attempt that was already between
+    // awaits when shutdown began. New registrations are rejected atomically by
+    // registerActiveAbortController().
+    this.#abortActiveControllers();
 
     this.taskContexts.clear();
-    await this.pubsub.flush();
+    this.localReservations.clear();
+    this.localPendingTaskIds.clear();
+    this.staticExecutors.clear();
+    if (this.initPromise) {
+      await this.#waitForShutdownStep('background task pubsub flush', this.pubsub.flush());
+    }
+  }
+
+  async #cancelTaskForShutdown(taskId: string): Promise<void> {
+    const storage = await this.getStorage();
+    const task = await storage.getTask(taskId);
+    if (task?.status === 'running' && task.maxRetries > 0) return;
+    await this.cancel(taskId);
+  }
+
+  #abortActiveControllers(): void {
+    for (const controller of this.activeAbortControllers.values()) {
+      controller.abort(new Error(SHUTDOWN_ABORT_MESSAGE));
+    }
+    this.activeAbortControllers.clear();
+  }
+
+  /**
+   * Await one teardown step against the shutdown-wide deadline. Callers pass an
+   * already-started promise, so a step that finds the budget spent still runs —
+   * it just stops blocking the rest of teardown, which keeps cleanup
+   * best-effort while bounding `#shutdown()` as a whole.
+   */
+  async #waitForShutdownStep<T>(description: string, promise: Promise<T>): Promise<T | undefined> {
+    const remainingMs = this.#remainingShutdownBudgetMs();
+    if (remainingMs <= 0) {
+      void promise.catch(() => {});
+      this.#mastra?.getLogger?.()?.warn(`${description} left running in the background: the shutdown budget is spent`);
+      return undefined;
+    }
+
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    let outcome: { status: 'settled'; value: T } | { status: 'timed-out' };
+    try {
+      outcome = await Promise.race([
+        promise.then(value => ({ status: 'settled' as const, value })),
+        new Promise<{ status: 'timed-out' }>(resolve => {
+          timeoutHandle = setTimeout(() => resolve({ status: 'timed-out' }), remainingMs);
+        }),
+      ]);
+    } catch (error) {
+      this.#mastra?.getLogger?.()?.warn(`${description} failed during shutdown:`, error as any);
+      return undefined;
+    } finally {
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+    }
+
+    if (outcome.status === 'timed-out') {
+      this.#mastra
+        ?.getLogger?.()
+        ?.warn(`${description} exhausted the remaining ${remainingMs}ms of the graceful shutdown budget`);
+      return undefined;
+    }
+    return outcome.value;
+  }
+
+  #remainingShutdownBudgetMs(): number {
+    // No deadline means this ran outside `shutdown()`; fall back to the full
+    // budget rather than treating the step as already expired.
+    if (this.shutdownDeadline === undefined) return SHUTDOWN_GRACE_PERIOD_MS;
+    return this.shutdownDeadline - Date.now();
+  }
+
+  async #releaseLateInitSubscriptions(subscriptions: Array<[string, EventCallback]>): Promise<void> {
+    const results = await this.#waitForShutdownStep(
+      'late background task subscription cleanup',
+      Promise.allSettled(subscriptions.map(([topic, callback]) => this.pubsub.unsubscribe(topic, callback))),
+    );
+    results?.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.#mastra
+          ?.getLogger?.()
+          ?.warn(`Failed to release late ${subscriptions[index]?.[0]} subscription after shutdown:`, result.reason);
+      }
+    });
   }
 
   // --- Internal ---
@@ -759,6 +1049,7 @@ export class BackgroundTaskManager {
    * `recoverStaleTasks()` loops.
    */
   async #ensureExecutionWorkersStarted(): Promise<void> {
+    if (this.shuttingDown) return;
     if (!this.#mastra) return;
     try {
       await this.#mastra.__ensureExecutionWorkersStarted();
@@ -768,12 +1059,14 @@ export class BackgroundTaskManager {
   }
 
   private async dispatch(task: BackgroundTask, isRestart?: boolean): Promise<void> {
+    if (this.shuttingDown) return;
     await this.#ensureExecutionWorkersStarted();
 
-    // Publish `task.dispatch` on `TOPIC_DISPATCH` with `WORKER_GROUP`, so
-    // exactly one worker handles the task. `handleDispatch` flips the
-    // task to running and starts the per-task workflow run.
-    await this.pubsub.publish(TOPIC_DISPATCH, {
+    // Invocation-bound executors are closures owned by this manager and cannot
+    // run in another process. Static executors remain portable and use the
+    // shared competing-consumer topic.
+    const dispatchTopic = this.taskContexts.has(task.id) ? this.processAffineDispatchTopic : TOPIC_DISPATCH;
+    await this.pubsub.publish(dispatchTopic, {
       type: 'task.dispatch',
       data: {
         taskId: task.id,
@@ -796,39 +1089,81 @@ export class BackgroundTaskManager {
    * Handles a task.dispatch and task.restart events.
    * Both events are similar, but the latter is used to restart a running task.
    */
-  private async handleDispatch(event: Event): Promise<void> {
+  private async handleDispatch(event: Event): Promise<boolean> {
+    if (this.shuttingDown) return false;
     const { taskId, isRestart } = event.data;
     const deliveryAttempt = event.deliveryAttempt ?? 1;
 
     const storage = await this.getStorage();
+    if (this.shuttingDown) return false;
     const task = await storage.getTask(taskId);
+    if (this.shuttingDown) return false;
     if (!task || task.status === 'cancelled') {
+      this.releaseLocalSlot(taskId);
       this.deregisterTaskContext(taskId);
-      return;
+      return true;
     }
 
-    if (isRestart && task.status !== 'running') {
-      // Either gone or already done/cancelled by another worker. Drop the
-      // event silently — the worker group ensures exactly-once delivery, but
-      // the task may have moved on between publish and pickup.
-      return;
+    const isRunningRedelivery = task.status === 'running' && deliveryAttempt > 1;
+    const canDispatch = isRestart ? task.status === 'running' : task.status === 'pending' || isRunningRedelivery;
+
+    if (!canDispatch) {
+      // The task moved to a state this delivery cannot start. Acknowledge the
+      // stale event without clearing its context: suspended tasks still need
+      // that context to resume, and terminal result hooks may still be running.
+      return true;
     }
 
-    await storage.updateTask(taskId, { status: 'running', startedAt: new Date(), retryCount: deliveryAttempt - 1 });
+    // A broker redelivery only counts against the retry budget when a previous
+    // delivery actually started execution (the task was marked `running`, e.g.
+    // the worker crashed mid-run). A dispatch declined cleanly during shutdown
+    // leaves the task `pending`, so the worker that picks up the redelivery
+    // still gets the full retry budget.
+    const retryCount = task.status === 'running' ? deliveryAttempt - 1 : task.retryCount;
+    const started = await storage.updateTask(
+      taskId,
+      { status: 'running', startedAt: new Date(), retryCount },
+      { expectedStatus: task.status },
+    );
+    if (!started) return true;
+    if (this.shuttingDown) return false;
 
     // Publish running lifecycle event (fan-out, for stream consumers)
     const runningTask = await storage.getTask(taskId);
-    if (runningTask) await this.publishLifecycleEvent('task.running', runningTask);
+    if (!runningTask || runningTask.status !== 'running') return true;
+    await this.publishLifecycleEvent('task.running', runningTask);
+    if (this.shuttingDown) return false;
 
     // Fire-and-forget the workflow run; the workflow step body owns
     // executor invocation, retries, and suspend/resume. The local
     // execution hook still runs here so callers see `onExecution` fire.
-    if (this.#mastra) {
+    if (!this.#mastra) {
+      this.releaseLocalSlot(taskId);
+      const markedFailed = await storage.updateTask(
+        taskId,
+        {
+          status: 'failed',
+          error: { message: 'Mastra is not registered with this background task manager' },
+          completedAt: new Date(),
+        },
+        { expectedStatus: 'running' },
+      );
+      if (markedFailed) {
+        const failedTask = await storage.getTask(taskId);
+        if (failedTask?.status === 'failed') await this.publishLifecycleEvent('task.failed', failedTask);
+      }
+      void this.drainPending();
+      return true;
+    }
+
+    try {
       if (runningTask) void this.runLocalExecutionHook(runningTask);
       const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
       const prevWorkflowRun = isRestart ? await workflow.getWorkflowRunById(taskId) : undefined;
+      if (this.shuttingDown) return false;
       const shouldRestart = isRestart && prevWorkflowRun?.status === 'running';
       const run = await workflow.createRun({ runId: taskId });
+      if (this.shuttingDown) return false;
       const runPromise = shouldRestart ? run.restart() : run.start({ inputData: { taskId } });
       void runPromise
         .then(result => {
@@ -842,10 +1177,27 @@ export class BackgroundTaskManager {
             ?.error(`background-task workflow ${shouldRestart ? 'restart' : 'start'} failed for ${taskId}:`, err);
         })
         .finally(() => {
-          // Free the concurrency slot once the run terminates.
+          this.releaseLocalSlot(taskId);
           void this.drainPending();
         });
+    } catch (error) {
+      this.releaseLocalSlot(taskId);
+      const markedFailed = await storage.updateTask(
+        taskId,
+        {
+          status: 'failed',
+          error: { message: error instanceof Error ? error.message : String(error) },
+          completedAt: new Date(),
+        },
+        { expectedStatus: 'running' },
+      );
+      if (markedFailed) {
+        const failedTask = await storage.getTask(taskId);
+        if (failedTask?.status === 'failed') await this.publishLifecycleEvent('task.failed', failedTask);
+      }
+      void this.drainPending();
     }
+    return true;
   }
 
   /**
@@ -855,30 +1207,48 @@ export class BackgroundTaskManager {
    * `task.resumed` lifecycle publish all happen here so a different process
    * than the one that suspended the task can drive the resume.
    */
-  private async handleResume(event: Event): Promise<void> {
+  private async handleResume(event: Event): Promise<boolean> {
+    if (this.shuttingDown) return false;
     const { taskId, resumeData } = event.data;
 
     const storage = await this.getStorage();
+    if (this.shuttingDown) return false;
     const task = await storage.getTask(taskId);
+    if (this.shuttingDown) return false;
     if (!task || task.status !== 'suspended') {
       // Either gone or already resumed/cancelled by another worker. Drop the
       // event silently — the worker group ensures exactly-once delivery, but
       // the task may have moved on between publish and pickup.
-      return;
+      this.releaseLocalSlot(taskId);
+      void this.drainPending();
+      return true;
     }
 
-    await storage.updateTask(taskId, {
-      status: 'running',
-      startedAt: new Date(),
-      suspendPayload: undefined,
-      suspendedAt: undefined,
-    });
+    const resumed = await storage.updateTask(
+      taskId,
+      {
+        status: 'running',
+        startedAt: new Date(),
+        suspendPayload: undefined,
+        suspendedAt: undefined,
+      },
+      { expectedStatus: 'suspended' },
+    );
+    if (!resumed) {
+      this.releaseLocalSlot(taskId);
+      void this.drainPending();
+      return true;
+    }
     const resumedTask = await storage.getTask(taskId);
     if (resumedTask) {
       await this.publishLifecycleEvent('task.resumed', resumedTask);
     }
 
-    if (!this.#mastra) return;
+    if (!this.#mastra) {
+      this.releaseLocalSlot(taskId);
+      void this.drainPending();
+      return true;
+    }
     const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
     // `createRun({ runId })` reattaches to the existing snapshot when given a
     // stable runId — we don't want a fresh run.
@@ -894,9 +1264,10 @@ export class BackgroundTaskManager {
         this.#mastra?.getLogger?.()?.error(`background-task workflow resume failed for ${taskId}:`, err);
       })
       .finally(() => {
-        // Mirror dispatch's drain — resuming frees a slot when it terminates.
+        this.releaseLocalSlot(taskId);
         void this.drainPending();
       });
+    return true;
   }
 
   /**
@@ -1048,10 +1419,12 @@ export class BackgroundTaskManager {
     const storage = await this.getStorage();
     const task = await storage.getTask(taskId);
 
-    if (task?.completedAt) {
-      // Look up per-task hooks
-      const ctx = this.taskContexts.get(taskId);
+    if (!task?.completedAt) return;
 
+    // Look up per-task hooks
+    const ctx = this.taskContexts.get(taskId);
+
+    try {
       if (event.type === 'task.completed') {
         ctx?.onChunk?.({
           type: 'background-task-completed',
@@ -1080,9 +1453,18 @@ export class BackgroundTaskManager {
           startedAt: task.startedAt!,
         });
 
-        if (task) {
-          await Promise.all([ctx?.onComplete?.(task), this.config.onTaskComplete?.(task)]);
-        }
+        await Promise.all([
+          ctx?.onComplete?.(task),
+          (async () => {
+            try {
+              await this.config.onTaskComplete?.(task);
+            } catch (error) {
+              this.#mastra
+                ?.getLogger?.()
+                ?.warn(`background-task completion callback failed for ${taskId}:`, error as any);
+            }
+          })(),
+        ]);
       }
 
       if (event.type === 'task.failed') {
@@ -1113,13 +1495,23 @@ export class BackgroundTaskManager {
           startedAt: task.startedAt!,
         });
 
-        if (task) {
-          await Promise.all([ctx?.onFailed?.(task), this.config.onTaskFailed?.(task)]);
-        }
+        await Promise.all([
+          ctx?.onFailed?.(task),
+          (async () => {
+            try {
+              await this.config.onTaskFailed?.(task);
+            } catch (error) {
+              this.#mastra?.getLogger?.()?.warn(`background-task failure callback failed for ${taskId}:`, error as any);
+            }
+          })(),
+        ]);
       }
-
-      // Clean up context after terminal result
+    } finally {
+      // Clean up context after terminal result and admit the next task owned
+      // by this manager. Portable tasks may have completed on another process,
+      // so the result fan-out is the origin manager's queue-drain signal.
       this.deregisterTaskContext(taskId);
+      void this.drainPending();
     }
   }
 
@@ -1168,6 +1560,24 @@ export class BackgroundTaskManager {
     });
   }
 
+  private reserveLocalSlot(task: Pick<BackgroundTask, 'id' | 'agentId'>): boolean {
+    if (this.localReservations.has(task.id)) return true;
+    if (this.localReservations.size >= this.config.globalConcurrency) return false;
+
+    let agentRunning = 0;
+    for (const agentId of this.localReservations.values()) {
+      if (agentId === task.agentId) agentRunning++;
+    }
+    if (agentRunning >= this.config.perAgentConcurrency) return false;
+
+    this.localReservations.set(task.id, task.agentId);
+    return true;
+  }
+
+  private releaseLocalSlot(taskId: string): void {
+    this.localReservations.delete(taskId);
+  }
+
   private async checkConcurrency(agentId: string): Promise<boolean> {
     const storage = await this.getStorage();
     const globalRunning = await storage.getRunningCount();
@@ -1184,17 +1594,36 @@ export class BackgroundTaskManager {
   }
 
   private async drainPending(): Promise<void> {
-    const storage = await this.getStorage();
-    const { tasks: pending } = await storage.listTasks({
-      status: 'pending',
-      orderBy: 'createdAt',
-      orderDirection: 'asc',
-    });
+    if (this.drainingPending || this.shuttingDown) return;
+    this.drainingPending = true;
 
-    for (const task of pending) {
-      if (await this.checkConcurrency(task.agentId)) {
-        await this.dispatch(task);
+    try {
+      const storage = await this.getStorage();
+      for (const taskId of [...this.localPendingTaskIds]) {
+        const task = await storage.getTask(taskId);
+        if (!task || task.status !== 'pending') {
+          this.localPendingTaskIds.delete(taskId);
+          continue;
+        }
+
+        const isProcessAffine = this.taskContexts.has(taskId);
+        const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
+        if (!canRun) continue;
+
+        this.localPendingTaskIds.delete(taskId);
+        try {
+          await this.dispatch(task);
+        } catch (error) {
+          if (isProcessAffine) this.releaseLocalSlot(taskId);
+          this.localPendingTaskIds.add(taskId);
+          this.#mastra?.getLogger?.()?.warn(`background-task dispatch failed while draining ${taskId}:`, error as any);
+          return;
+        }
       }
+    } catch (error) {
+      this.#mastra?.getLogger?.()?.warn('background-task queue drain failed:', error as any);
+    } finally {
+      this.drainingPending = false;
     }
   }
 
@@ -1202,6 +1631,7 @@ export class BackgroundTaskManager {
    * Recovers tasks left in 'running' or 'pending' state from a previous process.
    */
   private async recoverStaleTasks(): Promise<void> {
+    if (this.shuttingDown) return;
     try {
       const storage = await this.getStorage();
       const { tasks: staleTasks } = await storage.listTasks({ status: 'running' });

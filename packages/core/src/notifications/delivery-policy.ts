@@ -39,6 +39,14 @@ export type NotificationDeliveryPolicyInput = {
   now: Date;
 };
 
+/**
+ * Custom delivery decision logic. Runs at receipt time (when the notification
+ * is sent) and, for records the receipt-time decision deferred or scheduled
+ * for summary, AGAIN at delivery time when the dispatch workflow picks them
+ * up. At delivery time only the decision's `streamOptions` is honored — the
+ * record's persisted schedule already fixed when and how it delivers — so
+ * deciders should be side-effect free.
+ */
 export type NotificationDeliveryPolicyDecider = (
   input: NotificationDeliveryPolicyInput,
 ) => NotificationDeliveryPolicyDecision | undefined | Promise<NotificationDeliveryPolicyDecision | undefined>;
@@ -90,11 +98,13 @@ export async function resolveNotificationDeliveryDecision({
   const custom = await config?.decide?.(input);
   if (custom) return normalizeDecision(custom);
 
-  const sourceDecision = config?.sources?.[input.record.source];
-  if (sourceDecision) return normalizeDecision(sourceDecision);
+  if (config?.sources && Object.hasOwn(config.sources, input.record.source)) {
+    return normalizeDecision(config.sources[input.record.source]!);
+  }
 
-  const priorityDecision = config?.priorities?.[input.record.priority];
-  if (priorityDecision) return normalizeDecision(priorityDecision);
+  if (config?.priorities && Object.hasOwn(config.priorities, input.record.priority)) {
+    return normalizeDecision(config.priorities[input.record.priority]!);
+  }
 
   if (config?.default) return normalizeDecision(config.default);
 

@@ -10,9 +10,10 @@ import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
+import { InMemoryStore } from '../../storage/mock';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../../workspace/constants';
-import { LocalFilesystem } from '../../workspace/filesystem';
+import { LocalFilesystem, WORKSPACE_READS_STATE_TYPE } from '../../workspace/filesystem';
 import { Workspace } from '../../workspace/workspace';
 import { Agent } from '../agent';
 
@@ -738,6 +739,7 @@ describe('Workspace tools receive workspace via ToolOptions fallback (GH-14203)'
     // workspace baked into ToolOptions at build time (the fix).
     const coreTools = await (agent as any).listWorkspaceTools({
       requestContext: new RequestContext(),
+      getModel: () => agent.getModel(),
     });
 
     const listFilesCoreTool = coreTools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES];
@@ -754,6 +756,152 @@ describe('Workspace tools receive workspace via ToolOptions fallback (GH-14203)'
     expect(result).toBeDefined();
     expect(typeof result).toBe('string');
     expect(result).toContain('hello.txt');
+  });
+});
+
+describe('Read-before-write records survive across listWorkspaceTools calls (GH-23772)', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'workspace-read-tracker-'));
+    await fs.writeFile(path.join(tempDir, 'notes.txt'), 'original notes');
+  });
+
+  afterEach(async () => {
+    try {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  it('should allow edit_file in a later run after read_file in an earlier run on the same thread', async () => {
+    const workspace = new Workspace({
+      id: 'read-tracker-workspace',
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      tools: {
+        [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: { requireReadBeforeWrite: true },
+      },
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: 'done' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'read-tracker-agent',
+      name: 'Read Tracker Agent',
+      instructions: 'test',
+      model: mockModel,
+      workspace,
+    });
+
+    // Read records persist in the `threadState` domain of Mastra storage.
+    const storage = new InMemoryStore();
+    new Mastra({ agents: { 'read-tracker-agent': agent }, storage, logger: false });
+
+    // Run 1: read the file, then "suspend" (the run ends).
+    const run1Tools = await (agent as any).listWorkspaceTools({
+      threadId: 'thread-1',
+      requestContext: new RequestContext(),
+      getModel: () => agent.getModel(),
+    });
+    await run1Tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute!({ path: 'notes.txt' }, {
+      toolCallId: 'read-1',
+      messages: [],
+    } as any);
+
+    // The read record landed in the per-thread storage slot.
+    const threadState = await storage.getStore('threadState');
+    const state = await threadState!.getState<Record<string, unknown>>({
+      threadId: 'thread-1',
+      type: WORKSPACE_READS_STATE_TYPE,
+    });
+    expect(state).toBeDefined();
+    expect(state!['notes.txt']).toBeDefined();
+
+    // Run 2 (resume): fresh tool batch for the same thread — the earlier read
+    // must still count, so edit_file succeeds without a forced re-read.
+    const run2Tools = await (agent as any).listWorkspaceTools({
+      threadId: 'thread-1',
+      requestContext: new RequestContext(),
+      getModel: () => agent.getModel(),
+    });
+    const editResult = await run2Tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute!(
+      { path: 'notes.txt', old_string: 'original notes', new_string: 'updated notes' },
+      { toolCallId: 'edit-1', messages: [] } as any,
+    );
+    expect(editResult).toContain('Replaced 1 occurrence');
+
+    const content = await fs.readFile(path.join(tempDir, 'notes.txt'), 'utf-8');
+    expect(content).toBe('updated notes');
+  });
+
+  it('falls back to per-run tracking when the agent has no Mastra storage', async () => {
+    const workspace = new Workspace({
+      id: 'read-tracker-workspace-no-storage',
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      tools: {
+        [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: { requireReadBeforeWrite: true },
+      },
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: 'done' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'read-tracker-agent-no-storage',
+      name: 'Read Tracker Agent (no storage)',
+      instructions: 'test',
+      model: mockModel,
+      workspace,
+    });
+
+    const run1Tools = await (agent as any).listWorkspaceTools({
+      threadId: 'thread-1',
+      requestContext: new RequestContext(),
+      getModel: () => agent.getModel(),
+    });
+    await run1Tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute!({ path: 'notes.txt' }, {
+      toolCallId: 'read-1',
+      messages: [],
+    } as any);
+
+    // No storage → records are per-run; a later batch must force a re-read.
+    const run2Tools = await (agent as any).listWorkspaceTools({
+      threadId: 'thread-1',
+      requestContext: new RequestContext(),
+      getModel: () => agent.getModel(),
+    });
+    await expect(
+      run2Tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute!(
+        { path: 'notes.txt', old_string: 'original notes', new_string: 'updated notes' },
+        { toolCallId: 'edit-1', messages: [] } as any,
+      ),
+    ).rejects.toThrow(/has not been read/);
   });
 });
 

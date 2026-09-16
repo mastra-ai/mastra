@@ -1,0 +1,501 @@
+import {
+  encodeTraceQueryCursor,
+  parseGetTraceQueryFieldsArgs,
+  parseQueryThreadsInput,
+  parseTraceQueryRequest,
+  planThreadQuery,
+  planTraceQuery,
+  planTraceQueryObservedFields,
+  TraceQueryResourceLimitError,
+} from '@mastra/core/storage';
+import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
+import { describe, expect, it, vi } from 'vitest';
+
+import type { DuckDBConnection } from '../../db/index';
+import {
+  compileDuckDBThreadQuery,
+  compileDuckDBTraceQuery,
+  getTraceQueryObservedFields,
+  queryThreads,
+  queryTraces,
+} from './trace-query';
+
+const TIME_RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' };
+
+function plan(input: Record<string, unknown> = {}): TrustedTraceQueryPlan {
+  return planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE, ...input }));
+}
+
+function threadPlan(input: Record<string, unknown> = {}): TrustedThreadQueryPlan {
+  return planThreadQuery(parseQueryThreadsInput({ traces: { timeRange: TIME_RANGE }, ...input }));
+}
+
+describe('DuckDB advanced trace query', () => {
+  it('normalizes discovery resource exhaustion without exposing driver details', async () => {
+    const query = vi.fn().mockRejectedValue(new Error('Out of Memory Error: failed to allocate secret query'));
+    const discoveryPlan = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+
+    await expect(getTraceQueryObservedFields({ query } as unknown as DuckDBConnection, discoveryPlan)).rejects.toEqual(
+      expect.objectContaining<Partial<TraceQueryResourceLimitError>>({
+        code: 'TRACE_QUERY_RESOURCE_LIMIT',
+        message: 'The trace query exceeded its resource limit',
+      }),
+    );
+  });
+
+  it('parameterizes literals and compiles one correlated existence check per collection clause', () => {
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        where: {
+          scores: {
+            some: {
+              op: 'and',
+              args: [
+                { op: 'eq', left: { path: 'scorerId' }, right: { literal: "factuality' OR TRUE --" } },
+                { op: 'eq', left: { path: 'scorerVersion' }, right: { literal: 'v2' } },
+                { op: 'in', value: { path: 'scoreSource' }, set: ['automated'] },
+                {
+                  op: 'gte',
+                  left: { path: 'timestamp' },
+                  right: { literal: '2026-01-01T06:00:00-06:00' },
+                },
+                { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+                { op: 'exists', path: 'spanId' },
+                { op: 'eq', left: { path: 'entityVersionId' }, right: { literal: 'entity-v2' } },
+                { op: 'exists', path: 'parentEntityVersionId' },
+                { op: 'notIn', value: { path: 'rootEntityVersionId' }, set: ['root-v2'] },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(compiled.sql).not.toContain("factuality' OR TRUE --");
+    expect(compiled.values).toContain("factuality' OR TRUE --");
+    expect(compiled.sql.match(/EXISTS \(/g)).toHaveLength(1);
+    expect(compiled.sql).toContain('s.traceId = r.traceId');
+    expect(compiled.sql).toContain('FROM current_scores s');
+    expect(compiled.sql).toContain('s.scorerVersion IS NOT DISTINCT FROM ?');
+    expect(compiled.sql).toContain('s.scoreSource IS NOT NULL AND s.scoreSource IN (?)');
+    expect(compiled.sql).toContain('s.timestamp IS NOT NULL AND s.timestamp >= CAST(? AS TIMESTAMP)');
+    expect(compiled.sql).toContain('s.spanId IS NOT NULL');
+    expect(compiled.sql).toContain('s.entityVersionId IS NOT DISTINCT FROM ?');
+    expect(compiled.sql).toContain('s.parentEntityVersionId IS NOT NULL');
+    expect(compiled.sql).toContain('s.rootEntityVersionId IS NULL OR s.rootEntityVersionId NOT IN (?)');
+    expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
+  });
+
+  it('projects canonical span values with guarded JSON strings and typed timestamps', () => {
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        where: {
+          spans: {
+            some: {
+              op: 'and',
+              args: [
+                { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } },
+                { op: 'eq', left: { path: 'model' }, right: { literal: 'claude-sonnet-4-6' } },
+                { op: 'eq', left: { path: 'provider' }, right: { literal: 'anthropic' } },
+                {
+                  op: 'gte',
+                  left: { path: 'startedAt' },
+                  right: { literal: '2026-01-01T06:00:00-06:00' },
+                },
+                { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+                { op: 'eq', left: { path: 'status' }, right: { literal: 'success' } },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(compiled.sql.match(/FROM current_spans s/g)).toHaveLength(1);
+    expect(compiled.sql).toContain(`json_type(attributes, '$.model') = 'VARCHAR'`);
+    expect(compiled.sql).toContain(`json_extract_string(attributes, '$.model')`);
+    expect(compiled.sql).toContain(`json_type(attributes, '$.provider') = 'VARCHAR'`);
+    expect(compiled.sql).toContain(`date_diff('millisecond', startedAt, endedAt) AS durationMs`);
+    expect(compiled.sql).toContain('s.startedAt IS NOT NULL AND s.startedAt >= CAST(? AS TIMESTAMP)');
+    expect(compiled.sql).toContain('s.durationMs IS NOT NULL AND s.durationMs > ?');
+    expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
+    expect(compiled.values).toContain(5000);
+  });
+
+  it('parameterizes metadata keys and values with total missing semantics', () => {
+    const key = ` message'id `;
+    const value = `message' OR TRUE --`;
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: `metadata.${key}` }, right: { literal: value } },
+            { op: 'notIn', value: { path: 'metadata.actorRole' }, set: ['assistant', 'tool'] },
+            { op: 'notExists', path: 'metadata.parentMessageId' },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.sql).not.toContain(key);
+    expect(compiled.sql).not.toContain(value);
+    expect(compiled.sql).toContain(
+      `NULLIF(trim(CASE WHEN json_type(r.metadata, ?) = 'VARCHAR' THEN json_extract_string(r.metadata, ?) END), '')`,
+    );
+    expect(compiled.values).toEqual([
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      `$.${JSON.stringify(key)}`,
+      `$.${JSON.stringify(key)}`,
+      value,
+      '$."actorRole"',
+      '$."actorRole"',
+      '$."actorRole"',
+      '$."actorRole"',
+      'assistant',
+      'tool',
+      '$."parentMessageId"',
+      '$."parentMessageId"',
+      101,
+    ]);
+  });
+
+  it('keeps generic ordered metadata compiler bindings aligned without changing planner support', () => {
+    const key = ` latency'ms `;
+    const path = `$.${JSON.stringify(key)}`;
+    const trusted = plan({
+      where: { op: 'eq', left: { path: `metadata.${key}` }, right: { literal: '10' } },
+    });
+    const ordered = {
+      ...trusted,
+      where: { type: 'comparison', field: `metadata.${key}`, operator: 'gt', value: '10' },
+    } as TrustedTraceQueryPlan;
+
+    const compiled = compileDuckDBTraceQuery(ordered);
+
+    expect(compiled.sql).not.toContain(key);
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, path, path, path, path, '10', 101]);
+    expect(compiled.sql.match(/\?/g)).toHaveLength(compiled.values.length);
+  });
+
+  it('selects the latest logical root before applying completion and time filters', () => {
+    const compiled = compileDuckDBTraceQuery(plan());
+
+    expect(compiled.sql).toContain('row_number() OVER (PARTITION BY traceId ORDER BY cursorId DESC)');
+    expect(compiled.sql).toContain('FROM current_roots r');
+    expect(compiled.sql).toContain('r.endedAt IS NOT NULL');
+  });
+
+  it('emits only referenced signal work and reuses current-record CTEs', () => {
+    const traceOnly = compileDuckDBTraceQuery(plan());
+    const scoreOnly = compileDuckDBTraceQuery(
+      plan({
+        where: { scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.5 } } } },
+      }),
+    );
+    const spanOnly = compileDuckDBTraceQuery(
+      plan({
+        where: { spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } } } },
+      }),
+    );
+    const repeatedSpans = compileDuckDBTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } } } },
+            { spans: { none: { op: 'exists', path: 'error' } } },
+          ],
+        },
+      }),
+    );
+
+    expect(traceOnly.sql.match(/FROM span_events/g)).toHaveLength(1);
+    expect(traceOnly.sql).not.toContain('score_events');
+    expect(traceOnly.sql).not.toContain('current_spans AS');
+
+    expect(scoreOnly.sql.match(/FROM span_events/g)).toHaveLength(1);
+    expect(scoreOnly.sql.match(/current_scores AS/g)).toHaveLength(1);
+    expect(scoreOnly.sql).not.toContain('current_spans AS');
+
+    expect(spanOnly.sql.match(/FROM span_events/g)).toHaveLength(2);
+    expect(spanOnly.sql.match(/current_spans AS/g)).toHaveLength(1);
+    expect(spanOnly.sql).not.toContain('score_events');
+
+    expect(repeatedSpans.sql.match(/current_spans AS/g)).toHaveLength(1);
+  });
+
+  it('compiles feedback value predicates against typed columns while retaining legacy presence semantics', () => {
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            {
+              feedback: {
+                some: {
+                  op: 'and',
+                  args: [
+                    { op: 'eq', left: { path: 'feedbackType' }, right: { literal: "rating' OR TRUE --" } },
+                    { op: 'lt', left: { path: 'value' }, right: { literal: 0 } },
+                    { op: 'eq', left: { path: 'value' }, right: { literal: 3 } },
+                    { op: 'eq', left: { path: 'value' }, right: { literal: '3' } },
+                    { op: 'in', value: { path: 'value' }, set: [1, 2] },
+                    { op: 'gte', left: { path: 'timestamp' }, right: { literal: '2026-01-01T14:00:00+02:00' } },
+                    { op: 'exists', path: 'value' },
+                  ],
+                },
+              },
+            },
+            { feedback: { none: { op: 'in', value: { path: 'value' }, set: ['bad', 'worse'] } } },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.sql.match(/current_feedback AS/g)).toHaveLength(1);
+    expect(compiled.sql.match(/FROM current_feedback s/g)).toHaveLength(2);
+    expect(compiled.sql).toContain('s.traceId IS NOT NULL');
+    expect(compiled.sql).toContain('s.traceId = r.traceId');
+    expect(compiled.sql).toContain('s.valueNumber IS NOT NULL AND s.valueNumber < ?');
+    expect(compiled.sql).toContain('s.valueNumber IS NOT DISTINCT FROM ?');
+    expect(compiled.sql).toContain('s.valueString IS NOT DISTINCT FROM ?');
+    expect(compiled.sql).toContain('s.valueNumber IS NOT NULL AND s.valueNumber IN (?, ?)');
+    expect(compiled.sql).toContain('s.valueString IS NOT NULL AND s.valueString IN (?, ?)');
+    expect(compiled.sql).toContain('s.value IS NOT NULL');
+    expect(compiled.sql).not.toContain('TRY_CAST(s.value');
+    expect(compiled.sql).not.toContain("rating' OR TRUE --");
+    expect(compiled.values).toContain("rating' OR TRUE --");
+    expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
+  });
+
+  it('emits feedback scope only when referenced', () => {
+    const traceOnly = compileDuckDBTraceQuery(plan()).sql;
+    const feedbackOnly = compileDuckDBTraceQuery(
+      plan({ where: { feedback: { some: { op: 'exists', path: 'value' } } } }),
+    ).sql;
+
+    expect(traceOnly).not.toContain('current_feedback AS');
+    expect(traceOnly).not.toContain('feedback_events');
+    expect(feedbackOnly.match(/current_feedback AS/g)).toHaveLength(1);
+  });
+
+  it('uses total null semantics for negative predicates', () => {
+    const compiled = compileDuckDBTraceQuery(
+      plan({ where: { op: 'ne', left: { path: 'threadId' }, right: { literal: 'excluded' } } }),
+    );
+
+    expect(compiled.sql).toContain('r.threadId IS DISTINCT FROM ?');
+  });
+
+  it('matches the requested keyset order and always ties on traceId ascending', () => {
+    const first = plan({ orderBy: [{ field: 'endedAt', direction: 'desc' }], page: { limit: 2 } });
+    const after = plan({
+      orderBy: [{ field: 'endedAt', direction: 'desc' }],
+      page: {
+        limit: 2,
+        after: queryCursor(first, { sortValue: '2026-01-01T12:00:00.000Z', traceId: 'trace-b' }),
+      },
+    });
+    const compiled = compileDuckDBTraceQuery(after);
+
+    expect(compiled.sql).toContain('endedAt < CAST(? AS TIMESTAMP)');
+    expect(compiled.sql).toContain('traceId > ?');
+    expect(compiled.sql).toContain('ORDER BY endedAt DESC, traceId ASC');
+    expect(compiled.values.at(-1)).toBe(3);
+  });
+
+  it('compiles grouped queries as distinct non-null thread IDs', () => {
+    const compiled = compileDuckDBTraceQuery(plan({ group: { by: ['threadId'] }, page: { limit: 4 } }));
+
+    expect(compiled.sql).toContain('WHERE threadId IS NOT NULL');
+    expect(compiled.sql).toContain('GROUP BY threadId');
+    expect(compiled.sql).toContain('ORDER BY threadId ASC');
+    expect(compiled.values.at(-1)).toBe(5);
+  });
+
+  it('compiles thread qualification over full eligible roots with dependencies from both scopes', () => {
+    const metadataKey = ` actor'role `;
+    const metadataValue = `clinician' OR TRUE --`;
+    const compiled = compileDuckDBThreadQuery(
+      threadPlan({
+        traces: {
+          timeRange: TIME_RANGE,
+          where: { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } } } },
+        },
+        where: {
+          op: 'and',
+          args: [
+            {
+              traces: {
+                some: {
+                  op: 'and',
+                  args: [
+                    { op: 'eq', left: { path: `metadata.${metadataKey}` }, right: { literal: metadataValue } },
+                    { scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } } } },
+                  ],
+                },
+              },
+            },
+            {
+              traces: {
+                none: {
+                  feedback: {
+                    some: { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'clinical-review' } },
+                  },
+                },
+              },
+            },
+          ],
+        },
+        page: { limit: 4 },
+      }),
+    );
+
+    expect(compiled.sql.match(/current_spans AS/g)).toHaveLength(1);
+    expect(compiled.sql.match(/current_scores AS/g)).toHaveLength(1);
+    expect(compiled.sql.match(/current_feedback AS/g)).toHaveLength(1);
+    expect(compiled.sql).toContain('eligible_roots AS');
+    expect(compiled.sql).toContain('SELECT *\n      FROM root_scope r');
+    expect(compiled.sql).toContain('SELECT 1 FROM eligible_roots r');
+    expect(compiled.sql).toContain('r.threadId = t.threadId');
+    expect(compiled.sql).toContain('NOT EXISTS (');
+    expect(compiled.sql).not.toContain(metadataKey);
+    expect(compiled.sql).not.toContain(metadataValue);
+    expect(compiled.values).toEqual([
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      'medication_lookup',
+      `$.${JSON.stringify(metadataKey)}`,
+      `$.${JSON.stringify(metadataKey)}`,
+      metadataValue,
+      0.6,
+      'clinical-review',
+      5,
+    ]);
+    expect(compiled.sql.match(/\?/g)).toHaveLength(compiled.values.length);
+  });
+
+  it('applies the thread cursor after qualification and fetches one lookahead row', () => {
+    const first = threadPlan({ page: { limit: 1 } });
+    const after = threadPlan({
+      page: {
+        limit: 1,
+        after: encodeTraceQueryCursor(first, { result: 'threads', threadId: 'thread-1' }),
+      },
+    });
+    const compiled = compileDuckDBThreadQuery(after);
+
+    expect(compiled.sql).toContain('FROM qualified_threads\nWHERE threadId > ?');
+    expect(compiled.sql).toContain('ORDER BY threadId ASC');
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'thread-1', 2]);
+    expect(compiled.sql.match(/\?/g)).toHaveLength(compiled.values.length);
+  });
+
+  it('fails closed when a trusted plan contains an unmapped field', () => {
+    const trusted = plan({ where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } } });
+    const invalid = {
+      ...trusted,
+      where: { type: 'comparison', field: 'rawSql', operator: 'eq', value: 'x' },
+    } as unknown as TrustedTraceQueryPlan;
+
+    expect(() => compileDuckDBTraceQuery(invalid)).toThrow('Unsupported trusted trace-query field');
+
+    const thread = threadPlan({
+      where: { traces: { some: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } } } },
+    });
+    const invalidThread = {
+      ...thread,
+      where: {
+        type: 'relation',
+        collection: 'traces',
+        quantifier: 'some',
+        predicate: { type: 'comparison', field: 'rawSql', operator: 'eq', value: 'x' },
+      },
+    } as unknown as TrustedThreadQueryPlan;
+    expect(() => compileDuckDBThreadQuery(invalidThread)).toThrow('Unsupported trusted trace-query field');
+  });
+
+  it('returns fixed records and computes the next cursor from the last visible row', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValue([
+        traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
+        traceRow('trace-b', '2026-01-01T11:00:00.000Z'),
+      ]);
+    const response = await queryTraces({ query } as unknown as DuckDBConnection, plan({ page: { limit: 1 } }));
+
+    expect(response).toMatchObject({
+      traces: [{ traceId: 'trace-a', rootSpanId: 'root-trace-a', status: 'success' }],
+      page: { next: expect.any(String) },
+    });
+    if (!('traces' in response)) throw new Error('Expected trace results');
+    expect(Object.keys(response.traces[0]!)).toHaveLength(16);
+    expect(response.traces[0]).toMatchObject({
+      name: 'Agent run',
+      entityId: 'agent-1',
+      parentSpanId: null,
+      createdAt: '2026-01-01T12:00:00.000Z',
+      metadata: { customer: { id: 'customer-1' }, count: 2 },
+      inputPreview: 'Help with my order',
+    });
+    expect(response.traces[0]).not.toHaveProperty('input');
+  });
+
+  it('returns null for absent optional root span details', async () => {
+    const row = {
+      ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
+      entityId: null,
+      metadata: null,
+      input: null,
+    };
+    const query = vi.fn().mockResolvedValue([row]);
+    const response = await queryTraces({ query } as unknown as DuckDBConnection, plan());
+
+    expect(response.traces[0]).toMatchObject({
+      name: 'Agent run',
+      entityId: null,
+      parentSpanId: null,
+      metadata: null,
+      inputPreview: null,
+    });
+    expect(response.page.next).toBeNull();
+  });
+
+  it('returns fixed thread identities and computes the next cursor from the last visible row', async () => {
+    const query = vi.fn().mockResolvedValue([{ threadId: 'thread-1' }, { threadId: 'thread-2' }]);
+
+    const response = await queryThreads({ query } as unknown as DuckDBConnection, threadPlan({ page: { limit: 1 } }));
+
+    expect(response).toEqual({ threads: [{ threadId: 'thread-1' }], page: { next: expect.any(String) } });
+    expect(Object.keys(response.threads[0]!)).toEqual(['threadId']);
+  });
+});
+
+function queryCursor(plan: TrustedTraceQueryPlan, values: { sortValue: string; traceId: string }): string {
+  if (plan.result !== 'traces') throw new Error('Expected a trace plan');
+  return encodeTraceQueryCursor(plan, { result: 'traces', ...values });
+}
+
+function traceRow(traceId: string, startedAt: string) {
+  return {
+    traceId,
+    rootSpanId: `root-${traceId}`,
+    name: 'Agent run',
+    entityId: 'agent-1',
+    parentSpanId: null,
+    metadata: JSON.stringify({ customer: { id: 'customer-1' }, count: 2 }),
+    input: JSON.stringify({ messages: [{ role: 'user', content: 'Help with my order' }] }),
+    threadId: null,
+    resourceId: null,
+    startedAt: new Date(startedAt),
+    endedAt: new Date(new Date(startedAt).getTime() + 1_000),
+    entityName: null,
+    entityType: null,
+    environment: null,
+    status: 'success',
+  };
+}

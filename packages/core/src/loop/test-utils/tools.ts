@@ -4,7 +4,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { loop } from '../loop';
-import { createMessageListWithUserMessage, createTestModels, defaultSettings, testUsage } from './utils';
+import {
+  createMessageListWithUserMessage,
+  createTestModels,
+  defaultSettings,
+  expectPromptWithoutMastraCreatedAt,
+  testUsage,
+} from './utils';
 import { convertAsyncIterableToArray } from './stream-helpers';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 
@@ -769,11 +775,10 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
 
                 expect(toolChoice).toStrictEqual({ type: 'required' });
 
-                expect(prompt).toStrictEqual([
+                expectPromptWithoutMastraCreatedAt(prompt, [
                   {
                     role: 'user',
                     content: [{ type: 'text', text: 'test-input' }],
-                    // providerOptions: undefined,
                   },
                 ]);
 

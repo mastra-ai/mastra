@@ -1,3 +1,4 @@
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -5,7 +6,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../api/keys';
 import { workspacesQueryOptions } from '../../../../hooks/useWorkspaces';
 import { createQueryClient } from '../../../../query-client';
@@ -35,6 +36,8 @@ const AGENT_CONTROLLER_API = `${TEST_BASE_URL}/api/agent-controller/code`;
 interface SearchRequestState {
   abortRequests: number;
   createSessionRequests: number;
+  created: Record<string, unknown>[];
+  transitions: Array<{ itemId: string; body: Record<string, unknown> }>;
   intakeRequests: number;
   sessionRequests: Record<string, number>;
   workItemRequests: number;
@@ -43,6 +46,7 @@ interface SearchRequestState {
 interface StubSearchOptions {
   activeFactoryHasRepositories?: boolean;
   failRepositories?: string[];
+  failRepositoryAttempts?: Record<string, number>;
   failIntake?: boolean;
   failWorkItems?: boolean;
   secondRepositoryGate?: Promise<void>;
@@ -60,6 +64,8 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
   const state: SearchRequestState = {
     abortRequests: 0,
     createSessionRequests: 0,
+    created: [],
+    transitions: [],
     intakeRequests: 0,
     sessionRequests: {},
     workItemRequests: 0,
@@ -132,14 +138,21 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
         request.signal.addEventListener('abort', () => options.onSecondRepositoryAbort?.(), { once: true });
         await options.secondRepositoryGate;
       }
-      if (failRepositories.has(repositoryId) && state.sessionRequests[repositoryId] === 1) {
+      const failedAttempts = options.failRepositoryAttempts?.[repositoryId] ?? 1;
+      if (failRepositories.has(repositoryId) && state.sessionRequests[repositoryId] <= failedAttempts) {
         return HttpResponse.json({ error: 'sessions unavailable' }, { status: 500 });
       }
       return HttpResponse.json({ sessions: sessionsByRepository[repositoryId] ?? [] });
     }),
-    http.post(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/sessions`, () => {
+    http.post(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/sessions`, async ({ request }) => {
       state.createSessionRequests += 1;
-      return HttpResponse.json({ error: 'Search must not create sessions' }, { status: 500 });
+      const body = (await request.json()) as { branch?: string };
+      return HttpResponse.json({
+        session: {
+          sessionId: 'session-search',
+          branch: body.branch ?? 'factory/search',
+        },
+      });
     }),
     http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, ({ params }) => {
       const sessionId = String(params.sessionId);
@@ -150,12 +163,29 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
         ? HttpResponse.json({ session })
         : HttpResponse.json({ error: 'Session not found' }, { status: 404 });
     }),
-    http.post(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/ensure`, ({ params }) =>
-      HttpResponse.json({
-        resourceId: `resource-${String(params.projectRepositoryId)}`,
-        sandboxId: `sandbox-${String(params.projectRepositoryId)}`,
-        sandboxWorkdir: `/workspaces/${String(params.projectRepositoryId)}`,
-      }),
+    http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/work-items`, async ({ request }) => {
+      const body = (await request.json()) as Record<string, unknown>;
+      state.created.push(body);
+      return HttpResponse.json({
+        workItem: toWireWorkItem({ ...workItems[0], id: 'work-item-filed', title: String(body.title) }),
+      });
+    }),
+    http.post(
+      `${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/work-items/:itemId/transition`,
+      async ({ params, request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        state.transitions.push({ itemId: String(params.itemId), body });
+        return HttpResponse.json({
+          result: {
+            status: 'accepted',
+            transitionId: 'transition-search',
+            itemId: String(params.itemId),
+            revision: 9,
+            stage: body.stage,
+            decisions: [],
+          },
+        });
+      },
     ),
     http.post(`${AGENT_CONTROLLER_API}/sessions`, async ({ request }) => {
       const resourceId = resourceIdFromRequestBody(await request.json());
@@ -210,6 +240,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
           headers: { 'content-type': 'text/event-stream' },
         }),
     ),
+    http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/thread`, () => HttpResponse.json({ ok: true })),
     http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/abort`, () => {
       state.abortRequests += 1;
       return HttpResponse.json({});
@@ -233,7 +264,13 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
 function renderSearchRoute(initialEntry = `/factories/${ACTIVE_FACTORY_ID}/settings/preferences`) {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
   const client = createQueryClient();
-  renderWithProviders(<RouterProvider router={router} />, client);
+  renderWithProviders(
+    <>
+      <RouterProvider router={router} />
+      <Toaster position="bottom-right" />
+    </>,
+    client,
+  );
   return { router, client };
 }
 
@@ -321,13 +358,13 @@ describe('Global search', () => {
     expect(screen.getByText('Mastra Factory')).toBeInTheDocument();
     expect(screen.getByText('Docs Factory')).toBeInTheDocument();
     for (const label of [
+      'Overview',
       'Work',
       'Review',
-      'Metrics',
       'Rules',
       'Audit log',
       'Preferences',
-      'Factory',
+      'Manage Factory',
       'Connections',
       'Repositories',
       'Work Intake',
@@ -417,17 +454,20 @@ describe('Global search', () => {
   });
 
   it('keeps successful results when one repository fails and retries only the failed source', async () => {
-    const requests = stubSearchApi({ failRepositories: [SECOND_REPOSITORY_ID] });
+    const requests = stubSearchApi({
+      failRepositories: [SECOND_REPOSITORY_ID],
+      failRepositoryAttempts: { [SECOND_REPOSITORY_ID]: 2 },
+    });
     const user = userEvent.setup();
     renderSearchRoute();
     await openFromSidebar();
 
     expect(await screen.findByText('Add universal command search')).toBeInTheDocument();
     expect(await screen.findByText('Some linked repositories could not be searched.')).toBeInTheDocument();
-    expect(requests.sessionRequests[SECOND_REPOSITORY_ID]).toBe(1);
+    expect(requests.sessionRequests[SECOND_REPOSITORY_ID]).toBe(2);
 
     await user.click(screen.getByRole('button', { name: /Retry/ }));
-    await waitFor(() => expect(requests.sessionRequests[SECOND_REPOSITORY_ID]).toBe(2));
+    await waitFor(() => expect(requests.sessionRequests[SECOND_REPOSITORY_ID]).toBe(3));
     expect(screen.getByText('Add universal command search')).toBeInTheDocument();
     expect(await screen.findByText('Review command palette PR')).toBeInTheDocument();
   });
@@ -435,6 +475,7 @@ describe('Global search', () => {
   it('shows destructive all-repository failure while retaining navigation and Factories', async () => {
     stubSearchApi({
       failRepositories: [FIRST_REPOSITORY_ID, SECOND_REPOSITORY_ID],
+      failRepositoryAttempts: { [FIRST_REPOSITORY_ID]: 2, [SECOND_REPOSITORY_ID]: 2 },
     });
     renderSearchRoute();
     await openFromSidebar();
@@ -478,10 +519,10 @@ describe('Global search', () => {
     expect(screen.queryByText('feature/offline-index')).not.toBeInTheDocument();
   });
 
-  it('finds a board card with no session by identifier and opens its board', async () => {
+  it('finds a board card with no session by identifier and moves it into its lane', async () => {
     const requests = stubSearchApi();
     const user = userEvent.setup();
-    const { router } = renderSearchRoute();
+    renderSearchRoute();
     const dialog = await openFromSidebar();
     await screen.findByText('Review command palette PR');
 
@@ -496,9 +537,31 @@ describe('Global search', () => {
 
     await user.click(card);
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${ACTIVE_FACTORY_ID}/review`));
-    expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument());
+    await waitFor(() => expect(requests.transitions).toHaveLength(1));
+    expect(requests.transitions[0]).toMatchObject({
+      itemId: 'work-item-unstarted-review',
+      body: { board: 'review', stage: 'review', cause: 'card_action' },
+    });
     expect(requests.createSessionRequests).toBe(0);
+  });
+
+  it('toasts the reason when the move it fired is refused, after the palette has closed', async () => {
+    stubSearchApi();
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/work-items/:itemId/transition`, () =>
+        HttpResponse.json({ result: { status: 'rejected', reason: 'Reviewing is paused for this repository.' } }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderSearchRoute();
+    await openFromSidebar();
+    await screen.findByText('Review command palette PR');
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
+    await user.click(await screen.findByText('Bump the command palette dependencies'));
+
+    expect(await screen.findByText('Reviewing is paused for this repository.')).toBeInTheDocument();
   });
 
   it('scopes results to board cards with no session', async () => {
@@ -519,10 +582,10 @@ describe('Global search', () => {
     expect(screen.queryByText('research-notes')).not.toBeInTheDocument();
   });
 
-  it('finds a pull request that has no card yet and opens the review board', async () => {
+  it('finds a pull request that has no card yet, files it, and moves it into its lane', async () => {
     const requests = stubSearchApi();
     const user = userEvent.setup();
-    const { router } = renderSearchRoute();
+    const { client } = renderSearchRoute();
     const dialog = await openFromSidebar();
     await screen.findByText('Review command palette PR');
 
@@ -532,7 +595,13 @@ describe('Global search', () => {
 
     await user.click(candidate);
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${ACTIVE_FACTORY_ID}/review`));
+    await waitFor(() => expect(requests.transitions).toHaveLength(1));
+    await waitForMutationsIdle(client);
+    expect(requests.created).toEqual([
+      expect.objectContaining({ title: 'Harden the review board drop target', stages: ['intake'] }),
+    ]);
+    expect(requests.transitions[0]).toMatchObject({ itemId: 'work-item-filed', body: { stage: 'review' } });
+    expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
     expect(requests.createSessionRequests).toBe(0);
   });
 
@@ -577,7 +646,7 @@ describe('Global search', () => {
     expect(requests.intakeRequests).toBe(0);
   });
 
-  it('cancels a search-only repository request when the dialog closes', async () => {
+  it('keeps a repository request alive when the notification observer also consumes it', async () => {
     let releaseSecondRepository = () => {};
     const secondRepositoryGate = new Promise<void>(resolve => {
       releaseSecondRepository = resolve;
@@ -592,7 +661,8 @@ describe('Global search', () => {
     await openFromSidebar();
     await waitFor(() => expect(requests.sessionRequests[SECOND_REPOSITORY_ID]).toBe(1));
     await user.keyboard('{Escape}');
-    await waitFor(() => expect(onAbort).toHaveBeenCalledOnce());
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(onAbort).not.toHaveBeenCalled();
     releaseSecondRepository();
   });
 

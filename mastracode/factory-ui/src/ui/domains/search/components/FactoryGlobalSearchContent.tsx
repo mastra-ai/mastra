@@ -6,9 +6,14 @@ import {
   CommandPaletteResults,
 } from '@mastra/playground-ui/components/CommandPalette';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useState } from 'react';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
+import { candidatePayload } from '../../factory/boardDrag';
+import { cardMoves } from '../../factory/cardPrimaryAction';
+import { useBoardItems } from '../../factory/hooks/useBoardItems';
+import { useBoardRuns } from '../../factory/hooks/useBoardRuns';
 import { useGlobalSearchIntake } from '../hooks/useGlobalSearchIntake';
 import { useGlobalSearchNavigation } from '../hooks/useGlobalSearchNavigation';
 import { useGlobalSearchSessions } from '../hooks/useGlobalSearchSessions';
@@ -34,9 +39,18 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const activeFactory = factories.find(factory => factory.id === factoryId);
   const repositoryIds = activeFactory?.repositories.map(repository => repository.projectRepositoryId) ?? [];
   const sessions = useGlobalSearchSessions(repositoryIds);
-  const workItems = useGlobalSearchWorkItems(repositoryIds.length > 0 ? factoryId : undefined);
+  const searchableFactoryId = repositoryIds.length > 0 ? factoryId : undefined;
+  const workItems = useGlobalSearchWorkItems(searchableFactoryId);
   // Both boards read `repositories[0]`, so that is the repository whose intake feeds are searchable.
-  const intake = useGlobalSearchIntake(activeFactory?.repositories[0]?.projectRepositoryId);
+  const projectRepositoryId = activeFactory?.repositories[0]?.projectRepositoryId;
+  const intake = useGlobalSearchIntake(projectRepositoryId);
+  // The palette closes on select, so a failed move has no card left to carry its reason.
+  const board = useBoardItems({
+    factoryProjectId: searchableFactoryId,
+    kind: 'work',
+    onFailure: message => toast.error(message),
+  });
+  const runs = useBoardRuns({ factoryProjectId: factoryId, refetchItems: workItems.refetch });
   const { selectPath } = useGlobalSearchNavigation(closeSearch);
   const [activeScope, setActiveScope] = useState<GlobalSearchScope>('all');
 
@@ -83,7 +97,28 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
             <GlobalSearchSessionResults title="Review Sessions" results={sessionGroups.review} onSelect={selectPath} />
           )}
           {scopeIncludes(activeScope, 'items') && (
-            <GlobalSearchWorkItemResults results={unstartedItems} onSelect={selectPath} />
+            <GlobalSearchWorkItemResults
+              results={unstartedItems}
+              onSelect={result => {
+                closeSearch();
+                const target = result.target;
+                if (target.kind === 'candidate') {
+                  const [move] = cardMoves(target.candidate, target.candidate.column);
+                  if (move) board.handleDrop(candidatePayload(target.candidate), move.stage, 'card_action');
+                  return;
+                }
+                const [move] = cardMoves(target.item, 'intake');
+                if (move) {
+                  board.move(target.item.id, move.stage);
+                  return;
+                }
+                void runs
+                  .openOrCreateSession(target.item)
+                  .catch(error =>
+                    toast.error(error instanceof Error ? error.message : 'The session could not be started.'),
+                  );
+              }}
+            />
           )}
           {scopeIncludes(activeScope, 'user') && (
             <GlobalSearchSessionResults title="User Sessions" results={sessionGroups.user} onSelect={selectPath} />

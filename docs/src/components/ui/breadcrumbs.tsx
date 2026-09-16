@@ -6,21 +6,32 @@ export function BreadcrumbsItemLink({
   children,
   href,
   isLast,
+  onClick,
+  className,
 }: {
   children: ReactNode
   href: string | undefined
   isLast: boolean
+  onClick?: () => void
+  className?: string
 }): ReactNode {
-  const className = 'breadcrumbs__link'
+  const linkClassName = clsx('breadcrumbs__link', className)
   if (isLast) {
-    return <span className={className}>{children}</span>
+    return <span className={linkClassName}>{children}</span>
   }
-  return href ? (
-    <Link className={className} href={href}>
-      <span>{children}</span>
-    </Link>
+  if (href) {
+    return (
+      <Link className={linkClassName} href={href}>
+        <span>{children}</span>
+      </Link>
+    )
+  }
+  return onClick ? (
+    <button className={linkClassName} type="button" onClick={onClick}>
+      {children}
+    </button>
   ) : (
-    <span className={className}>{children}</span>
+    <span className={linkClassName}>{children}</span>
   )
 }
 

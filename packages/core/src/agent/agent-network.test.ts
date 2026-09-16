@@ -198,7 +198,7 @@ describe('Agent - network - finalResult token efficiency', () => {
             type: 'tool-call',
             toolCallId: 'test-tool-call-1',
             toolName: 'test-tool',
-            args: { query: 'hello world' },
+            input: JSON.stringify({ query: 'hello world' }),
           },
         ],
         warnings: [],
@@ -211,7 +211,7 @@ describe('Agent - network - finalResult token efficiency', () => {
             type: 'tool-call',
             toolCallId: 'test-tool-call-1',
             toolName: 'test-tool',
-            args: { query: 'hello world' },
+            input: JSON.stringify({ query: 'hello world' }),
           },
           { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
         ]),
@@ -4050,6 +4050,53 @@ describe('Agent - network - tool approval and suspension', () => {
       expect(mockToolExecute).toHaveBeenCalled();
     });
 
+    it('passes { requestContext } to a per-tool requireApproval function on the network tool path', async () => {
+      const contextToolExecute = vi.fn().mockImplementation(async (input: { query: string }) => ({
+        result: `Processed: ${input.query}`,
+      }));
+      const needsApprovalFn = vi.fn((_input: unknown, ctx?: { requestContext?: Record<string, unknown> }) => {
+        // Trusted channels skip approval; anything else (including a missing context) requires it.
+        return (ctx?.requestContext as any)?.channel?.platform !== 'trusted';
+      });
+      const contextTool = createTool({
+        id: 'contextTool',
+        description: 'A tool that processes queries.',
+        inputSchema: z.object({ query: z.string() }),
+        execute: contextToolExecute,
+      });
+      // The network tool step reads the runtime `needsApprovalFn` attached to the
+      // live tool instance (the shape the MCP client and CoreToolBuilder produce).
+      (contextTool as any).needsApprovalFn = needsApprovalFn;
+
+      const mockModel = createRoutingMockModel('contextTool', 'tool', JSON.stringify({ query: 'ctx' }));
+      const networkAgent = new Agent({
+        id: 'context-approval-network-agent',
+        name: 'Context Approval Network Agent',
+        instructions: 'Use contextTool.',
+        model: mockModel,
+        tools: { contextTool },
+        memory,
+      });
+      const mastra = new Mastra({ agents: { networkAgent }, storage, logger: false });
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const requestContext = new RequestContext<unknown>([['channel', { platform: 'trusted' }]]);
+      const anStream = await registeredAgent.network('Process the query "ctx"', {
+        memory: { thread: 'test-thread-ctx-approval', resource: 'test-resource-ctx-approval' },
+        requestContext,
+      });
+
+      const chunkTypes: string[] = [];
+      for await (const chunk of anStream) {
+        chunkTypes.push(chunk.type);
+      }
+
+      expect(needsApprovalFn).toHaveBeenCalledTimes(1);
+      expect(needsApprovalFn.mock.calls[0]![1]?.requestContext).toMatchObject({ channel: { platform: 'trusted' } });
+      expect(chunkTypes).not.toContain('tool-execution-approval');
+      expect(contextToolExecute).toHaveBeenCalled();
+    });
+
     it('should approve a nested agent tool call', async () => {
       mockToolExecute.mockClear();
 
@@ -4198,6 +4245,53 @@ describe('Agent - network - tool approval and suspension', () => {
       expect(resumeChunks[resumeChunks.length - 1].type).toBe('network-execution-event-finish');
 
       expect(rejectionFound).toBe(true);
+      expect(mockToolExecute).not.toHaveBeenCalled();
+    });
+
+    it('should decline a direct network tool call with a custom reason (#20495)', async () => {
+      mockToolExecute.mockClear();
+
+      const declineReason = 'That query touches restricted data';
+      const mockModel = createRoutingMockModel('approvalTool', 'tool', JSON.stringify({ query: 'decline test' }));
+
+      const networkAgent = new Agent({
+        id: 'decline-reason-network-agent',
+        name: 'Decline Reason Network Agent',
+        instructions: 'You help users process queries. Use the approval-tool when asked to process something.',
+        model: mockModel,
+        tools: { approvalTool },
+        memory,
+      });
+
+      const mastra = new Mastra({ agents: { networkAgent }, storage, logger: false });
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const memoryConfig = {
+        thread: 'test-thread-decline-reason',
+        resource: 'test-resource-decline-reason',
+      };
+
+      const anStream = await registeredAgent.network('Process the query "decline test"', { memory: memoryConfig });
+      for await (const _chunk of anStream) {
+        // drain until suspension
+      }
+
+      const resumeStream = await registeredAgent.declineNetworkToolCall({
+        runId: anStream.runId,
+        reason: declineReason,
+        memory: memoryConfig,
+      });
+
+      const resumeChunks: any[] = [];
+      for await (const chunk of resumeStream) {
+        resumeChunks.push(chunk);
+      }
+
+      const executionEnd = resumeChunks.find(chunk => chunk.type === 'tool-execution-end');
+      expect(executionEnd?.payload?.result).toBe(declineReason);
+      // The loop must still recognise this as a decline even though the text no longer
+      // matches the default reason.
+      expect(resumeChunks[resumeChunks.length - 1].type).toBe('network-execution-event-finish');
       expect(mockToolExecute).not.toHaveBeenCalled();
     });
 

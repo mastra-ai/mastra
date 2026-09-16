@@ -162,6 +162,83 @@ describe('GET /auth/sso/login — callback URI prefix', () => {
 });
 
 // =============================================================================
+// Public host behind a gateway that rewrites X-Forwarded-Host
+// =============================================================================
+
+describe('GET /auth/sso/login — public host behind a rewriting gateway', () => {
+  // Railway's gateway overwrites X-Forwarded-Host with its own internal domain,
+  // so the edge in front of it forwards the browser-facing host in
+  // X-Mastra-Public-Host. Resolving the origin from X-Forwarded-Host instead
+  // produced an internal *.up.railway.app callback that the platform's OAuth
+  // redirect_uri allowlist rejected outright.
+  const gatewayHeaders = {
+    'x-mastra-public-host': 'my-project--qa.studio.example.com',
+    'x-forwarded-host': 'my-project-qa-qa.up.railway.app',
+  };
+
+  it('should build the OAuth callback URI from the public host, not the gateway host', async () => {
+    const mockAuth = createMockSSOProvider();
+    const mastra = createMastraWithAuth(mockAuth);
+
+    const request = new Request('http://internal-hostname:8080/api/auth/sso/login', {
+      headers: new Headers(gatewayHeaders),
+    });
+    const ctx = {
+      ...createTestServerContext({ mastra }),
+      request,
+      redirect_uri: undefined,
+    };
+
+    await GET_SSO_LOGIN_ROUTE.handler(ctx as any);
+
+    const callbackUri = (mockAuth.getLoginUrl as any).mock.calls[0][0];
+    expect(callbackUri).toBe('https://my-project--qa.studio.example.com/api/auth/sso/callback');
+  });
+
+  it('should treat the public host as same-origin when validating the post-login redirect', async () => {
+    const mockAuth = createMockSSOProvider();
+    const mastra = createMastraWithAuth(mockAuth);
+
+    const request = new Request('http://internal-hostname:8080/api/auth/sso/login', {
+      headers: new Headers(gatewayHeaders),
+    });
+    const ctx = {
+      ...createTestServerContext({ mastra }),
+      request,
+      redirect_uri: 'https://my-project--qa.studio.example.com/agents',
+    };
+
+    await GET_SSO_LOGIN_ROUTE.handler(ctx as any);
+
+    // Resolving the origin as the gateway host makes this fail the same-origin
+    // check and silently collapse to '/', dropping the user's landing page.
+    const stateArg = (mockAuth.getLoginUrl as any).mock.calls[0][1] as string;
+    const [, encodedRedirect] = stateArg.split('|', 2);
+    expect(decodeURIComponent(encodedRedirect)).toBe('https://my-project--qa.studio.example.com/agents');
+  });
+
+  it('should still reject an external redirect_uri when a public host is set', async () => {
+    const mockAuth = createMockSSOProvider();
+    const mastra = createMastraWithAuth(mockAuth);
+
+    const request = new Request('http://internal-hostname:8080/api/auth/sso/login', {
+      headers: new Headers(gatewayHeaders),
+    });
+    const ctx = {
+      ...createTestServerContext({ mastra }),
+      request,
+      redirect_uri: 'https://evil.com/phish',
+    };
+
+    await GET_SSO_LOGIN_ROUTE.handler(ctx as any);
+
+    const stateArg = (mockAuth.getLoginUrl as any).mock.calls[0][1] as string;
+    const [, encodedRedirect] = stateArg.split('|', 2);
+    expect(decodeURIComponent(encodedRedirect)).toBe('/');
+  });
+});
+
+// =============================================================================
 // Issue #4: SSO callback rejects cross-origin post-login redirects
 // =============================================================================
 

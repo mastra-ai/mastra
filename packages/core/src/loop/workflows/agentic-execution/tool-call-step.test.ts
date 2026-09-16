@@ -2,7 +2,7 @@ import type { ToolSet } from '@internal/ai-sdk-v5';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import { z } from 'zod/v4';
-import type { MessageList } from '../../../agent/message-list';
+import { MessageList } from '../../../agent/message-list';
 import { RequestContext } from '../../../request-context';
 import { ChunkFrom } from '../../../stream/types';
 import { createTool } from '../../../tools';
@@ -40,6 +40,213 @@ const makeBaseExecuteParams = (suspend: Mock, overrides: any = {}) => ({
   abortSignal: new AbortController().signal,
   validateSchemas: false,
   ...overrides,
+});
+
+describe('createToolCallStep background task resume with falsy payload', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  const runBackgroundResume = async (resumeData: unknown) => {
+    const controller = { enqueue: vi.fn() };
+    const streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    const messageList = createMessageList();
+    const backgroundTaskManager = {
+      // A suspended task already exists for this tool call, so the step should
+      // resume it rather than dispatch a brand new one.
+      listTasks: vi.fn(async () => ({ tasks: [{ id: 'suspended-task-1' }], total: 1 })),
+      registerTaskContext: vi.fn(),
+      resume: vi.fn(async () => ({ id: 'suspended-task-1' })),
+      enqueue: vi.fn(async () => ({ task: { id: 'brand-new-task' }, fallbackToSync: false })),
+      cancel: vi.fn(),
+      waitForNextTask: vi.fn(),
+    };
+    const tools = {
+      'background-tool': {
+        backgroundConfig: { enabled: true },
+        execute: vi.fn(async () => ({ ok: true })),
+      },
+    } as any;
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'current-run',
+      streamState,
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+      },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        resumeData,
+        inputData: { toolCallId: 'call-1', toolName: 'background-tool', args: { query: 'customers' } },
+      }),
+    );
+
+    return backgroundTaskManager;
+  };
+
+  const runBackgroundDispatchOnResume = async (resumeData: unknown) => {
+    const controller = { enqueue: vi.fn() };
+    const streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    const messageList = createMessageList();
+    const backgroundTaskManager = {
+      // No suspended task, so this resume turn dispatches instead. The chunk comes
+      // back on the CURRENT run id, which is the case the replay gate guards.
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+      resume: vi.fn(),
+      enqueue: vi.fn(async (_payload: any, context: any) => {
+        context.onChunk?.({
+          type: 'background-task-completed',
+          payload: {
+            taskId: 'task-1',
+            toolCallId: 'call-1',
+            toolName: 'background-tool',
+            agentId: 'agent-1',
+            runId: 'current-run',
+            result: { ok: true },
+            completedAt: new Date(),
+          },
+        });
+        return { task: { id: 'task-1' }, fallbackToSync: false };
+      }),
+      cancel: vi.fn(),
+      waitForNextTask: vi.fn(),
+    };
+    const tools = {
+      'background-tool': { backgroundConfig: { enabled: true }, execute: vi.fn() },
+    } as any;
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'current-run',
+      streamState,
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+      },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        resumeData,
+        inputData: { toolCallId: 'call-1', toolName: 'background-tool', args: { query: 'customers' } },
+      }),
+    );
+
+    await vi.waitFor(() => {
+      expect(controller.enqueue).toHaveBeenCalled();
+    });
+    return controller;
+  };
+
+  it('replays the tool-call chunk on a same-run resume with a falsy payload', async () => {
+    // The replay exists so a reloading UI still renders the invocation that was streamed
+    // in the earlier turn. A falsy resume payload is still a resume, so it must replay.
+    const controller = await runBackgroundDispatchOnResume(false);
+
+    const replayed = controller.enqueue.mock.calls
+      .map(([chunk]: [any]) => chunk)
+      .filter((chunk: any) => chunk.type === 'tool-call');
+    expect(replayed).toHaveLength(1);
+  });
+
+  it('records the background result to memory on a same-run resume with a falsy payload', async () => {
+    // When no matching tool-invocation is on the list, the result is appended as a standalone
+    // tool message so memory still records it. A falsy resume payload must not skip that.
+    const streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    const added: any[] = [];
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [] },
+        all: { db: () => [], aiV5: { model: () => [] } },
+      },
+      updateToolInvocation: vi.fn(() => false),
+      updateMessageMetadataByToolCallId: vi.fn(() => true),
+      add: vi.fn((messages: any) => {
+        added.push(messages);
+      }),
+    } as unknown as MessageList;
+
+    const backgroundTaskManager = {
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+      resume: vi.fn(),
+      enqueue: vi.fn(async (_payload: any, context: any) => {
+        await context.onResult?.({
+          taskId: 'task-1',
+          toolCallId: 'call-1',
+          toolName: 'background-tool',
+          runId: 'current-run',
+          status: 'completed',
+          result: { ok: true },
+          startedAt: new Date(0),
+          completedAt: new Date(0),
+        });
+        return { task: { id: 'task-1' }, fallbackToSync: false };
+      }),
+      cancel: vi.fn(),
+      waitForNextTask: vi.fn(),
+    };
+
+    const toolCallStep = createToolCallStep({
+      tools: { 'background-tool': { backgroundConfig: { enabled: true }, execute: vi.fn() } } as any,
+      messageList,
+      controller: { enqueue: vi.fn() },
+      runId: 'current-run',
+      streamState,
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+      },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        resumeData: false,
+        inputData: { toolCallId: 'call-1', toolName: 'background-tool', args: { query: 'customers' } },
+      }),
+    );
+
+    // Distinguish the standalone tool-CALL record (the gated fallback) from the
+    // tool-RESULT message that is appended unconditionally a few lines below it.
+    const callRecords = added
+      .flat()
+      .filter((message: any) => message?.role === 'tool')
+      .filter((message: any) => (message.content ?? []).some((part: any) => part.type === 'tool-call'));
+    expect(callRecords).toHaveLength(1);
+  });
+
+  it('resumes the suspended task when the resume payload is an object', async () => {
+    const manager = await runBackgroundResume({ confirmed: true });
+
+    expect(manager.resume).toHaveBeenCalledWith('suspended-task-1', { confirmed: true });
+    expect(manager.enqueue).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['false', false],
+    ['zero', 0],
+    ['an empty string', ''],
+  ])('resumes the suspended task when the resume payload is %s', async (_label, resumeData) => {
+    // A primitive resumeSchema makes these valid payloads; `false` is how a boolean
+    // human-in-the-loop tool declines. Treating them as "no resume data" silently
+    // dispatches a second task while the first stays suspended forever.
+    const manager = await runBackgroundResume(resumeData);
+
+    expect(manager.resume).toHaveBeenCalledWith('suspended-task-1', resumeData);
+    expect(manager.enqueue).not.toHaveBeenCalled();
+  });
 });
 
 describe('createToolCallStep background task stream replay', () => {
@@ -135,6 +342,467 @@ describe('createToolCallStep background task stream replay', () => {
         args: { query: 'customers' },
       },
     });
+  });
+
+  const runResumedAwaitedTask = async (
+    terminalTask:
+      | { id: string; status: 'completed'; result: unknown }
+      | { id: string; status: 'failed'; error: { message: string } }
+      | { id: string; status: 'cancelled' },
+  ) => {
+    let registeredContext: any;
+    const backgroundTaskManager = {
+      listTasks: vi.fn(async () => ({ tasks: [{ id: terminalTask.id }], total: 1 })),
+      registerTaskContext: vi.fn((_taskId: string, context: any) => {
+        registeredContext = context;
+      }),
+      resume: vi.fn(async () => {
+        if (terminalTask.status !== 'cancelled') {
+          setTimeout(async () => {
+            await registeredContext.onResult({
+              taskId: terminalTask.id,
+              toolCallId: 'call-resumed-awaited',
+              toolName: 'background-tool',
+              agentId: 'agent-1',
+              runId: 'current-run',
+              status: terminalTask.status,
+              ...(terminalTask.status === 'completed' ? { result: { executor: true } } : { error: terminalTask.error }),
+              startedAt: new Date(),
+              completedAt: new Date(),
+            });
+          }, 0);
+        }
+        return { id: terminalTask.id };
+      }),
+      waitForNextTask: vi.fn(async () => terminalTask),
+      enqueue: vi.fn(),
+      cancel: vi.fn(),
+    };
+    const messageList = {
+      ...createMessageList(),
+      updateToolInvocation: vi.fn(() => true),
+      updateMessageMetadataByToolCallId: vi.fn(),
+    } as unknown as MessageList;
+    const toolCallStep = createToolCallStep({
+      tools: {
+        'background-tool': { backgroundConfig: { enabled: true }, execute: vi.fn() },
+      } as any,
+      messageList,
+      controller: { enqueue: vi.fn() },
+      runId: 'current-run',
+      streamState: { serialize: vi.fn() },
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+      },
+    } as any);
+
+    const result = await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        resumeData: { approved: true },
+        inputData: {
+          toolCallId: 'call-resumed-awaited',
+          toolName: 'background-tool',
+          args: { query: 'meaning', _background: { disposition: 'awaited' } },
+        },
+      }),
+    );
+
+    return { result, backgroundTaskManager };
+  };
+
+  it('awaits a resumed awaited task until its authoritative result is reconciled', async () => {
+    const { result, backgroundTaskManager } = await runResumedAwaitedTask({
+      id: 'task-resumed-awaited',
+      status: 'completed',
+      result: { authoritative: true },
+    });
+
+    expect(result).toMatchObject({ result: { authoritative: true } });
+    expect(backgroundTaskManager.registerTaskContext).toHaveBeenCalledWith('task-resumed-awaited', expect.any(Object));
+    expect(backgroundTaskManager.resume).toHaveBeenCalledWith('task-resumed-awaited', { approved: true });
+    expect(backgroundTaskManager.waitForNextTask).toHaveBeenCalledWith(['task-resumed-awaited'], {
+      abortSignal: undefined,
+    });
+  });
+
+  it.each([
+    {
+      status: 'failed' as const,
+      task: { id: 'task-resumed-failed', status: 'failed' as const, error: { message: 'resume failed' } },
+      message: 'resume failed',
+    },
+    {
+      status: 'cancelled' as const,
+      task: { id: 'task-resumed-cancelled', status: 'cancelled' as const },
+      message: 'Background task cancelled: task-resumed-cancelled',
+    },
+  ])('returns a resumed awaited $status task without hanging', async ({ task, message }) => {
+    const { result } = await runResumedAwaitedTask(task);
+
+    expect(result as any).toMatchObject({ error: expect.objectContaining({ message }) });
+  });
+
+  it('awaits the exact background task until its authoritative result is reconciled', async () => {
+    const order: string[] = [];
+    const controller = { enqueue: vi.fn() };
+    const flushMessages = vi.fn(async () => {
+      order.push('flushed');
+    });
+    const messageList = {
+      ...createMessageList(),
+      updateToolInvocation: vi.fn(() => {
+        order.push('reconciled');
+        return true;
+      }),
+      updateMessageMetadataByToolCallId: vi.fn(),
+    } as unknown as MessageList;
+    let signalTaskStarted!: () => void;
+    const taskStarted = new Promise<void>(resolve => {
+      signalTaskStarted = resolve;
+    });
+    const backgroundTaskManager = {
+      enqueue: vi.fn(async (payload: any, context: any) => {
+        setTimeout(async () => {
+          const result = await context.executor.execute(payload.args);
+          signalTaskStarted();
+          await context.onResult({
+            status: 'completed',
+            taskId: 'task-awaited',
+            toolCallId: 'call-awaited',
+            toolName: 'background-tool',
+            agentId: 'agent-1',
+            runId: 'current-run',
+            result,
+            startedAt: new Date(),
+            completedAt: new Date(),
+          });
+          order.push('terminal');
+        }, 0);
+        return { task: { id: 'task-awaited' }, fallbackToSync: false };
+      }),
+      waitForNextTask: vi.fn(async () => {
+        await taskStarted;
+        return { id: 'task-awaited', status: 'completed', result: { answer: 42, authoritative: true } };
+      }),
+      cancel: vi.fn(),
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+    };
+    const tools = {
+      'background-tool': {
+        backgroundConfig: { enabled: true },
+        execute: vi.fn(async () => ({ answer: 42 })),
+        onOutput: vi.fn(async () => {
+          order.push('onOutput');
+        }),
+      },
+    } as any;
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'current-run',
+      streamState: { serialize: vi.fn() },
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+        saveQueueManager: { flushMessages },
+        threadId: 'thread-1',
+      },
+    } as any);
+
+    const result = await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: {
+          toolCallId: 'call-awaited',
+          toolName: 'background-tool',
+          args: { query: 'meaning', _background: { disposition: 'awaited' } },
+        },
+      }),
+    );
+
+    expect(result).toMatchObject({ result: { answer: 42, authoritative: true } });
+    expect(backgroundTaskManager.waitForNextTask).toHaveBeenCalledWith(['task-awaited'], {
+      abortSignal: undefined,
+    });
+    expect(tools['background-tool'].execute).toHaveBeenCalledOnce();
+    expect(tools['background-tool'].onOutput).toHaveBeenCalledWith({
+      toolCallId: 'call-awaited',
+      toolName: 'background-tool',
+      output: { answer: 42 },
+      abortSignal: undefined,
+    });
+    expect(order).toEqual(['onOutput', 'reconciled', 'flushed', 'terminal']);
+  });
+
+  it('stops awaiting background work when the request is aborted', async () => {
+    const abortController = new AbortController();
+    const backgroundTaskManager = {
+      enqueue: vi.fn(async () => ({ task: { id: 'task-aborted' }, fallbackToSync: false })),
+      waitForNextTask: vi.fn(
+        async (_taskIds: string[], waitOptions?: { abortSignal?: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            waitOptions?.abortSignal?.addEventListener('abort', () => reject(waitOptions.abortSignal?.reason), {
+              once: true,
+            });
+          }),
+      ),
+      cancel: vi.fn(),
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+    };
+    const toolCallStep = createToolCallStep({
+      tools: {
+        'background-tool': {
+          backgroundConfig: { enabled: true },
+          execute: vi.fn(),
+        },
+      },
+      messageList: createMessageList(),
+      controller: { enqueue: vi.fn() },
+      options: { abortSignal: abortController.signal },
+      runId: 'current-run',
+      streamState: { serialize: vi.fn() },
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+      },
+    } as any);
+
+    const execution = toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: {
+          toolCallId: 'call-aborted',
+          toolName: 'background-tool',
+          args: { _background: { disposition: 'awaited' } },
+        },
+      }),
+    );
+    await vi.waitFor(() => expect(backgroundTaskManager.waitForNextTask).toHaveBeenCalledOnce());
+
+    abortController.abort(new Error('request aborted'));
+
+    await expect(execution).resolves.toMatchObject({ aborted: true });
+    expect(backgroundTaskManager.waitForNextTask).toHaveBeenCalledWith(['task-aborted'], {
+      abortSignal: abortController.signal,
+    });
+  });
+
+  it('awaits failed background work until the failure is reconciled', async () => {
+    const order: string[] = [];
+    const messageList = {
+      ...createMessageList(),
+      updateToolInvocation: vi.fn(() => {
+        order.push('reconciled');
+        return true;
+      }),
+      updateMessageMetadataByToolCallId: vi.fn(),
+    } as unknown as MessageList;
+    let completeTask!: () => void;
+    const taskCompleted = new Promise<void>(resolve => {
+      completeTask = resolve;
+    });
+    const backgroundTaskManager = {
+      enqueue: vi.fn(async (_payload: any, context: any) => {
+        void (async () => {
+          await context.onResult({
+            status: 'failed',
+            taskId: 'task-failed',
+            toolCallId: 'call-failed',
+            toolName: 'background-tool',
+            agentId: 'agent-1',
+            runId: 'current-run',
+            error: { message: 'lookup failed' },
+            startedAt: new Date(),
+            completedAt: new Date(),
+          });
+          order.push('terminal');
+          completeTask();
+        })();
+        return { task: { id: 'task-failed' }, fallbackToSync: false };
+      }),
+      waitForNextTask: vi.fn(async () => {
+        await taskCompleted;
+        return { id: 'task-failed', status: 'failed', error: { message: 'lookup failed' } };
+      }),
+      cancel: vi.fn(),
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+    };
+    const toolCallStep = createToolCallStep({
+      tools: {
+        'background-tool': { backgroundConfig: { enabled: true }, execute: vi.fn() },
+      } as any,
+      messageList,
+      controller: { enqueue: vi.fn() },
+      runId: 'current-run',
+      streamState: { serialize: vi.fn() },
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+      },
+    } as any);
+
+    const result = await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: {
+          toolCallId: 'call-failed',
+          toolName: 'background-tool',
+          args: { query: 'missing', _background: { disposition: 'awaited' } },
+        },
+      }),
+    );
+
+    expect(result as any).toMatchObject({ error: expect.objectContaining({ message: 'lookup failed' }) });
+    expect(order).toEqual(['reconciled', 'terminal']);
+  });
+
+  it('returns an awaited cancellation without waiting for result reconciliation', async () => {
+    const backgroundTaskManager = {
+      enqueue: vi.fn(async () => ({ task: { id: 'task-cancelled' }, fallbackToSync: false })),
+      waitForNextTask: vi.fn(async () => ({ id: 'task-cancelled', status: 'cancelled' })),
+      cancel: vi.fn(),
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+    };
+    const toolCallStep = createToolCallStep({
+      tools: {
+        'background-tool': { backgroundConfig: { enabled: true }, execute: vi.fn() },
+      } as any,
+      messageList: createMessageList(),
+      controller: { enqueue: vi.fn() },
+      runId: 'current-run',
+      streamState: { serialize: vi.fn() },
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+      },
+    } as any);
+
+    const result = await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: {
+          toolCallId: 'call-cancelled',
+          toolName: 'background-tool',
+          args: { query: 'cancelled', _background: { disposition: 'awaited' } },
+        },
+      }),
+    );
+
+    expect(result as any).toMatchObject({
+      error: expect.objectContaining({ message: 'Background task cancelled: task-cancelled' }),
+    });
+  });
+
+  it('runs onOutput for deferred background execution', async () => {
+    const onOutput = vi.fn();
+    let resolveExecution!: () => void;
+    const executionComplete = new Promise<void>(resolve => {
+      resolveExecution = resolve;
+    });
+    const backgroundTaskManager = {
+      enqueue: vi.fn(async (payload: any, context: any) => {
+        setTimeout(async () => {
+          await context.executor.execute(payload.args);
+          resolveExecution();
+        }, 0);
+        return { task: { id: 'task-deferred' }, fallbackToSync: false };
+      }),
+      waitForNextTask: vi.fn(),
+      cancel: vi.fn(),
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+    };
+    const toolCallStep = createToolCallStep({
+      tools: {
+        'background-tool': {
+          backgroundConfig: { enabled: true },
+          execute: vi.fn(async () => ({ answer: 42 })),
+          onOutput,
+        },
+      } as any,
+      messageList: createMessageList(),
+      controller: { enqueue: vi.fn() },
+      runId: 'current-run',
+      streamState: { serialize: vi.fn() },
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+      },
+    } as any);
+
+    const result = await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: {
+          toolCallId: 'call-deferred',
+          toolName: 'background-tool',
+          args: { query: 'meaning', _background: { disposition: 'deferred' } },
+        },
+      }),
+    );
+
+    expect(result).toMatchObject({ result: expect.stringContaining('Background task started') });
+    await executionComplete;
+    expect(onOutput).toHaveBeenCalledOnce();
+    expect(onOutput).toHaveBeenCalledWith({
+      toolCallId: 'call-deferred',
+      toolName: 'background-tool',
+      output: { answer: 42 },
+      abortSignal: undefined,
+    });
+  });
+
+  it('returns a serializable result from the background executor', async () => {
+    const circular: Record<string, unknown> = { answer: 42 };
+    circular.self = circular;
+    let executorResult: unknown;
+    let resolveExecution!: () => void;
+    const executionComplete = new Promise<void>(resolve => {
+      resolveExecution = resolve;
+    });
+    const backgroundTaskManager = {
+      enqueue: vi.fn(async (payload: any, context: any) => {
+        setTimeout(async () => {
+          executorResult = await context.executor.execute(payload.args);
+          resolveExecution();
+        }, 0);
+        return { task: { id: 'task-serialized' }, fallbackToSync: false };
+      }),
+      waitForNextTask: vi.fn(),
+      cancel: vi.fn(),
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+    };
+    const toolCallStep = createToolCallStep({
+      tools: {
+        'background-tool': { backgroundConfig: { enabled: true }, execute: vi.fn(async () => circular) },
+      } as any,
+      messageList: createMessageList(),
+      controller: { enqueue: vi.fn() },
+      runId: 'current-run',
+      streamState: { serialize: vi.fn() },
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+      },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: {
+          toolCallId: 'call-serialized',
+          toolName: 'background-tool',
+          args: { query: 'meaning', _background: { disposition: 'deferred' } },
+        },
+      }),
+    );
+    await executionComplete;
+
+    expect(executorResult).toEqual({ answer: 42, self: '[Circular]' });
+    expect(() => JSON.stringify(executorResult)).not.toThrow();
   });
 });
 
@@ -245,6 +913,92 @@ describe('createToolCallStep tool execution error handling', () => {
       name: 'Error',
       message: expect.stringContaining('External API error: 503 Service Unavailable'),
     });
+  });
+
+  it('should return aborted (not error/result) when the request was aborted while the tool threw', async () => {
+    // A throw caused by request cancellation must NOT become a tool result, or the call is
+    // persisted as completed (result = abort message) and reads as success on resume. The
+    // step flags it `aborted` instead. CoreToolBuilder wraps the throw in a MastraError, so
+    // the abort signal — not the error type — is the evidence.
+    const abortedTool = createTool({
+      id: 'failing-tool',
+      description: 'A tool that throws when the request is cancelled',
+      inputSchema: z.object({ param: z.string() }),
+      execute: async () => {
+        const err = new Error('The operation was aborted.');
+        err.name = 'AbortError';
+        throw err;
+      },
+    });
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: abortedTool,
+      options: {
+        name: 'failing-tool',
+        logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any,
+        description: 'A tool that throws when the request is cancelled',
+        requestContext: new RequestContext(),
+      },
+    }).build();
+
+    const abortController = new AbortController();
+    abortController.abort();
+
+    const toolCallStep = createToolCallStep({
+      tools: { 'failing-tool': builtTool },
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+      // The agent-run abort signal (req.signal in production) is wired in via `options`.
+      options: { abortSignal: abortController.signal },
+    } as any);
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData: makeInputData() }));
+
+    expect(result).toHaveProperty('aborted', true);
+    expect(result).not.toHaveProperty('error');
+    expect(result).not.toHaveProperty('result');
+  });
+
+  it('should still return error (not aborted) when a tool throws and the request was NOT aborted', async () => {
+    // Guard against over-reach: a genuine tool failure on a live request must keep surfacing
+    // as an error result so the model can see it and self-correct.
+    const failingTool = createTool({
+      id: 'failing-tool',
+      description: 'A tool that throws',
+      inputSchema: z.object({ param: z.string() }),
+      execute: async () => {
+        throw new Error('External API error: 503 Service Unavailable');
+      },
+    });
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: failingTool,
+      options: {
+        name: 'failing-tool',
+        logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any,
+        description: 'A tool that throws',
+        requestContext: new RequestContext(),
+      },
+    }).build();
+
+    const toolCallStep = createToolCallStep({
+      tools: { 'failing-tool': builtTool },
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+    } as any);
+
+    // Fresh (non-aborted) signal
+    const result = await toolCallStep.execute(
+      makeExecuteParams({ inputData: makeInputData(), abortSignal: new AbortController().signal }),
+    );
+
+    expect(result).toHaveProperty('error');
+    expect(result).not.toHaveProperty('aborted');
+    expect(result).not.toHaveProperty('result');
   });
 });
 
@@ -424,6 +1178,57 @@ describe('createToolCallStep tool approval workflow', () => {
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
   });
 
+  it.each([{}, { approved: 'true' }])('re-suspends malformed workflow approval data: %j', async resumeData => {
+    suspend.mockResolvedValueOnce('suspended');
+
+    const result = await toolCallStep.execute(makeExecuteParams({ resumeData }));
+
+    expect(result).toBe('suspended');
+    expect(suspend).toHaveBeenCalledTimes(1);
+    expectNoToolExecution();
+  });
+
+  it('does not accept model-authored approval data', async () => {
+    suspend.mockResolvedValueOnce('suspended');
+    const inputData = makeInputData();
+
+    const result = await toolCallStep.execute(
+      makeExecuteParams({
+        inputData: { ...inputData, args: { ...inputData.args, resumeData: { approved: true } } },
+      }),
+    );
+
+    expect(result).toBe('suspended');
+    expect(suspend).toHaveBeenCalledTimes(1);
+    expectNoToolExecution();
+  });
+
+  it('should not flush messages before suspending when memory is read-only', async () => {
+    const flushMessages = vi.fn().mockResolvedValue(undefined);
+    const readOnlyStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      requireToolApproval: true,
+      runId: 'test-run',
+      streamState,
+      _internal: {
+        saveQueueManager: { flushMessages },
+        memoryConfig: { readOnly: true },
+        threadId: 'read-only-thread',
+        threadExists: true,
+      },
+    } as any);
+
+    suspend.mockResolvedValueOnce('completed');
+    const executePromise = readOnlyStep.execute(makeExecuteParams());
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(suspend).toHaveBeenCalled();
+    expect(flushMessages).not.toHaveBeenCalled();
+    await expect(executePromise).resolves.toBe('completed');
+  });
+
   it('should handle declined tool calls without executing the tool', async () => {
     const inputData = makeInputData();
     const resumeData = { approved: false };
@@ -441,6 +1246,47 @@ describe('createToolCallStep tool approval workflow', () => {
       ...inputData,
     });
     expectNoToolExecution();
+  });
+
+  it('carries a caller-supplied decline reason onto the approval decision (#20495)', async () => {
+    const inputData = makeInputData();
+    const resumeData = { approved: false, reason: 'The user is not authorized to read this file' };
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData }));
+
+    expect(result).toEqual({
+      approval: {
+        id: inputData.toolCallId,
+        approved: false,
+        reason: 'The user is not authorized to read this file',
+      },
+      ...inputData,
+    });
+    expectNoToolExecution();
+  });
+
+  it('falls back to the default decline reason when the supplied reason is blank (#20495)', async () => {
+    const inputData = makeInputData();
+
+    const result = await toolCallStep.execute(
+      makeExecuteParams({ inputData, resumeData: { approved: false, reason: '   ' } }),
+    );
+
+    expect((result as any).approval.reason).toBe('Tool call was not approved by the user');
+    expectNoToolExecution();
+  });
+
+  it('advertises an optional reason on the approval resume schema (#20495)', async () => {
+    suspend.mockResolvedValueOnce('suspended');
+    await toolCallStep.execute(makeExecuteParams());
+
+    const approvalChunk = controller.enqueue.mock.calls
+      .map(([chunk]: [any]) => chunk)
+      .find((chunk: any) => chunk?.type === 'tool-call-approval');
+    expect(approvalChunk).toBeDefined();
+    const resumeSchema = JSON.parse(approvalChunk.payload.resumeSchema);
+    expect(resumeSchema.properties.reason).toBeDefined();
+    expect(resumeSchema.required).toEqual(['approved']);
   });
 
   it('declines without a live requireToolApproval policy when suspendData marks approval (#20470)', async () => {
@@ -667,12 +1513,98 @@ describe('createToolCallStep tool approval workflow', () => {
   });
 });
 
-describe('createToolCallStep delegated agent tool approvals', () => {
+describe('createToolCallStep delegated agent tool metadata', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;
   let streamState: { serialize: Mock };
-  let messageList: MessageList;
   let neverResolve: Promise<never>;
+
+  const createAssistantMessage = (
+    id: string,
+    toolCallId: string,
+    toolName: string,
+    args: Record<string, unknown> = {},
+  ) => ({
+    id,
+    role: 'assistant' as const,
+    createdAt: new Date(0),
+    content: {
+      format: 2 as const,
+      metadata: {} as Record<string, unknown>,
+      parts: [
+        {
+          type: 'tool-invocation' as const,
+          toolInvocation: {
+            state: 'call' as const,
+            toolCallId,
+            toolName,
+            args,
+          },
+        },
+      ],
+    },
+  });
+
+  const startDelegatedTool = ({
+    messageList,
+    requireApproval,
+    suspendPayload = {},
+    logger,
+    toolCallId = 'parent-tool-call-id',
+    delegatedRunId = 'sub-agent-run-id',
+    toolPayloadTransform,
+  }: {
+    messageList: MessageList;
+    requireApproval: boolean;
+    suspendPayload?: unknown;
+    logger?: { warn: Mock; debug?: Mock };
+    toolCallId?: string;
+    delegatedRunId?: string;
+    toolPayloadTransform?: unknown;
+  }) => {
+    const tools = {
+      'agent-subAgent': {
+        execute: vi.fn(async (_args: unknown, opts: MastraToolInvocationOptions) => {
+          await opts.suspend?.(suspendPayload, {
+            ...(requireApproval ? { requireToolApproval: true } : {}),
+            runId: delegatedRunId,
+          });
+          return { text: 'done' };
+        }),
+      },
+    } as ToolSet;
+    const inputData = {
+      toolCallId,
+      toolName: 'agent-subAgent',
+      args: { prompt: 'do thing' },
+    };
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'parent-run-id',
+      streamState,
+      logger: logger as any,
+      _internal: toolPayloadTransform ? ({ toolPayloadTransform } as any) : undefined,
+    });
+
+    return toolCallStep.execute({
+      ...makeBaseExecuteParams(suspend),
+      writer: new ToolStream({
+        prefix: 'tool',
+        callId: inputData.toolCallId,
+        name: inputData.toolName,
+        runId: 'parent-run-id',
+      }),
+      inputData,
+    });
+  };
+
+  const settleToolSuspension = async () => {
+    for (let i = 0; i < 5; i++) {
+      await new Promise(resolve => setImmediate(resolve));
+    }
+  };
 
   beforeEach(() => {
     controller = { enqueue: vi.fn() };
@@ -687,11 +1619,10 @@ describe('createToolCallStep delegated agent tool approvals', () => {
   });
 
   it('stores the outer resumable runId with delegatedRunId when a nested agent run requests tool approval', async () => {
-    const assistantMessage = {
-      role: 'assistant',
-      content: { metadata: {} as Record<string, unknown> },
-    };
-    messageList = {
+    const assistantMessage = createAssistantMessage('assistant-target', 'parent-tool-call-id', 'agent-subAgent', {
+      prompt: 'do thing',
+    });
+    const messageList = {
       get: {
         input: { aiV5: { model: () => [] } },
         response: { db: () => [assistantMessage] },
@@ -699,45 +1630,8 @@ describe('createToolCallStep delegated agent tool approvals', () => {
       },
     } as unknown as MessageList;
 
-    const tools = {
-      'agent-subAgent': {
-        execute: vi.fn(async (_args: unknown, opts: MastraToolInvocationOptions) => {
-          await opts.suspend?.({}, { requireToolApproval: true, runId: 'sub-agent-run-id' });
-          return { text: 'done' };
-        }),
-      },
-    } as ToolSet;
-
-    const toolCallStep = createToolCallStep({
-      tools,
-      messageList,
-      controller,
-      runId: 'parent-run-id',
-      streamState,
-    });
-
-    const inputData = {
-      toolCallId: 'parent-tool-call-id',
-      toolName: 'agent-subAgent',
-      args: { prompt: 'do thing' },
-    };
-
-    const executePromise = toolCallStep.execute({
-      ...makeBaseExecuteParams(suspend),
-      writer: new ToolStream({
-        prefix: 'tool',
-        callId: inputData.toolCallId,
-        name: inputData.toolName,
-        runId: 'parent-run-id',
-      }),
-      inputData,
-    });
-
-    // Allow the microtask / setImmediate chain through tool execution → inner
-    // suspend → addToolMetadata to settle before inspecting the metadata.
-    for (let i = 0; i < 5; i++) {
-      await new Promise(resolve => setImmediate(resolve));
-    }
+    const executePromise = startDelegatedTool({ messageList, requireApproval: true });
+    await settleToolSuspension();
 
     const pending = (assistantMessage.content.metadata as Record<string, any>).pendingToolApprovals?.[
       'parent-tool-call-id'
@@ -753,6 +1647,445 @@ describe('createToolCallStep delegated agent tool approvals', () => {
     expect(pending.parentRunId).toBeUndefined();
 
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('advertises an optional reason on the delegated approval resume schema (#20495)', async () => {
+    const assistantMessage = createAssistantMessage('assistant-target', 'parent-tool-call-id', 'agent-subAgent', {
+      prompt: 'do thing',
+    });
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [assistantMessage] },
+        all: { db: () => [assistantMessage], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+
+    const executePromise = startDelegatedTool({ messageList, requireApproval: true });
+    await settleToolSuspension();
+
+    const approvalChunk = controller.enqueue.mock.calls
+      .map(([chunk]: [any]) => chunk)
+      .find((chunk: any) => chunk?.type === 'tool-call-approval');
+    expect(approvalChunk).toBeDefined();
+    const resumeSchema = JSON.parse(approvalChunk.payload.resumeSchema);
+    expect(resumeSchema.properties.reason).toBeDefined();
+    expect(resumeSchema.required).toEqual(['approved']);
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('preserves explicitly transformed null payloads in approval and suspension metadata', async () => {
+    const toolPayloadTransform = {
+      targets: ['transcript'],
+      transformToolPayload: vi.fn(() => null),
+    };
+    const approvalMessage = createAssistantMessage('assistant-approval', 'parent-tool-call-id', 'agent-subAgent', {
+      secret: 'approval-secret',
+    });
+    const approvalMessageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [approvalMessage] },
+        all: { db: () => [approvalMessage], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+
+    const approvalExecution = startDelegatedTool({
+      messageList: approvalMessageList,
+      requireApproval: true,
+      toolPayloadTransform,
+    });
+    await settleToolSuspension();
+    expect(
+      (approvalMessage.content.metadata as Record<string, any>).pendingToolApprovals['parent-tool-call-id'].args,
+    ).toBeNull();
+
+    const suspensionMessage = createAssistantMessage('assistant-suspension', 'parent-tool-call-id', 'agent-subAgent', {
+      secret: 'suspension-secret',
+    });
+    const suspensionMessageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [suspensionMessage] },
+        all: { db: () => [suspensionMessage], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+
+    const suspensionExecution = startDelegatedTool({
+      messageList: suspensionMessageList,
+      requireApproval: false,
+      suspendPayload: { secret: 'suspend-payload-secret' },
+      toolPayloadTransform,
+    });
+    await settleToolSuspension();
+    const suspendedEntry = (suspensionMessage.content.metadata as Record<string, any>).suspendedTools[
+      'parent-tool-call-id'
+    ];
+    expect(suspendedEntry.args).toBeNull();
+    expect(suspendedEntry.suspendPayload).toBeNull();
+
+    await expect(Promise.race([approvalExecution, Promise.resolve('completed')])).resolves.toBe('completed');
+    await expect(Promise.race([suspensionExecution, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('recovers a drained response message when persisting a delegated tool suspension', async () => {
+    const targetMessage = createAssistantMessage('assistant-target', 'parent-tool-call-id', 'agent-subAgent', {
+      prompt: 'do thing',
+    });
+    const unrelatedMessage = createAssistantMessage('assistant-unrelated', 'unrelated-tool-call-id', 'unrelatedTool');
+    const messageList = new MessageList();
+    messageList.add(targetMessage, 'response');
+    messageList.drainUnsavedMessages();
+    messageList.add({ role: 'user', content: 'next turn' }, 'input');
+    messageList.add(unrelatedMessage, 'response');
+    const updateMessageMetadataByToolCallId = vi.spyOn(messageList, 'updateMessageMetadataByToolCallId');
+
+    const executePromise = startDelegatedTool({
+      messageList,
+      requireApproval: false,
+      suspendPayload: { reason: 'review' },
+    });
+    await settleToolSuspension();
+
+    expect(updateMessageMetadataByToolCallId).toHaveBeenCalledWith(
+      'parent-tool-call-id',
+      expect.objectContaining({
+        suspendedTools: expect.objectContaining({
+          'parent-tool-call-id': expect.objectContaining({
+            runId: 'parent-run-id',
+            delegatedRunId: 'sub-agent-run-id',
+            suspendPayload: { reason: 'review' },
+          }),
+        }),
+      }),
+    );
+    expect(unrelatedMessage.content.metadata).toEqual({});
+    expect((targetMessage.content.metadata as Record<string, any>).suspendedTools).toHaveProperty(
+      'parent-tool-call-id',
+    );
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('persists BOTH siblings when the shared response is drained before each metadata write', async () => {
+    // Two parallel delegations to the same sub-agent share one assistant message. Flush the
+    // response before EACH sibling's metadata write so both take the drained-message fallback;
+    // the second fallback merge must preserve the first sibling's already-persisted entry.
+    const targetMessage = createAssistantMessage('assistant-target', 'tool-call-A', 'agent-subAgent', {
+      prompt: 'do thing',
+    });
+    targetMessage.content.parts.push({
+      type: 'tool-invocation' as const,
+      toolInvocation: {
+        state: 'call' as const,
+        toolCallId: 'tool-call-B',
+        toolName: 'agent-subAgent',
+        args: { prompt: 'do other thing' },
+      },
+    });
+    const messageList = new MessageList();
+    messageList.add(targetMessage, 'response');
+    messageList.drainUnsavedMessages();
+
+    const executeA = startDelegatedTool({
+      messageList,
+      requireApproval: false,
+      suspendPayload: { reason: 'review-A' },
+      toolCallId: 'tool-call-A',
+      delegatedRunId: 'sub-agent-run-A',
+    });
+    await settleToolSuspension();
+    // A's fallback re-queued the message; flush again so B also finds a drained response view.
+    messageList.drainUnsavedMessages();
+
+    const executeB = startDelegatedTool({
+      messageList,
+      requireApproval: false,
+      suspendPayload: { reason: 'review-B' },
+      toolCallId: 'tool-call-B',
+      delegatedRunId: 'sub-agent-run-B',
+    });
+    await settleToolSuspension();
+
+    const suspendedTools = (targetMessage.content.metadata as Record<string, any>).suspendedTools ?? {};
+    expect(Object.keys(suspendedTools).sort()).toEqual(['tool-call-A', 'tool-call-B']);
+    expect(suspendedTools['tool-call-A']).toMatchObject({
+      runId: 'parent-run-id',
+      delegatedRunId: 'sub-agent-run-A',
+      suspendPayload: { reason: 'review-A' },
+    });
+    expect(suspendedTools['tool-call-B']).toMatchObject({
+      runId: 'parent-run-id',
+      delegatedRunId: 'sub-agent-run-B',
+      suspendPayload: { reason: 'review-B' },
+    });
+    // The recovered message must be queued for persistence again.
+    expect(messageList.get.response.db()).toContain(targetMessage);
+
+    await expect(Promise.race([executeA, Promise.resolve('completed')])).resolves.toBe('completed');
+    await expect(Promise.race([executeB, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('logs at debug when a drained response message cannot be marked unsaved', async () => {
+    const targetMessage = createAssistantMessage('assistant-target', 'parent-tool-call-id', 'agent-subAgent', {
+      prompt: 'do thing',
+    });
+    const unrelatedMessage = createAssistantMessage('assistant-unrelated', 'unrelated-tool-call-id', 'unrelatedTool');
+    const logger = { warn: vi.fn(), debug: vi.fn() };
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [unrelatedMessage] },
+        all: { db: () => [targetMessage, unrelatedMessage], aiV5: { model: () => [] } },
+      },
+      updateMessageMetadataByToolCallId: vi.fn().mockReturnValue(false),
+    } as unknown as MessageList;
+
+    const executePromise = startDelegatedTool({
+      messageList,
+      requireApproval: false,
+      suspendPayload: { reason: 'review' },
+      logger,
+    });
+    await settleToolSuspension();
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('could not update the assistant message for tool call parent-tool-call-id'),
+    );
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+});
+
+describe('createToolCallStep suspension metadata cleanup on resume', () => {
+  let controller: { enqueue: Mock };
+  let streamState: { serialize: Mock };
+
+  const createSuspendedAssistantMessage = (toolCallId: string, toolName: string) => ({
+    id: 'assistant-suspended',
+    role: 'assistant' as const,
+    createdAt: new Date(0),
+    content: {
+      format: 2 as const,
+      metadata: {
+        suspendedTools: {
+          [toolCallId]: { toolCallId, toolName, runId: 'parent-run-id' },
+        },
+      } as Record<string, unknown>,
+      parts: [
+        {
+          type: 'tool-invocation' as const,
+          toolInvocation: { state: 'call' as const, toolCallId, toolName, args: {} },
+        },
+      ],
+    },
+  });
+
+  const runResumedTool = async ({
+    resumeData,
+    args,
+    message,
+    flushMessages,
+    suspendData,
+    toolCallId = 'hitl-call-id',
+  }: {
+    resumeData?: unknown;
+    args: Record<string, unknown>;
+    message: ReturnType<typeof createSuspendedAssistantMessage>;
+    flushMessages: Mock;
+    suspendData?: unknown;
+    toolCallId?: string;
+  }) => {
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [message] },
+        all: { db: () => [message], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+
+    const tools = {
+      'hitl-tool': {
+        execute: vi.fn(async () => ({ confirmed: true })),
+      },
+    } as ToolSet;
+
+    const inputData = { toolCallId, toolName: 'hitl-tool', args };
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'parent-run-id',
+      streamState,
+      _internal: {
+        saveQueueManager: { flushMessages },
+        threadId: 'thread-1',
+      },
+    } as any);
+
+    return toolCallStep.execute({
+      ...makeBaseExecuteParams(vi.fn(), { resumeData, suspendData }),
+      writer: new ToolStream({
+        prefix: 'tool',
+        callId: inputData.toolCallId,
+        name: inputData.toolName,
+        runId: 'parent-run-id',
+      }),
+      inputData,
+    });
+  };
+
+  beforeEach(() => {
+    controller = { enqueue: vi.fn() };
+    streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('clears suspendedTools when resumed via workflow resumeData (agent.resumeStream)', async () => {
+    // `agent.resumeStream(resumeData, { runId, toolCallId })` delivers the payload as the step's
+    // workflow resumeData, NOT embedded in the LLM's args. The suspension entry must still be
+    // cleared, or a reloading client reads the resolved tool as still resumable.
+    const message = createSuspendedAssistantMessage('hitl-call-id', 'hitl-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({
+      resumeData: { confirmed: true },
+      args: { prompt: 'do thing' },
+      message,
+      flushMessages,
+    });
+
+    expect(message.content.metadata.suspendedTools).toBeUndefined();
+    expect(flushMessages).toHaveBeenCalled();
+  });
+
+  it('clears suspendedTools when resumed via resumeData embedded in args', async () => {
+    const message = createSuspendedAssistantMessage('hitl-call-id', 'hitl-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({
+      args: { prompt: 'do thing', resumeData: { confirmed: true } },
+      message,
+      flushMessages,
+    });
+
+    expect(message.content.metadata.suspendedTools).toBeUndefined();
+    expect(flushMessages).toHaveBeenCalled();
+  });
+
+  it.each([
+    ['false', false],
+    ['zero', 0],
+    ['an empty string', ''],
+  ])('clears suspendedTools when the resume payload is %s', async (_label, resumeData) => {
+    // A tool with a primitive resumeSchema can legitimately be resumed with a falsy value —
+    // `false` is how a boolean HITL tool declines. A truthiness gate would skip cleanup here.
+    const message = createSuspendedAssistantMessage('hitl-call-id', 'hitl-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({ resumeData, args: { prompt: 'do thing' }, message, flushMessages });
+
+    expect(message.content.metadata.suspendedTools).toBeUndefined();
+    expect(flushMessages).toHaveBeenCalled();
+  });
+
+  it('leaves a same-name sibling suspended when an approval resume arrives after policy loss', async () => {
+    // Approve-after-policy-loss (#20470): the live `requireToolApproval` policy is gone, but the
+    // suspension was an approval one, so `approvalGated` is still true and the approval branch
+    // clears its own metadata. The generic suspension cleanup must not also run here —
+    // `removeToolMetadata` falls back from toolCallId to toolName, so it would delete the entry
+    // belonging to a different, still-suspended call of the same tool.
+    const message = createSuspendedAssistantMessage('sibling-call-id', 'hitl-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({
+      toolCallId: 'approved-call-id',
+      resumeData: { approved: true },
+      suspendData: { requireToolApproval: true },
+      args: { prompt: 'do thing' },
+      message,
+      flushMessages,
+    });
+
+    expect(message.content.metadata.suspendedTools).toHaveProperty('sibling-call-id');
+  });
+
+  it('still recovers the delegated runId when a workflow tool is resumed with a falsy payload', async () => {
+    // The suspension entry carries the sub-run id a delegated tool must resume into. The lookup
+    // that reads it has to run for falsy resume payloads too, because the cleanup below then
+    // removes the entry: skipping it would silently start a fresh sub-run instead.
+    const message = {
+      id: 'assistant-suspended',
+      role: 'assistant' as const,
+      createdAt: new Date(0),
+      content: {
+        format: 2 as const,
+        metadata: {
+          suspendedTools: {
+            'wf-call-id': {
+              toolCallId: 'wf-call-id',
+              toolName: 'workflow-sub',
+              runId: 'parent-run-id',
+              delegatedRunId: 'sub-run-id',
+            },
+          },
+        } as Record<string, unknown>,
+        parts: [
+          {
+            type: 'tool-invocation' as const,
+            toolInvocation: {
+              state: 'call' as const,
+              toolCallId: 'wf-call-id',
+              toolName: 'workflow-sub',
+              args: {},
+            },
+          },
+        ],
+      },
+    };
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [message] },
+        all: { db: () => [message], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+    const execute = vi.fn(async () => ({ done: true }));
+
+    const toolCallStep = createToolCallStep({
+      tools: { 'workflow-sub': { execute } } as ToolSet,
+      messageList,
+      controller,
+      runId: 'parent-run-id',
+      streamState,
+      _internal: { saveQueueManager: { flushMessages: vi.fn() }, threadId: 'thread-1' },
+    } as any);
+
+    await toolCallStep.execute({
+      ...makeBaseExecuteParams(vi.fn()),
+      writer: new ToolStream({ prefix: 'tool', callId: 'wf-call-id', name: 'workflow-sub', runId: 'parent-run-id' }),
+      inputData: { toolCallId: 'wf-call-id', toolName: 'workflow-sub', args: { resumeData: false } },
+    });
+
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({ suspendedToolRunId: 'sub-run-id' }),
+      expect.objectContaining({ resumeData: false }),
+    );
+  });
+
+  it('leaves suspendedTools intact for a plain (non-resume) tool call', async () => {
+    const message = createSuspendedAssistantMessage('other-call-id', 'other-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({ args: { prompt: 'do thing' }, message, flushMessages });
+
+    expect(message.content.metadata.suspendedTools).toHaveProperty('other-call-id');
   });
 });
 
@@ -1157,6 +2490,7 @@ describe('createToolCallStep requestContext forwarding', () => {
     expect(capturedOptions!.requestContext).toBe(requestContext);
     expect(capturedOptions!.requestContext!.get('testKey')).toBe('testValue');
     expect(capturedOptions!.requestContext!.get('apiClient')).toEqual({ fetch: expect.any(Function) });
+    expect(capturedOptions).not.toHaveProperty('observe');
     expect(result).toEqual({ result: { ok: true }, ...inputData });
   });
 

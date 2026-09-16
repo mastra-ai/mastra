@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { MASTRA_RESOURCE_ID_KEY } from '../request-context';
+import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../request-context';
 import { buildConnectionSuffix, resolveStoredToolProviders } from './runtime';
 import type { ResolveToolsOpts, ToolProvider, ToolProviderConnectionScope, ToolProviders } from './types';
 import { SHARED_BUCKET_ID } from './types';
+
+function requestContext(resourceId: string): RequestContext {
+  return new RequestContext([[MASTRA_RESOURCE_ID_KEY, resourceId]]);
+}
 
 function makeStubProvider(): {
   provider: ToolProvider;
@@ -48,7 +52,7 @@ describe('resolveStoredToolProviders — resolveConnectionAuthorId branches', ()
     const { provider, resolveToolsVNext } = makeStubProvider();
 
     await resolveStoredToolProviders(buildToolProviders('caller-supplied'), () => provider, {
-      requestContext: { [MASTRA_RESOURCE_ID_KEY]: 'user_abc' },
+      requestContext: requestContext('user_abc'),
       authorId: 'author_xyz',
     });
 
@@ -94,6 +98,68 @@ describe('resolveStoredToolProviders — resolveConnectionAuthorId branches', ()
     expect(resolveToolsVNext.mock.calls[0]![0].authorId).toBe('author_xyz');
     expect(resolveToolsVNext.mock.calls[0]![0].scope).toBe('per-author');
   });
+
+  it('forwards connection kind and toolkit to the provider', async () => {
+    const { provider, resolveToolsVNext } = makeStubProvider();
+
+    await resolveStoredToolProviders(buildToolProviders('per-author'), () => provider, {
+      authorId: 'author_xyz',
+    });
+
+    expect(resolveToolsVNext.mock.calls[0]![0].kind).toBe('author');
+    expect(resolveToolsVNext.mock.calls[0]![0].toolkit).toBe('gmail');
+  });
+});
+
+describe('resolveStoredToolProviders — invoker connections', () => {
+  function buildInvokerToolProviders(): ToolProviders {
+    return {
+      composio: {
+        tools: {
+          'salesforce.create_lead': { toolkit: 'salesforce' },
+        },
+        connections: {
+          salesforce: [
+            {
+              kind: 'invoker',
+              toolkit: 'salesforce',
+              connectionId: 'ca_alice_salesforce',
+            },
+          ],
+        },
+      },
+    };
+  }
+
+  it('never derives the user bucket from the Memory resource id', async () => {
+    const { provider, resolveToolsVNext } = makeStubProvider();
+
+    await resolveStoredToolProviders(buildInvokerToolProviders(), () => provider, {
+      requestContext: requestContext('project_123'),
+      authorId: 'author_xyz',
+    });
+
+    expect(resolveToolsVNext).toHaveBeenCalledTimes(1);
+    const opts = resolveToolsVNext.mock.calls[0]![0];
+    expect(opts.authorId).toBeUndefined();
+    expect(opts.kind).toBe('invoker');
+  });
+
+  it('passes the pinned connectionId and live RequestContext through unchanged', async () => {
+    const { provider, resolveToolsVNext } = makeStubProvider();
+    const context = requestContext('project_123');
+
+    await resolveStoredToolProviders(buildInvokerToolProviders(), () => provider, {
+      requestContext: context,
+      authorId: 'author_xyz',
+    });
+
+    const opts = resolveToolsVNext.mock.calls[0]![0];
+    expect(opts.connectionId).toBe('ca_alice_salesforce');
+    expect(opts.toolkit).toBe('salesforce');
+    expect(opts.requestContext).toBe(context);
+    expect(opts.requestContext?.getRaw(MASTRA_RESOURCE_ID_KEY)).toBe('project_123');
+  });
 });
 
 describe('resolveStoredToolProviders — connectionless caller-supplied tools', () => {
@@ -120,8 +186,9 @@ describe('resolveStoredToolProviders — connectionless caller-supplied tools', 
       },
     };
 
+    const context = requestContext('tenant-user-1');
     const resolved = await resolveStoredToolProviders(toolProviders, () => provider, {
-      requestContext: { [MASTRA_RESOURCE_ID_KEY]: 'tenant-user-1' },
+      requestContext: context,
       authorId: 'agent-author',
     });
 
@@ -133,7 +200,7 @@ describe('resolveStoredToolProviders — connectionless caller-supplied tools', 
         connectionId: 'tenant-user-1',
         authorId: 'tenant-user-1',
         scope: 'caller-supplied',
-        requestContext: { [MASTRA_RESOURCE_ID_KEY]: 'tenant-user-1' },
+        requestContext: context,
       }),
     );
   });
@@ -162,7 +229,7 @@ describe('resolveStoredToolProviders — connectionless caller-supplied tools', 
     };
 
     const resolved = await resolveStoredToolProviders(toolProviders, () => provider, {
-      requestContext: { [MASTRA_RESOURCE_ID_KEY]: 'tenant-user-1' },
+      requestContext: requestContext('tenant-user-1'),
     });
 
     expect(resolved[legacyToolId]).toBeDefined();

@@ -1,8 +1,31 @@
-import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
+import type {
+  AgentControllerThread,
+  AgentControllerWireEvent,
+  MastraDBMessage,
+  MastraMessagePart,
+} from '@mastra/core/agent-controller';
 export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { StorageListMessagesOutput } from '@mastra/core/storage';
 
-import type { ClientOptions } from '../types';
+import type { QueryParams, RouteResponse } from '../route-types.generated.js';
+import type {
+  AgentControllerActiveRun,
+  AgentControllerAvailableModel,
+  AgentControllerGoalRecord,
+  AgentControllerModeInfo,
+  AgentControllerSessionState,
+  AgentControllerThreadInfo,
+  AgentControllerWorkspaceStatus,
+  ClientOptions,
+  CreateAgentControllerSessionResponse,
+  CreateAgentControllerThreadResponse,
+  PermissionPolicy,
+  PermissionRules,
+  SendNotificationInput,
+  SendNotificationResult,
+  ToolCategory,
+} from '../types';
 import { parseClientRequestContext } from '../utils';
 import { BaseResource } from './base';
 
@@ -21,64 +44,52 @@ import { BaseResource } from './base';
  *   POST /agent-controller/:id/sessions/:resourceId/tool-approval   session().approveTool()
  */
 
-export interface AgentControllerInfo {
-  id: string;
-}
+/** One arm of the wire union, selected by its `type`. */
+type WireEventOf<T extends AgentControllerWireEvent['type']> = Extract<AgentControllerWireEvent, { type: T }>;
+
+/** A `MastraDBMessage` before {@link hydrateMessage} turns its `createdAt` back into a `Date`. */
+type SerializedMastraDBMessage = WireEventOf<'message_start'>['message'];
+
+type AgentControllerModernListMessagesOptions = Omit<
+  QueryParams<'GET /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/messages'>,
+  'sessionScope' | 'limit'
+> & {
+  limit?: never;
+};
+
+type AgentControllerLegacyPagedListMessagesOptions = {
+  /** @deprecated Use `perPage` instead. May only be combined with `page`. */
+  limit: number;
+  page?: number;
+  perPage?: never;
+  orderBy?: never;
+  filter?: never;
+  include?: never;
+};
+
+/** Pagination, ordering, filtering, and include options for an Agent Controller thread's messages. */
+export type AgentControllerListMessagesOptions =
+  | AgentControllerModernListMessagesOptions
+  | AgentControllerLegacyPagedListMessagesOptions;
+
+/** A page of hydrated Agent Controller thread messages. */
+export type AgentControllerListMessagesResult = StorageListMessagesOutput;
+
+type SerializedAgentControllerListMessagesResult = Omit<
+  RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/messages'>,
+  'messages'
+> & {
+  messages: SerializedMastraDBMessage[];
+};
+
+/** An `AgentControllerThread` before {@link hydrateThread} turns its timestamps back into `Date`s. */
+type SerializedThread = WireEventOf<'thread_created'>['thread'];
 
 /**
- * Status-line relevant slice of observational-memory progress, mirroring the
- * TUI status line. `msg` reads `pendingTokens/threshold ↓projectedMessageRemoval`
- * (the active message window before an observation fires); `mem` reads
- * `observationTokens/reflectionThreshold ↓projectedReflectionSavings`
- * (accumulated observations before a reflection fires).
+ * Notifications reach a session as agent signals carried on messages, not as
+ * controller events. These two arms predate that and no controller emits them.
  */
-export interface AgentControllerOMProgress {
-  status: string;
-  pendingTokens: number;
-  threshold: number;
-  thresholdPercent: number;
-  observationTokens: number;
-  reflectionThreshold: number;
-  reflectionThresholdPercent: number;
-  projectedMessageRemoval: number;
-  projectedReflectionSavings: number;
-}
-
-/**
- * AgentController events the SDK types explicitly. This is a discriminated union, so
- * narrowing on `event.type` gives you the right payload fields. This mirrors the
- * subset of the agent controller event stream a web client typically renders.
- */
-export type KnownAgentControllerEvent =
-  | { type: 'agent_start' }
-  | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
-  // Assistant message streaming.
-  | { type: 'message_start'; message: MastraDBMessage }
-  | { type: 'message_update'; message: MastraDBMessage }
-  | { type: 'message_end'; message: MastraDBMessage }
-  // Tool lifecycle.
-  | { type: 'tool_input_start'; toolCallId: string; toolName: string }
-  | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: string; toolName?: string }
-  | { type: 'tool_input_end'; toolCallId: string }
-  | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
-  | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
-  | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
-  | { type: 'tool_end'; toolCallId: string; result?: unknown; isError?: boolean }
-  // Interactive prompts.
-  | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }
-  | { type: 'tool_suspended'; toolCallId: string; toolName: string; args: unknown; suspendPayload: unknown }
-  // Session state changes.
-  | { type: 'mode_changed'; modeId: string; previousModeId: string }
-  | { type: 'model_changed'; modelId: string; scope?: 'global' | 'thread' | 'mode'; modeId?: string }
-  | { type: 'thread_changed'; threadId: string; previousThreadId: string | null }
-  | { type: 'thread_created'; thread: { id: string; title?: string } }
-  | { type: 'thread_deleted'; threadId: string }
-  // Subagents.
-  | { type: 'subagent_start'; toolCallId: string; agentType: string; task: string; modelId: string }
-  | { type: 'subagent_end'; toolCallId: string }
-  // Task tools.
-  | { type: 'task_updated'; tasks: AgentControllerTaskSnapshot[] }
-  // Notifications.
+type NotificationEvent =
   | {
       type: 'notification';
       notificationId?: string;
@@ -97,56 +108,21 @@ export type KnownAgentControllerEvent =
       bySource: Record<string, number>;
       byPriority: Record<string, number>;
       notificationIds: string[];
-    }
-  // Usage tracking.
-  | { type: 'usage_update'; usage: unknown }
-  // Canonical display-state snapshot, emitted after every other event. Carries
-  // the status-line figures (OM progress + cumulative token usage). Maps/Dates
-  // in the full display state don't survive JSON, so only plain fields are typed.
-  | {
-      type: 'display_state_changed';
-      displayState: {
-        isRunning?: boolean;
-        omProgress?: AgentControllerOMProgress;
-        tokenUsage?: Record<string, unknown>;
-        [key: string]: unknown;
-      };
-    }
-  // Goals.
-  | {
-      type: 'goal_evaluation';
-      payload: {
-        objective: string;
-        iteration: number;
-        maxRuns: number;
-        passed: boolean;
-        status: 'active' | 'paused' | 'done';
-        reason?: string;
-      };
-    }
-  // Follow-up queue.
-  | { type: 'follow_up_queued'; count: number }
-  // Observational memory lifecycle.
-  | { type: 'om_observation_start' }
-  | { type: 'om_observation_end' }
-  | { type: 'om_observation_failed'; error?: string }
-  | { type: 'om_reflection_start' }
-  | { type: 'om_reflection_end' }
-  | { type: 'om_reflection_failed'; error?: string }
-  | { type: 'om_buffering_start' }
-  | { type: 'om_buffering_end' }
-  | { type: 'om_buffering_failed'; error?: string }
-  | { type: 'om_model_changed'; role: string; modelId: string }
-  | { type: 'om_activation'; enabled: boolean }
-  | { type: 'om_status'; status: string }
-  | { type: 'om_thread_title_updated'; title: string }
-  // Workspace lifecycle.
-  | { type: 'workspace_ready' }
-  | { type: 'workspace_error'; error?: string }
-  | { type: 'workspace_status_changed'; status: string }
-  // Notices.
-  | { type: 'info'; message: string }
-  | { type: 'error'; error: { message?: string } | string; errorType?: string };
+    };
+
+/** The timestamps the SDK gives back as `Date`s. {@link hydrateKnownEvent} is typed against this, so the two cannot drift. */
+type Hydrated<T> = T extends { type: 'thread_created' }
+  ? Omit<T, 'thread'> & { thread: AgentControllerThread }
+  : T extends { type: 'message_start' }
+    ? Omit<T, 'message'> & { message: MastraDBMessage }
+    : T;
+
+/**
+ * AgentController events the SDK types explicitly: the wire union `@mastra/core`
+ * derives from the controller's own events, with timestamps hydrated. This is a
+ * discriminated union, so narrowing on `event.type` gives the right payload.
+ */
+export type KnownAgentControllerEvent = Hydrated<AgentControllerWireEvent> | NotificationEvent;
 
 /** Any other agent controller event the SDK doesn't model explicitly. */
 export interface OtherAgentControllerEvent {
@@ -155,163 +131,126 @@ export interface OtherAgentControllerEvent {
 }
 
 /**
- * An agent controller event. Narrow on `type` to access known payloads; unknown
- * event types fall through to {@link OtherAgentControllerEvent}.
+ * An agent controller event. Comparing `event.type` to a literal does NOT
+ * narrow this union — {@link OtherAgentControllerEvent} types `type` as
+ * `string`, which matches every literal. Narrow with
+ * {@link isKnownAgentControllerEvent} first, then switch on `type`.
  */
 export type AgentControllerEvent = KnownAgentControllerEvent | OtherAgentControllerEvent;
 
-type SerializedMastraDBMessage = Omit<MastraDBMessage, 'createdAt'> & { createdAt: Date | string };
+// Runtime mirror of the union — Record keyed by its `type` makes tsc reject a
+// missing or extra entry.
+const KNOWN_AGENT_CONTROLLER_EVENT_TYPES = new Set<string>(
+  Object.keys({
+    agent_start: true,
+    agent_end: true,
+    message_start: true,
+    message_update: true,
+    message_end: true,
+    state_changed: true,
+    tool_input_start: true,
+    tool_input_delta: true,
+    tool_input_end: true,
+    tool_start: true,
+    tool_update: true,
+    shell_output: true,
+    command_exit: true,
+    tool_end: true,
+    tool_approval_required: true,
+    tool_suspended: true,
+    tool_suspension_cancelled: true,
+    mode_changed: true,
+    model_changed: true,
+    thread_changed: true,
+    thread_created: true,
+    thread_deleted: true,
+    thread_title_updated: true,
+    subagent_start: true,
+    subagent_text_delta: true,
+    subagent_tool_start: true,
+    subagent_tool_end: true,
+    subagent_end: true,
+    subagent_model_changed: true,
+    task_updated: true,
+    notification: true,
+    notification_summary: true,
+    usage_update: true,
+    display_state_changed: true,
+    goal_evaluation: true,
+    follow_up_queued: true,
+    om_observation_start: true,
+    om_observation_end: true,
+    om_observation_failed: true,
+    om_reflection_start: true,
+    om_reflection_end: true,
+    om_reflection_failed: true,
+    om_buffering_start: true,
+    om_buffering_end: true,
+    om_buffering_failed: true,
+    om_model_changed: true,
+    om_activation: true,
+    om_status: true,
+    om_thread_title_updated: true,
+    workspace_ready: true,
+    workspace_error: true,
+    workspace_status_changed: true,
+    info: true,
+    error: true,
+  } satisfies Record<KnownAgentControllerEvent['type'], true>),
+);
+
+/** Narrows to the explicitly typed events; see {@link AgentControllerEvent}. */
+export function isKnownAgentControllerEvent(event: AgentControllerEvent): event is KnownAgentControllerEvent {
+  return KNOWN_AGENT_CONTROLLER_EVENT_TYPES.has(event.type);
+}
+
+const toDate = (value: Date | string): Date => (value instanceof Date ? value : new Date(value));
 
 function hydrateMessage(message: SerializedMastraDBMessage): MastraDBMessage {
-  return {
-    ...message,
-    createdAt: message.createdAt instanceof Date ? message.createdAt : new Date(message.createdAt),
-  };
+  return { ...message, createdAt: toDate(message.createdAt) };
 }
 
-function hydrateEventMessage(event: AgentControllerEvent): AgentControllerEvent {
-  if (event.type !== 'message_start' && event.type !== 'message_update' && event.type !== 'message_end') return event;
-
-  return {
-    ...event,
-    message: hydrateMessage(event.message as SerializedMastraDBMessage),
-  } as AgentControllerEvent;
+function hydrateThread(thread: SerializedThread): AgentControllerThread {
+  return { ...thread, createdAt: toDate(thread.createdAt), updatedAt: toDate(thread.updatedAt) };
 }
 
-/** Response from creating or resuming an agent controller session. */
-export interface CreateAgentControllerSessionResponse {
-  controllerId: string;
-  resourceId: string;
-  threadId?: string;
+/** A frame straight off the stream: still wire-shaped, so its timestamps are strings. */
+type ParsedEvent = AgentControllerWireEvent | NotificationEvent | OtherAgentControllerEvent;
+
+function isKnownParsedEvent(event: ParsedEvent): event is AgentControllerWireEvent | NotificationEvent {
+  return KNOWN_AGENT_CONTROLLER_EVENT_TYPES.has(event.type);
 }
 
-/** Agent behavior settings, mirroring the TUI's `/settings` toggles. */
-export interface AgentControllerSessionSettings {
-  /** Auto-approve all tool calls (no per-tool prompt). */
-  yolo: boolean;
-  /** Extended-thinking budget. */
-  thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh';
-  /** How completion/notification alerts are delivered. */
-  notifications: 'off' | 'bell' | 'system' | 'both';
-  /** Use AST-aware smart editing when available. */
-  smartEditing: boolean;
+/** The stream carries every timestamp as an ISO string; give consumers back the `Date`s {@link Hydrated} promises. */
+function hydrateKnownEvent(event: AgentControllerWireEvent | NotificationEvent): KnownAgentControllerEvent {
+  switch (event.type) {
+    case 'message_start':
+      return { ...event, message: hydrateMessage(event.message) };
+    case 'thread_created':
+      return { ...event, thread: hydrateThread(event.thread) };
+    default:
+      return event;
+  }
 }
 
-/** State snapshot for an agent controller session. */
-export interface AgentControllerSessionState {
-  controllerId: string;
-  resourceId: string;
-  threadId?: string;
-  modeId: string;
-  modelId: string;
-  /** Whether the agent is currently executing a run (for initial UI hydration). */
-  running?: boolean;
-  /** OM progress snapshot for the status line (initial hydration). */
-  omProgress?: AgentControllerOMProgress;
-  /** Cumulative token usage for the current thread. */
-  tokenUsage?: Record<string, unknown>;
-  /** Agent behavior settings (yolo, thinking, notifications, smart editing). */
-  settings?: AgentControllerSessionSettings;
+function hydrateEventTimestamps(event: ParsedEvent): AgentControllerEvent {
+  return isKnownParsedEvent(event) ? hydrateKnownEvent(event) : event;
 }
 
-export interface AgentControllerModeInfo {
-  id: string;
-  name?: string;
-}
-
-export interface AgentControllerThreadInfo {
-  id: string;
-  title?: string;
-  resourceId?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  /**
-   * The session scoping tags this thread was stamped with at creation (e.g.
-   * `{ projectPath }`). Present on `listThreads()` results; used to tell which
-   * worktree/scope a thread belongs to when a resourceId is shared.
-   */
-  tags?: Record<string, string>;
-  /**
-   * Whether a run is currently executing on this thread (`'active'`) or not
-   * (`'idle'`). Present on `listThreads()` results; lets one listing report
-   * activity across every worktree/scope sharing the resourceId.
-   */
-  state?: 'active' | 'idle';
-}
-
-export interface AgentControllerAvailableModel {
-  id: string;
-  provider: string;
-  modelName: string;
-  hasApiKey: boolean;
-  apiKeyEnvVar?: string;
-  useCount: number;
-}
-
-export interface AgentControllerWorkspaceStatus {
-  hasWorkspace: boolean;
-  isReady: boolean;
-}
-
-export interface AgentControllerGoalRecord {
-  id?: string;
-  objective: string;
-  status: 'active' | 'paused' | 'done';
-  runsUsed: number;
-  maxRuns?: number;
-  judgeModelId?: string;
-  startedAt: number;
-  updatedAt: number;
-  pausedReason?: string;
-}
-
-/** Permission policy for a tool or category. */
-export type PermissionPolicy = 'allow' | 'ask' | 'deny';
-
-/** Tool category for permission grouping. */
-export type ToolCategory = 'read' | 'edit' | 'execute' | 'mcp' | 'other';
-
-/** Permission rules for controlling tool approval behavior. */
-export interface PermissionRules {
-  categories?: Partial<Record<ToolCategory, PermissionPolicy>>;
-  tools?: Partial<Record<string, PermissionPolicy>>;
-}
-
-/** Snapshot of a single task item from the task tools. */
-export interface AgentControllerTaskSnapshot {
-  id: string;
-  content: string;
-  status: 'pending' | 'in_progress' | 'completed';
-  activeForm: string;
-}
-
-/** Input for sending a notification signal to a session. */
-export interface SendNotificationInput {
-  source: string;
-  kind: string;
-  summary: string;
-  priority?: 'low' | 'medium' | 'high' | 'urgent';
-  payload?: unknown;
-  sourceId?: string;
-  dedupeKey?: string;
-  coalesceKey?: string;
-  attributes?: Record<string, string | number | boolean | null | undefined>;
-  metadata?: Record<string, unknown>;
-}
-
-/** Result of sending a notification signal. */
-export interface SendNotificationResult {
-  accepted: boolean;
-  notificationId?: string;
-  /** Delivery decision: deliver, queue, defer, summarize, persist, or discard. */
-  decision?: string;
-  runId?: string;
-}
-
-/** Resume payload for the built-in `submit_plan` suspension. */
+/**
+ * Resume payload for the built-in `submit_plan` suspension.
+ *
+ * The tool suspends with only the plan file `path`; hosts read that file to render
+ * the approval. `path`/`title`/`plan` let the host back-fill what it rendered so the
+ * persisted tool result (`submittedPlan`) replays the plan durably in history even
+ * after the plan file changes or disappears.
+ */
 export interface PlanResume {
   action: 'approved' | 'rejected';
   feedback?: string;
+  path?: string;
+  title?: string;
+  plan?: string;
 }
 
 /**
@@ -506,6 +445,9 @@ export class AgentControllerSession extends BaseResource {
         while (!cancelled) {
           const { done, value } = await reader.read();
           if (done) return cancelled ? { kind: 'cancelled' } : { kind: 'done' };
+          // A read() that resolved just before unsubscribe() must not deliver its
+          // frame: cancellation happened while we were awaiting.
+          if (cancelled) return { kind: 'cancelled' };
           buffer += decoder.decode(value, { stream: true });
 
           let separator: { index: number; length: number } | null;
@@ -518,10 +460,13 @@ export class AgentControllerSession extends BaseResource {
               if (!data) continue;
               let event: AgentControllerEvent;
               try {
-                event = hydrateEventMessage(JSON.parse(data) as AgentControllerEvent);
+                event = hydrateEventTimestamps(JSON.parse(data));
               } catch {
                 continue;
               }
+              // An earlier onEvent in this same buffered chunk may have called
+              // unsubscribe(); stop before delivering any further frames.
+              if (cancelled) return { kind: 'cancelled' };
               try {
                 options.onEvent(event);
               } catch (cause) {
@@ -593,6 +538,9 @@ export class AgentControllerSession extends BaseResource {
         let attempts = 0;
         let reconnectedResponse: Response | undefined;
         while (!reconnectedResponse) {
+          // A requestStream() that rejected after unsubscribe() must not surface
+          // as a terminal onError: honor cancellation before exhausting the budget.
+          if (cancelled) return;
           if (attempts >= reconnectOptions.maxRetries) {
             reportTerminalError(result);
             return;
@@ -617,6 +565,13 @@ export class AgentControllerSession extends BaseResource {
           options.onReconnect?.();
         } catch {
           // Consumer callback failures must not kill the stream loop.
+        }
+        // onReconnect may have called unsubscribe(). The new response has not yet
+        // acquired a reader (pump() runs on the next iteration), so unsubscribe()
+        // had nothing to cancel — cancel its body here before the loop exits.
+        if (cancelled) {
+          void response.body?.cancel().catch(() => {});
+          return;
         }
       }
     };
@@ -695,8 +650,9 @@ export class AgentControllerSession extends BaseResource {
   }
 
   /** Get the current mode, model, and thread (for initial UI hydration). */
-  state(): Promise<AgentControllerSessionState> {
-    return this.request(this.url(this.base()));
+  state(options?: { threadId?: string }): Promise<AgentControllerSessionState> {
+    const path = options?.threadId ? `${this.base()}?threadId=${encodeURIComponent(options.threadId)}` : this.base();
+    return this.request(this.url(path));
   }
 
   /** Merge key-value pairs into the session state. Existing keys not in the payload are preserved. */
@@ -732,7 +688,7 @@ export class AgentControllerSession extends BaseResource {
     if (opts.limit != null) params.set('limit', String(opts.limit));
     if (opts.tags && Object.keys(opts.tags).length > 0) params.set('tags', JSON.stringify(opts.tags));
     const query = params.toString() ? `?${params.toString()}` : '';
-    const body = await this.request<{ threads: AgentControllerThreadInfo[] }>(
+    const body = await this.request<RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/threads'>>(
       this.url(`${this.base()}/threads${query}`),
     );
     return body.threads;
@@ -744,7 +700,7 @@ export class AgentControllerSession extends BaseResource {
   }
 
   /** Create a new thread (unbinds previous, binds the new one). */
-  async createThread(title?: string): Promise<AgentControllerThreadInfo> {
+  async createThread(title?: string): Promise<CreateAgentControllerThreadResponse> {
     return this.request(this.url(`${this.base()}/threads`), {
       method: 'POST',
       body: { title },
@@ -767,20 +723,57 @@ export class AgentControllerSession extends BaseResource {
   }
 
   /** Clone a thread (and its messages). The session binds to the clone. */
-  async cloneThread(options?: { sourceThreadId?: string; title?: string }): Promise<AgentControllerThreadInfo> {
+  async cloneThread(options?: {
+    sourceThreadId?: string;
+    title?: string;
+  }): Promise<CreateAgentControllerThreadResponse> {
     return this.request(this.url(`${this.base()}/threads/clone`), {
       method: 'POST',
       body: options ?? {},
     });
   }
 
-  /** List messages for a specific thread. */
-  async listMessages(threadId: string, limit?: number): Promise<MastraDBMessage[]> {
-    const params = limit != null ? `?limit=${limit}` : '';
-    const body = await this.request<{ messages: SerializedMastraDBMessage[] }>(
-      this.url(`${this.base()}/threads/${encodeURIComponent(threadId)}/messages${params}`),
+  /** List messages for a specific thread, preserving the legacy array-returning limit overload. */
+  async listMessages(threadId: string, limit?: number): Promise<MastraDBMessage[]>;
+  async listMessages(
+    threadId: string,
+    options: AgentControllerListMessagesOptions,
+  ): Promise<AgentControllerListMessagesResult>;
+  async listMessages(
+    threadId: string,
+    options?: number | AgentControllerListMessagesOptions,
+  ): Promise<MastraDBMessage[] | AgentControllerListMessagesResult> {
+    const queryParams = new URLSearchParams();
+    const legacy = typeof options === 'number' || options === undefined;
+
+    if (typeof options === 'number') {
+      queryParams.set('limit', String(options));
+    } else if (options === undefined) {
+      queryParams.set('perPage', 'false');
+    } else {
+      const { limit, page, perPage, orderBy, filter, include } = options;
+      if (
+        limit !== undefined &&
+        (perPage !== undefined || orderBy !== undefined || filter !== undefined || include !== undefined)
+      ) {
+        throw new Error('limit can only be combined with page; use perPage with orderBy, filter, or include');
+      }
+      if (limit !== undefined) queryParams.set('limit', String(limit));
+      if (page !== undefined) queryParams.set('page', String(page));
+      if (perPage !== undefined) queryParams.set('perPage', String(perPage));
+      if (orderBy) queryParams.set('orderBy', JSON.stringify(orderBy));
+      if (filter) queryParams.set('filter', JSON.stringify(filter));
+      if (include) queryParams.set('include', JSON.stringify(include));
+    }
+
+    const query = queryParams.toString();
+    const body = await this.request<SerializedAgentControllerListMessagesResult>(
+      this.url(`${this.base()}/threads/${encodeURIComponent(threadId)}/messages${query ? `?${query}` : ''}`),
     );
-    return body.messages.map(hydrateMessage);
+    const messages = body.messages.map(hydrateMessage);
+
+    if (legacy) return messages;
+    return { ...body, messages };
   }
 
   /**
@@ -796,8 +789,10 @@ export class AgentControllerSession extends BaseResource {
   }
 
   /** Get the observational memory record for this session's thread. */
-  async getOMRecord(): Promise<unknown> {
-    const body = await this.request<{ record: unknown }>(this.url(`${this.base()}/om`));
+  async getOMRecord(): Promise<RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/om'>['record']> {
+    const body = await this.request<RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/om'>>(
+      this.url(`${this.base()}/om`),
+    );
     return body.record;
   }
 
@@ -810,14 +805,20 @@ export class AgentControllerSession extends BaseResource {
   }
 
   /** Get known resource IDs for this session. */
-  async getResourceIds(): Promise<string[]> {
-    const body = await this.request<{ resourceIds: string[] }>(this.url(`${this.base()}/resources`));
+  async getResourceIds(): Promise<
+    RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/resources'>['resourceIds']
+  > {
+    const body = await this.request<
+      RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/resources'>
+    >(this.url(`${this.base()}/resources`));
     return body.resourceIds;
   }
 
   /** Get the current goal for this session's thread. */
   async getGoal(): Promise<AgentControllerGoalRecord | undefined> {
-    const body = await this.request<{ goal?: AgentControllerGoalRecord }>(this.url(`${this.base()}/goal`));
+    const body = await this.request<RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/goal'>>(
+      this.url(`${this.base()}/goal`),
+    );
     return body.goal;
   }
 
@@ -826,10 +827,13 @@ export class AgentControllerSession extends BaseResource {
     objective: string,
     options?: { judgeModelId?: string; maxRuns?: number },
   ): Promise<AgentControllerGoalRecord | undefined> {
-    const body = await this.request<{ goal?: AgentControllerGoalRecord }>(this.url(`${this.base()}/goal`), {
-      method: 'POST',
-      body: { objective, ...options },
-    });
+    const body = await this.request<RouteResponse<'POST /agent-controller/:controllerId/sessions/:resourceId/goal'>>(
+      this.url(`${this.base()}/goal`),
+      {
+        method: 'POST',
+        body: { objective, ...options },
+      },
+    );
     return body.goal;
   }
 
@@ -839,10 +843,13 @@ export class AgentControllerSession extends BaseResource {
     maxRuns?: number;
     status?: 'active' | 'paused' | 'done';
   }): Promise<AgentControllerGoalRecord | undefined> {
-    const body = await this.request<{ goal?: AgentControllerGoalRecord }>(this.url(`${this.base()}/goal`), {
-      method: 'PUT',
-      body: options,
-    });
+    const body = await this.request<RouteResponse<'PUT /agent-controller/:controllerId/sessions/:resourceId/goal'>>(
+      this.url(`${this.base()}/goal`),
+      {
+        method: 'PUT',
+        body: options,
+      },
+    );
     return body.goal;
   }
 
@@ -904,14 +911,26 @@ export class AgentController extends BaseResource {
 
   /** List the modes configured on this agent controller (e.g. build, plan). */
   async listModes(): Promise<AgentControllerModeInfo[]> {
-    const body = await this.request<{ modes: AgentControllerModeInfo[] }>(`${this.basePath()}/modes`);
+    const body = await this.request<RouteResponse<'GET /agent-controller/:controllerId/modes'>>(
+      `${this.basePath()}/modes`,
+    );
     return body.modes;
   }
 
   /** List available models on this agent controller (with auth status and use counts). */
   async listModels(): Promise<AgentControllerAvailableModel[]> {
-    const body = await this.request<{ models: AgentControllerAvailableModel[] }>(`${this.basePath()}/models`);
+    const body = await this.request<RouteResponse<'GET /agent-controller/:controllerId/models'>>(
+      `${this.basePath()}/models`,
+    );
     return body.models;
+  }
+
+  /** List the runs in flight on this controller, across all resources. */
+  async listActiveRuns(): Promise<AgentControllerActiveRun[]> {
+    const body = await this.request<RouteResponse<'GET /agent-controller/:controllerId/active-runs'>>(
+      `${this.basePath()}/active-runs`,
+    );
+    return body.runs;
   }
 
   /** Get workspace status for this agent controller. */

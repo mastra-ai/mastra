@@ -6,6 +6,7 @@ import { deepEqual } from '../../../utils/deep-equal';
 import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from '../adapters';
 import type { AdapterContext } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
+import { categorizeFileData } from '../prompt/image-utils';
 import type { MastraDBMessage, MessageSource } from '../state/types';
 import type { AIV5Type, AIV6Type } from '../types';
 import {
@@ -94,13 +95,19 @@ export function sanitizeAIV4UIMessages(messages: UIMessageV4[]): UIMessageV4[] {
   const msgs = messages
     .map(m => {
       if (m.parts.length === 0) return false;
-      const safeParts = m.parts.filter(
-        p =>
+      const safeParts = m.parts.filter(p => {
+        // Mastra-only record of a terminal failure. It exists for DB/UI history
+        // and must never reach a provider. Cast because the v4 UI part union has
+        // no `error` member even though the adapter passes the part through.
+        if ((p as { type: string }).type === 'error') return false;
+
+        return (
           p.type !== `tool-invocation` ||
           // calls and partial-calls should be updated to be results at this point
           // if they haven't we can't send them back to the llm and need to remove them.
-          (p.toolInvocation.state !== `call` && p.toolInvocation.state !== `partial-call`),
-      );
+          (p.toolInvocation.state !== `call` && p.toolInvocation.state !== `partial-call`)
+        );
+      });
 
       // fully remove this message if it has an empty parts array after stripping out incomplete tool calls.
       if (!safeParts.length) return false;
@@ -153,6 +160,15 @@ export function sanitizeV5UIMessages(
       // If not filtered, convertToModelMessages produces empty content arrays
       // which causes some models to fail with "must include at least one parts field"
       if (typeof p.type === 'string' && p.type.startsWith('data-')) {
+        return false;
+      }
+
+      // Filter out Mastra-only `error` parts (persisted terminal-failure records).
+      // Like data-* parts they are not provider content: an error-only assistant
+      // message therefore drops out below instead of reaching the model as an
+      // empty turn. Cast because the v5 UI part union has no `error` member even
+      // though the adapter passes the part through.
+      if ((p as { type: string }).type === 'error') {
         return false;
       }
 
@@ -301,9 +317,65 @@ export function addStartStepPartsForAIV5(messages: AIV5Type.UIMessage[]): AIV5Ty
 
 /**
  * Converts AIV4 UI messages to AIV4 Core messages.
+ *
+ * Provider file IDs (e.g. OpenAI Files API "file-...") stored in
+ * `experimental_attachments` would make AI SDK v4's internal `attachmentsToParts`
+ * throw `Invalid URL: file-...` inside `convertToCoreMessages`. Strip them before
+ * conversion and re-append them as file parts on the resulting user core message
+ * so the IDs survive untouched.
  */
 export function aiV4UIMessagesToAIV4CoreMessages(messages: UIMessageV4[]): CoreMessageV4[] {
-  return convertToCoreMessagesV4(sanitizeAIV4UIMessages(messages));
+  const sanitized = sanitizeAIV4UIMessages(messages);
+
+  type AttachmentV4 = NonNullable<UIMessageV4['experimental_attachments']>[number];
+  // Keyed by the user message's position among user messages: each user UI message
+  // converts to exactly one user core message, in order.
+  const fileIdAttachmentsByUserIndex = new Map<number, AttachmentV4[]>();
+  let userIndex = 0;
+
+  const prepared = sanitized.map(m => {
+    if (m.role !== 'user') return m;
+    const currentUserIndex = userIndex++;
+
+    if (!m.experimental_attachments?.length) return m;
+
+    const fileIdAttachments = m.experimental_attachments.filter(
+      a => categorizeFileData(a.url, a.contentType).type === 'providerFileId',
+    );
+    if (!fileIdAttachments.length) return m;
+
+    fileIdAttachmentsByUserIndex.set(currentUserIndex, fileIdAttachments);
+    const remaining = m.experimental_attachments.filter(a => !fileIdAttachments.includes(a));
+    return {
+      ...m,
+      experimental_attachments: remaining.length ? remaining : undefined,
+    };
+  });
+
+  const coreMessages = convertToCoreMessagesV4(prepared);
+  if (!fileIdAttachmentsByUserIndex.size) return coreMessages;
+
+  let coreUserIndex = 0;
+  return coreMessages.map(coreMessage => {
+    if (coreMessage.role !== 'user') return coreMessage;
+    const fileIdAttachments = fileIdAttachmentsByUserIndex.get(coreUserIndex++);
+    if (!fileIdAttachments) return coreMessage;
+
+    const fileParts = fileIdAttachments.map(a => ({
+      type: 'file' as const,
+      data: a.url,
+      mimeType: a.contentType || 'application/octet-stream',
+    }));
+    const existingContent =
+      typeof coreMessage.content === 'string'
+        ? [{ type: 'text' as const, text: coreMessage.content }]
+        : coreMessage.content;
+
+    return {
+      ...coreMessage,
+      content: [...existingContent, ...fileParts],
+    };
+  });
 }
 
 /**

@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -27,6 +28,32 @@ afterEach(() => {
 });
 
 describe('AuditDomain', () => {
+  it('persists and mirrors concurrent retries once while keeping distinct actions and tenants', async () => {
+    const seed = await createFactoryStorageForTests();
+    const mirror = vi.fn(async () => undefined);
+    const first = auditDomain(seed, { sinks: [{ id: 'mirror', audit: mirror }] });
+    const second = auditDomain(seed, { sinks: [{ id: 'mirror', audit: mirror }] });
+    const input = {
+      orgId: 'org-1',
+      factoryProjectId: 'project-1',
+      actorId: 'user-1',
+      action: 'factory.run.started' as const,
+      targets: [{ type: 'work_item', id: 'item-1' }],
+      idempotencyKey: 'kickoff-1',
+    };
+    const [original, duplicate] = await Promise.all([first.record(input), second.record(input)]);
+    expect(original).not.toBeNull();
+    expect(duplicate?.id).toBe(original?.id);
+    await first.record(input);
+    await vi.waitFor(() => expect(mirror).toHaveBeenCalledTimes(1));
+    expect((await seed.audit.list({ orgId: 'org-1' })).events).toHaveLength(1);
+
+    await first.record({ ...input, action: 'factory.run.ended' });
+    await first.record({ ...input, orgId: 'org-2' });
+    await first.record({ ...input, factoryProjectId: 'project-2' });
+    await vi.waitFor(() => expect(mirror).toHaveBeenCalledTimes(4));
+  });
+
   it('records locally before notifying configured sinks', async () => {
     const seed = await createFactoryStorageForTests();
     const audit = vi.fn(async () => undefined);
@@ -113,6 +140,38 @@ describe('AuditDomain', () => {
     });
   });
 
+  it('records the active agent name and model on agent events when available', async () => {
+    const seed = await createFactoryStorageForTests();
+    const domain = auditDomain(seed, {
+      agentTenant: () => ({ orgId: 'org-1', userId: 'user-1' }),
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('controller', {
+      threadId: 'thread-1',
+      session: { modeId: 'review', modelId: 'anthropic/claude-sonnet-4-5' },
+      getState: () => ({ factoryProjectId: 'project-1' }),
+    });
+
+    await domain.emitAgent({
+      requestContext,
+      input: {
+        action: 'factory.agent.commit',
+        targets: [{ type: 'worktree', id: '/tmp/worktree' }],
+      },
+    });
+
+    const [event] = (await seed.audit.list({ orgId: 'org-1' })).events;
+    expect(event).toMatchObject({
+      actorId: 'agent:thread-1',
+      actorType: 'agent',
+      metadata: {
+        startedBy: 'user-1',
+        agentName: 'review agent',
+        modelId: 'anthropic/claude-sonnet-4-5',
+      },
+    });
+  });
+
   it('serves exactly the project audit route', async () => {
     const seed = await createFactoryStorageForTests();
     expect(
@@ -160,6 +219,128 @@ describe('AuditDomain', () => {
     ).toBe(404);
   });
 
+  it('enriches audit actors with resolvable user profiles', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Acme project' },
+    });
+    const getUser = vi.fn(async (userId: string) => ({
+      id: userId,
+      name: userId === 'user-1' ? 'Ada Lovelace' : 'Grace Hopper',
+      avatarUrl: `https://avatars.example/${userId}.png`,
+    }));
+    const domain = auditDomain(seed, {
+      users: { getUser },
+    });
+    await domain.record({
+      orgId: 'org-1',
+      actorId: 'user-1',
+      action: 'factory.work_item.updated',
+      targets: [{ type: 'work_item', id: 'item-1', name: 'Fix login' }],
+      factoryProjectId: project.id,
+    });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, domain.routes());
+
+    const response = await app.request(
+      `/web/factory/projects/${project.id}/audit?actorIds=user-2,factory-rule-dispatcher`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      actors: {
+        'user-1': {
+          id: 'user-1',
+          name: 'Ada Lovelace',
+          avatarUrl: 'https://avatars.example/user-1.png',
+        },
+        'user-2': {
+          id: 'user-2',
+          name: 'Grace Hopper',
+          avatarUrl: 'https://avatars.example/user-2.png',
+        },
+      },
+    });
+    expect(getUser.mock.calls.flat()).toEqual(expect.arrayContaining(['user-1', 'user-2']));
+    expect(getUser).not.toHaveBeenCalledWith('factory-rule-dispatcher');
+  });
+
+  it('captures the acting user profile in emitted metadata for later resolution', async () => {
+    const seed = await createFactoryStorageForTests();
+    const domain = auditDomain(seed);
+    const app = new Hono();
+    app.post('/emit', async c => {
+      c.set(
+        'factoryAuthUser' as never,
+        {
+          workosId: 'user-1',
+          organizationId: 'org-1',
+          name: 'Ada Lovelace',
+          avatarUrl: 'https://avatars.example/ada.png',
+        } as never,
+      );
+      await domain.emit({
+        context: c,
+        input: { action: 'factory.work_item.updated', targets: [{ type: 'work_item', id: 'wi-1' }] },
+      });
+      return c.json({ ok: true });
+    });
+
+    await app.request('/emit', { method: 'POST' });
+
+    const [event] = (await seed.audit.list({ orgId: 'org-1' })).events;
+    expect(event?.metadata).toMatchObject({
+      __actorProfile: { name: 'Ada Lovelace', avatarUrl: 'https://avatars.example/ada.png' },
+    });
+  });
+
+  it('prefers actor profiles stamped in event metadata over the user provider', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Acme project' },
+    });
+    const getUser = vi.fn(async () => null);
+    const domain = auditDomain(seed, { users: { getUser } });
+    await domain.record({
+      orgId: 'org-1',
+      actorId: 'user-1',
+      action: 'factory.work_item.updated',
+      targets: [{ type: 'work_item', id: 'item-1', name: 'Fix login' }],
+      factoryProjectId: project.id,
+      metadata: {
+        __actorProfile: { name: 'Ada Lovelace', avatarUrl: 'https://avatars.example/ada.png' },
+      },
+    });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, domain.routes());
+
+    const response = await app.request(`/web/factory/projects/${project.id}/audit`);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      actors: {
+        'user-1': {
+          id: 'user-1',
+          name: 'Ada Lovelace',
+          avatarUrl: 'https://avatars.example/ada.png',
+        },
+      },
+    });
+    expect(getUser).not.toHaveBeenCalled();
+  });
+
   it('normalizes project audit filters before listing', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({
@@ -176,7 +357,7 @@ describe('AuditDomain', () => {
     });
     mountApiRoutes(app as never, domain.routes());
     const query = new URLSearchParams({
-      actions: 'factory.work_item.created, factory.git.push,',
+      namespaces: 'run, git,worktree,',
       actor: 'user-2',
       before: '2026-07-15T00:00:00.000Z_event-9',
       limit: '25',
@@ -186,11 +367,26 @@ describe('AuditDomain', () => {
     expect(list).toHaveBeenCalledWith({
       orgId: 'org-1',
       factoryProjectId: project.id,
-      actions: ['factory.work_item.created', 'factory.git.push'],
+      actions: [
+        'factory.run.started',
+        'factory.run.ended',
+        'factory.run.approved',
+        'factory.run.dismissed',
+        'factory.run.retry',
+        'factory.run.queued',
+        'factory.run.rejected',
+        'factory.git.commit',
+        'factory.git.push',
+        'factory.git.pr_opened',
+      ],
       actorId: 'user-2',
       before: '2026-07-15T00:00:00.000Z_event-9',
       limit: 25,
     });
+
+    const unknown = await app.request(`/web/factory/projects/${project.id}/audit?namespaces=worktree`);
+    expect(unknown.status).toBe(400);
+    expect(list).toHaveBeenCalledTimes(1);
 
     await app.request(`/web/factory/projects/${project.id}/audit?limit=lots`);
     expect(list.mock.calls[1]?.[0].limit).toBeUndefined();

@@ -55,6 +55,13 @@ export interface LSPConfig {
   /** Timeout in ms for LSP server initialization (default: 15000) */
   initTimeout?: number;
 
+  /**
+   * Positive integer limiting language server clients retained by this workspace.
+   * When the limit is reached, the least recently used idle client is shut down
+   * before a client for another project root is started. Unlimited by default.
+   */
+  maxOpenClients?: number;
+
   /** Server IDs to disable (e.g., ['eslint'] to skip ESLint) */
   disableServers?: string[];
 

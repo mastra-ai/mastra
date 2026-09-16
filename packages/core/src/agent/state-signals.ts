@@ -193,7 +193,12 @@ export async function resolveStateSignalHistory({
 export function createStateSignalInput(
   input: AgentStateSignalInput | (Omit<AgentStateSignalInput, 'id'> & { id?: string }),
   options?: { defaultId?: string; acceptedAt?: Date },
-): { stateId: string; signal: CreatedAgentSignal; mode: 'snapshot' | 'delta'; cacheKey: string } {
+): {
+  stateId: string;
+  signal: Extract<CreatedAgentSignal, { type: 'state' }>;
+  mode: 'snapshot' | 'delta';
+  cacheKey: string;
+} {
   const stateId = input.id ?? options?.defaultId;
   if (!stateId) {
     throw new Error('state signal id is required');

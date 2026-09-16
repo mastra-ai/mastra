@@ -24,10 +24,12 @@ import {
   Cloud,
   Database,
   HardDrive,
+  X,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { coldarkCold, coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+import { isImageFile, isVideoFile, videoMimeType } from '../file-type-utils';
 import type { FileEntry } from '../types';
 
 // =============================================================================
@@ -198,7 +200,7 @@ function Breadcrumb({ path, onNavigate }: BreadcrumbProps) {
   const parts = isRoot ? [] : path.split('/').filter(Boolean);
 
   return (
-    <div className="flex items-center gap-1 overflow-x-auto text-sm">
+    <div className="text-ui-md flex items-center gap-1 overflow-x-auto">
       <button
         onClick={() => onNavigate('.')}
         className="hover:bg-surface4 text-neutral5 hover:text-neutral6 rounded p-1 transition-colors"
@@ -307,19 +309,19 @@ export function FileBrowser({
       {/* File List */}
       <div className="max-h-[400px] overflow-auto">
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
+          <div className="flex items-center justify-center py-8">
             <Loader2 className="text-neutral3 h-6 w-6 animate-spin" />
           </div>
         ) : error ? (
-          <div className="px-4 py-12 text-center">
+          <div className="px-4 py-8 text-center">
             <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10">
               <AlertCircle className="h-6 w-6 text-red-400" />
             </div>
-            <p className="text-neutral6 mb-1 text-sm font-medium">Failed to load directory</p>
-            <p className="text-neutral4 mx-auto max-w-sm text-xs">{getErrorMessage(error)}</p>
+            <p className="text-neutral6 text-ui-md mb-1 font-medium">Failed to load directory</p>
+            <p className="text-neutral4 text-ui-sm mx-auto max-w-sm">{getErrorMessage(error)}</p>
           </div>
         ) : sortedEntries.length === 0 ? (
-          <div className="text-neutral4 py-12 text-center text-sm">
+          <div className="text-neutral4 text-ui-md py-8 text-center">
             {isRoot ? 'Workspace is empty' : 'Directory is empty'}
           </div>
         ) : (
@@ -336,7 +338,7 @@ export function FileBrowser({
                     className="hover:bg-surface4 flex w-full items-center gap-3 px-4 py-2 text-left transition-colors"
                   >
                     <FolderOpen className="h-4 w-4 text-amber-400" />
-                    <span className="text-neutral5 text-sm">..</span>
+                    <span className="text-neutral5 text-ui-md">..</span>
                   </button>
                 </li>
               )}
@@ -352,7 +354,7 @@ export function FileBrowser({
                         className="flex flex-1 items-center gap-3 px-4 py-2 text-left"
                       >
                         {getFileIcon(entry)}
-                        <span className="text-neutral6 flex-1 truncate text-sm">{entry.name}</span>
+                        <span className="text-neutral6 text-ui-md flex-1 truncate">{entry.name}</span>
                         {/* Mount error indicator */}
                         {entry.mount && isError && (
                           <Tooltip>
@@ -374,7 +376,7 @@ export function FileBrowser({
                               <TooltipTrigger asChild>
                                 <span
                                   tabIndex={0}
-                                  className={`rounded px-1.5 py-0.5 text-xs ${isError ? 'bg-red-400/10 text-red-400' : 'text-neutral3 bg-surface4'}`}
+                                  className={`text-ui-sm rounded px-1.5 py-0.5 ${isError ? 'bg-red-400/10 text-red-400' : 'text-neutral3 bg-surface4'}`}
                                 >
                                   {mountLabel}
                                 </span>
@@ -383,13 +385,13 @@ export function FileBrowser({
                             </Tooltip>
                           ) : (
                             <span
-                              className={`rounded px-1.5 py-0.5 text-xs ${isError ? 'bg-red-400/10 text-red-400' : 'text-neutral3 bg-surface4'}`}
+                              className={`text-ui-sm rounded px-1.5 py-0.5 ${isError ? 'bg-red-400/10 text-red-400' : 'text-neutral3 bg-surface4'}`}
                             >
                               {mountLabel}
                             </span>
                           ))}
                         {entry.type === 'file' && entry.size !== undefined && (
-                          <span className="text-neutral3 text-xs tabular-nums">{formatBytes(entry.size)}</span>
+                          <span className="text-neutral3 text-ui-sm tabular-nums">{formatBytes(entry.size)}</span>
                         )}
                       </button>
                       {onDelete && !entry.mount && (
@@ -505,7 +507,7 @@ function HighlightedCode({ content, language }: { content: string; language: str
         margin: 0,
         padding: '1rem',
         backgroundColor: 'transparent',
-        fontSize: '0.875rem',
+        fontSize: 'var(--text-ui-md)',
       }}
       codeTagProps={{
         style: {
@@ -529,7 +531,8 @@ export interface FileViewerProps {
 export function FileViewer({ path, content, isLoading, mimeType, onClose }: FileViewerProps) {
   const fileName = path.split('/').pop() || path;
   const ext = fileName.split('.').pop()?.toLowerCase();
-  const isImage = mimeType?.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext || '');
+  const isImage = isImageFile(path, mimeType);
+  const isVideo = isVideoFile(path, mimeType);
   const language = getLanguageFromExtension(ext);
 
   return (
@@ -538,12 +541,12 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
       <div className="bg-surface3 border-border1 flex items-center justify-between border-b px-4 py-2">
         <div className="flex items-center gap-2">
           {getFileIcon({ name: fileName, type: 'file' })}
-          <span className="text-neutral6 text-sm font-medium">{fileName}</span>
+          <span className="text-neutral6 text-ui-md font-medium">{fileName}</span>
         </div>
         <div className="flex items-center gap-2">
           <CopyButton content={content} copyMessage="Copied file content" />
           {onClose && (
-            <Button variant="ghost" size="md" onClick={onClose}>
+            <Button icon={<X />} variant="ghost" size="md" onClick={onClose}>
               Close
             </Button>
           )}
@@ -553,21 +556,36 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
       {/* Content */}
       <div className="bg-surface2 h-full max-h-[500px] overflow-auto">
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
+          <div className="flex items-center justify-center py-8">
             <Loader2 className="text-neutral3 h-6 w-6 animate-spin" />
           </div>
         ) : isImage ? (
           <div className="flex items-center justify-center p-4">
+            {/* content is already base64 here (the caller requests encoding: 'base64'
+                for image files) — re-encoding it through btoa() would both be wrong
+                (btoa expects raw Latin1 bytes, not an already-base64 string) and
+                throw outright once the caller stops mis-reading images as text. */}
             <img
-              src={`data:${mimeType || 'image/png'};base64,${btoa(content)}`}
+              src={`data:${mimeType || 'image/png'};base64,${content}`}
               alt={fileName}
               className="max-h-[400px] max-w-full object-contain"
             />
           </div>
+        ) : isVideo ? (
+          <div className="flex items-center justify-center p-4">
+            {/* Same base64-content contract as the image branch above — the
+                caller requests encoding: 'base64' for video files too. */}
+            <video controls className="max-h-[400px] max-w-full">
+              <source
+                src={`data:${videoMimeType(path, mimeType)};base64,${content}`}
+                type={videoMimeType(path, mimeType)}
+              />
+            </video>
+          </div>
         ) : language ? (
           <HighlightedCode content={content} language={language} />
         ) : (
-          <pre className="text-neutral5 overflow-x-auto p-4 font-mono text-sm whitespace-pre-wrap">{content}</pre>
+          <pre className="text-neutral5 text-ui-md overflow-x-auto p-4 font-mono whitespace-pre-wrap">{content}</pre>
         )}
       </div>
     </div>

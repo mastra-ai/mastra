@@ -19,9 +19,10 @@
  *    `this` as the API client.
  */
 
+import { createHash } from 'node:crypto';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
-
+import type { MastraWorker } from '@mastra/core/worker';
 import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
   CreateIntakeCommentInput,
@@ -36,7 +37,12 @@ import type { RouteAuth } from '../../routes/route.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { buildLinearAgentTools } from './agent-tools.js';
+import type { LinearEventRules, LinearRuleOverrides } from './default-rules.js';
+import { resolveLinearRules } from './default-rules.js';
+import { attachLinearIssueReconciler } from './issue-reconciler.js';
+import { linearIssueReconciliationEnabled, linearIssueReconciliationInterval } from './reconciliation-config.js';
 import { buildLinearRoutes } from './routes.js';
 import { attachLinearRules } from './rules.js';
 import type { LinearConnectionRow, LinearStorageHandle, UpsertLinearConnectionInput } from './storage.js';
@@ -45,8 +51,10 @@ const LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql';
 const LINEAR_TOKEN_URL = 'https://api.linear.app/oauth/token';
 const LINEAR_AUTHORIZE_URL = 'https://linear.app/oauth/authorize';
 
-/** Credentials for the Linear OAuth application. All fields are required. */
+/** Credentials and optional event rules for the Linear OAuth application. */
 export interface LinearIntegrationConfig {
+  /** Per-event replacements; omitted events retain defaults, null disables. */
+  rules?: LinearRuleOverrides;
   /** OAuth client id of the Linear application. */
   clientId: string;
   /** OAuth client secret of the Linear application. */
@@ -75,7 +83,11 @@ export interface LinearWorkspace {
 
 export interface LinearIssue {
   id: string;
-  projectId: string;
+  projectId: string | null;
+  /** Backend workspace identity when source ids span multiple workspaces. */
+  workspaceId?: string;
+  /** Raw Linear team id for exact team-source attribution. */
+  teamId: string | null;
   /** Human key like `ENG-123`. */
   identifier: string;
   title: string;
@@ -86,6 +98,8 @@ export interface LinearIssue {
   stateType: string;
   priorityLabel: string;
   assignee: string | null;
+  /** Display name of the Linear user who created the issue, when Linear returns one. */
+  creator: string | null;
   team: string | null;
   labels: string[];
   createdAt: string;
@@ -114,6 +128,16 @@ export interface LinearProject {
   teams: LinearProjectTeam[];
 }
 
+/** A Linear team, selectable as an intake source in its own right. */
+export interface LinearTeam {
+  id: string;
+  /** Short team key, e.g. `ENG`. */
+  key: string;
+  name: string;
+  /** Opaque intake source identifier. Optional on the wire for compatibility. */
+  sourceId?: string;
+}
+
 export interface LinearIssueComment {
   author: string | null;
   body: string;
@@ -136,6 +160,8 @@ export interface LinearCreatedComment {
 
 const LINEAR_ISSUES_PAGE_SIZE = 30;
 const ISSUE_COMMENTS_PAGE_SIZE = 50;
+const LINEAR_TEAMS_PAGE_SIZE = 100;
+const LINEAR_TEAMS_MAX_PAGES = 20;
 /** Hard stop for comment pagination so a misbehaving cursor can't loop forever. */
 const ISSUE_COMMENTS_MAX_PAGES = 20;
 
@@ -173,9 +199,10 @@ interface IssuesQueryData {
       createdAt: string;
       updatedAt: string;
       state: { name: string; type: string };
-      project: { id: string };
+      project: { id: string } | null;
       assignee: { name: string } | null;
-      team: { key: string } | null;
+      creator: { name: string } | null;
+      team: { id: string; key: string } | null;
       labels: { nodes: Array<{ name: string }> };
     }>;
     pageInfo: { hasNextPage: boolean; endCursor: string | null };
@@ -204,9 +231,10 @@ interface IssueDetailQueryData {
     createdAt: string;
     updatedAt: string;
     state: { name: string; type: string };
-    project: { id: string };
+    project: { id: string } | null;
     assignee: { name: string } | null;
-    team: { key: string } | null;
+    creator: { name: string } | null;
+    team: { id: string; key: string } | null;
     labels: { nodes: Array<{ name: string }> };
     comments: IssueCommentsPage;
   } | null;
@@ -501,36 +529,54 @@ export class LinearIntegration implements FactoryIntegration {
       const connection = await this.loadConnection(orgId);
       if (!connection) return [];
       const accessToken = await this.getFreshAccessToken(connection);
-      const projects = await this.listProjects(accessToken);
-      return projects.map(project => ({
-        id: project.id,
-        name: project.name,
-        type: 'project',
-      }));
+      const [projects, teams] = await Promise.all([this.listProjects(accessToken), this.listTeams(accessToken)]);
+      return [
+        ...projects.map(project => ({
+          id: project.id,
+          name: project.name,
+          type: 'project' as const,
+        })),
+        ...teams.map(team => ({
+          id: encodeSelfManagedTeamSourceId(team.id),
+          name: team.name,
+          type: 'team' as const,
+          metadata: { teamKey: team.key },
+        })),
+      ];
     },
-    listItems: async ({ orgId, sourceIds, cursor }) => {
+    listItems: async ({ orgId, sourceIds, attributionSourceIds, cursor }) => {
       if (sourceIds.length === 0) return { items: [], nextCursor: null };
       const connection = await this.loadConnection(orgId);
       if (!connection) return { items: [], nextCursor: null };
       const accessToken = await this.getFreshAccessToken(connection);
-      const page = await this.listActiveIssues(accessToken, cursor, sourceIds);
+      const page = await this.#listIntakeIssues({
+        connection: { type: 'oauth', accessToken },
+        sourceIds,
+        attributionSourceIds,
+        cursor,
+      });
       return {
-        items: page.issues.map(issue => ({
-          source: { type: 'issue', externalId: issue.id, url: issue.url },
-          sourceId: issue.projectId,
-          title: `${issue.identifier}: ${issue.title}`,
-          status: issue.state,
-          labels: issue.labels,
-          assignee: issue.assignee,
-          createdAt: issue.createdAt,
-          updatedAt: issue.updatedAt,
-          metadata: {
-            identifier: issue.identifier,
-            stateType: issue.stateType,
-            priority: issue.priorityLabel,
-            team: issue.team,
-          },
-        })),
+        items: page.issues.flatMap(issue => {
+          if (!issue.sourceId) return [];
+          return [
+            {
+              source: { type: 'issue', externalId: issue.id, url: issue.url },
+              sourceId: issue.sourceId,
+              title: `${issue.identifier}: ${issue.title}`,
+              status: issue.state ?? '',
+              labels: issue.labels,
+              assignee: issue.assignee,
+              createdAt: issue.createdAt,
+              updatedAt: issue.updatedAt,
+              metadata: {
+                identifier: issue.identifier,
+                stateType: issue.stateType,
+                priority: issue.priority,
+                team: issue.source,
+              },
+            },
+          ];
+        }),
         nextCursor: page.nextCursor,
       };
     },
@@ -566,7 +612,14 @@ export class LinearIntegration implements FactoryIntegration {
   readonly #clientId: string;
   readonly #clientSecret: string;
 
+  readonly #rules: LinearEventRules;
+
+  get rules(): LinearEventRules {
+    return this.#rules;
+  }
+
   constructor(config: LinearIntegrationConfig) {
+    this.#rules = resolveLinearRules(config.rules);
     const missing = (['clientId', 'clientSecret'] as const).filter(key => !config[key]);
     if (missing.length > 0) {
       throw new Error(`LinearIntegration is missing required config: ${missing.join(', ')}.`);
@@ -657,10 +710,61 @@ export class LinearIntegration implements FactoryIntegration {
 
   async #listIntakeIssues(input: ListIntakeIssuesInput): Promise<{ issues: IntakeIssue[]; nextCursor: string | null }> {
     const accessToken = getLinearAccessToken(input.connection);
-    const result = await this.listActiveIssues(accessToken, input.cursor, input.sourceIds, input.labels);
+    if (input.sourceIds.length === 0) return { issues: [], nextCursor: null };
+    const attributionSourceIds = input.attributionSourceIds ?? input.sourceIds;
+    const { projectIds, teamIds } = splitSelfManagedSourceIds(input.sourceIds);
+    const cursors = decodeSelfManagedListCursor(input.cursor, input.sourceIds, attributionSourceIds);
+
+    // Project-only intake still uses one Linear query, but its provider cursor
+    // is wrapped so a later source-selection change cannot reinterpret it.
+    if (teamIds.length === 0) {
+      if (cursors.projects === null) return { issues: [], nextCursor: null };
+      const result = await this.listActiveIssues(accessToken, cursors.projects, projectIds, input.labels);
+      return {
+        issues: result.issues.map(issue => linearIssueToIntakeIssue(issue)),
+        nextCursor: encodeSelfManagedListCursor(
+          { projects: result.nextCursor, teams: null },
+          input.sourceIds,
+          attributionSourceIds,
+        ),
+      };
+    }
+
+    // A team is selected. List projects and teams separately (the two Linear
+    // filters would AND together in one query) and stamp each issue with the
+    // selected source that surfaced it. Each source kind paginates on its own
+    // cursor, carried in a compound cursor when both are present.
+    const projectResult =
+      projectIds.length > 0 && cursors.projects !== null
+        ? await this.listActiveIssues(accessToken, cursors.projects, projectIds, input.labels)
+        : { issues: [], nextCursor: null };
+    const teamResult =
+      cursors.teams !== null
+        ? await this.listActiveIssues(accessToken, cursors.teams, undefined, input.labels, teamIds)
+        : { issues: [], nextCursor: null };
+
+    // Stamp project issues with their (selected) project id; stamp team issues
+    // with the team source id. A team issue whose project was also selected is
+    // reconciled by the dedupe step below (project wins).
+    const projectIssues = projectResult.issues.map(issue => linearIssueToIntakeIssue(issue));
+    const selectedTeamSourceById = new Map(teamIds.map(teamId => [teamId, encodeSelfManagedTeamSourceId(teamId)]));
+    const selectedProjectIds = new Set(splitSelfManagedSourceIds(attributionSourceIds).projectIds);
+    const teamIssues = teamResult.issues
+      .filter(issue => issue.projectId === null || !selectedProjectIds.has(issue.projectId))
+      .map(issue => {
+        const teamSourceId = issue.teamId ? selectedTeamSourceById.get(issue.teamId) : undefined;
+        if (!teamSourceId) throw new Error('Linear returned an issue outside the selected teams.');
+        return { ...linearIssueToIntakeIssue(issue), sourceId: teamSourceId };
+      });
+
+    const deduped = dedupeSelfManagedIssues([...projectIssues, ...teamIssues]);
     return {
-      issues: result.issues.map(issue => linearIssueToIntakeIssue(issue)),
-      nextCursor: result.nextCursor,
+      issues: deduped,
+      nextCursor: encodeSelfManagedListCursor(
+        { projects: projectResult.nextCursor, teams: teamResult.nextCursor },
+        input.sourceIds,
+        attributionSourceIds,
+      ),
     };
   }
 
@@ -754,31 +858,77 @@ export class LinearIntegration implements FactoryIntegration {
     }));
   }
 
+  /** List the workspace's teams (for the Settings intake-source picker). */
+  async listTeams(accessToken: string): Promise<LinearTeam[]> {
+    const teams: Array<{ id: string; key: string; name: string }> = [];
+    let after: string | undefined;
+    for (let page = 0; page < LINEAR_TEAMS_MAX_PAGES; page += 1) {
+      const data = await linearGraphql<{
+        teams: {
+          nodes: Array<{ id: string; key: string; name: string }>;
+          pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        };
+      }>(
+        accessToken,
+        `query Teams($first: Int!, $after: String) {
+          teams(first: $first, after: $after) {
+            nodes { id key name }
+            pageInfo { hasNextPage endCursor }
+          }
+        }`,
+        { first: LINEAR_TEAMS_PAGE_SIZE, ...(after ? { after } : {}) },
+      );
+      teams.push(...data.teams.nodes);
+      if (!data.teams.pageInfo.hasNextPage || !data.teams.pageInfo.endCursor) break;
+      // A page that hands back the cursor it was asked for would replay forever.
+      if (data.teams.pageInfo.endCursor === after) throw invalidLinearCursor();
+      after = data.teams.pageInfo.endCursor;
+    }
+    return teams.map(team => ({
+      id: team.id,
+      key: team.key,
+      name: team.name,
+      sourceId: encodeSelfManagedTeamSourceId(team.id),
+    }));
+  }
+
+  sourceMatchesIssue(sourceId: string, issue: Pick<LinearIssueDetail, 'projectId' | 'teamId'>): boolean {
+    return isSelfManagedTeamSourceId(sourceId)
+      ? issue.teamId === decodeSelfManagedTeamSourceId(sourceId)
+      : issue.projectId === sourceId;
+  }
+
   /**
    * List one page of the workspace's active issues (triage/backlog/unstarted/
    * started — completed and canceled are excluded), most recently updated
    * first. When `projectIds` is provided, only issues from those projects are
-   * returned.
+   * returned. When `teamIds` is provided, only issues in those teams are
+   * returned, including issues that belong to no project. Callers list team
+   * sources and project sources in separate calls so the two filters are not
+   * AND-ed together.
    */
   async listActiveIssues(
     accessToken: string,
     after?: string,
     projectIds?: string[],
     labels?: string[],
+    teamIds?: string[],
   ): Promise<LinearIssuePage> {
     const normalizedLabels = [...new Set((labels ?? []).map(label => label.trim()).filter(Boolean))];
     const projectFilter = projectIds?.length ? ', project: { id: { in: $projectIds } }' : '';
     const projectVar = projectIds?.length ? ', $projectIds: [ID!]' : '';
+    const teamFilter = teamIds?.length ? ', team: { id: { in: $teamIds } }' : '';
+    const teamVar = teamIds?.length ? ', $teamIds: [ID!]' : '';
     const labelFilter = normalizedLabels.length > 0 ? ', labels: { name: { in: $labels } }' : '';
     const labelVar = normalizedLabels.length > 0 ? ', $labels: [String!]' : '';
     const data = await linearGraphql<IssuesQueryData>(
       accessToken,
-      `query Intake($first: Int!, $after: String${projectVar}${labelVar}) {
+      `query Intake($first: Int!, $after: String${projectVar}${teamVar}${labelVar}) {
         issues(
           first: $first
           after: $after
           orderBy: updatedAt
-          filter: { state: { type: { in: ["triage", "backlog", "unstarted", "started"] } }${projectFilter}${labelFilter} }
+          filter: { state: { type: { in: ["triage", "backlog", "unstarted", "started"] } }${projectFilter}${teamFilter}${labelFilter} }
         ) {
           nodes {
             id
@@ -791,7 +941,8 @@ export class LinearIntegration implements FactoryIntegration {
             state { name type }
             project { id }
             assignee { name }
-            team { key }
+            creator { name }
+            team { id key }
             labels { nodes { name } }
           }
           pageInfo { hasNextPage endCursor }
@@ -801,6 +952,7 @@ export class LinearIntegration implements FactoryIntegration {
         first: LINEAR_ISSUES_PAGE_SIZE,
         after: after ?? null,
         ...(projectIds?.length ? { projectIds } : {}),
+        ...(teamIds?.length ? { teamIds } : {}),
         ...(normalizedLabels.length > 0 ? { labels: normalizedLabels } : {}),
       },
     );
@@ -808,7 +960,7 @@ export class LinearIntegration implements FactoryIntegration {
     return {
       issues: nodes.map(node => ({
         id: node.id,
-        projectId: node.project.id,
+        projectId: node.project?.id ?? null,
         identifier: node.identifier,
         title: node.title,
         url: node.url,
@@ -816,10 +968,12 @@ export class LinearIntegration implements FactoryIntegration {
         stateType: node.state.type,
         priorityLabel: node.priorityLabel,
         assignee: node.assignee?.name ?? null,
+        creator: node.creator?.name ?? null,
         team: node.team?.key ?? null,
         labels: node.labels.nodes.map(label => label.name),
         createdAt: node.createdAt,
         updatedAt: node.updatedAt,
+        teamId: node.team?.id ?? null,
       })),
       nextCursor: pageInfo.hasNextPage ? pageInfo.endCursor : null,
     };
@@ -849,6 +1003,7 @@ export class LinearIntegration implements FactoryIntegration {
       const comments = data.issue?.comments;
       if (!comments) break;
       nodes.push(...comments.nodes);
+      if (comments.pageInfo.hasNextPage && comments.pageInfo.endCursor === endCursor) throw invalidLinearCursor();
       ({ hasNextPage, endCursor } = comments.pageInfo);
     }
     return nodes;
@@ -860,7 +1015,12 @@ export class LinearIntegration implements FactoryIntegration {
    * `null` when the issue doesn't exist (Linear reports it as an "Entity not
    * found" error).
    */
-  async fetchIssueDetail(accessToken: string, idOrIdentifier: string): Promise<LinearIssueDetail | null> {
+  async fetchIssueDetail(
+    accessToken: string,
+    idOrIdentifier: string,
+    _sourceIds?: string[],
+    _routedSourceIds?: string[],
+  ): Promise<LinearIssueDetail | null> {
     let data: IssueDetailQueryData;
     try {
       data = await linearGraphql<IssueDetailQueryData>(
@@ -878,7 +1038,8 @@ export class LinearIntegration implements FactoryIntegration {
             state { name type }
             project { id }
             assignee { name }
-            team { key }
+            creator { name }
+            team { id key }
             labels { nodes { name } }
             comments(first: $commentsFirst) {
               nodes { body createdAt user { name } }
@@ -901,7 +1062,8 @@ export class LinearIntegration implements FactoryIntegration {
     const comments = allComments.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     return {
       id: issue.id,
-      projectId: issue.project.id,
+      projectId: issue.project?.id ?? null,
+      teamId: issue.team?.id ?? null,
       identifier: issue.identifier,
       title: issue.title,
       description: issue.description?.trim() ? issue.description : null,
@@ -910,6 +1072,7 @@ export class LinearIntegration implements FactoryIntegration {
       stateType: issue.state.type,
       priorityLabel: issue.priorityLabel,
       assignee: issue.assignee?.name ?? null,
+      creator: issue.creator?.name ?? null,
       team: issue.team?.key ?? null,
       labels: issue.labels.nodes.map(label => label.name),
       createdAt: issue.createdAt,
@@ -961,6 +1124,20 @@ export class LinearIntegration implements FactoryIntegration {
 
   // ── FactoryIntegration surface ───────────────────────────────────────────
 
+  workers(ctx: IntegrationContext): MastraWorker[] {
+    if (!linearIssueReconciliationEnabled()) return [];
+    const reconcile = attachLinearIssueReconciler(this, ctx);
+    if (!reconcile) return [];
+    const intervalMs = linearIssueReconciliationInterval();
+    return [
+      new IssueReconcileWorker({
+        integrationId: this.id,
+        reconcile,
+        ...(intervalMs ? { intervalMs } : {}),
+      }),
+    ];
+  }
+
   /**
    * The integration's HTTP surface: `/web/linear/*` + `/auth/linear/*` Mastra
    * `apiRoutes` (status, OAuth connect/callback, projects + issues for
@@ -973,7 +1150,10 @@ export class LinearIntegration implements FactoryIntegration {
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
       intake: ctx.storage.intake,
-      ingestFactoryIssues: attachLinearRules(ctx),
+      projects: ctx.storage.projects,
+      ingestFactoryIssues: attachLinearRules(this, ctx),
+      workItems: ctx.runtime?.workItems,
+      boards: ctx.runtime?.boards,
     });
   }
 
@@ -1000,13 +1180,154 @@ function getLinearAccessToken(connection: IntegrationConnection): string {
   return connection.accessToken;
 }
 
-function linearIssueToIntakeIssue(issue: LinearIssue): IntakeIssue {
+/**
+ * Self-managed source ids. Projects use their raw Linear project id (no prefix,
+ * preserving existing intake bindings). Teams are prefixed so the two never
+ * collide and callers can tell them apart.
+ */
+const SELF_MANAGED_TEAM_SOURCE_PREFIX = 'linear-team:';
+
+function encodeSelfManagedTeamSourceId(teamId: string): string {
+  return `${SELF_MANAGED_TEAM_SOURCE_PREFIX}${teamId}`;
+}
+
+function isSelfManagedTeamSourceId(sourceId: string): boolean {
+  return sourceId.startsWith(SELF_MANAGED_TEAM_SOURCE_PREFIX);
+}
+
+function decodeSelfManagedTeamSourceId(sourceId: string): string {
+  return sourceId.slice(SELF_MANAGED_TEAM_SOURCE_PREFIX.length);
+}
+
+/**
+ * Split selected source ids into raw project ids and raw team ids. A team
+ * source id carries the `linear-team:` prefix; everything else is a project id.
+ */
+function splitSelfManagedSourceIds(sourceIds: string[]): { projectIds: string[]; teamIds: string[] } {
+  const projectIds: string[] = [];
+  const teamIds: string[] = [];
+  for (const sourceId of sourceIds) {
+    if (isSelfManagedTeamSourceId(sourceId)) teamIds.push(decodeSelfManagedTeamSourceId(sourceId));
+    else projectIds.push(sourceId);
+  }
+  return { projectIds, teamIds };
+}
+
+type SelfManagedListCursor = {
+  v: 1;
+  sourceSet: string;
+  projects: string | null;
+  teams: string | null;
+};
+
+function linearSourceSetFingerprint(sourceIds: string[], attributionSourceIds: string[]): string {
+  const scope = {
+    sourceIds: [...new Set(sourceIds)].sort(),
+    attributionSourceIds: [...new Set(attributionSourceIds)].sort(),
+  };
+  return createHash('sha256').update(JSON.stringify(scope)).digest('base64url');
+}
+
+function invalidLinearCursor(): Error {
+  return Object.assign(new Error('Linear cursor is invalid or stale.'), { code: 'invalid_cursor' as const });
+}
+
+function isCursorValue(value: unknown): value is string | null {
+  return value === null || typeof value === 'string';
+}
+
+function decodeSelfManagedListCursor(
+  cursor: string | undefined,
+  sourceIds: string[],
+  attributionSourceIds: string[],
+): { projects: string | null | undefined; teams: string | null | undefined } {
+  const { projectIds, teamIds } = splitSelfManagedSourceIds(sourceIds);
+  if (!cursor) {
+    return {
+      projects: projectIds.length > 0 ? undefined : null,
+      teams: teamIds.length > 0 ? undefined : null,
+    };
+  }
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Partial<SelfManagedListCursor>;
+    if (
+      parsed.v !== 1 ||
+      parsed.sourceSet !== linearSourceSetFingerprint(sourceIds, attributionSourceIds) ||
+      !isCursorValue(parsed.projects) ||
+      !isCursorValue(parsed.teams)
+    ) {
+      throw invalidLinearCursor();
+    }
+    return {
+      projects: parsed.projects,
+      teams: parsed.teams,
+    };
+  } catch {
+    throw invalidLinearCursor();
+  }
+}
+
+function encodeSelfManagedListCursor(
+  state: Pick<SelfManagedListCursor, 'projects' | 'teams'>,
+  sourceIds: string[],
+  attributionSourceIds: string[],
+): string | null {
+  if (state.projects === null && state.teams === null) return null;
+  return Buffer.from(
+    JSON.stringify({
+      v: 1,
+      sourceSet: linearSourceSetFingerprint(sourceIds, attributionSourceIds),
+      ...state,
+    } satisfies SelfManagedListCursor),
+  ).toString('base64url');
+}
+
+/**
+ * Deduplicate issues that surfaced from both a selected team and one of its
+ * selected projects. Keeps one entry per Linear issue UUID.
+ *
+ * Tie-breaker — MOST-SPECIFIC-WINS: an issue in a selected project is
+ * attributed to that project source (routes to the project's board); the team
+ * source covers only the remainder (projectless issues and issues in projects
+ * that were not separately selected). Change the comparison here to change the
+ * routing policy — this is the single precedence point for the self-managed
+ * integration, mirroring the platform-backed one.
+ */
+function dedupeSelfManagedIssues(
+  issues: Array<IntakeIssue & { sourceId?: string | null }>,
+): Array<IntakeIssue & { sourceId?: string | null }> {
+  const isProjectSource = (sourceId: string | null | undefined): boolean =>
+    typeof sourceId === 'string' && sourceId.length > 0 && !isSelfManagedTeamSourceId(sourceId);
+  const winners = new Map<string, IntakeIssue & { sourceId?: string | null }>();
+  for (const issue of issues) {
+    const existing = winners.get(issue.id);
+    if (!existing) {
+      winners.set(issue.id, issue);
+      continue;
+    }
+    // Project source beats team source; otherwise keep the first seen.
+    if (isProjectSource(issue.sourceId) && !isProjectSource(existing.sourceId)) {
+      winners.set(issue.id, issue);
+    }
+  }
+  const seen = new Set<string>();
+  const ordered: Array<IntakeIssue & { sourceId?: string | null }> = [];
+  for (const issue of issues) {
+    if (seen.has(issue.id)) continue;
+    seen.add(issue.id);
+    ordered.push(winners.get(issue.id)!);
+  }
+  return ordered;
+}
+
+function linearIssueToIntakeIssue(issue: Omit<LinearIssue, 'projectId'> & { projectId?: string | null }): IntakeIssue {
   return {
     id: issue.id,
+    sourceId: issue.projectId ?? null,
     identifier: issue.identifier,
     title: issue.title,
     url: issue.url,
-    author: null,
+    author: issue.creator,
     state: issue.state,
     stateType: issue.stateType,
     priority: issue.priorityLabel,

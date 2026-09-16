@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
+import { createScorer } from '../evals';
+import { runScorer } from '../evals/hooks';
 import { AvailableHooks, executeHook } from '../hooks';
 import { InMemoryStore } from '../storage/mock';
 
@@ -22,6 +24,55 @@ async function flushHook() {
 }
 
 describe('scorer hook teardown', () => {
+  it('only runs a scorer on the Mastra instance that emitted the hook', async () => {
+    const sharedScorer = createScorer({
+      id: 'shared-instance-scorer',
+      name: 'Shared instance scorer',
+      description: 'A scorer registered on more than one Mastra instance',
+    }).generateScore(() => 1);
+    const run = vi.spyOn(sharedScorer, 'run').mockImplementation(async input => ({
+      ...input,
+      runId: input.runId ?? 'shared-instance-scorer-run',
+      score: 1,
+    }));
+
+    const owner = new Mastra({
+      storage: new InMemoryStore(),
+      scorers: { sharedScorer },
+    });
+    const nonOwner = new Mastra({
+      storage: new InMemoryStore(),
+      scorers: { sharedScorer },
+    });
+    const nonOwnerLookup = vi.spyOn(nonOwner, 'getScorerById');
+    const nonOwnerException = vi.spyOn(nonOwner.getLogger(), 'trackException');
+
+    try {
+      runScorer({
+        mastra: owner,
+        scorerId: sharedScorer.id,
+        scorerObject: { scorer: sharedScorer },
+        runId: 'shared-instance-run',
+        input: 'in',
+        output: 'out',
+        requestContext: {},
+        entity: { id: 'shared-instance-agent' },
+        structuredOutput: false,
+        source: 'LIVE',
+        entityType: 'AGENT',
+      });
+
+      await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+      await flushHook();
+
+      expect(nonOwnerLookup).not.toHaveBeenCalled();
+      expect(nonOwnerException).not.toHaveBeenCalled();
+    } finally {
+      owner.__unregisterHooks();
+      nonOwner.__unregisterHooks();
+    }
+  });
+
   it('an empty Mastra logs a failed-hook error for a scorer it does not own', async () => {
     const mastra = new Mastra({ storage: new InMemoryStore() });
     const trackException = vi.spyOn(mastra.getLogger(), 'trackException');

@@ -6,7 +6,7 @@ import { Sections } from '@mastra/playground-ui/components/Sections';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { format } from 'date-fns/format';
-import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, RouteIcon } from 'lucide-react';
+import { HashIcon, FileInputIcon, FileOutputIcon, ListChecksIcon, TagIcon, RouteIcon } from 'lucide-react';
 
 export interface DatasetItemPageProps {
   item: DatasetItem;
@@ -18,7 +18,7 @@ export interface DatasetItemPageProps {
  */
 export function DatasetItemPage({ item }: DatasetItemPageProps) {
   return (
-    <div className="h-full overflow-y-auto p-6">
+    <div className="h-full overflow-y-auto p-4">
       <DatasetItemContent item={item} />
     </div>
   );
@@ -34,7 +34,7 @@ function DatasetItemContent({ item }: { item: DatasetItem }) {
   return (
     <>
       <div className="mb-4">
-        <h3 className="flex items-center gap-2 text-lg font-medium">
+        <h3 className="text-header-sm flex items-center gap-2 font-medium">
           <FileInputIcon className="h-5 w-5" /> Dataset Item
         </h3>
         <TextAndIcon>
@@ -75,6 +75,12 @@ function DatasetItemContent({ item }: { item: DatasetItem }) {
         {trajectoryDisplay && (
           <SideDialog.CodeSection title="Expected Trajectory" icon={<RouteIcon />} codeStr={trajectoryDisplay} />
         )}
+
+        <SideDialog.CodeSection
+          title="Scorers"
+          icon={<ListChecksIcon />}
+          codeStr={item.scorerIds === undefined ? 'Inherited from dataset' : JSON.stringify(item.scorerIds, null, 2)}
+        />
 
         {metadataDisplay && <SideDialog.CodeSection title="Metadata" icon={<TagIcon />} codeStr={metadataDisplay} />}
       </Sections>

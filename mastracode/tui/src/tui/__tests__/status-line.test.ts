@@ -91,9 +91,9 @@ function createState() {
         },
         bufferingMessages: false,
         bufferingObservations: false,
+        queuedFollowUps: 0,
       })),
     },
-    followUps: { count: vi.fn(() => 0) },
     identity: { getResourceId: vi.fn(() => 'resource-1') },
     thread: { getId: vi.fn(() => 'thread-1') },
     mode: {
@@ -154,7 +154,10 @@ describe('updateStatusLine', () => {
   it('shows queued count in the status line', () => {
     const state = createState();
     state.pendingQueuedActions = ['message', 'slash'];
-    state.session.followUps.count.mockReturnValue(1);
+    state.session.displayState.get.mockReturnValue({
+      ...state.session.displayState.get(),
+      queuedFollowUps: 1,
+    });
 
     updateStatusLine(state);
 
@@ -255,6 +258,17 @@ describe('updateStatusLine', () => {
     expect(rendered).toContain('PR#17439');
     expect(rendered).not.toContain('polling');
     expect(rendered).not.toContain('updated');
+  });
+
+  it('shows a GitHub PR subscription count when multiple PRs are active', () => {
+    const state = createState();
+    state.activeGithubPrSubscriptions = [{ prNumber: 17439 }, { prNumber: 17440 }, { prNumber: 17441 }];
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('3 PRs');
+    expect(rendered).not.toContain('PR#17439');
   });
 
   it('keeps the PR label within the available width when truncating a long thread title', () => {

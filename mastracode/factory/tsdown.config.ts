@@ -35,8 +35,8 @@ export default defineConfig({
   dts: false,
   sourcemap: true,
   deps: {
-    alwaysBundle: ['@mastra/libsql'],
-    neverBundle: [/^@mastra\//, '@octokit/auth-app', '@octokit/rest', 'hono', /^hono\//, 'zod'],
+    alwaysBundle: ['@mastra/libsql', '@internal/workspace'],
+    neverBundle: [/^@mastra\//, '@octokit/auth-app', '@octokit/rest', 'chat', 'hono', /^hono\//, 'zod'],
   },
   inputOptions: {
     plugins: [rewriteRelativeSpecifiersPlugin],

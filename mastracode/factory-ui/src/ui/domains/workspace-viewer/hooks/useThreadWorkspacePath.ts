@@ -10,6 +10,7 @@ export function useThreadWorkspacePath() {
 
   return {
     workspacePath: isUserThreadRoute ? userSession.data?.sessionId : sessionId,
+    threadId,
     isPending: isUserThreadRoute && userSession.isPending,
   };
 }

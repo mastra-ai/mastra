@@ -95,6 +95,34 @@ describe('Workflow (fetch-mocked)', () => {
     ]);
   });
 
+  it('streams records split across network chunks', async () => {
+    const run = await wf.createRun();
+    const encoded = new TextEncoder().encode('{"type":"result","payload":{"message":"mañana"}}\x1E');
+    const splitAt = encoded.indexOf(0xc3) + 1;
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(encoded.slice(0, splitAt));
+              controller.enqueue(encoded.slice(splitAt));
+              controller.close();
+            },
+          }),
+          { status: 200 },
+        ),
+    );
+
+    const stream = await run.stream({ inputData: { x: 1 } });
+    const reader = (stream as ReadableStream<any>).getReader();
+
+    await expect(reader.read()).resolves.toMatchObject({
+      done: false,
+      value: { type: 'result', payload: { message: 'mañana' } },
+    });
+    await expect(reader.read()).resolves.toMatchObject({ done: true });
+  });
+
   it('creates run using provided runId', async () => {
     fetchMock.mockImplementation((input: any) => {
       const url = String(input);

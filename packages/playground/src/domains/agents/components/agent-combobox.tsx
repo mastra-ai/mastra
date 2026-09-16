@@ -15,6 +15,8 @@ export interface AgentComboboxProps {
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
+  'aria-label'?: string;
+  align?: ComboboxProps['align'];
 }
 
 export function AgentCombobox({
@@ -27,6 +29,8 @@ export function AgentCombobox({
   disabled = false,
   variant,
   size,
+  'aria-label': ariaLabel,
+  align,
 }: AgentComboboxProps) {
   const { data: agents = {}, isLoading, isError, error } = useAgents();
   const { navigate, paths } = useLinkComponent();
@@ -63,6 +67,8 @@ export function AgentCombobox({
       disabled={disabled || isLoading || isError}
       variant={variant}
       size={size}
+      aria-label={ariaLabel}
+      align={align}
     />
   );
 }

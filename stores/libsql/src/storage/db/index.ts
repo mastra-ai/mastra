@@ -1,5 +1,4 @@
 import { createClient } from '@libsql/client';
-import type { Client, InValue } from '@libsql/client';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
@@ -11,6 +10,7 @@ import {
 } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
+import type { SqliteClient as Client, SqliteInValue as InValue } from './client';
 import {
   buildSelectColumns,
   createExecuteWriteOperationWithRetry,
@@ -810,6 +810,21 @@ export class LibSQLDB extends MastraBase {
           this.logger.debug(`LibSQLDB: Created unique index on (spanId, traceId) for ${TABLE_SPANS}`);
         }
       }
+
+      // Ensure read indexes for the built-in trace list/detail queries exist.
+      // These are created idempotently on every init (cheap metadata no-op once present)
+      // and outside the unique-index guard above so existing/migrated databases also gain
+      // them. Without these, the default trace-list query
+      // (WHERE parentSpanId IS NULL ORDER BY startedAt DESC) and the trace-detail query
+      // (WHERE traceId = ? ORDER BY startedAt ASC) full-scan the table and build a
+      // temporary B-tree for ordering.
+      await this.client.execute(
+        `CREATE INDEX IF NOT EXISTS "mastra_ai_spans_roots_started_at_idx" ON "${TABLE_SPANS}" ("startedAt" DESC) WHERE "parentSpanId" IS NULL`,
+      );
+      await this.client.execute(
+        `CREATE INDEX IF NOT EXISTS "mastra_ai_spans_trace_started_at_idx" ON "${TABLE_SPANS}" ("traceId", "startedAt")`,
+      );
+      this.logger.debug(`LibSQLDB: Ensured trace read indexes for ${TABLE_SPANS}`);
 
       this.logger.info(`LibSQLDB: Migration completed for ${TABLE_SPANS}`);
     } catch (error) {

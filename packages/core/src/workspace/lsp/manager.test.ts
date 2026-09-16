@@ -57,11 +57,13 @@ vi.mock('./servers', () => ({
     // Simulate finding project roots at specific directories
     if (startDir.startsWith('/project') || startDir === '/project') return '/project';
     if (startDir.startsWith('/other-project') || startDir === '/other-project') return '/other-project';
+    if (startDir.startsWith('/third-project') || startDir === '/third-project') return '/third-project';
     return null;
   }),
   walkUpAsync: vi.fn().mockImplementation(async (startDir: string, _markers: string[]) => {
     if (startDir.startsWith('/project') || startDir === '/project') return '/project';
     if (startDir.startsWith('/other-project') || startDir === '/other-project') return '/other-project';
+    if (startDir.startsWith('/third-project') || startDir === '/third-project') return '/third-project';
     if (startDir.startsWith('/s3') || startDir === '/s3') return '/s3';
     return null;
   }),
@@ -134,12 +136,14 @@ describe('LSPManager', () => {
     (servers.walkUp as ReturnType<typeof vi.fn>).mockImplementation((startDir: string, _markers: string[]) => {
       if (startDir.startsWith('/project') || startDir === '/project') return '/project';
       if (startDir.startsWith('/other-project') || startDir === '/other-project') return '/other-project';
+      if (startDir.startsWith('/third-project') || startDir === '/third-project') return '/third-project';
       return null;
     });
     (servers.walkUpAsync as ReturnType<typeof vi.fn>).mockImplementation(
       async (startDir: string, _markers: string[]) => {
         if (startDir.startsWith('/project') || startDir === '/project') return '/project';
         if (startDir.startsWith('/other-project') || startDir === '/other-project') return '/other-project';
+        if (startDir.startsWith('/third-project') || startDir === '/third-project') return '/third-project';
         if (startDir.startsWith('/s3') || startDir === '/s3') return '/s3';
         return null;
       },
@@ -180,24 +184,24 @@ describe('LSPManager', () => {
 
   describe('getClient', () => {
     it('returns null for unsupported file types', async () => {
-      const client = await manager.getClient('/project/README.md');
+      const client = await manager['getClientInternal']('/project/README.md');
       expect(client).toBeNull();
     });
 
     it('returns a client for TypeScript files', async () => {
-      const client = await manager.getClient('/project/src/app.ts');
+      const client = await manager['getClientInternal']('/project/src/app.ts');
       expect(client).not.toBeNull();
     });
 
     it('reuses client for same server + project root', async () => {
-      const client1 = await manager.getClient('/project/src/app.ts');
-      const client2 = await manager.getClient('/project/src/other.ts');
+      const client1 = await manager['getClientInternal']('/project/src/app.ts');
+      const client2 = await manager['getClientInternal']('/project/src/other.ts');
       expect(client1).toBe(client2);
     });
 
     it('creates separate clients for files in different project roots', async () => {
-      const client1 = await manager.getClient('/project/src/app.ts');
-      const client2 = await manager.getClient('/other-project/src/app.ts');
+      const client1 = await manager['getClientInternal']('/project/src/app.ts');
+      const client2 = await manager['getClientInternal']('/other-project/src/app.ts');
       expect(client1).not.toBe(client2);
       expect(client1).not.toBeNull();
       expect(client2).not.toBeNull();
@@ -205,7 +209,7 @@ describe('LSPManager', () => {
 
     it('falls back to default root when walkup finds nothing', async () => {
       const { walkUp } = await import('./servers');
-      const client = await manager.getClient('/unknown/path/app.ts');
+      const client = await manager['getClientInternal']('/unknown/path/app.ts');
       expect(walkUp).toHaveBeenCalledWith('/unknown/path', ['tsconfig.json', 'package.json']);
       expect(client).not.toBeNull();
     });
@@ -239,14 +243,92 @@ describe('LSPManager', () => {
   });
 
   describe('shutdownAll', () => {
-    it('cleans up all clients', async () => {
-      await manager.getClient('/project/src/app.ts');
+    it('cleans up all clients and accepts new acquisitions once complete', async () => {
+      await manager['getClientInternal']('/project/src/app.ts');
 
       await manager.shutdownAll();
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
 
-      // After shutdown, getting a new client should create a fresh one
-      const client = await manager.getClient('/project/src/app.ts');
+      // A completed shutdown resets the manager: the next acquisition spawns
+      // a fresh client instead of being rejected forever. Workspace.stop()
+      // relies on this to keep a stopped workspace's diagnostics working.
+      const client = await manager['getClientInternal']('/project/src/app.ts');
       expect(client).not.toBeNull();
+    });
+
+    it('waits for queued initialization before shutting clients down', async () => {
+      let finishInitialization!: () => void;
+      mockInitialize.mockImplementationOnce(
+        () =>
+          new Promise<void>(resolve => {
+            finishInitialization = resolve;
+          }),
+      );
+      const getClientPromise = manager['getClientInternal']('/project/src/app.ts');
+      await vi.waitFor(() => expect(mockInitialize).toHaveBeenCalledTimes(1));
+
+      const shutdownPromise = manager.shutdownAll();
+      finishInitialization();
+      await getClientPromise;
+      await shutdownPromise;
+
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
+    });
+
+    it('waits for in-flight diagnostics before shutting the client down', async () => {
+      let finishDiagnostics!: (diagnostics: any[]) => void;
+      mockWaitForDiagnostics.mockImplementationOnce(
+        () =>
+          new Promise<any[]>(resolve => {
+            finishDiagnostics = resolve;
+          }),
+      );
+
+      const diagnosticsPromise = manager.getDiagnostics('/project/src/app.ts', 'const value = 1');
+      await vi.waitFor(() => expect(mockWaitForDiagnostics).toHaveBeenCalledTimes(1));
+
+      const shutdownPromise = manager.shutdownAll();
+      await Promise.resolve();
+      expect(mockShutdown).not.toHaveBeenCalled();
+
+      finishDiagnostics([{ severity: 1, message: 'diagnostic', range: { start: { line: 0, character: 0 } } }]);
+      await expect(diagnosticsPromise).resolves.toEqual([
+        { severity: 'error', message: 'diagnostic', line: 1, character: 1, source: undefined },
+      ]);
+      await shutdownPromise;
+
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
+    });
+
+    it('forces shutdown after the lease drain timeout', async () => {
+      const query = await manager.prepareQuery('/project/src/app.ts');
+      expect(query).not.toBeNull();
+
+      vi.useFakeTimers();
+      try {
+        const shutdownPromise = manager.shutdownAll();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(mockShutdown).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(5000);
+        await shutdownPromise;
+
+        expect(mockShutdown).toHaveBeenCalledTimes(1);
+      } finally {
+        query?.release();
+        vi.useRealTimers();
+      }
+    });
+
+    it('rejects acquisition started after shutdown begins', async () => {
+      const shutdownPromise = manager.shutdownAll();
+      const clientPromise = manager['getClientInternal']('/project/src/app.ts');
+
+      await expect(clientPromise).resolves.toBeNull();
+      await shutdownPromise;
+
+      expect(mockInitialize).not.toHaveBeenCalled();
+      expect(mockShutdown).not.toHaveBeenCalled();
     });
   });
 
@@ -255,7 +337,7 @@ describe('LSPManager', () => {
       const { getServersForFile } = await import('./servers');
       const restrictedManager = new LSPManager(mockProcessManager, '/project', { disableServers: ['eslint'] });
 
-      await restrictedManager.getClient('/project/src/app.ts');
+      await restrictedManager['getClientInternal']('/project/src/app.ts');
 
       expect(getServersForFile).toHaveBeenCalledWith(
         '/project/src/app.ts',
@@ -265,14 +347,133 @@ describe('LSPManager', () => {
       );
       await restrictedManager.shutdownAll();
     });
+
+    it('shuts down the least recently used client when maxOpenClients is reached', async () => {
+      const restrictedManager = new LSPManager(mockProcessManager, '/project', { maxOpenClients: 2 });
+      const first = await restrictedManager['getClientInternal']('/project/src/app.ts');
+      const second = await restrictedManager['getClientInternal']('/other-project/src/app.ts');
+
+      expect(await restrictedManager['getClientInternal']('/project/src/other.ts')).toBe(first);
+
+      const third = await restrictedManager['getClientInternal']('/third-project/src/app.ts');
+      expect(third).not.toBe(first);
+      expect(third).not.toBe(second);
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
+      expect(await restrictedManager['getClientInternal']('/project/src/app.ts')).toBe(first);
+
+      const reopenedSecond = await restrictedManager['getClientInternal']('/other-project/src/app.ts');
+      expect(reopenedSecond).not.toBe(second);
+      expect(mockShutdown).toHaveBeenCalledTimes(2);
+      await restrictedManager.shutdownAll();
+    });
+
+    it('does not evict a client while diagnostics are in flight', async () => {
+      const restrictedManager = new LSPManager(mockProcessManager, '/project', { maxOpenClients: 1 });
+      let finishDiagnostics!: (diagnostics: any[]) => void;
+      mockWaitForDiagnostics.mockImplementationOnce(
+        () =>
+          new Promise<any[]>(resolve => {
+            finishDiagnostics = resolve;
+          }),
+      );
+
+      const diagnosticsPromise = restrictedManager.getDiagnostics('/project/src/app.ts', 'const x = 1');
+      await vi.waitFor(() => expect(mockWaitForDiagnostics).toHaveBeenCalledTimes(1));
+
+      const otherClientPromise = restrictedManager['getClientInternal']('/other-project/src/app.ts');
+      await Promise.resolve();
+      expect(mockShutdown).not.toHaveBeenCalled();
+
+      finishDiagnostics([]);
+      await expect(diagnosticsPromise).resolves.toEqual([]);
+      await expect(otherClientPromise).resolves.not.toBeNull();
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
+      await restrictedManager.shutdownAll();
+    });
+
+    it('leases a newly initialized client before another cold diagnostics request can evict it', async () => {
+      const restrictedManager = new LSPManager(mockProcessManager, '/project', { maxOpenClients: 1 });
+      let finishInitialization!: () => void;
+      let finishDiagnostics!: (diagnostics: any[]) => void;
+      mockInitialize.mockImplementationOnce(
+        () =>
+          new Promise<void>(resolve => {
+            finishInitialization = resolve;
+          }),
+      );
+      mockWaitForDiagnostics.mockImplementationOnce(
+        () =>
+          new Promise<any[]>(resolve => {
+            finishDiagnostics = resolve;
+          }),
+      );
+
+      const firstDiagnostics = restrictedManager.getDiagnostics('/project/src/app.ts', 'const first = 1');
+      await vi.waitFor(() => expect(mockInitialize).toHaveBeenCalledTimes(1));
+      const secondDiagnostics = restrictedManager.getDiagnostics('/other-project/src/app.ts', 'const second = 2');
+
+      finishInitialization();
+      await vi.waitFor(() => expect(mockWaitForDiagnostics).toHaveBeenCalledTimes(1));
+      expect(mockInitialize).toHaveBeenCalledTimes(1);
+      expect(mockShutdown).not.toHaveBeenCalled();
+
+      finishDiagnostics([]);
+      await expect(firstDiagnostics).resolves.toEqual([]);
+      await expect(secondDiagnostics).resolves.toEqual(expect.any(Array));
+      expect(mockInitialize).toHaveBeenCalledTimes(2);
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
+      await restrictedManager.shutdownAll();
+    });
+
+    it('keeps a prepared query client leased until the caller releases it', async () => {
+      const restrictedManager = new LSPManager(mockProcessManager, '/project', { maxOpenClients: 1 });
+      const query = await restrictedManager.prepareQuery('/project/src/app.ts');
+      expect(query).not.toBeNull();
+
+      const otherDiagnostics = restrictedManager.getDiagnostics('/other-project/src/app.ts', 'const second = 2');
+      await Promise.resolve();
+      expect(mockShutdown).not.toHaveBeenCalled();
+
+      query!.client.notifyClose('/project/src/app.ts');
+      query!.release();
+      await expect(otherDiagnostics).resolves.toEqual(expect.any(Array));
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
+      await restrictedManager.shutdownAll();
+    });
+
+    it('stops waiting for capacity when a prepared query is never released', async () => {
+      const restrictedManager = new LSPManager(mockProcessManager, '/project', { maxOpenClients: 1 });
+      const query = await restrictedManager.prepareQuery('/project/src/app.ts');
+      expect(query).not.toBeNull();
+
+      vi.useFakeTimers();
+      try {
+        const otherDiagnostics = restrictedManager.getDiagnostics('/other-project/src/app.ts', 'const second = 2');
+        await vi.advanceTimersByTimeAsync(5000);
+
+        await expect(otherDiagnostics).resolves.toBeNull();
+        expect(mockShutdown).not.toHaveBeenCalled();
+      } finally {
+        query!.client.notifyClose('/project/src/app.ts');
+        query!.release();
+        vi.useRealTimers();
+        await restrictedManager.shutdownAll();
+      }
+    });
+
+    it.each([0, -1, 1.5])('rejects invalid maxOpenClients value %s', maxOpenClients => {
+      expect(() => new LSPManager(mockProcessManager, '/project', { maxOpenClients })).toThrow(
+        'maxOpenClients must be a positive integer',
+      );
+    });
   });
 
   describe('concurrent getClient', () => {
     it('deduplicates concurrent calls for the same file', async () => {
       // Both calls should resolve to the same client, with initialize called only once
       const [client1, client2] = await Promise.all([
-        manager.getClient('/project/src/app.ts'),
-        manager.getClient('/project/src/app.ts'),
+        manager['getClientInternal']('/project/src/app.ts'),
+        manager['getClientInternal']('/project/src/app.ts'),
       ]);
 
       expect(client1).toBe(client2);
@@ -281,8 +482,8 @@ describe('LSPManager', () => {
 
     it('deduplicates concurrent calls for different files in same project root', async () => {
       const [client1, client2] = await Promise.all([
-        manager.getClient('/project/src/app.ts'),
-        manager.getClient('/project/src/other.ts'),
+        manager['getClientInternal']('/project/src/app.ts'),
+        manager['getClientInternal']('/project/src/other.ts'),
       ]);
 
       expect(client1).toBe(client2);
@@ -298,11 +499,12 @@ describe('LSPManager', () => {
         // Make initialize hang — fake timers prevent a real 5s delay
         mockInitialize.mockImplementationOnce(() => new Promise(resolve => setTimeout(resolve, 5000)));
 
-        const clientPromise = timeoutManager.getClient('/project/src/app.ts');
+        const clientPromise = timeoutManager['getClientInternal']('/project/src/app.ts');
         await vi.advanceTimersByTimeAsync(5000);
         const client = await clientPromise;
 
         expect(client).toBeNull();
+        expect(mockShutdown).toHaveBeenCalled();
         await timeoutManager.shutdownAll();
       } finally {
         vi.useRealTimers();
@@ -315,13 +517,14 @@ describe('LSPManager', () => {
         const timeoutManager = new LSPManager(mockProcessManager, '/project', { initTimeout: 50 });
         mockInitialize.mockImplementationOnce(() => new Promise(resolve => setTimeout(resolve, 5000)));
 
-        const clientPromise = timeoutManager.getClient('/project/src/app.ts');
+        const clientPromise = timeoutManager['getClientInternal']('/project/src/app.ts');
         await vi.advanceTimersByTimeAsync(5000);
         await clientPromise;
+        expect(mockShutdown).toHaveBeenCalled();
 
         // Subsequent call should attempt a fresh initialization
         mockInitialize.mockResolvedValueOnce(undefined);
-        const client = await timeoutManager.getClient('/project/src/app.ts');
+        const client = await timeoutManager['getClientInternal']('/project/src/app.ts');
         expect(client).not.toBeNull();
         await timeoutManager.shutdownAll();
       } finally {
@@ -332,9 +535,10 @@ describe('LSPManager', () => {
     it('returns null when initialization throws', async () => {
       mockInitialize.mockRejectedValueOnce(new Error('spawn failed'));
 
-      const client = await manager.getClient('/project/src/app.ts');
+      const client = await manager['getClientInternal']('/project/src/app.ts');
 
       expect(client).toBeNull();
+      expect(mockShutdown).toHaveBeenCalled();
     });
   });
 
@@ -397,7 +601,7 @@ describe('LSPManager', () => {
       const { walkUpAsync } = await import('./servers');
       const fsManager = new LSPManager(mockProcessManager, '/fallback', {}, mockFilesystem);
 
-      await fsManager.getClient('/project/src/app.ts');
+      await fsManager['getClientInternal']('/project/src/app.ts');
 
       expect(walkUpAsync).toHaveBeenCalledWith('/project/src', ['tsconfig.json', 'package.json'], mockFilesystem);
       await fsManager.shutdownAll();
@@ -407,7 +611,7 @@ describe('LSPManager', () => {
       const { walkUp, walkUpAsync } = await import('./servers');
       const noFsManager = new LSPManager(mockProcessManager, '/fallback');
 
-      await noFsManager.getClient('/project/src/app.ts');
+      await noFsManager['getClientInternal']('/project/src/app.ts');
 
       expect(walkUp).toHaveBeenCalledWith('/project/src', ['tsconfig.json', 'package.json']);
       expect(walkUpAsync).not.toHaveBeenCalled();
@@ -419,7 +623,7 @@ describe('LSPManager', () => {
       (walkUpAsync as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
 
       const fsManager = new LSPManager(mockProcessManager, '/fallback', {}, mockFilesystem);
-      const client = await fsManager.getClient('/unknown/path/app.ts');
+      const client = await fsManager['getClientInternal']('/unknown/path/app.ts');
 
       // Should still get a client — resolves to /fallback
       expect(client).not.toBeNull();
@@ -430,7 +634,7 @@ describe('LSPManager', () => {
       const { walkUpAsync } = await import('./servers');
       const fsManager = new LSPManager(mockProcessManager, '/fallback', {}, mockFilesystem);
 
-      await fsManager.getClient('/s3/src/app.ts');
+      await fsManager['getClientInternal']('/s3/src/app.ts');
 
       expect(walkUpAsync).toHaveBeenCalledWith('/s3/src', ['tsconfig.json', 'package.json'], mockFilesystem);
       await fsManager.shutdownAll();
@@ -452,7 +656,7 @@ describe('LSPManager', () => {
 
       const fsManager = new LSPManager(mockProcessManager, '/fallback', {}, mockFilesystem);
 
-      await fsManager.getClient('/project/main.go');
+      await fsManager['getClientInternal']('/project/main.go');
 
       // walkUpAsync should be called with ['go.mod'], not the default TS markers
       expect(walkUpAsync).toHaveBeenCalledWith('/project', ['go.mod'], mockFilesystem);
@@ -580,7 +784,15 @@ describe('LSPManager', () => {
       // Either getDiagnostics returns [] or we timed out (null)
       // Both prove the system doesn't crash
       expect(result === null || (Array.isArray(result) && result.length === 0)).toBe(true);
-      await timeoutManager.shutdownAll();
+
+      vi.useFakeTimers();
+      try {
+        const shutdownPromise = timeoutManager.shutdownAll();
+        await vi.advanceTimersByTimeAsync(5000);
+        await shutdownPromise;
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
@@ -628,7 +840,7 @@ describe('LSPManager', () => {
   describe('crash detection and recovery', () => {
     it('evicts cached client when isAlive is false and creates new one', async () => {
       // First call — creates and caches a client
-      const client1 = await manager.getClient('/project/src/app.ts');
+      const client1 = await manager['getClientInternal']('/project/src/app.ts');
       expect(client1).not.toBeNull();
       expect(mockInitialize).toHaveBeenCalledTimes(1);
 
@@ -636,7 +848,7 @@ describe('LSPManager', () => {
       mockIsAlive = false;
 
       // Second call — should detect dead client, evict it, create new one
-      const client2 = await manager.getClient('/project/src/app.ts');
+      const client2 = await manager['getClientInternal']('/project/src/app.ts');
       expect(client2).not.toBeNull();
       expect(client2).not.toBe(client1);
       expect(mockInitialize).toHaveBeenCalledTimes(2);
@@ -644,19 +856,19 @@ describe('LSPManager', () => {
     });
 
     it('keeps cached client when isAlive is true', async () => {
-      const client1 = await manager.getClient('/project/src/app.ts');
+      const client1 = await manager['getClientInternal']('/project/src/app.ts');
       expect(client1).not.toBeNull();
 
       mockIsAlive = true;
 
-      const client2 = await manager.getClient('/project/src/app.ts');
+      const client2 = await manager['getClientInternal']('/project/src/app.ts');
       expect(client2).toBe(client1);
       expect(mockInitialize).toHaveBeenCalledTimes(1);
     });
 
     it('concurrent getClient during eviction does not create duplicates', async () => {
       // First call — create initial client
-      await manager.getClient('/project/src/app.ts');
+      await manager['getClientInternal']('/project/src/app.ts');
       expect(mockInitialize).toHaveBeenCalledTimes(1);
 
       // Simulate crash
@@ -664,8 +876,8 @@ describe('LSPManager', () => {
 
       // Concurrent calls after crash — should not create multiple clients
       const [client1, client2] = await Promise.all([
-        manager.getClient('/project/src/app.ts'),
-        manager.getClient('/project/src/app.ts'),
+        manager['getClientInternal']('/project/src/app.ts'),
+        manager['getClientInternal']('/project/src/app.ts'),
       ]);
 
       // Both should resolve (may or may not be the same instance depending on timing)
@@ -705,6 +917,93 @@ describe('LSPManager', () => {
       // With serialization, the pattern must be: open-wait-close-open-wait-close
       // (second open happens after first close)
       expect(callOrder).toEqual(['open', 'wait', 'close', 'open', 'wait', 'close']);
+    });
+
+    it('hands the lock to waiters in arrival order when a late caller races the release', async () => {
+      // The lock is a FIFO queue, so a caller that shows up while others are
+      // already queued goes to the back of that queue.
+      //
+      // The interesting moment is the instant the holder releases. A caller
+      // that asks for the lock in that same synchronous turn sees a free lock
+      // and can take it before the already-queued waiters get to resume. Under
+      // a FIFO queue it waits its turn instead.
+      const filePath = '/project/src/app.ts';
+      const acquire = (): Promise<() => void> =>
+        (manager as unknown as { acquireFileLock(p: string): Promise<() => void> }).acquireFileLock(filePath);
+
+      const order: string[] = [];
+      let held = 0;
+      let maxHeld = 0;
+      const enter = (name: string) => {
+        order.push(name);
+        held++;
+        maxHeld = Math.max(maxHeld, held);
+      };
+
+      const releaseFirst = await acquire();
+      enter('first');
+
+      const second = (async () => {
+        const release = await acquire();
+        enter('second');
+        held--;
+        release();
+      })();
+      await Promise.resolve();
+
+      const third = (async () => {
+        const release = await acquire();
+        enter('third');
+        held--;
+        release();
+      })();
+      await Promise.resolve();
+
+      // `late` asks for the lock in the same turn that the first holder frees it.
+      const late = (async () => {
+        held--;
+        releaseFirst();
+        const release = await acquire();
+        enter('late');
+        held--;
+        release();
+      })();
+
+      await Promise.all([second, third, late]);
+
+      expect(order).toEqual(['first', 'second', 'third', 'late']);
+      expect(maxHeld).toBe(1);
+    });
+
+    it('serializes three or more concurrent getDiagnostics for same file', async () => {
+      const callOrder: string[] = [];
+      let concurrentWaits = 0;
+      let maxConcurrentWaits = 0;
+
+      mockNotifyOpen.mockImplementation((_file: string) => {
+        callOrder.push('open');
+      });
+      mockNotifyClose.mockImplementation((_file: string) => {
+        callOrder.push('close');
+      });
+      mockWaitForDiagnostics.mockImplementation(async () => {
+        concurrentWaits++;
+        maxConcurrentWaits = Math.max(maxConcurrentWaits, concurrentWaits);
+        callOrder.push('wait');
+        await new Promise(resolve => setTimeout(resolve, 10));
+        concurrentWaits--;
+        return [{ severity: 1, message: 'err', range: { start: { line: 0, character: 0 } } }];
+      });
+
+      await Promise.all([
+        manager.getDiagnostics('/project/src/app.ts', 'content1'),
+        manager.getDiagnostics('/project/src/app.ts', 'content2'),
+        manager.getDiagnostics('/project/src/app.ts', 'content3'),
+      ]);
+
+      // Never more than one caller inside the critical section at a time.
+      expect(maxConcurrentWaits).toBe(1);
+      expect(callOrder).toEqual(['open', 'wait', 'close', 'open', 'wait', 'close', 'open', 'wait', 'close']);
     });
 
     it('allows parallel getDiagnostics for different files', async () => {
@@ -807,7 +1106,7 @@ describe('LSPManager', () => {
 
       const customManager = new LSPManager(mockProcessManager, '/project', phpConfig);
 
-      const client = await customManager.getClient('/project/src/App.php');
+      const client = await customManager['getClientInternal']('/project/src/App.php');
       expect(client).not.toBeNull();
 
       await customManager.shutdownAll();
@@ -836,8 +1135,8 @@ describe('LSPManager', () => {
 
       const customManager = new LSPManager(mockProcessManager, '/project', phpConfig);
 
-      const phpClient = await customManager.getClient('/project/src/App.php');
-      const tsClient = await customManager.getClient('/project/src/app.ts');
+      const phpClient = await customManager['getClientInternal']('/project/src/App.php');
+      const tsClient = await customManager['getClientInternal']('/project/src/app.ts');
 
       expect(phpClient).not.toBeNull();
       expect(tsClient).not.toBeNull();

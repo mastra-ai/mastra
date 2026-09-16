@@ -1,5 +1,6 @@
 import type { StorageThreadType } from '@mastra/core/memory';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import {
   ThreadList,
   ThreadListEmpty,
@@ -8,7 +9,11 @@ import {
   ThreadListNewItem,
   ThreadListSeparator,
 } from '@mastra/playground-ui/components/ThreadList';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { PanelEdgeIcon } from '@mastra/playground-ui/resize/panel-edge-icon';
+import { panelIconButtonClass } from '@mastra/playground-ui/resize/panel-icon-button';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
@@ -21,6 +26,8 @@ export interface ChatThreadsProps {
   resourceId: string;
   resourceType: 'agent' | 'network';
   embedded?: boolean;
+  /** When provided, renders a "Hide threads panel" control next to "New Chat". */
+  onHidePanel?: () => void;
 }
 
 export const ChatThreads = ({
@@ -30,6 +37,7 @@ export const ChatThreads = ({
   resourceId,
   resourceType,
   embedded = false,
+  onHidePanel,
 }: ChatThreadsProps) => {
   const { Link, paths } = useLinkComponent();
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -42,12 +50,38 @@ export const ChatThreads = ({
   return (
     <>
       <ThreadList embedded={embedded}>
-        <ThreadListNewItem as={Link} to={newThreadLink}>
-          <Icon>
-            <Plus />
-          </Icon>
-          New Chat
-        </ThreadListNewItem>
+        {/* pt-[3px] lines the hide button up with the collapsed panel's expand button (top-2 vs border+p-1) */}
+        <div className="flex items-center gap-1 pt-[3px]">
+          <ThreadListNewItem as={Link} to={newThreadLink}>
+            <Icon>
+              <Plus />
+            </Icon>
+            New Chat
+          </ThreadListNewItem>
+          {onHidePanel && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Hide threads panel"
+                  className={cn(panelIconButtonClass, 'shrink-0')}
+                  onClick={onHidePanel}
+                >
+                  <Icon>
+                    <PanelEdgeIcon side="left" />
+                  </Icon>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <span className="inline-flex items-center gap-1.5">
+                  Hide threads panel
+                  <Kbd size="xs">{'{'}</Kbd>
+                </span>
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+
         <ThreadListSeparator />
 
         {threads.length === 0 ? (

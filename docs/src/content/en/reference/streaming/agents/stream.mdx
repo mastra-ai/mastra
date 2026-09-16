@@ -1,6 +1,6 @@
 ---
 title: "Reference: Agent.stream() | Streaming"
-description: "Documentation for the `Agent.stream()` method in Mastra agents, which enables real-time streaming of responses with enhanced capabilities."
+description: "The .stream() method enables real-time streaming of responses from an agent with enhanced capabilities and format flexibility."
 packages:
   - "@mastra/ai-sdk"
 ---
@@ -17,7 +17,7 @@ The `.stream()` method enables real-time streaming of responses from an agent wi
 const stream = await agent.stream('message for agent')
 ```
 
-:::info
+:::note
 
 **Model Compatibility**: This method is designed for V2 models. V1 models should use the [`.streamLegacy()`](./streamLegacy) method. The framework automatically detects your model version and will throw an error if there's a mismatch.
 
@@ -42,6 +42,14 @@ const stream = await agent.stream('message for agent')
       {
         type: 'AgentExecutionOptions<Output, Format>',
         parameters: [
+          {
+            name: 'hideSignals',
+            type: 'boolean | AgentSignalType[]',
+            isOptional: true,
+            defaultValue: '[]',
+            description:
+              "Use true to hide all recognized signals, false to show all, or an array to hide selected types from this caller's fullStream after experimental transforms. Does not filter model context, storage, aggregates, or other subscribers. See Signal visibility below.",
+          },
           {
             name: 'maxSteps',
             type: 'number',
@@ -281,7 +289,7 @@ const stream = await agent.stream('message for agent')
                     type: '(context: DelegationStartContext) => DelegationStartResult | void | Promise<DelegationStartResult | void>',
                     isOptional: true,
                     description:
-                      'Called before delegating to a subagent. Use this to modify the delegation parameters or reject the delegation entirely.',
+                      "Called before delegating to a subagent. Use this to modify the delegation parameters, reject the delegation entirely, or mutate `context.requestContext` to add entries to the subagent run's request context.",
                   },
                 ],
               },
@@ -335,16 +343,17 @@ const stream = await agent.stream('message for agent')
           },
           {
             name: 'onAbort',
-            type: '(event: any) => Promise<void> | void',
+            type: '(event: { steps: any[]; text?: string }) => Promise<void> | void',
             isOptional: true,
-            description: 'Callback function called when the stream is aborted.',
+            description:
+              'Callback function called when the stream is aborted. `steps` contains the steps that completed before the abort, and `text` contains the assistant text streamed so far for the step that was in flight.',
           },
           {
             name: 'abortSignal',
             type: 'AbortSignal',
             isOptional: true,
             description:
-              "Signal object that allows you to abort the agent's execution. When the signal is aborted, all ongoing operations will be terminated, including any in-flight subagent runs the agent delegated to.",
+              "Signal object that allows you to abort the agent's execution, including in-flight subagent runs. Canceled runs continue through output processors. When writable memory is configured, built-in memory processors persist submitted messages, completed tool results, and assistant output available when terminal processing runs. Output that doesn't reach terminal processing isn't persisted. Custom output processors can transform or interrupt this behavior before memory processors run.",
           },
           {
             name: 'activeTools',
@@ -843,7 +852,7 @@ const stream = await agent.stream('message for agent')
             type: 'VersionOverrides',
             isOptional: true,
             description:
-              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Editor versioning](/docs/editor/overview#versioning).',
+              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Editor versioning](/docs/studio/editor#versioning).',
             properties: [
               {
                 type: 'VersionOverrides',
@@ -935,6 +944,34 @@ const stream = await agent.stream('message for agent')
 ]}
 />
 
+## Signal visibility
+
+Signals, including reactive reminders, appear in `fullStream` by default. Set `hideSignals` to omit selected signal chunks from your stream:
+
+```ts
+const stream = await agent.stream('Review the latest changes', {
+  hideSignals: ['reactive', 'system-reminder'],
+})
+
+for await (const chunk of stream.fullStream) {
+  console.log(chunk)
+}
+```
+
+Set `hideSignals: true` to hide all recognized signal types, or `hideSignals: false` to show all signals. An array selects individual types.
+
+The array accepts `user`, `state`, `reactive`, `notification`, and the legacy aliases `user-message` and `system-reminder`. An omitted option, `false`, or `[]` excludes nothing. Streaming normalizes `system-reminder` to `reactive` and `user-message` to `user`, then matches the encoded signal type in `data-signal` or `data-user-message` chunks. Unknown or malformed signal chunks pass through, as do text, errors, and completion events.
+
+Exclusions apply after `experimentalTransform`, so transforms still receive the unfiltered input. Adapters consuming `fullStream` inherit the filter, but aggregate `content`, `getFullOutput()`, response messages, callbacks, model context, and saved messages remain unchanged.
+
+Each [thread subscription](/reference/agents/agent#subscribetothreadoptions) has its own exclusion policy, independent of the initiating stream.
+
+The same policy applies to `resumeStream()`, `untilIdle` continuations, and the deprecated `streamUntilIdle()` and `resumeStreamUntilIdle()` methods, including durable agents. Shared execution options also accept `hideSignals` on `generate()` and `resumeGenerate()`, but it doesn't filter their returned results. This option isn't available on HTTP or client-js request options or legacy `streamLegacy()` APIs.
+
+Unlike streams, [memory recall](/reference/memory/recall) hides reminders by default for compatibility. Recall exclusions match stored types exactly rather than normalizing aliases. Use `['reactive', 'system-reminder']` to exclude both reminder representations across surfaces.
+
+Exclusions control returned data, not authorization or delivery. They aren't a security boundary. Signal options such as `ifActive`, `ifIdle`, `persist`/`discard`, and `transient` retain their delivery and persistence meanings.
+
 ## Extended usage example
 
 ### Mastra Format (Default)
@@ -962,6 +999,30 @@ for await (const chunk of stream.fullStream) {
 // Get full text after streaming
 const fullText = await stream.text
 ```
+
+### Limiting execution time
+
+Use `modelSettings.timeout` to bound how long a run may take. `totalMs` limits the entire run, including every loop iteration, tool call and retry. `stepMs` limits a single model call, covering both establishing the stream and consuming it. `firstChunkMs` only applies to streaming calls and limits how long the model may take to emit its first content-bearing chunk.
+
+```ts title="index.ts"
+const stream = await agent.stream('Tell me a story', {
+  modelSettings: {
+    timeout: {
+      totalMs: 30000, // fail the run if it takes longer than 30s
+      stepMs: 10000, // fail an individual model call after 10s
+      firstChunkMs: 3000, // fail a model call that produces no content within 3s
+    },
+  },
+})
+```
+
+Exceeding a budget fails with a `MastraTimeoutError`, which carries a `timeoutType` of `'total'`, `'step'` or `'firstChunk'`. Each budget behaves differently when the agent is configured with fallback [`models`](/reference/agents/agent):
+
+- A `totalMs` timeout ends the run immediately and doesn't try the next model, because it's a hard deadline for the run as a whole.
+- A `stepMs` timeout isn't retried against the same model, but does advance to the next model, which makes it a way to fail over from a slow provider.
+- A `firstChunkMs` timeout behaves like `stepMs`: it isn't retried against the same model, but does advance to the next model. Stream-start and metadata chunks don't satisfy the budget; only the first text, reasoning, tool call, file or source chunk does. Once content begins, only `stepMs` and `totalMs` remain active. Each provider retry attempt gets a fresh `firstChunkMs` budget.
+
+Nested `timeout` settings are merged per key across call-time and per-model `modelSettings`, so a per-model `stepMs` override keeps a call-time `firstChunkMs`.
 
 ### AI SDK v5+ Format
 
@@ -1002,8 +1063,9 @@ const stream = await agent.stream('Tell me a story', {
   onError: ({ error }) => {
     console.error('Streaming error:', error)
   },
-  onAbort: event => {
-    console.log('Stream aborted:', event)
+  onAbort: ({ steps, text }) => {
+    console.log('Stream aborted after', steps.length, 'steps')
+    console.log('Partial text:', text)
   },
 })
 
@@ -1100,4 +1162,4 @@ Responses WebSocket connections run one response at a time. Mastra rejects overl
 
 - [Generating responses](/docs/agents/overview#use-your-agent)
 - [Streaming responses](/docs/agents/overview#use-your-agent)
-- [Agent Approval](/docs/agents/agent-approval)
+- [Agent Approval](/docs/agents/human-in-the-loop)

@@ -16,10 +16,12 @@ import {
 } from '@internal/server-adapter-test-utils';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
+import { createRoute } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import Koa from 'koa';
 import bodyParser from 'koa-bodyparser';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { z } from 'zod';
 import { MastraServer } from '../index';
 
 function sleep(ms: number): Promise<void> {
@@ -40,11 +42,12 @@ async function waitFor(assertion: () => boolean, timeout = 500): Promise<void> {
 describe('Koa Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Koa Adapter Integration Tests',
+    emptyBodyNormalization: { withoutContentType: 'empty-object', withJsonContentType: 'empty-string' },
 
     setupAdapter: async (context: AdapterTestContext, options?: AdapterSetupOptions) => {
       // Create Koa app
       const app = new Koa();
-      app.use(bodyParser());
+      app.use(bodyParser({ strict: false }));
 
       // Create adapter
       const adapter = new MastraServer({
@@ -95,13 +98,13 @@ describe('Koa Server Adapter', () => {
         const fetchOptions: RequestInit = {
           method: httpRequest.method,
           headers: {
-            'Content-Type': 'application/json',
+            ...(httpRequest.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
             ...(httpRequest.headers || {}),
           },
         };
 
         // Add body for POST/PUT/PATCH/DELETE
-        if (httpRequest.body && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpRequest.method)) {
+        if (httpRequest.body !== undefined && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpRequest.method)) {
           fetchOptions.body = JSON.stringify(httpRequest.body);
         }
 
@@ -350,7 +353,7 @@ describe('Koa Server Adapter', () => {
         { prefix: '' },
       );
 
-      expect(app.middleware).toHaveLength(3);
+      expect(app.middleware).toHaveLength(4);
 
       server = await new Promise(resolve => {
         const s = app.listen(0, () => resolve(s));
@@ -1119,6 +1122,47 @@ describe('Koa Server Adapter', () => {
     },
   });
 
+  describe('Channel webhook diagnostics', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>((resolve, reject) => {
+          server!.close(err => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        server = null;
+      }
+    });
+
+    it('warns for an unregistered channel webhook when no custom API routes exist', async () => {
+      const mastra = new Mastra({ logger: false });
+      const warnSpy = vi.spyOn(mastra.getLogger(), 'warn');
+      const app = new Koa();
+      const adapter = new MastraServer({ app, mastra });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const startedServer = app.listen(0, () => resolve(startedServer));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/api/agents/support/channels/slack/webhook`, {
+        method: 'POST',
+      });
+
+      expect(response.status).toBe(404);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('channels.adapters configuration'), {
+        agentId: 'support',
+        platform: 'slack',
+      });
+    });
+  });
+
   describe('Custom API Routes (registerApiRoute)', () => {
     let server: Server | null = null;
 
@@ -1214,6 +1258,71 @@ describe('Koa Server Adapter', () => {
       expect(response.status).toBe(200);
       const data = await response.json();
       expect(data).toEqual({ echo: { test: 'data' } });
+    });
+
+    it('registers createRoute routes from customApiRoutes with runtime validation', async () => {
+      const route = createRoute({
+        method: 'POST',
+        path: '/custom/validated',
+        responseType: 'json',
+        requiresAuth: false,
+        bodySchema: z.object({ name: z.string() }),
+        handler: async ({ name }) => ({ greeting: `Hello, ${name}` }),
+      });
+      const protectedRoute = createRoute({
+        method: 'GET',
+        path: '/custom/secure',
+        responseType: 'json',
+        requiresAuth: true,
+        handler: async () => ({ secret: true }),
+      });
+
+      const mastra = new Mastra({ server: { apiRoutes: [route, protectedRoute] } });
+      const originalGetServer = mastra.getServer.bind(mastra);
+      mastra.getServer = () =>
+        ({
+          ...originalGetServer(),
+          auth: {
+            authenticateToken: async (token: string) => (token === 'valid-token' ? { id: 'user-1' } : null),
+            authorize: async () => true,
+          },
+        }) as any;
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({ app, mastra });
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server!.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const invalidResponse = await fetch(`http://localhost:${port}/custom/validated`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 42 }),
+      });
+      expect(invalidResponse.status).toBe(400);
+      await expect(invalidResponse.json()).resolves.toMatchObject({ error: 'Invalid request body' });
+
+      const validResponse = await fetch(`http://localhost:${port}/custom/validated`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Ada' }),
+      });
+      expect(validResponse.status).toBe(200);
+      await expect(validResponse.json()).resolves.toEqual({ greeting: 'Hello, Ada' });
+
+      const unauthenticated = await fetch(`http://localhost:${port}/custom/secure`);
+      expect(unauthenticated.status).toBe(401);
+
+      const authenticated = await fetch(`http://localhost:${port}/custom/secure`, {
+        headers: { Authorization: 'Bearer valid-token' },
+      });
+      expect(authenticated.status).toBe(200);
+      await expect(authenticated.json()).resolves.toEqual({ secret: true });
     });
   });
 

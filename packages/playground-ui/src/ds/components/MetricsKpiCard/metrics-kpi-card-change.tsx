@@ -15,7 +15,7 @@ export function MetricsKpiCardChange({
   const isGood = lowerIsBetter ? changePct < 0 : changePct >= 0;
 
   return (
-    <div className={cn('flex flex-wrap items-center gap-1 text-sm text-neutral1', className)}>
+    <div className={cn('flex flex-wrap items-center gap-1 text-ui-md text-neutral1', className)}>
       <div className="flex items-center gap-1">
         <span className={cn('[&>svg]:size-4', isGood ? 'text-green-600' : 'text-red-600')}>
           {changePct >= 0 ? <TrendingUpIcon /> : <TrendingDownIcon />}

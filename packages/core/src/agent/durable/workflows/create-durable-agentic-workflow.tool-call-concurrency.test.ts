@@ -36,9 +36,13 @@ function findForeachEntry(steps: any[]): any {
   return undefined;
 }
 
-describe('createDurableAgenticWorkflow tool-call concurrency', () => {
+describe('createDurableAgenticWorkflow', () => {
   const workflow = createDurableAgenticWorkflow();
   const foreachEntry = findForeachEntry((workflow as any).executionGraph.steps);
+
+  it('suppresses internal workflow step events', () => {
+    expect(workflow.options.emitStepEvents).toBe(false);
+  });
 
   const resolveWith = (state: unknown): number => {
     const resolver = foreachEntry.opts.concurrency;

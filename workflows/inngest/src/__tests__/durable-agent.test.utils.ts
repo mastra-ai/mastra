@@ -18,6 +18,7 @@ import { DefaultStorage } from '@mastra/libsql';
 import { Inngest } from 'inngest';
 
 import { serve as inngestServe } from '../index';
+import { ensureInngestCliBinary } from './inngest-cli';
 
 export const INNGEST_PORT = 4100;
 export const HANDLER_PORT = 4101;
@@ -76,23 +77,27 @@ export async function waitForInngestSync(ms = 500): Promise<void> {
 }
 
 /**
- * Start the Inngest dev server using npx inngest-cli.
+ * Start the Inngest dev server using the inngest-cli binary.
  * Returns a promise that resolves when the server is ready.
+ *
+ * `sdkUrl` is the app serve URL the dev server polls for function sync. Pass `null` for tests whose
+ * app connects outbound via `connect()` instead of being served over HTTP.
  */
-async function startInngestDevServer(): Promise<ChildProcess> {
+async function startInngestDevServer({
+  sdkUrl = `http://localhost:${HANDLER_PORT}/inngest/api`,
+}: { sdkUrl?: string | null } = {}): Promise<ChildProcess> {
+  const inngestBinary = ensureInngestCliBinary();
   return new Promise((resolve, reject) => {
     const args = [
-      'inngest-cli',
       'dev',
       '-p',
       String(INNGEST_PORT),
-      '-u',
-      `http://localhost:${HANDLER_PORT}/inngest/api`,
+      ...(sdkUrl ? ['-u', sdkUrl] : []),
       '--poll-interval=1',
       '--no-discovery',
     ];
 
-    const proc = spawn('npx', args, {
+    const proc = spawn(inngestBinary, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: false,
     });
@@ -156,6 +161,30 @@ async function waitForInngestReady(maxAttempts = 30, intervalMs = 1000): Promise
     await new Promise(resolve => setTimeout(resolve, intervalMs));
   }
   throw new Error(`Inngest dev server not ready after ${maxAttempts} attempts`);
+}
+
+/** Stop a dev server process, escalating to SIGKILL if it ignores SIGTERM. */
+export async function stopInngestDevServer(proc: ChildProcess | null): Promise<void> {
+  if (!proc) return;
+  proc.kill('SIGTERM');
+  await new Promise(resolve => setTimeout(resolve, 500));
+  if (!proc.killed) {
+    proc.kill('SIGKILL');
+  }
+}
+
+/**
+ * Start an Inngest dev server for tests that don't serve their app over HTTP — e.g. tests that run
+ * the app on a `connect()` worker, which dials the dev server's connect gateway outbound.
+ *
+ * Returns `null` when INNGEST_DEV_EXTERNAL=true, i.e. the caller runs against an existing server.
+ * Pass the result to `stopInngestDevServer` in afterAll.
+ */
+export async function startConnectInngestDevServer(): Promise<ChildProcess | null> {
+  if (process.env.INNGEST_DEV_EXTERNAL === 'true') return null;
+  const proc = await startInngestDevServer({ sdkUrl: null });
+  await waitForInngestReady();
+  return proc;
 }
 
 /**
@@ -231,16 +260,8 @@ export async function teardownSharedTestInfrastructure(): Promise<void> {
   }
 
   // Stop the Inngest dev server
-  if (inngestDevServer) {
-    inngestDevServer.kill('SIGTERM');
-    // Wait a bit for graceful shutdown
-    await new Promise(resolve => setTimeout(resolve, 500));
-    // Force kill if still running
-    if (!inngestDevServer.killed) {
-      inngestDevServer.kill('SIGKILL');
-    }
-    inngestDevServer = null;
-  }
+  await stopInngestDevServer(inngestDevServer);
+  inngestDevServer = null;
 
   sharedMastra = null;
   sharedInngest = null;

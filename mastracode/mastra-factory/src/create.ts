@@ -4,16 +4,17 @@ import * as p from '@clack/prompts';
 // `mastra/internal/auth` is the CLI's internal barrel — drives the browser-auth
 // flow and reuses persisted credentials + org resolution rather than duplicating
 // them here.
+import type { PosthogAnalytics } from 'mastra/dist/analytics/index.js';
 import { fetchOrgs, getToken, loadCredentials, LoginCancelledError, resolveCurrentOrg } from 'mastra/internal/auth';
 import color from 'picocolors';
 import { x } from 'tinyexec';
 
-import type { Analytics } from './analytics.js';
 import { upsertEnvFile } from './env.js';
 import type { PlatformProject, ProjectRegion } from './platform.js';
 import {
   attachNeonDatabase,
   createServerProject,
+  ensureProductionEnvironment,
   getDatabaseConnection,
   mintOrgApiKey,
   PlatformApiError,
@@ -39,7 +40,7 @@ export interface CreateArgs {
    * equals the value. If no match, provisioning fails with a clear message.
    */
   org?: string;
-  analytics: Analytics;
+  analytics: PosthogAnalytics;
 }
 
 interface PlatformProvisionResult {
@@ -325,6 +326,21 @@ async function runPlatformProvisioning({
       throw err;
     }
     envAccumulator.MASTRA_PLATFORM_SECRET_KEY = secretKey;
+
+    const environmentSpinner = p.spinner();
+    environmentSpinner.start('Configuring production environment…');
+    try {
+      envAccumulator.MASTRA_ENVIRONMENT_ID = await ensureProductionEnvironment({
+        token,
+        orgId,
+        projectId: project.id,
+        region: projectRegion,
+      });
+      environmentSpinner.stop('Production environment ready.');
+    } catch (err) {
+      environmentSpinner.stop('Environment setup failed.');
+      throw err;
+    }
 
     // 5-7. Neon attach + poll + connection string.
     const neonSpinner = p.spinner();

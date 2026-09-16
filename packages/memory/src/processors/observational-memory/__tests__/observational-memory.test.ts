@@ -1,11 +1,18 @@
+import { randomUUID } from 'node:crypto';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
+import { TITLE_PINNED_THREAD_METADATA_KEY } from '@mastra/core/memory';
 import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
-import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
+import { createSkill } from '@mastra/core/skills';
+import { InMemoryMemory, InMemoryDB, InMemoryStore } from '@mastra/core/storage';
+import { estimateTokenCount } from 'tokenx';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 
+import { Memory } from '../../../index';
 import { injectAnchorIds, parseAnchorId, stripEphemeralAnchorIds } from '../anchor-ids';
 import { BufferingCoordinator } from '../buffering-coordinator';
 import {
@@ -37,14 +44,16 @@ import {
   buildObserverHistoryMessage,
   buildMultiThreadObserverHistoryMessage,
   parseObserverOutput,
-  optimizeObservationsForContext,
   formatMessagesForObserver,
+  formatMultiThreadMessagesForObserver,
   hasCurrentTaskSection,
   extractCurrentTask,
   sanitizeObservationLines,
   detectDegenerateRepetition,
+  describeDegenerateOutput,
 } from '../observer-agent';
 import { ObserverRunner } from '../observer-runner';
+import { registerOp, unregisterOp, isOpActiveInProcess } from '../operation-registry';
 import { ObservationalMemoryProcessor } from '../processor';
 import type { MemoryContextProvider } from '../processor';
 
@@ -122,7 +131,7 @@ import {
 } from '../reflector-agent';
 import { resolveRetentionFloor } from '../thresholds';
 import { TokenCounter } from '../token-counter';
-import { formatToolResultForObserver } from '../tool-result-helpers';
+import { DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS, formatToolResultForObserver } from '../tool-result-helpers';
 
 // =============================================================================
 // Test Helpers
@@ -141,6 +150,35 @@ function createTestMessage(content: string, role: 'user' | 'assistant' = 'user',
     type: 'text',
     createdAt: new Date(),
   };
+}
+
+function createToolInvocationMessage(
+  parts: Array<Record<string, unknown>>,
+  id = `tool-msg-${Math.random().toString(36).slice(2)}`,
+  threadId = 'tool-thread',
+): MastraDBMessage {
+  return {
+    id,
+    role: 'assistant',
+    threadId,
+    resourceId: 'tool-resource',
+    createdAt: new Date('2024-12-04T10:30:00Z'),
+    content: { format: 2, parts },
+  } as unknown as MastraDBMessage;
+}
+
+function observerTextContent(message: CoreMessage): string {
+  return (message.content as Array<{ type: string; text?: string }>)
+    .filter(part => part.type === 'text')
+    .map(part => part.text ?? '')
+    .join('');
+}
+
+function collectStringValues(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(collectStringValues);
+  if (value && typeof value === 'object') return Object.values(value).flatMap(collectStringValues);
+  return [];
 }
 
 function createTestMessages(count: number, baseContent = 'Test message'): MastraDBMessage[] {
@@ -1621,6 +1659,32 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).not.toContain('x'.repeat(200));
     });
 
+    it('caps oversized tool results at the 5,000-token default', () => {
+      const toolResult = 'result line\n'.repeat(3_000);
+      const msg = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'default-result-limit',
+            toolName: 'large_result',
+            args: {},
+            result: toolResult,
+          },
+        },
+      ]);
+      const formatted = formatMessagesForObserver([msg]);
+      const resultHeader = formatted.match(/^Tool Result large_result(?: \([^)]*\))?: /m)?.[0];
+      expect(resultHeader).toBeDefined();
+      const resultBody = formatted.slice(formatted.indexOf(resultHeader!) + resultHeader!.length);
+
+      expect(estimateTokenCount(toolResult)).toBeGreaterThan(5_000);
+      expect(estimateTokenCount(toolResult)).toBeLessThan(10_000);
+      expect(DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS).toBe(5_000);
+      expect(resultBody).toContain('[truncated ~');
+      expect(estimateTokenCount(resultBody!)).toBeLessThanOrEqual(5_000);
+    });
+
     it('should replace image-data tool-result blocks with attachment placeholders', () => {
       const base64 = 'A'.repeat(2000);
       const msg = createTestMessage('ignored', 'assistant');
@@ -1750,6 +1814,596 @@ describe('Observer Agent Helpers', () => {
       expect(loneHighSurrogate.test(serialized)).toBe(false);
       expect(loneLowSurrogate.test(serialized)).toBe(false);
     });
+
+    it('renders canonical completed tool arguments and results exactly once', () => {
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'canonical-1',
+            toolName: 'lookup',
+            args: { query: 'alpha' },
+            result: { answer: 'done' },
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+
+      expect((formatted.match(/^Tool Call lookup(?: \([^)]*\))?: query: "alpha"$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^Tool Result lookup(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^  "answer": "done"$/gm) ?? []).length).toBe(1);
+    });
+
+    it('renders a neutral provenance marker when legacy terminal arguments are unavailable', () => {
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'legacy-no-args',
+            toolName: 'read_file',
+            result: 'legacy contents',
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+
+      expect((formatted.match(/^Tool Call read_file(?: \([^)]*\))?: \[arguments unavailable\]$/gm) ?? []).length).toBe(
+        1,
+      );
+      expect((formatted.match(/^Tool Result read_file(?: \([^)]*\))?: legacy contents$/gm) ?? []).length).toBe(1);
+      expect(formatted).not.toContain('<undefined>');
+    });
+
+    it('uses precomputed tool-part occurrences when skipped marker content contains tool-shaped data', () => {
+      const marker = {
+        ...createToolInvocationMessage([], '__temporal_marker'),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'ignored-marker-call',
+                toolName: 'ignored',
+                args: { value: 'ignored' },
+              },
+            },
+          ],
+          metadata: { reminderType: 'temporal-gap', gapText: '10 minutes later' },
+        },
+      } as unknown as MastraDBMessage;
+      const completed = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'after-marker',
+            toolName: 'lookup',
+            args: { query: 'after marker' },
+            result: 'found',
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([marker, completed]);
+
+      expect(formatted).toContain('10 minutes later');
+      expect((formatted.match(/^Tool Call lookup(?: \([^)]*\))?: query: "after marker"$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^Tool Result lookup(?: \([^)]*\))?: found$/gm) ?? []).length).toBe(1);
+      expect(formatted).not.toContain('Tool Call ignored');
+    });
+
+    it('bounds large completed tool arguments without hiding later sibling fields', () => {
+      const content = 'export const generated = true;\n'.repeat(2_000);
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'large-args-1',
+            toolName: 'write_file',
+            args: { content, path: 'src/generated.ts', overwrite: true },
+            result: 'written',
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+      const uncappedZero = formatMessagesForObserver([message], { maxPartLength: 0 });
+      const passivelyFormatted = formatMessagesForObserver([message], { maxPartLength: 500 });
+      const minimallyFormatted = formatMessagesForObserver([message], { maxPartLength: 1 });
+
+      for (const text of [formatted, uncappedZero, passivelyFormatted]) {
+        expect(text).toContain(`content: <string, ${content.length} characters; preview size-limited>`);
+        expect(text).toContain('path: "src/generated.ts"');
+        expect(text).toContain('overwrite: true');
+        expect(text.indexOf('path: "src/generated.ts"')).toBeLessThan(
+          text.indexOf('Large string previews (size-limited):'),
+        );
+        expect(text).not.toContain(content);
+      }
+      expect((formatted.match(/^Tool Call write_file(?: \([^)]*\))?: content: /gm) ?? []).length).toBe(1);
+      expect((uncappedZero.match(/^Tool Call write_file(?: \([^)]*\))?: content: /gm) ?? []).length).toBe(1);
+      expect((minimallyFormatted.match(/^Tool Call write_file(?: \([^)]*\))?: …$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^Tool Result write_file(?: \([^)]*\))?: written$/gm) ?? []).length).toBe(1);
+      expect(passivelyFormatted.length).toBeLessThan(formatted.length);
+    });
+
+    it.each([
+      ['normal', false],
+      ['reversed', true],
+    ])('normalizes split call/result parts in %s order', (_label, reversed) => {
+      const call = createToolInvocationMessage(
+        [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'call',
+              toolCallId: 'split-1',
+              toolName: 'lookup',
+              args: { query: 'split' },
+            },
+          },
+        ],
+        'split-call',
+      );
+      const result = createToolInvocationMessage(
+        [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'split-1',
+              toolName: 'lookup',
+              args: { query: 'split' },
+              result: 'split-result',
+            },
+          },
+        ],
+        'split-result',
+      );
+
+      const formatted = formatMessagesForObserver(reversed ? [result, call] : [call, result]);
+      const callIndex = formatted.indexOf('Tool Call lookup');
+      const resultIndex = formatted.indexOf('Tool Result lookup');
+
+      expect(callIndex).toBeGreaterThanOrEqual(0);
+      expect(resultIndex).toBeGreaterThan(callIndex);
+      expect((formatted.match(/^Tool Call lookup(?: \([^)]*\))?: query: "split"$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^Tool Result lookup(?: \([^)]*\))?: split-result$/gm) ?? []).length).toBe(1);
+    });
+
+    it('collapses partial and approval transitions using the terminal arguments', () => {
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'partial-call',
+            toolCallId: 'transition-1',
+            toolName: 'search',
+            args: { query: 'partial' },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'call',
+            toolCallId: 'transition-1',
+            toolName: 'search',
+            args: { query: 'call' },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'approval-requested',
+            toolCallId: 'transition-1',
+            toolName: 'search',
+            args: { query: 'approval-requested' },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'approval-responded',
+            toolCallId: 'transition-1',
+            toolName: 'search',
+            args: { query: 'approval-responded' },
+            approval: { id: 'approval-1', approved: true },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'transition-1',
+            toolName: 'search',
+            args: { query: 'terminal' },
+            result: 'complete',
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+
+      expect((formatted.match(/^Tool Call search(?: \([^)]*\))?: query: "terminal"$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^Tool Result search(?: \([^)]*\))?: complete$/gm) ?? []).length).toBe(1);
+      expect(formatted).not.toContain('query: "partial"');
+      expect(formatted).not.toContain('query: "approval-responded"');
+    });
+
+    it('keeps repeated tool names distinct by tool call ID and uses the latest terminal outcome', () => {
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'repeat-1',
+            toolName: 'lookup',
+            args: { query: 'one' },
+            result: 'stale-one',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'repeat-1',
+            toolName: 'lookup',
+            args: { query: 'one-final' },
+            result: 'final-one',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'repeat-2',
+            toolName: 'lookup',
+            args: { query: 'two' },
+            result: 'final-two',
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+
+      expect((formatted.match(/^Tool Call lookup(?: \([^)]*\))?: query: "/gm) ?? []).length).toBe(2);
+      expect((formatted.match(/^Tool Result lookup(?: \([^)]*\))?: /gm) ?? []).length).toBe(2);
+      expect(formatted).not.toContain('stale-one');
+      expect(formatted).toContain('final-one');
+      expect(formatted).toContain('final-two');
+      expect(formatted).toContain('query: "one-final"');
+      expect(formatted).toContain('query: "two"');
+    });
+
+    it('renders error and denial terminal states with visible fallbacks', () => {
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-error',
+            toolCallId: 'error-1',
+            toolName: 'write',
+            args: { path: '/tmp/a' },
+            errorText: 'disk full',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-error',
+            toolCallId: 'error-2',
+            toolName: 'write',
+            args: { path: '/tmp/b' },
+            errorText: '',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-error',
+            toolCallId: 'error-3',
+            toolName: 'write',
+            args: { path: '/tmp/missing-error' },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-denied',
+            toolCallId: 'denied-1',
+            toolName: 'remove',
+            args: { path: '/tmp/c' },
+            approval: { id: 'approval-1', approved: false, reason: 'protected file' },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-denied',
+            toolCallId: 'denied-2',
+            toolName: 'remove',
+            args: { path: '/tmp/d' },
+            approval: { id: 'approval-2', approved: false, reason: '' },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-denied',
+            toolCallId: 'denied-3',
+            toolName: 'remove',
+            args: { path: '/tmp/missing-denial' },
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+
+      expect((formatted.match(/^Tool Call (?:write|remove)(?: \([^)]*\))?: path: "\/tmp\//gm) ?? []).length).toBe(6);
+      expect((formatted.match(/^Tool Error write(?: \([^)]*\))?: /gm) ?? []).length).toBe(3);
+      expect((formatted.match(/^Tool Denied remove(?: \([^)]*\))?: /gm) ?? []).length).toBe(3);
+      expect(formatted).toContain('disk full');
+      expect((formatted.match(/: Tool execution failed$/gm) ?? []).length).toBe(2);
+      expect(formatted).toContain('protected file');
+      expect((formatted.match(/: Tool call was not approved by the user$/gm) ?? []).length).toBe(2);
+    });
+
+    it('renders errored results and empty successful results without dropping terminal events', () => {
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'result-error-body',
+            toolName: 'fetch',
+            args: { url: 'body' },
+            result: 'raw provider failure',
+            isError: true,
+            errorText: 'ignored fallback',
+          },
+          providerMetadata: { mastra: { modelOutput: 'stored provider failure' } },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'result-error-text',
+            toolName: 'fetch',
+            args: { url: 'errorText' },
+            result: '',
+            isError: true,
+            errorText: 'network failure',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'result-error-fallback',
+            toolName: 'fetch',
+            args: { url: 'fallback' },
+            isError: true,
+            errorText: '',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'empty-string',
+            toolName: 'fetch',
+            args: { url: 'empty' },
+            result: '',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'undefined-result',
+            toolName: 'fetch',
+            args: { url: 'undefined' },
+            result: undefined,
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+
+      expect((formatted.match(/^Tool Error fetch(?: \([^)]*\))?: /gm) ?? []).length).toBe(3);
+      expect((formatted.match(/^Tool Result fetch(?: \([^)]*\))?: \[empty result\]$/gm) ?? []).length).toBe(2);
+      expect(formatted).toContain('stored provider failure');
+      expect(formatted).not.toContain('raw provider failure');
+      expect(formatted).not.toContain('ignored fallback');
+      expect(formatted).toContain('network failure');
+      expect(formatted).toContain('Tool execution failed');
+    });
+
+    it('scopes tool-call deduplication per thread across all observer assembly paths', () => {
+      const first = createToolInvocationMessage(
+        [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'shared-id',
+              toolName: 'skill',
+              args: { name: 'first-skill' },
+              result: 'first instructions',
+            },
+          },
+        ],
+        'thread-one-message',
+        'thread-one',
+      );
+      const second = createToolInvocationMessage(
+        [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'shared-id',
+              toolName: 'skill',
+              args: { name: 'second-skill' },
+              result: 'second instructions',
+            },
+          },
+        ],
+        'thread-two-message',
+        'thread-two',
+      );
+      const byThread = new Map([
+        ['thread-one', [first]],
+        ['thread-two', [second]],
+      ]);
+      const threadOrder = ['thread-one', 'thread-two'];
+
+      const singleText = formatMessagesForObserver([first]);
+      const singleHistory = observerTextContent(buildObserverHistoryMessage([first]));
+      const multiText = formatMultiThreadMessagesForObserver(byThread, threadOrder);
+      const multiHistory = observerTextContent(buildMultiThreadObserverHistoryMessage(byThread, threadOrder));
+
+      for (const text of [singleText, singleHistory]) {
+        expect((text.match(/^Tool Call skill(?: \([^)]*\))?: name: "first-skill"$/gm) ?? []).length).toBe(1);
+        expect((text.match(/^Tool Result skill(?: \([^)]*\))?: first instructions$/gm) ?? []).length).toBe(1);
+      }
+      for (const text of [multiText, multiHistory]) {
+        expect((text.match(/^Tool Call skill(?: \([^)]*\))?: name: "(?:first|second)-skill"$/gm) ?? []).length).toBe(2);
+        expect((text.match(/^Tool Result skill(?: \([^)]*\))?: /gm) ?? []).length).toBe(2);
+        expect((text.match(/^Tool Call skill(?: \([^)]*\))?: name: "first-skill"$/gm) ?? []).length).toBe(1);
+        expect((text.match(/^Tool Call skill(?: \([^)]*\))?: name: "second-skill"$/gm) ?? []).length).toBe(1);
+      }
+    });
+  });
+
+  it('preserves skill activation arguments in observer history', async () => {
+    await Promise.allSettled([...BufferingCoordinator.asyncBufferingOps.values()]);
+    BufferingCoordinator.asyncBufferingOps.clear();
+    BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.lastBufferedAtTime.clear();
+    BufferingCoordinator.reflectionBufferCycleIds.clear();
+
+    const skillName = 'observer-provenance-skill';
+    const skillInstructions = '# Observer Provenance Skill\n\nAlways preserve the activated skill identity.';
+    const threadId = `observer-skill-thread-${randomUUID()}`;
+    const resourceId = `observer-skill-resource-${randomUUID()}`;
+    const observerPrompts: unknown[] = [];
+    const actorToolSets: unknown[] = [];
+    let actorCallCount = 0;
+
+    const observerModel = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        observerPrompts.push(prompt);
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'observation' },
+            {
+              type: 'text-delta',
+              id: 'observation',
+              delta: '<observations>\n- The requested skill was activated.\n</observations>',
+            },
+            { type: 'text-end', id: 'observation' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            },
+          ]),
+        };
+      },
+    });
+    const actorModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt, tools }) => {
+        actorToolSets.push(tools);
+        actorCallCount += 1;
+        return {
+          content:
+            actorCallCount === 1
+              ? [
+                  {
+                    type: 'tool-call' as const,
+                    toolCallId: 'activate-observer-provenance-skill',
+                    toolName: 'skill',
+                    input: JSON.stringify({ name: skillName }),
+                  },
+                ]
+              : [{ type: 'text' as const, text: 'Skill activated.' }],
+          finishReason: actorCallCount === 1 ? ('tool-calls' as const) : ('stop' as const),
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          rawCall: { rawPrompt: prompt, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      options: {
+        lastMessages: 20,
+        semanticRecall: false,
+        observationalMemory: {
+          enabled: true,
+          scope: 'thread',
+          observation: { model: observerModel, messageTokens: 1, bufferTokens: false },
+        },
+      },
+    });
+    const agent = new Agent({
+      id: 'observer-skill-agent',
+      instructions: 'Activate the requested skill.',
+      model: actorModel,
+      memory,
+      skills: [
+        createSkill({
+          name: skillName,
+          description: 'Proves skill activation provenance reaches the Observer.',
+          instructions: skillInstructions,
+        }),
+      ],
+    });
+
+    try {
+      const response = await agent.generate('Activate the observer provenance skill.', {
+        memory: { thread: threadId, resource: resourceId },
+        maxSteps: 2,
+      });
+      await memory.settled();
+
+      const registeredToolNames = actorToolSets.flatMap(tools => {
+        if (Array.isArray(tools)) {
+          return tools
+            .map(tool => (tool && typeof tool === 'object' && 'name' in tool ? String(tool.name) : ''))
+            .filter(Boolean);
+        }
+        return tools && typeof tools === 'object' ? Object.keys(tools) : [];
+      });
+      const skillResult = response.toolResults.find(result => result.payload.toolName === 'skill')?.payload.result;
+      const observerPrompt = collectStringValues(observerPrompts).join('\n');
+
+      expect(actorCallCount).toBe(2);
+      expect(registeredToolNames).toContain('skill');
+      expect(skillResult).toBe(skillInstructions);
+      expect(
+        (observerPrompt.match(new RegExp(`^Tool Call skill(?: \\([^)]*\\))?: name: "${skillName}"$`, 'gm')) ?? [])
+          .length,
+      ).toBe(1);
+      expect(
+        (observerPrompt.match(/^Tool Result skill(?: \([^)]*\))?: # Observer Provenance Skill$/gm) ?? []).length,
+      ).toBe(1);
+      expect(observerPrompt.split(skillInstructions).length - 1).toBe(1);
+    } finally {
+      BufferingCoordinator.asyncBufferingOps.clear();
+      BufferingCoordinator.lastBufferedBoundary.clear();
+      BufferingCoordinator.lastBufferedAtTime.clear();
+      BufferingCoordinator.reflectionBufferCycleIds.clear();
+    }
   });
 
   describe('buildObserverHistoryMessage', () => {
@@ -1837,6 +2491,74 @@ describe('Observer Agent Helpers', () => {
       expect(joinedText).toContain('Tool Result screenshot');
       expect(joinedText).toContain('[Image #1: image/png]');
       expect(joinedText).not.toContain(base64);
+    });
+
+    it('preserves attachments from every terminal record in traversal order while rendering only the latest outcome', () => {
+      const firstBase64 = 'C'.repeat(1500);
+      const secondBase64 = 'D'.repeat(1500);
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'repeated-terminal',
+            toolName: 'screenshot',
+            args: { url: 'https://example.com/old' },
+            result: {},
+          },
+          providerMetadata: {
+            mastra: {
+              modelOutput: {
+                type: 'content',
+                value: [
+                  { type: 'text', text: 'superseded outcome' },
+                  { type: 'image-data', data: firstBase64, mediaType: 'image/png' },
+                ],
+              },
+            },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'repeated-terminal',
+            toolName: 'screenshot',
+            args: { url: 'https://example.com/final' },
+            result: {},
+          },
+          providerMetadata: {
+            mastra: {
+              modelOutput: {
+                type: 'content',
+                value: [
+                  { type: 'text', text: 'latest outcome' },
+                  { type: 'image-data', data: secondBase64, mediaType: 'image/jpeg' },
+                ],
+              },
+            },
+          },
+        },
+      ]);
+
+      const historyMessage = buildObserverHistoryMessage([message]);
+      const content = historyMessage.content as Array<{ type: string; text?: string; image?: string }>;
+      const joinedText = content
+        .filter(part => part.type === 'text')
+        .map(part => part.text ?? '')
+        .join('\n');
+
+      const imageParts = content.filter(part => part.type === 'image');
+      expect(imageParts).toHaveLength(2);
+      expect(imageParts.map(part => part.image)).toEqual([
+        `data:image/png;base64,${firstBase64}`,
+        `data:image/jpeg;base64,${secondBase64}`,
+      ]);
+      expect(joinedText).not.toContain('superseded outcome');
+      expect(joinedText).toContain('latest outcome');
+      expect(joinedText).toContain('url: "https://example.com/final"');
+      expect((joinedText.match(/^Tool Call screenshot(?: \([^)]*\))?: url: /gm) ?? []).length).toBe(1);
+      expect((joinedText.match(/^Tool Result screenshot(?: \([^)]*\))?: /gm) ?? []).length).toBe(1);
     });
 
     it('should hoist URL and media tool-result blocks into observer input attachments', () => {
@@ -2089,7 +2811,7 @@ describe('Observer Agent Helpers', () => {
 
       expect(textParts[0].text).toContain('## New Message History to Observe');
       expect(textParts[1].text).toBe(
-        `Dec 4 2024:\nAssistant (10:30 AM): I found two candidate vendors.\nReasoning: Comparing price and delivery windows.\nTool Call web_search (10:31 AM): {\n  "query": "best local print vendors"\n}\nTool Result web_search: {\n  "topVendor": "Acme Print",\n  "etaDays": 3\n}\nDec 5 2024:\nFile (9:00 AM): [File #1: quote.pdf]`,
+        `Dec 4 2024:\nAssistant (10:30 AM): I found two candidate vendors.\nReasoning: Comparing price and delivery windows.\nTool Call web_search (10:31 AM): query: "best local print vendors"\nTool Result web_search: {\n  "topVendor": "Acme Print",\n  "etaDays": 3\n}\nDec 5 2024:\nFile (9:00 AM): [File #1: quote.pdf]`,
       );
       expect(historyMessage.content).toContainEqual(
         expect.objectContaining({
@@ -2481,7 +3203,12 @@ describe('Observer Agent Helpers', () => {
 
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
-        observation: { messageTokens: 1000, bufferTokens: false, model: 'test-model' },
+        observation: {
+          messageTokens: 1000,
+          bufferTokens: false,
+          model: 'test-model',
+          observeAttachments: true,
+        },
         reflection: { observationTokens: 1000 },
       });
 
@@ -2653,15 +3380,24 @@ describe('Observer Agent Helpers', () => {
         ],
       };
 
-      await observer.call(undefined, [message]);
+      // Generated provider data can change independently of this text-only scenario.
+      const llmModule = await import('@mastra/core/llm');
+      const spy = vi.spyOn(llmModule, 'modelSupportsAttachments').mockReturnValue(false);
 
-      const content = capturedPrompt[1].content as any[];
-      expect(content.some((part: any) => part.type === 'image')).toBe(false);
-      const joined = content
-        .filter((part: any) => part.type === 'text')
-        .map((part: any) => part.text)
-        .join('\n');
-      expect(joined).toContain('[Image #1: photo.png]');
+      try {
+        await observer.call(undefined, [message]);
+
+        expect(spy).toHaveBeenCalledWith('openrouter/deepseek/deepseek-v4-flash');
+        const content = capturedPrompt[1].content as any[];
+        expect(content.some((part: any) => part.type === 'image')).toBe(false);
+        const joined = content
+          .filter((part: any) => part.type === 'text')
+          .map((part: any) => part.text)
+          .join('\n');
+        expect(joined).toContain('[Image #1: photo.png]');
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it('auto mode forwards attachments for multimodal function-based observer model', async () => {
@@ -3293,52 +4029,110 @@ User asked about </current-task> parsing and how it works
       expect(result.degenerate).toBe(true);
       expect(result.observations).toBe('');
     });
+
+    // Long-period multi-line loops defeat the window-sampling strategy: with a
+    // repeating block of period P chars, sampled windows only collide when two
+    // sample positions are congruent mod P, so ~50 samples land on ~50 distinct
+    // phases and find zero duplicates. Both cases below reproduce real observer
+    // output found in production records (2026-08-21).
+    it('should detect a long-period multi-line repetition loop (21-line block x 62)', () => {
+      const block = Array.from(
+        { length: 21 },
+        (_, i) =>
+          `* 🟡 (08:44) Found \`API.md\` lines ${200 + i * 10}-${210 + i * 10}: \`/api/learning/entities/:entityId/route-${i}\` accepts \`signalName\` — no catalog enrichment currently present.`,
+      ).join('\n');
+      const uniquePrefix = Array.from(
+        { length: 30 },
+        (_, i) =>
+          `* 🔴 (0${(i % 9) + 1}:1${i % 6}) User asked about distinct topic number ${i} with unique detail ${i * 37}`,
+      ).join('\n');
+      const text = `${uniquePrefix}\n${Array(62).fill(block).join('\n')}`;
+      expect(detectDegenerateRepetition(text)).toBe(true);
+
+      const description = describeDegenerateOutput(text);
+      expect(description).toContain('duplicateRatio=0.00');
+      expect(description).toContain('duplicateLineRatio=0.96');
+      expect(description).toContain('countedLines=1332');
+    });
+
+    it('should detect a short-period multi-line repetition loop (8-line block x 140)', () => {
+      const block = Array.from(
+        { length: 8 },
+        (_, i) =>
+          `* 🟡 (14:0${i}) Verified \`verifier-runner.ts\` line ${100 + i}: baseline replay hook number ${i} registered against the lifecycle map.`,
+      ).join('\n');
+      const text = Array(140).fill(block).join('\n');
+      expect(detectDegenerateRepetition(text)).toBe(true);
+    });
+
+    it('should detect duplicate substantial lines just over the ratio threshold', () => {
+      const repeatedConstraint =
+        '- 🔴 User requires every production change to preserve backwards compatibility and include documented rollback instructions.';
+      const uniqueObservations = Array.from(
+        { length: 8 },
+        (_, i) =>
+          `- 🟡 Distinct reflected project fact ${i}: ${String.fromCharCode(65 + i).repeat(150 + i * 17)} terminal-${i}`,
+      );
+      const lines = uniqueObservations.flatMap(unique => [repeatedConstraint, unique]);
+      lines.push(repeatedConstraint, repeatedConstraint, repeatedConstraint, repeatedConstraint);
+      const text = lines.join('\n');
+
+      expect(text.length).toBeGreaterThan(2000);
+      expect(detectDegenerateRepetition(text)).toBe(true);
+    });
+
+    it('should not flag long legitimate output with unique lines', () => {
+      const text = Array.from(
+        { length: 300 },
+        (_, i) =>
+          `* 🟡 (1${i % 10}:${String(i % 60).padStart(2, '0')}) Observation number ${i}: examined file-${i}.ts and found unique detail ${i * 13} relating to subsystem ${i % 7}`,
+      ).join('\n');
+      expect(text.length).toBeGreaterThan(2000);
+      expect(detectDegenerateRepetition(text)).toBe(false);
+    });
+
+    it('should not flag output where only short lines repeat', () => {
+      const unique = Array.from(
+        { length: 40 },
+        (_, i) =>
+          `* 🟡 (12:${String(i % 60).padStart(2, '0')}) Unique observation ${i} with distinct content token ${i * 31}`,
+      );
+      // Interleave legitimately repetitive short separators/bullets
+      const text = unique.flatMap(line => [line, '---', '## Current Task']).join('\n');
+      expect(detectDegenerateRepetition(text)).toBe(false);
+    });
   });
 
-  describe('optimizeObservationsForContext', () => {
-    it('should strip yellow and green emojis', () => {
-      const observations = `
-- 🔴 Critical info
-- 🟡 Medium info
-- 🟢 Low info
-      `;
-
-      const optimized = optimizeObservationsForContext(observations);
-      expect(optimized).toContain('🔴 Critical info');
-      expect(optimized).not.toContain('🟡');
-      expect(optimized).not.toContain('🟢');
+  describe('describeDegenerateOutput', () => {
+    it('reports length, duplicate stats, and the most-repeated window on one line', () => {
+      const block =
+        'getLanguageModel().doGenerate(options: LanguageModelV2CallOptions): PromiseLike<LanguageModelV2GenerateResult>, ';
+      const text = block.repeat(100);
+      const description = describeDegenerateOutput(text);
+      expect(description).toContain(`length=${text.length}`);
+      expect(description).toMatch(/duplicateRatio=0\.\d+/);
+      expect(description).toMatch(/duplicateLineRatio=(?:\d+\.\d+|n\/a)/);
+      expect(description).toMatch(/countedLines=\d+/);
+      expect(description).toMatch(/topWindowCount=\d+/);
+      expect(description).toContain('topWindow="');
+      expect(description).toContain('head="');
+      expect(description).toContain('tail="');
+      expect(description).not.toContain('\n');
     });
 
-    it('should strip anchor IDs before injecting context', () => {
-      const observations = '[O1] - 🔴 Critical info\n[O2] - 🟡 Medium info';
-      const optimized = optimizeObservationsForContext(observations);
-
-      expect(optimized).toContain('🔴 Critical info');
-      expect(optimized).toContain('- Medium info');
-      expect(optimized).not.toContain('[O1]');
-      expect(optimized).not.toContain('[O2]');
+    it('bounds snippets to the requested size', () => {
+      const text = 'x'.repeat(10_000);
+      const description = describeDegenerateOutput(text, 100);
+      const head = /head="(x+)"/.exec(description)?.[1];
+      const tail = /tail="(x+)"/.exec(description)?.[1];
+      expect(head?.length).toBe(100);
+      expect(tail?.length).toBe(100);
     });
 
-    it('should preserve red emojis', () => {
-      const observations = '- 🔴 Critical user preference';
-      const optimized = optimizeObservationsForContext(observations);
-      expect(optimized).toContain('🔴');
-    });
-
-    it('should simplify arrows', () => {
-      const observations = '- Task -> completed successfully';
-      const optimized = optimizeObservationsForContext(observations);
-      expect(optimized).not.toContain('->');
-    });
-
-    it('should collapse multiple newlines', () => {
-      const observations = `Line 1
-
-
-
-Line 2`;
-      const optimized = optimizeObservationsForContext(observations);
-      expect(optimized).not.toContain('\n\n\n');
+    it('omits the tail when the text is short', () => {
+      const description = describeDegenerateOutput('short text', 400);
+      expect(description).toContain('head="short text"');
+      expect(description).not.toContain('tail=');
     });
   });
 });
@@ -3583,6 +4377,26 @@ _range: \`ignored-by-reconciler\`_
       const result = parseReflectorOutput(output);
       expect(result.observations).toContain('Project Context');
       expect(result.observations).toContain('Completed auth implementation');
+    });
+
+    it('should preserve substantial repeated lines at the duplicate ratio boundary', () => {
+      const repeatedConstraint =
+        '- 🔴 User requires every production change to preserve backwards compatibility and include documented rollback instructions.';
+      const uniqueObservations = Array.from(
+        { length: 9 },
+        (_, i) =>
+          `- 🟡 Distinct reflected project fact ${i}: ${String.fromCharCode(65 + i).repeat(150 + i * 17)} terminal-${i}`,
+      );
+      const lines = uniqueObservations.flatMap(unique => [repeatedConstraint, unique]);
+      lines.push(repeatedConstraint, repeatedConstraint);
+      const output = lines.join('\n');
+
+      expect(output.length).toBeGreaterThan(2000);
+      const result = parseReflectorOutput(output);
+
+      expect(result.degenerate).not.toBe(true);
+      expect(result.observations).toContain(repeatedConstraint);
+      expect(result.observations).toContain('Distinct reflected project fact 8');
     });
 
     it('should strip ephemeral anchor IDs from reflector output', () => {
@@ -5536,7 +6350,7 @@ Ask about favorite vegetarian dishes
     observerSpy.mockRestore();
   });
 
-  it('should send attachment parts to the observer alongside placeholder text', async () => {
+  it('should only send commonly supported attachment parts to the observer by default', async () => {
     let capturedPrompt: any = null;
 
     const om = new ObservationalMemory({
@@ -5552,6 +6366,14 @@ Ask about favorite vegetarian dishes
     vi.spyOn(om.observer as any, 'createAgent').mockReturnValue({
       stream: async (prompt: any) => {
         capturedPrompt = prompt;
+        const hasUnsupportedHtml = prompt.some(
+          (message: any) =>
+            Array.isArray(message.content) &&
+            message.content.some((part: any) => part.type === 'file' && part.mimeType === 'text/html'),
+        );
+        if (hasUnsupportedHtml) {
+          throw new Error("'file part media type text/html' functionality not supported");
+        }
         return {
           getFullOutput: async () => ({
             text: `<observations>\n- User shared a reference image and floorplan\n</observations>`,
@@ -5567,6 +6389,12 @@ Ask about favorite vegetarian dishes
       parts: [
         { type: 'text', text: 'Please compare these attachments.' },
         { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+        {
+          type: 'file',
+          data: 'https://example.com/report.html',
+          mimeType: 'text/html',
+          filename: 'report.html',
+        } as any,
         {
           type: 'file',
           data: 'https://example.com/specs/floorplan.pdf',
@@ -5586,7 +6414,8 @@ Ask about favorite vegetarian dishes
     expect(historyMessage).toBeDefined();
     expect(historyMessage.content[0].text).toContain('New Message History');
     expect(historyMessage.content[1].text).toContain('[Image #1: reference-board.png]');
-    expect(historyMessage.content[1].text).toContain('[File #1: floorplan.pdf]');
+    expect(historyMessage.content[1].text).toContain('[File #1: report.html]');
+    expect(historyMessage.content[1].text).toContain('[File #2: floorplan.pdf]');
     expect(
       historyMessage.content.some(
         (part: any) => part.type === 'image' && part.image === 'https://example.com/reference-board.png',
@@ -5601,6 +6430,11 @@ Ask about favorite vegetarian dishes
           part.data === 'https://example.com/specs/floorplan.pdf',
       ),
     ).toBe(true);
+    expect(
+      historyMessage.content.some(
+        (part: any) => part.type === 'file' && part.mimeType === 'text/html' && part.filename === 'report.html',
+      ),
+    ).toBe(false);
   });
 
   it('should pass reflection instruction to reflector agent during synchronous reflection', async () => {
@@ -6233,31 +7067,23 @@ describe('Resource Scope Observation Flow', () => {
     const model = new MockLanguageModelV2({
       doStream: async ({ prompt }: { prompt: unknown }) => {
         const promptText = JSON.stringify(prompt);
-        const observerOutput = promptText.includes('Thread one')
-          ? `<observations>\n- thread-1-secret priority alpha\n</observations>`
-          : `<observations>\n- thread-2-secret priority beta\n</observations>`;
+        const isStructuredExtraction = promptText.includes('thread-1-secret') || promptText.includes('thread-2-secret');
+        if (isStructuredExtraction) structuredPrompts.push(promptText);
+        const output = isStructuredExtraction
+          ? JSON.stringify({ priority: promptText.includes('thread-1-secret') ? 'alpha' : 'beta' })
+          : promptText.includes('Thread one')
+            ? `<observations>\n- thread-1-secret priority alpha\n</observations>`
+            : `<observations>\n- thread-2-secret priority beta\n</observations>`;
         return {
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: 'obs-1', modelId: 'mock-observer', timestamp: new Date() },
             { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: observerOutput },
+            { type: 'text-delta', id: 'text-1', delta: output },
             { type: 'text-end', id: 'text-1' },
             { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 } },
           ]),
           rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        };
-      },
-      doGenerate: async ({ prompt }: { prompt: unknown }) => {
-        const promptText = JSON.stringify(prompt);
-        structuredPrompts.push(promptText);
-        const priority = promptText.includes('thread-1-secret') ? 'alpha' : 'beta';
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-          content: [{ type: 'text', text: JSON.stringify({ priority }) }],
           warnings: [],
         };
       },
@@ -6462,6 +7288,130 @@ describe('Locking Behavior', () => {
     // Verify the flag was cleared in storage
     const updatedRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
     expect(updatedRecord!.isReflecting).toBe(false);
+  });
+
+  it('manual reflect() skips quietly when a reflection is already in flight in this process', async () => {
+    const storage = createInMemoryStorage();
+
+    let reflectorCalled = false;
+    const mockReflectorModel = createStreamCapableMockModel({
+      doGenerate: async () => {
+        reflectorCalled = true;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>
+- Consolidated observation
+</observations>
+<current-task>None</current-task>
+<suggested-response>Continue</suggested-response>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: { messageTokens: 100, model: mockReflectorModel as any },
+      reflection: { observationTokens: 100, model: mockReflectorModel as any },
+      scope: 'thread',
+    });
+
+    await storage.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+    const record = await storage.getObservationalMemory('thread-1', 'resource-1');
+    await storage.updateActiveObservations({
+      id: record!.id,
+      observations: '- Some observation about the user',
+      tokenCount: 500,
+      lastObservedAt: new Date(),
+    });
+
+    // Simulate an IN-FLIGHT reflection in this process: flag set AND op registered.
+    await storage.setReflectingFlag(record!.id, true);
+    registerOp(record!.id, 'reflecting');
+    try {
+      const result = await om.reflect('thread-1', 'resource-1');
+
+      expect(result.reflected).toBe(false);
+      expect(reflectorCalled).toBe(false);
+
+      // The skip must not clobber the in-flight reflection's lock.
+      const after = await storage.getObservationalMemory('thread-1', 'resource-1');
+      expect(after!.isReflecting).toBe(true);
+      expect(isOpActiveInProcess(record!.id, 'reflecting')).toBe(true);
+    } finally {
+      unregisterOp(record!.id, 'reflecting');
+      await storage.setReflectingFlag(record!.id, false);
+    }
+  });
+
+  it('manual reflect() clears a stale isReflecting flag from a dead process and proceeds', async () => {
+    const storage = createInMemoryStorage();
+
+    let reflectorCalled = false;
+    const mockReflectorModel = createStreamCapableMockModel({
+      doGenerate: async () => {
+        reflectorCalled = true;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>
+- Consolidated observation
+</observations>
+<current-task>None</current-task>
+<suggested-response>Continue</suggested-response>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: { messageTokens: 100, model: mockReflectorModel as any },
+      reflection: { observationTokens: 100, model: mockReflectorModel as any },
+      scope: 'thread',
+    });
+
+    await storage.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+    const record = await storage.getObservationalMemory('thread-1', 'resource-1');
+    await storage.updateActiveObservations({
+      id: record!.id,
+      observations: '- Some observation about the user',
+      tokenCount: 500,
+      lastObservedAt: new Date(),
+    });
+
+    // Stale scenario: flag set in storage but NO op registered in this process.
+    await storage.setReflectingFlag(record!.id, true);
+
+    const result = await om.reflect('thread-1', 'resource-1');
+
+    expect(result.reflected).toBe(true);
+    expect(reflectorCalled).toBe(true);
+    const after = await storage.getObservationalMemory('thread-1', 'resource-1');
+    expect(after!.isReflecting).toBe(false);
   });
 
   it('should not force reflection when activateAfterIdle has expired below threshold', async () => {
@@ -11126,17 +12076,37 @@ describe('Full Async Buffering Flow', () => {
       messageCount: 20, // ~4000 tokens, well above the 2000 threshold
     });
 
-    // Step 0: no observation (step 0 never does sync observation)
-    await step(0);
+    // Step 0: since #16523, sync observation already fires here when pending
+    // tokens exceed the threshold — the messages are over-threshold from the start.
+    const listAfterStep0 = await step(0);
     await waitForAsyncOps();
     const callsAfterStep0 = observerCalls.length;
+    expect(callsAfterStep0).toBeGreaterThan(0);
 
-    // Step 1: pending tokens exceed threshold → sync observation MUST fire,
-    // even though bufferTokens is set and blockAfter is not configured.
+    // Add FRESH over-threshold messages so step 1 has something unobserved to
+    // observe — otherwise step 0 (which now observes) leaves nothing behind and
+    // the step > 0 half of this regression guard would be unreachable.
+    const freshFiller = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    for (let i = 0; i < 20; i++) {
+      listAfterStep0.add(
+        {
+          id: `fresh-msg-${i}`,
+          role: i % 2 === 0 ? 'user' : 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: `Fresh ${i}: ${freshFiller}` }] },
+          type: 'text',
+          createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
+          threadId,
+          resourceId,
+        } as any,
+        'memory',
+      );
+    }
+
+    // Step 1: the blockAfter gate must not have silently disabled sync
+    // observation — the regression this test guards is `if (!blockAfter) return
+    // false` disabling ALL sync observation at step > 0.
     await step(1);
     await waitForAsyncOps();
-
-    // The observer must have been called at step 1 (sync observation path)
     expect(observerCalls.length).toBeGreaterThan(callsAfterStep0);
 
     // Verify observations were actually persisted to the record
@@ -11144,7 +12114,7 @@ describe('Full Async Buffering Flow', () => {
     expect(record?.activeObservations).toBeTruthy();
   });
 
-  it('should defer async buffering when messages contain pending tool calls (state: call)', async () => {
+  it('should exclude pending tail tool calls from async buffering while still buffering the completed prefix', async () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
@@ -11265,8 +12235,8 @@ describe('Full Async Buffering Flow', () => {
     const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
 
     // Step 0: Load messages with pending tool call.
-    // Even though total tokens (~2200) exceed threshold (2000),
-    // OM should NOT trigger async buffering because a message has state: 'call'.
+    // The pending call must never be observed; the completed messages before it
+    // may still buffer as a safe chronological prefix.
     const messageList = new MessageList({ threadId, resourceId });
     const sharedState: Record<string, unknown> = {};
     const requestContext = new RequestContext();
@@ -11289,8 +12259,16 @@ describe('Full Async Buffering Flow', () => {
     });
     await waitForAsyncOps();
 
-    // Observer should NOT have been called because there's a pending tool call
-    expect(observerCalls.length).toBe(0);
+    // The pending tool call itself must never be observed. Completed messages
+    // before it may buffer as a safe chronological prefix (#22573 policy).
+    const recordAfterStep0 = await storage.getObservationalMemory(threadId, resourceId);
+    const bufferedIdsAfterStep0 = (recordAfterStep0?.bufferedObservationChunks ?? []).flatMap(
+      chunk => chunk.messageIds,
+    );
+    expect(bufferedIdsAfterStep0).not.toContain('pending-msg-tool-call');
+    for (const call of observerCalls) {
+      expect(call.input).not.toContain('call_pending_123');
+    }
 
     // ─── Simulate tool completion: update the message in the messageList ───
     // In real usage, llm-execution-step mutates the state:'call' part to state:'result'
@@ -12330,6 +13308,90 @@ describe('Full Async Buffering Flow', () => {
       expect(remaining).toHaveLength(1);
     });
 
+    it('forceMaxActivation: no observable effect with the documented defaults', async () => {
+      // Documented defaults: messageTokens=30k, bufferActivation=0.8 → retentionFloor=6k,
+      // blockAfter=1.2 → 36k. currentPending=36000, target=30000.
+      // Six 6k chunks: boundary 5 is the lowest over boundary (30k, overshoot=0),
+      // so the forced branch and the normal branch pick the same boundary and one
+      // chunk stays buffered. The docs must not describe this as draining the buffer.
+      const chunks = Array.from({ length: 6 }, (_, i) => ({
+        cycleId: `c-${i}`,
+        messageTokens: 6000,
+        observationTokens: 100,
+        obs: `Chunk ${i}`,
+      }));
+
+      const forced = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 30000,
+        currentPendingTokens: 36000,
+        forceMaxActivation: true,
+      });
+      const normal = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 30000,
+        currentPendingTokens: 36000,
+      });
+
+      expect(forced.result.chunksActivated).toBe(5);
+      expect(forced.result.chunksActivated).toBe(normal.result.chunksActivated);
+      expect(forced.result.messageTokensActivated).toBe(normal.result.messageTokensActivated);
+      expect(forced.remaining).toHaveLength(1);
+    });
+
+    it('forceMaxActivation: activates one extra chunk only when the retention floor is large', async () => {
+      // threshold=100k, ratio=0.7 → retentionFloor=30000, maxOvershoot=28500, minRemaining=1000
+      // currentPending=100000, target=70000
+      // Chunk 0: 69k (under). Chunk 1: 30k → cumulative 99k (over, overshoot=29000).
+      // Normal: overshoot 29000 > 28500 → falls back to the under boundary (1 chunk).
+      // Forced: remainingAfterOver = 1000 >= minRemaining → takes the over boundary (2 chunks).
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 69000, observationTokens: 500, obs: 'Chunk 0' },
+        { cycleId: 'c-1', messageTokens: 30000, observationTokens: 300, obs: 'Chunk 1' },
+      ];
+
+      const forced = await setupAndActivate({
+        chunks,
+        activationRatio: 0.7,
+        messageTokensThreshold: 100000,
+        currentPendingTokens: 100000,
+        forceMaxActivation: true,
+      });
+      const normal = await setupAndActivate({
+        chunks,
+        activationRatio: 0.7,
+        messageTokensThreshold: 100000,
+        currentPendingTokens: 100000,
+      });
+
+      // Forced activation never goes past the lowest boundary that reaches the target.
+      expect(forced.result.chunksActivated).toBe(2);
+      expect(forced.result.messageTokensActivated).toBe(99000);
+      expect(normal.result.chunksActivated).toBe(1);
+      expect(normal.result.messageTokensActivated).toBe(69000);
+    });
+
+    it('single buffered chunk covering the whole window leaves less than the minimum remaining', async () => {
+      // threshold=30k, ratio=0.8 → retentionFloor=6000, minRemaining=1000
+      // currentPending=36000, target=30000. One 36k chunk is the only boundary:
+      // overshoot=6000 > maxOvershoot=5700 and remainingAfterOver=0 < 1000, and there is
+      // no under boundary, so the final fallback activates it anyway and leaves 0 tokens.
+      const chunks = [{ cycleId: 'c-0', messageTokens: 36000, observationTokens: 400, obs: 'Chunk 0' }];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 30000,
+        currentPendingTokens: 36000,
+      });
+
+      expect(result.chunksActivated).toBe(1);
+      expect(result.messageTokensActivated).toBe(36000);
+      expect(remaining).toHaveLength(0);
+    });
+
     it('large message scenario: safeguard falls back to small chunk when oversized message dominates', async () => {
       // Real-world scenario: a small chunk (2k) followed by a huge web_search result (46k).
       // threshold=30k, absolute retention=1000 → ratio ≈ 0.967
@@ -13035,6 +14097,32 @@ describe('threadId validation in thread scope', () => {
     });
 
     await expect(om.getOrCreateRecord('', 'resource-1')).rejects.toThrow(/requires a threadId/);
+  });
+
+  it('should classify missing thread context as a bad request', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const storage = createInMemoryStorage();
+    const om = new ObservationalMemory({
+      storage,
+      observation: { messageTokens: 500, model: 'test-model' },
+      reflection: { observationTokens: 1000, model: 'test-model' },
+    });
+
+    let error: unknown;
+    try {
+      om.getThreadContext(undefined, new MessageList());
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(MastraError);
+    expect(error).toMatchObject({
+      id: 'OBSERVATIONAL_MEMORY_THREAD_ID_REQUIRED',
+      domain: ErrorDomain.MASTRA_MEMORY,
+      category: ErrorCategory.USER,
+      details: { status: 400 },
+    });
+    expect((error as Error).message).toMatch(/requires a threadId/);
   });
 
   it('should NOT throw when getOrCreateRecord is called without threadId in resource scope', async () => {
@@ -15992,10 +17080,14 @@ describe('Processor stream events: buffering status and activation markers', () 
     // record (e.g. setBufferingObservationFlag) are visible everywhere. Real DBs
     // return fresh rows on each query, so the cached record remains stale.
     const originalGetOrCreate = om.getOrCreateRecord.bind(om);
-    om.getOrCreateRecord = async (...args: Parameters<typeof om.getOrCreateRecord>) => {
-      const record = await originalGetOrCreate(...args);
-      return JSON.parse(JSON.stringify(record));
-    };
+    const getOrCreateSpy = vi
+      .spyOn(om, 'getOrCreateRecord')
+      .mockImplementation(async (...args: Parameters<typeof om.getOrCreateRecord>) => {
+        const record = await originalGetOrCreate(...args);
+        return JSON.parse(JSON.stringify(record));
+      });
+    const setPendingSpy = vi.spyOn(storage, 'setPendingMessageTokens');
+    const emitProgressSpy = vi.spyOn(om, 'emitProgress');
 
     await storage.saveThread({
       thread: {
@@ -16090,12 +17182,14 @@ describe('Processor stream events: buffering status and activation markers', () 
       await new Promise(r => setTimeout(r, 50));
     }
 
+    expect(emitProgressSpy).toHaveBeenCalledTimes(1);
+    expect(setPendingSpy).toHaveBeenCalledTimes(1);
+    expect(getOrCreateSpy.mock.calls.length).toBeLessThan(3);
     expect(capturedStatusParts.length).toBeGreaterThanOrEqual(1);
 
     const lastStatus = capturedStatusParts[capturedStatusParts.length - 1];
-    // emitProgress should use a fresh record from storage (not the stale cached
-    // one from turn.start()). The fresh record reflects the isBufferingObservation
-    // flag set by buffer(), so the status should NOT be 'idle'.
+    // The turn-scoped record is updated before the asynchronous buffer work yields,
+    // so progress remains current without another storage fetch.
     expect(lastStatus.data.windows.buffered.observations.status).not.toBe('idle');
   });
 
@@ -16658,6 +17752,66 @@ describe('Observer output threadTitle propagation', () => {
     expect(omMetadata.currentTask).toBe('Building the dashboard');
     expect(omMetadata.suggestedResponse).toBe('Let me help with that.');
   });
+
+  it('should not overwrite a user-pinned title when activating buffered chunks', async () => {
+    const storage = createInMemoryStorage();
+    const threadId = 'buf-pinned-title-thread';
+    const resourceId = 'buf-pinned-title-resource';
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'My custom name',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: { [TITLE_PINNED_THREAD_METADATA_KEY]: true },
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
+      observation: {
+        messageTokens: 50000,
+        bufferTokens: 10000,
+        bufferActivation: 1,
+        threadTitle: true,
+      },
+      reflection: { observationTokens: 100000 },
+    });
+
+    const record = await storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+
+    await storage.updateBufferedObservations({
+      id: record.id,
+      chunk: {
+        observations: '- User building a React dashboard',
+        tokenCount: 100,
+        messageIds: ['msg-1', 'msg-2'],
+        messageTokens: 45000,
+        lastObservedAt: new Date('2025-01-01T10:00:00Z'),
+        cycleId: 'cycle-pinned-title-1',
+        threadTitle: 'React Dashboard Project',
+        currentTask: 'Building the dashboard',
+        suggestedContinuation: 'Let me help with that.',
+      },
+    });
+
+    const result = await om.activate({ threadId, resourceId });
+    expect(result.activated).toBe(true);
+
+    // The pinned title survives, but OM metadata still advances.
+    const thread = await storage.getThreadById({ threadId });
+    expect(thread?.title).toBe('My custom name');
+    expect(((thread?.metadata as any)?.mastra?.om ?? {}).threadTitle).toBe('React Dashboard Project');
+  });
 });
 
 // =============================================================================
@@ -16675,6 +17829,8 @@ describe('Message ordering regressions', () => {
   async function setupOrderingScenario(opts: {
     messageTokens: number;
     bufferTokens?: number | false;
+    bufferActivation?: number;
+    seedMessages?: boolean;
     observerDelay?: number;
   }) {
     const { MessageList } = await import('@mastra/core/agent');
@@ -16724,6 +17880,7 @@ describe('Message ordering regressions', () => {
       observation: {
         messageTokens: opts.messageTokens,
         ...(bufferTokensConfig !== false ? { bufferTokens: bufferTokensConfig } : { bufferTokens: false }),
+        ...(opts.bufferActivation !== undefined ? { bufferActivation: opts.bufferActivation } : {}),
       },
       reflection: { observationTokens: 200_000 },
     });
@@ -16753,7 +17910,9 @@ describe('Message ordering regressions', () => {
       type: 'text',
       createdAt: new Date(Date.UTC(2025, 0, 1, 8, 30 + i)),
     }));
-    await storage.saveMessages({ messages: seedMessages });
+    if (opts.seedMessages !== false) {
+      await storage.saveMessages({ messages: seedMessages });
+    }
 
     const state: Record<string, unknown> = {};
     const capturedParts: any[] = [];
@@ -16927,36 +18086,54 @@ describe('Message ordering regressions', () => {
 
     s.addUserMessage('Tell me about React');
     await s.runStep(0);
+
+    // Since #16523, an over-threshold step 0 observes during runStep — snapshot
+    // the record state here so we can prove finalize adds NO side effects on top.
+    // Positive anchor first: the step-0 observation must actually have happened,
+    // otherwise the unchanged-state comparisons below hold vacuously ('' === '').
+    const recordAfterStep = await s.getOMRecord();
+    expect(recordAfterStep?.activeObservations).toBeTruthy();
+    expect(recordAfterStep?.lastObservedAt).toBeDefined();
+    const metadataAfterStep = await s.getOMMetadata();
+
     s.addAssistantMessage('React is a UI library.');
     await s.finalize();
 
     const record = await s.getOMRecord();
-    // observation must NOT have fired during finalize
-    expect(record?.activeObservations ?? '').toBe('');
-    expect(record?.lastObservedAt).toBeUndefined();
+    // observation must NOT have fired during finalize — state unchanged from the step
+    expect(record?.activeObservations ?? '').toBe(recordAfterStep?.activeObservations ?? '');
+    expect(record?.lastObservedAt).toEqual(recordAfterStep?.lastObservedAt);
 
     const omMetadata = await s.getOMMetadata();
-    expect(omMetadata?.currentTask).toBeUndefined();
-    expect(omMetadata?.suggestedResponse).toBeUndefined();
+    expect(omMetadata?.currentTask).toEqual(metadataAfterStep?.currentTask);
+    expect(omMetadata?.suggestedResponse).toEqual(metadataAfterStep?.suggestedResponse);
   });
 
   // ─── Test 2: deferred observation should happen at beginning of next turn ───
 
-  it('2 — deferred observation should happen at the beginning of the next turn', async () => {
+  it('2 — observation fires during a step (step 0 included since #16523), never during finalize', async () => {
     const s = await setupOrderingScenario({ messageTokens: 1 });
 
-    // Turn 1: single step
+    // Turn 1: single step. With messageTokens: 1 the user message alone exceeds
+    // the threshold, so since #16523 observation fires at step 0 of THIS turn
+    // instead of deferring to the next turn.
     s.addUserMessage('Hello');
     await s.runStep(0);
+
+    let record = await s.getOMRecord();
+    expect(record?.activeObservations).toBeTruthy();
+    expect(record?.lastObservedAt).toBeDefined();
+    const lastObservedAfterTurn1Step = record!.lastObservedAt;
+
+    // The assistant response lands after the step — finalize must not observe it.
     s.addAssistantMessage('Hi there');
     await s.finalize();
+    record = await s.getOMRecord();
+    expect(record?.lastObservedAt).toEqual(lastObservedAfterTurn1Step);
 
-    // After turn 1: no observation yet
-    let record = await s.getOMRecord();
-    expect(record?.activeObservations ?? '').toBe('');
-    expect(record?.lastObservedAt).toBeUndefined();
-
-    // Turn 2: multi-step (step 0 + step 1 triggers observation)
+    // Turn 2: the backlog (turn 1 assistant message + new user message) is
+    // observed at the next turn's steps, not before.
+    const observerSpy = vi.spyOn((s.om as any).observer, 'call');
     s.resetForNewTurn();
     s.addUserMessage('Follow-up');
     await s.runStep(0);
@@ -16965,10 +18142,15 @@ describe('Message ordering regressions', () => {
     s.addAssistantMessage('Here are results');
     await s.finalize();
 
-    // After turn 2 step 1: observation should have fired
     record = await s.getOMRecord();
     expect(record?.activeObservations).toBeTruthy();
     expect(record?.lastObservedAt).toBeDefined();
+    // Positive anchor: turn 2 must have called the observer — a timestamp
+    // comparison alone also holds when turn 2 never observes at all.
+    expect(observerSpy).toHaveBeenCalled();
+    expect(new Date(record!.lastObservedAt!).getTime()).toBeGreaterThanOrEqual(
+      new Date(lastObservedAfterTurn1Step!).getTime(),
+    );
   });
 
   // ─── Test 2b: next turn step 0 activates buffered chunks and loads correct context ───
@@ -17109,7 +18291,8 @@ describe('Message ordering regressions', () => {
       return ctx;
     };
 
-    // ── Turn 1: step 0 (no observation) → finalize → messages persist ──
+    // ── Turn 1: since #16523, an over-threshold step 0 observes immediately.
+    // The failing observer propagates (sync strategy rethrows) → abort throws.
     let ml = new MessageList({ threadId, resourceId });
     let processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
 
@@ -17124,51 +18307,35 @@ describe('Message ordering regressions', () => {
       } as any,
       'input',
     );
-    await processor.processInputStep({
-      messageList: ml,
-      messages: [],
-      requestContext: makeCtx(),
-      stepNumber: 0,
-      state,
-      steps: [],
-      systemMessages: [],
-      model: failingModel as any,
-      retryCount: 0,
-      writer: mockWriter as any,
-      abort,
-    });
+    await expect(
+      processor.processInputStep({
+        messageList: ml,
+        messages: [],
+        requestContext: makeCtx(),
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: failingModel as any,
+        retryCount: 0,
+        writer: mockWriter as any,
+        abort,
+      }),
+    ).rejects.toThrow();
 
-    ml.add(
-      {
-        id: 'fail-assistant-1',
-        role: 'assistant',
-        content: { format: 2, parts: [{ type: 'text', text: 'Hi there' }] },
-        createdAt: new Date('2025-01-01T10:01:00Z'),
-        threadId,
-        resourceId,
-      } as any,
-      'response',
-    );
-    await processor.processOutputResult({
-      messageList: ml,
-      messages: ml.get.response.db(),
-      requestContext: makeCtx(),
-      state,
-      abort,
-      result: {} as any,
-      retryCount: 0,
-    });
-
-    // Verify Turn 1 messages persisted
+    // The user message was persisted *before* observation ran (persist-before-observe),
+    // so the failed observation must not have lost it — nor the seed messages.
     let result = await storage.listMessages({
       threadId,
       orderBy: { field: 'createdAt', direction: 'ASC' },
       perPage: false,
     });
     expect(result.messages.some(m => m.id === 'fail-user-1')).toBe(true);
-    expect(result.messages.some(m => m.id === 'fail-assistant-1')).toBe(true);
+    expect(result.messages.some(m => m.id === 'seed-0')).toBe(true);
+    expect(result.messages.some(m => m.id === 'seed-1')).toBe(true);
 
-    // ── Turn 2: step 0 → step 1 (observation fires, model fails → abort) ──
+    // ── Turn 2: fresh processor, same failure at step 0 → previously persisted
+    // messages must still survive across turns ──
     Object.keys(state).forEach(k => delete state[k]);
     ml = new MessageList({ threadId, resourceId });
     processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
@@ -17184,27 +18351,12 @@ describe('Message ordering regressions', () => {
       } as any,
       'input',
     );
-    await processor.processInputStep({
-      messageList: ml,
-      messages: [],
-      requestContext: makeCtx(),
-      stepNumber: 0,
-      state,
-      steps: [],
-      systemMessages: [],
-      model: failingModel as any,
-      retryCount: 0,
-      writer: mockWriter as any,
-      abort,
-    });
-
-    // Step 1: threshold exceeded → sync observation fires → model throws → abort
     await expect(
       processor.processInputStep({
         messageList: ml,
         messages: [],
         requestContext: makeCtx(),
-        stepNumber: 1,
+        stepNumber: 0,
         state,
         steps: [],
         systemMessages: [],
@@ -17215,16 +18367,53 @@ describe('Message ordering regressions', () => {
       }),
     ).rejects.toThrow();
 
-    // Despite observation failure, all previously persisted messages must survive
+    // Despite repeated observation failures, all previously persisted messages survive
     result = await storage.listMessages({
       threadId,
       orderBy: { field: 'createdAt', direction: 'ASC' },
       perPage: false,
     });
     expect(result.messages.some(m => m.id === 'fail-user-1')).toBe(true);
-    expect(result.messages.some(m => m.id === 'fail-assistant-1')).toBe(true);
-    // Turn 2's user message was saved at step 1 *before* observation ran
+    // Turn 2's user message was saved *before* observation ran
     expect(result.messages.some(m => m.id === 'fail-user-2')).toBe(true);
+    expect(result.messages.some(m => m.id === 'seed-0')).toBe(true);
+    expect(result.messages.some(m => m.id === 'seed-1')).toBe(true);
+  });
+
+  it('om-continuation stays live but is excluded from synchronous persistence', async () => {
+    // Active observations with no completed observation cursor reproduce the window where
+    // a later buffering step can synchronously persist the injected continuation.
+    const s = await setupOrderingScenario({
+      messageTokens: 1000,
+      bufferTokens: 1,
+      bufferActivation: 1,
+      seedMessages: false,
+    });
+    const record = await s.om.getOrCreateRecord(s.threadId, s.resourceId);
+    await s.storage.updateActiveObservations({
+      id: record.id,
+      observations: '* 🟡 Existing observation enables continuation context',
+      tokenCount: 8,
+      lastObservedAt: null,
+    });
+
+    const firstUserId = s.addUserMessage('Start a conversation with active observations');
+    await s.runStep(0);
+    expect(s.currentMessageList.get.all.db().map(m => m.id)).toContain('om-continuation');
+    expect((await s.getStoredMessages()).map(m => m.id)).not.toContain('om-continuation');
+
+    await s.om.waitForBuffering(s.threadId, s.resourceId, 5000);
+
+    const secondUserId = s.addUserMessage(`Continue after observational context is injected ${'word '.repeat(80)}`);
+    await s.runStep(1);
+
+    const liveIds = s.currentMessageList.get.all.db().map(m => m.id);
+    const storedIds = (await s.getStoredMessages()).map(m => m.id);
+
+    expect(liveIds).toContain('om-continuation');
+    expect(storedIds).toContain(firstUserId);
+    expect(storedIds).toContain(secondUserId);
+    expect(storedIds).not.toContain('om-continuation');
   });
 
   // ─── Test 4: all messages present in storage after processOutputResult ───
@@ -17240,9 +18429,12 @@ describe('Message ordering regressions', () => {
     const stored = await s.getStoredMessages();
     const runtimeMessages = s.currentMessageList.get.all.db();
 
-    // Every non-system message from runtime must exist in storage by exact ID
+    // Every non-system message from runtime must exist in storage by exact ID.
+    // The synthetic 'om-continuation' hint is deliberately never persisted
+    // (every OM cleanup path skips it) — present here since #16523 because
+    // the over-threshold step 0 now observes.
     for (const msg of runtimeMessages) {
-      if (msg.role === 'system') continue;
+      if (msg.role === 'system' || msg.id === 'om-continuation') continue;
       const inStorage = stored.find(sm => sm.id === msg.id);
       expect(inStorage).toBeDefined();
     }
@@ -17420,5 +18612,478 @@ describe('Message ordering regressions', () => {
     // No duplicate IDs
     const ids = stored.map(m => m.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('filterObservedMessages — tool-call/result pair preservation', () => {
+  it('keeps the tool-call message during marker pruning when its result is still unobserved', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-marker-thread';
+    const resourceId = 'tool-pair-marker-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    messageList.add(
+      {
+        id: 'tool-call-before-marker',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-marker-1',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'marker-msg',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'observed-prefix' },
+            { type: 'data-om-observation-end', data: { cycleId: 'marker-cycle' } },
+            { type: 'text', text: 'fresh-tail' },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'tool-result-after-marker',
+        threadId,
+        resourceId,
+        role: 'tool',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-marker-1',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: new Date(t1.getTime() + 1),
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['tool-call-before-marker', 'marker-msg'] } as any,
+      useMarkerBoundaryPruning: true,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingIds = remaining.map((m: any) => m.id);
+    const marker = remaining.find((m: any) => m.id === 'marker-msg');
+
+    expect(remainingIds).toContain('tool-call-before-marker');
+    expect(remainingIds).toContain('marker-msg');
+    expect(remainingIds).toContain('tool-result-after-marker');
+    expect(marker?.content?.parts?.map((part: any) => part.type)).toEqual(['text']);
+    expect(marker?.content?.parts?.[0]?.text).toBe('fresh-tail');
+  });
+
+  it('removes the tool-call message during marker pruning when its result was already observed before the marker', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-marker-observed-thread';
+    const resourceId = 'tool-pair-marker-observed-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+    const t2 = new Date('2025-01-01T10:00:02.000Z');
+
+    messageList.add(
+      {
+        id: 'tool-call-before-observed-result',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-marker-2',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'tool-result-before-marker',
+        threadId,
+        resourceId,
+        role: 'tool',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-marker-2',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'marker-msg-observed-result',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'observed-prefix' },
+            { type: 'data-om-observation-end', data: { cycleId: 'marker-cycle-2' } },
+            { type: 'text', text: 'fresh-tail' },
+          ],
+        },
+        createdAt: t2,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: {
+        observedMessageIds: [
+          'tool-call-before-observed-result',
+          'tool-result-before-marker',
+          'marker-msg-observed-result',
+        ],
+      } as any,
+      useMarkerBoundaryPruning: true,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingIds = remaining.map((m: any) => m.id);
+
+    expect(remainingIds).not.toContain('tool-call-before-observed-result');
+    expect(remainingIds).not.toContain('tool-result-before-marker');
+    expect(remainingIds).toEqual(['marker-msg-observed-result']);
+  });
+
+  it('keeps the tool-call message when its result is in an unobserved message', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-test-thread';
+    const resourceId = 'tool-pair-test-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    // Add observed message with tool call
+    messageList.add(
+      {
+        id: 'tool-call-msg',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-1',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    // Add unobserved message with tool result
+    messageList.add(
+      {
+        id: 'tool-result-msg',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-1',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['tool-call-msg'] } as any,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingIds = remaining.map((m: any) => m.id);
+
+    expect(remainingIds).toContain('tool-call-msg');
+  });
+
+  it('keeps the tool-call message when fallback cursor pruning would remove it', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-fallback-cursor-thread';
+    const resourceId = 'tool-pair-fallback-cursor-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+    const t2 = new Date('2025-01-01T10:00:02.000Z');
+
+    messageList.add(
+      {
+        id: 'tool-call-before-cursor',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-cursor-1',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'cursor-msg',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'cursor' }] },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'tool-result-after-cursor',
+        threadId,
+        resourceId,
+        role: 'tool',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-cursor-1',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: t2,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['cursor-msg'] } as any,
+      useMarkerBoundaryPruning: false,
+    });
+
+    const remainingIds = messageList.get.all.db().map((m: any) => m.id);
+
+    expect(remainingIds).toContain('tool-call-before-cursor');
+    expect(remainingIds).toContain('tool-result-after-cursor');
+    expect(remainingIds).not.toContain('cursor-msg');
+  });
+
+  it('keeps the tool-call message when fallback time pruning would remove it', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-fallback-time-thread';
+    const resourceId = 'tool-pair-fallback-time-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    messageList.add(
+      {
+        id: 'tool-call-before-last-observed',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-time-1',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'tool-result-after-last-observed',
+        threadId,
+        resourceId,
+        role: 'tool',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-time-1',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: {
+        observedMessageIds: [],
+        lastObservedAt: t0,
+      } as any,
+      useMarkerBoundaryPruning: false,
+    });
+
+    const remainingIds = messageList.get.all.db().map((m: any) => m.id);
+
+    expect(remainingIds).toContain('tool-call-before-last-observed');
+    expect(remainingIds).toContain('tool-result-after-last-observed');
+  });
+
+  it('removes the tool-call message when no result is pending', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-no-result-thread';
+    const resourceId = 'tool-pair-no-result-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    // Add observed message with tool call but no result
+    messageList.add(
+      {
+        id: 'tool-call-msg-alone',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-2',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['tool-call-msg-alone'] } as any,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingIds = remaining.map((m: any) => m.id);
+
+    expect(remainingIds).not.toContain('tool-call-msg-alone');
   });
 });

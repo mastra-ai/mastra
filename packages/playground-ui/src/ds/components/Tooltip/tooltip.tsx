@@ -4,6 +4,7 @@ import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
 import type { TooltipPopupProps, TooltipPositionerProps } from '@base-ui/react/tooltip';
 import * as React from 'react';
 
+import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { cn } from '@/lib/utils';
 
 type TooltipProviderProps = Omit<TooltipPrimitive.Provider.Props, 'delay' | 'timeout'> & {
@@ -62,7 +63,7 @@ const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
       alignOffset = 0,
       arrowPadding = 10,
       anchor,
-      positionMethod,
+      positionMethod = FLOATING_POSITION_METHOD,
       collisionBoundary,
       collisionPadding,
       sticky,

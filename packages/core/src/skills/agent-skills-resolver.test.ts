@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { resolveAgentSkills } from './agent-skills-resolver';
+import { mergeWorkspaceSkills, resolveAgentSkills } from './agent-skills-resolver';
 import { createSkill } from './create-skill';
 
 describe('resolveAgentSkills', () => {
@@ -116,9 +116,80 @@ describe('resolveAgentSkills', () => {
     expect(refContent).toBe('# Style Guide\nUse consistent naming.');
   });
 
+  it('uses ranked BM25 search for agent skills', async () => {
+    const ws = resolveAgentSkills([
+      createSkill({
+        name: 'deploy-checklist',
+        description: 'General deployment checklist.',
+        instructions: 'Review the deployment checklist before making changes.',
+      }),
+      createSkill({
+        name: 'production-deploy',
+        description: 'Production deployment guide.',
+        instructions: 'Deploy services safely to production. Validate the production deployment before release.',
+      }),
+    ]);
+
+    const results = await ws.search('deployment production', { topK: 1 });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.skillName).toBe('production-deploy');
+    expect(results[0]?.score).toBeGreaterThan(0);
+    expect(results[0]?.scoreDetails?.bm25).toBeDefined();
+  });
+
+  it('indexes agent skill references for BM25 search', async () => {
+    const ws = resolveAgentSkills([
+      createSkill({
+        name: 'incident-response',
+        description: 'Respond to incidents.',
+        instructions: 'Follow the operational runbook.',
+        references: {
+          'runbook.md': 'Incident response steps and escalation procedures for the on-call engineer.',
+        },
+      }),
+    ]);
+
+    const results = await ws.search('incident escalation');
+
+    expect(results[0]?.skillName).toBe('incident-response');
+    expect(results[0]?.source).toBe('references/runbook.md');
+    expect(results[0]?.scoreDetails?.bm25).toBeDefined();
+  });
+
   it('handles empty skills array', async () => {
     const ws = resolveAgentSkills([]);
     const list = await ws.list();
     expect(list).toHaveLength(0);
+  });
+});
+
+describe('mergeWorkspaceSkills', () => {
+  it('forwards registerLocationAlias so remapped locations resolve on either side', async () => {
+    const agentSkills = resolveAgentSkills([
+      createSkill({
+        name: 'agent-skill',
+        description: 'Agent-level skill.',
+        instructions: 'Do agent things.',
+      }),
+    ]);
+    const workspaceSkills = resolveAgentSkills([
+      createSkill({
+        name: 'workspace-skill',
+        description: 'Workspace-level skill.',
+        instructions: 'Do workspace things.',
+      }),
+    ]);
+
+    const { merged } = await mergeWorkspaceSkills(agentSkills, workspaceSkills);
+
+    merged.registerLocationAlias?.('/mnt/bundle/agent-skill/SKILL.md', 'inline/agent-skill');
+    merged.registerLocationAlias?.('/mnt/bundle/workspace-skill/SKILL.md', 'inline/workspace-skill');
+
+    const fromPrimary = await merged.get('/mnt/bundle/agent-skill/SKILL.md');
+    expect(fromPrimary?.name).toBe('agent-skill');
+
+    const fromSecondary = await merged.get('/mnt/bundle/workspace-skill/SKILL.md');
+    expect(fromSecondary?.name).toBe('workspace-skill');
   });
 });

@@ -23,7 +23,7 @@ import type {
   SandboxInfo,
   SandboxNetworking,
 } from '@mastra/core/workspace';
-import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
+import { MastraSandbox, SandboxNotReadyError, assertModesUnsupported } from '@mastra/core/workspace';
 import { Sandbox } from '@vercel/sandbox';
 import { VercelSandboxProcessManager } from './process-manager';
 
@@ -148,7 +148,7 @@ export class VercelSandbox extends MastraSandbox {
     super({
       ...options,
       name: 'VercelSandbox',
-      processes: new VercelSandboxProcessManager({ env: options.env ?? {} }),
+      processes: new VercelSandboxProcessManager(),
     });
 
     this.id = options.id ?? `vercel-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -310,8 +310,12 @@ export class VercelSandbox extends MastraSandbox {
   /**
    * Bulk-write files into the sandbox filesystem via the SDK's native upload.
    * Relative paths resolve against /vercel/sandbox.
+   *
+   * Per-file permission modes are not supported; an explicit `mode` is
+   * rejected rather than silently discarded.
    */
   async writeFiles(files: SandboxFileInput[]): Promise<void> {
+    assertModesUnsupported(files, 'Vercel');
     await this.ensureRunning();
     await this.sandbox.writeFiles(files.map(f => ({ path: f.path, content: f.content })));
   }
@@ -327,7 +331,8 @@ export class VercelSandbox extends MastraSandbox {
     const fullCommand = args?.length ? `${command} ${args.join(' ')}` : command;
     this.logger.debug(`${LOG_PREFIX} Executing: ${fullCommand}`, { cwd: options?.cwd });
 
-    const mergedEnv = { ...this._env, ...options?.env };
+    // Constructor env seeds the sandbox env, so getEnv() covers it plus any setEnv updates
+    const mergedEnv = { ...this.getEnv(), ...options?.env };
     const env = Object.fromEntries(
       Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
     );
@@ -350,10 +355,11 @@ export class VercelSandbox extends MastraSandbox {
       : null;
 
     try {
+      const cwd = options?.cwd ?? this.workingDirectory;
       const commandPromise = this.sandbox.runCommand({
         cmd: command,
         args: args ?? [],
-        ...(options?.cwd ? { cwd: options.cwd } : {}),
+        ...(cwd ? { cwd } : {}),
         ...(Object.keys(env).length ? { env } : {}),
         signal,
       });

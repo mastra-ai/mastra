@@ -80,6 +80,7 @@ function addSqliteMetadataValuePredicate(
 }
 
 export class MemoryStorageDO extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   #db: DODB;
 
   constructor(config: DODomainConfig) {
@@ -498,8 +499,8 @@ export class MemoryStorageDO extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     try {
@@ -513,9 +514,25 @@ export class MemoryStorageDO extends MemoryStorage {
         ...metadata,
       };
 
+      const updatedTitle = title !== undefined ? title : thread.title;
       const updatedAt = new Date();
-      const columns = ['title', 'metadata', 'updatedAt'];
-      const values = [title, JSON.stringify(mergedMetadata), updatedAt.toISOString()];
+
+      // Only write the columns the caller supplied. Writing a title read moments
+      // ago would clobber one generated in between, and the same applies to
+      // metadata on a title-only update.
+      const columns: string[] = [];
+      const values: (string | null)[] = [];
+
+      if (title !== undefined) {
+        columns.push('title');
+        values.push(title);
+      }
+      if (metadata !== undefined) {
+        columns.push('metadata');
+        values.push(JSON.stringify(mergedMetadata));
+      }
+      columns.push('updatedAt');
+      values.push(updatedAt.toISOString());
 
       const query = createSqlBuilder().update(fullTableName, columns, values).where('id = ?', id);
 
@@ -525,7 +542,7 @@ export class MemoryStorageDO extends MemoryStorage {
 
       return {
         ...thread,
-        title,
+        title: updatedTitle,
         metadata: mergedMetadata,
         updatedAt,
       };
@@ -650,13 +667,21 @@ export class MemoryStorageDO extends MemoryStorage {
     }
   }
 
-  private async _getIncludedMessages(include: StorageListMessagesInput['include']) {
+  /**
+   * Fetches the messages named by `include` together with their surrounding context.
+   *
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param resourceId - When set, restricts both the pinned messages and their context
+   * to that resource so an id from another resource returns nothing.
+   */
+  private async _getIncludedMessages(include: StorageListMessagesInput['include'], resourceId?: string) {
     if (!include || include.length === 0) return null;
 
     const unionQueries: string[] = [];
     const params: unknown[] = [];
     let paramIdx = 1;
     const tableName = this.#db.getTableName(TABLE_MESSAGES);
+    const resourceCondition = resourceId ? ` AND resourceId = ?` : '';
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
@@ -665,14 +690,14 @@ export class MemoryStorageDO extends MemoryStorage {
       unionQueries.push(`
                 SELECT * FROM (
                   WITH target_thread AS (
-                    SELECT thread_id FROM ${tableName} WHERE id = ?
+                    SELECT thread_id FROM ${tableName} WHERE id = ?${resourceCondition}
                   ),
                   ordered_messages AS (
                     SELECT
                       *,
                       ROW_NUMBER() OVER (ORDER BY createdAt ASC) AS row_num
                     FROM ${tableName}
-                    WHERE thread_id = (SELECT thread_id FROM target_thread)
+                    WHERE thread_id = (SELECT thread_id FROM target_thread)${resourceCondition}
                   )
                   SELECT
                     m.id,
@@ -696,7 +721,9 @@ export class MemoryStorageDO extends MemoryStorage {
                 ) AS query_${paramIdx}
             `);
 
-      params.push(id, id, id, withNextMessages, withPreviousMessages);
+      params.push(id);
+      if (resourceId) params.push(resourceId, resourceId);
+      params.push(id, id, withNextMessages, withPreviousMessages);
       paramIdx++;
     }
 
@@ -933,7 +960,7 @@ export class MemoryStorageDO extends MemoryStorage {
 
       if (include && include.length > 0) {
         // Use the existing _getIncludedMessages helper, but adapt it for listMessages format
-        const includeResult = (await this._getIncludedMessages(include)) as MastraDBMessage[];
+        const includeResult = (await this._getIncludedMessages(include, resourceId)) as MastraDBMessage[];
         if (Array.isArray(includeResult)) {
           includeMessages = includeResult;
 

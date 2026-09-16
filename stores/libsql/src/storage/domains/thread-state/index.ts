@@ -1,4 +1,3 @@
-import type { Client } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   ThreadStateStorage,
@@ -10,6 +9,7 @@ import type { PruneOptions, PruneResult, RetentionTablesDescriptor, TableRetenti
 
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import type { SqliteClient as Client } from '../../db/client';
 import { runPrune, resolveTargets } from '../../retention';
 
 /**

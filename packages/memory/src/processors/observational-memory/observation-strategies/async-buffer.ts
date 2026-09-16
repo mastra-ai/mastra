@@ -12,8 +12,11 @@ import { getBufferedChunks, combineObservationsForBuffering } from '../message-u
 
 import { wrapInObservationGroup } from '../observation-groups';
 import { buildMessageRange } from '../observational-memory';
+import { formatMessagesForObserver } from '../observer-agent';
+import { withRetry } from '../retry';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
+import { resolveThreadTitleUpdate } from './thread-title';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
 
 export class AsyncBufferObservationStrategy extends ObservationStrategy {
@@ -63,7 +66,9 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       requestContext: this.opts.requestContext,
       observabilityContext: this.opts.observabilityContext,
       priorExtractedValues: this.priorExtractedValues,
+      threadId: this.opts.threadId,
       resourceId: this.opts.resourceId,
+      trigger: this.opts.trigger,
       mainAgent: this.opts.agent,
     });
     const hookedValues = await applyExtractorHooks({
@@ -72,11 +77,16 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       values: result.extractedValues,
       failures: result.extractionFailures,
       previousValues: this.priorExtractedValues,
+      rawObservations: result.observations,
+      recentMessages: formatMessagesForObserver(messages, { maxPartLength: 500 }),
       threadId: this.opts.threadId,
       resourceId: this.opts.resourceId,
       mainAgent: this.opts.agent,
       memory: this.deps.memory,
       sendSignal: this.opts.sendSignal,
+      sendStateSignal: this.opts.sendStateSignal,
+      writer: this.opts.writer,
+      abortSignal: this.opts.abortSignal,
       requestContext: this.opts.requestContext,
     });
     return {
@@ -136,34 +146,39 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
 
     const { record, threadId, resourceId, messages } = this.opts;
     const messageTokens = await this.tokenCounter.countMessagesAsync(messages);
-    await this.storage.updateBufferedObservations({
-      id: record.id,
-      chunk: {
-        cycleId: this.cycleId,
-        observations: processed.observations,
-        tokenCount: processed.observationTokens,
-        messageIds: processed.observedMessageIds,
-        messageTokens,
-        lastObservedAt: processed.lastObservedAt,
-        suggestedContinuation: processed.suggestedContinuation,
-        currentTask: processed.currentTask,
-        threadTitle: processed.threadTitle,
-        extractedValues: processed.extractedValues,
-        extractionFailures: processed.extractionFailures,
-      },
-      lastBufferedAtTime: processed.lastObservedAt,
-    });
+    await withRetry(
+      () =>
+        this.storage.updateBufferedObservations({
+          id: record.id,
+          chunk: {
+            cycleId: this.cycleId,
+            observations: processed.observations,
+            tokenCount: processed.observationTokens,
+            messageIds: processed.observedMessageIds,
+            messageTokens,
+            lastObservedAt: processed.lastObservedAt,
+            suggestedContinuation: processed.suggestedContinuation,
+            currentTask: processed.currentTask,
+            threadTitle: processed.threadTitle,
+            extractedValues: processed.extractedValues,
+            extractionFailures: processed.extractionFailures,
+          },
+          lastBufferedAtTime: processed.lastObservedAt,
+        }),
+      { label: 'persist-buffered-observations', abortSignal: this.opts.abortSignal },
+    );
 
     await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
 
     // Persist extracted values immediately; buffered observation activation is unrelated to extractor state.
-    const newTitle = processed.threadTitle?.trim();
-    const hasValidThreadTitle = !!newTitle && newTitle.length >= 3;
+    const candidateTitle = processed.threadTitle?.trim();
+    const hasValidThreadTitle = !!candidateTitle && candidateTitle.length >= 3;
     if (hasValidThreadTitle || processed.extractedValues) {
       const thread = await this.storage.getThreadById({ threadId });
       if (thread) {
         const oldTitle = thread.title?.trim();
-        const shouldUpdateThreadTitle = hasValidThreadTitle && newTitle !== oldTitle;
+        const newTitle = resolveThreadTitleUpdate(thread, candidateTitle);
+        const shouldUpdateThreadTitle = newTitle !== undefined;
         const previousOmMetadata = getThreadOMMetadata(thread.metadata);
         const metadataUpdate = buildThreadMetadataFromExtractedValues(
           processed.extractors ?? this.observationConfig.extractors,
@@ -178,9 +193,9 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
             ...(metadataUpdate.extracted ?? {}),
           },
         });
-        await this.storage.updateThread({
+        await this.storage.patchThread({
           id: threadId,
-          title: shouldUpdateThreadTitle ? newTitle : (thread.title ?? ''),
+          ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),
           metadata: newMetadata,
         });
 
@@ -234,7 +249,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       operationType: 'observation',
       startedAt: this.startedAt,
       tokensAttempted,
-      error: error instanceof Error ? error.message : String(error),
+      error,
       recordId: record.id,
       threadId,
     });

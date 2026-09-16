@@ -1,6 +1,6 @@
 # @mastra/voice-speechify
 
-Mastra Voice integration with Speechify's API.
+Add Speechify text-to-speech to Mastra with configurable voices, languages, audio formats, synthesis controls, and speaker discovery.
 
 ## Installation
 
@@ -10,13 +10,7 @@ npm install @mastra/voice-speechify
 
 ## Usage
 
-First, set your Speechify API key in your environment:
-
-```bash
-export SPEECHIFY_API_KEY=your_api_key_here
-```
-
-Then use it in your code:
+Set the API credentials required by your voice provider.
 
 ```typescript
 import { SpeechifyVoice } from '@mastra/voice-speechify';
@@ -43,46 +37,14 @@ const stream = await voice.speak('Hello world', {
 stream.pipe(destination);
 ```
 
-## Configuration
+## Documentation
 
-The `SpeechifyVoice` constructor accepts the following options:
+- [Speechify](https://mastra.ai/integrations/voice/speechify)
 
-```typescript
-interface SpeechifyConfig {
-  name?: SpeechifyModel; // Optional Speechify model name (default: 'simba-english')
-  apiKey?: string; // Optional API key (can also use env var)
-}
+## Changelog
 
-new SpeechifyVoice({
-  speechModel?: SpeechifyConfig,
-  speaker?: string // Optional default speaker ID
-})
-```
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/voice/speechify/CHANGELOG.md) for version history and release notes.
 
-## Available Models
+## Support
 
-- `simba-3.2`: Speechify's latest streaming-native model with the lowest latency and richest expressivity. Recommended for English. Currently English only.
-- `simba-3.0`: The earlier Simba 3 model, still available. Currently English only.
-- `simba-english`: The default model, optimized for English.
-- `simba-multilingual`: Optimized for non-English or mixed-language input.
-
-The model can also be overridden per request. When overriding to a Simba 3 model, pass a matching speaker too:
-
-```typescript
-const stream = await voice.speak('Hello world', { model: 'simba-3.2', speaker: 'harper_32' });
-```
-
-## Available Speakers
-
-You can get a list of available speakers:
-
-```typescript
-const speakers = await voice.getSpeakers();
-```
-
-Voice availability depends on the model:
-
-- `simba-3.2` and `simba-3.0` serve a curated voice set only: `beatrice_32`, `dominic_32`, `edmund_32`, `geffen_32`, `harper_32`, `hugh_32`, `imogen_32`, `wyatt_32`. `simba-3.2` also accepts cloned voices approved by Speechify.
-- `simba-english` and `simba-multilingual` serve the full classic catalog (`george`, `henry`, `carly`, ...) and self-serve cloned voices.
-
-The default speaker follows the configured model: `harper_32` for the Simba 3 models, otherwise `george`.
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

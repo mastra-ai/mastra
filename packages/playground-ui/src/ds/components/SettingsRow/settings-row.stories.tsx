@@ -24,7 +24,7 @@ function ThemeOptionLabel({ option }: { option: (typeof THEME_OPTIONS)[number] }
 }
 
 const meta: Meta<typeof SettingsRow> = {
-  title: 'Layout/SettingsRow',
+  title: 'Deprecated/SettingsRow',
   component: SettingsRow,
   parameters: {
     layout: 'padded',
@@ -127,6 +127,39 @@ export const Stacked: Story = {
           </Select>
         </SettingsRow>
       </div>
+    </SectionCard>
+  ),
+};
+
+export const FactoryVariant: Story = {
+  render: () => (
+    <SectionCard
+      title="Factory observational memory"
+      description="Models and thresholds used to summarize and retain context."
+      contentClassName="px-0 pb-0"
+    >
+      <SettingsRow
+        variant="factory"
+        htmlFor="factory-observer-model"
+        label="Observer model"
+        description="Summarizes the conversation into observations"
+      >
+        <Select defaultValue="dark">
+          <SelectTrigger id="factory-observer-model" className="w-full lg:w-72">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="dark">claude-opus-5</SelectItem>
+          </SelectContent>
+        </Select>
+      </SettingsRow>
+      <SettingsRow
+        variant="factory"
+        label="Observe attachments"
+        description="Whether attached files are included in observations"
+      >
+        <Button>Auto</Button>
+      </SettingsRow>
     </SectionCard>
   ),
 };

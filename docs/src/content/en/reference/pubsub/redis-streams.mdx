@@ -1,9 +1,9 @@
 ---
-title: "Reference: RedisStreamsPubSub | PubSub"
-description: API reference for RedisStreamsPubSub, the Redis Streams pub/sub implementation for distributed event delivery.
+title: 'Reference: RedisStreamsPubSub | PubSub'
+description: "RedisStreamsPubSub is a PubSub implementation backed by Redis Streams. It delivers events across processes and hosts, with persistence, consumer groups, and redelivery on failure."
 packages:
-  - "@mastra/core"
-  - "@mastra/redis-streams"
+  - '@mastra/core'
+  - '@mastra/redis-streams'
 ---
 
 # RedisStreamsPubSub
@@ -22,6 +22,8 @@ Each topic maps to a Redis stream key. Subscriptions with a group use a Redis co
 npm install @mastra/redis-streams
 ```
 
+Requires Redis 7.0 or later. The reclaim loop relies on `XCLAIM` removing trimmed entries from the pending list, which earlier versions don't do.
+
 ## Usage example
 
 Provide a Redis connection URL.
@@ -34,6 +36,36 @@ export const mastra = new Mastra({
   pubsub: new RedisStreamsPubSub({
     url: 'redis://localhost:6379',
   }),
+})
+```
+
+### Redis Cluster
+
+Pass `cluster` instead of `url`/`redisOptions` to connect to a Redis Cluster (for example, AWS ElastiCache with cluster mode enabled). The options are forwarded to `createCluster()` from `redis`.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { RedisStreamsPubSub } from '@mastra/redis-streams'
+
+export const mastra = new Mastra({
+  pubsub: new RedisStreamsPubSub({
+    cluster: {
+      rootNodes: [{ url: 'redis://node-1:6379' }, { url: 'redis://node-2:6379' }],
+    },
+  }),
+})
+```
+
+### Bring your own client
+
+To control client construction yourself (TLS, credential providers, and so on), pass an unconnected `redis` client as `client`. The pubsub uses it as its writer and calls `client.duplicate()` for each subscription's blocking reader, so every connection stays distinct. The pubsub owns the client's lifecycle (it connects on first use and quits it on `close()`), so don't share it with the rest of your app.
+
+```typescript title="src/mastra/index.ts"
+import { RedisStreamsPubSub } from '@mastra/redis-streams'
+import { createClient } from 'redis'
+
+const pubsub = new RedisStreamsPubSub({
+  client: createClient({ url: process.env.REDIS_URL, socket: { tls: true } }),
 })
 ```
 
@@ -66,6 +98,20 @@ export const mastra = new Mastra({
     name: 'redisOptions',
     type: 'RedisClientOptions',
     description: 'Options passed to the underlying `redis` client for advanced configuration.',
+    isOptional: true,
+  },
+  {
+    name: 'cluster',
+    type: 'RedisClusterOptions',
+    description:
+      'Connect to a Redis Cluster. Options are passed to `createCluster()` from `redis`. Mutually exclusive with `url`, `redisOptions`, and `client`.',
+    isOptional: true,
+  },
+  {
+    name: 'client',
+    type: 'RedisClientType | RedisClusterType',
+    description:
+      'A pre-configured, unconnected `redis` client (standalone or cluster) used as the writer; readers are created with `client.duplicate()`. The pubsub owns its lifecycle (connects lazily, quits on `close()`). Mutually exclusive with `url`, `redisOptions`, and `cluster`.',
     isOptional: true,
   },
   {
@@ -108,6 +154,14 @@ export const mastra = new Mastra({
     defaultValue: '5',
   },
   {
+    name: 'inFlightTimeoutMs',
+    type: 'number',
+    description:
+      'How long a handler may hold an event without acking or nacking before the reclaim loop nacks it on its behalf. The event is republished with an incremented `deliveryAttempt`, so `maxDeliveryAttempts` still applies. Set this to recover hung handlers in single-consumer groups. `0` disables it.',
+    isOptional: true,
+    defaultValue: '0',
+  },
+  {
     name: 'logger',
     type: '{ debug?: Function; warn?: Function }',
     description: 'Optional logger for diagnostics. When omitted, suppressed errors are silent.',
@@ -125,6 +179,12 @@ export const mastra = new Mastra({
     type: 'ReadonlyArray<"pull" | "push">',
     description: 'Returns `["pull"]`.',
   },
+  {
+    name: 'supportsOffsets',
+    type: 'boolean',
+    description:
+      'Returns `false`. Redis stream anchors support start positions, but not the numeric indexes used by `subscribeFromOffset()`.',
+  },
 ]}
 />
 
@@ -136,10 +196,16 @@ export const mastra = new Mastra({
 
 Subscribes to a topic. With `options.group`, members of the group share events through a Redis consumer group. Without a group, the subscriber receives every event through a private consumer group.
 
+Set `options.startFrom` to `"latest"` to skip retained entries when Redis creates the consumer group. The default, `"earliest"`, reads retained entries first. This option doesn't reset an existing group's checkpoint.
+
 ```typescript
-await pubsub.subscribe('workflow.events', (event, ack, nack) => {
-  console.log(event)
-})
+await pubsub.subscribe(
+  'workflow.events',
+  (event, ack, nack) => {
+    console.log(event)
+  },
+  { group: 'live-workers', startFrom: 'latest' },
+)
 ```
 
 ### `flush()`
@@ -172,10 +238,22 @@ await pubsub.close()
 
 When a subscriber calls `nack`, the event is republished with an incremented `deliveryAttempt` and the original is acknowledged. Once an event reaches `maxDeliveryAttempts`, it's dropped instead of redelivered. Separately, each subscription periodically reclaims events that an earlier consumer in the group read but never acknowledged, controlled by `reclaimIntervalMs` and `reclaimIdleMs`.
 
+A subscription never reclaims an event its own handler is still processing, so a slow handler isn't invoked twice for the same event. If a handler hangs, a different consumer in the group reclaims the event once it has been idle for `reclaimIdleMs`. In a single-consumer group there's no sibling to do that, so set `inFlightTimeoutMs` to have the subscription nack the event itself after that long.
+
 ## Distributed leasing
 
-`RedisStreamsPubSub` implements the [`LeaseProvider`](/reference/pubsub/lease-provider) contract on top of the same Redis connection. The [signals runtime](/docs/long-running-agents/signals) uses it to elect a single owner (usually per thread key) so that across instances only one process wakes and runs the agent, and others route follow-up work to the holder. This is what makes signals work on serverless and multi-instance deployments; without a shared lease, each instance would start its own competing run.
+`RedisStreamsPubSub` implements the [`LeaseProvider`](/reference/pubsub/lease-provider) contract on top of the same Redis connection. The [signals runtime](/docs/harness/signals) uses it to elect a single owner (usually per thread key) so that across instances only one process wakes and runs the agent, and others route follow-up work to the holder. This is what makes signals work on serverless and multi-instance deployments; without a shared lease, each instance would start its own competing run.
 
 Lease keys are namespaced under the same `keyPrefix` as topics, as `<keyPrefix>:lease:<key>`. All operations are atomic: `acquireLease` uses `SET NX PX` and refreshes its own TTL idempotently, while `releaseLease`, `renewLease`, and `transferLease` use Lua scripts that check ownership before mutating, so a concurrent renewal from another owner is never clobbered.
 
 You don't call these methods directly. Configuring `RedisStreamsPubSub` as the `pubsub` backend is enough for the runtime to detect and use the capability. See [`LeaseProvider`](/reference/pubsub/lease-provider) for the full method contract.
+
+## Managed provisioning
+
+When you deploy a project that reads `REDIS_URL` from the environment, the Mastra CLI's `deploy` preflight offers to attach a managed Redis on the Mastra platform in one step.
+
+If you accept, `mastra deploy` provisions the database and waits for it to reach the ready state before injecting `REDIS_URL` into the deploy so `new RedisStreamsPubSub({ url: process.env.REDIS_URL })` connects without extra setup.
+
+The prompt is shown only when three conditions hold: `REDIS_URL` is referenced by user code, the environment's value is missing or points to a localhost address, and the run is interactive (a terminal without the `--yes` flag). Non-interactive runs (CI, `--yes`) report the issue with a copy-pasteable `mastra env db create --kind redis` command instead of silently creating infrastructure.
+
+You can also provision a managed Redis up front with `mastra env db create --kind redis`. Once attached, the platform meters CPU seconds and memory GB-hours and shows them on the project's Database Usage page.

@@ -1,27 +1,42 @@
 import type { RequestContext } from '@mastra/core/request-context';
-import type { WorkflowInfo } from '@mastra/core/workflows';
-import type { ClientOptions, ListWorkflowRunsParams } from '../types';
+import type { Body, PathParams, QueryParams, RouteResponse } from '../route-types.generated.js';
+import type { ClientOptions, ListWorkflowRunsParams, SerializedRouteResponse } from '../types';
 import { parseClientRequestContext } from '../utils';
+import { createRecordSeparatorJsonTransform } from '../utils/stream-transforms';
 import { BaseResource } from './base';
 
-const RECORD_SEPARATOR = '\x1E';
-
-export interface AgentBuilderActionRequest {
-  /** Input data specific to the workflow type */
-  inputData: any;
-  /** Request context for the action execution */
+export type AgentBuilderActionRequest = Omit<Body<'POST /agent-builder/:actionId/start-async'>, 'requestContext'> & {
+  /** SDK convenience input serialized before the route request. */
   requestContext?: RequestContext;
-}
+};
 
+type AgentBuilderResumeRequest = Omit<Body<'POST /agent-builder/:actionId/resume'>, 'requestContext'> & {
+  /** SDK convenience input serialized before the route request. */
+  requestContext?: RequestContext;
+};
+
+type AgentBuilderWorkflowResult = RouteResponse<'POST /agent-builder/:actionId/start-async'>;
+type AgentBuilderActionPayload = {
+  success?: boolean;
+  applied?: boolean;
+  branchName?: string;
+  message?: string;
+  validationResults?: unknown;
+  error?: string;
+  errors?: string[];
+  stepResults?: unknown;
+};
+
+/** SDK transformation of the route's generic workflow execution result. */
 export interface AgentBuilderActionResult {
   success: boolean;
   applied: boolean;
   branchName?: string;
   message: string;
-  validationResults?: any;
+  validationResults?: unknown;
   error?: string;
   errors?: string[];
-  stepResults?: any;
+  stepResults?: unknown;
 }
 
 /**
@@ -35,77 +50,47 @@ export class AgentBuilder extends BaseResource {
     super(options);
   }
 
-  // Helper function to transform workflow result to action result
-  transformWorkflowResult(result: any): AgentBuilderActionResult {
+  // Transforms the route's generic workflow result into the SDK action result.
+  transformWorkflowResult(result: AgentBuilderWorkflowResult): AgentBuilderActionResult {
     if (result.status === 'success') {
+      const actionResult = result.result as AgentBuilderActionPayload | undefined;
       return {
-        success: result.result.success || false,
-        applied: result.result.applied || false,
-        branchName: result.result.branchName,
-        message: result.result.message || 'Agent builder action completed',
-        validationResults: result.result.validationResults,
-        error: result.result.error,
-        errors: result.result.errors,
-        stepResults: result.result.stepResults,
-      };
-    } else if (result.status === 'failed') {
-      return {
-        success: false,
-        applied: false,
-        message: `Agent builder action failed: ${result.error.message}`,
-        error: result.error.message,
-      };
-    } else {
-      return {
-        success: false,
-        applied: false,
-        message: 'Agent builder action was suspended',
-        error: 'Workflow suspended - manual intervention required',
+        success: actionResult?.success ?? false,
+        applied: actionResult?.applied ?? false,
+        branchName: actionResult?.branchName,
+        message: actionResult?.message ?? 'Agent builder action completed',
+        validationResults: actionResult?.validationResults,
+        error: actionResult?.error,
+        errors: actionResult?.errors,
+        stepResults: actionResult?.stepResults,
       };
     }
+
+    if (result.status === 'failed') {
+      const error = result.error as { message?: string } | undefined;
+      const message = error?.message ?? 'Agent builder action failed';
+      return { success: false, applied: false, message: `Agent builder action failed: ${message}`, error: message };
+    }
+
+    return {
+      success: false,
+      applied: false,
+      message: 'Agent builder action was suspended',
+      error: 'Workflow suspended - manual intervention required',
+    };
   }
 
-  /**
-   * Creates a transform stream that parses binary chunks into JSON records.
-   */
   private createRecordParserTransform(): TransformStream<ArrayBuffer, { type: string; payload: any }> {
-    let failedChunk: string | undefined = undefined;
-
-    return new TransformStream<ArrayBuffer, { type: string; payload: any }>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
+    return createRecordSeparatorJsonTransform();
   }
 
   /**
    * Creates a new agent builder action run and returns the runId.
    * This calls `/agent-builder/:actionId/create-run`.
    */
-  async createRun(params?: { runId?: string }): Promise<{ runId: string }> {
+  async createRun(
+    params?: QueryParams<'POST /agent-builder/:actionId/create-run'>,
+  ): Promise<SerializedRouteResponse<'POST /agent-builder/:actionId/create-run'>> {
     const searchParams = new URLSearchParams();
 
     if (!!params?.runId) {
@@ -132,7 +117,7 @@ export class AgentBuilder extends BaseResource {
     const { requestContext: _, ...actionParams } = params;
 
     const url = `/agent-builder/${this.actionId}/start-async${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
-    const result = await this.request(url, {
+    const result = await this.request<AgentBuilderWorkflowResult>(url, {
       method: 'POST',
       body: { ...actionParams, requestContext },
     });
@@ -144,7 +129,10 @@ export class AgentBuilder extends BaseResource {
    * Starts an existing agent builder action run.
    * This calls `/agent-builder/:actionId/start`.
    */
-  async startActionRun(params: AgentBuilderActionRequest, runId: string): Promise<{ message: string }> {
+  async startActionRun(
+    params: AgentBuilderActionRequest,
+    runId: string,
+  ): Promise<SerializedRouteResponse<'POST /agent-builder/:actionId/start'>> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', runId);
 
@@ -163,13 +151,9 @@ export class AgentBuilder extends BaseResource {
    * This calls `/agent-builder/:actionId/resume`.
    */
   async resume(
-    params: {
-      step?: string | string[];
-      resumeData?: unknown;
-      requestContext?: RequestContext;
-    },
+    params: AgentBuilderResumeRequest,
     runId: string,
-  ): Promise<{ message: string }> {
+  ): Promise<SerializedRouteResponse<'POST /agent-builder/:actionId/resume'>> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', runId);
 
@@ -187,14 +171,7 @@ export class AgentBuilder extends BaseResource {
    * Resumes a suspended agent builder action step asynchronously.
    * This calls `/agent-builder/:actionId/resume-async`.
    */
-  async resumeAsync(
-    params: {
-      step?: string | string[];
-      resumeData?: unknown;
-      requestContext?: RequestContext;
-    },
-    runId: string,
-  ): Promise<AgentBuilderActionResult> {
+  async resumeAsync(params: AgentBuilderResumeRequest, runId: string): Promise<AgentBuilderActionResult> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', runId);
 
@@ -202,85 +179,12 @@ export class AgentBuilder extends BaseResource {
     const { requestContext: _, ...resumeParams } = params;
 
     const url = `/agent-builder/${this.actionId}/resume-async?${searchParams.toString()}`;
-    const result = await this.request(url, {
+    const result = await this.request<AgentBuilderWorkflowResult>(url, {
       method: 'POST',
       body: { ...resumeParams, requestContext },
     });
 
     return this.transformWorkflowResult(result);
-  }
-
-  /**
-   * Creates an async generator that processes a readable stream and yields action records
-   * separated by the Record Separator character (\x1E)
-   *
-   * @param stream - The readable stream to process
-   * @returns An async generator that yields parsed records
-   */
-  private async *streamProcessor(
-    stream: ReadableStream,
-  ): AsyncGenerator<{ type: string; payload: any }, void, unknown> {
-    const reader = stream.getReader();
-
-    // Track if we've finished reading from the stream
-    let doneReading = false;
-    // Buffer to accumulate partial chunks
-    let buffer = '';
-
-    try {
-      while (!doneReading) {
-        // Read the next chunk from the stream
-        const { done, value } = await reader.read();
-        doneReading = done;
-
-        // Skip processing if we're done and there's no value
-        if (done && !value) continue;
-
-        try {
-          // Decode binary data to text
-          const decoded = value ? new TextDecoder().decode(value) : '';
-
-          // Split the combined buffer and new data by record separator
-          const chunks = (buffer + decoded).split(RECORD_SEPARATOR);
-
-          // The last chunk might be incomplete, so save it for the next iteration
-          buffer = chunks.pop() || '';
-
-          // Process complete chunks
-          for (const chunk of chunks) {
-            if (chunk) {
-              // Only process non-empty chunks
-              if (typeof chunk === 'string') {
-                try {
-                  const parsedChunk = JSON.parse(chunk);
-                  yield parsedChunk;
-                } catch {
-                  // Silently ignore parsing errors to maintain stream processing
-                  // This allows the stream to continue even if one record is malformed
-                }
-              }
-            }
-          }
-        } catch {
-          // Silently ignore parsing errors to maintain stream processing
-          // This allows the stream to continue even if one record is malformed
-        }
-      }
-
-      // Process any remaining data in the buffer after stream is done
-      if (buffer) {
-        try {
-          yield JSON.parse(buffer);
-        } catch {
-          // Ignore parsing error for final chunk
-        }
-      }
-    } finally {
-      // Always ensure we clean up the reader
-      reader.cancel().catch(() => {
-        // Ignore cancel errors
-      });
-    }
   }
 
   /**
@@ -378,12 +282,9 @@ export class AgentBuilder extends BaseResource {
    * Resumes a suspended agent builder action and streams the results.
    * This calls `/agent-builder/:actionId/resume-stream`.
    */
-  async resumeStream(params: {
-    runId: string;
-    step: string | string[];
-    resumeData?: unknown;
-    requestContext?: RequestContext;
-  }): Promise<globalThis.ReadableStream<{ type: string; payload: any }>> {
+  async resumeStream(
+    params: AgentBuilderResumeRequest & { runId: string },
+  ): Promise<globalThis.ReadableStream<{ type: string; payload: any }>> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', params.runId);
 
@@ -418,12 +319,13 @@ export class AgentBuilder extends BaseResource {
    * @returns Promise containing the action run details with metadata and processed execution state
    */
   async runById(
-    runId: string,
+    runId: PathParams<'GET /agent-builder/:actionId/runs/:runId'>['runId'],
     options?: {
+      /** SDK convenience serialized to the route's comma-separated `fields` query value. */
       fields?: string[];
       withNestedWorkflows?: boolean;
     },
-  ) {
+  ): Promise<SerializedRouteResponse<'GET /agent-builder/:actionId/runs/:runId'>> {
     const searchParams = new URLSearchParams();
 
     if (options?.fields && options.fields.length > 0) {
@@ -445,9 +347,8 @@ export class AgentBuilder extends BaseResource {
    * Gets details about this agent builder action.
    * This calls `/agent-builder/:actionId`.
    */
-  async details(): Promise<WorkflowInfo> {
-    const result = await this.request<WorkflowInfo>(`/agent-builder/${this.actionId}`);
-    return result;
+  async details(): Promise<SerializedRouteResponse<'GET /agent-builder/:actionId'>> {
+    return this.request(`/agent-builder/${this.actionId}`);
   }
 
   /**
@@ -493,7 +394,9 @@ export class AgentBuilder extends BaseResource {
    * Cancels an agent builder action run.
    * This calls `/agent-builder/:actionId/runs/:runId/cancel`.
    */
-  async cancelRun(runId: string): Promise<{ message: string }> {
+  async cancelRun(
+    runId: PathParams<'POST /agent-builder/:actionId/runs/:runId/cancel'>['runId'],
+  ): Promise<SerializedRouteResponse<'POST /agent-builder/:actionId/runs/:runId/cancel'>> {
     const url = `/agent-builder/${this.actionId}/runs/${runId}/cancel`;
     return this.request(url, {
       method: 'POST',

@@ -9,7 +9,7 @@
  * so `sendStdin()` throws a clear "not supported" error.
  */
 
-import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
+import { ProcessHandle, UnsupportedStdinCloseError, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import type { Command } from '@vercel/sandbox';
 import type { VercelSandbox } from './index';
@@ -134,15 +134,15 @@ class VercelSandboxProcessHandle extends ProcessHandle {
   async sendStdin(_data: string): Promise<void> {
     throw new Error('VercelSandbox does not support sending stdin to running processes.');
   }
+
+  async closeStdin(): Promise<void> {
+    throw new UnsupportedStdinCloseError('VercelSandbox does not support closing stdin for running processes.');
+  }
 }
 
 // =============================================================================
 // Process Manager
 // =============================================================================
-
-export interface VercelSandboxProcessManagerOptions {
-  env?: Record<string, string | undefined>;
-}
 
 /**
  * Vercel Sandbox implementation of SandboxProcessManager. Uses one detached
@@ -150,17 +150,19 @@ export interface VercelSandboxProcessManagerOptions {
  */
 export class VercelSandboxProcessManager extends SandboxProcessManager<VercelSandbox> {
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
-    const mergedEnv = { ...this.env, ...options.env };
+    // The base spawn wrapper already merged the sandbox env into options.env
+    const mergedEnv = { ...options.env };
     const env = Object.fromEntries(
       Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
     );
 
     // The workspace passes a full command string; run it through a shell so
     // pipes, redirects, and builtins behave as expected.
+    const cwd = options.cwd ?? this.sandbox.workingDirectory;
     const cmd = await this.sandbox.sandbox.runCommand({
       cmd: 'sh',
       args: ['-c', command],
-      ...(options.cwd ? { cwd: options.cwd } : {}),
+      ...(cwd ? { cwd } : {}),
       ...(Object.keys(env).length ? { env } : {}),
       detached: true,
     });

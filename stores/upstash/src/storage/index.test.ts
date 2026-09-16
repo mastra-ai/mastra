@@ -324,6 +324,42 @@ describe('updateMessages keeps msg-idx index in sync', () => {
   });
 });
 
+describe('StoreMemoryUpstash error propagation (no empty-on-error)', () => {
+  // These reads used to swallow DB errors and return an empty page, so an outage
+  // looked exactly like "no data". They should throw instead.
+  const createFailingDomain = () => {
+    const client = {
+      // listThreads scans keys first
+      scan: vi.fn().mockRejectedValue(new Error('simulated backend outage')),
+      // listMessages reads the thread's sorted set first
+      zrange: vi.fn().mockRejectedValue(new Error('simulated backend outage')),
+      pipeline: vi.fn(),
+    };
+    return new StoreMemoryUpstash({ client: client as any });
+  };
+
+  // Also check the cause is the original error, so a broken mock can't pass as
+  // a real outage.
+  const expectOutage = async (promise: Promise<unknown>, idPattern: RegExp) => {
+    const err: any = await promise.then(
+      () => {
+        throw new Error('expected the read to reject, but it resolved');
+      },
+      e => e,
+    );
+    expect(err).toMatchObject({ id: expect.stringMatching(idPattern) });
+    expect(String(err?.cause?.message ?? err?.message)).toContain('simulated backend outage');
+  };
+
+  it('listThreads re-throws backend failures instead of returning empty', async () => {
+    await expectOutage(createFailingDomain().listThreads({}), /LIST_THREADS.*FAILED/);
+  });
+
+  it('listMessages re-throws backend failures instead of returning empty', async () => {
+    await expectOutage(createFailingDomain().listMessages({ threadId: 'thread-err' }), /LIST_MESSAGES.*FAILED/);
+  });
+});
+
 describe('WorkflowsUpstash.persistWorkflowSnapshot', () => {
   it('preserves, loads, and deletes a resource-scoped workflow run', async () => {
     const workflowsDomain = new WorkflowsUpstash({ client: createTestClient() });

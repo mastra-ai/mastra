@@ -124,6 +124,25 @@ describe('MCPServer dynamic tools + tools/list_changed', () => {
     expect(result.content?.[0]?.text).toContain('dynamic');
   });
 
+  it('lists healthy tools when one tool has no input schema', async () => {
+    const schemaLessTool = createTool({
+      id: 'schemaLessTool',
+      description: 'A tool without an input schema',
+      execute: async () => ({ result: 'success' }),
+    });
+
+    await server.toolActions.add({ schemaLessTool });
+    (server as any).convertedTools.schemaLessTool.parameters = undefined;
+
+    try {
+      const toolList = await client.tools();
+      expect(Object.keys(toolList)).toContain('initialTool');
+      expect(Object.keys(toolList)).toContain('schemaLessTool');
+    } finally {
+      await server.toolActions.remove(['schemaLessTool']);
+    }
+  });
+
   it('removing a tool notifies the client and the tool is no longer listed', async () => {
     const notified = new Promise<void>(resolve => {
       client.setToolListChangedNotificationHandler(() => resolve());

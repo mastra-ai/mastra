@@ -9,8 +9,10 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
+import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
+import type { ThinkingLevel } from './openai-codex.js';
 
 // Required for Claude Max plan OAuth - the endpoint checks for this system message
 const claudeCodeIdentity = "You are Claude Code, Anthropic's official CLI for Claude.";
@@ -143,6 +145,99 @@ export const promptCacheMiddleware: LanguageModelMiddleware = {
   },
 };
 
+type ActiveThinkingLevel = Exclude<ThinkingLevel, 'off'>;
+
+// Anthropic's effort scale matches mastracode thinking levels 1:1 (minus 'off'),
+// including 'max' — the level OpenAI's scale stops short of.
+const ANTHROPIC_EFFORT: Record<ActiveThinkingLevel, 'low' | 'medium' | 'high' | 'xhigh' | 'max'> = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  xhigh: 'xhigh',
+  max: 'max',
+};
+
+const ANTHROPIC_XHIGH_EFFORT_RE = /claude-(?:opus-4-[78]|opus-5|sonnet-5|fable-5)/;
+
+function getAnthropicEffort(modelId: string, level: ActiveThinkingLevel) {
+  if (level === 'xhigh' && !ANTHROPIC_XHIGH_EFFORT_RE.test(modelId)) return 'high';
+  return ANTHROPIC_EFFORT[level];
+}
+
+// Extended-thinking budgets for models that predate adaptive thinking/effort.
+// Budgets count toward max_tokens, so they stay well below the smallest
+// output ceiling of the budget-era models (32k on Opus 4.0/4.1).
+const ANTHROPIC_THINKING_BUDGET_TOKENS: Record<ActiveThinkingLevel, number> = {
+  low: 4096,
+  medium: 8192,
+  high: 16384,
+  xhigh: 24576,
+  max: 24576,
+};
+
+/** Claude generations that support adaptive thinking + `output_config.effort`. */
+const ADAPTIVE_THINKING_RE = /claude-(?:sonnet-4-6|opus-4-[678]|opus-5|sonnet-5|fable-5)/;
+/** Older generations that support extended thinking via `budget_tokens`. */
+const BUDGET_THINKING_RE = /claude-(?:3-7|sonnet-4|opus-4|haiku-4-5)/;
+/** Generations with no extended-thinking support at all. */
+const NO_THINKING_RE = /claude-(?:instant|v?2(?:[-.:]|$)|3(?:[-.]|$)|3-5)/;
+
+function getAnthropicThinkingCapability(modelId: string): 'adaptive' | 'budget' | 'none' {
+  if (ADAPTIVE_THINKING_RE.test(modelId)) return 'adaptive';
+  if (BUDGET_THINKING_RE.test(modelId)) return 'budget';
+  if (NO_THINKING_RE.test(modelId)) return 'none';
+  // Unknown (i.e. newer) Claude models: assume the current API surface.
+  return 'adaptive';
+}
+
+/**
+ * Middleware that maps the session thinking level onto Anthropic extended
+ * thinking. Returns `undefined` (no middleware) when the level is `off` or the
+ * model doesn't support thinking, preserving the previous request shape.
+ *
+ * - Adaptive-era models (Sonnet 4.6+/Opus 4.6+): `thinking: adaptive` plus
+ *   `output_config.effort` mapped 1:1 from the level (including `max`).
+ * - Budget-era models (Claude 3.7 – Opus 4.5): `thinking: enabled` with a
+ *   `budget_tokens` value derived from the level.
+ */
+export function createAnthropicThinkingMiddleware(
+  modelId: string,
+  thinkingLevel?: ThinkingLevel,
+): LanguageModelMiddleware | undefined {
+  if (!thinkingLevel || thinkingLevel === 'off') return undefined;
+  const capability = getAnthropicThinkingCapability(modelId);
+  if (capability === 'none') return undefined;
+  const level = thinkingLevel as ActiveThinkingLevel;
+
+  return {
+    specificationVersion: 'v3',
+    transformParams: async ({ params }) => {
+      const anthropicOptions = (params.providerOptions?.anthropic ?? {}) as Record<string, unknown>;
+      // Don't override explicit per-request thinking configuration.
+      if (anthropicOptions.thinking !== undefined || anthropicOptions.effort !== undefined) {
+        return params;
+      }
+
+      // Anthropic rejects sampling parameters when thinking is enabled.
+      delete params.temperature;
+      delete params.topP;
+      delete params.topK;
+
+      params.providerOptions = {
+        ...params.providerOptions,
+        anthropic: {
+          ...anthropicOptions,
+          ...(capability === 'adaptive'
+            ? { thinking: { type: 'adaptive', display: 'summarized' }, effort: getAnthropicEffort(modelId, level) }
+            : { thinking: { type: 'enabled', budgetTokens: ANTHROPIC_THINKING_BUDGET_TOKENS[level] } }),
+        },
+      } as typeof params.providerOptions;
+
+      return params;
+    },
+  };
+}
+
 /**
  * Build a fetch function that handles Anthropic OAuth.
  * Preserves non-auth headers from init (critical for gateway auth header to survive
@@ -160,7 +255,7 @@ export function buildAnthropicOAuthFetch(opts: { authStorage?: CredentialStore }
 
     const accessToken = await storage.getApiKey('anthropic');
     if (!accessToken) {
-      throw new Error('Not logged in to Anthropic. Run /login first.');
+      throw new ProviderAuthRequiredError('Not logged in to Anthropic.');
     }
 
     // Preserve existing headers, strip auth-related ones
@@ -207,9 +302,11 @@ export function buildAnthropicOAuthFetch(opts: { authStorage?: CredentialStore }
  */
 export function opencodeClaudeMaxProvider(
   modelId: string = 'claude-sonnet-4-20250514',
-  options?: { headers?: Record<string, string>; authStorage?: CredentialStore },
+  options?: { headers?: Record<string, string>; authStorage?: CredentialStore; thinkingLevel?: ThinkingLevel },
 ): MastraModelConfig {
   const headers = options?.headers;
+  const thinkingMiddleware = createAnthropicThinkingMiddleware(modelId, options?.thinkingLevel);
+  const middleware = [claudeCodeMiddleware, promptCacheMiddleware, ...(thinkingMiddleware ? [thinkingMiddleware] : [])];
 
   // Test environment: use API key
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
@@ -219,7 +316,7 @@ export function opencodeClaudeMaxProvider(
     });
     return wrapLanguageModel({
       model: anthropic(modelId),
-      middleware: [claudeCodeMiddleware, promptCacheMiddleware],
+      middleware,
     });
   }
 
@@ -232,6 +329,6 @@ export function opencodeClaudeMaxProvider(
   // Wrap with middleware to inject Claude Code identity and enable prompt caching
   return wrapLanguageModel({
     model: anthropic(modelId),
-    middleware: [claudeCodeMiddleware, promptCacheMiddleware],
+    middleware,
   });
 }

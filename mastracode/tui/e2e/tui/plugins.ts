@@ -15,10 +15,18 @@ const TOOL_NAME = 'e2e_plugin_lookup';
 const PROMPT = 'Use the local plugin tool availability check.';
 const RESPONSE = 'Plugin tool availability verified.';
 
+const SIGNAL_PLUGIN_ID = 'e2e.signal-plugin';
+const SIGNAL_PLUGIN_NAME = 'E2E Signal Plugin';
+const SIGNAL_PROVIDER_ID = 'e2e-signals';
+const SIGNAL_TOOL_NAME = 'e2e_signal_probe';
+
 let currentTui: unknown;
 let hotReloadPluginDir: string | undefined;
 let githubPollSourceDir: string | undefined;
 let githubPollManager: { pollGithubSourcesForUpdates: () => Promise<boolean> } | undefined;
+let githubSignalSourceDir: string | undefined;
+let githubSignalStopLogPath: string | undefined;
+let githubSignalManager: { pollGithubSourcesForUpdates: () => Promise<boolean> } | undefined;
 let githubInstallGhLogPath: string | undefined;
 let githubInstallGhPath: string | undefined;
 let githubInstallCheckoutDir: string | undefined;
@@ -30,6 +38,9 @@ function resetPluginScenarioState(): void {
   hotReloadPluginDir = undefined;
   githubPollSourceDir = undefined;
   githubPollManager = undefined;
+  githubSignalSourceDir = undefined;
+  githubSignalStopLogPath = undefined;
+  githubSignalManager = undefined;
   githubInstallGhLogPath = undefined;
   githubInstallGhPath = undefined;
   githubInstallCheckoutDir = undefined;
@@ -307,7 +318,11 @@ function writePluginRegistry(
   );
 }
 
-function writeGithubPluginRegistry(projectDir: string, checkoutName: string): void {
+function writeGithubPluginRegistry(
+  projectDir: string,
+  checkoutName: string,
+  options: { pluginId?: string; specifier?: string } = {},
+): void {
   const registryDir = join(projectDir, '.mastracode', 'plugins');
   mkdirSync(registryDir, { recursive: true });
   writeFileSync(
@@ -315,10 +330,10 @@ function writeGithubPluginRegistry(projectDir: string, checkoutName: string): vo
     JSON.stringify(
       {
         plugins: {
-          [PLUGIN_ID]: {
+          [options.pluginId ?? PLUGIN_ID]: {
             enabled: true,
             source: 'github',
-            specifier: 'https://github.com/acme/github-poll-plugin',
+            specifier: options.specifier ?? 'https://github.com/acme/github-poll-plugin',
             path: `sources/github/${checkoutName}`,
             entry: 'src/index.ts',
           },
@@ -417,6 +432,90 @@ function pushGithubPollPluginUpdate(sourceDir: string): void {
   writeHotReloadPluginSource(sourceDir, 'version-two');
   git(sourceDir, ['add', '.']);
   git(sourceDir, ['commit', '-m', 'update plugin result']);
+  git(sourceDir, ['push']);
+}
+
+function writeSignalProviderPluginSource(pluginDir: string, version: string, stopLogPath: string): void {
+  const pluginSrcDir = join(pluginDir, 'src');
+  mkdirSync(pluginSrcDir, { recursive: true });
+  writePluginPackageLink(pluginDir);
+
+  writeFileSync(
+    join(pluginSrcDir, 'index.ts'),
+    `import { appendFileSync } from 'node:fs';
+
+import { createTool, defineMastraCodePlugin, SignalProvider, z } from 'mastracode/plugin';
+
+const VERSION = '${version}';
+
+class E2eSignalProvider extends SignalProvider<'${SIGNAL_PROVIDER_ID}'> {
+  readonly id = '${SIGNAL_PROVIDER_ID}' as const;
+
+  getInputProcessors() {
+    return [
+      {
+        id: 'e2e-signal-provider-input',
+        processInputStep: (args: { tools?: Record<string, unknown> }) => ({
+          tools: {
+            ...args.tools,
+            ${SIGNAL_TOOL_NAME}: createTool({
+              id: '${SIGNAL_TOOL_NAME}',
+              description: 'Report the live signal provider version.',
+              inputSchema: z.object({ query: z.string() }),
+              execute: async (input: { query: string }) => ({ query: input.query, result: VERSION }),
+            }),
+          },
+        }),
+      },
+    ];
+  }
+
+  stop(): void {
+    appendFileSync(${JSON.stringify(stopLogPath)}, VERSION + '\\n');
+    super.stop();
+  }
+}
+
+export default defineMastraCodePlugin({
+  id: '${SIGNAL_PLUGIN_ID}',
+  name: '${SIGNAL_PLUGIN_NAME}',
+  description: 'Plugin used by Mastra Code E2E signal provider tests.',
+  signalProviders: () => [new E2eSignalProvider()],
+});
+`,
+  );
+}
+
+function prepareGithubSignalProviderPlugin(projectDir: string): { sourceDir: string; stopLogPath: string } {
+  const sourceDir = join(projectDir, 'fixtures', 'plugins', 'github-signal-source');
+  const remoteDir = join(projectDir, 'fixtures', 'plugins', 'github-signal-remote.git');
+  const stopLogPath = join(projectDir, 'fixtures', 'signal-provider-stops.log');
+  const checkoutName = 'acme-github-signal-plugin';
+  const checkoutDir = join(projectDir, '.mastracode', 'plugins', 'sources', 'github', checkoutName);
+
+  writeSignalProviderPluginSource(sourceDir, 'provider-version-one', stopLogPath);
+  git(sourceDir, ['init', '-b', 'main']);
+  git(sourceDir, ['config', 'user.email', 'e2e@example.com']);
+  git(sourceDir, ['config', 'user.name', 'Mastra Code E2E']);
+  git(sourceDir, ['add', '.']);
+  git(sourceDir, ['commit', '-m', 'initial signal plugin']);
+  git(projectDir, ['init', '--bare', remoteDir]);
+  git(sourceDir, ['remote', 'add', 'origin', remoteDir]);
+  git(sourceDir, ['push', '-u', 'origin', 'main']);
+  mkdirSync(dirname(checkoutDir), { recursive: true });
+  git(projectDir, ['clone', '-b', 'main', remoteDir, checkoutDir]);
+  writeGithubPluginRegistry(projectDir, checkoutName, {
+    pluginId: SIGNAL_PLUGIN_ID,
+    specifier: 'https://github.com/acme/github-signal-plugin',
+  });
+
+  return { sourceDir, stopLogPath };
+}
+
+function pushGithubSignalProviderPluginUpdate(sourceDir: string, stopLogPath: string): void {
+  writeSignalProviderPluginSource(sourceDir, 'provider-version-two', stopLogPath);
+  git(sourceDir, ['add', '.']);
+  git(sourceDir, ['commit', '-m', 'update signal provider version']);
   git(sourceDir, ['push']);
 }
 
@@ -836,6 +935,78 @@ export const pluginsGithubPollUpdateScenario: McE2eScenario = {
     }
     // The run() screen assertions wait for version-one and version-two, while the AIMock fixture responses deliberately
     // avoid those strings. That ensures the visible text comes from the plugin tool results, not mocked model prose.
+  },
+};
+
+export const pluginsGithubProviderSwapScenario: McE2eScenario = {
+  name: 'plugins-github-provider-swap',
+  description:
+    'Runs a signal provider contributed by a GitHub-installed plugin and swaps it for an updated one in the same TUI session.',
+  testName: 'runs and swaps a plugin-provided signal provider in the same TUI session',
+  useOpenAIModel: true,
+  aimockFixture: 'plugins-github-provider-swap.json',
+  prepare({ projectDir }) {
+    resetPluginScenarioState();
+    const prepared = prepareGithubSignalProviderPlugin(projectDir);
+    githubSignalSourceDir = prepared.sourceDir;
+    githubSignalStopLogPath = prepared.stopLogPath;
+  },
+  async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
+    const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
+    const manager = new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir });
+    githubSignalManager = manager;
+    return startMastraCodeApp({
+      config: {
+        pluginManager: manager,
+      },
+    });
+  },
+  async run({ terminal, runtime }) {
+    runtime.startLiveOutput(terminal);
+    await runtime.waitForScreenText(/Resource ID:/i, terminal);
+
+    terminal.submit('Probe the signal provider before update.');
+    await runtime.waitForScreenText(/provider-version-one/i, terminal, 10_000);
+
+    if (!githubSignalSourceDir || !githubSignalStopLogPath) {
+      throw new Error('GitHub signal plugin source was not prepared');
+    }
+    if (!githubSignalManager) throw new Error('GitHub signal plugin manager was not initialized');
+    pushGithubSignalProviderPluginUpdate(githubSignalSourceDir, githubSignalStopLogPath);
+    const changed = await githubSignalManager.pollGithubSourcesForUpdates();
+    if (!changed) throw new Error('Expected GitHub signal plugin poll to detect an update');
+
+    await runtime.waitForScreenText(
+      new RegExp(`Plugin updated to the latest version: ${SIGNAL_PLUGIN_NAME}`, 'i'),
+      terminal,
+      10_000,
+    );
+
+    terminal.submit('Probe the signal provider after update.');
+    await runtime.waitForScreenText(/provider-version-two/i, terminal, 10_000);
+
+    const stops = existsSync(githubSignalStopLogPath)
+      ? readFileSync(githubSignalStopLogPath, 'utf8').split('\n').filter(Boolean)
+      : [];
+    if (!stops.includes('provider-version-one')) {
+      throw new Error(`Expected the replaced signal provider to be stopped. Stop log: ${JSON.stringify(stops)}`);
+    }
+    if (stops.includes('provider-version-two')) {
+      throw new Error(`Did not expect the live signal provider to be stopped. Stop log: ${JSON.stringify(stops)}`);
+    }
+
+    terminal.keyCtrlC();
+  },
+  verifyAimockRequests(requests) {
+    const names = getToolNames(requests);
+    if (!names.includes(SIGNAL_TOOL_NAME)) {
+      throw new Error(
+        `Expected provider request to expose the signal provider tool ${SIGNAL_TOOL_NAME}. Names: ${names.join(', ')}`,
+      );
+    }
+    // The tool only reaches the request through the provider's input processor, which only runs while the plugin
+    // signal lane keeps that provider live. The AIMock fixture responses avoid the version strings, so the visible
+    // provider-version-one / provider-version-two text can only come from the live provider's injected tool.
   },
 };
 

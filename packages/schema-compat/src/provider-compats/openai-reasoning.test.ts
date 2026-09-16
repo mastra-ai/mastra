@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ModelInformation } from '../types';
 import { OpenAIReasoningSchemaCompatLayer } from './openai-reasoning';
-import { createSuite } from './test-suite';
+import { createSuite, createOpenAISuite } from './test-suite';
 
 describe('OpenAIReasoningSchemaCompatLayer', () => {
   const modelInfo: ModelInformation = {
@@ -12,6 +12,7 @@ describe('OpenAIReasoningSchemaCompatLayer', () => {
 
   const compat = new OpenAIReasoningSchemaCompatLayer(modelInfo);
   createSuite(compat);
+  createOpenAISuite(compat);
 
   describe('shouldApply', () => {
     it('should apply for OpenAI models without structured outputs', () => {

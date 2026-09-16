@@ -2,6 +2,7 @@ import { z } from 'zod/v4';
 import type { BackgroundTaskManager } from '../../../background-tasks';
 import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import type { SystemMessage } from '../../../llm';
+import type { ToolCallConcurrency } from '../../../loop/types';
 import { createRunScope } from '../../../mastra/run-scope';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
@@ -39,12 +40,13 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   returnScorerData?: boolean;
   saveQueueManager?: SaveQueueManager;
   requireToolApproval?: RequireToolApproval;
-  toolCallConcurrency?: number;
+  toolCallConcurrency?: ToolCallConcurrency;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
   };
   agentId: string;
+  agentVersionId?: string;
   agentName?: string;
   toolCallId?: string;
   workspace?: Workspace;
@@ -79,6 +81,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   toolCallConcurrency,
   resumeContext,
   agentId,
+  agentVersionId,
   agentName,
   toolCallId,
   workspace,
@@ -140,6 +143,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     toolCallConcurrency,
     resumeContext,
     agentId,
+    agentVersionId,
     agentName,
     toolCallId,
     methodType,
@@ -168,6 +172,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     memoryConfig,
     agentSpan,
     agentId,
+    agentVersionId,
     methodType,
     saveQueueManager,
     runScope,

@@ -8,6 +8,10 @@ describe('transformAgent tool input streaming (issue #16422)', () => {
     return { type, runId, payload } as any;
   }
 
+  function getSnapshot(result: any) {
+    return Array.isArray(result) ? result[0] : result;
+  }
+
   it('emits data-tool-agent updates while a sub-agent tool input is streaming', () => {
     const bufferedSteps = new Map<string, any>();
     const runId = 'sub-agent-run';
@@ -269,7 +273,7 @@ describe('transformAgent tool input streaming (issue #16422)', () => {
       bufferedSteps,
     );
 
-    expect(stepFinish).toMatchObject({
+    expect(getSnapshot(stepFinish)).toMatchObject({
       data: {
         pendingToolCalls: [],
         steps: [
@@ -281,7 +285,7 @@ describe('transformAgent tool input streaming (issue #16422)', () => {
     });
   });
 
-  it('emits pending tool input updates through the nested tool-output transformer route', async () => {
+  it('emits pending data-tool-agent tool input updates through the nested tool-output transformer route', async () => {
     const stream = new ReadableStream<any>({
       start(controller) {
         controller.enqueue({

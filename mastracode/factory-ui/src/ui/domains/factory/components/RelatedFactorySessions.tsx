@@ -1,16 +1,17 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { CircleDot, ExternalLink, Link2 } from 'lucide-react';
+import { Link2 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router';
 
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { ChatHeader } from '../../chat/components/ChatHeader';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
-import { useWorkspaceFiles } from '../../workspace-viewer/context/useWorkspaceFiles';
-import { relatedWorkItems, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
+import { useWorkspacePanel } from '../../workspace-viewer/context/useWorkspacePanel';
+import { relatedWorkItemIndex, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
+import { SourceIcon } from './BoardIcons';
 import { FactoryReviewPullRequestLinks } from './FactoryReviewPullRequestLinks';
 
 function latestLiveSession(item: WorkItem, livePaths: ReadonlySet<string>): WorkItemSessionRef | undefined {
@@ -54,7 +55,7 @@ export function FactorySessionHeader() {
   const projectRepositoryId = sessionQuery.data?.projectRepositoryId;
   const items = useWorkItemsQuery(factoryId);
   const workspaces = useWorkspacesQuery(projectRepositoryId);
-  const { workspacePath } = useWorkspaceFiles();
+  const { workspacePath } = useWorkspacePanel();
 
   const allItems = items.data ?? [];
   const currentItem = activeWorkItem(allItems, factoryId, sessionId, threadId);
@@ -122,7 +123,6 @@ function WorkItemActions({
   const navigate = useNavigate();
   const externalItemUrl = genericExternalWorkItemUrl(item);
   const externalItemLabel = externalWorkItemLabel(item);
-  const ExternalItemIcon = item.source === 'github-issue' ? CircleDot : ExternalLink;
 
   const openSession = (session: WorkItemSessionRef) => {
     void navigate(`/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.threadId}`);
@@ -140,11 +140,11 @@ function WorkItemActions({
           rel="noreferrer"
           aria-label={`Open ${externalItemLabel}`}
         >
-          <ExternalItemIcon size={13} aria-hidden />
+          <SourceIcon source={item.source} className="size-3.5" />
           {externalItemLabel}
         </Button>
       ) : null}
-      {relatedWorkItems(item, allItems).map(related => {
+      {relatedWorkItemIndex(allItems)(item).map(related => {
         const label = relationshipLabel(related);
         const session = latestLiveSession(related, livePaths);
 

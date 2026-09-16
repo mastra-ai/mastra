@@ -94,7 +94,7 @@ export function SchemaField({
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <Switch checked={isEnabled} onCheckedChange={handleToggle} id={`${schemaType}-schema-toggle`} />
-        <label htmlFor={`${schemaType}-schema-toggle`} className="text-sm font-medium">
+        <label htmlFor={`${schemaType}-schema-toggle`} className="text-ui-md font-medium">
           {label}
         </label>
       </div>
@@ -107,8 +107,8 @@ export function SchemaField({
             showCopyButton={false}
             className={cn('h-48 border rounded-md', (parseError || error) && 'border-destructive')}
           />
-          {parseError && <p className="text-destructive text-xs">{parseError}</p>}
-          {error && !parseError && <p className="text-destructive text-xs">{error}</p>}
+          {parseError && <p className="text-destructive text-ui-sm">{parseError}</p>}
+          {error && !parseError && <p className="text-destructive text-ui-sm">{error}</p>}
         </div>
       )}
     </div>

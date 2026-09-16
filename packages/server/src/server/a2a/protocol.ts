@@ -44,7 +44,7 @@ export function createErrorResponse(
 }
 
 export function createSuccessResponse<T>(id: number | string | null, result: T): JSONRPCResponse<T> {
-  if (!id) {
+  if (id === null) {
     // This shouldn't happen for methods that expect a response, but safeguard
     throw MastraA2AError.internalError('Cannot create success response for null ID.');
   }

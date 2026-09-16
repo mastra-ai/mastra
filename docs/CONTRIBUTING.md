@@ -56,18 +56,12 @@ Before submitting a PR, make sure to:
 
 4. **Verify code examples**: If you've added code examples, test them if possible to ensure they work.
 
-5. **Run linters**: Install Vale and `mdx2vast`, then run the linting and validation commands.
+5. **Run linters**: Install Vale, then run the linting and validation commands.
 
    Download Vale:
 
    ```bash
    pnpm run vale:download
-   ```
-
-   Install `mdx2vast` globally:
-
-   ```bash
-   npm install -g mdx2vast
    ```
 
    Run the validation scripts:
@@ -208,12 +202,6 @@ Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 
 :::
 
-:::info
-
-Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
-
-:::
-
 :::warning
 
 Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
@@ -225,7 +213,15 @@ Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 
 :::
+
+:::beta
+
+Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
+
+:::
 ```
+
+`info` is an alias for `note` and renders identically, so prefer `note`.
 
 ### `<Tabs>`
 

@@ -1,15 +1,19 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
+import { ToolCallMono } from '@mastra/playground-ui/components/ai/tool-call';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 
+import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
+import { BadgeWrapper } from '@mastra/playground-ui/domains/chat/components/badge-wrapper';
+import { LoadingBadge } from '@mastra/playground-ui/domains/chat/components/loading-badge';
+import { NetworkChoiceMetadataDialogTrigger } from '@mastra/playground-ui/domains/chat/components/network-choice-metadata-dialog';
+import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/section-label';
+import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
+import { ToolApprovalButtons } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { Eye } from 'lucide-react';
 import { useContext, useEffect } from 'react';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
-import { BadgeWrapper } from './badge-wrapper';
-import { LoadingBadge } from './loading-badge';
-import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
-import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
-import { ToolApprovalButtons } from './tool-approval-buttons';
 import {
   WorkflowGraph,
   WorkflowRunContext,
@@ -20,7 +24,6 @@ import {
 import type { WorkflowRunStreamResult } from '@/domains/workflows/context/workflow-run-context';
 import { useWorkflow } from '@/hooks';
 import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
-import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface WorkflowBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
@@ -66,7 +69,9 @@ export const WorkflowBadge = ({
 
   let suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
-      <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{suspendPayload}</pre>
+      <ToolCallMono copyText={suspendPayload} className="text-icon3">
+        {suspendPayload}
+      </ToolCallMono>
     ) : (
       <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
     );
@@ -100,7 +105,7 @@ export const WorkflowBadge = ({
 
       {suspendPayloadSlot !== undefined && suspendPayload && (
         <div>
-          <p className="pb-2 font-medium">Workflow suspend payload</p>
+          <SectionLabel>Workflow suspend payload</SectionLabel>
           {suspendPayloadSlot}
         </div>
       )}
@@ -129,11 +134,11 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
   return (
     <>
       <div className="flex items-center gap-2 pb-2">
-        <Button as={Link} href={`/workflows/${workflowId}/graph`}>
+        <Button icon={<WorkflowIcon />} as={Link} href={`/workflows/${workflowId}/graph`}>
           Go to workflow
         </Button>
         {runId && (
-          <Button as={Link} href={`/workflows/${workflowId}/graph/${runId}`}>
+          <Button icon={<Eye />} as={Link} href={`/workflows/${workflowId}/graph/${runId}`}>
             See run
           </Button>
         )}

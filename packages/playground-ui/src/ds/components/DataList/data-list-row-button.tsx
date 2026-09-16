@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
 import { useDataListRowWrapperContext } from './data-list-row-wrapper-context';
-import { dataListRowInteractiveStyles, dataListRowStyles, dataListRowVariants } from './shared';
+import { dataListRowInteractiveStyles, dataListRowStyles } from './shared';
 import type { DataListRowSharedProps } from './shared';
 import { cn } from '@/lib/utils';
 
@@ -12,22 +12,7 @@ export type DataListRowButtonProps = ComponentPropsWithoutRef<'button'> & DataLi
  * can attach a ref and `data-index` to each rendered row.
  */
 export const DataListRowButton = forwardRef<HTMLButtonElement, DataListRowButtonProps>(
-  (
-    {
-      children,
-      className,
-      type = 'button',
-      flushLeft,
-      flushRight,
-      colStart,
-      colEnd,
-      featured,
-      variant,
-      style,
-      ...rest
-    },
-    ref,
-  ) => {
+  ({ children, className, type = 'button', colStart, colEnd, featured, variant, style, ...rest }, ref) => {
     const isWrapped = useDataListRowWrapperContext();
     const hasColumnOverride = colStart !== undefined || colEnd !== undefined;
     const resolvedStyle = hasColumnOverride ? { ...style, gridColumn: `${colStart ?? 1} / ${colEnd ?? -1}` } : style;
@@ -35,18 +20,10 @@ export const DataListRowButton = forwardRef<HTMLButtonElement, DataListRowButton
       <button
         ref={ref}
         type={type}
-        className={cn(
-          ...(isWrapped ? dataListRowInteractiveStyles : dataListRowStyles),
-          'text-left',
-          !isWrapped && flushLeft && 'ml-0!',
-          !isWrapped && flushRight && 'mr-0!',
-          // `!` so the selection fill wins over borderless table root styling
-          // (higher-specificity descendant rules); same color in `default`.
-          featured && 'bg-surface4!',
-          dataListRowVariants({ variant }),
-          className,
-        )}
+        className={cn(...(isWrapped ? dataListRowInteractiveStyles : dataListRowStyles), 'text-left', className)}
         style={resolvedStyle}
+        data-featured={featured || undefined}
+        data-variant={variant ?? 'default'}
         {...rest}
       >
         {children}

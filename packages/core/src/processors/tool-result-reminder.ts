@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, statSync } from 'node:fs';
-import { basename, dirname, isAbsolute, join, normalize, resolve } from 'node:path';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { isAbsolute, normalize, posix, resolve, win32 } from 'node:path';
 import { estimateTokenCount } from 'tokenx';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import { signalToXmlMarkup } from '../agent/signals';
@@ -63,6 +63,24 @@ export interface ReminderFileReader {
   pathExists: (path: string) => boolean;
   isDirectory: (path: string) => boolean;
   readFile: (path: string) => string;
+  /**
+   * Stable identity used only to deduplicate instruction paths. Read addresses
+   * and emitted paths remain unchanged. Omit to use lexical absolute paths;
+   * virtual readers must not resolve identities through the host filesystem.
+   */
+  getPathIdentity?: (path: string) => string;
+}
+
+function getPathIdentity(path: string, reader: ReminderFileReader): string {
+  return reader.getPathIdentity?.(path) ?? toAbsolutePath(path);
+}
+
+function localPathIdentity(path: string): string {
+  try {
+    return toPosixPath(realpathSync(path));
+  } catch {
+    return toAbsolutePath(path);
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -73,8 +91,43 @@ function isInstructionFileName(name: string): boolean {
   return INSTRUCTION_FILE_NAMES.some(instructionFileName => instructionFileName.toLowerCase() === name.toLowerCase());
 }
 
+/**
+ * Normalize path separators to forward slashes.
+ *
+ * Instruction paths are embedded in prompt reminders and used as the dedup
+ * identity in metadata, so they must be stable across platforms. `node:path`
+ * produces `\` separators on Windows; converting to `/` keeps the reminder
+ * path (and the metadata used to avoid re-injection) identical on every OS.
+ * Windows filesystem APIs accept forward slashes, so real reads still work.
+ */
+function toPosixPath(candidatePath: string): string {
+  return candidatePath.replaceAll('\\', '/');
+}
+
+function usesWindowsPathSemantics(candidatePath: string): boolean {
+  const normalizedPath = toPosixPath(candidatePath);
+  return normalizedPath.startsWith('//') || (/^[a-zA-Z]:\//.test(normalizedPath) && win32.isAbsolute(normalizedPath));
+}
+
 function toAbsolutePath(candidatePath: string): string {
-  return normalize(isAbsolute(candidatePath) ? candidatePath : resolve(process.cwd(), candidatePath));
+  if (usesWindowsPathSemantics(candidatePath)) {
+    return toPosixPath(win32.normalize(candidatePath));
+  }
+
+  const absolutePath = normalize(isAbsolute(candidatePath) ? candidatePath : resolve(process.cwd(), candidatePath));
+  return toPosixPath(absolutePath);
+}
+
+function dirnamePreservingWindowsRoot(candidatePath: string): string {
+  return usesWindowsPathSemantics(candidatePath)
+    ? toPosixPath(win32.dirname(candidatePath))
+    : posix.dirname(candidatePath);
+}
+
+function joinPreservingWindowsRoot(basePath: string, childPath: string): string {
+  return usesWindowsPathSemantics(basePath)
+    ? toPosixPath(win32.join(basePath, childPath))
+    : posix.join(basePath, childPath);
 }
 
 function findInstructionFileForPath(
@@ -83,28 +136,31 @@ function findInstructionFileForPath(
   isDirectory: (path: string) => boolean,
 ): string | undefined {
   const absoluteCandidatePath = toAbsolutePath(candidatePath);
-  const candidateName = basename(absoluteCandidatePath);
+  const candidateName = posix.basename(absoluteCandidatePath);
 
   if (isInstructionFileName(candidateName)) {
     return absoluteCandidatePath;
   }
 
+  // Ordinary paths use POSIX operations so the walk is deterministic on every
+  // platform. UNC and drive-rooted paths use win32 operations to preserve their
+  // roots, then convert the result back to forward slashes.
   let currentDir = absoluteCandidatePath;
   if (!pathExists(currentDir) || !isDirectory(currentDir)) {
-    currentDir = dirname(currentDir);
+    currentDir = dirnamePreservingWindowsRoot(currentDir);
   }
 
   let previousDir: string | undefined;
   while (currentDir && currentDir !== previousDir) {
     for (const instructionFileName of INSTRUCTION_FILE_NAMES) {
-      const instructionFilePath = join(currentDir, instructionFileName);
+      const instructionFilePath = joinPreservingWindowsRoot(currentDir, instructionFileName);
       if (pathExists(instructionFilePath)) {
         return instructionFilePath;
       }
     }
 
     previousDir = currentDir;
-    currentDir = dirname(currentDir);
+    currentDir = dirnamePreservingWindowsRoot(currentDir);
   }
 
   return undefined;
@@ -201,13 +257,13 @@ type CompletedToolCall = Pick<ToolCallInfo, 'toolCallId' | 'args'>;
 function getCompletedToolCalls(messages: MastraDBMessage[]): CompletedToolCall[] {
   const completed: CompletedToolCall[] = [];
 
-  for (const message of messages) {
+  for (const message of [...messages].reverse()) {
     const parts = isRecord(message.content) ? message.content.parts : undefined;
     if (!Array.isArray(parts)) {
       continue;
     }
 
-    for (const part of parts) {
+    for (const part of [...parts].reverse()) {
       if (!isRecord(part) || part.type !== 'tool-invocation') {
         continue;
       }
@@ -225,10 +281,6 @@ function getCompletedToolCalls(messages: MastraDBMessage[]): CompletedToolCall[]
   }
 
   return completed;
-}
-
-function getCurrentStepResponseMessages(messageList: MessageList): MastraDBMessage[] {
-  return messageList.get.response.db();
 }
 
 function parseInvocationArgs(args: unknown): Record<string, unknown> | undefined {
@@ -263,6 +315,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
   private readonly pathExists: (path: string) => boolean;
   private readonly isDirectory: (path: string) => boolean;
   private readonly readFile: (path: string) => string;
+  private readonly getPathIdentity?: (path: string) => string;
   private readonly getIgnoredInstructionPaths?: (args: ProcessInputStepArgs) => string[];
   private readonly isEnabled?: (args: ProcessInputStepArgs) => boolean;
   private readonly getReader?: (args: ProcessInputStepArgs) => ReminderFileReader | undefined;
@@ -281,6 +334,8 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
         }
       });
     this.readFile = options.readFile ?? (path => readFileSync(path, 'utf-8'));
+    this.getPathIdentity =
+      options.pathExists || options.isDirectory || options.readFile ? undefined : localPathIdentity;
     this.getIgnoredInstructionPaths = options.getIgnoredInstructionPaths;
     this.isEnabled = options.isEnabled;
     this.getReader = options.getReader;
@@ -295,33 +350,54 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
       pathExists: this.pathExists,
       isDirectory: this.isDirectory,
       readFile: this.readFile,
+      getPathIdentity: this.getPathIdentity,
+    };
+    const pathIdentities = new Map<string, string>();
+    const resolvePathIdentity = (path: string) => {
+      const cached = pathIdentities.get(path);
+      if (cached !== undefined) {
+        return cached;
+      }
+      const identity = getPathIdentity(path, reader);
+      pathIdentities.set(path, identity);
+      return identity;
     };
     const messages = messageList.get.all.db();
-    const responseMessages = getCurrentStepResponseMessages(messageList);
-    const completedToolCalls = getCompletedToolCalls(responseMessages);
-    const instructionPath = this.findReferencedInstructionPath(completedToolCalls, reader);
+    // Memory processors can reclassify completed responses before this hook runs.
+    const completedToolCalls = getCompletedToolCalls(messages);
+    const checkedPaths = new Set<string>();
+    for (const toolCall of completedToolCalls) {
+      for (const instructionPath of this.findInstructionPathsInInvocation(toolCall, reader)) {
+        const identity = resolvePathIdentity(instructionPath);
+        if (checkedPaths.has(identity)) {
+          continue;
+        }
+        checkedPaths.add(identity);
 
-    if (!instructionPath || this.isIgnoredInstructionPath(args, instructionPath)) {
-      return messageList;
+        if (this.isIgnoredInstructionPath(args, identity, resolvePathIdentity)) {
+          continue;
+        }
+
+        const reminderText = this.getReminderText(instructionPath, reader);
+        if (!reminderText) {
+          continue;
+        }
+
+        const reminderMarkup = getReminderMarkup(reminderText, instructionPath);
+        if (this.hasReminderAlready(messages, reminderMarkup, resolvePathIdentity)) {
+          continue;
+        }
+
+        await args.sendSignal?.({
+          type: 'reactive',
+          tagName: 'system-reminder',
+          contents: reminderText,
+          attributes: { type: REMINDER_TYPE, path: instructionPath },
+          metadata: getReminderMetadata(instructionPath).systemReminder,
+        });
+        return messageList;
+      }
     }
-
-    const reminderText = this.getReminderText(instructionPath, reader);
-    if (!reminderText) {
-      return messageList;
-    }
-
-    const reminderMarkup = getReminderMarkup(reminderText, instructionPath);
-    if (this.hasReminderAlready(messages, reminderMarkup)) {
-      return messageList;
-    }
-
-    await args.sendSignal?.({
-      type: 'reactive',
-      tagName: 'system-reminder',
-      contents: reminderText,
-      attributes: { type: REMINDER_TYPE, path: instructionPath },
-      metadata: getReminderMetadata(instructionPath).systemReminder,
-    });
 
     return messageList;
   }
@@ -339,38 +415,23 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     return this.reminderText?.trim() || undefined;
   }
 
-  private isIgnoredInstructionPath(args: ProcessInputStepArgs, instructionPath: string): boolean {
+  private isIgnoredInstructionPath(
+    args: ProcessInputStepArgs,
+    identity: string,
+    resolvePathIdentity: (path: string) => string,
+  ): boolean {
     const ignoredPaths = this.getIgnoredInstructionPaths?.(args) ?? [];
-    const normalizedInstructionPath = toAbsolutePath(instructionPath);
-    return ignoredPaths.some(path => toAbsolutePath(path) === normalizedInstructionPath);
+    return ignoredPaths.some(path => resolvePathIdentity(path) === identity);
   }
 
-  private findReferencedInstructionPath(
-    toolCalls: CompletedToolCall[] | undefined,
-    reader: ReminderFileReader,
-  ): string | undefined {
-    if (!Array.isArray(toolCalls)) {
-      return undefined;
-    }
-
-    for (const toolCall of toolCalls) {
-      const path = this.findInstructionPathInInvocation(toolCall, reader);
-      if (path) {
-        return path;
-      }
-    }
-
-    return undefined;
-  }
-
-  private findInstructionPathInInvocation(invocation: unknown, reader: ReminderFileReader): string | undefined {
+  private *findInstructionPathsInInvocation(invocation: unknown, reader: ReminderFileReader): Generator<string> {
     if (!isRecord(invocation)) {
-      return undefined;
+      return;
     }
 
     const args = parseInvocationArgs(invocation.args);
     if (!args) {
-      return undefined;
+      return;
     }
 
     for (const field of PATH_FIELDS) {
@@ -381,22 +442,26 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
 
       const instructionPath = findInstructionFileForPath(value, reader.pathExists, reader.isDirectory);
       if (instructionPath) {
-        return instructionPath;
+        yield instructionPath;
       }
     }
-
-    return undefined;
   }
 
-  private hasReminderAlready(messages: MastraDBMessage[], reminderMarkup: string): boolean {
+  private hasReminderAlready(
+    messages: MastraDBMessage[],
+    reminderMarkup: string,
+    resolvePathIdentity: (path: string) => string,
+  ): boolean {
     const reminderPath = extractReminderPath(reminderMarkup);
+    const identity = reminderPath ? resolvePathIdentity(reminderPath) : undefined;
 
     return messages.some(message => {
       if (message.role !== 'user' && message.role !== 'signal') {
         return false;
       }
 
-      if (reminderPath && extractReminderPathFromMetadata(message) === reminderPath) {
+      const metadataPath = extractReminderPathFromMetadata(message);
+      if (metadataPath && resolvePathIdentity(metadataPath) === identity) {
         return true;
       }
 
@@ -409,7 +474,8 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
         return false;
       }
 
-      return extractReminderPath(messageText) === reminderPath;
+      const markupPath = extractReminderPath(messageText);
+      return !!markupPath && resolvePathIdentity(markupPath) === identity;
     });
   }
 }

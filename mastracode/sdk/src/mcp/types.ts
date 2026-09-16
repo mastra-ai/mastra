@@ -110,4 +110,22 @@ export interface McpServerStatus {
    * The UI uses it to suppress a misleading "Failed to authenticate" message.
    */
   cancelled?: boolean;
+  /**
+   * Whether the user disabled this server. Disabled servers stay visible in
+   * status listings (so they can be re-enabled) but are never connected and
+   * contribute no tools.
+   */
+  disabled?: boolean;
+  /**
+   * Where the effective disable state comes from when `disabled` is true.
+   * `global` means the global all-MCP kill switch or inherited global default
+   * applies; `project` means this project explicitly disabled the server.
+   */
+  disabledScope?: 'project' | 'global';
+  /** This project's explicit server override, or undefined when inheriting the global default. */
+  projectOverride?: 'enabled' | 'disabled';
+  /** The per-server global default before applying a project override or the global kill switch. */
+  globalDefault?: 'enabled' | 'disabled';
+  /** Whether the global all-MCP kill switch currently overrides every server and project setting. */
+  globalKillSwitch?: boolean;
 }

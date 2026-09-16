@@ -1,4 +1,4 @@
-import type { AgentCard, JSONRPCMessage, Message, Task } from '@a2a-js/sdk';
+import type { AgentCard, JSONRPCMessage, Message, Task } from '@a2a-js/sdk-v0_3';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 
 /**
@@ -156,6 +156,8 @@ export interface A2AAgentVerificationOptions {
 
 export interface A2AAgentOptions {
   url: string;
+  /** A2A wire protocol used for agent-card discovery and execution. Defaults to `0.3`. */
+  protocolVersion?: '0.3' | '1.0';
   id?: string;
   name?: string;
   description?: string;

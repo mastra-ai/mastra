@@ -6,6 +6,8 @@ export const PricingMeter = {
   INPUT_AUDIO_TOKENS: 'input_audio_tokens',
   INPUT_CACHE_READ_TOKENS: 'input_cache_read_tokens',
   INPUT_CACHE_WRITE_TOKENS: 'input_cache_write_tokens',
+  INPUT_CACHE_WRITE_5M_TOKENS: 'input_cache_write_5m_tokens',
+  INPUT_CACHE_WRITE_1H_TOKENS: 'input_cache_write_1h_tokens',
   INPUT_IMAGE_TOKENS: 'input_image_tokens',
 
   OUTPUT_TOKENS: 'output_tokens',
@@ -22,6 +24,8 @@ export const TokenMetrics = {
   INPUT_TEXT: 'mastra_model_input_text_tokens',
   INPUT_CACHE_READ: 'mastra_model_input_cache_read_tokens',
   INPUT_CACHE_WRITE: 'mastra_model_input_cache_write_tokens',
+  INPUT_CACHE_WRITE_5M: 'mastra_model_input_cache_write_5m_tokens',
+  INPUT_CACHE_WRITE_1H: 'mastra_model_input_cache_write_1h_tokens',
   INPUT_AUDIO: 'mastra_model_input_audio_tokens',
   INPUT_IMAGE: 'mastra_model_input_image_tokens',
   OUTPUT_TEXT: 'mastra_model_output_text_tokens',
