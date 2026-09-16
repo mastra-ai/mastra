@@ -10,7 +10,6 @@ export { TraceTimeline } from './trace-timeline';
 export { SpanRows, type SpanRowsProps, type SpanRowContext, type SpanRowExpansion } from './span-rows';
 export { SpanTreeRow, type SpanTreeRowProps } from './span-tree-row';
 export { SpanTimelineCol, type SpanTimelineColProps } from './span-timeline-col';
-export { SpanDurationCol } from './span-duration-col';
 export { SpanTimingHoverCard } from './span-timing-hover-card';
 export { SpanTypeLegend } from './span-type-legend';
 export { TraceSpanTree, type TraceSpanTreeProps } from './trace-span-tree';
