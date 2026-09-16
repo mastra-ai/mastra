@@ -736,12 +736,6 @@ function parsePositiveInteger(value: string): number | null {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-export function tokenUrl(host: string, slug: string, token: string): string {
-  const accessToken = token.trim();
-  if (!accessToken) throw new Error('GitLab repository access token is missing.');
-  return `https://oauth2:${encodeURIComponent(accessToken)}@${normalizeHost(host)}/${normalizeSlug(slug)}.git`;
-}
-
 function parseConnection(value: unknown): IntegrationConnection | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const connection = value as Record<string, unknown>;

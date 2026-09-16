@@ -493,7 +493,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // start so the installed credential never outlives rotation.
       const patKind = await resolveGithubPatKind('default');
       const ghCliToken =
-        (await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind)) ?? (await getRepositoryToken());
+        (await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind)) ??
+        (await getRepositoryToken());
       target.setEnv?.(env => ({ ...env, GH_TOKEN: ghCliToken }));
       const tokenRegistration: GithubTokenRegistration = {
         inject: freshToken => {

@@ -16,8 +16,11 @@ import { GitLabIntegration } from '@mastra/factory/integrations/gitlab/integrati
 const gitlab = new GitLabIntegration({
   baseUrl: 'https://gitlab.example.com',
   accessToken: process.env.GITLAB_ACCESS_TOKEN!,
+  accessTokenType: 'group', // Or 'personal'.
   webhookSecret: process.env.GITLAB_WEBHOOK_SECRET,
 });
 ```
 
-When Platform credentials are configured, Factory automatically uses organization-scoped GitLab connections through the integrations v2 proxy. Platform-managed clone access remains unavailable until Platform exposes a repository credential; Factory returns an explicit not-supported error instead of treating the connection selector as a token.
+Direct mode reads the same values from `GITLAB_ACCESS_TOKEN`, `GITLAB_ACCESS_TOKEN_TYPE`, `GITLAB_BASE_URL`, and `GITLAB_WEBHOOK_SECRET` when constructor options are omitted. Personal and Group Access Tokens are both supported; use `api` and `write_repository` scopes.
+
+When Platform credentials and `MASTRA_GITLAB_CONNECTION_ID` are configured, Factory automatically uses that organization-scoped GitLab connection through `/v2/connections/{connectionId}/proxy`. An explicit direct integration takes precedence. Platform-managed clone access remains unavailable until Platform exposes a repository credential; Factory returns an explicit not-supported error instead of treating the connection selector as a token.
