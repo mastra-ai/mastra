@@ -1205,8 +1205,10 @@ describe('agent-controller routes', () => {
       }
     });
 
-    it('lists active runs controller-wide without creating a session', async () => {
+    it('lists authorized active runs controller-wide without creating a session', async () => {
       const controller = mastra.getAgentController('code')!;
+      const memory = await mastra.getStorage()!.getStore('memory');
+      await memory!.saveThread({ thread: { id: 'thread-a', resourceId: 'workspace-a', title: 'Active run' } });
       const createSession = vi.spyOn(controller, 'createSession');
       const spy = vi
         .spyOn(Agent.prototype, 'listActiveThreadRuns')
