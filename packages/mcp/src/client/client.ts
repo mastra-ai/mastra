@@ -703,17 +703,19 @@ export class InternalMastraMCPClient extends MastraBase {
    *
    * Exchanges the authorization code captured at the redirect URI on the same
    * transport that started the flow, then leaves the client ready to connect().
+   * The RFC 9207 `iss` captured at the redirect is validated against the
+   * discovered authorization server before the code is exchanged.
    *
    * @internal
    */
-  async finishAuth(authorizationCode: string): Promise<void> {
+  async finishAuth(authorizationCode: string, issuer?: string): Promise<void> {
     const pending = this.pendingAuthTransport;
     if (!pending) {
       throw new Error('No OAuth authorization is pending for this server. Call connect() first.');
     }
     this.pendingAuthTransport = undefined;
     try {
-      await pending.finishAuth(authorizationCode);
+      await pending.finishAuth(authorizationCode, issuer);
     } finally {
       // The pending transport only ran the token exchange; the next connect() builds a fresh one.
       void pending.close().catch(() => {});

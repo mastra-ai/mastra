@@ -34,6 +34,12 @@ interface FakeAuthorizationServer {
   registrationAttempts: number;
   /** The redirect_uri of every authorization request received, in order. */
   authorizeRedirectUris: string[];
+  /** The client_id of every authorization request received, in order. */
+  authorizeClientIds: string[];
+  /** RFC 9207 issuer returned on authorization callbacks; defaults to this server. */
+  authorizationResponseIssuer: string;
+  /** How many authorization_code grants the token endpoint served. */
+  authorizationCodeGrantCount: number;
   /** How many refresh_token grants the token endpoint served. */
   refreshGrantCount: number;
   /** Access tokens currently accepted by the protected MCP server. */
@@ -68,6 +74,9 @@ async function startFakeAuthorizationServer(port: number): Promise<FakeAuthoriza
     preregister: client => void clientsById.set(client.client_id, client),
     registrationAttempts: 0,
     authorizeRedirectUris: [],
+    authorizeClientIds: [],
+    authorizationResponseIssuer: url,
+    authorizationCodeGrantCount: 0,
     refreshGrantCount: 0,
     validTokens: new Set(),
     denyAuthorization: false,
@@ -91,6 +100,7 @@ async function startFakeAuthorizationServer(port: number): Promise<FakeAuthoriza
         grant_types_supported: ['authorization_code', 'refresh_token'],
         code_challenge_methods_supported: ['S256'],
         token_endpoint_auth_methods_supported: ['none'],
+        authorization_response_iss_parameter_supported: true,
       });
       return;
     }
@@ -118,6 +128,7 @@ async function startFakeAuthorizationServer(port: number): Promise<FakeAuthoriza
       }
 
       state.authorizeRedirectUris.push(redirectUri);
+      state.authorizeClientIds.push(clientId);
       const location = new URL(redirectUri);
       if (state.denyAuthorization) {
         location.searchParams.set('error', 'access_denied');
@@ -127,6 +138,7 @@ async function startFakeAuthorizationServer(port: number): Promise<FakeAuthoriza
         location.searchParams.set('code', code);
       }
       location.searchParams.set('state', oauthState);
+      location.searchParams.set('iss', state.authorizationResponseIssuer);
       res.writeHead(302, { Location: location.toString() });
       res.end();
       return;
@@ -145,6 +157,7 @@ async function startFakeAuthorizationServer(port: number): Promise<FakeAuthoriza
           return;
         }
         pendingCodes.delete(params.get('code')!);
+        state.authorizationCodeGrantCount += 1;
       } else if (grantType === 'refresh_token') {
         if (!refreshTokens.has(params.get('refresh_token') ?? '')) {
           sendJson(res, 400, { error: 'invalid_grant' });
@@ -382,6 +395,56 @@ describe('MCPClient OAuth authorization flow', () => {
     expect(mcp.getServerAuthState('fixture')).toBe('authorized');
     expect(authorizationUrls[0]!.searchParams.get('client_id')).toBe(CLIENT_METADATA_URL);
     expect(authServer.registrationAttempts).toBe(0);
+  });
+
+  it('prefers caller-provided client information over a metadata document', async () => {
+    const { authServer, mcpServer, callbackUrl } = await setup();
+    const preRegisteredClientId = `preregistered-${randomUUID()}`;
+    authServer.preregister({
+      client_id: preRegisteredClientId,
+      redirect_uris: getCallbackUrlCandidates(callbackUrl).map(candidate => candidate.toString()),
+    });
+    const provider = new MCPOAuthClientProvider({
+      redirectUrl: callbackUrl,
+      clientMetadata: { redirect_uris: [callbackUrl], client_name: 'Both Identities', token_endpoint_auth_method: 'none' },
+      clientMetadataUrl: CLIENT_METADATA_URL,
+      clientInformation: { client_id: preRegisteredClientId },
+      onRedirectToAuthorization: driveBrowser,
+    });
+    const mcp = track(createClient(mcpServer.url, provider));
+
+    await mcp.authenticate('fixture');
+
+    expect(authServer.registrationAttempts).toBe(0);
+    expect(authServer.authorizeClientIds).toEqual([preRegisteredClientId]);
+  });
+
+  it('rejects an authorization response with the wrong issuer before exchanging the code', async () => {
+    const { authServer, mcpServer, callbackUrl } = await setup();
+    authServer.authorizationResponseIssuer = 'https://attacker.example.com';
+    const provider = createProvider({ callbackUrl, authServer, onRedirectToAuthorization: driveBrowser });
+    const mcp = track(createClient(mcpServer.url, provider));
+
+    await expect(mcp.authenticate('fixture')).rejects.toThrow(/issuer/i);
+
+    expect(authServer.authorizationCodeGrantCount).toBe(0);
+    expect(await provider.tokens()).toBeUndefined();
+    expect(mcp.getServerAuthState('fixture')).toBe('needs-auth');
+  });
+
+  it('binds persisted tokens and discovery state to the authorization server issuer', async () => {
+    const { authServer, mcpServer, callbackUrl } = await setup();
+    const storage = new InMemoryOAuthStorage();
+    const provider = createProvider({ callbackUrl, authServer, storage, onRedirectToAuthorization: driveBrowser });
+    const mcp = track(createClient(mcpServer.url, provider));
+
+    await mcp.authenticate('fixture');
+
+    const scoped = await provider.tokens({ issuer: authServer.url });
+    expect(scoped?.issuer).toBe(authServer.url);
+    expect(scoped?.access_token).toBe((await provider.tokens())?.access_token);
+    await expect(provider.tokens({ issuer: 'https://other.example.com' })).resolves.toBeUndefined();
+    expect((await provider.discoveryState())?.authorizationServerMetadata?.issuer).toBe(authServer.url);
   });
 
   it('reconnects with persisted tokens without a new browser flow', async () => {
