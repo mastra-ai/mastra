@@ -3647,6 +3647,7 @@ type Shared_Type_157 = {
         [key: string]: unknown;
       }
     | undefined;
+  resourceId?: string | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -20549,6 +20550,7 @@ export type PostSchedules_Body =
             [key: string]: unknown;
           }
         | undefined;
+      resourceId?: string | undefined;
       metadata?:
         | {
             [key: string]: unknown;
@@ -20614,6 +20616,7 @@ export type PatchSchedulesScheduleId_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  resourceId?: string | undefined;
 };
 
 export type PatchSchedulesScheduleId_Response = GetSchedulesScheduleId_Response;

@@ -450,6 +450,9 @@ describe('Schedules handlers', () => {
       } as any);
 
       expect((result as { resourceId?: string }).resourceId).toBe('tenant-2');
+
+      const persisted = await schedulesStore.getSchedule('wf_a');
+      expect((persisted!.target as { resourceId?: string }).resourceId).toBe('tenant-2');
     });
 
     it('rejects invalid cron', async () => {
