@@ -1,0 +1,44 @@
+{
+  "name": "support-demo-ui",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Demo UI for the customer support/refund Mastra agent: a landing explainer and a support admin queue with refund approvals.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "format:check": "prettier --check . --ignore-path ../.prettierignore",
+    "lint": "oxlint --deny-warnings src",
+    "typecheck": "tsc -b --pretty false",
+    "test:unit": "vitest run --root .. --config vitest.config.ts --project web-unit",
+    "test:integration": "vitest run --root .. --config vitest.config.ts --project web-integration",
+    "test:contract": "vitest run --root .. --config vitest.config.ts --project web-contract",
+    "test:eval": "vitest run --root .. --config vitest.config.ts --project web-eval",
+    "test:e2e": "playwright test --config ../playwright.config.ts",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.7.0",
+    "@fontsource-variable/geist": "^5.3.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.34.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.2",
+    "shadcn": "^4.19.0",
+    "sonner": "^2.0.8",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4.3.3",
+    "tw-animate-css": "^1.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.1.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.2"
+  }
+}
