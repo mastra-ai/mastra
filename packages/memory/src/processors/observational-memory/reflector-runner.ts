@@ -1441,22 +1441,32 @@ export class ReflectorRunner {
         usage: reflectResult.usage,
       });
     } catch (error) {
-      if (writer && streamContext) {
-        const failedMarker = createObservationFailedMarker({
-          cycleId: streamContext.cycleId,
-          operationType: 'reflection',
-          startedAt: streamContext.startedAt,
-          tokensAttempted: observationTokens,
-          error,
-          failurePolicy: this.reflectionConfig.failurePolicy,
-          recordId: record.id,
-          threadId,
-        });
+      const failedMarker = createObservationFailedMarker({
+        cycleId: streamContext?.cycleId ?? cycleId,
+        operationType: 'reflection',
+        startedAt: streamContext?.startedAt ?? startedAt,
+        tokensAttempted: observationTokens,
+        error,
+        failurePolicy: this.reflectionConfig.failurePolicy,
+        recordId: record.id,
+        threadId,
+      });
+      if (writer) {
         // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
         await writer.custom({ ...failedMarker, transient: true }).catch(() => {});
-        await this.persistMarkerToStorage(failedMarker, threadId, record.resourceId ?? undefined);
       }
+      await this.persistMarkerToStorage(failedMarker, threadId, record.resourceId ?? undefined);
       reflectionError = error instanceof Error ? error : new Error(String(error));
+      this.emitDebugEvent({
+        type: 'reflection_failed',
+        timestamp: new Date(),
+        threadId,
+        resourceId: record.resourceId ?? '',
+        inputTokens: observationTokens,
+        failurePolicy: this.reflectionConfig.failurePolicy,
+        failureKind: failedMarker.data.failureKind,
+        error: reflectionError.message,
+      });
       if (
         lifecycleError !== undefined ||
         abortSignal?.aborted ||

@@ -5,7 +5,7 @@ import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../../..';
 import { omDebug, omError } from '../debug';
-import { formatOmError, getOmFailureMetadata } from '../error';
+import { formatOmError, getOmFailureMetadata, isOmModelExecutionError } from '../error';
 import { getObservableMessages, stripThreadTags } from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
@@ -151,8 +151,14 @@ export abstract class ObservationStrategy {
         return { observed: false, error: error instanceof Error ? error : new Error(String(error)) };
       }
 
-      // Sync + resource-scoped: same contract as pre-#14453 — rethrow after failed markers.
       omError('[OM] Observation failed', error);
+      if (
+        this.observationConfig.failurePolicy === 'continue' &&
+        isOmModelExecutionError(error) &&
+        error.failureKind === 'observer-model'
+      ) {
+        return { observed: false, error };
+      }
       throw error;
     }
   }

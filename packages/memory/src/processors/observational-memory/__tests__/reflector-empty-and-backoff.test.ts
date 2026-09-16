@@ -106,6 +106,8 @@ function createReflectorRunner(
     getThreadById: vi.fn(async () => null),
     ...overrides?.storage,
   };
+  const emitDebugEvent = vi.fn();
+  const persistMarkerToStorage = vi.fn();
   const runner = new ReflectorRunner({
     reflectionConfig: {
       model: 'mock/model',
@@ -127,13 +129,13 @@ function createReflectorRunner(
       isAsyncReflectionEnabled: () => false,
       ...overrides?.buffering,
     } as any,
-    emitDebugEvent: vi.fn(),
-    persistMarkerToStorage: vi.fn(),
+    emitDebugEvent,
+    persistMarkerToStorage,
     persistMarkerToMessage: vi.fn(),
     getCompressionStartLevel: async () => 0,
     resolveModel: () => ({ model: model as any }),
   });
-  return { runner, storage, createReflectionGeneration };
+  return { runner, storage, createReflectionGeneration, emitDebugEvent, persistMarkerToStorage };
 }
 
 const SOURCE_OBSERVATIONS = `* original observation that must be compressed ${'x'.repeat(500)}`;
@@ -312,6 +314,51 @@ describe('reflector retry budget and terminal policy', () => {
 
     expect(failing.callCount).toBe(1);
     expect(createReflectionGeneration).not.toHaveBeenCalled();
+  });
+
+  it('preserves committed observation state after continue and commits reflection once after recovery', async () => {
+    const failing = createFailingModel(1);
+    const { runner, createReflectionGeneration, persistMarkerToStorage } = createReflectorRunner(failing.model, {
+      reflectionConfig: { failurePolicy: 'continue', maxRetries: 0 },
+    });
+    const record = makeRecord();
+    const stateBeforeFailure = {
+      activeObservations: record.activeObservations,
+      observationTokenCount: record.observationTokenCount,
+      generationCount: record.generationCount,
+    };
+
+    await runner.maybeReflect({
+      record,
+      observationTokens: SOURCE_OBSERVATIONS.length,
+      threadId: 'thread-1',
+    });
+
+    expect(record).toMatchObject(stateBeforeFailure);
+    expect(createReflectionGeneration).not.toHaveBeenCalled();
+    expect(persistMarkerToStorage).toHaveBeenCalledTimes(1);
+    expect(persistMarkerToStorage.mock.calls[0]![0]).toMatchObject({
+      type: 'data-om-observation-failed',
+      data: {
+        operationType: 'reflection',
+        failurePolicy: 'continue',
+        failureKind: 'reflector-model',
+      },
+    });
+
+    await runner.maybeReflect({
+      record,
+      observationTokens: SOURCE_OBSERVATIONS.length + 1,
+      threadId: 'thread-1',
+    });
+
+    expect(failing.callCount).toBe(2);
+    expect(createReflectionGeneration).toHaveBeenCalledTimes(1);
+    expect(createReflectionGeneration.mock.calls[0]![0]).toMatchObject({
+      currentRecord: record,
+      reflection: expect.stringContaining('recovered summary'),
+    });
+    expect(record).toMatchObject(stateBeforeFailure);
   });
 
   it('keeps the exhausted reflector-model failure fatal under abort policy', async () => {

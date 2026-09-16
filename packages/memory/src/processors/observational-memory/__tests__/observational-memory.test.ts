@@ -6574,6 +6574,61 @@ describe('Scenario: Cross-session memory (resource scope)', () => {
     expect(resourceRecord?.activeObservations).toContain('TechCorp');
     expect(resourceRecord?.scope).toBe('resource');
   });
+
+  it('retains resource-scoped input after a continued observation failure and processes it on recovery', async () => {
+    const storage = createInMemoryStorage();
+    const resourceId = 'resource-recovery';
+    let observerCalls = 0;
+    const model = createStreamCapableMockModel({
+      doGenerate: async () => {
+        observerCalls++;
+        if (observerCalls === 1) {
+          throw new TypeError('terminated');
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+          content: [{ type: 'text' as const, text: '<observations>\n- Resource input recovered\n</observations>' }],
+          warnings: [],
+        };
+      },
+    });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'resource',
+      observation: {
+        model,
+        messageTokens: 1,
+        maxRetries: 0,
+        failurePolicy: 'continue',
+      },
+      reflection: { observationTokens: 100_000 },
+    });
+    const messages = [
+      createTestMessage('Retain this resource-scoped input', 'user', 'resource-msg-1'),
+      createTestMessage('Acknowledged', 'assistant', 'resource-msg-2'),
+    ];
+
+    const failed = await om.observe({ threadId: 'thread-a', resourceId, messages });
+    const failedRecord = await storage.getObservationalMemory(null, resourceId);
+
+    expect(failed.observed).toBe(false);
+    expect(failedRecord?.threadId).toBeNull();
+    expect(failedRecord?.lastObservedAt).toBeUndefined();
+    expect(failedRecord?.observedMessageIds ?? []).toEqual([]);
+    expect((om as any).getUnobservedMessages(messages, failedRecord)).toHaveLength(2);
+
+    const recovered = await om.observe({ threadId: 'thread-a', resourceId, messages });
+    const recoveredRecord = await storage.getObservationalMemory(null, resourceId);
+
+    expect(observerCalls).toBe(2);
+    expect(recovered.observed).toBe(true);
+    expect(recoveredRecord?.lastObservedAt).toBeDefined();
+    expect(recoveredRecord?.observedMessageIds).toEqual(['resource-msg-1', 'resource-msg-2']);
+    expect((om as any).getUnobservedMessages(messages, recoveredRecord)).toHaveLength(0);
+    expect(recoveredRecord?.activeObservations).toContain('<thread id="thread-a">');
+  });
 });
 
 describe('Scenario: Observation quality checks', () => {
