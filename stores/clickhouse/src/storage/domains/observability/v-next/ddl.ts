@@ -849,7 +849,10 @@ CREATE TABLE IF NOT EXISTS ${TABLE_DELETION_REQUESTS} (
   requestedBy     String DEFAULT '',
   lastAppliedAt   DateTime64(3) DEFAULT 0,
   purgeVerifiedAt DateTime64(3) DEFAULT 0,
-  updatedAt       DateTime64(3)
+  updatedAt       DateTime64(3),
+  -- Bloom-filter skip index so has(predicateValues, id) mutation guards
+  -- can skip granules instead of scanning every request in a tenant scope.
+  INDEX idx_predicateValues predicateValues TYPE bloom_filter(0.01) GRANULARITY 2
 )
 ENGINE = ReplacingMergeTree(updatedAt)
 ORDER BY (organizationId, resourceId, requestId)
@@ -1174,6 +1177,9 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addBloomIndex(TABLE_METRIC_EVENTS, 'idx_runId', 'runId'),
   addBloomIndex(TABLE_METRIC_EVENTS, 'idx_sessionId', 'sessionId'),
   addBloomIndex(TABLE_METRIC_EVENTS, 'idx_requestId', 'requestId'),
+  // Deletion requests: `predicateValues` is outside the sort key, so guard
+  // lookups via `has()` need a skip index to avoid a per-scope full scan.
+  addBloomIndex(TABLE_DELETION_REQUESTS, 'idx_predicateValues', 'predicateValues'),
 ];
 
 /**

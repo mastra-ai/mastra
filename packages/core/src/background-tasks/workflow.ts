@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { resolveSuspendedToolRunId } from '../agent/utils';
 import { InternalSpans } from '../observability';
 import { createStep, createWorkflow } from '../workflows';
 import type { SuspendOptions } from '../workflows';
@@ -158,6 +159,16 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
 
       try {
         const args = { ...task.args };
+        // The model authors the optional `suspendedToolRunId` arg, and some models emit
+        // sentinel strings like "null" for it. Drop sentinels so the framework-persisted
+        // id from `suspendData` back-fills on resume (#23739). The suspendData-side value
+        // is framework-written and stays unfiltered.
+        const resolvedArgsSuspendedToolRunId = resolveSuspendedToolRunId(args.suspendedToolRunId);
+        if (resolvedArgsSuspendedToolRunId === undefined) {
+          delete args.suspendedToolRunId;
+        } else {
+          args.suspendedToolRunId = resolvedArgsSuspendedToolRunId;
+        }
         const suspendedToolRunId = (suspendData as { suspendedToolRunId?: unknown } | undefined)?.suspendedToolRunId;
         if (resumeData !== undefined && !args.suspendedToolRunId && typeof suspendedToolRunId === 'string') {
           args.suspendedToolRunId = suspendedToolRunId;

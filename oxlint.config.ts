@@ -213,12 +213,5 @@ export default defineConfig({
       },
       plugins: ['vitest'],
     },
-    {
-      files: ['packages/create-mastra/**'],
-      jsPlugins: ['eslint-plugin-depend'],
-      rules: {
-        'depend/ban-dependencies': 'error',
-      },
-    },
   ],
 });

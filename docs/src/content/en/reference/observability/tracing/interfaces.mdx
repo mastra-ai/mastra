@@ -481,12 +481,14 @@ Use `onDroppedEvent` on a custom exporter or bridge to forward these events to e
 
 Interface for span output processors.
 
+`process()` must mutate the span it receives and return the same instance, or return `undefined` to drop the span. A copy of the span (for example `{ ...span }`) can't be exported because `exportSpan()` and `isValid` are instance members of the live span; if a processor returns one, Mastra logs a processor error and drops the span.
+
 ```typescript
 interface SpanOutputProcessor {
   /** Processor name */
   name: string
 
-  /** Process span before export */
+  /** Process span before export. Mutate in place and return the same span, or return undefined to drop it. */
   process(span?: AnySpan): AnySpan | undefined
 
   /** Shutdown processor */

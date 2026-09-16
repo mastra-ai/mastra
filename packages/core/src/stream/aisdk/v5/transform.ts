@@ -666,6 +666,24 @@ function isV3Usage(usage: unknown): usage is LanguageModelV3Usage {
 }
 
 /**
+ * Peel `{ total: { total: … } }` down to the innermost token-detail object.
+ *
+ * AI SDK v7 wraps any model that advertises `specificationVersion: 'v2'` in a
+ * compatibility shim that nests flat usage as `{ total: usage.inputTokens }`.
+ * Mastra's model router advertises 'v2' but forwards V3/V4 usage untouched, so
+ * wrapping it with `wrapLanguageModel` nests the already-nested counts once more.
+ * Only the innermost object carries the real counts and cache/reasoning details;
+ * the wrapper's own detail fields are `undefined`.
+ */
+function innermostTokens<T extends { total?: unknown }>(tokens: T): T {
+  let current = tokens;
+  while (typeof current.total === 'object' && current.total !== null) {
+    current = current.total as T;
+  }
+  return current;
+}
+
+/**
  * Normalizes usage from either V2 (flat) or V3 (nested) format to Mastra's flat format.
  * V2 format: { inputTokens: number, outputTokens: number, totalTokens?: number }
  * V3 format: { inputTokens: { total, noCache, cacheRead, cacheWrite }, outputTokens: { total, text, reasoning } }
@@ -708,15 +726,17 @@ function normalizeUsage(
 
   if (isV3Usage(usage)) {
     // V3 format - extract from nested structure
-    const inputTokens = usage.inputTokens.total;
-    const outputTokens = usage.outputTokens.total;
+    const input = innermostTokens(usage.inputTokens);
+    const output = innermostTokens(usage.outputTokens);
+    const inputTokens = input.total;
+    const outputTokens = output.total;
     return {
       inputTokens,
       outputTokens,
       totalTokens: (inputTokens ?? 0) + (outputTokens ?? 0),
-      reasoningTokens: usage.outputTokens.reasoning,
-      cachedInputTokens: usage.inputTokens.cacheRead,
-      cacheCreationInputTokens: usage.inputTokens.cacheWrite,
+      reasoningTokens: output.reasoning,
+      cachedInputTokens: input.cacheRead,
+      cacheCreationInputTokens: input.cacheWrite,
       ...cacheCreationUsage,
       raw: usage,
     };
@@ -757,22 +777,24 @@ function isV3FinishReason(
 function normalizeFinishReason(
   finishReason: LanguageModelV2FinishReason | LanguageModelV3FinishReason | 'tripwire' | 'retry' | undefined,
 ): LanguageModelV2FinishReason | 'tripwire' | 'retry' {
-  if (!finishReason) {
+  // V3/V6 format - extract unified value. Peel repeated envelopes: the AI SDK v7
+  // 'v2' compatibility shim re-wraps an already-nested reason (see innermostTokens).
+  let reason = finishReason;
+  while (isV3FinishReason(reason)) {
+    reason = reason.unified as typeof finishReason;
+  }
+
+  if (!reason) {
     return 'other';
   }
 
   // Handle Mastra-specific finish reasons
-  if (finishReason === 'tripwire' || finishReason === 'retry') {
-    return finishReason;
-  }
-
-  // V3/V6 format - extract unified value
-  if (isV3FinishReason(finishReason)) {
-    return finishReason.unified;
+  if (reason === 'tripwire' || reason === 'retry') {
+    return reason;
   }
 
   // V2/V5 format - already a string, but normalize 'unknown' to 'other' for consistency with V6
-  return finishReason === 'unknown' ? 'other' : finishReason;
+  return reason === 'unknown' ? 'other' : reason;
 }
 
 /**
@@ -788,5 +810,13 @@ function normalizeFinishReason(
 function extractRawFinishReason(
   finishReason: LanguageModelV2FinishReason | LanguageModelV3FinishReason | 'tripwire' | 'retry' | undefined,
 ): string | undefined {
-  return isV3FinishReason(finishReason) ? finishReason.raw : undefined;
+  // Walk nested envelopes: an outer compatibility wrapper carries `raw: undefined`,
+  // the provider's own string sits on the innermost object.
+  let raw: string | undefined;
+  let reason = finishReason;
+  while (isV3FinishReason(reason)) {
+    raw = reason.raw ?? raw;
+    reason = reason.unified as typeof finishReason;
+  }
+  return raw;
 }

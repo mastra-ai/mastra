@@ -30,6 +30,12 @@ export interface ExperimentsListProps {
   datasetFilter?: string;
   /** When provided, rows toggle selection (for comparison) instead of navigating. */
   selection?: ExperimentsListSelection;
+  /** When provided, rows call this instead of navigating (e.g. to open a side panel). */
+  onSelectExperiment?: (experiment: DatasetExperiment) => void;
+  /** Highlights the row matching this id when `onSelectExperiment` is used. */
+  selectedExperimentId?: string;
+  /** Whether keyboard roving is bound globally. Defaults to true. */
+  keyboardGlobal?: boolean;
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
@@ -61,17 +67,21 @@ const columnHeaders = [
 const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();
 
 /**
- * Wrapper owns focus/roving and activation so the whole row navigates; the
- * link and the delete button stop propagation to avoid double activation.
+ * Wrapper owns focus/roving and activation so the whole row activates; the
+ * link/button and the delete button stop propagation to avoid double activation.
  */
-function ExperimentLinkRow({
+function ExperimentRow({
   experiment: exp,
   rowProps,
+  onSelect,
+  featured,
   onDelete,
   children,
 }: {
   experiment: DatasetExperiment;
   rowProps: ReturnType<ReturnType<typeof useDataListKeyboard>['getRowProps']>;
+  onSelect?: () => void;
+  featured?: boolean;
   onDelete: () => void;
   children: ReactNode;
 }) {
@@ -79,17 +89,31 @@ function ExperimentLinkRow({
   const linkRef = useRef<HTMLAnchorElement>(null);
 
   return (
-    <EntityList.RowWrapper {...rowProps} onSelectRow={() => linkRef.current?.click()}>
-      <EntityList.RowLink
-        ref={linkRef}
-        colEnd={-2}
-        to={paths.experimentLink(exp.id)}
-        LinkComponent={Link}
-        tabIndex={-1}
-        onClick={stopPropagation}
-      >
-        {children}
-      </EntityList.RowLink>
+    <EntityList.RowWrapper {...rowProps} onSelectRow={onSelect ?? (() => linkRef.current?.click())}>
+      {onSelect ? (
+        <EntityList.RowButton
+          colEnd={-2}
+          featured={featured}
+          tabIndex={-1}
+          onClick={(e: MouseEvent) => {
+            e.stopPropagation();
+            onSelect();
+          }}
+        >
+          {children}
+        </EntityList.RowButton>
+      ) : (
+        <EntityList.RowLink
+          ref={linkRef}
+          colEnd={-2}
+          to={paths.experimentLink(exp.id)}
+          LinkComponent={Link}
+          tabIndex={-1}
+          onClick={stopPropagation}
+        >
+          {children}
+        </EntityList.RowLink>
+      )}
       <EntityList.ActionsCell className="pl-2">
         <Button
           type="button"
@@ -118,6 +142,9 @@ export function ExperimentsList({
   statusFilter = 'all',
   datasetFilter = 'all',
   selection,
+  onSelectExperiment,
+  selectedExperimentId,
+  keyboardGlobal = true,
   isFetchingNextPage,
   hasNextPage,
   setEndOfListElement,
@@ -153,7 +180,7 @@ export function ExperimentsList({
     });
   }, [sortedExperiments, search, datasetMap, statusFilter, datasetFilter]);
 
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: true });
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: keyboardGlobal });
 
   const [experimentToDelete, setExperimentToDelete] = useState<DatasetExperiment | null>(null);
 
@@ -194,14 +221,16 @@ export function ExperimentsList({
 
         if (!selection) {
           return (
-            <ExperimentLinkRow
+            <ExperimentRow
               key={exp.id}
               experiment={exp}
               rowProps={getRowProps(index)}
+              onSelect={onSelectExperiment ? () => onSelectExperiment(exp) : undefined}
+              featured={selectedExperimentId === exp.id}
               onDelete={() => setExperimentToDelete(exp)}
             >
               {rowCells}
-            </ExperimentLinkRow>
+            </ExperimentRow>
           );
         }
 

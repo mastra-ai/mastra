@@ -2,13 +2,14 @@ import { serve as serveHono } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
 import { Mastra } from '@mastra/core/mastra';
 import { DefaultStorage } from '@mastra/libsql';
-import { execaCommand } from 'execa';
+import { execa } from 'execa';
 import type { ResultPromise } from 'execa';
 import { Hono } from 'hono';
 import { Inngest } from 'inngest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { ensureInngestCliBinary } from './__tests__/inngest-cli';
 import { init, serve as inngestServe } from './index';
 
 /**
@@ -169,8 +170,17 @@ beforeAll(async () => {
   }
 
   if (!devServerAlreadyRunning) {
-    devServer = execaCommand(
-      `npx inngest-cli dev -p ${DEV_SERVER_PORT} -u http://localhost:${HANDLER_PORT}/inngest/api --poll-interval=1 --retry-interval=1`,
+    devServer = execa(
+      ensureInngestCliBinary(),
+      [
+        'dev',
+        '-p',
+        String(DEV_SERVER_PORT),
+        '-u',
+        `http://localhost:${HANDLER_PORT}/inngest/api`,
+        '--poll-interval=1',
+        '--retry-interval=1',
+      ],
       { cwd: import.meta.dirname, stdio: 'ignore', reject: false },
     );
     for (let i = 0; i < 60; i++) {

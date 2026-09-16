@@ -3,8 +3,9 @@ import { estimateTokenCount, sliceByTokens } from 'tokenx';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { parseDataUri, resolveFilePartMediaTypeAndData } from '../../agent/message-list/prompt/image-utils';
 import { TripWire } from '../../agent/trip-wire';
+import { groupLinkedToolMessages } from '../../memory/load-message-history';
 import type { ChunkType } from '../../stream';
-import type { ProcessInputStepArgs, ProcessOutputStreamArgs, Processor } from '../index';
+import type { ProcessInputArgs, ProcessInputStepArgs, ProcessOutputStreamArgs, Processor } from '../index';
 
 /**
  * Configuration options for TokenLimiter processor
@@ -29,7 +30,13 @@ export interface TokenLimiterOptions {
    * - 'part': Only count tokens in the current part
    */
   countMode?: 'cumulative' | 'part';
-  trimMode?: 'best-fit' | 'contiguous';
+  trimMode?: 'best-fit' | 'contiguous' | 'memory-only';
+  /** In memory-only mode, free this many tokens below the limit (default 25%). */
+  atMaxRemoveTokens?: number;
+  /** Share memory's token estimator and per-part estimate cache. */
+  tokenCounter?: { countMessage(message: MastraDBMessage): number | Promise<number> };
+  /** Persist a memory cursor after trimming. */
+  onMemoryTrim?: (messages: MastraDBMessage[], requestContext?: ProcessInputArgs['requestContext']) => Promise<void>;
 }
 
 /**
@@ -102,7 +109,10 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   private maxTokens: number;
   private strategy: 'truncate' | 'abort';
   private countMode: 'cumulative' | 'part';
-  private trimMode: 'best-fit' | 'contiguous';
+  private trimMode: 'best-fit' | 'contiguous' | 'memory-only';
+  private atMaxRemoveTokens = 0;
+  private tokenCounter?: TokenLimiterOptions['tokenCounter'];
+  private onMemoryTrim?: TokenLimiterOptions['onMemoryTrim'];
 
   // Token counting constants for input processing
   private static readonly TOKENS_PER_MESSAGE = 3.8;
@@ -129,7 +139,67 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
       this.strategy = options.strategy || 'truncate';
       this.countMode = options.countMode || 'cumulative';
       this.trimMode = options.trimMode || 'best-fit';
+      this.atMaxRemoveTokens = options.atMaxRemoveTokens ?? this.maxTokens * 0.25;
+      this.tokenCounter = options.tokenCounter;
+      this.onMemoryTrim = options.onMemoryTrim;
+      if (
+        this.trimMode === 'memory-only' &&
+        (!Number.isFinite(this.maxTokens) ||
+          this.maxTokens < 0 ||
+          !Number.isFinite(this.atMaxRemoveTokens) ||
+          this.atMaxRemoveTokens < 0 ||
+          this.atMaxRemoveTokens > this.maxTokens)
+      ) {
+        throw new Error('Memory token limits must be finite, non-negative, and atMaxRemoveTokens cannot exceed limit');
+      }
     }
+  }
+
+  async processInput(args: ProcessInputArgs) {
+    if (this.trimMode === 'memory-only') await this.trimMemory(args.messageList, args.requestContext);
+    return args.messageList;
+  }
+
+  private async trimMemory(
+    messageList: ProcessInputStepArgs['messageList'],
+    requestContext?: ProcessInputArgs['requestContext'],
+  ): Promise<void> {
+    if (!messageList) return;
+    const sources = messageList.makeMessageSourceChecker();
+    const removableIds = new Set(
+      messageList.get.remembered
+        .db()
+        .filter(
+          message =>
+            message.role !== 'system' &&
+            !sources.input.has(message.id) &&
+            !sources.output.has(message.id) &&
+            !sources.context.has(message.id),
+        )
+        .map(message => message.id),
+    );
+    const candidateGroups = groupLinkedToolMessages(
+      messageList.get.all.db().sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
+    ).filter(group => group.every(message => removableIds.has(message.id)));
+    const counts = new Map<string, number>();
+    let total = TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
+    for (const message of messageList.getAllSystemMessages()) total += await this.countCoreSystemMessageTokens(message);
+    for (const message of messageList.get.all.db()) {
+      const tokens = await this.countMessage(message);
+      counts.set(message.id, tokens);
+      total += tokens;
+    }
+    if (total <= this.maxTokens) return;
+    const removed: MastraDBMessage[] = [];
+    const target = this.maxTokens - this.atMaxRemoveTokens;
+    for (const group of candidateGroups) {
+      if (total <= target) break;
+      removed.push(...group);
+      for (const message of group) total -= counts.get(message.id) ?? 0;
+    }
+    if (!removed.length) return;
+    await this.onMemoryTrim?.(removed, requestContext);
+    messageList.removeByIds(removed.map(message => message.id));
   }
 
   private countTokens(text: string): number {
@@ -147,6 +217,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   async processInputStep(args: ProcessInputStepArgs): Promise<void> {
     const { messageList } = args;
 
+    if (this.trimMode === 'memory-only') return this.trimMemory(messageList, args.requestContext);
     if (!messageList) return;
 
     const messages = messageList.get.all.db();
@@ -238,6 +309,11 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     const tokenString = message.role + message.content;
 
     return this.countTokens(tokenString) + TokenLimiterProcessor.TOKENS_PER_MESSAGE;
+  }
+
+  /** Count one persisted message with the same estimator used by input limiting. */
+  public async countMessage(message: MastraDBMessage): Promise<number> {
+    return this.tokenCounter ? this.tokenCounter.countMessage(message) : this.countInputMessageTokens(message);
   }
 
   /**
@@ -334,8 +410,8 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   }
 
   async processOutputStream(args: ProcessOutputStreamArgs<TokenLimiterTripWireMetadata>): Promise<ChunkType | null> {
-    // Always process output streams (this is the main/original functionality)
     const { part, state, abort, writer } = args;
+    if (this.trimMode === 'memory-only') return part;
     const limit = this.maxTokens;
 
     // Chunks that don't carry generated output pass through untouched: counting
@@ -413,7 +489,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     messages: MastraDBMessage[];
     abort: (reason?: string) => never;
   }): Promise<MastraDBMessage[]> {
-    // Always process output results (this is the main/original functionality)
+    if (this.trimMode === 'memory-only') return args.messages;
     const { messages, abort } = args;
     const limit = this.maxTokens;
 

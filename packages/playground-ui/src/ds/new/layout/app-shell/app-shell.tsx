@@ -34,13 +34,7 @@ export function AppShell({
       )}
     >
       {routeHeader}
-      <div
-        data-slot="app-shell-main"
-        aria-label={mainLabel}
-        role="group"
-        tabIndex={0}
-        className="min-h-0 overflow-y-auto"
-      >
+      <div data-slot="app-shell-main" aria-label={mainLabel} role="group" className="min-h-0 overflow-y-auto">
         {children}
       </div>
     </div>

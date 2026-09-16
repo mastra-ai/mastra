@@ -447,6 +447,89 @@ describe('output-format-handlers', () => {
       ]);
     });
 
+    describe('arrays of primitives (#23980)', () => {
+      const finishChunk: ChunkType<any> = {
+        type: 'finish',
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        payload: {
+          stepResult: { reason: 'stop' },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+
+      const textDelta = (text: string): ChunkType<any> => ({
+        type: 'text-delta',
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        payload: { id: 'text-1', text },
+      });
+
+      async function run(schema: any, deltas: string[]) {
+        const transformer = createObjectStreamTransformer({ structuredOutput: { schema } });
+        // @ts-expect-error - web/stream readable stream type error
+        const stream = convertArrayToReadableStream([...deltas.map(textDelta), finishChunk]).pipeThrough(transformer);
+        const chunks = await convertAsyncIterableToArray(stream);
+        return {
+          objects: chunks.filter(c => c?.type === 'object').map(c => (c as any).object),
+          result: chunks.find(c => c?.type === 'object-result'),
+        };
+      }
+
+      it.each([
+        ['strings', z.array(z.string()), '{"elements":["alpha","beta"]}', ['alpha', 'beta']],
+        ['numbers', z.array(z.number()), '{"elements":[1,2,3]}', [1, 2, 3]],
+        ['booleans', z.array(z.boolean()), '{"elements":[true,false]}', [true, false]],
+        ['nullable strings', z.array(z.string().nullable()), '{"elements":["a",null,"b"]}', ['a', null, 'b']],
+      ])('resolves %s from a single delta', async (_label, schema, text, expected) => {
+        const { result } = await run(schema, [text]);
+        expect(result?.type).toBe('object-result');
+        expect((result as any).object).toEqual(expected);
+      });
+
+      it('withholds a partially streamed primitive until it is complete', async () => {
+        const { objects, result } = await run(z.array(z.string()), [
+          '{"elements":["al',
+          'pha","be',
+          'ta",',
+          '"gamma"]}',
+        ]);
+
+        // Never emits a truncated string
+        for (const partial of objects) {
+          for (const el of partial as string[]) {
+            expect(['alpha', 'beta', 'gamma']).toContain(el);
+          }
+        }
+        expect(objects.at(-1)).toEqual(['alpha', 'beta', 'gamma']);
+        expect((result as any).object).toEqual(['alpha', 'beta', 'gamma']);
+      });
+
+      it('withholds a partially streamed number until it is complete', async () => {
+        const { objects, result } = await run(z.array(z.number()), ['{"elements":[1', '23,4', '5]}']);
+
+        expect(objects).not.toContainEqual([1]);
+        expect(objects).not.toContainEqual([123, 4]);
+        expect((result as any).object).toEqual([123, 45]);
+      });
+
+      it('rejects primitives that fail the item schema', async () => {
+        const transformer = createObjectStreamTransformer({ structuredOutput: { schema: z.array(z.number()) } });
+        // @ts-expect-error - web/stream readable stream type error
+        const stream = convertArrayToReadableStream([textDelta('{"elements":[1,"two"]}'), finishChunk]).pipeThrough(
+          transformer,
+        );
+        const chunks = await convertAsyncIterableToArray(stream);
+
+        expect(chunks.find(c => c?.type === 'object-result')).toBeUndefined();
+        const errorChunk = chunks.find(c => c?.type === 'error');
+        expect(errorChunk).toBeDefined();
+        expect((errorChunk as any).payload.error.message).toContain('Structured output validation failed');
+      });
+    });
+
     it('should validate zod enum schema', async () => {
       const schema = z.enum(['red', 'green', 'blue']);
 
