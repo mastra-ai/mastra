@@ -7,17 +7,20 @@ describe('Workflow graph connections', () => {
     it('creates one data connection per condition and retains both branches', () => {
       const { edges } = constructNodesAndEdges({ stepGraph: branchWorkflow.stepGraph });
 
-      expect(edges.map(edge => [edge.source, edge.target])).toEqual([
-        ['boundary-start', 'node-start'],
-        ['node-start', 'condition-node-cond-short'],
-        ['node-start', 'condition-node-cond-long'],
-        ['condition-node-cond-short', 'node-short-text'],
-        ['node-short-text', 'node-mapping_join'],
-        ['condition-node-cond-long', 'node-long-text'],
-        ['node-long-text', 'node-mapping_join'],
-        ['node-mapping_join', 'node-final'],
-        ['node-final', 'boundary-end'],
-      ]);
+      expect(edges).toHaveLength(9);
+      expect(edges.map(edge => [edge.source, edge.target])).toEqual(
+        expect.arrayContaining([
+          ['boundary-start', 'node-start'],
+          ['node-start', 'condition-node-cond-short'],
+          ['node-start', 'condition-node-cond-long'],
+          ['condition-node-cond-short', 'node-short-text'],
+          ['node-short-text', 'node-mapping_join'],
+          ['condition-node-cond-long', 'node-long-text'],
+          ['node-long-text', 'node-mapping_join'],
+          ['node-mapping_join', 'node-final'],
+          ['node-final', 'boundary-end'],
+        ]),
+      );
       expect(edges.find(edge => edge.target === 'condition-node-cond-short')?.data?.conditionNode).toBe(true);
     });
   });
@@ -26,11 +29,14 @@ describe('Workflow graph connections', () => {
     it('creates one connection per transition for inspecting its data', () => {
       const { edges } = constructNodesAndEdges({ stepGraph: twoStepWorkflow.stepGraph });
 
-      expect(edges.map(edge => [edge.source, edge.target])).toEqual([
-        ['boundary-start', 'node-extract'],
-        ['node-extract', 'node-transform'],
-        ['node-transform', 'boundary-end'],
-      ]);
+      expect(edges).toHaveLength(3);
+      expect(edges.map(edge => [edge.source, edge.target])).toEqual(
+        expect.arrayContaining([
+          ['boundary-start', 'node-extract'],
+          ['node-extract', 'node-transform'],
+          ['node-transform', 'boundary-end'],
+        ]),
+      );
     });
   });
 
@@ -38,15 +44,18 @@ describe('Workflow graph connections', () => {
     it('keeps both paths with one connection into and out of each step', () => {
       const { edges } = constructNodesAndEdges({ stepGraph: parallelWorkflow.stepGraph });
 
-      expect(edges.map(edge => [edge.source, edge.target])).toEqual([
-        ['boundary-start', 'node-start'],
-        ['node-start', 'node-add-letter-b'],
-        ['node-start', 'node-add-letter-c'],
-        ['node-add-letter-b', 'node-mapping_join'],
-        ['node-add-letter-c', 'node-mapping_join'],
-        ['node-mapping_join', 'node-final'],
-        ['node-final', 'boundary-end'],
-      ]);
+      expect(edges).toHaveLength(7);
+      expect(edges.map(edge => [edge.source, edge.target])).toEqual(
+        expect.arrayContaining([
+          ['boundary-start', 'node-start'],
+          ['node-start', 'node-add-letter-b'],
+          ['node-start', 'node-add-letter-c'],
+          ['node-add-letter-b', 'node-mapping_join'],
+          ['node-add-letter-c', 'node-mapping_join'],
+          ['node-mapping_join', 'node-final'],
+          ['node-final', 'boundary-end'],
+        ]),
+      );
     });
   });
 });

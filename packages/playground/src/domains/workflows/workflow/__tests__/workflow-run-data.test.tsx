@@ -6,9 +6,10 @@ import { useContext } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
+import { WorkflowRunData } from '../workflow-run-data';
 import { WorkflowTrigger } from '../workflow-trigger';
 import { twoStepWorkflow } from './fixtures/workflow-debug-step-controls';
-import { failedDataRun, successfulDataRun } from './fixtures/workflow-run-data';
+import { failedDataRun } from './fixtures/workflow-run-data';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -61,12 +62,30 @@ describe('Workflow run data', () => {
 
   describe('when a saved run produced a falsy output', () => {
     it('keeps the actual output available in a read-only view', async () => {
-      renderRun(successfulDataRun);
+      render(<WorkflowRunData input={{}} result={{ status: 'success', input: {}, result: false, steps: {} }} />);
       fireEvent.click(await screen.findByRole('button', { name: 'Run data' }));
       fireEvent.click(screen.getByRole('tab', { name: 'Output' }));
       const panel = screen.getByRole('tabpanel', { name: 'Output' });
       expect(within(panel).getByText('false')).not.toBeNull();
       expect(panel.querySelector('[contenteditable="true"]')).toBeNull();
+    });
+  });
+});
+
+describe('Workflow run data input source', () => {
+  describe('when the form payload wraps initial state and workflow input', () => {
+    it.each([null, false, 0, ''])('preserves the recorded %j input without showing the form envelope', input => {
+      render(
+        <WorkflowRunData
+          input={{ initialState: { privateCounter: 3 }, inputData: input }}
+          result={{ status: 'success', input, result: undefined, steps: {} }}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Run data' }));
+      const panel = screen.getByRole('tabpanel', { name: 'Input' });
+      expect(panel.textContent).toContain(JSON.stringify(input));
+      expect(panel.textContent).not.toContain('privateCounter');
+      expect(panel.textContent).not.toContain('inputData');
     });
   });
 });

@@ -60,6 +60,7 @@ const paths = {
   datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
   datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
   experimentLink: (experimentId: string) => `/experiments/${experimentId}`,
+  experimentItemLink: (experimentId: string, itemId: string) => `/experiments/${experimentId}/items/${itemId}`,
 } satisfies LinkComponentProviderProps['paths'];
 
 function renderRunList(runId?: string) {
@@ -89,6 +90,19 @@ function stubRuns(response: ListWorkflowRunsResponse) {
 afterEach(cleanup);
 
 describe('WorkflowRecentRuns', () => {
+  describe('when the run history request fails', () => {
+    it('reports the failure instead of claiming there are no runs', async () => {
+      stubCapabilities();
+      server.use(
+        http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs`, () =>
+          HttpResponse.json({ error: 'Storage unavailable' }, { status: 403 }),
+        ),
+      );
+      renderRunList();
+      expect(await screen.findByText('Unable to load workflow runs.')).not.toBeNull();
+      expect(screen.queryByText('Your run history will appear here once you run the workflow')).toBeNull();
+    });
+  });
   describe('when the run history is collapsed', () => {
     it('keeps the count visible and restores the selected run', async () => {
       stubCapabilities();

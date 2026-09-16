@@ -21,7 +21,11 @@ function resolveWorkflowRunResult(
   const canReconcile =
     !isStreaming && storedResult?.status === liveResult.status && isWorkflowRunFinished(liveResult.status);
   if (!canReconcile) return liveResult;
-  return { ...storedResult, ...liveResult, steps: { ...liveResult.steps, ...storedResult?.steps } };
+  const steps = { ...liveResult.steps };
+  for (const [stepId, step] of Object.entries(storedResult.steps)) {
+    steps[stepId] = { ...steps[stepId], ...step };
+  }
+  return { ...storedResult, ...liveResult, steps };
 }
 
 export function WorkflowRunProvider({
@@ -65,7 +69,8 @@ export function WorkflowRunProvider({
   });
 
   const runId = initialRunId ?? localRun.runId;
-  const selectedStream = streamRunId === runId && streamResult.status ? streamResult : null;
+  const hasStreamResult = isStreaming || streamResult.status !== 'pending';
+  const selectedStream = streamRunId === runId && hasStreamResult ? streamResult : null;
   const selectedOverride = localRun.runId === runId ? localRun.result : null;
   const isStreamingWorkflow = streamRunId === runId && isStreaming;
   const liveResult = selectedOverride ?? selectedStream;
@@ -79,19 +84,10 @@ export function WorkflowRunProvider({
 
   const executionSnapshot = useMemo(() => {
     return runExecutionResult && snapshotRunId
-      ? ({
-          context: {
-            input: runExecutionResult?.payload,
-            ...runExecutionResult?.steps,
-          },
-          status: runExecutionResult?.status,
-          result: runExecutionResult?.result,
-          error: runExecutionResult?.error,
-          runId: snapshotRunId,
-          serializedStepGraph: runExecutionResult?.serializedStepGraph,
-          timestamp: getRunTimestamp(runExecutionResult?.updatedAt) ?? getRunTimestamp(runExecutionResult?.createdAt),
-          value: runExecutionResult?.initialState,
-        } as WorkflowRunState)
+      ? {
+          ...runExecutionResult,
+          timestamp: getRunTimestamp(runExecutionResult.updatedAt) ?? getRunTimestamp(runExecutionResult.createdAt),
+        }
       : undefined;
   }, [runExecutionResult, snapshotRunId]);
 
@@ -106,11 +102,12 @@ export function WorkflowRunProvider({
   );
   const payload = useMemo(() => {
     if (!runSnapshot) return localRun.payload;
-    if (runSnapshot.value && Object.keys(runSnapshot.value).length > 0) {
-      return { initialState: runSnapshot.value, inputData: runSnapshot.context?.input };
+    const initialState = 'value' in runSnapshot ? runSnapshot.value : runSnapshot.initialState;
+    if (initialState && Object.keys(initialState).length > 0) {
+      return { initialState, inputData: storedResult?.input };
     }
-    return runSnapshot.context?.input;
-  }, [runSnapshot, localRun.payload]);
+    return storedResult?.input;
+  }, [runSnapshot, storedResult, localRun.payload]);
 
   const setRunId: WorkflowRunContextType['setRunId'] = useCallback(
     update => {
@@ -154,47 +151,53 @@ export function WorkflowRunProvider({
     setLocalRun({ runId: '', result: null, payload: null });
   }, [closeStreamsAndReset, resetStepDetail]);
 
-  useEffect(() => clearData, [initialRunId, clearData]);
+  // Keep the canvas mounted while releasing the previous route's stream and run state.
+  useEffect(() => clearData, [workflowId, initialRunId, clearData]);
+
+  const selectStreamRun = useCallback((runId?: string) => {
+    setStreamRunId(runId);
+    setLocalRun(current => (current.runId === runId ? { ...current, result: null } : current));
+  }, []);
 
   const startStreamWorkflow = useCallback(
     async (props: Parameters<WorkflowRunContextType['streamWorkflow']>[0]) => {
       closeStreamsAndReset();
-      setStreamRunId(props.runId);
+      selectStreamRun(props.runId);
       await streamWorkflow(props);
     },
-    [closeStreamsAndReset, streamWorkflow],
+    [closeStreamsAndReset, selectStreamRun, streamWorkflow],
   );
 
   const startResumeWorkflow = useCallback(
     async (props: Parameters<WorkflowRunContextType['resumeWorkflow']>[0]) => {
-      setStreamRunId(props.runId);
+      selectStreamRun(props.runId);
       try {
         await resumeWorkflowStream(props);
       } finally {
         await queryClient.invalidateQueries({ queryKey: ['workflow-run', props.workflowId, props.runId], exact: true });
       }
     },
-    [queryClient, resumeWorkflowStream],
+    [queryClient, selectStreamRun, resumeWorkflowStream],
   );
 
   const startObserveWorkflowStream = useCallback(
     (props: Parameters<NonNullable<WorkflowRunContextType['observeWorkflowStream']>>[0]) => {
-      setStreamRunId(props.runId);
+      selectStreamRun(props.runId);
       observeWorkflowStream(props);
     },
-    [observeWorkflowStream],
+    [selectStreamRun, observeWorkflowStream],
   );
 
   const startTimeTravelWorkflowStream = useCallback(
     async (props: Parameters<WorkflowRunContextType['timeTravelWorkflowStream']>[0]) => {
-      setStreamRunId(props.runId);
+      selectStreamRun(props.runId);
       try {
         await timeTravelWorkflowStream(props);
       } finally {
         await queryClient.invalidateQueries({ queryKey: ['workflow-run', props.workflowId, props.runId], exact: true });
       }
     },
-    [queryClient, timeTravelWorkflowStream],
+    [queryClient, selectStreamRun, timeTravelWorkflowStream],
   );
 
   const value = useMemo<WorkflowRunContextType>(

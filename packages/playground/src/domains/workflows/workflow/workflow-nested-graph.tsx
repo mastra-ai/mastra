@@ -18,8 +18,12 @@ export interface WorkflowNestedGraphProps {
 }
 
 export function WorkflowNestedGraph(props: WorkflowNestedGraphProps) {
+  const layoutKey = useMemo(
+    () => `${props.workflowName}:${JSON.stringify(props.stepGraph)}`,
+    [props.workflowName, props.stepGraph],
+  );
   return (
-    <WorkflowGraphBoundary stepGraph={props.stepGraph}>
+    <WorkflowGraphBoundary key={layoutKey} stepGraph={props.stepGraph}>
       <WorkflowNestedGraphContent {...props} />
     </WorkflowGraphBoundary>
   );

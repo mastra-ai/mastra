@@ -163,7 +163,7 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
           description: flow.description,
           component: 'WORKFLOW',
           serializedStepFlow: flow.serializedStepFlow,
-        } as never,
+        },
         flow,
       };
   }

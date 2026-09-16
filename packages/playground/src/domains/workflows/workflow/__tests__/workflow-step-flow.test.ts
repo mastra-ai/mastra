@@ -39,7 +39,7 @@ describe('buildStepSuccessors', () => {
 
 describe('collectGraphStepFlags', () => {
   it('collects conditional arm ids but not parallel arm ids', () => {
-    const stepGraph = [
+    const stepGraph: SerializedStepFlowEntry[] = [
       {
         type: 'parallel',
         steps: [
@@ -53,8 +53,12 @@ describe('collectGraphStepFlags', () => {
           { type: 'step', step: { id: 'short' } },
           { type: 'step', step: { id: 'long' } },
         ],
+        serializedConditions: [
+          { id: 'short-condition', fn: 'true' },
+          { id: 'long-condition', fn: 'false' },
+        ],
       },
-    ] as unknown as SerializedStepFlowEntry[];
+    ];
 
     const { conditionalStepIds, nestedWorkflowStepIds } = collectGraphStepFlags(stepGraph);
 
@@ -63,10 +67,10 @@ describe('collectGraphStepFlags', () => {
   });
 
   it('flags nested workflow steps by component', () => {
-    const stepGraph = [
+    const stepGraph: SerializedStepFlowEntry[] = [
       { type: 'step', step: { id: 'plain', component: 'STEP' } },
       { type: 'step', step: { id: 'nested', component: 'WORKFLOW' } },
-    ] as unknown as SerializedStepFlowEntry[];
+    ];
 
     const { nestedWorkflowStepIds } = collectGraphStepFlags(stepGraph);
 
@@ -108,6 +112,25 @@ describe('isBranchArmBypassed', () => {
     expect(
       isBranchArmBypassed({ ...graph, stepId: 'parallel-arm', steps: { 'parallel-arm': { status: 'skipped' } } }),
     ).toBe(false);
+  });
+});
+
+describe('Conditional join readiness', () => {
+  describe('when another matching branch arm has not finished', () => {
+    it.each(['running', 'paused', 'failed'])('does not bypass a %s arm after its sibling succeeds', status => {
+      const steps = { short: { status: 'success', output: 'short' }, long: { status } };
+      const graph = {
+        conditionalStepIds: new Set(['short', 'long']),
+        stepSuccessors: { short: ['join'], long: ['join'] },
+        stepsFlow: { join: ['short', 'long'] },
+        steps,
+      };
+      const isStepBypassed = (stepId: string) => isBranchArmBypassed({ ...graph, stepId });
+      expect(isStepBypassed('long')).toBe(false);
+      expect(
+        buildNextStepInput({ nextStepKey: 'join', stepsFlow: graph.stepsFlow, steps, isStepBypassed }),
+      ).toBeUndefined();
+    });
   });
 });
 

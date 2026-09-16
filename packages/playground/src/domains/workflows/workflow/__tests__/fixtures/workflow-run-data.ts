@@ -7,12 +7,5 @@ export const failedDataRun: GetWorkflowRunByIdResponse = {
   status: 'failed',
   payload: { customer: 'Test customer' },
   result: undefined,
-  error: { message: 'Dispatch failed. Check the order and run again.' },
-};
-
-export const successfulDataRun: GetWorkflowRunByIdResponse = {
-  ...successfulRunState,
-  runId: 'run-data-success',
-  payload: { customer: 'Test customer' },
-  result: false,
+  error: { name: 'Error', message: 'Dispatch failed. Check the order and run again.' },
 };

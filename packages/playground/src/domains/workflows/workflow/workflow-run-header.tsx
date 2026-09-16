@@ -40,34 +40,42 @@ function formatRunDuration(durationMs?: number) {
 const isRunInProgress = (status?: WorkflowRunStatus) =>
   status === 'running' || status === 'suspended' || status === 'waiting';
 
-function useClockWhileRunning(isRunning: boolean) {
+function RunningRunDuration({ result }: { result: WorkflowRunStreamResult | null }) {
   const [now, setNow] = useState(() => Date.now());
-
   useEffect(() => {
-    if (!isRunning) return;
-    setNow(Date.now());
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
-  }, [isRunning]);
+  }, []);
+  return <RunDuration duration={getRunDuration(result, true, now)} />;
+}
 
-  return now;
+function RunDuration({ duration }: { duration?: number }) {
+  if (duration === undefined) return null;
+  return (
+    <span className="text-ui-xs text-neutral4 flex items-center gap-1.5 tabular-nums" title="Run duration">
+      <Timer aria-hidden className="size-3.5" />
+      {formatRunDuration(duration)}
+    </span>
+  );
 }
 
 function getRunDuration(result: WorkflowRunStreamResult | null, isRunning: boolean, now: number) {
   const stepTimes: Array<{ startedAt: number; endedAt?: number }> = Object.values(result?.steps ?? {}).flatMap(step => {
     const startedAt = 'startedAt' in step ? step.startedAt : undefined;
-    if (typeof startedAt !== 'number') return [];
+    if (typeof startedAt !== 'number' || !Number.isFinite(startedAt)) return [];
     const endedAt = 'endedAt' in step ? step.endedAt : undefined;
-    return [{ startedAt, ...(typeof endedAt === 'number' ? { endedAt } : {}) }];
+    const hasValidEnd = typeof endedAt === 'number' && Number.isFinite(endedAt) && endedAt >= startedAt;
+    return [{ startedAt, ...(hasValidEnd ? { endedAt } : {}) }];
   });
 
   if (stepTimes.length === 0) return undefined;
 
   const startedAt = Math.min(...stepTimes.map(step => step.startedAt));
-  const endedTimes = stepTimes.flatMap(step => (step.endedAt ? [step.endedAt] : []));
+  const endedTimes = stepTimes.flatMap(step => (step.endedAt !== undefined ? [step.endedAt] : []));
   const endedAt = endedTimes.length > 0 ? Math.max(...endedTimes) : undefined;
   const effectiveEndedAt = isRunning ? now : endedAt;
-  return effectiveEndedAt === undefined ? undefined : effectiveEndedAt - startedAt;
+  if (effectiveEndedAt === undefined || effectiveEndedAt < startedAt) return undefined;
+  return effectiveEndedAt - startedAt;
 }
 
 export function RunWorkflowHeader({
@@ -82,18 +90,15 @@ export function RunWorkflowHeader({
   timestamp?: number;
 }) {
   const isRunning = isRunInProgress(status);
-  const now = useClockWhileRunning(isRunning);
-  const runDuration = getRunDuration(result, isRunning, now);
 
   return (
     <div className="flex w-full flex-col gap-2 px-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <WorkflowRunStatusBadge status={status} />
-        {runDuration !== undefined && (
-          <span className="text-ui-xs text-neutral4 flex items-center gap-1.5 tabular-nums" title="Run duration">
-            <Timer aria-hidden className="size-3.5" />
-            {formatRunDuration(runDuration)}
-          </span>
+        {isRunning ? (
+          <RunningRunDuration key={runId} result={result} />
+        ) : (
+          <RunDuration duration={getRunDuration(result, false, 0)} />
         )}
       </div>
       <div className="text-ui-xs text-neutral3 flex min-w-0 items-center gap-1">
@@ -101,7 +106,7 @@ export function RunWorkflowHeader({
           {runId}
         </span>
         <CopyButton content={runId} tooltip="Copy run ID" variant="ghost" size="icon-sm" className="shrink-0" />
-        {timestamp ? (
+        {timestamp !== undefined && Number.isFinite(timestamp) ? (
           <span className="ml-auto shrink-0">{formatDistanceToNowStrict(timestamp, { addSuffix: true })}</span>
         ) : null}
       </div>

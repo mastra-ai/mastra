@@ -42,3 +42,23 @@ export const LongFunction: Story = {
     ],
   },
 };
+
+export const UnavailableExpression: Story = {
+  args: { conditions: [{ type: 'when', fnString: '' }] },
+};
+
+export const UnparseableSource: Story = {
+  args: { conditions: [{ type: 'when', fnString: 'custom predicate: [native code]' }] },
+};
+
+export const CompoundExpression: Story = {
+  args: {
+    conditions: [
+      {
+        type: 'when',
+        fnString:
+          'async ({ inputData }) => { const message = "a=>b && c"; return await allowed(inputData) && inputData.note === message; }',
+      },
+    ],
+  },
+};

@@ -138,7 +138,7 @@ describe('Workflow input views', () => {
     });
 
     it('keeps the removal through a Form and JSON round trip', async () => {
-      renderInput();
+      const onSubmit = renderInput();
       fireEvent.click(screen.getByRole('button', { name: 'Remove item 1' }));
       fireEvent.click(screen.getByRole('radio', { name: 'JSON' }));
       expect(JSON.parse(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Code editor' }).value)).toEqual({
@@ -146,6 +146,8 @@ describe('Workflow input views', () => {
       });
       fireEvent.click(screen.getByRole('radio', { name: 'Form' }));
       expect(await screen.findByText('No items added')).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({ documents: [] }));
     });
   });
   describe('when a schema allows an empty string', () => {
@@ -271,6 +273,116 @@ describe('Workflow input views', () => {
       fireEvent.click(screen.getByRole('radio', { name: 'Simple' }));
       fireEvent.click(screen.getByRole('radio', { name: 'JSON' }));
       expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Code editor' }).value).toBe(firstJson);
+    });
+  });
+
+  describe('when an edited form is collapsed and reopened', () => {
+    it('submits the edited draft instead of restoring the initial input', async () => {
+      const onSubmit = vi.fn();
+      render(
+        <WorkflowInputData
+          schema={z.object({ message: z.string() })}
+          defaultValues={{ message: 'Original' }}
+          isSubmitLoading={false}
+          submitButtonLabel="Run"
+          onSubmit={onSubmit}
+        />,
+      );
+      fireEvent.change(screen.getByRole('textbox', { name: /^Message/ }), { target: { value: 'Edited' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Trigger a run' }));
+      await waitFor(() => expect(screen.queryByRole('textbox', { name: /^Message/ })).toBeNull());
+      fireEvent.click(screen.getByRole('button', { name: 'Trigger a run' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Run' }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({ message: 'Edited' }));
+    });
+  });
+
+  describe('when processor JSON contains an invalid message shape', () => {
+    it('keeps the recoverable JSON draft instead of crashing Simple mode', () => {
+      render(
+        <WorkflowInputData
+          schema={z.object({ phase: z.string(), messages: z.array(z.unknown()) })}
+          isSubmitLoading={false}
+          submitButtonLabel="Run"
+          onSubmit={vi.fn()}
+          isProcessorWorkflow
+        />,
+      );
+      fireEvent.click(screen.getByRole('radio', { name: 'JSON' }));
+      const invalidDraft = '{"phase":"input","messages":[{"content":{"parts":{}}}]}';
+      editJson(invalidDraft);
+      fireEvent.click(screen.getByRole('radio', { name: 'Simple' }));
+      expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Code editor' }).value).toBe(invalidDraft);
+      expect(screen.getByRole('alert').textContent).toContain('Correct the JSON first');
+      editJson('{"phase":"input","messages":[]}');
+      fireEvent.click(screen.getByRole('radio', { name: 'Simple' }));
+      expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Test Message' }).value).toBe('');
+    });
+  });
+
+  describe('when a processor phase changes', () => {
+    it('shares the matching author role with JSON before either view submits', async () => {
+      const onSubmit = vi.fn();
+      render(
+        <WorkflowInputData
+          schema={z.object({
+            phase: z.string(),
+            messages: z.array(z.object({ role: z.string() }).passthrough()),
+          })}
+          isSubmitLoading={false}
+          submitButtonLabel="Run"
+          onSubmit={onSubmit}
+          isProcessorWorkflow
+        />,
+      );
+      fireEvent.click(screen.getByRole('combobox', { name: 'Phase' }));
+      const outputResult = await screen.findByRole('option', { name: 'outputResult' });
+      fireEvent.pointerDown(outputResult, { pointerType: 'mouse' });
+      fireEvent.click(outputResult, { detail: 1 });
+      fireEvent.click(screen.getByRole('radio', { name: 'JSON' }));
+      const draft: unknown = JSON.parse(
+        screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Code editor' }).value,
+      );
+      expect(draft).toMatchObject({ phase: 'outputResult', messages: [{ role: 'assistant' }] });
+      fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+      expect(onSubmit).toHaveBeenCalledWith(draft);
+    });
+  });
+
+  describe('when JSON has the wrong root shape for the form', () => {
+    it('keeps that draft editable instead of silently replacing it with defaults', () => {
+      renderInput();
+      fireEvent.click(screen.getByRole('radio', { name: 'JSON' }));
+      editJson('null');
+      fireEvent.click(screen.getByRole('radio', { name: 'Form' }));
+      expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Code editor' }).value).toBe('null');
+      expect(screen.getByRole('alert').textContent).toContain('requires a JSON object');
+      editJson('{"documents":[]}');
+      fireEvent.click(screen.getByRole('radio', { name: 'Form' }));
+      expect(screen.getByText('No items added')).not.toBeNull();
+    });
+  });
+
+  describe('when a root array is edited as JSON', () => {
+    it('requires an array before opening Form and submits an empty array without replacing it', async () => {
+      const onSubmit = vi.fn();
+      render(
+        <WorkflowInputData
+          schema={z.array(z.string())}
+          defaultValues={['Original']}
+          isSubmitLoading={false}
+          submitButtonLabel="Run"
+          onSubmit={onSubmit}
+        />,
+      );
+      fireEvent.click(screen.getByRole('radio', { name: 'JSON' }));
+      editJson('null');
+      fireEvent.click(screen.getByRole('radio', { name: 'Form' }));
+      expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Code editor' }).value).toBe('null');
+      editJson('[]');
+      fireEvent.click(screen.getByRole('radio', { name: 'Form' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledWith([]));
     });
   });
 });

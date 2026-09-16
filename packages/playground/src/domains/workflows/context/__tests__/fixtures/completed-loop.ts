@@ -1,6 +1,6 @@
 import type { GetWorkflowRunByIdResponse } from '@mastra/client-js';
 
-export const completedLoop: GetWorkflowRunByIdResponse = {
+export const completedLoop = {
   runId: 'completed-loop',
   workflowName: 'two-step-workflow',
   status: 'success',
@@ -15,10 +15,21 @@ export const completedLoop: GetWorkflowRunByIdResponse = {
       endedAt: 110,
     },
   },
-};
+} satisfies GetWorkflowRunByIdResponse;
 
 export const suspendedLoop: GetWorkflowRunByIdResponse = {
   ...completedLoop,
   status: 'suspended',
   steps: {},
 };
+
+export const partialCompletedLoop: GetWorkflowRunByIdResponse = {
+  ...completedLoop,
+  runId: 'live-run',
+  steps: {
+    'analyze-document[0].count-words': { status: 'success', startedAt: 100, endedAt: 110 },
+    persisted: { status: 'success', startedAt: 100, endedAt: 110 },
+  },
+};
+
+export const pausedLoop: GetWorkflowRunByIdResponse = { ...suspendedLoop, status: 'paused' };

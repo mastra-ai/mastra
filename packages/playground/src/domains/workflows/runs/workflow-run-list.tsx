@@ -58,7 +58,14 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
   const canDeleteRun = canDelete('workflows');
 
   const { Link, paths, navigate } = useLinkComponent();
-  const { isLoading, data: runs, setEndOfListElement, isFetchingNextPage, hasNextPage } = useWorkflowRuns(workflowId);
+  const {
+    isLoading,
+    error,
+    data: runs,
+    setEndOfListElement,
+    isFetchingNextPage,
+    hasNextPage,
+  } = useWorkflowRuns(workflowId);
   const { mutateAsync: deleteRun } = useDeleteWorkflowRun(workflowId);
 
   const handleDelete = async (runId: string) => {
@@ -79,7 +86,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
         <CollapsibleTrigger className="text-ui-sm text-neutral4 flex shrink-0 items-center gap-2 px-4 py-3 text-left">
           <ChevronRight aria-hidden className="text-neutral3 size-4 shrink-0 motion-reduce:transition-none" />
           <span>Recent runs</span>
-          {!isLoading && (
+          {!isLoading && !error && (
             <span className="text-ui-xs text-neutral3">
               {actualRuns.length}
               {hasNextPage ? '+' : ''}
@@ -95,7 +102,11 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
             ) : (
               <ThreadList aria-label="Workflow runs" embedded>
                 {actualRuns.length === 0 ? (
-                  <ThreadListEmpty>Your run history will appear here once you run the workflow</ThreadListEmpty>
+                  <ThreadListEmpty>
+                    {error
+                      ? 'Unable to load workflow runs.'
+                      : 'Your run history will appear here once you run the workflow'}
+                  </ThreadListEmpty>
                 ) : (
                   <ThreadListItems>
                     {actualRuns.map(run => {

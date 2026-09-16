@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -26,7 +26,6 @@ describe('WorkflowTriggerForm', () => {
         />,
       );
 
-      expect(screen.queryByRole('button', { name: /run input/i })).toBeNull();
       expect(screen.getByTestId('heading-slot')).not.toBeNull();
       expect(screen.queryByRole('button', { name: /^run$/i })).toBeNull();
       expect(screen.queryByTestId('left-actions')).toBeNull();
@@ -35,19 +34,21 @@ describe('WorkflowTriggerForm', () => {
   });
 
   describe('when preparing a new run', () => {
-    it('renders the editable input and run action', () => {
+    it('executes the workflow with the edited input', async () => {
+      const onExecute = vi.fn();
       render(
         <WorkflowTriggerForm
           zodSchema={schema}
           isStreaming={false}
-          onExecute={vi.fn()}
+          onExecute={onExecute}
           defaultValues={{ request: true }}
           collapsible={false}
         />,
       );
 
-      expect(screen.getByRole('button', { name: /run/i })).not.toBeNull();
-      expect(screen.queryByRole('button', { name: /run input/i })).toBeNull();
+      fireEvent.click(screen.getByRole('checkbox', { name: /request/i }));
+      fireEvent.click(screen.getByRole('button', { name: /^run$/i }));
+      await waitFor(() => expect(onExecute).toHaveBeenCalledWith({ request: false }));
     });
   });
 
@@ -63,7 +64,6 @@ describe('WorkflowTriggerForm', () => {
         />,
       );
       expect(screen.getByText('Paused run')).not.toBeNull();
-      expect(screen.queryByRole('button', { name: 'Run input' })).toBeNull();
     });
   });
 });

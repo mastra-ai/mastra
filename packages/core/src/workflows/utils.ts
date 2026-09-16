@@ -505,8 +505,8 @@ export const createTimeTravelExecutionParams = (params: {
     stepIds.forEach(stepId => {
       let result;
       const stepContext = context?.[stepId] ?? snapshotContext[stepId];
-      // A conditional arm with no recorded result was never selected: report it as skipped, not as a fake success.
-      const isUnselectedConditionalSibling = entry.type === 'conditional' && !steps?.includes(stepId);
+      const isUnselectedConditionalSibling =
+        entry.type === 'conditional' && !steps.includes(stepId) && (isTargetEntry || !stepContext);
       const defaultStepStatus = steps?.includes(stepId)
         ? 'running'
         : isUnselectedConditionalSibling

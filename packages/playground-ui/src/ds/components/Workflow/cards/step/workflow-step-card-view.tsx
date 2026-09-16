@@ -41,7 +41,7 @@ const footerStatusClasses: Partial<Record<ReportedStatus, string>> = {
   tripwire: 'text-warning1',
 };
 
-const suspendedWickStyle = { '--belt-hue': 'var(--warning1)' } as CSSProperties;
+const suspendedWickStyle: CSSProperties & { '--belt-hue': string } = { '--belt-hue': 'var(--warning1)' };
 
 export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
   const {
@@ -80,7 +80,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
     <div
       className={cn(
         'relative isolate w-[274px]',
-        isBodyExpanded && 'w-[688px]',
+        isBodyExpanded && 'w-172',
         isStacked &&
           'pb-3 before:absolute before:inset-x-1.5 before:top-2 before:bottom-1.5 before:-z-10 before:rounded-xl before:border before:border-border1 before:bg-surface3 after:absolute after:inset-x-3 after:top-3.5 after:bottom-0 after:-z-20 after:rounded-xl after:border after:border-border1 after:bg-surface3',
       )}
@@ -89,7 +89,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
         open={expanded}
         onOpenChange={setExpanded}
         className={cn(
-          'relative rounded-xl border border-border1 bg-surface2 text-neutral5 shadow-panel transition-[border-color,box-shadow] motion-reduce:transition-none [--card-radius:calc(var(--radius-xl)-2px)]',
+          'relative rounded-xl border border-border1 bg-surface2 text-neutral5 shadow-panel transition-[border-color,box-shadow] [--card-radius:calc(var(--radius-xl)-2px)] motion-reduce:transition-none',
           'after:pointer-events-none after:absolute after:inset-x-4 after:-top-px after:h-px after:mask-x-from-76%',
           displayStatus && statusLineClasses[displayStatus],
           'has-focus-visible:outline-2 has-focus-visible:outline-offset-4 has-focus-visible:outline-accent3',
@@ -112,7 +112,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
         <div className="m-0.5 overflow-hidden rounded-(--card-radius)">
           <Summary
             className={cn(
-              'flex w-full flex-col text-left nodrag nopan',
+              'nodrag nopan flex w-full flex-col text-left',
               onSelect && 'group cursor-pointer focus-visible:outline-hidden',
             )}
             type={onSelect ? 'button' : undefined}
@@ -152,7 +152,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
           </Summary>
           <div
             className={cn(
-              'flex min-h-7 items-center justify-between gap-2 bg-surface3 px-3.5 pb-2.5 text-ui-xs text-neutral3 nodrag nopan',
+              'nodrag nopan flex min-h-7 items-center justify-between gap-2 bg-surface3 px-3.5 pb-2.5 text-ui-xs text-neutral3',
               displayStatus && footerStatusClasses[displayStatus],
             )}
           >
@@ -169,13 +169,13 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
 
           {body && (
             <>
-              <CollapsibleTrigger className="border-border1 bg-surface3 text-ui-sm hover:bg-surface4 nodrag nopan flex min-h-11 w-full items-center justify-between border-t px-3.5 py-2.5 focus-visible:shadow-none focus-visible:ring-0">
+              <CollapsibleTrigger className="nodrag nopan border-border1 bg-surface3 text-ui-sm hover:bg-surface4 flex min-h-11 w-full items-center justify-between border-t px-3.5 py-2.5 focus-visible:shadow-none focus-visible:ring-0">
                 <span>
                   {expanded ? 'Collapse' : 'Expand'} {isForEach ? 'loop' : 'workflow'}
                 </span>
                 <ChevronRight aria-hidden size={14} />
               </CollapsibleTrigger>
-              <CollapsibleContent className="border-border1 h-[620px] overflow-hidden border-t border-dashed">
+              <CollapsibleContent className="border-border1 h-155 overflow-hidden border-t border-dashed">
                 {body}
               </CollapsibleContent>
             </>

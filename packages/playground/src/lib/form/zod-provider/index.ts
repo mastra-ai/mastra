@@ -1,5 +1,5 @@
 import type { FieldConfig, ParsedField, ParsedSchema, SchemaProvider, SchemaValidation } from '@autoform/core';
-import { isPlainObject, removeEmptyValues } from '../utils';
+import { isPlainObject } from '../utils';
 import {
   getDef,
   getBaseSchema,
@@ -152,22 +152,31 @@ export function parseSchema(schema: AnySchema): ParsedSchema {
   return { fields };
 }
 
-// `safeParse` resurrects a cleared value where the schema has a default; elsewhere empty means untouched.
-function keepEmptyWhereDefaulted(values: Record<string, any>, defaults: Record<string, any>): Record<string, any> {
-  const kept: Record<string, any> = removeEmptyValues(values);
-
-  for (const [key, defaultValue] of Object.entries(defaults)) {
-    const value = values?.[key];
-    if (value === undefined) continue;
-
-    if (isPlainObject(defaultValue) && isPlainObject(value)) {
-      kept[key] = keepEmptyWhereDefaulted(value, defaultValue);
-    } else if (kept[key] === undefined) {
-      kept[key] = value;
+// Only blank optional scalar controls represent missing input. Arrays retain their
+// positions, and explicit empty collections must reach the schema unchanged.
+function normalizeFormValues(value: unknown, schema: AnySchema): unknown {
+  const baseSchema = getBaseSchema(schema);
+  const shape = getShape(baseSchema);
+  if (isPlainObject(value) && shape) {
+    const normalized: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value)) {
+      const fieldValue = shape[key] ? normalizeFormValues(child, shape[key]) : child;
+      if (fieldValue !== undefined) normalized[key] = fieldValue;
     }
+    return normalized;
   }
 
-  return kept;
+  if (Array.isArray(value)) {
+    const element = getArrayElement(baseSchema);
+    return element && typeof element === 'object' ? value.map(item => normalizeFormValues(item, element)) : value;
+  }
+
+  const blankControl = value === '' || (value === null && !schema.safeParse(null).success);
+  if (blankControl && isOptional(schema) && getDefaultValueInZodStack(schema) === undefined) {
+    return undefined;
+  }
+
+  return value;
 }
 
 export class CustomZodProvider<T extends AnySchema> implements SchemaProvider {
@@ -184,8 +193,9 @@ export class CustomZodProvider<T extends AnySchema> implements SchemaProvider {
   }
 
   validateSchema(values: any): SchemaValidation {
-    const cleanedValues = keepEmptyWhereDefaulted(values, this.getDefaultValues());
-    const validationResult = (this._schema as any).safeParse(cleanedValues);
+    const cleanedValues = normalizeFormValues(values, this._schema);
+    const schema: AnySchema = this._schema;
+    const validationResult = schema.safeParse(cleanedValues);
     if (validationResult.success) {
       return { success: true, data: validationResult.data } as const;
     }

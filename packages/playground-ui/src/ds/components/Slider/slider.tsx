@@ -26,7 +26,8 @@ const Slider = ({
   'aria-labelledby': ariaLabelledBy,
   ...props
 }: SliderProps) => {
-  const values = Array.isArray(value) ? value : Array.isArray(defaultValue) ? defaultValue : [min];
+  const currentValue = value ?? defaultValue ?? min;
+  const values = typeof currentValue === 'number' ? [currentValue] : currentValue;
 
   return (
     <SliderPrimitive.Root

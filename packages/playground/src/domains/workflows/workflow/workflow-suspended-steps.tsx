@@ -6,6 +6,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/pla
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { ChevronRight, CirclePause, MoveDownLeft, MoveUpRight, Play } from 'lucide-react';
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
@@ -29,7 +30,7 @@ export interface WorkflowSuspendedStepsProps {
   suspendedSteps: SuspendedStep[];
   workflow: GetWorkflowResponse;
   isStreaming: boolean;
-  onResume: (step: ResumeStepParams) => void;
+  onResume: (step: ResumeStepParams) => Promise<void>;
 }
 
 function formatPayloadSize(payload: unknown): string {
@@ -114,11 +115,12 @@ interface SuspendedStepCardProps {
   stepSchema: z.ZodSchema;
   description?: string;
   isStreaming: boolean;
-  onResume: (step: ResumeStepParams) => void;
+  onResume: WorkflowSuspendedStepsProps['onResume'];
 }
 
 function SuspendedStepCard({ step, stepSchema, description, isStreaming, onResume }: SuspendedStepCardProps) {
   const [isPayloadOpen, setIsPayloadOpen] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
 
   return (
     <div className="[&+&]:border-border1/50 space-y-5 p-5 [&+&]:border-t">
@@ -133,7 +135,7 @@ function SuspendedStepCard({ step, stepSchema, description, isStreaming, onResum
         )}
       </div>
 
-      {step.suspendPayload && (
+      {step.suspendPayload !== undefined && (
         <div className="space-y-2">
           <Txt as="p" variant="ui-sm" className="text-neutral3 flex items-center gap-2">
             <Icon>
@@ -161,7 +163,7 @@ function SuspendedStepCard({ step, stepSchema, description, isStreaming, onResum
             <CollapsibleContent>
               <div data-testid="suspended-payload" className="pt-2">
                 <CodeEditor
-                  data={step.suspendPayload}
+                  value={JSON.stringify(step.suspendPayload, null, 2)}
                   editable={false}
                   className="w-full overflow-x-auto p-2"
                   showCopyButton={false}
@@ -183,7 +185,7 @@ function SuspendedStepCard({ step, stepSchema, description, isStreaming, onResum
         <div className="-mx-5">
           <WorkflowInputData
             schema={stepSchema}
-            isSubmitLoading={isStreaming}
+            isSubmitLoading={isStreaming || isResuming}
             submitButtonLabel="Resume"
             submitButtonVariant="primary"
             submitButtonIcon={<Play />}
@@ -191,15 +193,21 @@ function SuspendedStepCard({ step, stepSchema, description, isStreaming, onResum
             collapsible={false}
             hideHeading
             hideInputTypeLabel
-            onSubmit={data => {
-              const stepIds = step.stepId?.split('.');
-              onResume({
-                stepId: stepIds,
-                runId: step.runId,
-                suspendPayload: step.suspendPayload,
-                resumeData: data,
-                isLoading: false,
-              });
+            onSubmit={async data => {
+              setIsResuming(true);
+              try {
+                await onResume({
+                  stepId: step.stepId.split('.'),
+                  runId: step.runId,
+                  suspendPayload: step.suspendPayload,
+                  resumeData: data,
+                  isLoading: false,
+                });
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : 'Error resuming workflow');
+              } finally {
+                setIsResuming(false);
+              }
             }}
           />
         </div>

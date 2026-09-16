@@ -11,7 +11,7 @@ import { WorkflowRunContext } from '../workflow-run-context';
 import { WorkflowRunProvider } from '../workflow-run-provider';
 import { WorkflowSelectedStepProvider } from '../workflow-selected-step-context';
 import { WorkflowStepDetailProvider } from '../workflow-step-detail-provider';
-import { completedLoop, suspendedLoop } from './fixtures/completed-loop';
+import { completedLoop, partialCompletedLoop, pausedLoop, suspendedLoop } from './fixtures/completed-loop';
 import { completedChunks, runningChunk } from './fixtures/workflow-stream';
 import { server } from '@/test/msw-server';
 
@@ -20,8 +20,17 @@ afterEach(cleanup);
 
 function CompletedRunProbe() {
   const [streamFinished, setStreamFinished] = useState(false);
-  const { result, setResult, setRunId, clearData, resumeWorkflow, streamWorkflow, isStreamingWorkflow } =
-    useContext(WorkflowRunContext);
+  const {
+    result,
+    setResult,
+    setRunId,
+    clearData,
+    resumeWorkflow,
+    streamWorkflow,
+    timeTravelWorkflowStream,
+    observeWorkflowStream,
+    isStreamingWorkflow,
+  } = useContext(WorkflowRunContext);
   return (
     <>
       <button
@@ -47,6 +56,7 @@ function CompletedRunProbe() {
             runId: completedLoop.runId,
             step: 'review',
             resumeData: { approved: true },
+            requestContext: {},
           })
         }
       >
@@ -66,13 +76,57 @@ function CompletedRunProbe() {
       >
         Stream run
       </button>
+      <button
+        onClick={() => {
+          setRunId('next-run');
+          void streamWorkflow({
+            workflowId: 'two-step-workflow',
+            runId: 'next-run',
+            inputData: { next: true },
+            requestContext: {},
+          });
+        }}
+      >
+        Stream another run
+      </button>
       <button onClick={() => setResult(null)}>Clear result</button>
+      <button onClick={() => setResult(current => (current ? { ...current, status: 'canceled' } : current))}>
+        Mark canceled
+      </button>
+      <button
+        onClick={() =>
+          void timeTravelWorkflowStream({
+            workflowId: 'two-step-workflow',
+            runId: completedLoop.runId,
+            step: 'review',
+            inputData: {},
+            requestContext: {},
+          })
+        }
+      >
+        Replay canceled run
+      </button>
+      <button
+        onClick={() =>
+          observeWorkflowStream?.({
+            workflowId: 'two-step-workflow',
+            runId: completedLoop.runId,
+            storeRunResult: result,
+          })
+        }
+      >
+        Observe run
+      </button>
       <output aria-label="Stream completion">{streamFinished ? 'Finished' : 'Pending'}</output>
       <output aria-label="Streaming state">{String(isStreamingWorkflow)}</output>
       <output aria-label="Run state">{result?.status}</output>
       <output aria-label="Child state">
         {result?.steps['analyze-document[0].count-words']?.status ?? 'No child state'}
       </output>
+      <output aria-label="Child output">
+        {JSON.stringify(result?.steps['analyze-document[0].count-words']?.output)}
+      </output>
+      <output aria-label="Persisted state">{result?.steps.persisted?.status}</output>
     </>
   );
 }
@@ -172,6 +226,48 @@ describe('WorkflowRunProvider', () => {
     });
   });
 
+  describe('when a superseded stream connects during the next run', () => {
+    it('does not replace or stop the active stream', async () => {
+      let connectOldStream = () => {};
+      let oldStreamRequested = () => {};
+      const oldConnection = new Promise<void>(resolve => {
+        connectOldStream = resolve;
+      });
+      const oldRequest = new Promise<void>(resolve => {
+        oldStreamRequested = resolve;
+      });
+      let finishNextStream = () => {};
+      const nextBody = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(JSON.stringify({ ...runningChunk, runId: 'next-run' }) + '\x1e'));
+          finishNextStream = () => controller.close();
+        },
+      });
+      server.use(
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/create-run`, ({ request }) =>
+          HttpResponse.json({ runId: new URL(request.url).searchParams.get('runId') }),
+        ),
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/stream`, async ({ request }) => {
+          if (new URL(request.url).searchParams.get('runId') === 'next-run') return new HttpResponse(nextBody);
+          oldStreamRequested();
+          await oldConnection;
+          return new HttpResponse(completedChunks.map(chunk => JSON.stringify(chunk) + '\x1e').join(''));
+        }),
+      );
+      renderProvider();
+      fireEvent.click(screen.getByRole('button', { name: 'Stream run' }));
+      await oldRequest;
+      fireEvent.click(screen.getByRole('button', { name: 'Stream another run' }));
+      await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('running'));
+      connectOldStream();
+      await waitFor(() => expect(screen.getByLabelText('Stream completion').textContent).toBe('Finished'));
+      expect(screen.getByLabelText('Run state').textContent).toBe('running');
+      expect(screen.getByLabelText('Streaming state').textContent).toBe('true');
+      finishNextStream();
+      await waitFor(() => expect(screen.getByLabelText('Streaming state').textContent).toBe('false'));
+    });
+  });
+
   describe('when selecting an uncached run', () => {
     it('clears the previous result while the selected run loads', async () => {
       let finishLoading = () => {};
@@ -213,8 +309,65 @@ describe('WorkflowRunProvider', () => {
       );
       renderProvider(completedLoop.runId);
       await screen.findByText('suspended');
+      fireEvent.click(screen.getByRole('button', { name: 'Observe run' }));
       fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
       await waitFor(() => expect(screen.getByLabelText('Child state').textContent).toBe('success'));
+    });
+  });
+
+  describe('when opening a paused run', () => {
+    it('keeps continuation available instead of waiting for an observer stream', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/workflows/two-step-workflow/runs/completed-loop`, () =>
+          HttpResponse.json(pausedLoop),
+        ),
+      );
+      renderProvider(completedLoop.runId);
+      await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('paused'));
+      fireEvent.click(screen.getByRole('button', { name: 'Observe run' }));
+      expect(screen.getByLabelText('Streaming state').textContent).toBe('false');
+    });
+  });
+
+  describe('when replaying a locally canceled run', () => {
+    it('uses the new stream instead of the canceled override', async () => {
+      server.use(
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/create-run`, () =>
+          HttpResponse.json({ runId: completedLoop.runId }),
+        ),
+        http.post(
+          `${BASE_URL}/api/workflows/two-step-workflow/time-travel-stream`,
+          () => new HttpResponse(JSON.stringify({ ...runningChunk, runId: completedLoop.runId }) + '\x1e'),
+        ),
+      );
+      renderProvider(completedLoop.runId);
+      await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('success'));
+      fireEvent.click(screen.getByRole('button', { name: 'Mark canceled' }));
+      expect(screen.getByLabelText('Run state').textContent).toBe('canceled');
+      fireEvent.click(screen.getByRole('button', { name: 'Replay canceled run' }));
+      await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('running'));
+    });
+  });
+
+  describe('when persistence returns a partial completed step', () => {
+    it('keeps the output already received from the stream', async () => {
+      server.use(
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/create-run`, () =>
+          HttpResponse.json({ runId: 'live-run' }),
+        ),
+        http.post(
+          `${BASE_URL}/api/workflows/two-step-workflow/stream`,
+          () => new HttpResponse(completedChunks.map(chunk => JSON.stringify(chunk) + '\x1e').join('')),
+        ),
+        http.get(`${BASE_URL}/api/workflows/two-step-workflow/runs/live-run`, () =>
+          HttpResponse.json(partialCompletedLoop),
+        ),
+      );
+      renderProvider();
+      fireEvent.click(screen.getByRole('button', { name: 'Stream run' }));
+      await waitFor(() => expect(screen.getByLabelText('Stream completion').textContent).toBe('Finished'));
+      await waitFor(() => expect(screen.getByLabelText('Persisted state').textContent).toBe('success'));
+      expect(screen.getByLabelText('Child output').textContent).toBe('{"words":2}');
     });
   });
 

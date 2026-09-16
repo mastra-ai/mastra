@@ -7,14 +7,15 @@ import type { ReactNode } from 'react';
 import { useRef, useState } from 'react';
 import type { ZodSchema } from 'zod';
 
-import { createProcessorInput } from './input/processor-input';
+import { createProcessorInput, processorDraftSchema } from './input/processor-input';
 import { WorkflowJsonInput } from './input/workflow-json-input';
 import { WorkflowProcessorInput } from './input/workflow-processor-input';
 import { WorkflowInputTypeToggle } from './workflow-input-type-toggle';
 import type { WorkflowInputType } from './workflow-input-type-toggle';
 import { DynamicForm } from '@/lib/form';
-
-type InputType = WorkflowInputType;
+import { isPlainObject } from '@/lib/form/utils';
+import { getBaseSchema } from '@/lib/form/zod-provider/compat';
+import { inferFieldType } from '@/lib/form/zod-provider/field-type-inference';
 
 export interface WorkflowInputDataProps {
   schema: ZodSchema;
@@ -68,7 +69,8 @@ export const WorkflowInputData = ({
 
   function parseJsonDraft(text: string) {
     try {
-      return { success: true, value: JSON.parse(text) as unknown } as const;
+      const value: unknown = JSON.parse(text);
+      return { success: true, value } as const;
     } catch (error) {
       setErrors([error instanceof Error ? `Invalid JSON: ${error.message}` : 'Invalid JSON']);
       return { success: false } as const;
@@ -83,7 +85,7 @@ export const WorkflowInputData = ({
     else setErrors(result.error.issues.map(issue => `${issue.path.join('.') || 'Input'}: ${issue.message}`));
   }
 
-  function changeInputType(type: InputType) {
+  function changeInputType(type: WorkflowInputType) {
     if (type === draft.type) return;
     setErrors([]);
     const value = draft.type === 'form' ? formValues.current : draft.value;
@@ -93,7 +95,25 @@ export const WorkflowInputData = ({
     }
     if (draft.type === 'json') {
       const json = parseJsonDraft(draft.value);
-      if (json.success) setDraft({ type, value: json.value });
+      if (!json.success) return;
+      if (type === 'simple' && !processorDraftSchema.safeParse(json.value).success) {
+        setErrors([
+          'Simple input requires a messages array with text parts and a string phase. Correct the JSON first.',
+        ]);
+        return;
+      }
+      if (type === 'form') {
+        const fieldType = inferFieldType(getBaseSchema(schema));
+        if (fieldType === 'object' && !isPlainObject(json.value)) {
+          setErrors(['Form input requires a JSON object. Correct the JSON first.']);
+          return;
+        }
+        if (fieldType === 'array' && !Array.isArray(json.value)) {
+          setErrors(['Form input requires a JSON array. Correct the JSON first.']);
+          return;
+        }
+      }
+      setDraft({ type, value: json.value });
       return;
     }
     setDraft({ type, value });
@@ -208,7 +228,7 @@ export const WorkflowInputData = ({
         {headingSlot ?? defaultHeading}
       </CollapsibleTrigger>
 
-      <CollapsibleContent>{body}</CollapsibleContent>
+      <CollapsibleContent keepMounted>{body}</CollapsibleContent>
     </Collapsible>
   );
 };

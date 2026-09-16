@@ -54,7 +54,7 @@ export function WorkflowRunData({ input, result }: { input: unknown; result: Wor
             </Tab>
           </TabList>
           <TabContent value="input" flush>
-            <RunDataValue value={input} />
+            <RunDataValue value={result.input !== undefined ? result.input : input} />
           </TabContent>
           {hasOutput && (
             <TabContent value="output" flush>

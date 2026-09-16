@@ -82,6 +82,7 @@ export const WorkflowRunDetail = ({
 
   return (
     <WorkflowTrigger
+      key={`${workflowId}:${runId}`}
       {...triggerProps}
       paramsRunId={runId}
       paramsRunStatus={runSnapshot.status}

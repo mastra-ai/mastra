@@ -26,6 +26,28 @@ describe('Workflow execution clock', () => {
     act(() => vi.advanceTimersByTime(1000));
     expect(screen.getByText('200ms')).not.toBeNull();
   });
+
+  describe('when execution starts after the clock has been mounted', () => {
+    it('uses the current time immediately rather than the stopped clock snapshot', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(1000);
+      const view = render(<WorkflowClock startedAt={1000} />);
+      vi.setSystemTime(5000);
+      view.rerender(<WorkflowClock startedAt={4900} isRunning />);
+      expect(screen.getByText('100ms')).not.toBeNull();
+    });
+  });
+
+  describe('when a running card switches to another execution', () => {
+    it('starts the new clock from its own timestamp before the first tick', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(1000);
+      const view = render(<WorkflowClock startedAt={1000} isRunning />);
+      vi.setSystemTime(5000);
+      view.rerender(<WorkflowClock startedAt={4800} isRunning />);
+      expect(screen.getByText('200ms')).not.toBeNull();
+    });
+  });
 });
 
 describe('Workflow execution clock fallback', () => {

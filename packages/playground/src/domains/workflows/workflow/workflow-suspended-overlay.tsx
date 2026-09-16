@@ -3,14 +3,16 @@ import { useContext } from 'react';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useResumeWorkflow, useSuspendedSteps } from './use-workflow-trigger';
 import { WorkflowSuspendedSteps } from './workflow-suspended-steps';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export function WorkflowSuspendedOverlay({ hidden }: { hidden?: boolean }) {
   const { result, workflow, runId, isStreamingWorkflow } = useContext(WorkflowRunContext);
+  const { canExecute, isLoading: isLoadingPermissions } = usePermissions();
   const suspendedSteps = useSuspendedSteps(result, runId ?? '');
   const onResume = useResumeWorkflow();
 
   const canResume = result?.status === 'suspended' && !isStreamingWorkflow && workflow && suspendedSteps.length > 0;
-  if (!canResume) {
+  if (!canResume || isLoadingPermissions || !canExecute('workflows')) {
     return null;
   }
 

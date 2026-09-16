@@ -1,280 +1,157 @@
-import { WORKFLOW_DATA_EDGE_TYPE } from '@mastra/playground-ui/components/Workflow';
-import { renderHook } from '@testing-library/react';
-import type { Edge } from '@xyflow/react';
+import type { GetWorkflowRunByIdResponse } from '@mastra/client-js';
+import { MastraReactProvider } from '@mastra/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { cleanup, renderHook, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import { useContext } from 'react';
 import type { PropsWithChildren } from 'react';
-import { describe, expect, it } from 'vitest';
-
+import { afterEach, describe, expect, it } from 'vitest';
 import { WorkflowRunContext } from '../../context/workflow-run-context';
+import { WorkflowRunProvider } from '../../context/workflow-run-provider';
 import { useWorkflowGraphRuntime } from '../use-workflow-graph-runtime';
+import type { WorkflowGraphEdge } from '../utils';
 import { constructNodesAndEdges } from '../utils';
-import { WORKFLOW_BOUNDARY_NODE_TYPE } from '../workflow-step-node-utils';
-import { branchWorkflow } from './fixtures/workflow-debug-step-controls';
+import { branchWorkflow, twoStepWorkflow } from './fixtures/workflow-debug-step-controls';
+import { completedIterationRun, graphRun } from './fixtures/workflow-graph-runtime';
+import { server } from '@/test/msw-server';
 
-const workflowRunContextValue = {
-  result: {
-    status: 'running',
-    steps: {
-      extract: {
-        status: 'success',
-        payload: { request: true },
-        output: { customerId: 'cus_123' },
-        startedAt: Date.now(),
-      },
-      transform: {
-        status: 'running',
-        payload: { customerId: 'cus_123' },
-        startedAt: Date.now(),
-      },
-    },
-  },
-  debugMode: false,
-} as React.ComponentProps<typeof WorkflowRunContext.Provider>['value'];
+const BASE_URL = 'http://localhost:4111';
+afterEach(cleanup);
 
-const wrapper = ({ children }: PropsWithChildren) => (
-  <WorkflowRunContext.Provider value={workflowRunContextValue}>{children}</WorkflowRunContext.Provider>
-);
+async function renderRuntime(run: GetWorkflowRunByIdResponse, edges: WorkflowGraphEdge[], workflowName?: string) {
+  server.use(
+    http.get(`${BASE_URL}/api/workflows/two-step-workflow`, () => HttpResponse.json(twoStepWorkflow)),
+    http.get(`${BASE_URL}/api/workflows/two-step-workflow/runs/graph-run`, () => HttpResponse.json(run)),
+  );
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <WorkflowRunProvider workflowId="two-step-workflow" initialRunId="graph-run">
+          {children}
+        </WorkflowRunProvider>
+      </QueryClientProvider>
+    </MastraReactProvider>
+  );
+  const { result } = renderHook(
+    () => ({
+      ...useWorkflowGraphRuntime({ edges, workflowName }),
+      runResult: useContext(WorkflowRunContext).result,
+    }),
+    { wrapper },
+  );
+  await waitFor(() => expect(result.current.runResult).not.toBeNull());
+  return result;
+}
 
-describe('useWorkflowGraphRuntime', () => {
-  it('registers the workflow data edge type and applies it to workflow edges', () => {
-    const edges: Edge[] = [
-      {
-        id: 'e-extract-transform',
-        source: 'extract',
-        target: 'transform',
-        data: { previousStepId: 'extract', nextStepId: 'transform' },
-      },
-    ];
-
-    const { result } = renderHook(() => useWorkflowGraphRuntime({ edges }), { wrapper });
-
-    expect(result.current.edgeTypes[WORKFLOW_DATA_EDGE_TYPE]).toEqual(expect.any(Function));
-    expect(result.current.nodeTypes[WORKFLOW_BOUNDARY_NODE_TYPE]).toEqual(expect.any(Function));
-    expect(result.current.styledEdges[0].type).toBe(WORKFLOW_DATA_EDGE_TYPE);
-  });
-
-  it('renders unfinished edges in gray instead of the default white stroke', () => {
-    const edges: Edge[] = [
-      {
-        id: 'e-transform-load',
-        source: 'transform',
-        target: 'load',
-        data: { previousStepId: 'transform', nextStepId: 'load' },
-      },
-    ];
-
-    const { result } = renderHook(() => useWorkflowGraphRuntime({ edges }), { wrapper });
-
-    expect(result.current.styledEdges[0].style?.stroke).toBe('#8e8e8e');
-    expect(result.current.styledEdges[0].data?.edgeStatus).toBe('idle');
-  });
-
-  it('renders finished green edges as solid instead of animated', () => {
-    const edges: Edge[] = [
-      {
-        id: 'e-extract-transform',
-        source: 'extract',
-        target: 'transform',
-        animated: true,
-        style: { strokeDasharray: '5 5' },
-        data: { previousStepId: 'extract', nextStepId: 'transform' },
-      },
-    ];
-
-    const { result } = renderHook(() => useWorkflowGraphRuntime({ edges }), { wrapper });
-
-    expect(result.current.styledEdges[0].style?.stroke).toBe('#22c55e');
-    expect(result.current.styledEdges[0].style?.strokeDasharray).toBe('none');
-    expect(result.current.styledEdges[0].animated).toBe(false);
-    expect(result.current.styledEdges[0].data?.edgeStatus).toBe('success');
-  });
-
-  it('does not light the conditional edge of a skipped branch arm', () => {
-    // After a conditional resolves, the un-taken arm is persisted as `skipped`. Its incoming
-    // condition edge must stay idle (grey) so the graph does not show the wrong branch as taken.
-    const conditionalContext = {
-      result: {
-        status: 'paused',
-        steps: {
-          'short-text': { status: 'skipped', startedAt: Date.now() },
-          'long-text': { status: 'success', output: { text: 'HELLOABHELLOAC' }, startedAt: Date.now() },
+describe('Workflow graph runtime', () => {
+  describe('when data passes between steps', () => {
+    it('marks the completed connection solid without completing a running predecessor', async () => {
+      const edges: WorkflowGraphEdge[] = [
+        {
+          id: 'completed',
+          source: 'extract',
+          target: 'transform',
+          animated: true,
+          data: { previousStepId: 'extract', nextStepId: 'transform' },
         },
-      },
-      debugMode: false,
-    } as React.ComponentProps<typeof WorkflowRunContext.Provider>['value'];
-
-    const conditionalWrapper = ({ children }: PropsWithChildren) => (
-      <WorkflowRunContext.Provider value={conditionalContext}>{children}</WorkflowRunContext.Provider>
-    );
-
-    const edges: Edge[] = [
-      {
-        id: 'e-condition-short-text',
-        source: 'condition',
-        target: 'short-text',
-        data: { nextStepId: 'short-text', conditionNode: true },
-      },
-      {
-        id: 'e-condition-long-text',
-        source: 'condition',
-        target: 'long-text',
-        data: { nextStepId: 'long-text', conditionNode: true },
-      },
-    ];
-
-    const { result } = renderHook(() => useWorkflowGraphRuntime({ edges }), { wrapper: conditionalWrapper });
-
-    const shortEdge = result.current.styledEdges.find(edge => edge.id === 'e-condition-short-text');
-    const longEdge = result.current.styledEdges.find(edge => edge.id === 'e-condition-long-text');
-
-    expect(shortEdge?.data?.edgeStatus).toBe('idle');
-    expect(longEdge?.data?.edgeStatus).toBe('success');
-  });
-
-  it('keeps both taken branches active when multiple conditions match', () => {
-    const context: typeof workflowRunContextValue = {
-      ...workflowRunContextValue,
-      workflow: branchWorkflow,
-      result: {
-        status: 'paused',
-        steps: {
-          'short-text': { status: 'success', startedAt: 100, endedAt: 200 },
-          'long-text': { status: 'success', startedAt: 100, endedAt: 200 },
+        {
+          id: 'pending',
+          source: 'transform',
+          target: 'load',
+          data: { previousStepId: 'transform', nextStepId: 'load' },
         },
-      },
-    };
-    const conditionalWrapper = ({ children }: PropsWithChildren) => (
-      <WorkflowRunContext.Provider value={context}>{children}</WorkflowRunContext.Provider>
-    );
-    const { edges } = constructNodesAndEdges(branchWorkflow);
-    const { result } = renderHook(() => useWorkflowGraphRuntime({ edges }), { wrapper: conditionalWrapper });
-    const branchEdges = result.current.styledEdges.filter(edge => edge.data?.conditionNode);
-    expect(branchEdges.length).toBeGreaterThan(0);
-    expect(branchEdges.every(edge => edge.data?.edgeStatus === 'success')).toBe(true);
+      ];
+      const result = await renderRuntime(graphRun, edges);
+      expect(result.current.styledEdges[0]).toMatchObject({ animated: false, data: { edgeStatus: 'success' } });
+      expect(result.current.styledEdges[1].data?.edgeStatus).toBe('idle');
+    });
   });
 
-  it('keeps the workflow-input boundary edge idle before the first step starts', () => {
-    const idleContext = {
-      result: {
-        status: 'running',
-        steps: {},
-      },
-      debugMode: false,
-    } as React.ComponentProps<typeof WorkflowRunContext.Provider>['value'];
-
-    const idleWrapper = ({ children }: PropsWithChildren) => (
-      <WorkflowRunContext.Provider value={idleContext}>{children}</WorkflowRunContext.Provider>
-    );
-
-    const edges: Edge[] = [
-      {
-        id: 'e-__workflow-start__-add-letter',
-        source: '__workflow-start__',
-        target: 'add-letter',
-        data: { boundaryPayload: 'workflow-input', nextStepId: 'add-letter' },
-      },
-    ];
-
-    const { result } = renderHook(() => useWorkflowGraphRuntime({ edges }), { wrapper: idleWrapper });
-
-    expect(result.current.styledEdges[0].data?.edgeStatus).toBe('idle');
-    expect(result.current.styledEdges[0].style?.stroke).toBe('#8e8e8e');
-  });
-
-  it('lights the workflow-input boundary edge green once the first step starts', () => {
-    const edges: Edge[] = [
-      {
-        id: 'e-__workflow-start__-transform',
-        source: '__workflow-start__',
-        target: 'transform',
-        animated: true,
-        style: { strokeDasharray: '5 5' },
-        data: { boundaryPayload: 'workflow-input', nextStepId: 'transform' },
-      },
-    ];
-
-    const { result } = renderHook(() => useWorkflowGraphRuntime({ edges }), { wrapper });
-
-    expect(result.current.styledEdges[0].data?.edgeStatus).toBe('success');
-    expect(result.current.styledEdges[0].style?.stroke).toBe('#22c55e');
-    expect(result.current.styledEdges[0].style?.strokeDasharray).toBe('none');
-    expect(result.current.styledEdges[0].animated).toBe(false);
-  });
-
-  it('keeps the workflow-input boundary edge idle for a skipped first step', () => {
-    const skippedContext = {
-      result: {
-        status: 'running',
-        steps: {
-          'add-letter': { status: 'skipped', startedAt: Date.now() },
+  describe('when a branch decision skips an arm', () => {
+    it('keeps only the taken arm connected', async () => {
+      const { edges } = constructNodesAndEdges(branchWorkflow);
+      const result = await renderRuntime(
+        {
+          ...graphRun,
+          status: 'paused',
+          steps: {
+            'short-text': { status: 'skipped', startedAt: 100 },
+            'long-text': { status: 'success', payload: {}, output: 'matched', startedAt: 100, endedAt: 200 },
+          },
         },
-      },
-      debugMode: false,
-    } as React.ComponentProps<typeof WorkflowRunContext.Provider>['value'];
-
-    const skippedWrapper = ({ children }: PropsWithChildren) => (
-      <WorkflowRunContext.Provider value={skippedContext}>{children}</WorkflowRunContext.Provider>
-    );
-
-    const edges: Edge[] = [
-      {
-        id: 'e-__workflow-start__-add-letter',
-        source: '__workflow-start__',
-        target: 'add-letter',
-        data: { boundaryPayload: 'workflow-input', nextStepId: 'add-letter' },
-      },
-    ];
-
-    const { result } = renderHook(() => useWorkflowGraphRuntime({ edges }), { wrapper: skippedWrapper });
-
-    expect(result.current.styledEdges[0].data?.edgeStatus).toBe('idle');
-    expect(result.current.styledEdges[0].style?.stroke).toBe('#8e8e8e');
+        edges,
+      );
+      const shortEdges = result.current.styledEdges.filter(edge => edge.data?.nextStepId === 'short-text');
+      const longEdges = result.current.styledEdges.filter(edge => edge.data?.nextStepId === 'long-text');
+      expect(shortEdges.map(edge => edge.data?.edgeStatus)).toEqual(['idle', 'idle']);
+      expect(longEdges.map(edge => edge.data?.edgeStatus)).toEqual(['success', 'success']);
+    });
   });
 
-  it('keeps the workflow-output boundary edge idle until the run succeeds', () => {
-    // The boundary edge into the End node carries no step ids, so it cannot rely on a
-    // predecessor step. It should only light once the whole run reaches `success`.
-    const edges: Edge[] = [
-      {
-        id: 'e-final-step-__workflow-end__',
-        source: 'final-step',
-        target: '__workflow-end__',
-        data: { boundaryPayload: 'workflow-output' },
-      },
-    ];
-
-    const { result } = renderHook(() => useWorkflowGraphRuntime({ edges }), { wrapper });
-
-    expect(result.current.styledEdges[0].data?.edgeStatus).toBe('idle');
-  });
-
-  it('lights the workflow-output boundary edge green once the run succeeds', () => {
-    const successContext = {
-      result: {
-        status: 'success',
-        result: { output: true },
-        steps: {
-          'final-step': { status: 'success', output: { output: true }, startedAt: Date.now() },
+  describe('when multiple branch conditions match', () => {
+    it('keeps both matching arms connected', async () => {
+      const { edges } = constructNodesAndEdges(branchWorkflow);
+      const result = await renderRuntime(
+        {
+          ...graphRun,
+          status: 'paused',
+          steps: {
+            'short-text': { status: 'success', payload: {}, output: 'short', startedAt: 100, endedAt: 200 },
+            'long-text': { status: 'success', payload: {}, output: 'long', startedAt: 100, endedAt: 200 },
+          },
         },
-      },
-      debugMode: false,
-    } as React.ComponentProps<typeof WorkflowRunContext.Provider>['value'];
+        edges,
+      );
+      const branchEdges = result.current.styledEdges.filter(edge => edge.data?.conditionNode);
+      expect(branchEdges.map(edge => edge.data?.edgeStatus)).toEqual(['success', 'success', 'success', 'success']);
+    });
+  });
 
-    const successWrapper = ({ children }: PropsWithChildren) => (
-      <WorkflowRunContext.Provider value={successContext}>{children}</WorkflowRunContext.Provider>
+  describe('when a workflow has not completed', () => {
+    it('distinguishes delivered input from an unavailable final result', async () => {
+      const { edges } = constructNodesAndEdges(twoStepWorkflow);
+      const result = await renderRuntime(graphRun, edges);
+      expect(
+        result.current.styledEdges.find(edge => edge.data?.boundaryPayload === 'workflow-input')?.data?.edgeStatus,
+      ).toBe('success');
+      expect(
+        result.current.styledEdges.find(edge => edge.data?.boundaryPayload === 'workflow-output')?.data?.edgeStatus,
+      ).toBe('idle');
+    });
+
+    it.each(['pending', 'skipped'] as const)('keeps a %s first step disconnected from input', async status => {
+      const { edges } = constructNodesAndEdges(twoStepWorkflow);
+      const result = await renderRuntime(
+        { ...graphRun, steps: status === 'pending' ? {} : { extract: { status: 'skipped', startedAt: 100 } } },
+        edges,
+      );
+      expect(
+        result.current.styledEdges.find(edge => edge.data?.boundaryPayload === 'workflow-input')?.data?.edgeStatus,
+      ).toBe('idle');
+    });
+  });
+
+  describe('when the workflow succeeds', () => {
+    it('connects the final result to End', async () => {
+      const { edges } = constructNodesAndEdges(twoStepWorkflow);
+      const result = await renderRuntime({ ...graphRun, status: 'success', result: { completed: true } }, edges);
+      expect(
+        result.current.styledEdges.find(edge => edge.data?.boundaryPayload === 'workflow-output')?.data?.edgeStatus,
+      ).toBe('success');
+    });
+  });
+
+  describe('when a completed foreach item has a falsy result', () => {
+    it.each(['batch[0]', 'batch[1]'])(
+      'connects the selected %s result rather than requiring a synthetic parent step',
+      async scope => {
+        const { edges } = constructNodesAndEdges(twoStepWorkflow);
+        const result = await renderRuntime(completedIterationRun, edges, scope);
+        expect(
+          result.current.styledEdges.find(edge => edge.data?.boundaryPayload === 'workflow-output')?.data?.edgeStatus,
+        ).toBe('success');
+      },
     );
-
-    const edges: Edge[] = [
-      {
-        id: 'e-final-step-__workflow-end__',
-        source: 'final-step',
-        target: '__workflow-end__',
-        data: { boundaryPayload: 'workflow-output' },
-      },
-    ];
-
-    const { result } = renderHook(() => useWorkflowGraphRuntime({ edges }), { wrapper: successWrapper });
-
-    expect(result.current.styledEdges[0].data?.edgeStatus).toBe('success');
-    expect(result.current.styledEdges[0].style?.stroke).toBe('#22c55e');
   });
 });

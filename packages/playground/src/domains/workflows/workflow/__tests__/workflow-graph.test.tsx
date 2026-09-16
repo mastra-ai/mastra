@@ -14,6 +14,7 @@ import { WorkflowSelectedStepProvider } from '../../context/workflow-selected-st
 import { WorkflowStepDetailProvider } from '../../context/workflow-step-detail-provider';
 import { WorkflowGraph } from '../workflow-graph';
 import { twoStepWorkflow as baseWorkflow } from './fixtures/workflow-debug-step-controls';
+import { graphRun } from './fixtures/workflow-graph-runtime';
 
 const reactFlowViewport = vi.hoisted(() => ({
   getNodes: vi.fn<() => XyFlowReact.Node[]>(() => []),
@@ -232,14 +233,9 @@ describe('WorkflowGraph', () => {
             workflow={twoStepWorkflow}
             contextValue={{
               runSnapshot: {
+                ...graphRun,
                 runId,
-                context: {},
-                status: 'success',
-                serializedStepGraph: structuredClone(twoStepWorkflow.stepGraph),
-              },
-              snapshot: {
-                runId,
-                context: {},
+                steps: {},
                 status: 'success',
                 serializedStepGraph: structuredClone(twoStepWorkflow.stepGraph),
               },

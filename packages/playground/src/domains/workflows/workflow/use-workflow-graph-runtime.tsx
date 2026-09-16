@@ -8,6 +8,7 @@ import { WorkflowRunContext } from '../context/workflow-run-context';
 import { groupWorkflowEdgeData } from './data/workflow-edge-data-groups';
 import { buildStepsFlow } from './utils';
 import type { WorkflowGraphEdge } from './utils';
+import { getWorkflowBoundaryData } from './workflow-boundary-data';
 import { WorkflowDataEdge } from './workflow-data-edge';
 import { WorkflowGraphNode } from './workflow-graph-node';
 import { WORKFLOW_BOUNDARY_NODE_TYPE, WORKFLOW_STEP_NODE_TYPE } from './workflow-step-node-utils';
@@ -26,7 +27,7 @@ export const useWorkflowGraphRuntime = ({
   const { steps } = useCurrentRun();
   const workflowRun = useContext(WorkflowRunContext);
   const workflowSucceeded = workflowName
-    ? steps[workflowName]?.status === 'success'
+    ? steps[workflowName]?.status === 'success' || getWorkflowBoundaryData(steps, workflowName).output !== undefined
     : workflowRun.result?.status === 'success';
   const stepsFlow = useMemo(() => buildStepsFlow(edges), [edges]);
   const nodeTypes = useMemo(

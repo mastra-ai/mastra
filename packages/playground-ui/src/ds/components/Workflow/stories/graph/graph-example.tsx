@@ -1,48 +1,29 @@
-import { ReactFlowProvider, useNodesState } from '@xyflow/react';
+import { ReactFlowProvider, useNodesState, useReactFlow } from '@xyflow/react';
 import type { EdgeProps, Node, NodeProps } from '@xyflow/react';
-import { useState } from 'react';
 import { WorkflowConditionCard } from '../../cards/condition/workflow-condition-card';
 import { WorkflowStepCardView } from '../../cards/step/workflow-step-card-view';
-import { WorkflowStepAction } from '../../controls/workflow-step-action';
-import { WorkflowStepActions } from '../../controls/workflow-step-actions';
 import { WORKFLOW_BOUNDARY_NODE_TYPE, WORKFLOW_DATA_EDGE_TYPE } from '../../graph/types';
 import { WorkflowBoundaryNode } from '../../graph/workflow-boundary-node';
 import { WorkflowDataEdgeView } from '../../graph/workflow-data-edge-view';
 import { WorkflowGraphCanvas } from '../../graph/workflow-graph-canvas';
+import type { WorkflowGraphCanvasProps } from '../../graph/workflow-graph-canvas';
 import { WorkflowNodeFrame } from '../../graph/workflow-node-frame';
 import { sequentialNodes, sequentialEdges } from './fixtures';
 import type { StoryConditionNode, StoryDataEdge, StoryStepNode } from './fixtures';
-import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
 
-function StepNode({ data, selected }: NodeProps<StoryStepNode>) {
-  const [nestedOpen, setNestedOpen] = useState(false);
+function StepNode({ id, data, selected }: NodeProps<StoryStepNode>) {
+  const { setNodes } = useReactFlow();
   return (
     <WorkflowNodeFrame>
       <WorkflowStepCardView
         {...data.card}
         isSelected={selected}
-        actionBar={
-          data.nested ? (
-            <WorkflowStepActions>
-              <WorkflowStepAction action="nested" onSelect={() => setNestedOpen(true)} />
-            </WorkflowStepActions>
-          ) : undefined
+        onSelect={() => setNodes(nodes => nodes.map(node => ({ ...node, selected: node.id === id })))}
+        initiallyOpen={data.card.initiallyOpen ?? data.card.isForEach}
+        body={
+          data.nested ? <GraphExample nodes={sequentialNodes} edges={sequentialEdges} variant="inline" /> : undefined
         }
       />
-      {data.nested && (
-        <Dialog open={nestedOpen} onOpenChange={setNestedOpen}>
-          <DialogContent className="w-full max-w-4xl">
-            <DialogHeader>
-              <DialogTitle>{data.card.label}</DialogTitle>
-            </DialogHeader>
-            <DialogBody>
-              <div style={{ height: 520 }}>
-                <GraphExample nodes={sequentialNodes} edges={sequentialEdges} variant="nested" />
-              </div>
-            </DialogBody>
-          </DialogContent>
-        </Dialog>
-      )}
     </WorkflowNodeFrame>
   );
 }
@@ -66,13 +47,15 @@ export function GraphExample({
   nodes: initialNodes,
   edges,
   variant,
+  groups,
 }: {
   nodes: Node[];
   edges: StoryDataEdge[];
-  variant?: 'default' | 'nested';
+  variant?: WorkflowGraphCanvasProps['variant'];
+  groups?: WorkflowGraphCanvasProps['groups'];
 }) {
   const [nodes, , onNodesChange] = useNodesState(initialNodes);
-  const [focusNodeId, setFocusNodeId] = useState<string>();
+  const focusNodeId = nodes.find(node => node.selected)?.id;
   return (
     <ReactFlowProvider>
       <WorkflowGraphCanvas
@@ -81,9 +64,9 @@ export function GraphExample({
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
-        onNodeClick={(_, node) => setFocusNodeId(node.id)}
-        focusNodeId={focusNodeId}
+        focusNodeId={variant === 'inline' ? undefined : focusNodeId}
         variant={variant}
+        groups={groups}
       />
     </ReactFlowProvider>
   );

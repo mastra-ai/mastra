@@ -2,6 +2,7 @@ import { Background, BackgroundVariant, ReactFlow, useNodesInitialized, useReact
 import type { Edge, Node, ReactFlowProps } from '@xyflow/react';
 import { useContext, useEffect, useId, useRef } from 'react';
 import { WorkflowCanvasInsetContext, workflowFitOptions } from '../workflow-canvas-inset';
+import { workflowCameraDuration } from './workflow-camera-duration';
 import { WorkflowGraphGroups } from './workflow-graph-groups';
 import type { WorkflowGraphGroup } from './workflow-graph-groups';
 import { ZoomSlider } from './zoom-slider';
@@ -67,7 +68,7 @@ export function WorkflowGraphCanvas<NodeType extends Node, EdgeType extends Edge
     }
     const width = focusNode.measured?.width ?? focusNode.width ?? 274;
     const height = focusNode.measured?.height ?? focusNode.height ?? 100;
-    const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 300;
+    const duration = workflowCameraDuration();
     const exceedsVisibleWidth = canvasWidth > 0 && width > canvasWidth - leftInset - 80;
     const exceedsVisibleHeight = canvasHeight > 0 && height > canvasHeight - 104;
     if (exceedsVisibleWidth || exceedsVisibleHeight) {
@@ -115,7 +116,7 @@ export function WorkflowGraphCanvas<NodeType extends Node, EdgeType extends Edge
             position="top-right"
             className="m-2!"
             compact={hasCompactZoom}
-            onFitView={() => fitView({ ...workflowFitOptions(leftInset), duration: 300 })}
+            onFitView={() => fitView({ ...workflowFitOptions(leftInset), duration: workflowCameraDuration() })}
           />
         )}
         {groups && <WorkflowGraphGroups nodes={nodes ?? []} groups={groups} />}

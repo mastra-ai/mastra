@@ -139,7 +139,7 @@ export function useNextPerStep() {
     const input = buildNextStepInput({ nextStepKey, stepsFlow, steps, isStepBypassed });
     if (input) return input;
     if (nextStepKey && (stepsFlow[nextStepKey]?.length ?? 0) === 0) {
-      return { hasMultiSteps: false, input: result?.input ?? payload };
+      return { hasMultiSteps: false, input: result?.input !== undefined ? result.input : payload };
     }
     return undefined;
   }, [nextStepKey, stepsFlow, steps, result?.input, payload, isStepBypassed]);

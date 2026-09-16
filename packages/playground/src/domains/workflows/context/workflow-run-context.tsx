@@ -1,10 +1,11 @@
-import type { TimeTravelParams } from '@mastra/client-js';
-import type { WorkflowRunState, WorkflowStreamResult } from '@mastra/core/workflows';
+import type { GetWorkflowRunByIdResponse, TimeTravelParams } from '@mastra/client-js';
+import type { WorkflowRunState } from '@mastra/core/workflows';
+import type { WorkflowStreamResult } from '@mastra/react';
 import { createContext } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { WorkflowTriggerProps } from '../workflow/workflow-trigger';
 
-export type WorkflowRunStreamResult = WorkflowStreamResult<any, any, any, any>;
+export type WorkflowRunStreamResult = WorkflowStreamResult;
 
 export type WorkflowRunContextType = {
   result: WorkflowRunStreamResult | null;
@@ -33,7 +34,7 @@ export type WorkflowRunContextType = {
       runId?: string;
     } & Omit<TimeTravelParams, 'requestContext'>,
   ) => Promise<void>;
-  runSnapshot?: WorkflowRunState;
+  runSnapshot?: WorkflowRunState | (GetWorkflowRunByIdResponse & { timestamp?: number });
   isLoadingRunExecutionResult?: boolean;
   withoutTimeTravel?: boolean;
   debugMode: boolean;

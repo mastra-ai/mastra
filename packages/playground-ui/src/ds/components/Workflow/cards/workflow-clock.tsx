@@ -9,17 +9,23 @@ interface WorkflowClockProps {
 }
 
 export const WorkflowClock = ({ startedAt, endedAt, isRunning = false }: WorkflowClockProps) => {
-  const [time, setTime] = useState(() => Date.now());
-  const needsClock = isRunning && endedAt === undefined && Number.isFinite(startedAt);
+  if (isRunning && endedAt === undefined && Number.isFinite(startedAt)) {
+    return <RunningWorkflowClock key={startedAt} startedAt={startedAt} />;
+  }
+  return <ElapsedTime startedAt={startedAt} endedAt={endedAt} />;
+};
 
+function RunningWorkflowClock({ startedAt }: Pick<WorkflowClockProps, 'startedAt'>) {
+  const [time, setTime] = useState(() => Date.now());
   useEffect(() => {
-    if (!needsClock) return;
     const interval = setInterval(() => setTime(Date.now()), 100);
     return () => clearInterval(interval);
-  }, [needsClock]);
+  }, []);
+  return <ElapsedTime startedAt={startedAt} endedAt={time} />;
+}
 
-  const end = endedAt ?? (isRunning ? time : undefined);
-  const duration = end === undefined ? NaN : end - startedAt;
+function ElapsedTime({ startedAt, endedAt }: Pick<WorkflowClockProps, 'startedAt' | 'endedAt'>) {
+  const duration = endedAt === undefined ? NaN : endedAt - startedAt;
   const timeDiff = Number.isFinite(duration) && duration >= 0 ? duration : undefined;
 
   return (
@@ -27,4 +33,4 @@ export const WorkflowClock = ({ startedAt, endedAt, isRunning = false }: Workflo
       {timeDiff === undefined ? <span aria-label="Timing unavailable">—</span> : `${toSigFigs(timeDiff, 3)}ms`}
     </Txt>
   );
-};
+}

@@ -1,3 +1,21 @@
+import { z } from 'zod';
+
+// Simple mode edits only this projection; unknown metadata stays in the draft.
+export const processorDraftSchema = z.object({
+  phase: z.string().optional(),
+  messages: z
+    .array(
+      z.object({
+        content: z
+          .object({
+            parts: z.array(z.object({ type: z.string(), text: z.string().optional() })).optional(),
+          })
+          .optional(),
+      }),
+    )
+    .optional(),
+});
+
 type ProcessorMessagePart = { type: string; text?: string };
 
 type ProcessorMessage = {

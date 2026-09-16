@@ -111,7 +111,7 @@ export const WorkflowStepActionBar = ({
   const showDebugMode = inDebugMode && stepPayload && !result?.steps?.[stepKey];
 
   const isMapConfigOpen = stepDetail?.type === 'map-config' && stepDetail?.stepName === stepName;
-  const isNestedGraphOpen = stepDetail?.type === 'nested-graph' && stepDetail?.stepName === stepName;
+  const isNestedGraphOpen = stepDetail?.type === 'nested-graph' && stepDetail.nestedGraph?.fullStep === stepKey;
 
   const handleMapConfigClick = () => {
     if (isMapConfigOpen) {

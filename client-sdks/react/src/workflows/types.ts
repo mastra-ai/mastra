@@ -1,10 +1,38 @@
-import type { TimeTravelParams } from '@mastra/client-js';
+import type { StreamVNextChunkType, TimeTravelParams } from '@mastra/client-js';
 import type { TracingOptions } from '@mastra/core/observability';
-import type { WorkflowStreamResult as CoreWorkflowStreamResult } from '@mastra/core/workflows';
-/**
- * Workflow stream result type alias.
- */
-export type WorkflowStreamResult = CoreWorkflowStreamResult<any, any, any, any>;
+import type {
+  StepTripwireInfo,
+  WorkflowState,
+  WorkflowStateSingleStepResult,
+  WorkflowStreamResult as CoreWorkflowStreamResult,
+} from '@mastra/core/workflows';
+
+type CoreStreamResult = CoreWorkflowStreamResult<any, any, any, any>;
+type StepProgress = Extract<StreamVNextChunkType, { type: 'workflow-step-progress' }>['payload'];
+
+/** Accumulated steps may come from partial stream events or persisted snapshots. */
+export type WorkflowStreamStep = Omit<WorkflowStateSingleStepResult, 'error'> & {
+  error?: WorkflowStateSingleStepResult['error'] | Error;
+  tripwire?: StepTripwireInfo;
+  foreachProgress?: Pick<
+    StepProgress,
+    'completedCount' | 'totalCount' | 'currentIndex' | 'iterationStatus' | 'iterationOutput'
+  >;
+};
+
+export type WorkflowStreamResult = {
+  status: WorkflowState['status'];
+  input: CoreStreamResult['input'];
+  steps: Record<string, WorkflowStreamStep>;
+  result?: Extract<CoreStreamResult, { status: 'success' }>['result'];
+  error?: WorkflowState['error'] | Error;
+  state?: Extract<CoreStreamResult, { status: 'success' }>['state'];
+  stepExecutionPath?: WorkflowState['stepExecutionPath'];
+  resumeLabels?: WorkflowState['resumeLabels'];
+  tripwire?: StepTripwireInfo;
+  suspended?: string[][];
+  suspendPayload?: Extract<CoreStreamResult, { status: 'suspended' }>['suspendPayload'];
+};
 
 /**
  * Parameters for the useStreamWorkflow hook.

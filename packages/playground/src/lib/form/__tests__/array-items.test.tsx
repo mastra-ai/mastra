@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { DynamicForm } from '../dynamic-form';
 
-const schema = z.object({ documents: z.array(z.object({ title: z.string(), text: z.string() })) });
+const schema = z.object({ documents: z.array(z.object({ title: z.string().min(1), text: z.string().min(1) })) });
 const documents = [
   { title: 'First document', text: 'Keep this content' },
   { title: 'Second document', text: 'Another paragraph' },

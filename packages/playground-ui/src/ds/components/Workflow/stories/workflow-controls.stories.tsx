@@ -20,3 +20,4 @@ type Story = StoryObj<typeof meta>;
 export const Paused: Story = {};
 export const Streaming: Story = { args: { isStreaming: true } };
 export const NoNextStep: Story = { args: { canRunNextStep: false, nextStepLabel: undefined } };
+export const Cancelling: Story = { args: { disabled: true } };

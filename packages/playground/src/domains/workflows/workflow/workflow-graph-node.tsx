@@ -105,11 +105,21 @@ const WorkflowStepCard = ({
   );
 };
 
-const WorkflowConditionNodeCard = ({ data }: { data: WorkflowStepNodeData }) => {
+const WorkflowConditionNodeCard = ({
+  data,
+  parentWorkflowName,
+}: {
+  data: WorkflowStepNodeData;
+  parentWorkflowName?: string;
+}) => {
   const { steps } = useCurrentRun();
   const conditions = data.conditions ?? [];
-  const previousStep = data.previousStepId ? steps[data.previousStepId] : undefined;
-  const nextStep = data.nextStepId ? steps[data.nextStepId] : undefined;
+  const previousStepId =
+    data.previousStepId && (parentWorkflowName ? `${parentWorkflowName}.${data.previousStepId}` : data.previousStepId);
+  const nextStepId =
+    data.nextStepId && (parentWorkflowName ? `${parentWorkflowName}.${data.nextStepId}` : data.nextStepId);
+  const previousStep = previousStepId ? steps[previousStepId] : undefined;
+  const nextStep = nextStepId ? steps[nextStepId] : undefined;
   const { displayStatus: previousDisplayStatus, isTripwire } = getDisplayStatus(previousStep);
 
   return (
@@ -135,7 +145,7 @@ export function WorkflowGraphNode({
 }: NodeProps<WorkflowStepNode> & WorkflowGraphNodeProps) {
   const content =
     data.workflowStep.kind === 'conditional' ? (
-      <WorkflowConditionNodeCard data={data} />
+      <WorkflowConditionNodeCard data={data} parentWorkflowName={parentWorkflowName} />
     ) : (
       <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />
     );

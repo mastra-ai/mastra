@@ -36,7 +36,7 @@ export const WorkflowProcessorInput = ({
   const handleSubmit = () => {
     setErrors([]);
 
-    const result = schema.safeParse(withPhaseRole(defaultValues));
+    const result = schema.safeParse(defaultValues);
     if (!result.success) {
       setErrors(result.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`));
       return;
@@ -67,7 +67,10 @@ export const WorkflowProcessorInput = ({
         </Txt>
         <Select
           value={phase}
-          onValueChange={phase => onValuesChange({ ...defaultValues, phase })}
+          onValueChange={phase => {
+            setErrors([]);
+            onValuesChange(withPhaseRole({ ...defaultValues, phase }));
+          }}
           disabled={isSubmitLoading}
         >
           <SelectTrigger id={phaseId} className="w-full">
@@ -93,7 +96,10 @@ export const WorkflowProcessorInput = ({
         <textarea
           id={messageId}
           value={message}
-          onChange={event => onValuesChange(updateProcessorMessage(defaultValues, event.target.value))}
+          onChange={event => {
+            setErrors([]);
+            onValuesChange(withPhaseRole(updateProcessorMessage(defaultValues, event.target.value)));
+          }}
           placeholder="Enter a test message..."
           rows={4}
           disabled={isSubmitLoading}

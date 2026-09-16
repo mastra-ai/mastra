@@ -14,9 +14,47 @@ describe('CustomZodProvider.validateSchema', () => {
 
     const result = provider.validateSchema({ startDate, name: '' });
 
-    expect(result.success).toBe(true);
-    expect(result.data).toEqual({ startDate });
-    expect(result.data!.startDate).toBeInstanceOf(Date);
+    expect(result).toEqual({ success: true, data: { startDate } });
+  });
+
+  describe('when an array contains an incomplete item', () => {
+    it('rejects that item without silently dropping it or moving the error to another index', () => {
+      const provider = new CustomZodProvider(z.object({ documents: z.array(z.object({ title: z.string().min(1) })) }));
+
+      const result = provider.validateSchema({ documents: [{ title: '' }, { title: 'Keep me' }] });
+
+      expect(result).toEqual({
+        success: false,
+        errors: [expect.objectContaining({ path: ['documents', 0, 'title'] })],
+      });
+    });
+  });
+
+  describe('when explicit empty values satisfy the schema', () => {
+    it('preserves empty collections, required strings, and nullable values', () => {
+      const provider = new CustomZodProvider(
+        z.object({
+          documents: z.array(z.string()),
+          options: z.object({}),
+          note: z.string(),
+          choice: z.string().nullable().optional(),
+        }),
+      );
+      const input = { documents: [], options: {}, note: '', choice: null };
+
+      expect(provider.validateSchema(input)).toEqual({ success: true, data: input });
+    });
+  });
+
+  describe('when an array item has a cleared default', () => {
+    it('submits the cleared value rather than restoring the nested default', () => {
+      const provider = new CustomZodProvider(
+        z.object({ documents: z.array(z.object({ title: z.string().default('Default title') })) }),
+      );
+      const input = { documents: [{ title: '' }] };
+
+      expect(provider.validateSchema(input)).toEqual({ success: true, data: input });
+    });
   });
 });
 
