@@ -1466,7 +1466,8 @@ const selector = new ModelByInputTokens({
 `skillResultFilter` builds a `beforeObservation` transform hook that drops the results of the built-in Agent Skills tools — `skill`, `skill_search`, and `skill_read` — before the Observer model sees them. Skill results contain a skill's full instructions or file contents, so filtering them keeps skill text out of observations while leaving the skill tool calls and all other messages intact.
 
 ```typescript
-import { Memory, skillResultFilter } from '@mastra/memory'
+import { Memory } from '@mastra/memory'
+import { skillResultFilter } from '@mastra/memory/filters'
 
 const memory = new Memory({
   options: {

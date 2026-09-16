@@ -1,6 +1,6 @@
 /**
  * Unit tests for the prebuilt `beforeObservation` filters exported from
- * `@mastra/memory`.
+ * `@mastra/memory/filters`.
  *
  * `skillResultFilter` is a pure function over the Observer's message payload, so
  * these tests exercise it directly and then prove the effect end-to-end through

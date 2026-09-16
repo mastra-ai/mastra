@@ -1,7 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { expectTypeOf, test } from 'vitest';
 
-import { SKILL_TOOL_NAMES, skillResultFilter, type ObserverMessageFilter } from '../src/index';
+import { SKILL_TOOL_NAMES, skillResultFilter, type ObserverMessageFilter } from '../src/filters';
 import type { ObserveTransformHooks } from '../src/processors/observational-memory/types';
 
 test('skillResultFilter is a synchronous beforeObservation filter', () => {

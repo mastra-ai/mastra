@@ -2,7 +2,7 @@ import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsdown';
 
 export default defineConfig({
-  entry: ['src/index.ts', 'src/processors/index.ts'],
+  entry: ['src/index.ts', 'src/filters.ts', 'src/processors/index.ts'],
   format: ['esm', 'cjs'],
   fixedExtension: false,
   nodeProtocol: 'strip',

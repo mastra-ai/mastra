@@ -112,10 +112,6 @@ export {
   type ObserverResult as ObserverAgentResult,
 } from './observer-agent';
 
-// Prebuilt `beforeObservation` filters
-export { skillResultFilter, SKILL_TOOL_NAMES } from './filters';
-export type { ObserverMessageFilter, SkillResultFilterOptions } from './filters';
-
 // Re-export storage types from core for convenience
 export type {
   ObservationalMemoryRecord,
