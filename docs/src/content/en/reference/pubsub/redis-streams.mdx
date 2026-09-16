@@ -58,7 +58,7 @@ export const mastra = new Mastra({
 
 ### Bring your own client
 
-To control client construction yourself (TLS, credential providers, Sentinel, and so on), pass an unconnected `redis` client as `client`. The pubsub uses it as its writer and calls `client.duplicate()` for each subscription's blocking reader, so every connection stays distinct. The pubsub owns the client's lifecycle — it connects on first use and quits it on `close()` — so don't share it with the rest of your app.
+To control client construction yourself (TLS, credential providers, Sentinel, and so on), pass an unconnected `redis` client as `client`. The pubsub uses it as its writer and calls `client.duplicate()` for each subscription's blocking reader, so every connection stays distinct. The pubsub owns the client's lifecycle (it connects on first use and quits it on `close()`), so don't share it with the rest of your app.
 
 ```typescript title="src/mastra/index.ts"
 import { RedisStreamsPubSub } from '@mastra/redis-streams'
