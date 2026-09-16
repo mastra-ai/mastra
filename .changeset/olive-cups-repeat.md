@@ -16,4 +16,4 @@ const result = await agent.generate('Extract the customer name.', {
 });
 ```
 
-`instructions` is also now serialized across the durable agent boundary, so the same behavior applies to durable runs.
+When no separate structuring `model` is configured, `instructions` is also serialized across the durable agent boundary, so the same behavior applies to durable runs.
