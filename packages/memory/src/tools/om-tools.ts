@@ -824,7 +824,7 @@ export async function recallPart({
     if (partIndex > highestVisiblePartIndex) {
       const nextMessage = await getNextVisibleMessage({
         memory,
-        threadId: resolved.threadId,
+        threadId: resolved.threadId ?? threadId,
         resourceId,
         after: resolved.createdAt,
       });
