@@ -1,8 +1,9 @@
 import { Agent } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { InMemoryTaskStore } from '../a2a/store';
 import { handleMessageSend, handleMessageStream } from './a2a';
 
@@ -87,5 +88,119 @@ describe.each(['send', 'stream'] as const)('A2A %s real Agent memory', transport
       status: { state: 'completed' },
       metadata: { resourceId: 'authenticated-user' },
     });
+  });
+
+  it('authorizes the destination before mutating task state or invoking the model', async () => {
+    const memory = new MockMemory({ storage: new InMemoryStore() });
+    const doGenerate = vi.fn();
+    const agent = new Agent({
+      id: 'denied-agent',
+      name: 'Denied agent',
+      instructions: 'Reply briefly',
+      memory,
+      model: {
+        specificationVersion: 'v2',
+        provider: 'test',
+        modelId: 'test-model',
+        supportedUrls: {},
+        doGenerate,
+        doStream: vi.fn(),
+      },
+    });
+    const mastra = new Mastra({ logger: false, agents: { [agent.id]: agent } });
+    const require = vi.fn().mockRejectedValue(Object.assign(new Error('FGA denied'), { status: 403 }));
+    vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+    const taskStore = new InMemoryTaskStore();
+    const save = vi.spyOn(taskStore, 'save');
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'authenticated-user');
+    requestContext.set('user', { id: 'user-1' });
+    const input = {
+      mastra,
+      agent,
+      agentId: agent.id,
+      taskStore,
+      requestContext,
+      requestId: 'denied-memory',
+      params: {
+        message: {
+          kind: 'message' as const,
+          messageId: 'denied-user-message',
+          contextId: 'denied-thread',
+          role: 'user' as const,
+          parts: [{ kind: 'text' as const, text: 'Hello' }],
+        },
+      },
+    };
+
+    const execution =
+      transport === 'send'
+        ? handleMessageSend(input)
+        : (async () => {
+            for await (const _event of handleMessageStream(input)) {
+              // Authorization must reject before the first stream event.
+            }
+          })();
+    await expect(execution).rejects.toMatchObject({ status: 403, message: 'FGA denied' });
+    expect(save).not.toHaveBeenCalled();
+    expect(doGenerate).not.toHaveBeenCalled();
+    expect(await memory.getThreadById({ threadId: 'denied-thread' })).toBeNull();
+  });
+
+  it('rejects hidden pending branch destinations before any side effect', async () => {
+    const memory = new MockMemory({ storage: new InMemoryStore() });
+    Object.defineProperty(memory, '__mastraInspectThreadBranchState', {
+      configurable: true,
+      value: vi.fn().mockResolvedValue({ state: 'pending' }),
+    });
+    const doGenerate = vi.fn();
+    const agent = new Agent({
+      id: 'pending-agent',
+      name: 'Pending agent',
+      instructions: 'Reply briefly',
+      memory,
+      model: {
+        specificationVersion: 'v2',
+        provider: 'test',
+        modelId: 'test-model',
+        supportedUrls: {},
+        doGenerate,
+        doStream: vi.fn(),
+      },
+    });
+    const mastra = new Mastra({ logger: false, agents: { [agent.id]: agent } });
+    const taskStore = new InMemoryTaskStore();
+    const save = vi.spyOn(taskStore, 'save');
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'authenticated-user');
+    const input = {
+      mastra,
+      agent,
+      agentId: agent.id,
+      taskStore,
+      requestContext,
+      requestId: 'pending-memory',
+      params: {
+        message: {
+          kind: 'message' as const,
+          messageId: 'pending-user-message',
+          contextId: 'pending-thread',
+          role: 'user' as const,
+          parts: [{ kind: 'text' as const, text: 'Hello' }],
+        },
+      },
+    };
+
+    const execution =
+      transport === 'send'
+        ? handleMessageSend(input)
+        : (async () => {
+            for await (const _event of handleMessageStream(input)) {
+              // Pending branches must reject before the first stream event.
+            }
+          })();
+    await expect(execution).rejects.toMatchObject({ id: 'BRANCH_NOT_FOUND' });
+    expect(save).not.toHaveBeenCalled();
+    expect(doGenerate).not.toHaveBeenCalled();
   });
 });

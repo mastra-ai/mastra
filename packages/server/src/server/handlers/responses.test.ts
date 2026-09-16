@@ -466,6 +466,34 @@ describe('Responses Handlers', () => {
     mockAgentSpecVersion(toolAgent);
   });
 
+  it('returns coded branch-not-found for an explicit pending conversation before model execution', async () => {
+    Object.defineProperty(memory, 'supportsThreadBranching', { configurable: true, value: true });
+    Object.defineProperty(memory, '__mastraInspectThreadBranchState', {
+      configurable: true,
+      value: vi.fn(async () => ({ state: 'pending', hasReadyDescendants: false })),
+    });
+    const generate = vi.spyOn(agent, 'generate');
+
+    let error: HTTPException | undefined;
+    try {
+      await CREATE_RESPONSE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        model: 'openai/gpt-5',
+        agent_id: 'test-agent',
+        input: 'Hello',
+        conversation_id: 'pending-conversation',
+        store: true,
+        stream: false,
+      });
+    } catch (caught) {
+      error = caught as HTTPException;
+    }
+
+    expect(error).toMatchObject({ status: 404 });
+    await expect(error?.res?.json()).resolves.toMatchObject({ error: { code: 'BRANCH_NOT_FOUND' } });
+    expect(generate).not.toHaveBeenCalled();
+  });
+
   it('creates and retrieves a stored non-streaming response', async () => {
     vi.spyOn(agent, 'generate').mockResolvedValue(createGenerateResult({ text: 'Hello from Mastra' }));
 
@@ -1207,7 +1235,7 @@ describe('Responses Handlers', () => {
     });
   });
 
-  it('returns 400 when previous_response_id belongs to a different explicit agent_id', async () => {
+  it('does not disclose the owning agent when previous_response_id belongs to another agent', async () => {
     vi.spyOn(agent, 'generate').mockResolvedValue(createGenerateResult({ text: 'First response' }));
 
     const firstResponse = (await CREATE_RESPONSE_ROUTE.handler({
@@ -1232,8 +1260,8 @@ describe('Responses Handlers', () => {
         stream: false,
       }),
     ).rejects.toMatchObject({
-      status: 400,
-      message: expect.stringContaining('belongs to agent test-agent'),
+      status: 404,
+      message: 'Thread branch was not found or is not accessible.',
     });
   });
 

@@ -1,6 +1,10 @@
 import { MASTRA_THREAD_BRANCH_METADATA_KEY } from '@mastra/core/memory';
 import type { MastraDBMessage } from '@mastra/core/memory';
-import { persistGeneratedMessages, persistMessagesWithThreadCreation } from '@mastra/core/memory/internal';
+import {
+  getThreadBranchAuthorizationCandidates,
+  persistGeneratedMessages,
+  persistMessagesWithThreadCreation,
+} from '@mastra/core/memory/internal';
 import { MessageHistory } from '@mastra/core/processors';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MemoryStorage } from '@mastra/core/storage';
@@ -164,6 +168,176 @@ describe('branch mutation integrity', () => {
     expect((await store.listMessagesById({ messageIds: [explicit.id] })).messages).toEqual([explicit]);
   });
 
+  it('atomically rejects duplicate create-only thread persistence without overwriting the winner', async () => {
+    const createThread = (title: string) =>
+      persistMessagesWithThreadCreation(
+        memory,
+        {
+          messages: [],
+          thread: {
+            id: 'create-only-thread',
+            resourceId,
+            title,
+            metadata: { title },
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          requireThreadCreation: true,
+        },
+        [],
+      );
+
+    const results = await Promise.allSettled([createThread('winner-a'), createThread('winner-b')]);
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter(result => result.status === 'rejected')).toHaveLength(1);
+    const stored = await store.getThreadById({ threadId: 'create-only-thread' });
+    expect(stored).toMatchObject({
+      id: 'create-only-thread',
+      resourceId,
+      title: expect.stringMatching(/^winner-[ab]$/),
+    });
+    expect(stored?.metadata).toEqual({ title: stored?.title });
+  });
+
+  it('preserves resource-scoped Working Memory initialization for atomic thread creation and rolls back failures', async () => {
+    const workingMemory = new Memory({
+      storage: new InMemoryStore(),
+      options: { workingMemory: { enabled: true, scope: 'resource' } },
+    });
+    const workingMemoryStore = (await workingMemory.storage.getStore('memory'))!;
+    const create = (threadId: string, value: string) =>
+      persistMessagesWithThreadCreation(
+        workingMemory,
+        {
+          messages: [],
+          thread: {
+            id: threadId,
+            resourceId,
+            title: '',
+            metadata: { workingMemory: value },
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          requireThreadCreation: true,
+        },
+        [],
+      );
+
+    await create('working-memory-thread', 'remember me');
+    expect(await workingMemoryStore.getResourceById({ resourceId })).toMatchObject({ workingMemory: 'remember me' });
+
+    vi.spyOn(workingMemoryStore, 'updateResource').mockRejectedValueOnce(new Error('resource update failed'));
+    await expect(create('failed-working-memory-thread', 'do not retain')).rejects.toThrow('resource update failed');
+    expect(await workingMemoryStore.getThreadById({ threadId: 'failed-working-memory-thread' })).toBeNull();
+
+    vi.spyOn(workingMemoryStore, 'saveMessages').mockRejectedValueOnce(new Error('message persistence failed'));
+    await expect(
+      persistMessagesWithThreadCreation(
+        workingMemory,
+        {
+          messages: [message('failed-create-message', 'failed-message-thread', new Date())],
+          thread: {
+            id: 'failed-message-thread',
+            resourceId,
+            title: '',
+            metadata: { workingMemory: 'must not replace prior state' },
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          requireThreadCreation: true,
+        },
+        [],
+      ),
+    ).rejects.toThrow('message persistence failed');
+    expect(await workingMemoryStore.getResourceById({ resourceId })).toMatchObject({ workingMemory: 'remember me' });
+    expect(await workingMemoryStore.getThreadById({ threadId: 'failed-message-thread' })).toBeNull();
+
+    const originalSaveMessages = workingMemoryStore.saveMessages.bind(workingMemoryStore);
+    vi.spyOn(workingMemoryStore, 'saveMessages').mockImplementationOnce(async ({ messages }) => {
+      await originalSaveMessages({ messages: messages.slice(0, 1) });
+      throw new Error('partial message persistence failed');
+    });
+    await expect(
+      persistMessagesWithThreadCreation(
+        workingMemory,
+        {
+          messages: [message('partial-create-message', 'partial-message-thread', new Date())],
+          thread: {
+            id: 'partial-message-thread',
+            resourceId,
+            title: '',
+            metadata: { workingMemory: 'must not replace prior state' },
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          requireThreadCreation: true,
+        },
+        [],
+      ),
+    ).rejects.toThrow('partial message persistence failed');
+    expect((await workingMemoryStore.listMessagesById({ messageIds: ['partial-create-message'] })).messages).toEqual(
+      [],
+    );
+    expect(await workingMemoryStore.getThreadById({ threadId: 'partial-message-thread' })).toBeNull();
+    expect(await workingMemoryStore.getResourceById({ resourceId })).toMatchObject({ workingMemory: 'remember me' });
+
+    vi.spyOn(workingMemoryStore, 'updateResource').mockRejectedValueOnce(new Error('direct save resource failure'));
+    await expect(
+      workingMemory.saveThread({
+        thread: {
+          id: 'direct-save-thread',
+          resourceId,
+          title: 'new',
+          metadata: { workingMemory: 'must roll back' },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      }),
+    ).rejects.toThrow('direct save resource failure');
+    expect(await workingMemoryStore.getThreadById({ threadId: 'direct-save-thread' })).toBeNull();
+
+    const beforeUpdate = await workingMemoryStore.getThreadById({ threadId: 'working-memory-thread' });
+    vi.spyOn(workingMemoryStore, 'updateResource').mockRejectedValueOnce(new Error('direct update resource failure'));
+    await expect(
+      workingMemory.updateThread({
+        id: 'working-memory-thread',
+        title: 'changed',
+        metadata: { workingMemory: 'must roll back' },
+      }),
+    ).rejects.toThrow('direct update resource failure');
+    expect(await workingMemoryStore.getThreadById({ threadId: 'working-memory-thread' })).toEqual(beforeUpdate);
+    expect(await workingMemoryStore.getResourceById({ resourceId })).toMatchObject({ workingMemory: 'remember me' });
+  });
+
+  it('ignores pending-only descendants when authorizing and mutating an ordinary root', async () => {
+    await store.saveThread({
+      thread: {
+        id: 'pending-child',
+        resourceId,
+        title: '',
+        metadata: {
+          [MASTRA_THREAD_BRANCH_METADATA_KEY]: {
+            state: 'pending',
+            parentThreadId: 'root',
+            branchPointMessageId: 'fork',
+            branchPointCreatedAt: forkTime.toISOString(),
+            branchCreatedAt: new Date(forkTime.getTime() + 1).toISOString(),
+            observationalMemoryThreadId: 'pending-child',
+          },
+        },
+        createdAt: new Date(forkTime.getTime() + 1),
+        updatedAt: new Date(forkTime.getTime() + 1),
+      },
+    });
+
+    await expect(getThreadBranchAuthorizationCandidates(memory, 'root', 'descendants')).resolves.toEqual([
+      expect.objectContaining({ id: 'root' }),
+    ]);
+    await expect(
+      memory.saveMessages({ messages: [message('root-after-pending', 'root', new Date(forkTime.getTime() + 2))] }),
+    ).resolves.toMatchObject({ messages: [expect.objectContaining({ id: 'root-after-pending' })] });
+  });
+
   it('normalizes trusted generated timestamps monotonically while explicit backdated rows fail closed', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(forkTime.getTime());
     const branch = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' });
@@ -305,6 +479,110 @@ describe('branch mutation integrity', () => {
     );
   });
 
+  it('indexes canonical messages returned by the storage adapter', async () => {
+    const indexes = new Set<string>();
+    const upsert = vi.fn().mockResolvedValue(undefined);
+    const doEmbed = vi.fn(async ({ values }: { values: string[] }) => ({
+      embeddings: values.map(() => [0.1, 0.1, 0.1, 0.1]),
+    }));
+    const vector = {
+      id: 'adapter-parity-vector',
+      createIndex: vi.fn(async ({ indexName }: { indexName: string }) => indexes.add(indexName)),
+      listIndexes: vi.fn(async () => [...indexes]),
+      describeIndex: vi.fn().mockResolvedValue({ dimension: 4 }),
+      deleteVectors: vi.fn().mockResolvedValue(undefined),
+      upsert,
+      query: vi.fn().mockResolvedValue([]),
+    } as unknown as MastraVector;
+    const vectorMemory = new Memory({
+      storage: new InMemoryStore(),
+      vector,
+      embedder: {
+        doEmbed,
+        modelId: 'mock-embedder',
+        specificationVersion: 'v1',
+        provider: 'mock',
+      } as any,
+      options: { semanticRecall: { scope: 'thread' }, generateTitle: false },
+    });
+    const vectorStore = (await vectorMemory.storage.getStore('memory'))!;
+    await vectorMemory.createThread({ threadId: 'adapter-root', resourceId });
+    const originalSaveMessages = vectorStore.saveMessages.bind(vectorStore);
+    vi.spyOn(vectorStore, 'saveMessages').mockImplementation(async ({ messages }) =>
+      originalSaveMessages({
+        messages: messages.map(item =>
+          item.id === 'adapter-message'
+            ? {
+                ...item,
+                content: { format: 2, parts: [{ type: 'text', text: 'adapter normalized' }] },
+              }
+            : item,
+        ),
+      }),
+    );
+
+    await vectorMemory.saveMessages({
+      messages: [message('adapter-message', 'adapter-root', forkTime, 'caller value')],
+    });
+    await vectorMemory.settled();
+
+    expect(doEmbed).toHaveBeenCalledWith(expect.objectContaining({ values: ['adapter normalized'] }));
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: [
+          expect.objectContaining({
+            message_id: 'adapter-message',
+            content: 'adapter normalized',
+            created_at: forkTime.toISOString(),
+          }),
+        ],
+      }),
+    );
+
+    upsert.mockClear();
+    vi.spyOn(vectorStore, 'saveMessages').mockImplementationOnce(async ({ messages }) =>
+      originalSaveMessages({
+        messages: messages.map(item => ({ ...item, createdAt: new Date(item.createdAt.getTime() - 1) })),
+      }),
+    );
+    await expect(
+      vectorMemory.saveMessages({
+        messages: [message('invalid-adapter-message', 'adapter-root', new Date(forkTime.getTime() + 10), 'invalid')],
+      }),
+    ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
+    expect((await vectorStore.listMessagesById({ messageIds: ['invalid-adapter-message'] })).messages).toEqual([]);
+    expect(upsert).not.toHaveBeenCalled();
+
+    vi.spyOn(vectorStore, 'saveMessages').mockImplementationOnce(async ({ messages }) => {
+      const persisted = await originalSaveMessages({ messages: messages.slice(0, 1) });
+      return { ...persisted, messages: [persisted.messages[0]!, persisted.messages[0]!] };
+    });
+    await expect(
+      vectorMemory.saveMessages({
+        messages: [
+          message('duplicate-result-a', 'adapter-root', new Date(forkTime.getTime() + 20)),
+          message('missing-result-b', 'adapter-root', new Date(forkTime.getTime() + 21)),
+        ],
+      }),
+    ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
+    expect(
+      (await vectorStore.listMessagesById({ messageIds: ['duplicate-result-a', 'missing-result-b'] })).messages,
+    ).toEqual([]);
+
+    vi.spyOn(vectorStore, 'saveMessages').mockImplementationOnce(async ({ messages }) =>
+      originalSaveMessages({ messages: messages.map(item => ({ ...item, id: 'unexpected-adapter-id' })) }),
+    );
+    await expect(
+      vectorMemory.saveMessages({
+        messages: [message('expected-adapter-id', 'adapter-root', new Date(forkTime.getTime() + 30))],
+      }),
+    ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
+    expect(
+      (await vectorStore.listMessagesById({ messageIds: ['expected-adapter-id', 'unexpected-adapter-id'] })).messages,
+    ).toEqual([]);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
   it('enforces both equal-timestamp ID tie directions on parent and child writes', async () => {
     const branch = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' });
     const saveStorage = vi.spyOn(store, 'saveMessages');
@@ -408,6 +686,7 @@ describe('branch mutation integrity', () => {
   it('validates raw observational-memory persistence and its generated provenance', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(forkTime.getTime());
     const branch = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' });
+    const originalSaveMessages = store.saveMessages.bind(store);
     const saveStorage = vi.spyOn(store, 'saveMessages');
     const rejected = message('aaa-raw', branch.thread.id, forkTime);
 
@@ -417,6 +696,34 @@ describe('branch mutation integrity', () => {
     await memory.persistMessages([rejected], [rejected.id]);
     const saved = (await store.listMessagesById({ messageIds: [rejected.id] })).messages[0]!;
     expect(saved.createdAt.getTime()).toBeGreaterThan(forkTime.getTime());
+
+    saveStorage.mockImplementationOnce(async ({ messages }) =>
+      originalSaveMessages({ messages: messages.map(item => ({ ...item, createdAt: forkTime })) }),
+    );
+    await expect(
+      memory.persistMessages(
+        [message('invalid-raw-canonical', branch.thread.id, new Date(forkTime.getTime() + 10))],
+        ['invalid-raw-canonical'],
+      ),
+    ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
+    expect((await store.listMessagesById({ messageIds: ['invalid-raw-canonical'] })).messages).toEqual([]);
+
+    saveStorage.mockImplementationOnce(async ({ messages }) => {
+      const persisted = await originalSaveMessages({ messages: messages.slice(0, 1) });
+      return { ...persisted, messages: [persisted.messages[0]!, persisted.messages[0]!] };
+    });
+    await expect(
+      memory.persistMessages(
+        [
+          message('raw-duplicate-result', branch.thread.id, new Date(forkTime.getTime() + 20)),
+          message('raw-missing-result', branch.thread.id, new Date(forkTime.getTime() + 21)),
+        ],
+        ['raw-duplicate-result', 'raw-missing-result'],
+      ),
+    ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
+    expect(
+      (await store.listMessagesById({ messageIds: ['raw-duplicate-result', 'raw-missing-result'] })).messages,
+    ).toEqual([]);
   });
 
   it('does not let message properties activate generated timestamp normalization', async () => {

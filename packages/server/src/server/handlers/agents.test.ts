@@ -955,6 +955,33 @@ describe('Agent Routes Authorization', () => {
       ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
     });
 
+    it('authorizes a caller-selected new thread before agent execution', async () => {
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+      requestContext.set('user', { id: 'user-a' });
+      const require = vi.fn().mockRejectedValue(Object.assign(new Error('FGA denied'), { status: 403 }));
+      vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+      const generate = vi.spyOn(mockAgent, 'generate');
+
+      await expect(
+        GENERATE_AGENT_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          messages: [{ role: 'user', content: 'test' }],
+          memory: { thread: 'new-thread', resource: 'user-a' },
+        } as any),
+      ).rejects.toMatchObject({ status: 403, message: 'FGA denied' });
+      expect(require).toHaveBeenCalledWith(
+        { id: 'user-a' },
+        expect.objectContaining({
+          resource: { type: 'thread', id: 'new-thread' },
+          permission: 'memory:write',
+        }),
+      );
+      expect(generate).not.toHaveBeenCalled();
+    });
+
     it('strips a client-supplied actor before forwarding to agent.generate', async () => {
       const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
 

@@ -16,6 +16,7 @@ import type {
 } from '@mastra/core/a2a';
 import type { Agent } from '@mastra/core/agent';
 import type { IMastraLogger } from '@mastra/core/logger';
+import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod/v4';
 import { signAgentCard } from '../a2a/agent-card-signing';
@@ -25,6 +26,7 @@ import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
 import { TaskStoreVersionConflictError, type InMemoryTaskStore } from '../a2a/store';
 import { isInterruptedTaskState, isTerminalTaskState } from '../a2a/task-state';
 import { applyUpdateToTask, loadOrCreateTask, resolveTaskMemory } from '../a2a/tasks';
+import { MastraFGAPermissions } from '../fga-permissions';
 import {
   a2aAgentIdPathParams,
   agentExecutionBodySchema,
@@ -36,6 +38,13 @@ import type { Context } from '../types';
 import { convertInstructionsToString } from '../utils';
 import { getAgentFromSystem } from './agents';
 import { getPublicOrigin } from './auth';
+import {
+  authorizeMemoryThreadAccess,
+  authorizeThreadBranchTree,
+  inspectVisibleMemoryThread,
+  throwThreadBranchNotFound,
+} from './thread-branching';
+import { enforceThreadAccess } from './utils';
 
 // Mirrors @a2a-js/sdk's Part discriminated union (text | file | data) and the
 // part shape already declared in ../schemas/a2a.ts. Before this widening, the
@@ -1050,6 +1059,62 @@ function getTaskArtifactUpdates({ previous, next }: { previous: Task; next: Task
   }));
 }
 
+async function authorizeA2AThreadAccess({
+  mastra,
+  agent,
+  requestContext,
+  threadId,
+  resourceId,
+  permission = MastraFGAPermissions.MEMORY_WRITE,
+  allowCreate = false,
+}: {
+  mastra?: Mastra;
+  agent: Agent;
+  requestContext: RequestContext;
+  threadId: string;
+  resourceId: string;
+  permission?: string;
+  allowCreate?: boolean;
+}): Promise<void> {
+  if (!mastra) return;
+  const memory = await agent.getMemory({ requestContext });
+  if (!memory) {
+    await enforceThreadAccess({
+      mastra,
+      requestContext,
+      threadId,
+      effectiveResourceId: resourceId,
+      permission,
+    });
+    return;
+  }
+  const branchState = await inspectVisibleMemoryThread(memory, threadId, { allowCreate });
+  const thread = branchState.state === 'absent' ? null : await memory.getThreadById({ threadId });
+  if (!thread) {
+    if (!allowCreate) {
+      throwThreadBranchNotFound();
+    }
+    await enforceThreadAccess({
+      mastra,
+      requestContext,
+      threadId,
+      effectiveResourceId: resourceId,
+      permission,
+    });
+    return;
+  }
+  const authorize =
+    permission === MastraFGAPermissions.MEMORY_READ ? authorizeMemoryThreadAccess : authorizeThreadBranchTree;
+  await authorize({
+    mastra,
+    requestContext,
+    memory,
+    thread,
+    effectiveResourceId: resourceId,
+    permission,
+  });
+}
+
 async function executeMessageSend({
   requestId,
   message,
@@ -1169,6 +1234,8 @@ async function executeMessageSend({
       state: 'failed',
       message: {
         messageId: crypto.randomUUID(),
+        taskId: currentData.id,
+        contextId: currentData.contextId,
         role: 'agent',
         parts: [
           {
@@ -1204,6 +1271,7 @@ async function executeMessageSend({
 }
 
 export async function handleMessageSend({
+  mastra,
   requestId,
   params,
   taskStore,
@@ -1214,6 +1282,7 @@ export async function handleMessageSend({
   logger,
   requestContext,
 }: {
+  mastra?: Mastra;
   requestId: number | string;
   params: MessageSendParams;
   taskStore: InMemoryTaskStore;
@@ -1227,13 +1296,22 @@ export async function handleMessageSend({
   validateMessageSendParams(params);
 
   const { message, metadata } = params;
-  const { contextId } = message;
+  let contextId = message.contextId;
   const taskId = message.taskId || crypto.randomUUID();
   const existingTask = taskStore.loadWithVersion({ agentId, taskId })?.task;
   if (message.taskId && !existingTask) {
     throw MastraA2AError.taskNotFound(message.taskId);
   }
-  resolveTaskMemory({ task: existingTask, agentId, requestContext, metadata, message });
+  const taskMemory = resolveTaskMemory({ task: existingTask, agentId, requestContext, metadata, message });
+  contextId = taskMemory.thread ?? contextId ?? crypto.randomUUID();
+  await authorizeA2AThreadAccess({
+    mastra,
+    agent,
+    requestContext,
+    threadId: contextId,
+    resourceId: taskMemory.resource,
+    allowCreate: !existingTask,
+  });
   if (params.configuration?.blocking === false && existingTask?.status.state === 'working') {
     return createSuccessResponse(requestId, existingTask);
   }
@@ -1284,6 +1362,8 @@ export async function handleMessageSend({
       messageId: crypto.randomUUID(),
       kind: 'message',
       role: 'agent',
+      taskId: currentData.id,
+      contextId: currentData.contextId,
       parts: [{ kind: 'text', text: 'Generating response...' }],
     },
   });
@@ -1338,16 +1418,18 @@ export async function handleTaskGet({
   return createSuccessResponse(requestId, task);
 }
 
-export function handleTaskList({
+export async function handleTaskList({
   requestId,
   taskStore,
   agentId,
   params,
+  authorizeTask,
 }: {
   requestId: number | string;
   taskStore: InMemoryTaskStore;
   agentId: string;
   params: Record<string, any>;
+  authorizeTask?: (task: Task) => Promise<boolean>;
 }) {
   const requestedPageSize = params.pageSize ?? 50;
   const offset = params.pageToken ? Number.parseInt(params.pageToken, 10) : 0;
@@ -1361,7 +1443,7 @@ export function handleTaskList({
       : undefined;
   const timestampAfter = params.statusTimestampAfter ? Date.parse(params.statusTimestampAfter) : undefined;
 
-  const matchingTasks = taskStore
+  const candidates = taskStore
     .list({ agentId })
     .filter(task => !params.contextId || task.contextId === params.contextId)
     .filter(task => !status || task.status.state === status)
@@ -1369,6 +1451,12 @@ export function handleTaskList({
       task =>
         !timestampAfter || (task.status.timestamp !== undefined && Date.parse(task.status.timestamp) >= timestampAfter),
     );
+  const matchingTasks: Task[] = [];
+  for (const task of candidates) {
+    if (!authorizeTask || (await authorizeTask(task))) {
+      matchingTasks.push(task);
+    }
+  }
   const tasks = matchingTasks.slice(start, start + requestedPageSize).map(task =>
     toV1Task(task, {
       includeArtifacts: params.includeArtifacts ?? false,
@@ -1401,6 +1489,30 @@ async function loadTaskOrThrow({
   }
 
   return task;
+}
+
+async function authorizeA2ATask({
+  mastra,
+  agent,
+  requestContext,
+  task,
+  permission = MastraFGAPermissions.MEMORY_READ,
+}: {
+  mastra?: Mastra;
+  agent: Agent;
+  requestContext: RequestContext;
+  task: Task;
+  permission?: string;
+}): Promise<void> {
+  const memory = resolveTaskMemory({ task, agentId: agent.id, requestContext });
+  await authorizeA2AThreadAccess({
+    mastra,
+    agent,
+    requestContext,
+    threadId: task.contextId,
+    resourceId: memory.resource,
+    permission,
+  });
 }
 
 export async function handleSetTaskPushNotificationConfig({
@@ -1534,6 +1646,7 @@ export async function handleDeleteTaskPushNotificationConfig({
 }
 
 export async function* handleMessageStream({
+  mastra,
   requestId,
   params,
   taskStore,
@@ -1545,6 +1658,7 @@ export async function* handleMessageStream({
   requestContext,
   abortSignal,
 }: {
+  mastra?: Mastra;
   requestId: number | string;
   params: MessageSendParams;
   taskStore: InMemoryTaskStore;
@@ -1559,13 +1673,23 @@ export async function* handleMessageStream({
   validateMessageSendParams(params);
 
   const { message, metadata } = params;
-  const { contextId } = message;
+  let contextId = message.contextId;
   const taskId = message.taskId || crypto.randomUUID();
   const existingTask = taskStore.loadWithVersion({ agentId, taskId })?.task;
   if (message.taskId && !existingTask) {
     throw MastraA2AError.taskNotFound(message.taskId);
   }
-  resolveTaskMemory({ task: existingTask, agentId, requestContext, metadata, message });
+  const taskMemory = resolveTaskMemory({ task: existingTask, agentId, requestContext, metadata, message });
+  contextId = taskMemory.thread ?? contextId ?? crypto.randomUUID();
+  const memory = { ...taskMemory, thread: contextId };
+  await authorizeA2AThreadAccess({
+    mastra,
+    agent,
+    requestContext,
+    threadId: memory.thread,
+    resourceId: memory.resource,
+    allowCreate: !existingTask,
+  });
 
   // A follow-up message for an interrupted task resumes the suspended agent
   // run instead of starting a fresh generation (A2A HITL continuation).
@@ -1604,6 +1728,8 @@ export async function* handleMessageStream({
       messageId: crypto.randomUUID(),
       kind: 'message',
       role: 'agent',
+      taskId: currentData.id,
+      contextId: currentData.contextId,
       parts: [{ kind: 'text', text: 'Generating response...' }],
     },
   });
@@ -1627,10 +1753,6 @@ export async function* handleMessageStream({
   try {
     yield createSuccessResponse(requestId, currentData);
 
-    const memory = {
-      ...resolveTaskMemory({ task: currentData, agentId, requestContext }),
-      thread: currentData.contextId,
-    };
     const result = resume
       ? await agent.resumeStream(normalizeResumeData(extractResumeData(message), resume.requiresApproval), {
           runId: resume.runId,
@@ -1719,6 +1841,8 @@ export async function* handleMessageStream({
         state: 'canceled',
         message: {
           messageId: crypto.randomUUID(),
+          taskId: currentData.id,
+          contextId: currentData.contextId,
           role: 'agent',
           parts: [{ kind: 'text', text: 'Task canceled because the request was aborted.' }],
           kind: 'message',
@@ -1884,6 +2008,8 @@ export async function* handleMessageStream({
           state: 'canceled',
           message: {
             messageId: crypto.randomUUID(),
+            taskId: currentData.id,
+            contextId: currentData.contextId,
             role: 'agent',
             parts: [{ kind: 'text', text: 'Task canceled because the request was aborted.' }],
             kind: 'message',
@@ -1911,6 +2037,8 @@ export async function* handleMessageStream({
         state: 'failed',
         message: {
           messageId: crypto.randomUUID(),
+          taskId: currentData.id,
+          contextId: currentData.contextId,
           role: 'agent',
           parts: [
             {
@@ -2121,6 +2249,8 @@ export async function handleTaskCancel({
         parts: [{ kind: 'text', text: 'Task cancelled by request.' }],
         kind: 'message',
         messageId: crypto.randomUUID(),
+        taskId: data.id,
+        contextId: data.contextId,
       },
     };
     const canceledTask = applyUpdateToTask(data, cancelUpdate);
@@ -2200,10 +2330,22 @@ export async function getAgentExecutionHandler({
   try {
     taskId = getTaskIdFromParams(protocolParams);
 
+    if (taskId && method !== 'message/send' && method !== 'message/stream' && method !== 'tasks/list') {
+      const task = await loadTaskOrThrow({ taskStore, agentId, taskId });
+      const permission =
+        method === 'tasks/cancel' ||
+        method === 'tasks/pushNotificationConfig/set' ||
+        method === 'tasks/pushNotificationConfig/delete'
+          ? MastraFGAPermissions.MEMORY_WRITE
+          : MastraFGAPermissions.MEMORY_READ;
+      await authorizeA2ATask({ mastra, agent, requestContext, task, permission });
+    }
+
     // 2. Route based on method
     switch (method) {
       case 'message/send': {
         const result = await handleMessageSend({
+          mastra,
           requestId,
           params: protocolParams as MessageSendParams,
           taskStore,
@@ -2218,6 +2360,7 @@ export async function getAgentExecutionHandler({
       }
       case 'message/stream': {
         const result = await handleMessageStream({
+          mastra,
           requestId,
           taskStore,
           params: protocolParams as MessageSendParams,
@@ -2233,11 +2376,14 @@ export async function getAgentExecutionHandler({
       }
 
       case 'tasks/get': {
+        const requestedTaskId = taskId || 'No task ID provided';
+        const task = await loadTaskOrThrow({ taskStore, agentId, taskId: requestedTaskId });
+        await authorizeA2ATask({ mastra, agent, requestContext, task });
         const result = await handleTaskGet({
           requestId,
           taskStore,
           agentId,
-          taskId: taskId || 'No task ID provided',
+          taskId: requestedTaskId,
         });
 
         return protocolVersion === '1.0' ? convertV1Response(result, method) : result;
@@ -2251,62 +2397,113 @@ export async function getAgentExecutionHandler({
           taskStore,
           agentId,
           params: protocolParams ?? {},
+          authorizeTask: async task => {
+            try {
+              await authorizeA2ATask({ mastra, agent, requestContext, task });
+              return true;
+            } catch (error) {
+              const id = error && typeof error === 'object' ? (error as { id?: unknown }).id : undefined;
+              const status = error && typeof error === 'object' ? (error as { status?: unknown }).status : undefined;
+              if (id === 'BRANCH_NOT_FOUND' || status === 403 || status === 404) return false;
+              throw error;
+            }
+          },
         });
       }
       case 'tasks/cancel': {
+        const requestedTaskId = taskId || 'No task ID provided';
+        const task = await loadTaskOrThrow({ taskStore, agentId, taskId: requestedTaskId });
+        await authorizeA2ATask({
+          mastra,
+          agent,
+          requestContext,
+          task,
+          permission: MastraFGAPermissions.MEMORY_WRITE,
+        });
         const result = await handleTaskCancel({
           requestId,
           taskStore,
           pushNotificationSender: resolvedPushNotificationSender,
           agentId,
-          taskId: taskId || 'No task ID provided',
+          taskId: requestedTaskId,
           logger,
         });
 
         return protocolVersion === '1.0' ? convertV1Response(result, method) : result;
       }
       case 'tasks/resubscribe': {
+        const requestedTaskId = taskId || 'No task ID provided';
+        const task = await loadTaskOrThrow({ taskStore, agentId, taskId: requestedTaskId });
+        await authorizeA2ATask({ mastra, agent, requestContext, task });
         const result = handleTaskResubscribe({
           requestId,
           taskStore,
           agentId,
-          taskId: taskId || 'No task ID provided',
+          taskId: requestedTaskId,
           abortSignal,
         });
         return protocolVersion === '1.0' ? convertV1Stream(result, method) : result;
       }
-      case 'tasks/pushNotificationConfig/set':
+      case 'tasks/pushNotificationConfig/set': {
+        const pushParams = params as unknown as TaskPushNotificationConfig;
+        const task = await loadTaskOrThrow({ taskStore, agentId, taskId: pushParams.taskId });
+        await authorizeA2ATask({
+          mastra,
+          agent,
+          requestContext,
+          task,
+          permission: MastraFGAPermissions.MEMORY_WRITE,
+        });
         return await handleSetTaskPushNotificationConfig({
           requestId,
           taskStore,
           pushNotificationStore: resolvedPushNotificationStore,
           agentId,
-          params: params as unknown as TaskPushNotificationConfig,
+          params: pushParams,
         });
-      case 'tasks/pushNotificationConfig/get':
+      }
+      case 'tasks/pushNotificationConfig/get': {
+        const pushParams = params as GetTaskPushNotificationConfigParams;
+        const task = await loadTaskOrThrow({ taskStore, agentId, taskId: pushParams.id });
+        await authorizeA2ATask({ mastra, agent, requestContext, task });
         return await handleGetTaskPushNotificationConfig({
           requestId,
           taskStore,
           pushNotificationStore: resolvedPushNotificationStore,
           agentId,
-          params: params as GetTaskPushNotificationConfigParams,
+          params: pushParams,
         });
-      case 'tasks/pushNotificationConfig/list':
+      }
+      case 'tasks/pushNotificationConfig/list': {
+        const pushParams = params as ListTaskPushNotificationConfigParams;
+        const task = await loadTaskOrThrow({ taskStore, agentId, taskId: pushParams.id });
+        await authorizeA2ATask({ mastra, agent, requestContext, task });
         return await handleListTaskPushNotificationConfig({
           requestId,
           taskStore,
           pushNotificationStore: resolvedPushNotificationStore,
           agentId,
-          params: params as ListTaskPushNotificationConfigParams,
+          params: pushParams,
         });
-      case 'tasks/pushNotificationConfig/delete':
+      }
+      case 'tasks/pushNotificationConfig/delete': {
+        const pushParams = params as DeleteTaskPushNotificationConfigParams;
+        const task = await loadTaskOrThrow({ taskStore, agentId, taskId: pushParams.id });
+        await authorizeA2ATask({
+          mastra,
+          agent,
+          requestContext,
+          task,
+          permission: MastraFGAPermissions.MEMORY_WRITE,
+        });
         return await handleDeleteTaskPushNotificationConfig({
           requestId,
           taskStore,
           pushNotificationStore: resolvedPushNotificationStore,
           agentId,
-          params: params as DeleteTaskPushNotificationConfigParams,
+          params: pushParams,
         });
+      }
       case 'agent/getAuthenticatedExtendedCard':
         throw MastraA2AError.extendedAgentCardNotConfigured();
       default:

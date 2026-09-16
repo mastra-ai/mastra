@@ -46,6 +46,14 @@ function isWorkflowSchemaValidationError(error: unknown): error is Error {
 
 const WORKFLOW_RESUME_ALREADY_CLAIMED_CODE = 'WORKFLOW_RESUME_ALREADY_CLAIMED';
 
+const THREAD_BRANCH_ERROR_STATUSES = {
+  BRANCHING_UNSUPPORTED: 501,
+  BRANCH_INVALID_REQUEST: 400,
+  BRANCH_NOT_FOUND: 404,
+  BRANCH_LINEAGE_CORRUPT: 409,
+  BRANCH_MUTATION_CONFLICT: 409,
+} as const satisfies Record<string, StatusCode>;
+
 function isWorkflowResumeAlreadyClaimedError(error: unknown): error is Error {
   return error instanceof Error && (error as { id?: unknown }).id === WORKFLOW_RESUME_ALREADY_CLAIMED_CODE;
 }
@@ -125,6 +133,17 @@ export function handleError(error: unknown, defaultMessage: string): never {
     throw new HTTPException(400, {
       message: error.message,
       stack: error.stack,
+      cause: error,
+    });
+  }
+
+  const branchCode = error && typeof error === 'object' ? (error as { id?: unknown }).id : undefined;
+  if (typeof branchCode === 'string' && branchCode in THREAD_BRANCH_ERROR_STATUSES) {
+    const status = THREAD_BRANCH_ERROR_STATUSES[branchCode as keyof typeof THREAD_BRANCH_ERROR_STATUSES];
+    const message = error instanceof Error ? error.message : defaultMessage;
+    throw new HTTPException(status, {
+      res: Response.json({ error: { code: branchCode, message } }, { status }),
+      message,
       cause: error,
     });
   }

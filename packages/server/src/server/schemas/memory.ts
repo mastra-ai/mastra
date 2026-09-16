@@ -1,5 +1,6 @@
+import { MASTRA_THREAD_BRANCH_METADATA_KEY } from '@mastra/core/memory';
 import { z } from 'zod/v4';
-import { paginationInfoSchema, createPagePaginationSchema, successResponseSchema } from './common';
+import { paginationInfoSchema, createPagePaginationSchema, paginationNumber, successResponseSchema } from './common';
 import { lastMessagesSchema, messageHistorySchema } from './message-history';
 
 // Path parameter schemas
@@ -20,6 +21,15 @@ export const agentIdQuerySchema = z.object({
  */
 export const optionalAgentIdQuerySchema = z.object({
   agentId: z.string().optional(),
+});
+
+export const listThreadBranchesQuerySchema = z.object({
+  agentId: z.string().optional(),
+  page: paginationNumber().optional().default(0),
+  perPage: z
+    .preprocess(value => (value === 'false' ? false : value), z.union([z.literal(false), paginationNumber()]))
+    .optional()
+    .default(100),
 });
 
 /**
@@ -185,6 +195,30 @@ const threadSchema = z.object({
   createdAt: z.date(),
   updatedAt: z.date(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+const publicThreadBranchMetadataSchema = z.object({
+  parentThreadId: z.string(),
+  branchPointMessageId: z.string(),
+  branchPointCreatedAt: z.date(),
+  branchCreatedAt: z.date(),
+});
+
+const branchThreadOutputSchema = z.object({
+  thread: threadSchema,
+  branch: publicThreadBranchMetadataSchema,
+});
+
+const branchMetadataInputSchema = z.record(z.string(), z.unknown()).superRefine((metadata, ctx) => {
+  for (const key of [MASTRA_THREAD_BRANCH_METADATA_KEY, 'workingMemory']) {
+    if (Object.prototype.hasOwnProperty.call(metadata, key)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [key],
+        message: `Thread metadata key "${key}" cannot be set when creating a branch.`,
+      });
+    }
+  }
 });
 
 /**
@@ -660,6 +694,31 @@ export const cloneThreadBodySchema = z.object({
 export const cloneThreadResponseSchema = z.object({
   thread: threadSchema,
   clonedMessages: z.array(messageSchema),
+});
+
+/**
+ * Body schema for POST /memory/threads/:threadId/branch
+ */
+export const branchThreadBodySchema = z
+  .object({
+    branchPointMessageId: z.string().min(1),
+    title: z.string().optional(),
+    metadata: branchMetadataInputSchema.optional(),
+  })
+  .strict();
+
+export const branchThreadResponseSchema = branchThreadOutputSchema;
+export const getParentThreadResponseSchema = threadSchema.nullable();
+export const listThreadBranchesResponseSchema = paginationInfoSchema.extend({
+  branches: z.array(branchThreadOutputSchema),
+});
+export const getBranchHistoryResponseSchema = z.object({
+  history: z.array(
+    z.object({
+      thread: threadSchema,
+      branch: publicThreadBranchMetadataSchema.nullable(),
+    }),
+  ),
 });
 
 // ============================================================================

@@ -92,6 +92,24 @@ describe('persistGeneratedMessages', () => {
     expect(saveMessages).not.toHaveBeenCalled();
   });
 
+  it('fails closed when a memory implementation lacks atomic thread creation', async () => {
+    const memory = new MockMemory();
+    const save = vi.spyOn(memory, 'saveMessages');
+    const thread = {
+      id: 'thread',
+      resourceId: 'resource',
+      title: '',
+      metadata: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    await expect(
+      persistMessagesWithThreadCreation(memory, { messages: [], thread, requireThreadCreation: true }, []),
+    ).rejects.toMatchObject({ id: 'BRANCHING_UNSUPPORTED' });
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it('dispatches to a string-named hook on a memory object from another module instance', async () => {
     const hook = vi.fn(async input => ({ messages: input.messages }));
     const saveMessages = vi.fn();
