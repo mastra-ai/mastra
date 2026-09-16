@@ -471,6 +471,13 @@ describe('Postgres advanced trace query', () => {
     );
   });
 
+  it('preserves resource-limit errors through the public vNext storage wrapper', async () => {
+    const tx = vi.fn().mockRejectedValue(Object.assign(new Error('out of memory: SELECT secret'), { code: '53200' }));
+    const storage = new ObservabilityStoragePostgresVNext({ client: { tx } as unknown as DbClient });
+
+    await expect(storage.queryTraces(plan())).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
+  });
+
   it('normalizes PostgreSQL statement timeouts without exposing driver details', async () => {
     const driverError = Object.assign(new Error('canceling statement due to statement timeout: SELECT secret'), {
       code: '57014',

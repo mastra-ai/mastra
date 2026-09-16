@@ -140,6 +140,16 @@ describe('ClickHouse advanced trace query', () => {
     ).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
   });
 
+  it('preserves resource-limit errors through public trace and thread queries', async () => {
+    const query = vi.fn().mockRejectedValue({ code: '241', type: 'MEMORY_LIMIT_EXCEEDED' });
+    const storage = new ObservabilityStorageClickhouseVNext({
+      client: { query } as unknown as ClickHouseClient,
+    });
+
+    await expect(storage.queryTraces(plan())).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
+    await expect(storage.queryThreads(threadPlan())).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
+  });
+
   it('decodes each observed metadata value from the expanded JSON entry', () => {
     const compiled = compileClickHouseTraceQueryObservedFields(
       planTraceQueryObservedFields(
