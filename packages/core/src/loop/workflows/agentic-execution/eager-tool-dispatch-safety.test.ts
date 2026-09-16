@@ -1,5 +1,5 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../agent';
 import { prepareForDurableExecution } from '../../../agent/durable/preparation';
@@ -103,7 +103,7 @@ describe('eager tool dispatch — excluded tool classes', () => {
     });
 
     const chunks = await drain(
-      await agent.stream('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as any),
+      await agent.stream('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as never),
     );
 
     // Stronger than "it did not execute": `onInputAvailable` fires inside toolCallStep
@@ -146,7 +146,9 @@ describe('eager tool dispatch — excluded tool classes', () => {
       },
     });
 
-    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as any));
+    await drain(
+      await agent.stream('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as never),
+    );
 
     // Dispatch itself must not happen — see the approval case for why
     // `onInputAvailable` is the discriminating signal.
@@ -186,7 +188,9 @@ describe('eager tool dispatch — excluded tool classes', () => {
       },
     });
 
-    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as any));
+    await drain(
+      await agent.stream('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as never),
+    );
 
     const finishIndex = events.indexOf('finish');
     expect(finishIndex).toBeGreaterThan(-1);
@@ -223,7 +227,9 @@ describe('eager tool dispatch — excluded tool classes', () => {
       },
     });
 
-    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as any));
+    await drain(
+      await agent.stream('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as never),
+    );
 
     const finishIndex = events.indexOf('finish');
     for (const event of ['input-available-a', 'execute-a']) {
@@ -274,7 +280,7 @@ describe('eager tool dispatch — entry points', () => {
       },
     });
 
-    await agent.generate('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as any);
+    await agent.generate('go', { maxSteps: 1, eagerToolExecution: true } as Record<string, unknown> as never);
 
     // Honest limitation: generate() resolves through `doGenerate`, so there is no
     // chunk-level window in which an eager dispatch could happen even without the
@@ -329,7 +335,7 @@ describe('eager tool dispatch — concurrency', () => {
         maxSteps: 1,
         eagerToolExecution: true,
         toolCallConcurrency: 1,
-      } as Record<string, unknown> as any),
+      } as Record<string, unknown> as never),
     );
 
     expect(peak.max).toBe(1);
@@ -345,7 +351,7 @@ describe('eager tool dispatch — concurrency', () => {
         maxSteps: 1,
         eagerToolExecution: true,
         toolCallConcurrency: 2,
-      } as Record<string, unknown> as any),
+      } as Record<string, unknown> as never),
     );
 
     expect(peak.max).toBe(2);
@@ -379,7 +385,7 @@ describe('eager tool dispatch — concurrency', () => {
         maxSteps: 1,
         eagerToolExecution: true,
         toolCallConcurrency: { limit: 4, strategy: 'called' } satisfies ToolCallConcurrency,
-      } as Record<string, unknown> as any),
+      } as Record<string, unknown> as never),
     );
 
     // The full called set is unknowable while streaming, so the 'called' strategy
@@ -426,7 +432,7 @@ describe('eager tool dispatch — ordering and exactly-once', () => {
         maxSteps: 1,
         eagerToolExecution: true,
         toolCallConcurrency: 2,
-      } as Record<string, unknown> as any),
+      } as Record<string, unknown> as never),
     );
 
     const resultIds = chunks.filter(chunk => chunk.type === 'tool-result').map(chunk => chunk.payload.toolCallId);
@@ -496,7 +502,7 @@ describe('eager tool dispatch — ordering and exactly-once', () => {
         // construction-time copy of the limit would still run the two safe calls in
         // parallel; reading the limit late keeps one source of truth.
         prepareStep: () => ({ tools: { ...safeTools, gated } }),
-      } as Record<string, unknown> as any),
+      } as Record<string, unknown> as never),
     );
 
     expect(peak.max).toBe(1);
@@ -504,7 +510,7 @@ describe('eager tool dispatch — ordering and exactly-once', () => {
 });
 
 describe('eager tool dispatch — unsafe terminations', () => {
-  it('drops eager work that has not started when the model terminates unsafely', async () => {
+  it('never starts queued eager work before an unsafe termination', async () => {
     const { events, record } = createRecorder();
     // Two calls, limit 1: the first occupies the permit, the second is queued.
     const model = new MockLanguageModelV2({
@@ -532,7 +538,9 @@ describe('eager tool dispatch — unsafe terminations', () => {
             await new Promise(resolve => setTimeout(resolve, 60));
             record('finish');
             controller.enqueue({
-              // Truncated output: the turn must not spawn new tool work.
+              // Truncated output. The ordinary foreach still runs these calls afterwards,
+              // exactly as it does without eager dispatch — what must not happen is the
+              // queued one being started early, ahead of the model saying so.
               type: 'finish',
               finishReason: 'length',
               usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
@@ -569,7 +577,7 @@ describe('eager tool dispatch — unsafe terminations', () => {
         maxSteps: 1,
         eagerToolExecution: true,
         toolCallConcurrency: 1,
-      } as Record<string, unknown> as any),
+      } as Record<string, unknown> as never),
     );
 
     const finishIndex = events.indexOf('finish');
@@ -692,7 +700,7 @@ describe('eager tool dispatch — discarded model attempt', () => {
         maxSteps: 1,
         eagerToolExecution,
         toolCallConcurrency: 1,
-      } as Record<string, unknown> as any),
+      } as Record<string, unknown> as never),
     ).catch(() => {});
 
     // Give any leaked eager execution time to surface rather than racing the assertion.
@@ -718,6 +726,31 @@ describe('eager tool dispatch — discarded model attempt', () => {
 });
 
 describe('EagerToolExecutionCoordinator', () => {
+  it('releases the permit of cancelled work so a retry never queues behind a zombie', async () => {
+    const coordinator = new EagerToolExecutionCoordinator(() => 1);
+    let started = 0;
+
+    // Deliberately antisocial: acknowledges nothing and never settles, which is exactly
+    // the tool that would otherwise hold the only permit for the rest of the run.
+    coordinator.start('call-1', async () => {
+      started++;
+      return await new Promise<never>(() => {});
+    });
+    expect(started).toBe(1);
+
+    coordinator.stop({ cancelRunning: true });
+    coordinator.beginTurn();
+
+    // The replacement attempt's call must start, not wait on work nobody is coming back for.
+    coordinator.start('call-1', async () => {
+      started++;
+      return { result: 'retried' } as never;
+    });
+
+    await vi.waitFor(() => expect(started).toBe(2));
+    expect(coordinator.running).toBe(1);
+  });
+
   it('forgets cancelled work so a reused toolCallId cannot adopt a discarded attempt', async () => {
     const coordinator = new EagerToolExecutionCoordinator(() => 4);
     let released!: () => void;
@@ -867,7 +900,7 @@ describe('eager tool dispatch — cancellation', () => {
           // before it is ever dispatched.
           toolCallConcurrency: 1,
           abortSignal: abortController.signal,
-        } as Record<string, unknown> as any),
+        } as Record<string, unknown> as never),
       );
     } catch {
       // An aborted run may surface as a stream error; the assertion below is about
@@ -911,7 +944,7 @@ describe('eager tool dispatch — durable boundary', () => {
       prepareForDurableExecution({
         agent,
         messages: 'go',
-        options: { eagerToolExecution: true } as Record<string, unknown> as any,
+        options: { eagerToolExecution: true } as Record<string, unknown> as never,
       }),
     ).rejects.toThrow(/eagerToolExecution is not supported by durable agents/);
 
@@ -942,7 +975,7 @@ describe('eager tool dispatch — durable boundary', () => {
       prepareForDurableExecution({
         agent,
         messages: 'go',
-        options: { eagerToolExecution: false } as Record<string, unknown> as any,
+        options: { eagerToolExecution: false } as Record<string, unknown> as never,
       }),
     ).resolves.toBeDefined();
   });

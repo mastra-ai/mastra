@@ -17,6 +17,11 @@ export const EAGER_TOOL_ABORT_SIGNAL = Symbol('eager-tool-abort-signal');
 /** Brands errors raised before the tool's own `execute` ever ran. */
 const EAGER_NOT_EXECUTED = Symbol('eager-tool-not-executed');
 
+type RunningExecution = {
+  controller: AbortController;
+  releasePermit: () => void;
+};
+
 type QueuedExecution = {
   toolCallId: string;
   run: () => void;
@@ -36,7 +41,7 @@ type QueuedExecution = {
 export class EagerToolExecutionCoordinator {
   readonly #executions = new Map<string, Promise<EagerToolResult>>();
   readonly #queued: QueuedExecution[] = [];
-  readonly #controllers = new Map<string, AbortController>();
+  readonly #controllers = new Map<string, RunningExecution>();
   #running = 0;
   #stopped = false;
   #stoppedPermanently = false;
@@ -67,19 +72,32 @@ export class EagerToolExecutionCoordinator {
     // be cancelled without touching the run's signal.
     const controller = new AbortController();
 
+    // Held once, released once — by whichever comes first, the execution settling or the
+    // execution being cancelled. A tool that ignores its abort signal must not keep a
+    // permit that the surviving attempt's calls are waiting on.
+    let holdsPermit = false;
+    const releasePermit = () => {
+      if (!holdsPermit) return;
+      holdsPermit = false;
+      this.#running--;
+      this.#queued.shift()?.run();
+    };
+
     const promise = new Promise<EagerToolResult>((resolve, reject) => {
       const run = () => {
         this.#running++;
-        this.#controllers.set(toolCallId, controller);
+        holdsPermit = true;
+        this.#controllers.set(toolCallId, { controller, releasePermit });
         void execute(controller.signal)
           .then(resolve, reject)
           .finally(() => {
-            this.#running--;
             // Identity-checked: a discarded attempt and its retry can carry the same
             // toolCallId, so the late settlement of the old one must not evict the
             // controller belonging to the live one.
-            if (this.#controllers.get(toolCallId) === controller) this.#controllers.delete(toolCallId);
-            this.#queued.shift()?.run();
+            if (this.#controllers.get(toolCallId)?.controller === controller) {
+              this.#controllers.delete(toolCallId);
+            }
+            releasePermit();
           });
       };
 
@@ -116,7 +134,9 @@ export class EagerToolExecutionCoordinator {
    * With `cancelRunning`, the surrounding model attempt is being thrown away entirely.
    * Those executions are aborted *and* forgotten, so nothing downstream can adopt work
    * belonging to an attempt that no longer exists — including a retry that happens to
-   * reuse the same toolCallId, which must execute fresh.
+   * reuse the same toolCallId, which must execute fresh. Their concurrency permits are
+   * released at the same moment: abort is cooperative, and a tool that declines to
+   * observe it must not stall the attempt that replaced it.
    */
   stop({ permanent = false, cancelRunning = false }: { permanent?: boolean; cancelRunning?: boolean } = {}) {
     this.#stopped = true;
@@ -131,11 +151,18 @@ export class EagerToolExecutionCoordinator {
     // pipeline never runs those calls, so neither may we. After an unsafe *finish* the
     // foreach still runs and adopts, so running work is left alone there.
     if (cancelRunning) {
-      for (const [toolCallId, controller] of this.#controllers) {
-        this.#executions.delete(toolCallId);
-        controller.abort();
-      }
+      const cancelled = [...this.#controllers];
+      // Cleared first: releasing a permit can start queued work, which must not observe
+      // a controller map that still holds the executions being abandoned.
       this.#controllers.clear();
+      for (const [toolCallId, running] of cancelled) {
+        // Deleting here is belt-and-braces at today's only call site, which opens a new
+        // turn immediately after. It is the coordinator's own invariant: cancelled work
+        // is never adoptable, whoever calls this and whatever they do next.
+        this.#executions.delete(toolCallId);
+        running.controller.abort();
+        running.releasePermit();
+      }
     }
   }
 
