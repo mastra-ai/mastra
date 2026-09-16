@@ -239,7 +239,7 @@ function createSkillReadTool(skills: WorkspaceSkills) {
         // assets (templates, etc.) as text. String content is already valid UTF-8, so only the
         // NUL check applies.
         const bytes = typeof content === 'string' ? Buffer.from(content, 'utf-8') : content;
-        const hasNullByte = bytes.subarray(0, 1000).includes(0);
+        const hasNullByte = bytes.includes(0);
         const isValidUtf8 = bytes.equals(Buffer.from(bytes.toString('utf-8'), 'utf-8'));
         if (hasNullByte || !isValidUtf8) {
           const fullPath = `${resolved.skill.path}/${path}`;

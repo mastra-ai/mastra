@@ -625,6 +625,24 @@ describe('skill_read tool', () => {
     expect(result).not.toContain('%PDF');
   });
 
+  it('treats a valid-UTF-8 asset with a NUL byte after the first 1000 bytes as binary', async () => {
+    const skill = makeSkill({ name: 'design-system', path: 'skills/design-system' });
+    // Valid UTF-8 (NUL is U+0000) but with a NUL past byte 1000 — the class of file a
+    // first-1000-bytes-only NUL scan would have leaked into the model context as text.
+    const buffer = Buffer.concat([Buffer.alloc(1500, 0x61), Buffer.from([0x00]), Buffer.alloc(10, 0x62)]);
+    expect(buffer.subarray(0, 1000).includes(0)).toBe(false);
+    expect(buffer.equals(Buffer.from(buffer.toString('utf-8'), 'utf-8'))).toBe(true);
+    const skills = createMockWorkspaceSkills({
+      get: vi.fn(async () => skill),
+      getAsset: vi.fn(async () => buffer),
+    });
+    const { skill_read: tool } = createSkillTools(skills);
+
+    const result = await exec(tool, { skillName: 'design-system', path: 'assets/data.bin' });
+
+    expect(result).toBe(`Binary file: skills/design-system/assets/data.bin (${buffer.length} bytes)`);
+  });
+
   it('returns genuine text assets as text', async () => {
     const skill = makeSkill({ name: 'design-system', path: 'skills/design-system' });
     const skills = createMockWorkspaceSkills({
