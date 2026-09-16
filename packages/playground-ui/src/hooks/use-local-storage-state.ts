@@ -60,12 +60,10 @@ interface ExpiringLocalStorageState<T> {
 
 interface ExpiringEntry<T> {
   value: T | undefined;
-  expiresAt: number | undefined;
   expired: boolean;
 }
 
-const MAX_TIMEOUT_MS = 2 ** 31 - 1;
-const EMPTY_ENTRY = { value: undefined, expiresAt: undefined, expired: false };
+const EMPTY_ENTRY = { value: undefined, expired: false };
 
 const toMs = (expiresAt: Date | number) => (expiresAt instanceof Date ? expiresAt.getTime() : expiresAt);
 
@@ -77,8 +75,8 @@ const removeStoredItem = (key: string) => {
   }
 };
 
-// Stores `{ value, expiresAt }` under `key`. The expiration date is persisted with the value, so
-// the value stays readable until that date even if the option changes later. Like useState,
+// Stores `{ value, expiresAt }` under `key`. Expiration is only checked when the key is read
+// (at mount); an expired entry is removed and reported as `expired`. Like useState,
 // initialization happens once. Remount the consumer when its storage key changes.
 export function useExpiringLocalStorageState<T>({
   key,
@@ -97,24 +95,12 @@ export function useExpiringLocalStorageState<T>({
         removeStoredItem(storageKey);
         return { ...EMPTY_ENTRY, expired: true };
       }
-      return { value: parsed.data.value, expiresAt: parsed.data.expiresAt, expired: false };
+      return { value: parsed.data.value, expired: false };
     } catch {
       // Invalid JSON or unavailable browser storage behaves like an empty entry.
       return EMPTY_ENTRY;
     }
   });
-
-  useEffect(() => {
-    if (entry.expiresAt === undefined) return;
-    const timeout = setTimeout(
-      () => {
-        removeStoredItem(storageKey);
-        setEntry({ ...EMPTY_ENTRY, expired: true });
-      },
-      Math.min(Math.max(entry.expiresAt - now(), 0), MAX_TIMEOUT_MS),
-    );
-    return () => clearTimeout(timeout);
-  }, [storageKey, entry.expiresAt, now]);
 
   const setValue = useCallback(
     (value: T) => {
@@ -124,7 +110,7 @@ export function useExpiringLocalStorageState<T>({
       } catch {
         // Keep in-memory state usable when storage is unavailable or full.
       }
-      setEntry({ value, expiresAt: expiresAtMs, expired: false });
+      setEntry({ value, expired: false });
     },
     [storageKey, expiresAt],
   );

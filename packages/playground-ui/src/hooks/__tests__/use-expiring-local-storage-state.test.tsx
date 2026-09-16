@@ -50,15 +50,16 @@ describe('useExpiringLocalStorageState', () => {
       expect(mount().result.current.value).toBe('xyz');
     });
   });
-  describe('when the value expires while mounted', () => {
-    it('switches to expired and removes the entry', () => {
+  describe('when the expiration date passes while mounted', () => {
+    it('keeps the value until the key is read again', () => {
       const view = mount(START + 10_000);
       act(() => view.result.current.setValue('xyz'));
-      act(() => vi.advanceTimersByTime(9_999));
+      vi.setSystemTime(START + 10_000);
       expect(view.result.current.value).toBe('xyz');
-      act(() => vi.advanceTimersByTime(1));
-      expect(view.result.current.value).toBeUndefined();
-      expect(view.result.current.expired).toBe(true);
+      view.unmount();
+      const next = mount();
+      expect(next.result.current.value).toBeUndefined();
+      expect(next.result.current.expired).toBe(true);
       expect(localStorage.getItem('token')).toBeNull();
     });
   });
