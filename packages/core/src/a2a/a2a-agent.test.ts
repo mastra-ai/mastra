@@ -824,6 +824,7 @@ describe('A2AAgent', () => {
           kind: 'artifact-update',
           taskId: 'task-1',
           contextId: 'ctx-1',
+          append: false,
           lastChunk: false,
           artifact: {
             artifactId: 'response:text',
@@ -835,6 +836,7 @@ describe('A2AAgent', () => {
           kind: 'artifact-update',
           taskId: 'task-1',
           contextId: 'ctx-1',
+          append: true,
           lastChunk: true,
           artifact: {
             artifactId: 'response:text',
@@ -853,6 +855,16 @@ describe('A2AAgent', () => {
     const stream = await agent.stream('Chunked stream', { runId: 'stream-run-chunked' });
 
     expect(await stream.text).toBe('Hello world');
+    expect((await stream.task)?.artifacts).toEqual([
+      {
+        artifactId: 'response:text',
+        name: 'response.txt',
+        parts: [
+          { kind: 'text', text: 'Hello' },
+          { kind: 'text', text: ' world' },
+        ],
+      },
+    ]);
   });
 
   it('throws the remote JSON-RPC error returned with HTTP 200', async () => {
@@ -1076,7 +1088,7 @@ describe('A2AAgent', () => {
     const agent = new A2AAgent({
       url: 'https://remote.example.com',
       protocolVersion: '1.0',
-      headers: { 'A2A-Version': '0.3' },
+      headers: { 'a2a-version': '0.3' },
       fetch: fetchMock as typeof fetch,
     });
 
@@ -1105,8 +1117,17 @@ describe('A2AAgent', () => {
             artifactUpdate: {
               taskId: 'v1-task-1',
               contextId: 'v1-context-1',
-              artifact: { artifactId: 'v1-artifact-1', parts: [{ text: 'V1 streamed text' }] },
+              artifact: { artifactId: 'v1-artifact-1', parts: [{ text: 'V1 streamed ' }] },
               append: false,
+              lastChunk: false,
+            },
+          },
+          {
+            artifactUpdate: {
+              taskId: 'v1-task-1',
+              contextId: 'v1-context-1',
+              artifact: { artifactId: 'v1-artifact-1', parts: [{ text: 'text' }] },
+              append: true,
               lastChunk: true,
             },
           },
@@ -1132,8 +1153,19 @@ describe('A2AAgent', () => {
       eventTypes.push(event.type);
     }
 
-    expect(eventTypes).toEqual(['start', 'text-start', 'text-delta', 'text-end', 'finish']);
+    expect(eventTypes).toEqual(['start', 'text-start', 'text-delta', 'text-delta', 'text-end', 'finish']);
     expect(await output.text).toBe('V1 streamed text');
-    expect((await output.task)?.status.state).toBe('completed');
+    expect(await output.task).toMatchObject({
+      status: { state: 'completed' },
+      artifacts: [
+        {
+          artifactId: 'v1-artifact-1',
+          parts: [
+            { kind: 'text', text: 'V1 streamed ' },
+            { kind: 'text', text: 'text' },
+          ],
+        },
+      ],
+    });
   });
 });

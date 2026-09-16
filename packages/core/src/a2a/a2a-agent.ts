@@ -1381,15 +1381,27 @@ export class A2AAgent implements SubAgent {
               textBuffer = messageText;
             }
           } else if (event.kind === 'artifact-update') {
-            task = task
-              ? {
-                  ...task,
-                  artifacts: [
-                    ...(task.artifacts ?? []).filter(artifact => artifact.artifactId !== event.artifact.artifactId),
-                    event.artifact,
-                  ],
-                }
-              : task;
+            if (task) {
+              const artifacts = task.artifacts ?? [];
+              const existingArtifact = artifacts.find(artifact => artifact.artifactId === event.artifact.artifactId);
+              const updatedArtifact =
+                event.append && existingArtifact
+                  ? {
+                      ...existingArtifact,
+                      ...event.artifact,
+                      parts: [...existingArtifact.parts, ...event.artifact.parts],
+                    }
+                  : event.artifact;
+
+              task = {
+                ...task,
+                artifacts: existingArtifact
+                  ? artifacts.map(artifact =>
+                      artifact.artifactId === event.artifact.artifactId ? updatedArtifact : artifact,
+                    )
+                  : [...artifacts, updatedArtifact],
+              };
+            }
 
             const artifactText = event.artifact.parts
               ?.flatMap(part =>
@@ -1532,22 +1544,24 @@ export class A2AAgent implements SubAgent {
     let attempts = 0;
     let lastError: unknown;
 
-    const finalHeaders = {
+    const finalHeaders = new Headers({
       accept: stream ? 'text/event-stream' : 'application/json',
       ...this.#headers,
       ...headers,
-      ...this.#compat.headers,
-    };
+    });
+    for (const [name, value] of Object.entries(this.#compat.headers)) {
+      finalHeaders.set(name, value);
+    }
+    if (body) {
+      finalHeaders.set('content-type', 'application/json');
+    }
 
     while (attempts <= this.#retries) {
       try {
         const requestSignal = this.#resolveRequestSignal(signal);
         const response = await this.#fetch(url, {
           method,
-          headers: {
-            ...finalHeaders,
-            ...(body ? { 'content-type': 'application/json' } : {}),
-          },
+          headers: finalHeaders,
           body: body ? JSON.stringify(body) : undefined,
           credentials: credentials ?? this.#credentials,
           signal: requestSignal,
