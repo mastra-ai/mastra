@@ -305,18 +305,19 @@ export class Deps extends MastraBase {
             ? ' --mode=update-lockfile'
             : ' --lockfile-only'
         : '';
+    const ignoreScriptsFlag = type === 'install' && lockfileOnly && pm !== 'yarn' ? ' --ignore-scripts' : '';
 
     switch (pm) {
       case 'npm':
-        return `${cmd}${lockfileFlag} --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false`;
+        return `${cmd}${lockfileFlag}${ignoreScriptsFlag} --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false`;
       case 'yarn':
         return `${cmd}${lockfileFlag}`;
       case 'pnpm':
-        return `${cmd}${lockfileFlag} --loglevel=error`;
+        return `${cmd}${lockfileFlag}${ignoreScriptsFlag} --loglevel=error`;
       case 'bun':
-        return `${cmd}${lockfileFlag}`;
+        return `${cmd}${lockfileFlag}${ignoreScriptsFlag}`;
       default:
-        return `${cmd}${lockfileFlag}`;
+        return `${cmd}${lockfileFlag}${ignoreScriptsFlag}`;
     }
   }
 

@@ -123,13 +123,13 @@ describe('DepsService lockfile preparation', () => {
     {
       lockfile: 'package-lock.json',
       lockfileOnlyCommand:
-        'npm install --package-lock-only --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false',
+        'npm install --package-lock-only --ignore-scripts --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false',
       installCommand:
         'npm install --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false',
     },
     {
       lockfile: 'pnpm-lock.yaml',
-      lockfileOnlyCommand: 'pnpm install --lockfile-only --loglevel=error',
+      lockfileOnlyCommand: 'pnpm install --lockfile-only --ignore-scripts --loglevel=error',
       installCommand: 'pnpm install --loglevel=error',
     },
     {
@@ -139,7 +139,7 @@ describe('DepsService lockfile preparation', () => {
     },
     {
       lockfile: 'bun.lock',
-      lockfileOnlyCommand: 'bun install --lockfile-only',
+      lockfileOnlyCommand: 'bun install --lockfile-only --ignore-scripts',
       installCommand: 'bun install',
     },
   ] as const;
@@ -180,7 +180,7 @@ describe('DepsService lockfile preparation', () => {
 
     expect(runChildProcess).toHaveBeenCalledTimes(1);
     expect(runChildProcess.mock.calls[0]?.[0]).toMatchObject({
-      cmd: 'npm install --package-lock-only --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false',
+      cmd: 'npm install --package-lock-only --ignore-scripts --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false',
       args: [],
     });
   });
@@ -198,6 +198,8 @@ describe('DepsService lockfile preparation', () => {
 
     expect(await readFile(join(outputDir, 'pnpm-lock.yaml'), 'utf-8')).toBe('pnpm source');
     await expect(readFile(join(outputDir, 'package-lock.json'), 'utf-8')).rejects.toThrow();
-    expect(runChildProcess.mock.calls[0]?.[0].cmd).toBe('pnpm install --lockfile-only --loglevel=error');
+    expect(runChildProcess.mock.calls[0]?.[0].cmd).toBe(
+      'pnpm install --lockfile-only --ignore-scripts --loglevel=error',
+    );
   });
 });
