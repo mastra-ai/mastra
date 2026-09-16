@@ -5,17 +5,21 @@ import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
 import type { TestAuthUser } from '../../routes/test-utils.js';
 import { PlatformGitLabIntegration } from '../platform/gitlab/integration.js';
 import { GitLabApiError } from './api.js';
-import { GitLabIntegration } from './integration.js';
+import { decodeIssueReference, encodeSourceId, GitLabIntegration } from './integration.js';
 import type { GitLabIntegrationBase } from './integration.js';
 import { buildGitLabRoutes } from './routes.js';
 
-function buildApp(gitlab: GitLabIntegrationBase, user: TestAuthUser | null) {
+function buildApp(
+  gitlab: GitLabIntegrationBase,
+  user: TestAuthUser | null,
+  intake?: Parameters<typeof buildGitLabRoutes>[0]['intake'],
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app, buildGitLabRoutes({ gitlab, auth: fakeRouteAuth({ enabled: true }) }));
+  mountApiRoutes(app, buildGitLabRoutes({ gitlab, auth: fakeRouteAuth({ enabled: true }), intake }));
   return app;
 }
 
@@ -85,6 +89,55 @@ describe('GitLab UI routes', () => {
       ],
     });
     expect(gitlab.intake.listSources).toHaveBeenCalledWith({ orgId: 'org1', userId: 'u1' });
+  });
+
+  it('lists only selected GitLab sources routed to the caller-owned Factory', async () => {
+    const gitlab = new GitLabIntegration({ accessToken: 'group-token' });
+    const factoryProjectId = '11111111-1111-4111-8111-111111111111';
+    const sourceId = encodeSourceId({ connectionId: 'direct', projectId: '10', projectPath: 'acme/app' });
+    vi.spyOn(gitlab, 'resolveOrgId').mockResolvedValue('org1');
+    vi.spyOn(gitlab.intake, 'listIssues').mockResolvedValue({
+      issues: [
+        {
+          id: '42',
+          identifier: 'acme/app#42',
+          title: 'Fix routed intake',
+          url: 'https://gitlab.com/acme/app/-/issues/42',
+          author: 'grace',
+          state: 'opened',
+          stateType: 'unstarted',
+          priority: null,
+          assignee: null,
+          assignees: [],
+          source: 'acme/app',
+          sourceId,
+          labels: [],
+          commentCount: 0,
+          createdAt: '2026-09-01T00:00:00Z',
+          updatedAt: '2026-09-01T00:00:00Z',
+        },
+      ],
+      nextCursor: null,
+    });
+    const intake = {
+      ensureReady: vi.fn(),
+      getConfig: vi.fn().mockResolvedValue({ gitlab: { enabled: true, sourceIds: [sourceId, 'other'] } }),
+      listBindings: vi.fn().mockResolvedValue([
+        { integrationId: 'gitlab', sourceId, factoryProjectId, board: 'work' },
+        { integrationId: 'gitlab', sourceId: 'other', factoryProjectId, board: 'planning' },
+      ]),
+    } as unknown as NonNullable<Parameters<typeof buildGitLabRoutes>[0]['intake']>;
+
+    const response = await buildApp(gitlab, orgUser(), intake).request(
+      '/web/gitlab/issues?factoryProjectId=' + factoryProjectId + '&board=work',
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(decodeIssueReference(body.issues[0].externalId)).toMatchObject({ projectId: '10', issueIid: 42 });
+    expect(gitlab.intake.listIssues).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceIds: [sourceId] }),
+    );
   });
 
   it('maps rejected credentials to a reconnectable auth error', async () => {

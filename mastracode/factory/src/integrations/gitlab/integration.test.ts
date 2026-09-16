@@ -75,11 +75,12 @@ describe('GitLabIntegration', () => {
 
     expect(
       gitlab
-        .routes({ auth: fakeRouteAuth({ enabled: true }) } as never)
+        .routes({ auth: fakeRouteAuth({ enabled: true }), storage: { intake: {} } } as never)
         .map(route => ({ path: route.path, requiresAuth: route.requiresAuth })),
     ).toEqual([
       { path: '/web/gitlab/status', requiresAuth: false },
       { path: '/web/gitlab/projects', requiresAuth: false },
+      { path: '/web/gitlab/issues', requiresAuth: false },
       { path: '/web/gitlab/webhook', requiresAuth: false },
     ]);
     expect(gitlab.diagnostics()).toMatchObject({ webhookConfigured: true });
@@ -233,9 +234,10 @@ describe('PlatformGitLabIntegration', () => {
 
     expect(gitlab.intake).toBeDefined();
     expect(gitlab.versionControl).toBeDefined();
-    expect(gitlab.routes({ auth: fakeRouteAuth({ enabled: true }) } as never).map(route => route.path)).toEqual([
+    expect(gitlab.routes({ auth: fakeRouteAuth({ enabled: true }), storage: { intake: {} } } as never).map(route => route.path)).toEqual([
       '/web/gitlab/status',
       '/web/gitlab/projects',
+      '/web/gitlab/issues',
       '/web/gitlab/webhook',
     ]);
     expect(gitlab.diagnostics()).toMatchObject({

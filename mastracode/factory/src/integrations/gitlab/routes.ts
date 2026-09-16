@@ -2,7 +2,9 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.js';
+import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import { GitLabApiError } from './api.js';
+import { decodeSourceId, encodeIssueReference } from './integration.js';
 import type { GitLabIntegrationBase } from './integration.js';
 import { handleGitLabWebhook } from './webhook.js';
 import type { ParsedGitLabWebhook } from './webhook.js';
@@ -16,6 +18,7 @@ function loose(c: unknown): RouteContext {
 export interface BuildGitLabRoutesOptions {
   gitlab?: GitLabIntegrationBase;
   auth?: RouteAuth;
+  intake?: IntakeStorage;
   webhookSecret?: string;
   ingestFactoryEvent?: (event: ParsedGitLabWebhook) => Promise<unknown>;
 }
@@ -50,7 +53,7 @@ function gitlabFetchError(c: RouteContext, error: unknown) {
 
 export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const { gitlab, auth } = options;
+  const { gitlab, auth, intake } = options;
   const enabled = Boolean(gitlab && auth?.enabled());
 
   if (gitlab && auth) {
@@ -120,6 +123,68 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
                 defaultBranch:
                   typeof source.metadata?.defaultBranch === 'string' ? source.metadata.defaultBranch : null,
               })),
+            });
+          } catch (error) {
+            return gitlabFetchError(loose(c), error);
+          }
+        },
+      }),
+    );
+  }
+
+  if (gitlab && auth && intake) {
+    routes.push(
+      registerApiRoute('/web/gitlab/issues', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await resolveOrgTenant(loose(c), auth);
+          if ('response' in resolved) return resolved.response;
+          const factoryProjectId = c.req.query('factoryProjectId')?.trim();
+          if (!factoryProjectId) return c.json({ error: 'invalid_factory_project_id' }, 400);
+          const board = c.req.query('board')?.trim();
+          if (!board) return c.json({ error: 'invalid_board' }, 400);
+          if ((await gitlab.resolveOrgId(factoryProjectId)) !== resolved.tenant.orgId) {
+            return c.json({ error: 'factory_project_not_found' }, 404);
+          }
+
+          await intake.ensureReady();
+          const config = await intake.getConfig({ orgId: resolved.tenant.orgId, integrationIds: ['gitlab'] });
+          const selection = config.gitlab!;
+          if (!selection.enabled) {
+            return c.json({ error: 'gitlab_intake_disabled', message: 'GitLab intake is turned off in Settings.' }, 404);
+          }
+          const selected = new Set(selection.sourceIds ?? []);
+          const sourceIds = [
+            ...new Set(
+              (await intake.listBindings({ orgId: resolved.tenant.orgId, integrationId: 'gitlab' }))
+                .filter(
+                  binding =>
+                    binding.factoryProjectId === factoryProjectId &&
+                    binding.board === board &&
+                    selected.has(binding.sourceId),
+                )
+                .map(binding => binding.sourceId),
+            ),
+          ];
+          if (sourceIds.length === 0) return c.json({ issues: [], nextCursor: null });
+
+          try {
+            const result = await gitlab.intake.listIssues({
+              connection: { type: 'oauth', accessToken: 'gitlab-route' },
+              sourceIds,
+              cursor: c.req.query('after')?.trim() || undefined,
+            });
+            return c.json({
+              ...result,
+              issues: result.issues.map(issue => {
+                const source = decodeSourceId(issue.sourceId ?? '');
+                const issueIid = Number(issue.id);
+                if (!source || !Number.isSafeInteger(issueIid) || issueIid <= 0) {
+                  throw new Error('GitLab returned an invalid routed issue reference.');
+                }
+                return { ...issue, externalId: encodeIssueReference({ ...source, issueIid }) };
+              }),
             });
           } catch (error) {
             return gitlabFetchError(loose(c), error);

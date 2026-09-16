@@ -16,6 +16,29 @@ export interface GitLabStatus {
   reason?: 'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready';
 }
 
+export interface GitLabIssue {
+  id: string;
+  externalId: string;
+  identifier: string;
+  title: string;
+  url: string;
+  state: string;
+  stateType: string;
+  priority: string | null;
+  assignee: string | null;
+  author: string | null;
+  source: string | null;
+  sourceId: string | null;
+  labels: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GitLabIssuePage {
+  issues: GitLabIssue[];
+  nextCursor: string | null;
+}
+
 export interface GitLabProject {
   id: string;
   name: string;
@@ -76,4 +99,15 @@ export function isGitLabReauthRequired(status: GitLabStatus | undefined): boolea
 export async function fetchGitLabProjects(baseUrl: string): Promise<GitLabProject[]> {
   const { projects } = await getGitLabResource<{ projects: GitLabProject[] }>(baseUrl, '/web/gitlab/projects');
   return projects;
+}
+
+export async function listGitLabIssues(
+  baseUrl: string,
+  factoryProjectId: string,
+  board: string,
+  after?: string,
+): Promise<GitLabIssuePage> {
+  const params = new URLSearchParams({ factoryProjectId, board });
+  if (after) params.set('after', after);
+  return getGitLabResource<GitLabIssuePage>(baseUrl, '/web/gitlab/issues?' + params.toString());
 }
