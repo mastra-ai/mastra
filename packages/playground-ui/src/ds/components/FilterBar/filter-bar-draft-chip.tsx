@@ -20,7 +20,7 @@ export function FilterBarDraftChip({ field, operator }: FilterBarDraftChipProps)
       data-slot="filter-bar-draft-chip"
       className={cn(
         'flex h-form-sm max-w-full items-stretch divide-x divide-border1 rounded-full border border-border1 bg-surface3 text-neutral5',
-        'rounded-r-none border-r-0',
+        'rounded-r-none',
       )}
     >
       <span className={cn(segmentClass, 'last:rounded-r-none')}>{field.label}</span>
