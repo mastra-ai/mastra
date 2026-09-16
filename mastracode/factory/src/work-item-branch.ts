@@ -84,7 +84,11 @@ export function workItemBranch(item: WorkItemBranchInput): string {
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9._-]+/g, '-');
-    if (identifier) return 'factory/gitlab-' + identifier.slice(0, 80);
+    const uniqueSuffix = item.id
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '')
+      .slice(-12);
+    if (identifier && uniqueSuffix) return `factory/gitlab-${identifier.slice(0, 60)}-${uniqueSuffix}`;
   }
   return `factory/item-${item.id}`;
 }

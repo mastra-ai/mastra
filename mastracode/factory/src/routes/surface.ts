@@ -41,6 +41,7 @@ import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js
 import {
   SourceControlConnectionNotFoundError,
   type SourceControlStorage,
+  type SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
 import {
   isAgentActor,
@@ -182,7 +183,7 @@ function guardIntegrationRoutes({
  * falls back to minting one.
  */
 async function reuseBoundSession(
-  sourceControl: GithubIntegration['sourceControlStorage'],
+  sourceControl: SourceControlStorageHandle,
   input: FactoryBindingPreparationInput,
 ): Promise<EnsuredFactorySourceSession | undefined> {
   const ref = input.item.sessions[input.role];
@@ -216,13 +217,17 @@ async function reuseBoundSession(
  * what it forwards.
  */
 export async function prepareFactoryRuleBinding(
-  github: GithubIntegration,
+  sourceControlProvider: SourceControlStorageHandle | Pick<GithubIntegration, 'sourceControlStorage'>,
   coordinator: Pick<FactoryStartCoordinator, 'prepare'>,
   projects: FactoryProjectsStorage,
   boards: BoardRegistry,
   input: FactoryBindingPreparationInput,
 ): Promise<void> {
   try {
+    const sourceControl =
+      'sourceControlStorage' in sourceControlProvider
+        ? sourceControlProvider.sourceControlStorage
+        : sourceControlProvider;
     const source = workItemBranchSource(input.item.externalSource);
     const branch = workItemBranch({ id: input.item.id, source, metadata: input.item.metadata });
     // Only leaving a resting phase derives a lane from the role: roles don't own lanes,
@@ -252,9 +257,9 @@ export async function prepareFactoryRuleBinding(
     // previous sandbox.
     const approver = input.record.approvedBy ?? undefined;
     const preparedSession =
-      (await reuseBoundSession(github.sourceControlStorage, input)) ??
+      (await reuseBoundSession(sourceControl, input)) ??
       (await ensureFactorySourceSession({
-        sourceControl: github.sourceControlStorage,
+        sourceControl,
         orgId: input.record.orgId,
         factoryProjectId: input.record.factoryProjectId,
         repositorySlug,
@@ -477,6 +482,19 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   const githubRegistration = registrations.find(({ integration }) => integration.id === 'github');
   const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
   const githubIntegration = githubRegistration?.integration as GithubIntegration | undefined;
+  const sourceControlRegistrations = registrations.filter(({ integration }) => integration.versionControl);
+  const defaultSourceControlId =
+    githubRegistration?.integration.id ??
+    (sourceControlRegistrations.length === 1 ? sourceControlRegistrations[0]!.integration.id : undefined);
+  const sourceControlFor = (
+    externalSource: FactoryBindingPreparationInput['item']['externalSource'] | undefined,
+  ): SourceControlStorageHandle | undefined => {
+    const matching = externalSource
+      ? sourceControlRegistrations.find(({ integration }) => integration.id === externalSource.integrationId)
+      : undefined;
+    const integrationId = matching?.integration.id ?? defaultSourceControlId;
+    return integrationId ? deps.sourceControlStorage.forIntegration(integrationId) : undefined;
+  };
 
   const integrationRoutes = registrations.flatMap(registration => {
     const { integration } = registration;
@@ -516,23 +534,31 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         deps.controller,
         deps.domains.workItems,
         transitionService,
-        githubIntegration?.sourceControlStorage,
+        request => sourceControlFor(request.workItem.input.externalSource),
         deps.domains.memorySettings,
       )
     : undefined;
   if (transitionService && startCoordinator) {
     deps.onFactoryRuntime?.({
       transitionService,
-      ...(githubIntegration
+      ...(sourceControlRegistrations.length > 0
         ? {
-            prepareBinding: (input: FactoryBindingPreparationInput) =>
-              prepareFactoryRuleBinding(
-                githubIntegration,
+            prepareBinding: (input: FactoryBindingPreparationInput) => {
+              const sourceControl = sourceControlFor(input.item.externalSource);
+              if (!sourceControl) {
+                throw new FactoryDispatchError(
+                  'source_control_missing',
+                  `No source-control provider is available for '${input.item.externalSource?.integrationId ?? 'manual'}'.`,
+                );
+              }
+              return prepareFactoryRuleBinding(
+                sourceControl,
                 startCoordinator,
                 deps.domains.projects,
                 deps.boardRegistry,
                 input,
-              ),
+              );
+            },
           }
         : {}),
     });

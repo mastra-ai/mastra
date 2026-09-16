@@ -48,9 +48,23 @@ describe('workItemBranch', () => {
 
   it('sanitizes the GitLab identifier into a bounded branch name', () => {
     expect(workItemBranch({ id, source: 'gitlab-issue', metadata: { identifier: 'Acme/App #42' } })).toBe(
-      'factory/gitlab-acme-app-42',
+      'factory/gitlab-acme-app-42-000000000001',
     );
     expect(workItemBranch({ id, source: 'gitlab-issue', metadata: { identifier: '  ' } })).toBe(`factory/item-${id}`);
+    const longPrefix = 'group/'.repeat(30);
+    expect(
+      workItemBranch({
+        id: 'aaaaaaaa-0000-4000-8000-000000000002',
+        source: 'gitlab-issue',
+        metadata: { identifier: longPrefix + '#42' },
+      }),
+    ).not.toBe(
+      workItemBranch({
+        id: 'aaaaaaaa-0000-4000-8000-000000000003',
+        source: 'gitlab-issue',
+        metadata: { identifier: longPrefix + '#43' },
+      }),
+    );
   });
 
   it('falls back when the linear identifier is empty or whitespace', () => {
