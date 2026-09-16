@@ -609,13 +609,13 @@ function getProviderCapabilitySupport(
   return models.includes(modelId);
 }
 
-/** Whether the provider's capability file enumerates this model under any dimension. */
-function providerListsModel(provider: string, modelId: string, useDynamicLoading: boolean): boolean {
-  const file = loadProviderCapabilityFile(provider, useDynamicLoading);
-  if (!file) return false;
-  return (Object.keys(providerCapCaches) as CapabilityDimension[]).some(dimension =>
-    file[dimension]?.includes(modelId),
-  );
+/**
+ * Whether the provider's model list enumerates this model. Capability arrays only
+ * hold models with the capability set, so a model that supports nothing would be
+ * absent from all of them — the registry's model list is the real membership signal.
+ */
+function providerListsModel(provider: string, modelId: string): boolean {
+  return GatewayRegistry.getInstance().getModels()[provider]?.includes(modelId) ?? false;
 }
 
 function modelSupportsCapability(modelRouterId: string, dimension: CapabilityDimension): boolean | undefined {
@@ -656,7 +656,7 @@ function modelSupportsCapability(modelRouterId: string, dimension: CapabilityDim
   // `openrouter/anthropic/claude-sonnet-4-6` missing from OpenRouter's data) do
   // we fall back to the underlying provider's capability file.
   const nestedProviderDelimiter = modelId.indexOf('/');
-  if (nestedProviderDelimiter !== -1 && !providerListsModel(provider, modelId, useDynamicLoading)) {
+  if (nestedProviderDelimiter !== -1 && !providerListsModel(provider, modelId)) {
     const nestedProvider = modelId.substring(0, nestedProviderDelimiter);
     const nestedModelId = modelId.substring(nestedProviderDelimiter + 1);
     if (nestedProvider && nestedModelId) {

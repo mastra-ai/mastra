@@ -61,7 +61,7 @@ describe('modelSupportsAttachments', () => {
     expect(modelSupportsAttachments('openrouter/deepseek/deepseek-v4-flash')).toBe(false);
   });
 
-  it('falls back to the nested provider only when the gateway does not list the model at all', () => {
+  it('treats a gateway-listed model absent from every capability array as unsupported', () => {
     const originalReadFileSync = fs.readFileSync;
     vi.spyOn(fs, 'readFileSync').mockImplementation((filePath, ...rest) => {
       const content = originalReadFileSync(filePath as any, ...(rest as [any]));
@@ -70,6 +70,8 @@ describe('modelSupportsAttachments', () => {
         path.basename(filePath) === 'openrouter.json' &&
         typeof content === 'string'
       ) {
+        // A model with no capabilities at all is in the gateway's model list but in
+        // none of its capability arrays; that must not trigger the nested fallback.
         const data = JSON.parse(content);
         for (const key of Object.keys(data)) {
           if (Array.isArray(data[key])) data[key] = data[key].filter((id: string) => id !== 'openai/gpt-4o');
@@ -77,6 +79,18 @@ describe('modelSupportsAttachments', () => {
         return JSON.stringify(data);
       }
       return content;
+    });
+
+    expect(modelSupportsAttachments('openai/gpt-4o')).toBe(true);
+    expect(modelSupportsAttachments('openrouter/openai/gpt-4o')).toBe(false);
+  });
+
+  it('falls back to the nested provider only when the gateway does not list the model at all', () => {
+    const registry = GatewayRegistry.getInstance();
+    const originalGetModels = registry.getModels.bind(registry);
+    vi.spyOn(registry, 'getModels').mockImplementation(() => {
+      const models = originalGetModels();
+      return { ...models, openrouter: models.openrouter.filter(id => id !== 'openai/gpt-4o') };
     });
 
     expect(modelSupportsAttachments('openrouter/openai/gpt-4o')).toBe(true);
