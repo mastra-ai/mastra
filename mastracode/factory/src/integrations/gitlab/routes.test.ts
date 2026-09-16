@@ -90,7 +90,7 @@ describe('GitLab UI routes', () => {
 
   it('maps rejected credentials to a reconnectable auth error', async () => {
     const gitlab = new GitLabIntegration({ accessToken: 'group-token' });
-    vi.spyOn(gitlab.intake, 'listSources').mockRejectedValue(new GitLabApiError('GitLab rejected the token.', 401));
+    vi.spyOn(gitlab.intake, 'listSources').mockRejectedValue(new GitLabApiError('GitLab rejected the token.', 403));
 
     const response = await buildApp(gitlab, orgUser()).request('/web/gitlab/projects');
 

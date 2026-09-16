@@ -86,10 +86,15 @@ describe('GitLabApiClient', () => {
       description: 'Details',
     });
     await client.mergeMergeRequest('group/project', 17, { squash: true });
-    await client.createMergeRequestDiscussion('group/project', 17, { body: 'Please revise', position });
+    await client.createMergeRequestDiscussion('group/project', 17, {
+      body: 'Please revise',
+      commitId: 'head-sha',
+      position,
+    });
     await client.approveMergeRequest('group/project', 17, 'head-sha');
     await client.setMergeRequestReviewers('group/project', 17, [11, 22]);
     await client.listProjectMembers('group/project', { query: 'alice', page: 2 });
+    await client.getMergeRequestDiscussion('group/project', 17, 'discussion/1');
 
     expect(requestOf(fetchMock, 0)).toMatchObject({
       url: 'https://gitlab.example.com/api/v4/projects/group%2Fproject/merge_requests',
@@ -110,7 +115,11 @@ describe('GitLabApiClient', () => {
       url: 'https://gitlab.example.com/api/v4/projects/group%2Fproject/merge_requests/17/discussions',
       init: { method: 'POST' },
     });
-    expect(JSON.parse(String(requestOf(fetchMock, 2).init.body))).toEqual({ body: 'Please revise', position });
+    expect(JSON.parse(String(requestOf(fetchMock, 2).init.body))).toEqual({
+      body: 'Please revise',
+      commit_id: 'head-sha',
+      position,
+    });
     expect(requestOf(fetchMock, 3)).toMatchObject({
       url: 'https://gitlab.example.com/api/v4/projects/group%2Fproject/merge_requests/17/approve',
       init: { method: 'POST' },
@@ -123,6 +132,9 @@ describe('GitLabApiClient', () => {
     expect(JSON.parse(String(requestOf(fetchMock, 4).init.body))).toEqual({ reviewer_ids: [11, 22] });
     expect(requestOf(fetchMock, 5).url).toBe(
       'https://gitlab.example.com/api/v4/projects/group%2Fproject/members/all?query=alice&page=2&per_page=100',
+    );
+    expect(requestOf(fetchMock, 6).url).toBe(
+      'https://gitlab.example.com/api/v4/projects/group%2Fproject/merge_requests/17/discussions/discussion%2F1',
     );
   });
 

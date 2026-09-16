@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
   PullRequest,
@@ -28,6 +30,7 @@ export interface GitLabVersionControlContext {
   api: GitLabApiClient;
   connection: IntegrationConnection;
   host: string;
+  repositoryAccessToken?: string;
 }
 
 export interface GitLabVersionControlDependencies {
@@ -96,6 +99,9 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     updatePullRequest({ ...input, state: 'closed' });
 
   const mergePullRequest: VersionControl['mergePullRequest'] = async input => {
+    if (input.method === 'rebase') {
+      throw notSupported('GitLab rebases merge requests asynchronously; rebase-and-merge is not supported.');
+    }
     const context = await deps.contextForConnection(input.connection);
     const commitMessage = combinedCommitMessage(input.commitTitle, input.commitMessage);
     const result = await context.api.mergeMergeRequest(
@@ -169,6 +175,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
       pullRequestId: input.pullRequestId,
       event: input.event,
       body: input.body,
+      commitId: input.commitId,
     });
 
   const updateReview: VersionControl['updateReview'] = async () => {
@@ -201,22 +208,25 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     const page = parsePositiveCursor(input.cursor);
     const discussions = await context.api.listMergeRequestDiscussions(input.sourceId, mergeRequestIid, { page });
     return {
-      comments: discussions.flatMap(discussion =>
-        discussion.notes.flatMap((note, index) =>
-          note.position
-            ? [
-                toReviewComment(
-                  context.host,
-                  input.sourceId,
-                  mergeRequestIid,
-                  discussion.id,
-                  note,
-                  index === 0 ? null : packDiscussionId(mergeRequestIid, discussion.id),
-                ),
-              ]
-            : [],
-        ),
-      ),
+      comments: discussions.flatMap(discussion => {
+        const position = discussionPosition(discussion.notes);
+        if (!position) return [];
+        const root = discussion.notes.find(note => note.position) ?? discussion.notes[0];
+        const replyToId = root ? packDiscussionNoteId(mergeRequestIid, discussion.id, root.id) : null;
+        return discussion.notes
+          .filter(note => !note.system)
+          .map(note =>
+            toReviewComment(
+              context.host,
+              input.sourceId,
+              mergeRequestIid,
+              discussion.id,
+              note,
+              note === root ? null : replyToId,
+              position,
+            ),
+          );
+      }),
       nextCursor: discussions.length === GITLAB_DISCUSSIONS_PAGE_SIZE ? String(page + 1) : null,
     };
   };
@@ -225,10 +235,19 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     const context = await deps.contextForConnection(input.connection);
     const mergeRequestIid = requirePositiveId(input.pullRequestId, 'merge request');
     if (input.replyToId) {
-      const thread = parseDiscussionId(input.replyToId);
+      const thread = parseReviewReplyId(input.replyToId);
       if (thread.mergeRequestIid !== mergeRequestIid) {
         throw new GitLabApiError('GitLab discussion does not belong to the requested merge request.', 400);
       }
+      const discussion = await context.api.getMergeRequestDiscussion(
+        input.sourceId,
+        mergeRequestIid,
+        thread.discussionId,
+      );
+      const position = discussionPosition(discussion.notes);
+      if (!position) throw new GitLabApiError('GitLab discussion is not anchored to a diff.', 400);
+      const root = discussion.notes.find(note => note.position) ?? discussion.notes[0];
+      if (!root) throw new GitLabApiError('GitLab discussion response did not include a note.', 502);
       const note = await context.api.addMergeRequestDiscussionNote(
         input.sourceId,
         mergeRequestIid,
@@ -241,7 +260,8 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
         mergeRequestIid,
         thread.discussionId,
         note,
-        input.replyToId,
+        packDiscussionNoteId(mergeRequestIid, thread.discussionId, root.id),
+        position,
       );
     }
 
@@ -249,9 +269,15 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     if (!mergeRequest.diff_refs) {
       throw new GitLabApiError('GitLab merge request diff refs are not ready.', 409);
     }
+    if (mergeRequest.diff_refs.head_sha !== input.commitId) {
+      throw new GitLabApiError('GitLab merge request changed since this review comment was prepared.', 409);
+    }
     const { path, line, side } = input;
     if (typeof path !== 'string' || typeof line !== 'number' || (side !== 'left' && side !== 'right')) {
       throw new GitLabApiError('GitLab diff review comment position is invalid.', 400);
+    }
+    if ((input.startLine === undefined) !== (input.startSide === undefined)) {
+      throw new GitLabApiError('A multi-line GitLab review comment requires both startLine and startSide.', 400);
     }
     const position: GitLabDiscussionPosition = {
       position_type: 'text',
@@ -260,9 +286,18 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
       new_path: path,
       old_line: side === 'left' ? line : undefined,
       new_line: side === 'right' ? line : undefined,
+      ...(input.startLine !== undefined && input.startSide
+        ? {
+            line_range: {
+              start: discussionLine(path, input.startLine, input.startSide),
+              end: discussionLine(path, line, side),
+            },
+          }
+        : {}),
     };
     const discussion = await context.api.createMergeRequestDiscussion(input.sourceId, mergeRequestIid, {
       body: input.body,
+      commitId: input.commitId,
       position,
     });
     const note = discussion.notes.find(candidate => candidate.position) ?? discussion.notes[0];
@@ -273,6 +308,15 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
   const updateReviewComment: VersionControl['updateReviewComment'] = async input => {
     const context = await deps.contextForConnection(input.connection);
     const reference = parseDiscussionNoteId(input.commentId);
+    const discussion = await context.api.getMergeRequestDiscussion(
+      input.sourceId,
+      reference.mergeRequestIid,
+      reference.discussionId,
+    );
+    const position = discussionPosition(discussion.notes);
+    if (!position) throw new GitLabApiError('GitLab discussion is not anchored to a diff.', 400);
+    const root = discussion.notes.find(candidate => candidate.position) ?? discussion.notes[0];
+    if (!root) throw new GitLabApiError('GitLab discussion response did not include a note.', 502);
     const note = await context.api.updateMergeRequestDiscussionNote(
       input.sourceId,
       reference.mergeRequestIid,
@@ -286,7 +330,8 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
       reference.mergeRequestIid,
       reference.discussionId,
       note,
-      null,
+      note.id === root.id ? null : packDiscussionNoteId(reference.mergeRequestIid, reference.discussionId, root.id),
+      position,
     );
   };
 
@@ -385,12 +430,15 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
       const connection = parseConnection(installation.providerMetadata.connection);
       if (!connection) throw new GitLabApiError('GitLab installation connection metadata is invalid.', 500);
       const context = await deps.contextForConnection(connection);
-      const token = accessToken(context.connection);
+      const token = context.repositoryAccessToken;
+      if (!token) {
+        throw notSupported('This GitLab connection does not expose credentials for repository cloning.');
+      }
       const host = normalizeHost(context.host);
       const slug = normalizeSlug(repository.slug);
       return {
         cloneUrl: `https://${host}/${slug}.git`,
-        authorization: { scheme: 'bearer', token },
+        authorization: { scheme: 'bearer', token, username: 'oauth2' },
       };
     },
     listPullRequests,
@@ -428,6 +476,7 @@ async function submitReviewAction(
     pullRequestId: string;
     event: 'approve' | 'request-changes' | 'comment' | undefined;
     body?: string;
+    commitId?: string;
   },
 ): Promise<Review> {
   const context = await deps.contextForConnection(input.connection);
@@ -441,7 +490,7 @@ async function submitReviewAction(
     throw notSupported('GitLab has no first-class pending review object.');
   }
   if (input.event === 'approve') {
-    await context.api.approveMergeRequest(input.sourceId, mergeRequestIid);
+    await context.api.approveMergeRequest(input.sourceId, mergeRequestIid, input.commitId);
     return {
       id: `${mergeRequestIid}:approval`,
       url: mergeRequestUrl(context.host, input.sourceId, mergeRequestIid),
@@ -518,6 +567,19 @@ function packDiscussionNoteId(mergeRequestIid: number, discussionId: string, not
   return `${packDiscussionId(mergeRequestIid, discussionId)}:${noteId}`;
 }
 
+function parseReviewReplyId(value: string): { mergeRequestIid: number; discussionId: string } {
+  const parts = value.split(':');
+  if (parts.length === 2) return parseDiscussionId(value);
+  if (parts.length === 3 && parts[1]) {
+    requirePositiveId(parts[2]!, 'discussion note');
+    return {
+      mergeRequestIid: requirePositiveId(parts[0]!, 'merge request'),
+      discussionId: parts[1],
+    };
+  }
+  throw new GitLabApiError('GitLab review reply id is invalid.', 400);
+}
+
 function parseDiscussionId(value: string): { mergeRequestIid: number; discussionId: string } {
   const parts = value.split(':');
   if (parts.length !== 2 || !parts[1]) throw new GitLabApiError('GitLab discussion id is invalid.', 400);
@@ -534,6 +596,22 @@ function parseDiscussionNoteId(value: string): { mergeRequestIid: number; discus
     mergeRequestIid: requirePositiveId(parts[0]!, 'merge request'),
     discussionId: parts[1],
     noteId: requirePositiveId(parts[2]!, 'discussion note'),
+  };
+}
+
+function discussionPosition(notes: GitLabDiscussionNote[]): GitLabDiscussionPosition | undefined {
+  return notes.find(note => note.position)?.position ?? undefined;
+}
+
+function discussionLine(path: string, line: number, side: 'left' | 'right') {
+  const pathHash = createHash('sha1').update(path).digest('hex');
+  const oldLine = side === 'left' ? line : undefined;
+  const newLine = side === 'right' ? line : undefined;
+  return {
+    line_code: `${pathHash}_${oldLine ?? 0}_${newLine ?? 0}`,
+    type: side === 'left' ? ('old' as const) : ('new' as const),
+    old_line: oldLine,
+    new_line: newLine,
   };
 }
 
@@ -661,7 +739,7 @@ function parsePositiveInteger(value: string): number | null {
 export function tokenUrl(host: string, slug: string, token: string): string {
   const accessToken = token.trim();
   if (!accessToken) throw new Error('GitLab repository access token is missing.');
-  return `https://oauth2:${accessToken}@${normalizeHost(host)}/${normalizeSlug(slug)}.git`;
+  return `https://oauth2:${encodeURIComponent(accessToken)}@${normalizeHost(host)}/${normalizeSlug(slug)}.git`;
 }
 
 function parseConnection(value: unknown): IntegrationConnection | null {
@@ -680,13 +758,6 @@ function parseConnection(value: unknown): IntegrationConnection | null {
   return null;
 }
 
-function accessToken(connection: IntegrationConnection): string {
-  if (connection.type !== 'oauth' || !connection.accessToken) {
-    throw new GitLabApiError('GitLab repository access requires an OAuth or personal access token.', 500);
-  }
-  return connection.accessToken;
-}
-
 function normalizeHost(value: string): string {
   const host = value.trim();
   if (!host || host.includes('/') || host.includes('@')) throw new GitLabApiError('GitLab host is invalid.', 400);
@@ -703,7 +774,7 @@ function normalizeHost(value: string): string {
 function normalizeSlug(value: string): string {
   const slug = value.replace(/^\/+|\/+$/g, '');
   const segments = slug.split('/');
-  if (!slug || segments.some(segment => !segment || segment === '.' || segment === '..')) {
+  if (!slug || segments.some(segment => !/^[A-Za-z0-9_.-]+$/.test(segment) || segment === '.' || segment === '..')) {
     throw new GitLabApiError('GitLab repository slug is invalid.', 400);
   }
   return slug;
