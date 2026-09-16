@@ -4,6 +4,7 @@ import {
   createConfigValidationTests,
   createClientAcceptanceTests,
   createDomainDirectTests,
+  createMemoryTokenBoundaryConformanceTest,
 } from '@internal/storage-test-utils';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -78,6 +79,24 @@ createDomainDirectTests({
   createMemoryDomain: () => new MemoryElasticSearch({ client: sharedClient }),
   createWorkflowsDomain: () => new WorkflowsElasticSearch({ client: sharedClient }),
   createScoresDomain: () => new ScoresElasticSearch({ client: sharedClient }),
+});
+
+createMemoryTokenBoundaryConformanceTest({
+  createStores: async () => {
+    const firstClient = new ElasticSearchClient({ node: url });
+    const secondClient = new ElasticSearchClient({ node: url });
+    const first = new MemoryElasticSearch({ client: firstClient });
+    const second = new MemoryElasticSearch({ client: secondClient });
+    await first.init();
+    await second.init();
+    return {
+      first,
+      second,
+      cleanup: async () => {
+        await Promise.all([firstClient.close(), secondClient.close()]);
+      },
+    };
+  },
 });
 
 describe('ElasticSearchStore connection options', () => {

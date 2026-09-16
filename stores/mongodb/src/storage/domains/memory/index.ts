@@ -1169,6 +1169,67 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
+  async advanceMemoryTokenBoundary({
+    id,
+    resourceId,
+    candidate,
+  }: {
+    id: string;
+    resourceId?: string;
+    candidate: {
+      createdAt: string;
+      messageIds: string[];
+      maxTokens: number;
+      atMaxRemoveTokens: number;
+    };
+  }) {
+    const collection = await this.getCollection(TABLE_THREADS);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const current = await collection.findOne<any>({ id, ...(resourceId === undefined ? {} : { resourceId }) });
+      if (!current) return { supported: true, thread: null, boundary: undefined };
+
+      const metadata =
+        typeof current.metadata === 'string' ? safelyParseJSON(current.metadata) : (current.metadata ?? {});
+      const previous = this.getMemoryTokenBoundary({ metadata });
+      const boundary = this.mergeMemoryTokenBoundaries(previous, candidate);
+      const thread = {
+        ...current,
+        metadata,
+        createdAt: formatDateForMongoDB(current.createdAt),
+        updatedAt: formatDateForMongoDB(current.updatedAt),
+      } as StorageThreadType;
+      if (JSON.stringify(previous) === JSON.stringify(boundary)) {
+        return { supported: true, thread, boundary };
+      }
+
+      const updated = await collection.findOneAndUpdate(
+        {
+          id,
+          ...(resourceId === undefined ? {} : { resourceId }),
+          ...(current.metadata === undefined ? { metadata: { $exists: false } } : { metadata: current.metadata }),
+        },
+        { $set: { metadata: { ...metadata, memoryTokenLimiter: boundary }, updatedAt: new Date() } },
+        { returnDocument: 'after' },
+      );
+      if (updated) {
+        const updatedMetadata =
+          typeof updated.metadata === 'string' ? safelyParseJSON(updated.metadata) : (updated.metadata ?? {});
+        return {
+          supported: true,
+          thread: {
+            ...updated,
+            metadata: updatedMetadata,
+            createdAt: formatDateForMongoDB(updated.createdAt),
+            updatedAt: formatDateForMongoDB(updated.updatedAt),
+          } as unknown as StorageThreadType,
+          boundary,
+        };
+      }
+    }
+
+    throw new Error(`Failed to advance memory token boundary for thread ${id} after 5 attempts`);
+  }
+
   async updateThread({
     id,
     title,

@@ -17,7 +17,7 @@ import {
 } from '@mastra/core/storage';
 import dotenv from 'dotenv';
 import { Miniflare } from 'miniflare';
-import { vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { CloudflareStore } from '..';
 import { MemoryStorageCloudflare } from './domains/memory';
@@ -74,6 +74,37 @@ const TEST_CONFIG: CloudflareWorkersConfig = {
   bindings: kvBindings,
   keyPrefix: 'mastra-test',
 };
+
+describe('memory token boundary persistence', () => {
+  it('returns the visible boundary without persisting a candidate', async () => {
+    const memory = new MemoryStorageCloudflare(TEST_CONFIG);
+    const visibleBoundary = {
+      createdAt: '2025-01-01T00:00:01.000Z',
+      messageIds: ['visible'],
+      maxTokens: 100,
+      atMaxRemoveTokens: 25,
+    };
+    vi.spyOn(memory, 'getThreadById').mockResolvedValue({
+      id: 'thread',
+      resourceId: 'resource',
+      title: 'Thread',
+      metadata: { memoryTokenLimiter: visibleBoundary },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const update = vi.spyOn(memory, 'updateThread');
+
+    const result = await memory.advanceMemoryTokenBoundary({
+      id: 'thread',
+      resourceId: 'resource',
+      candidate: { ...visibleBoundary, createdAt: '2025-01-01T00:00:02.000Z', messageIds: ['candidate'] },
+    });
+
+    expect(result.supported).toBe(false);
+    expect(result.boundary).toEqual(visibleBoundary);
+    expect(update).not.toHaveBeenCalled();
+  });
+});
 
 createTestSuite(new CloudflareStore(TEST_CONFIG));
 
