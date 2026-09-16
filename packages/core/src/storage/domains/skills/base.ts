@@ -92,6 +92,8 @@ export abstract class SkillsStorage extends VersionedStorageDomain<
     'createdAt',
   ] satisfies (keyof SkillVersion)[];
 
+  private readonly publishQueues = new Map<string, Promise<void>>();
+
   constructor() {
     super({
       component: 'STORAGE',
@@ -100,10 +102,27 @@ export abstract class SkillsStorage extends VersionedStorageDomain<
   }
 
   /**
-   * Create and activate an exact immutable version. Built-in adapters may override
-   * this fallback to perform both writes in a native transaction.
+   * Create and activate an exact immutable version. This fallback serializes
+   * publications per skill within this storage instance. Adapters that coordinate
+   * multiple instances should override it with a native transaction.
    */
-  async publishVersion(input: PublishSkillVersionInput): Promise<SkillVersion> {
+  publishVersion(input: PublishSkillVersionInput): Promise<SkillVersion> {
+    const previous = this.publishQueues.get(input.skillId) ?? Promise.resolve();
+    const publication = previous.catch(() => {}).then(() => this.publishVersionFallback(input));
+    const tail = publication.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.publishQueues.set(input.skillId, tail);
+
+    return publication.finally(() => {
+      if (this.publishQueues.get(input.skillId) === tail) {
+        this.publishQueues.delete(input.skillId);
+      }
+    });
+  }
+
+  private async publishVersionFallback(input: PublishSkillVersionInput): Promise<SkillVersion> {
     const sourceVersion = await this.getVersion(input.sourceVersionId);
     if (!sourceVersion) {
       throw new Error(`Skill version "${input.sourceVersionId}" not found`);
