@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { SpanOutputProcessor, AnySpan } from '@mastra/core/observability';
+import type { SpanOutputProcessor, AnyExportedSpan, AnySpan } from '@mastra/core/observability';
 
 export type RedactionStyle = 'full' | 'partial' | 'indexed';
 
@@ -115,10 +115,14 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
    * Process a span by filtering sensitive data across its key fields.
    * Fields processed: attributes, metadata, input, output, errorInfo, requestContext.
    *
-   * @param span - The input span to filter
-   * @returns A new span with sensitive values redacted
+   * @param span - The live or exported span to filter
+   * @returns The span with sensitive values redacted
    */
-  process(span: AnySpan): AnySpan {
+  process(span?: AnySpan): AnySpan | undefined;
+  process(span: AnyExportedSpan): AnyExportedSpan;
+  process(span?: AnySpan | AnyExportedSpan): AnySpan | AnyExportedSpan | undefined {
+    if (!span) return undefined;
+
     const indexedState = this.redactionStyle === 'indexed' ? this.getTraceState(span.traceId) : undefined;
     span.attributes = this.tryFilter(span.attributes, indexedState);
     span.metadata = this.tryFilter(span.metadata, indexedState);
