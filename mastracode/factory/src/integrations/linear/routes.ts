@@ -20,7 +20,7 @@ import type { StateSigner } from '../../state-signing.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import { parseSearchQuery } from '../search-query.js';
 import type { LinearIntegration } from './integration.js';
-import { LinearReauthRequiredError } from './integration.js';
+import { LINEAR_ISSUE_IDENTIFIER_RE, LinearReauthRequiredError } from './integration.js';
 import type { LinearRulesIngress } from './rules.js';
 
 type RouteContext = Context;
@@ -146,7 +146,6 @@ function parseAfterCursor(raw: string | undefined): string | undefined | null {
 }
 
 /** Human issue key as it appears on a card (`ENG-123`). */
-const ISSUE_IDENTIFIER_RE = /^[A-Za-z][A-Za-z0-9]{0,9}-\d{1,7}$/;
 
 /** Map a Linear read failure to the API response for the SPA. */
 function linearFetchError(c: RouteContext, err: unknown) {
@@ -406,7 +405,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
         if ('response' in resolved) return resolved.response;
 
         const identifier = c.req.param('identifier');
-        if (!ISSUE_IDENTIFIER_RE.test(identifier)) return c.json({ error: 'invalid_identifier' }, 400);
+        if (!LINEAR_ISSUE_IDENTIFIER_RE.test(identifier)) return c.json({ error: 'invalid_identifier' }, 400);
         const factoryProjectId = c.req.query('factoryProjectId');
         if (!factoryProjectId || !UUID_RE.test(factoryProjectId)) {
           return c.json({ error: 'invalid_factory_project_id' }, 400);

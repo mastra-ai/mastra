@@ -42,9 +42,9 @@ export function useLinearIssuesQuery(githubProjectId: string | undefined, query?
     select: data => data.pages.flatMap(page => page.issues),
     // New intake must show up on the board without a reload; the endpoint
     // proxies the Linear API, so poll on the gentle intake cadence. A search
-    // is a one-off question, not a feed: it never polls.
+    // is a one-off question, not a feed: it neither polls nor refetches on focus.
     refetchInterval: query ? false : INTAKE_POLL_MS,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: !query,
   });
 }
 

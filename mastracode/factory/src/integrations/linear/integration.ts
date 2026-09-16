@@ -147,13 +147,15 @@ export interface LinearCreatedComment {
 const LINEAR_ISSUES_PAGE_SIZE = 30;
 
 /** `ENG-123` matches that issue; anything else matches words in the title. */
+export const LINEAR_ISSUE_IDENTIFIER_RE = /^([A-Za-z][A-Za-z0-9]{0,9})-(\d{1,7})$/;
+
 function linearSearchFilter(query: string | undefined): {
   filter: string;
   variableDeclarations: string;
   variables: Record<string, string | number>;
 } {
   if (!query) return { filter: '', variableDeclarations: '', variables: {} };
-  const identifier = /^([A-Za-z][A-Za-z0-9]*)-(\d+)$/.exec(query);
+  const identifier = LINEAR_ISSUE_IDENTIFIER_RE.exec(query);
   if (identifier) {
     return {
       filter: ', team: { key: { eqIgnoreCase: $teamKey } }, number: { eq: $issueNumber }',

@@ -772,14 +772,16 @@ export class GithubIntegration implements FactoryIntegration {
     const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
     const page = parsePositiveCursor(input.cursor);
     if (input.query) {
-      // Search hits carry no branches, so each one is fetched in full.
       const { data } = await octokit.search.issuesAndPullRequests({
         q: pullRequestSearchQuery(input),
         per_page: LIST_PAGE_SIZE,
         page,
       });
+      // Search hits carry no branches, so each one is fetched in full.
       const pullRequests = await Promise.all(
-        data.items.map(async hit => parsePullRequest((await octokit.pulls.get({ ...parts, pull_number: hit.number })).data)),
+        data.items
+          .filter(hitBelongsTo(input.sourceId))
+          .map(async hit => parsePullRequest((await octokit.pulls.get({ ...parts, pull_number: hit.number })).data)),
       );
       return { pullRequests, nextCursor: data.items.length === LIST_PAGE_SIZE ? String(page + 1) : null };
     }
@@ -1134,7 +1136,7 @@ export class GithubIntegration implements FactoryIntegration {
             per_page: LIST_PAGE_SIZE,
             page,
           })
-        ).data.items
+        ).data.items.filter(hitBelongsTo(repoFullName))
       : (
           await octokit.issues.listForRepo({
             owner: parts.owner,
@@ -1455,6 +1457,12 @@ interface GithubReviewCommentData extends GithubCommentData {
   side?: string | null;
   commit_id: string;
   in_reply_to_id?: number | null;
+}
+
+// Search operators inside the free text (`OR repo:x`) can widen the query past the repo qualifier.
+function hitBelongsTo(repoFullName: string): (hit: { repository_url: string }) => boolean {
+  const suffix = `/repos/${repoFullName}`.toLowerCase();
+  return hit => hit.repository_url.toLowerCase().endsWith(suffix);
 }
 
 function issueSearchQuery(repoFullName: string, options: ListRepoOpenIssuesOptions): string {

@@ -38,9 +38,9 @@ export function useProjectIssuesQuery(projectRepositoryId: string | undefined, l
     // New intake must show up on the board without a reload. The endpoint
     // proxies the live GitHub API (and a refetch replays every loaded page),
     // so poll gently and refresh when the user returns to the tab. A search
-    // is a one-off question, not a feed: it never polls.
+    // is a one-off question, not a feed: it neither polls nor refetches on focus.
     refetchInterval: query ? false : intakePollInterval,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: !query,
   });
 }
 
@@ -57,7 +57,7 @@ export function useProjectPullRequestsQuery(projectRepositoryId: string | undefi
     select: data => data.pages.flatMap(page => page.pullRequests),
     // Same intake-freshness contract as the issues feed above.
     refetchInterval: query ? false : intakePollInterval,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: !query,
   });
 }
 

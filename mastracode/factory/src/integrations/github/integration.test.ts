@@ -361,7 +361,7 @@ describe('GithubIntegration capability surface', () => {
     expect(listForRepo).toHaveBeenCalledWith(expect.objectContaining({ labels: 'bug,urgent' }));
   });
 
-  it('searches issues through GitHub search when a query is given', async () => {
+  it('searches issues through GitHub search when a query is given, keeping only hits of the repository', async () => {
     const github = new GithubIntegration(validConfig());
     const issuesAndPullRequests = vi.fn(async () => ({
       data: {
@@ -370,8 +370,20 @@ describe('GithubIntegration capability surface', () => {
             number: 21068,
             title: 'Retry failed uploads',
             html_url: 'https://github.com/acme/app/issues/21068',
+            repository_url: 'https://api.github.com/repos/acme/app',
             user: { login: 'ada' },
             labels: [{ name: 'bug' }],
+            comments: 0,
+            created_at: '2026-07-01T00:00:00Z',
+            updated_at: '2026-07-02T00:00:00Z',
+          },
+          {
+            number: 9,
+            title: 'Retry failed uploads elsewhere',
+            html_url: 'https://github.com/acme/other/issues/9',
+            repository_url: 'https://api.github.com/repos/acme/other',
+            user: { login: 'ada' },
+            labels: [],
             comments: 0,
             created_at: '2026-07-01T00:00:00Z',
             updated_at: '2026-07-02T00:00:00Z',
@@ -547,9 +559,16 @@ describe('GithubIntegration capability surface', () => {
     });
   });
 
-  it('searches pull requests and fetches each hit in full', async () => {
+  it('searches pull requests and fetches each hit of the repository in full', async () => {
     const github = new GithubIntegration(validConfig());
-    const issuesAndPullRequests = vi.fn(async () => ({ data: { items: [{ number: 34 }] } }));
+    const issuesAndPullRequests = vi.fn(async () => ({
+      data: {
+        items: [
+          { number: 34, repository_url: 'https://api.github.com/repos/acme/app' },
+          { number: 35, repository_url: 'https://api.github.com/repos/acme/other' },
+        ],
+      },
+    }));
     const get = vi.fn(async () => ({ data: pullRequestData() }));
     vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({
       search: { issuesAndPullRequests },
@@ -572,6 +591,7 @@ describe('GithubIntegration capability surface', () => {
       per_page: 30,
       page: 1,
     });
+    expect(get).toHaveBeenCalledTimes(1);
     expect(get).toHaveBeenCalledWith({ owner: 'acme', repo: 'app', pull_number: 34 });
   });
 
