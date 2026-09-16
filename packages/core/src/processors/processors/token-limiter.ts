@@ -52,7 +52,6 @@ type TokenLimiterTripWireMetadata = {
   limit: number;
   remainingBudget?: number;
   messageCount?: number;
-  currentRunTokens?: number;
 };
 
 /**
@@ -272,8 +271,9 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     // Calculate remaining budget for non-system messages (accounting for conversation overhead)
     const remainingBudget = limit - systemTokens - TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
 
-    // Tool calls and results produced by the current run are never trimmed: the loop needs them for
-    // the next step, the model is not told they were removed, and they are not persisted once removed.
+    // Tool calls and results produced by the current run are never trimmed, even when they exceed the
+    // budget on their own: the loop needs them for the next step, the model is not told they were
+    // removed, and they are not persisted once removed. Older messages absorb the budget instead.
     const currentRunIds = this.currentRunResponseIds(messageList);
     const currentRunMessages = messages.filter(
       message => currentRunIds.has(message.id) && TokenLimiterProcessor.hasToolParts(message),
@@ -284,22 +284,6 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     let currentTokens = 0;
     for (const message of currentRunMessages) {
       currentTokens += await this.countInputMessageTokens(message);
-    }
-
-    if (currentTokens > remainingBudget) {
-      throw new TripWire(
-        "TokenLimiterProcessor: The current run's response messages exceed the remaining token budget. Increase the limit or reduce the size of tool results.",
-        {
-          retry: false,
-          metadata: {
-            systemTokens,
-            limit,
-            remainingBudget,
-            messageCount: messages.length,
-            currentRunTokens: currentTokens,
-          },
-        },
-      );
     }
 
     // Iterate through messages in reverse to prioritize recent messages

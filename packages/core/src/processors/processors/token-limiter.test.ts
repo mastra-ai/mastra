@@ -1549,7 +1549,7 @@ describe('TokenLimiterProcessor', () => {
         });
       }
 
-      it('should not remove the current run tool call when it exceeds the budget on its own', async () => {
+      it('should keep the current run tool call when it exceeds the budget on its own', async () => {
         const processor = new TokenLimiterProcessor({ limit: 500 });
         const messageList = new MessageList();
 
@@ -1557,12 +1557,12 @@ describe('TokenLimiterProcessor', () => {
         messageList.add(createTestMessage('How many rules do I have?', 'user', 'input-1'), 'input');
         addCurrentRunToolCall(messageList);
 
-        await expect(runStep(processor, messageList)).rejects.toBeInstanceOf(TripWire);
+        await runStep(processor, messageList);
 
-        expect(messageList.get.all.db().map(message => message.id)).toContain('response-1');
+        expect(messageList.get.all.db().map(message => message.id)).toEqual(['response-1']);
       });
 
-      it('should protect the current run after the save queue drains the live response set', async () => {
+      it('should keep the current run tool call after the save queue drains the live response set', async () => {
         const processor = new TokenLimiterProcessor({ limit: 500 });
         const messageList = new MessageList();
 
@@ -1570,31 +1570,44 @@ describe('TokenLimiterProcessor', () => {
         addCurrentRunToolCall(messageList);
         messageList.drainUnsavedMessages();
 
-        await expect(runStep(processor, messageList)).rejects.toBeInstanceOf(TripWire);
+        await runStep(processor, messageList);
 
         expect(messageList.get.all.db().map(message => message.id)).toContain('response-1');
       });
 
-      it('should throw a TripWire naming the current run when it alone exceeds the budget', async () => {
+      it('should keep a mixed text and tool call message from the current run', async () => {
         const processor = new TokenLimiterProcessor({ limit: 500 });
         const messageList = new MessageList();
 
         messageList.add(createTestMessage('How many rules do I have?', 'user', 'input-1'), 'input');
-        addCurrentRunToolCall(messageList);
+        messageList.add(
+          {
+            id: 'response-mixed',
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                { type: 'text', text: 'x'.repeat(8000) },
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'result',
+                    toolCallId: 'call-2',
+                    toolName: 'listRules',
+                    args: {},
+                    result: bigToolResult,
+                  },
+                },
+              ],
+            },
+            createdAt: new Date('2023-01-01T00:00:10Z'),
+          },
+          'response',
+        );
 
-        try {
-          await runStep(processor, messageList);
-          expect.fail('Expected TokenLimiterProcessor to throw a TripWire');
-        } catch (error) {
-          expect(error).toBeInstanceOf(TripWire);
-          expect(error).toHaveProperty(
-            'message',
-            "TokenLimiterProcessor: The current run's response messages exceed the remaining token budget. Increase the limit or reduce the size of tool results.",
-          );
-          expect((error as TripWire).options?.retry).toBe(false);
-          expect((error as TripWire).options?.metadata).toMatchObject({ limit: 500 });
-          expect((error as TripWire).options?.metadata).toHaveProperty('currentRunTokens');
-        }
+        await runStep(processor, messageList);
+
+        expect(messageList.get.all.db().map(message => message.id)).toContain('response-mixed');
       });
 
       it('should keep the current run tool call and trim history that does not fit', async () => {
