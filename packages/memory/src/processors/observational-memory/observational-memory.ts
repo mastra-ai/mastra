@@ -522,7 +522,7 @@ export class ObservationalMemory {
     const isSharedBudget = config.shareTokenBudget ?? false;
 
     const isDefaultModelSelection = (model: WidenedObservationalMemoryModel | undefined) =>
-      model === undefined || model === 'default' || model instanceof ModelByInputTokens;
+      model === undefined || model === 'default';
 
     const observationSelectedModel = topLevelModel ?? observationConfigModel ?? reflectionConfigModel;
     const reflectionSelectedModel = topLevelModel ?? reflectionConfigModel ?? observationConfigModel;
