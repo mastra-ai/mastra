@@ -313,7 +313,7 @@ describe('TelegramProvider webhook route — secret verification', () => {
     if (!('createHandler' in route)) throw new Error('expected a createHandler route');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handler = await route.createHandler({ mastra: stubMastra as any });
-    return { handler, webhookId: record!.webhookId!, secret: String(record!.data.secretToken) };
+    return { handler, storage, webhookId: record!.webhookId!, secret: String(record!.data.secretToken) };
   }
 
   it('404s an unknown webhookId', async () => {
@@ -321,10 +321,20 @@ describe('TelegramProvider webhook route — secret verification', () => {
     expect((await handler(makeCtx('does-not-exist', 'whatever'))).status).toBe(404);
   });
 
-  it('401s a missing or wrong secret token', async () => {
-    const { handler, webhookId } = await connectedHandler();
+  it('401s missing, wrong, and trailing-NUL secret tokens', async () => {
+    const { handler, webhookId, secret } = await connectedHandler();
     expect((await handler(makeCtx(webhookId, undefined))).status).toBe(401);
     expect((await handler(makeCtx(webhookId, 'wrong-secret'))).status).toBe(401);
+    expect((await handler(makeCtx(webhookId, `${secret}\0`))).status).toBe(401);
+  });
+
+  it('rejects a trailing-NUL difference for secrets longer than an HMAC block', async () => {
+    const { handler, storage, webhookId } = await connectedHandler();
+    const installation = await storage.getInstallationByWebhookId(webhookId);
+    const secret = 's'.repeat(128);
+    await storage.saveInstallation({ ...installation!, data: { ...installation!.data, secretToken: secret } });
+
+    expect((await handler(makeCtx(webhookId, `${secret}\0`))).status).toBe(401);
   });
 
   it('accepts a matching secret (past verification; 200 when no agent is wired)', async () => {
