@@ -49,7 +49,14 @@ import { templatePinFor, type TemplatePin } from './templates-config.js';
 /** Module specifier the upstream templates import their SDK from. */
 const TEMPLATE_SDK_MODULE = 'nango';
 const PROXY_REQUEST_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete']);
-const PROXY_CONTEXT_METHODS = new Set([...PROXY_REQUEST_METHODS, 'getConnection', 'getMetadata', 'ActionError', 'log']);
+const PROXY_CONTEXT_METHODS = new Set([
+  ...PROXY_REQUEST_METHODS,
+  'getConnection',
+  'getMetadata',
+  'updateMetadata',
+  'ActionError',
+  'log',
+]);
 const UNSUPPORTED_PROXY_OPTIONS = ['responseType'] as const;
 const ALLOWED_TEMPLATE_SDK_IMPORTS = new Set(['createAction', 'ProxyConfiguration']);
 
@@ -174,7 +181,14 @@ function usesNamedImport(declaration: ImportDeclaration, name: string): boolean 
 }
 
 function sanitizeVendoredSource(source: string): string {
-  return source.replace(/^.*@nangohq\/custom-integrations-linting\/.*\r?\n/gm, '');
+  return (
+    source
+      .replace(/^.*@nangohq\/custom-integrations-linting\/.*\r?\n/gm, '')
+      // Upstream `updateMetadata` typing forces templates to suppress the
+      // call; against the platform proxy's signature the call type-checks,
+      // so the directive would itself fail as unused.
+      .replace(/^\s*\/\/\s*@ts-expect-error[^\n]*\r?\n(?=\s*(?:await\s+)?platformProxy\.updateMetadata\()/gm, '')
+  );
 }
 
 function escapeRegExp(value: string): string {
@@ -340,6 +354,29 @@ function extractAction(
   }
   for (const parameter of source.getDescendantsOfKind(SyntaxKind.Parameter)) {
     if (parameter.getName() === 'nango') parameter.rename('platformProxy');
+  }
+
+  // Some templates skip the `NangoActionLocal` alias and type helper
+  // parameters inline against the SDK context — either through the action
+  // declaration (`Parameters<(typeof action)['exec']>[0]`) or through the
+  // factory itself (`Parameters<Parameters<typeof createAction>[0]['exec']>[0]`).
+  // Both names are stripped from the generated module, so rewrite those
+  // references to the imported `PlatformProxy` type.
+  const actionVariableName = createActionCall
+    .getFirstAncestorByKind(SyntaxKind.VariableStatement)
+    ?.getDeclarations()[0]
+    ?.getName();
+  const inlineContextTypes = new Set(
+    [
+      actionVariableName ? `Parameters<(typeof ${actionVariableName})['exec']>[0]` : undefined,
+      "Parameters<Parameters<typeof createAction>[0]['exec']>[0]",
+    ].filter((text): text is string => text !== undefined),
+  );
+  const inlineContextNodes = source
+    .getDescendantsOfKind(SyntaxKind.IndexedAccessType)
+    .filter(node => inlineContextTypes.has(node.getText()));
+  for (const node of inlineContextNodes.reverse()) {
+    if (!node.wasForgotten()) node.replaceWithText('PlatformProxy');
   }
 
   const renamedExecBodyNode = execInitializer.getBody();
