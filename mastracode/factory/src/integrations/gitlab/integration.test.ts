@@ -150,6 +150,15 @@ describe('GitLabIntegration', () => {
 });
 
 describe('PlatformGitLabIntegration', () => {
+  it('inherits the complete provider surface without configuring a direct webhook secret', () => {
+    const gitlab = platform();
+
+    expect(gitlab.intake).toBeDefined();
+    expect(gitlab.versionControl).toBeDefined();
+    expect(gitlab.routes({} as never).map(route => route.path)).toEqual(['/web/gitlab/webhook']);
+    expect(gitlab.diagnostics()).toMatchObject({ mode: 'platform', webhookConfigured: false });
+  });
+
   it('lists projects from every active GitLab connection through integrations v2', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
