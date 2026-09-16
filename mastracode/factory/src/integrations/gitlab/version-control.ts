@@ -1,13 +1,28 @@
 import type { IntegrationConnection } from '../../capabilities/connection.js';
-import type { PullRequest, PullRequestComment, VersionControl } from '../../capabilities/version-control.js';
+import type {
+  PullRequest,
+  PullRequestComment,
+  RequestedReviewers,
+  Review,
+  ReviewComment,
+  VersionControl,
+} from '../../capabilities/version-control.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import {
+  GITLAB_DISCUSSIONS_PAGE_SIZE,
   GITLAB_MERGE_REQUESTS_PAGE_SIZE,
   GITLAB_NOTES_PAGE_SIZE,
   GitLabApiError,
 } from './api.js';
-import type { GitLabApiClient, GitLabMergeRequest, GitLabNote } from './api.js';
-
+import type {
+  GitLabApiClient,
+  GitLabDiscussionNote,
+  GitLabDiscussionPosition,
+  GitLabMember,
+  GitLabMergeRequest,
+  GitLabNote,
+  GitLabUser,
+} from './api.js';
 
 export interface GitLabVersionControlContext {
   api: GitLabApiClient;
@@ -25,10 +40,6 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
   const sourceControlStorage = (): SourceControlStorageHandle => {
     if (!storage) throw new Error('GitLab VersionControl is not initialized.');
     return storage;
-  };
-
-  const notImplemented = (): never => {
-    throw new GitLabApiError('GitLab version-control operation is not implemented.', 501);
   };
 
   const listPullRequests: VersionControl['listPullRequests'] = async input => {
@@ -137,6 +148,194 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     await context.api.deleteMergeRequestNote(input.sourceId, mergeRequestIid, noteId);
   };
 
+  const listReviews: VersionControl['listReviews'] = async input => {
+    const context = await deps.contextForConnection(input.connection);
+    const mergeRequestIid = requirePositiveId(input.pullRequestId, 'merge request');
+    const approvals = await context.api.getMergeRequestApprovals(input.sourceId, mergeRequestIid);
+    return {
+      reviews: (approvals.approved_by ?? []).map(({ user }) =>
+        toApprovalReview(context.host, input.sourceId, mergeRequestIid, user),
+      ),
+      nextCursor: null,
+    };
+  };
+
+  const getReview: VersionControl['getReview'] = async () => null;
+
+  const createReview: VersionControl['createReview'] = async input =>
+    submitReviewAction(deps, {
+      connection: input.connection,
+      sourceId: input.sourceId,
+      pullRequestId: input.pullRequestId,
+      event: input.event,
+      body: input.body,
+    });
+
+  const updateReview: VersionControl['updateReview'] = async () => {
+    // FLAGGED FOR MANUAL REVIEW (spec §6.2)
+    throw notSupported('GitLab does not expose mutable pending review objects.');
+  };
+
+  const submitReview: VersionControl['submitReview'] = async input =>
+    submitReviewAction(deps, {
+      connection: input.connection,
+      sourceId: input.sourceId,
+      pullRequestId: input.pullRequestId,
+      event: input.event,
+      body: input.body,
+    });
+
+  const dismissReview: VersionControl['dismissReview'] = async () => {
+    // FLAGGED FOR MANUAL REVIEW (spec §6.2)
+    throw notSupported('GitLab approval dismissal has no GitHub review equivalent.');
+  };
+
+  const deletePendingReview: VersionControl['deletePendingReview'] = async () => {
+    // FLAGGED FOR MANUAL REVIEW (spec §6.2)
+    throw notSupported('GitLab does not expose pending review objects.');
+  };
+
+  const listReviewComments: VersionControl['listReviewComments'] = async input => {
+    const context = await deps.contextForConnection(input.connection);
+    const mergeRequestIid = requirePositiveId(input.pullRequestId, 'merge request');
+    const page = parsePositiveCursor(input.cursor);
+    const discussions = await context.api.listMergeRequestDiscussions(input.sourceId, mergeRequestIid, { page });
+    return {
+      comments: discussions.flatMap(discussion =>
+        discussion.notes.flatMap((note, index) =>
+          note.position
+            ? [
+                toReviewComment(
+                  context.host,
+                  input.sourceId,
+                  mergeRequestIid,
+                  discussion.id,
+                  note,
+                  index === 0 ? null : packDiscussionId(mergeRequestIid, discussion.id),
+                ),
+              ]
+            : [],
+        ),
+      ),
+      nextCursor: discussions.length === GITLAB_DISCUSSIONS_PAGE_SIZE ? String(page + 1) : null,
+    };
+  };
+
+  const createReviewComment: VersionControl['createReviewComment'] = async input => {
+    const context = await deps.contextForConnection(input.connection);
+    const mergeRequestIid = requirePositiveId(input.pullRequestId, 'merge request');
+    if (input.replyToId) {
+      const thread = parseDiscussionId(input.replyToId);
+      if (thread.mergeRequestIid !== mergeRequestIid) {
+        throw new GitLabApiError('GitLab discussion does not belong to the requested merge request.', 400);
+      }
+      const note = await context.api.addMergeRequestDiscussionNote(
+        input.sourceId,
+        mergeRequestIid,
+        thread.discussionId,
+        input.body,
+      );
+      return toReviewComment(
+        context.host,
+        input.sourceId,
+        mergeRequestIid,
+        thread.discussionId,
+        note,
+        input.replyToId,
+      );
+    }
+
+    const mergeRequest = await context.api.getMergeRequest(input.sourceId, mergeRequestIid);
+    if (!mergeRequest.diff_refs) {
+      throw new GitLabApiError('GitLab merge request diff refs are not ready.', 409);
+    }
+    const { path, line, side } = input;
+    if (typeof path !== 'string' || typeof line !== 'number' || (side !== 'left' && side !== 'right')) {
+      throw new GitLabApiError('GitLab diff review comment position is invalid.', 400);
+    }
+    const position: GitLabDiscussionPosition = {
+      position_type: 'text',
+      ...mergeRequest.diff_refs,
+      old_path: path,
+      new_path: path,
+      old_line: side === 'left' ? line : undefined,
+      new_line: side === 'right' ? line : undefined,
+    };
+    const discussion = await context.api.createMergeRequestDiscussion(input.sourceId, mergeRequestIid, {
+      body: input.body,
+      position,
+    });
+    const note = discussion.notes.find(candidate => candidate.position) ?? discussion.notes[0];
+    if (!note) throw new GitLabApiError('GitLab discussion response did not include a note.', 502);
+    return toReviewComment(context.host, input.sourceId, mergeRequestIid, discussion.id, note, null, position);
+  };
+
+  const updateReviewComment: VersionControl['updateReviewComment'] = async input => {
+    const context = await deps.contextForConnection(input.connection);
+    const reference = parseDiscussionNoteId(input.commentId);
+    const note = await context.api.updateMergeRequestDiscussionNote(
+      input.sourceId,
+      reference.mergeRequestIid,
+      reference.discussionId,
+      reference.noteId,
+      input.body,
+    );
+    return toReviewComment(
+      context.host,
+      input.sourceId,
+      reference.mergeRequestIid,
+      reference.discussionId,
+      note,
+      null,
+    );
+  };
+
+  const deleteReviewComment: VersionControl['deleteReviewComment'] = async input => {
+    const context = await deps.contextForConnection(input.connection);
+    const reference = parseDiscussionNoteId(input.commentId);
+    await context.api.deleteMergeRequestDiscussionNote(
+      input.sourceId,
+      reference.mergeRequestIid,
+      reference.discussionId,
+      reference.noteId,
+    );
+  };
+
+  const listRequestedReviewers: VersionControl['listRequestedReviewers'] = async input => {
+    const context = await deps.contextForConnection(input.connection);
+    const mergeRequest = await context.api.getMergeRequest(
+      input.sourceId,
+      requirePositiveId(input.pullRequestId, 'merge request'),
+    );
+    return toRequestedReviewers(mergeRequest);
+  };
+
+  const requestReviewers: VersionControl['requestReviewers'] = async input => {
+    rejectTeamReviewers(input.teams);
+    const context = await deps.contextForConnection(input.connection);
+    const mergeRequestIid = requirePositiveId(input.pullRequestId, 'merge request');
+    const mergeRequest = await context.api.getMergeRequest(input.sourceId, mergeRequestIid);
+    const requestedMembers = await resolveMembers(context.api, input.sourceId, input.users ?? []);
+    const currentIds = await reviewerIds(context.api, input.sourceId, mergeRequest.reviewers ?? []);
+    const reviewerIdsToSet = [...new Set([...currentIds, ...requestedMembers.map(member => member.id)])];
+    return toRequestedReviewers(
+      await context.api.setMergeRequestReviewers(input.sourceId, mergeRequestIid, reviewerIdsToSet),
+    );
+  };
+
+  const removeRequestedReviewers: VersionControl['removeRequestedReviewers'] = async input => {
+    rejectTeamReviewers(input.teams);
+    const context = await deps.contextForConnection(input.connection);
+    const mergeRequestIid = requirePositiveId(input.pullRequestId, 'merge request');
+    const mergeRequest = await context.api.getMergeRequest(input.sourceId, mergeRequestIid);
+    const removals = new Set((input.users ?? []).map(username => username.toLowerCase()));
+    const retained = (mergeRequest.reviewers ?? []).filter(user => !removals.has(user.username.toLowerCase()));
+    const retainedIds = await reviewerIds(context.api, input.sourceId, retained);
+    return toRequestedReviewers(
+      await context.api.setMergeRequestReviewers(input.sourceId, mergeRequestIid, retainedIds),
+    );
+  };
+
   return {
     initialize: input => {
       storage = input.storage;
@@ -204,21 +403,174 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
     createComment,
     updateComment,
     deleteComment,
-    listReviews: notImplemented,
-    getReview: notImplemented,
-    createReview: notImplemented,
-    updateReview: notImplemented,
-    submitReview: notImplemented,
-    dismissReview: notImplemented,
-    deletePendingReview: notImplemented,
-    listReviewComments: notImplemented,
-    createReviewComment: notImplemented,
-    updateReviewComment: notImplemented,
-    deleteReviewComment: notImplemented,
-    listRequestedReviewers: notImplemented,
-    requestReviewers: notImplemented,
-    removeRequestedReviewers: notImplemented,
+    listReviews,
+    getReview,
+    createReview,
+    updateReview,
+    submitReview,
+    dismissReview,
+    deletePendingReview,
+    listReviewComments,
+    createReviewComment,
+    updateReviewComment,
+    deleteReviewComment,
+    listRequestedReviewers,
+    requestReviewers,
+    removeRequestedReviewers,
   };
+}
+
+async function submitReviewAction(
+  deps: GitLabVersionControlDependencies,
+  input: {
+    connection: IntegrationConnection;
+    sourceId: string;
+    pullRequestId: string;
+    event: 'approve' | 'request-changes' | 'comment' | undefined;
+    body?: string;
+  },
+): Promise<Review> {
+  const context = await deps.contextForConnection(input.connection);
+  const mergeRequestIid = requirePositiveId(input.pullRequestId, 'merge request');
+  if (input.event === 'request-changes') {
+    // FLAGGED FOR MANUAL REVIEW (spec §6.2)
+    throw notSupported('GitLab has no first-class request-changes review event.');
+  }
+  if (input.event === undefined) {
+    // FLAGGED FOR MANUAL REVIEW (spec §6.2)
+    throw notSupported('GitLab has no first-class pending review object.');
+  }
+  if (input.event === 'approve') {
+    await context.api.approveMergeRequest(input.sourceId, mergeRequestIid);
+    return {
+      id: `${mergeRequestIid}:approval`,
+      url: mergeRequestUrl(context.host, input.sourceId, mergeRequestIid),
+      author: null,
+      body: input.body?.trim() || null,
+      state: 'approved',
+      commitId: null,
+      submittedAt: null,
+    };
+  }
+  const body = input.body?.trim();
+  if (!body) throw new GitLabApiError('GitLab comment reviews require a body.', 400);
+  const note = await context.api.createMergeRequestNote(input.sourceId, mergeRequestIid, body);
+  const comment = toPullRequestComment(context.host, input.sourceId, mergeRequestIid, note);
+  return {
+    id: `${mergeRequestIid}:comment:${note.id}`,
+    url: comment.url,
+    author: comment.author,
+    body: comment.body,
+    state: 'commented',
+    commitId: null,
+    submittedAt: note.created_at,
+  };
+}
+
+function toApprovalReview(host: string, sourceId: string, mergeRequestIid: number, user: GitLabUser): Review {
+  return {
+    id: `${mergeRequestIid}:approval:${user.id ?? user.username}`,
+    url: mergeRequestUrl(host, sourceId, mergeRequestIid),
+    author: displayName(user),
+    body: null,
+    state: 'approved',
+    commitId: null,
+    submittedAt: null,
+  };
+}
+
+function toReviewComment(
+  host: string,
+  sourceId: string,
+  mergeRequestIid: number,
+  discussionId: string,
+  note: GitLabDiscussionNote,
+  replyToId: string | null,
+  fallbackPosition?: GitLabDiscussionPosition,
+): ReviewComment {
+  const position = note.position ?? fallbackPosition;
+  if (!position) throw new GitLabApiError('GitLab review comment is missing its diff position.', 502);
+  const base = toPullRequestComment(host, sourceId, mergeRequestIid, note);
+  const side = position.new_line !== null && position.new_line !== undefined ? 'right' : 'left';
+  return {
+    ...base,
+    id: packDiscussionNoteId(mergeRequestIid, discussionId, note.id),
+    path: side === 'right' ? position.new_path : position.old_path,
+    line: side === 'right' ? (position.new_line ?? null) : (position.old_line ?? null),
+    side,
+    commitId: position.head_sha,
+    replyToId,
+  };
+}
+
+function mergeRequestUrl(host: string, sourceId: string, mergeRequestIid: number): string {
+  return `https://${normalizeHost(host)}/${normalizeSlug(sourceId)}/-/merge_requests/${mergeRequestIid}`;
+}
+
+function packDiscussionId(mergeRequestIid: number, discussionId: string): string {
+  if (!discussionId || discussionId.includes(':')) {
+    throw new GitLabApiError('GitLab discussion id is invalid.', 400);
+  }
+  return `${mergeRequestIid}:${discussionId}`;
+}
+
+function packDiscussionNoteId(mergeRequestIid: number, discussionId: string, noteId: number): string {
+  return `${packDiscussionId(mergeRequestIid, discussionId)}:${noteId}`;
+}
+
+function parseDiscussionId(value: string): { mergeRequestIid: number; discussionId: string } {
+  const parts = value.split(':');
+  if (parts.length !== 2 || !parts[1]) throw new GitLabApiError('GitLab discussion id is invalid.', 400);
+  return {
+    mergeRequestIid: requirePositiveId(parts[0]!, 'merge request'),
+    discussionId: parts[1],
+  };
+}
+
+function parseDiscussionNoteId(value: string): { mergeRequestIid: number; discussionId: string; noteId: number } {
+  const parts = value.split(':');
+  if (parts.length !== 3 || !parts[1]) throw new GitLabApiError('GitLab discussion note id is invalid.', 400);
+  return {
+    mergeRequestIid: requirePositiveId(parts[0]!, 'merge request'),
+    discussionId: parts[1],
+    noteId: requirePositiveId(parts[2]!, 'discussion note'),
+  };
+}
+
+function toRequestedReviewers(mergeRequest: GitLabMergeRequest): RequestedReviewers {
+  return {
+    users: (mergeRequest.reviewers ?? []).map(user => user.username),
+    teams: [],
+  };
+}
+
+async function resolveMembers(api: GitLabApiClient, sourceId: string, usernames: string[]): Promise<GitLabMember[]> {
+  return Promise.all(usernames.map(username => resolveMember(api, sourceId, username)));
+}
+
+async function resolveMember(api: GitLabApiClient, sourceId: string, username: string): Promise<GitLabMember> {
+  const normalized = username.trim();
+  if (!normalized) throw new GitLabApiError('GitLab reviewer username is invalid.', 400);
+  const members = await api.listProjectMembers(sourceId, { query: normalized });
+  const member = members.find(candidate => candidate.username.toLowerCase() === normalized.toLowerCase());
+  if (!member) throw new GitLabApiError(`GitLab reviewer ${normalized} is not a project member.`, 404);
+  return member;
+}
+
+async function reviewerIds(api: GitLabApiClient, sourceId: string, users: GitLabUser[]): Promise<number[]> {
+  return Promise.all(
+    users.map(async user => user.id ?? (await resolveMember(api, sourceId, user.username)).id),
+  );
+}
+
+function rejectTeamReviewers(teams: string[] | undefined): void {
+  if (!teams?.length) return;
+  // FLAGGED FOR MANUAL REVIEW (spec §6.2)
+  throw notSupported('GitLab merge requests do not have a direct team-reviewer equivalent.');
+}
+
+function notSupported(message: string): GitLabApiError {
+  return new GitLabApiError(message, 501);
 }
 
 function toPullRequest(mergeRequest: GitLabMergeRequest): PullRequest {
