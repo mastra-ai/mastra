@@ -3,7 +3,8 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Bot, Boxes, Brain, Cpu, Folder, Gauge, Globe, Radio, Sparkles, Workflow, Wrench } from 'lucide-react';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { Boxes, Brain, Cpu, Folder, Gauge, Globe, Radio, Sparkles, Workflow, Wrench } from 'lucide-react';
 import { useAgent } from '../../hooks/use-agent';
 import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
 import { useChannelPlatforms } from '../../hooks/use-channels';
@@ -109,7 +110,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
           title="Agents"
           count={networkAgents.length}
           accent="green"
-          icon={<Bot />}
+          icon={<AgentIcon />}
           hint={{ link: 'https://mastra.ai/en/docs/agents/overview', title: 'Agents documentation' }}
         >
           <AgentMetadataNetworkList agents={networkAgents} />
