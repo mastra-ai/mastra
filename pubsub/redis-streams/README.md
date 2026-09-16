@@ -26,19 +26,17 @@ export const mastra = new Mastra({
 
 ### Redis Cluster
 
-Pass a `clientFactory` to back the pubsub with a Redis Cluster client. It is called once for the shared writer and once per subscription reader, so each connection is a distinct client.
+Pass `cluster` (forwarded to `createCluster()` from `redis`) instead of `url`/`redisOptions`:
 
 ```typescript
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
-import { createCluster } from 'redis';
 
 const pubsub = new RedisStreamsPubSub({
-  clientFactory: () =>
-    createCluster({
-      rootNodes: [{ url: 'redis://node-1:6379' }, { url: 'redis://node-2:6379' }],
-    }),
+  cluster: { rootNodes: [{ url: 'redis://node-1:6379' }, { url: 'redis://node-2:6379' }] },
 });
 ```
+
+To build the client yourself (TLS, Sentinel, credential providers), pass an unconnected `client` instead; readers are created from it with `client.duplicate()` and the pubsub owns its lifecycle.
 
 ## Documentation
 

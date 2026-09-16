@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, LeaseProvider, PubSubDeliveryMode, SubscribeOptions } from '@mastra/core/events';
-import { createClient } from 'redis';
-import type { RedisClientOptions, RedisClientType, RedisClusterType } from 'redis';
+import { createClient, createCluster } from 'redis';
+import type { RedisClientOptions, RedisClientType, RedisClusterOptions, RedisClusterType } from 'redis';
 
 /** Page size for the reclaim loop's XPENDING scan and the max entries claimed per tick. */
 const RECLAIM_PAGE_SIZE = 100;
@@ -64,16 +64,20 @@ export interface RedisStreamsPubSubConfig {
   blockMs?: number;
   redisOptions?: RedisClientOptions;
   /**
-   * Factory that produces an UNCONNECTED redis client. When provided it is
-   * called once for the shared writer and once for each subscription's blocking
-   * reader, and takes precedence over `redisOptions`/`url` for client creation.
-   *
-   * Use this to back the pubsub with a Redis Cluster client
-   * (`createCluster(...)`) or any pre-configured client. The returned client
-   * must not already be connected — this class owns its connection lifecycle
-   * (connect on first use, quit on close).
+   * Connect to a Redis Cluster instead of a standalone server. Options are
+   * passed to `createCluster()` from `redis`. Mutually exclusive with
+   * `url`/`redisOptions`/`client`.
    */
-  clientFactory?: () => RedisClientType | RedisClusterType;
+  cluster?: RedisClusterOptions;
+  /**
+   * A pre-configured, UNCONNECTED `redis` client (standalone or cluster) to
+   * use as the shared writer. Each subscription's blocking reader is created
+   * from it with `client.duplicate()`, so the client's options are reused but
+   * every connection is distinct. The pubsub owns the client's lifecycle
+   * (connects on first use, quits on `close()`), so do not share it with the
+   * rest of your app. Mutually exclusive with `url`/`redisOptions`/`cluster`.
+   */
+  client?: RedisClientType | RedisClusterType;
   /**
    * Approximate maximum number of entries kept per stream. On every publish we
    * issue MAXLEN ~ N which lets Redis trim opportunistically. Defaults to
@@ -154,9 +158,10 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     this.#logger?.warn?.(`redis-streams: numeric replay offset ${offset} is unsupported; falling back to full replay`);
   }
 
+  // Standalone and cluster clients share the command surface this class uses.
+  // Every MULTI/EVAL here is single-key and XREADGROUP reads one stream, so
+  // commands never cross hash slots; keep it that way or Cluster breaks.
   #writeClient: RedisClientType;
-  #connectOptions: RedisClientOptions;
-  #clientFactory?: () => RedisClientType | RedisClusterType;
   // Dedupes concurrent cold callers onto a single writer connect(); see
   // #ensureWriterConnected.
   #writerConnecting?: Promise<void>;
@@ -185,10 +190,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
 
   constructor(options: RedisStreamsPubSubConfig = {}) {
     super();
-    const url = options.url ?? options.redisOptions?.url ?? 'redis://localhost:6379';
-    this.#connectOptions = { ...options.redisOptions, url };
-    this.#clientFactory = options.clientFactory;
-    this.#writeClient = this.#createClient();
+    this.#writeClient = RedisStreamsPubSub.#createWriteClient(options);
     this.#logger = options.logger;
     this.#attachErrorLogger(this.#writeClient, 'write');
     this.#keyPrefix = options.keyPrefix ?? 'mastra:topic';
@@ -227,14 +229,38 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   }
 
   /**
-   * Create an unconnected client via the caller-supplied `clientFactory` (used
-   * for Cluster clients), falling back to a standalone `createClient` built from
-   * `redisOptions`/`url`. Called once for the writer and once per reader.
+   * Resolve the shared writer client from config. Exactly one connection
+   * source is allowed: an injected `client`, `cluster` options, or the
+   * standalone `url`/`redisOptions` pair (the default).
    */
-  #createClient(): RedisClientType {
-    return this.#clientFactory
-      ? (this.#clientFactory() as RedisClientType)
-      : (createClient(this.#connectOptions) as RedisClientType);
+  static #createWriteClient(options: RedisStreamsPubSubConfig): RedisClientType {
+    const sources = [
+      options.client && 'client',
+      options.cluster && 'cluster',
+      (options.url ?? options.redisOptions) && 'url/redisOptions',
+    ].filter(Boolean);
+    if (sources.length > 1) {
+      throw new Error(`redis-streams: ${sources.join(', ')} are mutually exclusive; pass only one connection source`);
+    }
+    if (options.client) {
+      if (options.client.isOpen) {
+        throw new Error('redis-streams: `client` must not be connected; the pubsub owns its connection lifecycle');
+      }
+      return options.client as RedisClientType;
+    }
+    if (options.cluster) {
+      return createCluster(options.cluster) as unknown as RedisClientType;
+    }
+    const url = options.url ?? options.redisOptions?.url ?? 'redis://localhost:6379';
+    return createClient({ ...options.redisOptions, url }) as RedisClientType;
+  }
+
+  /**
+   * A fresh, unconnected client with the writer's configuration. Each
+   * subscription needs its own because XREADGROUP BLOCK holds the connection.
+   */
+  #createReadClient(): RedisClientType {
+    return this.#writeClient.duplicate() as RedisClientType;
   }
 
   /**
@@ -275,13 +301,16 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
 
   /** Lazily connect the shared writer client. Idempotent and safe under concurrent callers. */
   async #ensureWriterConnected(): Promise<void> {
-    if (this.#writeClient.isOpen) return;
-    // Dedupe concurrent cold callers onto a single connect(). On a Cluster
-    // client `isOpen` flips true only after slot discovery finishes, so a second
-    // connect() racing the first crashes inside slot lookup ("Cannot read
-    // properties of undefined (reading 'master')"). We still gate on `isOpen`
-    // (not `isReady`) so node-redis's own automatic reconnect — which reopens
-    // an already-open socket mid-life — is never fought with a second connect().
+    // node-redis flips `isOpen` true synchronously inside connect(), BEFORE the
+    // socket is ready (standalone) or slot discovery has finished (cluster). So
+    // while the initial connect is in flight, `isOpen` alone would let a second
+    // caller through to issue commands; on a Cluster client that crashes in
+    // slot lookup ("Cannot read properties of undefined (reading 'master')").
+    // Check the in-flight promise first so every cold caller awaits the same
+    // connect(). Outside that window we still gate on `isOpen` (not `isReady`)
+    // so node-redis's own automatic mid-life reconnect is never fought with a
+    // second connect().
+    if (!this.#writerConnecting && this.#writeClient.isOpen) return;
     if (!this.#writerConnecting) {
       this.#writerConnecting = this.#writeClient
         .connect()
@@ -434,7 +463,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
 
     // Each subscription gets a dedicated reader connection because XREADGROUP
     // with BLOCK > 0 holds the connection until a message arrives.
-    const readClient = this.#createClient();
+    const readClient = this.#createReadClient();
     this.#attachErrorLogger(readClient, 'read', { topic });
     await readClient.connect();
 
