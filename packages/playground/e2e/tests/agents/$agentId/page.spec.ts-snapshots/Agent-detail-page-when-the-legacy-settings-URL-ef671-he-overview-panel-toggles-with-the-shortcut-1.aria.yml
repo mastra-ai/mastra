@@ -1,16 +1,14 @@
 - heading "Config" [level=2]
-- heading "Agents 1 Agents documentation" [level=3]:
-  - text: ""
-  - link "Agents documentation":
-    - /url: https://mastra.ai/en/docs/agents/overview
+- heading "Agents 1" [level=3]
+- link "Agents documentation":
+  - /url: https://mastra.ai/en/docs/agents/overview
 - list:
   - listitem:
     - link "Sub Agent":
       - /url: /agents/subAgent/threads/new
-- heading "Tools 2 Using Tools and MCP documentation" [level=3]:
-  - text: ""
-  - link "Using Tools and MCP documentation":
-    - /url: https://mastra.ai/en/docs/agents/using-tools-and-mcp
+- heading "Tools 2" [level=3]
+- link "Using Tools and MCP documentation":
+  - /url: https://mastra.ai/en/docs/agents/using-tools-and-mcp
 - list:
   - listitem:
     - link "weatherInfo":
@@ -18,18 +16,16 @@
   - listitem:
     - link "simpleMcpTool":
       - /url: /agents/weather-agent/tools/simpleMcpTool
-- heading "Workflows 1 Workflows documentation" [level=3]:
-  - text: ""
-  - link "Workflows documentation":
-    - /url: https://mastra.ai/en/docs/workflows/overview
+- heading "Workflows 1" [level=3]
+- link "Workflows documentation":
+  - /url: https://mastra.ai/en/docs/workflows/overview
 - list:
   - listitem:
     - link "lessComplexWorkflow":
       - /url: /workflows/lessComplexWorkflow
-- heading "Skills Skills documentation" [level=3]:
-  - text: ""
-  - link "Skills documentation":
-    - /url: https://mastra.ai/en/docs/workspace/skills
+- heading "Skills" [level=3]
+- link "Skills documentation":
+  - /url: https://mastra.ai/en/docs/workspace/skills
 - paragraph: No skills
 - heading "Scorers" [level=3]
 - paragraph: No Scorers
