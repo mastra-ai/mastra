@@ -5,7 +5,8 @@ import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const settingsMock = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
-vi.mock('../onboarding/settings.js', () => ({
+vi.mock('../onboarding/settings.js', async importOriginal => ({
+  ...(await importOriginal<typeof import('../onboarding/settings.js')>()),
   loadSettings: () => settingsMock.value,
 }));
 
@@ -33,8 +34,9 @@ afterEach(() => {
 });
 
 describe('mastracode workspace LSP configuration', () => {
-  it('limits retained language server clients to four by default', async () => {
+  it('limits retained language server clients to four by default once LSP is enabled', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-workspace-lsp-'));
+    settingsMock.value = { lsp: true };
     let workspace: { destroy(): Promise<void>; lsp?: object } | undefined;
 
     try {

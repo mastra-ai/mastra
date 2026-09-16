@@ -20,29 +20,32 @@ import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
-// Thin stub for the heavy Dialog atom so this test focuses on the real client + mutation behavior.
-vi.mock('@mastra/playground-ui/components/Dialog', () => {
-  const Dialog = ({
-    open,
-    onOpenChange,
+// Thin stub for the heavy SideDialog atom so this test focuses on the real client + mutation behavior.
+vi.mock('@mastra/playground-ui/components/SideDialog', () => {
+  const SideDialogRoot = ({
+    isOpen,
+    onClose,
+    dialogTitle,
+    dialogDescription,
     children,
-  }: PropsWithChildren<{ open: boolean; onOpenChange: (open: boolean) => void }>) =>
-    open ? (
-      <div>
+  }: PropsWithChildren<{ isOpen: boolean; onClose: () => void; dialogTitle: string; dialogDescription: string }>) =>
+    isOpen ? (
+      <div role="dialog" aria-label={dialogTitle} aria-description={dialogDescription}>
         {children}
-        <button type="button" onClick={() => onOpenChange(false)}>
-          Dismiss dialog
+        <button type="button" onClick={onClose}>
+          Close
         </button>
       </div>
     ) : null;
 
-  return {
-    Dialog,
-    DialogContent: ({ children }: PropsWithChildren) => <div>{children}</div>,
-    DialogHeader: ({ children }: PropsWithChildren) => <div>{children}</div>,
-    DialogTitle: ({ children }: PropsWithChildren) => <h2>{children}</h2>,
-    DialogBody: ({ children }: PropsWithChildren) => <div>{children}</div>,
-  };
+  const SideDialog = Object.assign(SideDialogRoot, {
+    Top: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    Content: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    Header: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    Heading: ({ children }: PropsWithChildren) => <h2>{children}</h2>,
+  });
+
+  return { SideDialog };
 });
 
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
@@ -123,6 +126,23 @@ const selectScorer = async (name: string) => {
 };
 
 describe('AddItemDialog', () => {
+  describe('when the form is open', () => {
+    it('renders spacious JSON editors in a named and described side dialog', () => {
+      renderDialog();
+
+      const dialog = screen.getByRole('dialog', { name: 'Add Item' });
+      expect(dialog.getAttribute('aria-description')).toBe('Create a new dataset item');
+
+      const [input, ...optionalEditors] = getEditors();
+      expect(input.parentElement?.classList.contains('min-h-[240px]')).toBe(true);
+      expect(optionalEditors).toHaveLength(4);
+      optionalEditors.forEach(editor => {
+        expect(editor.parentElement?.classList.contains('min-h-[200px]')).toBe(true);
+      });
+      expect(screen.queryByRole('button', { name: 'Copy to clipboard' })).toBeNull();
+    });
+  });
+
   describe('when valid tool mocks are entered', () => {
     it('persists parsed tool mocks through the dataset item API', async () => {
       const capture = vi.fn<(body: unknown) => void>();
@@ -189,6 +209,49 @@ describe('AddItemDialog', () => {
 
       await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Tool Mocks must be a JSON array'));
       expect(capture).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the API rejects the input', () => {
+    it('shows the field-level validation result', async () => {
+      server.use(
+        http.post(`${BASE_URL}/api/datasets/dataset-1/items`, () =>
+          HttpResponse.json(
+            { error: 'Validation failed', field: 'input', errors: [{ path: 'prompt', message: 'Required' }] },
+            { status: 400 },
+          ),
+        ),
+      );
+
+      renderDialog();
+      fireEvent.click(screen.getByRole('button', { name: /add item/i }));
+
+      expect(await screen.findByText(/prompt/)).not.toBeNull();
+      expect(screen.getByText(/Required/)).not.toBeNull();
+    });
+  });
+
+  describe('when the API rejects the ground truth', () => {
+    it('shows the field-level validation result', async () => {
+      server.use(
+        http.post(`${BASE_URL}/api/datasets/dataset-1/items`, () =>
+          HttpResponse.json(
+            {
+              error: 'Validation failed',
+              field: 'groundTruth',
+              errors: [{ path: 'expected.answer', message: 'Required' }],
+            },
+            { status: 400 },
+          ),
+        ),
+      );
+
+      renderDialog();
+      fireEvent.change(getEditors()[1], { target: { value: '{"expected":{}}' } });
+      fireEvent.click(screen.getByRole('button', { name: /add item/i }));
+
+      expect(await screen.findByText(/expected\.answer/)).not.toBeNull();
+      expect(screen.getByText(/Required/)).not.toBeNull();
     });
   });
 
@@ -307,14 +370,14 @@ describe('AddItemDialog', () => {
     });
   });
 
-  describe('when the dialog is dismissed with a scorer override', () => {
+  describe('when the side dialog is closed with a scorer override', () => {
     it('restores dataset scorer inheritance when reopened', async () => {
       useScorerHandler();
       renderReopenableDialog();
 
       fireEvent.click(screen.getByRole('switch', { name: 'Override dataset scorers' }));
       await selectScorer('Quality scorer');
-      fireEvent.click(screen.getByRole('button', { name: 'Dismiss dialog' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
       fireEvent.click(screen.getByRole('button', { name: 'Reopen dialog' }));
 
       expect(screen.getByRole('switch', { name: 'Override dataset scorers' }).getAttribute('aria-checked')).toBe(

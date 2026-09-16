@@ -145,4 +145,121 @@ describe('useMeasuredAutoHeight', () => {
       expect(result.current.heightStyle).toEqual({ height: 96 });
     });
   });
+
+  it('has no height style before an element is attached', () => {
+    vi.stubGlobal('ResizeObserver', undefined);
+
+    const { result } = renderHook(() => useMeasuredAutoHeight<HTMLDivElement>());
+
+    expect(result.current.height).toBeNull();
+    expect(result.current.heightStyle).toEqual({});
+    expect(result.current.measure()).toBeNull();
+  });
+
+  it('reports the height it measured on demand', async () => {
+    vi.stubGlobal('ResizeObserver', undefined);
+
+    const element = document.createElement('div');
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(createRect(72.2));
+
+    const { result } = renderHook(() => useMeasuredAutoHeight<HTMLDivElement>());
+
+    act(() => {
+      result.current.ref(element);
+    });
+
+    // Fractional layout heights round up so the box never clips its content.
+    await waitFor(() => expect(result.current.height).toBe(73));
+    expect(result.current.measure()).toBe(73);
+  });
+
+  it('observes the element it was given', async () => {
+    vi.stubGlobal('ResizeObserver', MockResizeObserver);
+
+    const element = document.createElement('div');
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(createRect(72));
+
+    const { result } = renderHook(() => useMeasuredAutoHeight<HTMLDivElement>());
+
+    act(() => {
+      result.current.ref(element);
+    });
+
+    await waitFor(() => expect(MockResizeObserver.instances[0]?.observedElements.has(element)).toBe(true));
+  });
+
+  it('coalesces a burst of resizes into one measurement', async () => {
+    const frames: FrameRequestCallback[] = [];
+    const requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const cancelAnimationFrame = vi.fn();
+
+    vi.stubGlobal('ResizeObserver', MockResizeObserver);
+    vi.stubGlobal('requestAnimationFrame', requestAnimationFrame);
+    vi.stubGlobal('cancelAnimationFrame', cancelAnimationFrame);
+
+    const element = document.createElement('div');
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(createRect(72));
+
+    const { result } = renderHook(() => useMeasuredAutoHeight<HTMLDivElement>());
+
+    act(() => {
+      result.current.ref(element);
+    });
+
+    const observer = MockResizeObserver.instances[0];
+    if (!observer) throw new Error('ResizeObserver was not created.');
+
+    act(() => {
+      observer.trigger(element);
+      observer.trigger(element);
+      observer.trigger(element);
+    });
+
+    // Each resize replaces the frame the one before it scheduled.
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(3);
+    expect(cancelAnimationFrame).toHaveBeenCalledTimes(2);
+    expect(cancelAnimationFrame).toHaveBeenNthCalledWith(1, 1);
+    expect(cancelAnimationFrame).toHaveBeenNthCalledWith(2, 2);
+
+    // And the one frame that survives is the one that takes the measurement.
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(createRect(96));
+    act(() => {
+      frames[frames.length - 1]?.(0);
+    });
+
+    expect(result.current.height).toBe(96);
+  });
+
+  it('stops observing and drops a pending frame when it goes away', async () => {
+    const requestAnimationFrame = vi.fn(() => 7);
+    const cancelAnimationFrame = vi.fn();
+
+    vi.stubGlobal('ResizeObserver', MockResizeObserver);
+    vi.stubGlobal('requestAnimationFrame', requestAnimationFrame);
+    vi.stubGlobal('cancelAnimationFrame', cancelAnimationFrame);
+
+    const element = document.createElement('div');
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(createRect(72));
+
+    const { result, unmount } = renderHook(() => useMeasuredAutoHeight<HTMLDivElement>());
+
+    act(() => {
+      result.current.ref(element);
+    });
+
+    const observer = MockResizeObserver.instances[0];
+    if (!observer) throw new Error('ResizeObserver was not created.');
+
+    act(() => {
+      observer.trigger(element);
+    });
+
+    unmount();
+
+    expect(observer.disconnect).toHaveBeenCalledTimes(1);
+    expect(cancelAnimationFrame).toHaveBeenCalledWith(7);
+  });
 });

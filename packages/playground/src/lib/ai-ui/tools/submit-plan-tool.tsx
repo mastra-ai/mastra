@@ -17,11 +17,10 @@ import {
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
+import { useToolCall } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
+import { X, Check } from 'lucide-react';
 import { useAgentPlan } from '@/domains/agents/hooks/use-agent-plan';
-import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
-import { useToolCall } from '@/services/tool-call-provider';
-
-const PLAN_EXPAND_CHARACTER_THRESHOLD = 500;
 
 export interface SubmitPlanToolProps {
   agentId: string;
@@ -94,7 +93,6 @@ function getSuspendedPlanPath(
 
 function SubmittedPlanCard({ plan }: { plan: SubmittedPlan }) {
   const document = getPlanDocument(plan.content);
-  const canExpand = document.body.length > PLAN_EXPAND_CHARACTER_THRESHOLD;
 
   return (
     <Plan role="group" aria-label="Submitted plan">
@@ -111,7 +109,7 @@ function SubmittedPlanCard({ plan }: { plan: SubmittedPlan }) {
         </PlanIntro>
         <PlanMain>
           <PlanContent>{document.body}</PlanContent>
-          {canExpand ? <PlanControls /> : null}
+          <PlanControls />
         </PlanMain>
       </PlanBody>
     </Plan>
@@ -131,7 +129,6 @@ function PendingPlanCard({ agentId, agentVersionId, requestContext, toolCallId, 
   const { approveToolcall, isRunning, toolCallApprovals } = useToolCall();
   const content = data?.content;
   const document = content ? getPlanDocument(content) : undefined;
-  const canExpand = Boolean(document && document.body.length > PLAN_EXPAND_CHARACTER_THRESHOLD);
   const isAnswered = toolCallApprovals[toolCallId] !== undefined;
   const controlsDisabled = isLoading || isRunning || isAnswered;
 
@@ -171,6 +168,7 @@ function PendingPlanCard({ agentId, agentVersionId, requestContext, toolCallId, 
           <PlanControls>
             <PlanActionGroup>
               <Button
+                icon={<Check />}
                 type="button"
                 size="sm"
                 variant="primary"
@@ -182,9 +180,12 @@ function PendingPlanCard({ agentId, agentVersionId, requestContext, toolCallId, 
                 Approve &amp; build
               </Button>
             </PlanActionGroup>
-            {canExpand ? <PlanExpandButton /> : <span aria-hidden="true" />}
+            <span className="flex justify-center">
+              <PlanExpandButton />
+            </span>
             <PlanActionGroup>
               <Button
+                icon={<X />}
                 type="button"
                 size="sm"
                 aria-label="Reject the plan"

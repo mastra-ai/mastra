@@ -1,6 +1,6 @@
 ---
 title: "Reference: Storage retention (prune) | Storage"
-description: "API reference for retention policies and prune() on Mastra storage."
+description: "prune() deletes rows. It caps growth and is safe to run against large tables (batched, bounded, resumable, cancellable)."
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
@@ -9,7 +9,7 @@ packages:
 
 # Storage retention
 
-Storage grows without bound by default. Retention is an opt-in, age-based cleanup system: you declare per-table `maxAge` policies in the `retention` config, then call `storage.prune()` to delete rows older than their configured age. Anything you don't configure is kept forever, so there is no behavior change until you opt in.
+Because storage grows without bound by default, Mastra provides an opt-in, age-based retention system. Declare per-table `maxAge` policies in the `retention` config, then call `storage.prune()` to delete rows older than their configured age. Unconfigured data is kept forever, so behavior doesn't change until you opt in.
 
 `prune()` deletes rows. It caps growth and is safe to run against large tables (batched, bounded, resumable, cancellable). It never reclaims disk: on SQLite/libSQL the freed pages are reused by future writes so the file stops growing, but handing disk back to the OS (for example a `VACUUM`) is left to the underlying database and the operator to manage.
 
@@ -42,7 +42,7 @@ const storage = new LibSQLStore({
 const results = await storage.prune()
 ```
 
-`retention` is fully typed. Keys must be real domain keys, and each table key must be one the domain declares as retention-eligible. Passing the object straight into a store config type-checks it; if you build it standalone, use `satisfies RetentionConfig` so unknown domains or tables are compile errors:
+`retention` is fully typed. Domain keys must exist, and their table keys must be declared retention-eligible. Store configs type-check objects passed directly. When building an object separately, use `satisfies RetentionConfig` so unknown domains or tables produce compile errors:
 
 ```typescript
 import type { RetentionConfig } from '@mastra/core/storage'
@@ -108,7 +108,7 @@ Set the `retention` field on the store config.
 
 ### Retention-eligible tables
 
-Each domain declares which of its tables can be age-pruned and which timestamp column anchors the comparison. The anchor is chosen so `maxAge` means what you'd expect for that data. Append-only logs use creation time, and live state uses last activity. Jobs and runs use completion time, so in-flight work is never pruned.
+Each domain specifies its age-prunable tables and the timestamp column that anchors comparison, chosen so `maxAge` matches the meaning of the data. Append-only logs use creation time, live state uses last activity, and jobs or runs use completion time so in-flight work isn't pruned.
 
 | Domain | Table key | Anchor column | `maxAge` measures |
 | - | - | - | - |
@@ -230,7 +230,7 @@ interface PruneResult {
 
 ## Running prune on a schedule
 
-`prune()` has no built-in scheduler: you decide when it runs. Because it's bounded, a single call may not delete everything. When any result has `done: false`, eligible rows remain and you call again on the next tick. This keeps each invocation short and lets a large backlog drain over several runs.
+`prune()` has no built-in scheduler, so you decide when it runs. A bounded call may leave eligible rows, indicated by any result with `done: false`. Call it again on the next tick. Short invocations let a large backlog drain over several runs.
 
 ```typescript
 // Runs on your own cron (node-cron, a workflow schedule, an external job, etc.).

@@ -1,9 +1,9 @@
 ---
-title: "Subagents"
-description: Learn how to coordinate multiple agents with delegation hooks, iteration monitoring, message filtering, and task completion scoring.
+title: 'Subagents'
+description: 'Build Mastra supervisor agents that delegate work to specialized subagents with hooks, request context, message filtering, and completion scoring.'
 packages:
-  - "@mastra/core"
-  - "@mastra/memory"
+  - '@mastra/core'
+  - '@mastra/memory'
 ---
 
 # Subagents
@@ -147,10 +147,12 @@ The subagent reads these entries in its tools and dynamic configuration, such as
 Called after a delegation finishes. Use it to inspect results or provide feedback, or alternatively stop execution:
 
 - `context.bail()`: Stop the parent agent's loop immediately
-- Return `{ feedback: '...' }`: Add feedback that gets saved to the parent agent's memory and is visible to subsequent iterations
+- Return `{ feedback: '...' }`: Add feedback that gets saved to the parent agent's memory and is available on the next turn
 - Return `{ resultText: '...' }`: Replace the tool result text the parent model sees for this delegation, within the current run
 
-Use `resultText` when the subagent's own result would mislead the parent immediately. For example, a subagent that stops on a tool-calls step returns empty text. The parent model reads this as a successful but empty delegation. Unlike `feedback`, which only reaches the model on the next turn, `resultText` changes what the parent reasons on right away.
+Set `resultText` when the subagent's own result would give the parent a misleading signal. For example, empty text from a subagent stopped on a tool-calls step looks like a successful but empty delegation to the parent model. You can also replace the error text from a failed delegation with a more useful message. This doesn't recover the delegation. The parent still receives a failed tool result. Unlike `feedback` on the next turn, `resultText` affects the parent's reasoning immediately.
+
+To stop the parent agent on failure and save feedback for a later turn, call `bail()` and return `feedback`:
 
 ```typescript title="src/mastra/agents/parent-agent.ts"
 const stream = await parentAgent.stream('Research AI trends', {
@@ -176,9 +178,38 @@ The `context` object includes:
 | Property | Description |
 | - | - |
 | `primitiveId` | The ID of the subagent that ran |
-| `result` | The subagent's response |
-| `error` | Error if the delegation failed |
+| `result` | The subagent's response, including `text`, `usage`, `finishReason`, `subAgentToolResults`, `subAgentThreadId`, and `subAgentResourceId` when available |
+| `success` | Whether the delegation succeeded |
+| `error` | The original error if the delegation failed |
+| `messages` | The collected subagent transcript, including partial messages when available |
 | `bail()` | Function to stop the parent agent's loop |
+
+#### Failed delegations
+
+When a subagent run fails, the parent model receives a failed tool result with a generic error message. This doesn't automatically stop the parent agent, which can explain the failure or choose another approach. Call `context.bail()` to stop its loop instead.
+
+The hook receives `success: false`, the original `error`, and any collected partial results and messages. Returning `resultText` replaces the error text the parent model sees without changing the delegation's failed status or discarding its original cause. An empty string is also a valid replacement.
+
+To let the parent continue with a curated failure message instead of stopping its loop, return `resultText` without calling `bail()`:
+
+```typescript title="src/mastra/agents/parent-agent.ts"
+const stream = await parentAgent.stream('Research AI trends', {
+  maxSteps: 10,
+  delegation: {
+    onDelegationComplete: ({ success }) => {
+      if (!success) {
+        return {
+          resultText: 'The delegated task failed. Try another approach.',
+        }
+      }
+    },
+  },
+})
+```
+
+Prefer a curated message, as in this example. Returning `{ resultText: error.message }` explicitly forwards the underlying message to the parent model's provider, and the model may repeat it to the end user. Provider errors can contain sensitive information. A generic `resultText` isn't a redaction policy for logs, traces, or streamed error payloads.
+
+For delegations run as [background tasks](/docs/harness/background-tasks), configured retries can invoke `onDelegationComplete` once per attempt. Account for repeated calls if your hook has side effects.
 
 ### Hook errors
 
@@ -208,7 +239,7 @@ await parentAgent.generate('Research AI trends', { maxSteps: 10, requestContext 
 const hookErrors = requestContext.get('__mastra_delegationHookErrors') ?? []
 ```
 
-When `hookErrorStrategy` is `'throw'`, a throwing `onDelegationStart` blocks the subagent from running at all, and a throwing `messageFilter` or `onDelegationComplete` surfaces to the parent as a failed tool call. If `onDelegationComplete` throws while handling a failed delegation, the original delegation error is still what surfaces, and the hook is never re-invoked for its own failure.
+When `hookErrorStrategy` is `'throw'`, a throwing `onDelegationStart` blocks the subagent from running at all, and a throwing `messageFilter` or `onDelegationComplete` surfaces to the parent as a failed tool call. If `onDelegationComplete` throws while handling a failed delegation, the original delegation error remains the surfaced error. The hook isn't invoked again for its own failure.
 
 ## Message filtering
 
@@ -251,6 +282,31 @@ await parentAgent.generate('Research AI trends', {
   },
 })
 ```
+
+### Reusing an earlier subagent result
+
+By default, subagent results reach the parent agent as tool results, which are stripped from the context forwarded to later subagents. The parent agent must restate an earlier result in the next delegation prompt, which costs tokens and loses detail.
+
+Set `enableResultReferences` to let a later delegation reuse an earlier result verbatim:
+
+```typescript title="src/mastra/agents/parent-agent.ts"
+await parentAgent.generate('Find and fix the token refresh bug', {
+  delegation: {
+    enableResultReferences: true,
+  },
+})
+```
+
+When enabled:
+
+- Each successful, non-empty subagent result gets a reference ID such as `explorer-1`. The parent agent's model sees it as a `[ref: explorer-1]` line after the subagent's text.
+- The delegation tools gain a `contextFromRefs` input. The parent agent can pass earlier IDs, either as strings (`["explorer-1"]`) or as objects with an optional label and note (`[{ ref: "explorer-1", as: "investigation", note: "bug location" }]`).
+- The referenced text is inserted before the delegation prompt, each result in its own labeled block, exactly as the earlier subagent produced it. `onDelegationStart` and `messageFilter` receive the expanded prompt.
+- If `onDelegationComplete` returns `resultText`, the replaced text is what later delegations receive.
+
+References are held in memory for a single parent agent run and aren't persisted. Rejected, failed, empty, and background-task delegations don't receive a reference ID. Unknown IDs are skipped with a warning and the delegation continues.
+
+Referenced text is output from another agent. Each block uses a fresh, unpredictable tag and tells the receiving subagent to treat the contents as data, but if subagents handle untrusted input, add your own checks in `onDelegationStart` or through processors.
 
 ## Iteration monitoring
 

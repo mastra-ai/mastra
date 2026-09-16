@@ -1,0 +1,75 @@
+---
+extends: existence
+message: "AI settlement metaphor: '%s'. State the conclusion and the evidence, or name the stable state. Disable this rule for legal or geology prose."
+level: error
+nonword: true
+ignorecase: true
+# The settlement figure: a dispute closed, dust coming to rest, a form
+# hardening into permanence. AI prose reaches for the verb whenever a
+# decision or a stabilization needs reporting, and the figure lets the
+# sentence skip both the verdict and the evidence ("that settles it,"
+# "once the dust settles," "the design settled into its final form").
+#
+# Ownership splits with the neighbors: the invoice tokens ("settled the
+# cost," "settles up," "squares the ledger," "balances the books") live
+# in FigurativePays with the other money figures; the gavel tokens moved
+# here from AnthropomorphicJustification, whose adjudication family
+# keeps "decides the debate" and "puts the matter to rest"; and "fell
+# into place" stays in NarrativePivots.
+#
+# Every token measured zero across the Go and Python standard libraries
+# except "once the dust settles," which appears twice in Go comments,
+# the established programmer idiom this rule flags on purpose. The
+# corpora's own settle vocabulary is the convergence register: a pacer
+# that "settles into a non-degenerate state," workers that "settle into
+# cond.wait()," a lookup given "time to settle," a "settle time" for a
+# flaky builder. None of those complements appears in the gated lists
+# below, so control-loop and timing prose stays quiet.
+#
+# The other literal senses stay clear on their complements: the choice
+# senses take "on" or "for" ("settled on a heuristic," "settle for the
+# simpler form"), "settle ties by string ordering" takes no determiner,
+# settlers and settlements never inflect the verb, dust that lands on a
+# surface takes a locative the lookahead excludes, and a team settling
+# into a new office names a complement outside the gated list. Legal
+# parties literally settle disputes and geology prose watches literal
+# dust, so both registers disable the rule.
+tokens:
+  # --- The gavel: a fact or metric closes a dispute ("availability
+  # settles the question," "the reconfirmation settles it," "a
+  # classifier settles those").
+  - '\bsettl(?:es?|ed) the (?:question|debate|matter|argument|issue|dispute)\b'
+  - '\b(?:settles|settled) (?:it|that|this|which|what|whether|those|them)\b'
+
+  # --- The dust: turbulence as a cloud that must come to rest before
+  # anyone acts ("once the dust settles," "the dust settled after the
+  # reorg," "wait for the dust to settle"). The locative lookahead keeps
+  # dust that lands somewhere ("the dust settled on the windowsill")
+  # out of the first token; the perfect tenses carry no lookahead, so
+  # housekeeping prose about literal dust disables the rule.
+  - '\bthe dust settl(?:es|ed)\b(?!\s+(?:on|onto|over|in|into|across|out)\b)'
+  - '\bthe dust (?:has|had) (?:finally |never |already )?settled\b'
+  - '\bfor the dust to settle\b'
+  - '\blet(?:s|ting)? the dust settle\b'
+
+  # --- Settling into stability: a design or a process hardens into a
+  # final configuration ("the API settled into its final form," "the
+  # standup settled into a rhythm," "the pieces settled into place").
+  # The complement gate is what keeps the convergence register out; a
+  # person settling into a routine fires too, so biography prose
+  # disables the rule.
+  - '\bsettl(?:es?|ed|ing) into place\b'
+  - '\bsettl(?:es?|ed|ing) into (?:a|an|the|its|their) (?:[a-z]+ )?(?:rhythm|groove|pattern|routine|shape|form|normal)\b'
+
+  # --- The closed question: "settled" as an adjective declaring a
+  # dispute beyond reopening ("the debate is settled," "consider it
+  # settled," "settled law," "far from settled").
+  - '\b(?:question|debate|matter|issue|dispute) (?:is|was|remains|seems) (?:now |long |mostly |largely )?settled\b'
+  - '\bconsider(?:s|ed)? (?:it|that|this|the matter) settled\b'
+  - '\b(?:a|the) settled (?:question|matter|debate|issue)\b'
+  - '\bsettled (?:law|science)\b'
+  - '\bfar from settled\b'
+
+  # --- The score: retribution as bookkeeping ("settles an old score
+  # with the flaky suite").
+  - '\bsettl(?:es?|ed|ing) (?:a|an|the|old) (?:old )?scores?\b'

@@ -5,10 +5,10 @@
  * metadata) is snapshotted at construction time.
  */
 
-import { generateSignalId } from '@mastra/core/observability';
 import type { LogLevel, LoggerContext, ExportedLog, LogEvent, CorrelationContext } from '@mastra/core/observability';
 
 import type { ObservabilityBus } from '../bus';
+import { generateSignalId } from '../ids';
 
 export interface LoggerContextConfig {
   /** Top-level trace identity for emitted log events */

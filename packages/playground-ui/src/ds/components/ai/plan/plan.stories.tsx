@@ -119,7 +119,7 @@ export const FileUnavailable: Story = {
       <PlanHeader>
         <PlanLabel />
         <PlanHeaderActions>
-          <PlanStatus variant="warning">Missing</PlanStatus>
+          <PlanStatus variant="yellow">Missing</PlanStatus>
         </PlanHeaderActions>
       </PlanHeader>
       <PlanBody>
@@ -141,7 +141,7 @@ export const WithStatusAndActions: Story = {
       <PlanHeader>
         <PlanLabel />
         <PlanHeaderActions>
-          <PlanStatus variant="info">Pending</PlanStatus>
+          <PlanStatus variant="blue">Pending</PlanStatus>
           <PlanCopyButton content={planMarkdown} />
         </PlanHeaderActions>
       </PlanHeader>

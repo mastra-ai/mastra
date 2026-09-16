@@ -25,6 +25,7 @@ import type {
 import { listFeedbackArgsSchema } from './feedback';
 import type {
   BatchCreateFeedbackArgs,
+  DeleteFeedbackArgs,
   CreateFeedbackArgs,
   FeedbackFilter,
   GetFeedbackAggregateArgs,
@@ -38,6 +39,7 @@ import type {
   ListFeedbackArgs,
   ListFeedbackResponse,
   FeedbackRecord,
+  UpdateFeedbackReviewStatusArgs,
 } from './feedback';
 import { listLogsArgsSchema } from './logs';
 import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse, LogRecord } from './logs';
@@ -60,6 +62,7 @@ import { listMetricsArgsSchema } from './metrics';
 import { listScoresArgsSchema } from './scores';
 import type {
   BatchCreateScoresArgs,
+  DeleteScoresArgs,
   CreateScoreArgs,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
@@ -212,6 +215,39 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
     records.push(record);
     cursorIds.set(record, this.allocateObservabilityCursorId());
+  }
+
+  /**
+   * Deletes records whose id field is in `ids`, honoring optional tenant scope.
+   * Removes deleted records from the cursor-id map so delta polling no longer
+   * references them.
+   */
+  private deleteByIdField<T extends Record<string, unknown>>(
+    records: T[],
+    cursorIds: Map<T, number>,
+    ids: string[],
+    idField: keyof T,
+    scope: { organizationId?: string; resourceId?: string },
+  ): void {
+    if (ids.length === 0) {
+      return;
+    }
+    const idSet = new Set(ids);
+    for (let i = records.length - 1; i >= 0; i--) {
+      const record = records[i]!;
+      const id = record[idField];
+      if (typeof id !== 'string' || !idSet.has(id)) {
+        continue;
+      }
+      if (scope.organizationId !== undefined && record.organizationId !== scope.organizationId) {
+        continue;
+      }
+      if (scope.resourceId !== undefined && record.resourceId !== scope.resourceId) {
+        continue;
+      }
+      cursorIds.delete(record);
+      records.splice(i, 1);
+    }
   }
 
   private encodeDeltaCursor(cursorId?: number | null): string {
@@ -1119,15 +1155,49 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   }
 
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
+    const traceIds = new Set<string>(args.traceIds);
     for (const traceId of args.traceIds) {
       const traceEntry = this.db.traces.get(traceId);
       if (traceEntry) {
+        const scopeReference = traceEntry.rootSpan ?? Object.values(traceEntry.spans)[0];
+        if (!this.matchesDeleteScope(scopeReference, args)) {
+          continue;
+        }
         this.db.traceCursorIds.delete(traceId);
         for (const spanId of Object.keys(traceEntry.spans)) {
           this.db.branchCursorIds.delete(this.createBranchCursorKey(traceId, spanId));
         }
       }
       this.db.traces.delete(traceId);
+    }
+
+    // Cascade: remove trace-linked signal events. Records without a traceId are untouched.
+    this.deleteTraceLinkedRecords(this.db.metricRecords, this.db.metricCursorIds, traceIds, args);
+    this.deleteTraceLinkedRecords(this.db.logRecords, this.db.logCursorIds, traceIds, args);
+    this.deleteTraceLinkedRecords(this.db.scoreRecords, this.db.scoreCursorIds, traceIds, args);
+    this.deleteTraceLinkedRecords(this.db.feedbackRecords, this.db.feedbackCursorIds, traceIds, args);
+  }
+
+  /** Returns true when the record matches the optional tenant scope in delete args. */
+  private matchesDeleteScope(
+    record: { organizationId?: string | null; resourceId?: string | null } | null | undefined,
+    args: BatchDeleteTracesArgs,
+  ): boolean {
+    if (args.organizationId !== undefined && record?.organizationId !== args.organizationId) return false;
+    if (args.resourceId !== undefined && record?.resourceId !== args.resourceId) return false;
+    return true;
+  }
+
+  /** Removes signal records linked to the given trace ids (and matching the optional tenant scope). */
+  private deleteTraceLinkedRecords<
+    T extends { traceId?: string | null; organizationId?: string | null; resourceId?: string | null },
+  >(records: T[], cursorIds: Map<T, number>, traceIds: Set<string>, args: BatchDeleteTracesArgs): void {
+    for (let i = records.length - 1; i >= 0; i--) {
+      const record = records[i]!;
+      if (record.traceId != null && traceIds.has(record.traceId) && this.matchesDeleteScope(record, args)) {
+        cursorIds.delete(record);
+        records.splice(i, 1);
+      }
     }
   }
 
@@ -1832,6 +1902,13 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
   }
 
+  async deleteScores(args: DeleteScoresArgs): Promise<void> {
+    this.deleteByIdField(this.db.scoreRecords, this.db.scoreCursorIds, args.scoreIds, 'scoreId', {
+      organizationId: args.organizationId,
+      resourceId: args.resourceId,
+    });
+  }
+
   async listScores(args: ListScoresArgs): Promise<ListScoresResponse> {
     const { mode, filters, pagination, orderBy, after, limit } = listScoresArgsSchema.parse(args);
 
@@ -1925,6 +2002,13 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       if (score.tags == null) return false;
       for (const tag of filters.tags) {
         if (!score.tags.includes(tag)) return false;
+      }
+    }
+    // Metadata filter (partial match - all provided keys must match; empty filter is a no-op)
+    if (filters.metadata != null && Object.keys(filters.metadata).length > 0) {
+      if (score.metadata == null) return false;
+      for (const [key, value] of Object.entries(filters.metadata)) {
+        if (!jsonValueEquals(score.metadata[key], value)) return false;
       }
     }
 
@@ -2166,6 +2250,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         args.feedback.feedbackUserId ??
         args.feedback.userId ??
         (typeof args.feedback.metadata?.userId === 'string' ? args.feedback.metadata.userId : null),
+      reviewStatus: args.feedback.reviewStatus ?? 'needs-review',
     } as FeedbackRecord;
     this.upsertByIdField(this.db.feedbackRecords, this.db.feedbackCursorIds, record, 'feedbackId');
   }
@@ -2178,9 +2263,17 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         source: fb.feedbackSource ?? fb.source ?? '',
         feedbackUserId:
           fb.feedbackUserId ?? fb.userId ?? (typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null),
+        reviewStatus: fb.reviewStatus ?? 'needs-review',
       } as FeedbackRecord;
       this.upsertByIdField(this.db.feedbackRecords, this.db.feedbackCursorIds, record, 'feedbackId');
     }
+  }
+
+  async deleteFeedback(args: DeleteFeedbackArgs): Promise<void> {
+    this.deleteByIdField(this.db.feedbackRecords, this.db.feedbackCursorIds, args.feedbackIds, 'feedbackId', {
+      organizationId: args.organizationId,
+      resourceId: args.resourceId,
+    });
   }
 
   async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
@@ -2224,6 +2317,21 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         ),
       ),
     };
+  }
+
+  async updateFeedbackReviewStatus(args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    const feedback = this.db.feedbackRecords.find(record => record.feedbackId === args.feedbackId);
+    if (!feedback) {
+      throw new MastraError({
+        id: 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_NOT_FOUND',
+        domain: ErrorDomain.MASTRA_OBSERVABILITY,
+        category: ErrorCategory.USER,
+        text: 'Feedback record not found',
+      });
+    }
+
+    feedback.reviewStatus = args.reviewStatus;
+    return feedback;
   }
 
   async getFeedbackAggregate(args: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
@@ -2483,6 +2591,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.source !== undefined && feedbackSource !== filters.source) return false;
     if (filters.experimentId !== undefined && fb.experimentId !== filters.experimentId) return false;
     if (filters.feedbackUserId !== undefined && fb.feedbackUserId !== filters.feedbackUserId) return false;
+    if (filters.reviewStatus !== undefined && (fb.reviewStatus ?? 'needs-review') !== filters.reviewStatus)
+      return false;
     if (filters.tags != null && filters.tags.length > 0) {
       if (fb.tags == null) return false;
       for (const tag of filters.tags) {

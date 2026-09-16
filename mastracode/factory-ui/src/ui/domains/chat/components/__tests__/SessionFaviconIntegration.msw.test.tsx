@@ -47,13 +47,12 @@ beforeEach(() => {
 describe('Session favicon tracks the session lifecycle', () => {
   describe('when the session prepare stepper is showing', () => {
     it('shows the purple initializing indicator', async () => {
-      const session = stubPreparingSession({ ensurePending: true });
+      const session = stubPreparingSession();
       const { client } = renderThread();
 
       await waitFor(() => expect(screen.getByTestId('session-prepare-steps')).toBeInTheDocument());
       expect(faviconHref()).toBe('/favicon-session-initializing.svg');
 
-      session.finishEnsure();
       session.finishWorkspace();
       await waitForMutationsIdle(client);
     });

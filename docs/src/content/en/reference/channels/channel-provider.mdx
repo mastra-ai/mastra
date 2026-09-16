@@ -1,6 +1,6 @@
 ---
 title: "Reference: ChannelProvider | Channel Providers"
-description: "API reference for ChannelProvider, the interface that platform integrations implement to provision apps and route webhooks, then wire adapters to agents."
+description: "ChannelProvider is the interface that platform integrations implement to connect agents to a messaging platform."
 packages:
   - "@mastra/core"
 ---
@@ -27,7 +27,7 @@ export const mastra = new Mastra({
 
 The provider's `baseUrl` is the public URL the platform sends webhooks and events to. In production this is your deployed Mastra server URL. For local development, the platform can't reach `http://localhost:4111`, so run a tunnel (such as [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) or [ngrok](https://ngrok.com/)) and point `baseUrl` at the tunnel URL (for example `https://abc123.trycloudflare.com`) so events reach your local dev process.
 
-[`SlackProvider`](/reference/channels/slack-provider) is the first built-in implementation. Build a custom provider by implementing this interface.
+Mastra includes [`SlackProvider`](/reference/channels/slack-provider) and [`TelegramProvider`](/reference/channels/telegram-provider) implementations. Build a custom provider by implementing this interface.
 
 ## Properties
 
@@ -115,4 +115,5 @@ const all = mastra.getChannelProviders()
 ## Related
 
 - [SlackProvider](/reference/channels/slack-provider)
+- [TelegramProvider](/reference/channels/telegram-provider)
 - [Channels](/docs/channels)

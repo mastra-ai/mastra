@@ -3,12 +3,12 @@ import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
+import { createInitialTranscript, transcriptReducer } from '../../services/transcript';
 import type { TimelineEntry } from '../../services/transcript';
 import { TranscriptEntries } from '../Transcript';
 
 const CREATED_AT = new Date('2026-07-15T10:00:00.000Z');
-const ROOM_CLASS = 'turn-room-open';
-const ROOM_SELECTOR = `.${ROOM_CLASS}`;
+const ROOM_SELECTOR = '[data-holds-room]';
 
 function textEntry(id: string, role: 'user' | 'assistant', text: string): TimelineEntry {
   const message: MastraDBMessage = {
@@ -53,6 +53,28 @@ function echoEntry(id: string, text: string): TimelineEntry {
   return { kind: 'message', id, message };
 }
 
+function steerSignal(id: string, text: string): MastraDBMessage {
+  return {
+    id,
+    role: 'signal',
+    createdAt: CREATED_AT,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text }],
+      metadata: {
+        signal: {
+          id,
+          type: 'user',
+          tagName: 'user',
+          contents: text,
+          createdAt: CREATED_AT.toISOString(),
+          attributes: { delivery: 'while-active' },
+        },
+      },
+    },
+  };
+}
+
 const entries = [
   textEntry('user-1', 'user', 'first question'),
   textEntry('assistant-1', 'assistant', 'first answer'),
@@ -72,7 +94,7 @@ describe('TranscriptEntries turn groups', () => {
     );
 
     const liveGroup = screen.getByTestId('tail').parentElement;
-    expect(liveGroup).toHaveClass(ROOM_CLASS);
+    expect(liveGroup).toHaveAttribute('data-holds-room', 'true');
     expect(liveGroup).toBeInstanceOf(HTMLElement);
     if (liveGroup) expect(within(liveGroup).getByText('second question')).toBeInTheDocument();
     expect(screen.getByText('first question').closest(ROOM_SELECTOR)).toBeNull();
@@ -90,11 +112,11 @@ describe('TranscriptEntries turn groups', () => {
         tail={<div data-testid="tail" />}
       />,
     );
-    expect(screen.getByTestId('tail').parentElement).toHaveClass(ROOM_CLASS);
+    expect(screen.getByTestId('tail').parentElement).toHaveAttribute('data-holds-room', 'true');
     // Closes as the new turn opens instead of vanishing under the reader.
-    const handedOver = screen.getByText('second question').closest('.turn-room');
+    const handedOver = screen.getByText('second question').closest('[data-opens-turn]');
     expect(handedOver).not.toBeNull();
-    expect(handedOver).not.toHaveClass(ROOM_CLASS);
+    expect(handedOver).not.toHaveAttribute('data-holds-room');
     // One room, whatever the turn count: two would stack into a double gap.
     expect(document.querySelectorAll(ROOM_SELECTOR)).toHaveLength(1);
   });
@@ -120,21 +142,25 @@ describe('TranscriptEntries turn groups', () => {
     );
 
     const liveGroup = screen.getByTestId('tail').parentElement;
-    expect(liveGroup).not.toHaveClass(ROOM_CLASS);
+    expect(liveGroup).not.toHaveAttribute('data-holds-room');
     // Kept: it carries the transition the room closes on.
-    expect(liveGroup).toHaveClass('turn-room');
+    expect(liveGroup).toHaveAttribute('data-opens-turn', 'true');
   });
 
   it('keeps the room on the message you sent when the run echoes it back undrawn', () => {
+    const settledTurn = [
+      textEntry('user-0', 'user', 'earlier question'),
+      textEntry('assistant-0', 'assistant', 'earlier answer'),
+    ];
     const { rerender } = renderWithProviders(
-      <TranscriptEntries entries={[entries[0]]} onApprove={() => {}} onRespond={() => {}} running />,
+      <TranscriptEntries entries={[...settledTurn, entries[0]]} onApprove={() => {}} onRespond={() => {}} running />,
     );
     const room = screen.getByText('first question').closest(ROOM_SELECTOR);
     expect(room).toBeInstanceOf(HTMLElement);
 
     rerender(
       <TranscriptEntries
-        entries={[entries[0], echoEntry('echo-1', 'first question'), entries[1]]}
+        entries={[...settledTurn, entries[0], echoEntry('echo-1', 'first question'), entries[1]]}
         onApprove={() => {}}
         onRespond={() => {}}
         running
@@ -145,6 +171,70 @@ describe('TranscriptEntries turn groups', () => {
     expect(screen.getByText('first question').closest(ROOM_SELECTOR)).toBe(room);
     expect(screen.getByText('first answer').closest(ROOM_SELECTOR)).toBe(room);
     expect(document.querySelectorAll(ROOM_SELECTOR)).toHaveLength(1);
+  });
+
+  it('gives the first turn of a fresh thread no room to scroll into', () => {
+    renderWithProviders(<TranscriptEntries entries={[entries[0]]} onApprove={() => {}} onRespond={() => {}} running />);
+
+    // It opens at the top already: room under it would only put empty scroll below.
+    expect(screen.getByText('first question').closest(ROOM_SELECTOR)).toBeNull();
+    expect(screen.getByText('first question').closest('[data-opens-turn]')).not.toBeNull();
+  });
+
+  it('keeps the same room node when a pending steer is confirmed', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 'thread-1' });
+    state = transcriptReducer(state, {
+      type: 'localUser',
+      text: 'change direction',
+      steer: true,
+    });
+    const { rerender } = renderWithProviders(
+      <TranscriptEntries
+        entries={state.entries}
+        onApprove={() => {}}
+        onRespond={() => {}}
+        running
+        tail={<div data-testid="steering-tail" />}
+      />,
+    );
+    const room = screen.getByTestId('steering-tail').parentElement;
+    expect(room).toBeInstanceOf(HTMLElement);
+
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: steerSignal('signal-steer', 'change direction') },
+    });
+    rerender(
+      <TranscriptEntries
+        entries={state.entries}
+        onApprove={() => {}}
+        onRespond={() => {}}
+        running
+        tail={<div data-testid="steering-tail" />}
+      />,
+    );
+
+    expect(screen.getByTestId('steering-tail').parentElement).toBe(room);
+    expect(state.entries[0]).toMatchObject({ message: { id: 'signal-steer' } });
+  });
+
+  it('lets a steer slide in under the stream without opening room', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 'thread-1' });
+    state = transcriptReducer(state, { type: 'localUser', text: 'first question' });
+    state = transcriptReducer(state, { type: 'localUser', text: 'change direction', steer: true });
+
+    renderWithProviders(
+      <TranscriptEntries
+        entries={state.entries}
+        onApprove={() => {}}
+        onRespond={() => {}}
+        running
+        tail={<div data-testid="tail" />}
+      />,
+    );
+
+    expect(screen.getByText('change direction')).toBeInTheDocument();
+    expect(screen.getByTestId('tail').parentElement).not.toHaveAttribute('data-holds-room');
   });
 
   it('takes the gap that introduces a turn into that turn, where the room absorbs it', () => {

@@ -1,6 +1,8 @@
 import { ReadableStream } from 'node:stream/web';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { MessageList } from '../../agent/message-list';
+import { ConsoleLogger } from '../../logger';
 import type { Processor, ProcessorStreamWriter } from '../../processors';
 import { ChunkFrom } from '../types';
 import type { ChunkType } from '../types';
@@ -141,6 +143,51 @@ function createToolResultChunk(runId: string, toolCallId: string): ChunkType {
 }
 
 describe('MastraModelOutput', () => {
+  it.each([true, false])('uses the configured logger or preserves the default (injected: %s)', async injectLogger => {
+    const logger = new ConsoleLogger({ level: 'debug' });
+    vi.spyOn(logger, 'child').mockReturnValue(logger);
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const runId = 'logger-run';
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([
+          createTextDeltaChunk(runId, '[1,2,3]'),
+          { type: 'text-end', runId, from: ChunkFrom.AGENT, payload: { id: 'text-1' } },
+          createStepFinishChunk(runId),
+          createFinishChunk(runId),
+        ]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: {
+          runId,
+          ...(injectLogger ? { logger } : {}),
+          isLLMExecutionStep: true,
+          structuredOutput: { schema: z.object({ name: z.string() }), errorStrategy: 'warn' },
+        },
+      });
+
+      const chunks = [];
+      for await (const chunk of output.fullStream) chunks.push(chunk);
+      expect(chunks.some(chunk => chunk.type === 'error')).toBe(false);
+
+      if (injectLogger) {
+        expect(warn).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('Structured output validation failed'));
+      } else {
+        expect(warn).not.toHaveBeenCalled();
+      }
+      expect(error).not.toHaveBeenCalled();
+      expect(consoleWarn).not.toHaveBeenCalled();
+      expect(consoleError).not.toHaveBeenCalled();
+    } finally {
+      consoleWarn.mockRestore();
+      consoleError.mockRestore();
+    }
+  });
+
   describe('writer in output processors (outer context)', () => {
     it('should pass a defined writer to processOutputResult', async () => {
       let receivedWriter: ProcessorStreamWriter | undefined;
@@ -755,6 +802,114 @@ describe('MastraModelOutput', () => {
       });
       expect(finishPayload.response).toEqual({});
       expect(finishPayload.content).toEqual([]);
+    });
+
+    it('reports finishReason "aborted" and no tripwire when a caller abort bails through the tripwire path', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      // A caller `abortSignal` cancellation enqueues an `abort` chunk and then bails through the
+      // shared execution-bail path, which emits a `finish` chunk with `reason: 'tripwire'` and no
+      // real step tripwire. The result must be reported as a cancellation, not a processor block.
+      const stream = createChunkStream([
+        {
+          type: 'text-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { text: 'partial answer' },
+        },
+        {
+          type: 'abort',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {},
+        },
+        {
+          type: 'finish',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            id: 'finish-1',
+            output: {
+              steps: [],
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+            stepResult: {
+              reason: 'tripwire',
+              warnings: [],
+              isContinued: false,
+            },
+            metadata: {},
+            messages: { nonUser: [], all: [] },
+          },
+        },
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: '__GATEWAY_OPENAI_MODEL__', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      expect(await output.finishReason).toBe('aborted');
+      expect(output.tripwire).toBeUndefined();
+    });
+
+    it('still surfaces a real processor tripwire on the finish chunk (no abort)', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      // A genuine processor tripwire bails with `reason: 'tripwire'` and carries real tripwire data
+      // on the last step. Without a preceding abort, the tripwire must still be surfaced.
+      const stream = createChunkStream([
+        {
+          type: 'finish',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            id: 'finish-1',
+            output: {
+              steps: [
+                {
+                  tripwire: {
+                    reason: 'Blocked by moderation processor',
+                    processorId: 'moderation',
+                  },
+                },
+              ],
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+            stepResult: {
+              reason: 'tripwire',
+              warnings: [],
+              isContinued: false,
+            },
+            metadata: {},
+            messages: { nonUser: [], all: [] },
+          },
+        },
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: '__GATEWAY_OPENAI_MODEL__', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      expect(output.tripwire).toEqual({
+        reason: 'Blocked by moderation processor',
+        processorId: 'moderation',
+        retry: undefined,
+        metadata: undefined,
+      });
     });
 
     it('should keep the latest step raw usage across multiple steps', async () => {
@@ -1409,6 +1564,106 @@ describe('MastraModelOutput', () => {
       ]);
       expect(outcome).toBe('settled');
       expect(output.status).toBe('failed');
+    });
+  });
+
+  describe('caller-local signal exclusions', () => {
+    it.each([undefined, false, true, ['system-reminder'] as const])(
+      'filters after transforms without changing other consumers or aggregates (hideSignals=%j)',
+      async hideSignals => {
+        const runId = 'signal-exclusion-run';
+        const reminder: ChunkType = { type: 'data-signal', data: { type: 'reactive', contents: 'remember this' } };
+        const state: ChunkType = { type: 'data-signal', data: { type: 'state', contents: 'state' } };
+        const seen: ChunkType[] = [];
+        const chunks = [
+          reminder,
+          state,
+          createTextDeltaChunk(runId, 'hello'),
+          createStepFinishChunk(runId),
+          createFinishChunk(runId),
+        ];
+        const output = new MastraModelOutput({
+          model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+          stream: createChunkStream(chunks),
+          messageList: new MessageList({ threadId: 'test-thread' }),
+          messageId: 'msg-1',
+          options: {
+            runId,
+            hideSignals: typeof hideSignals === 'boolean' ? hideSignals : hideSignals ? [...hideSignals] : undefined,
+            experimentalTransform: () =>
+              new TransformStream({
+                transform(chunk, controller) {
+                  seen.push(chunk);
+                  controller.enqueue(chunk);
+                },
+              }),
+          },
+        });
+        const collect = async (stream: ReadableStream<ChunkType>) => {
+          const result: ChunkType[] = [];
+          for await (const chunk of stream) result.push(chunk);
+          return result;
+        };
+        const [caller, shared] = await Promise.all([
+          collect(output.fullStream),
+          collect(output.__getUnfilteredFullStream()),
+        ]);
+        expect(caller.includes(reminder)).toBe(!hideSignals);
+        expect(caller.includes(state)).toBe(hideSignals !== true);
+        expect(caller).toContainEqual(createTextDeltaChunk(runId, 'hello'));
+        expect(caller.at(-1)?.type).toBe('finish');
+        expect(shared).toContainEqual(reminder);
+        expect(seen).toContainEqual(reminder);
+        const control = new MastraModelOutput({
+          model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+          stream: createChunkStream(chunks),
+          messageList: new MessageList({ threadId: 'test-thread' }),
+          messageId: 'msg-1',
+          options: { runId },
+        });
+        await collect(control.fullStream);
+        expect(await output.content).toEqual(await control.content);
+        expect((await output.getFullOutput()).content).toEqual((await control.getFullOutput()).content);
+      },
+    );
+
+    it.each(['error', 'abort'] as const)('preserves %s boundaries when every signal is excluded', async type => {
+      const reminder: ChunkType = { type: 'data-signal', data: { type: 'reactive', contents: 'remember this' } };
+      const terminal = {
+        type,
+        runId: 'terminal-run',
+        from: ChunkFrom.AGENT,
+        payload: { error: 'failure' },
+      } as ChunkType;
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([reminder, terminal]),
+        messageList: new MessageList(),
+        messageId: 'msg-1',
+        options: { runId: 'terminal-run', hideSignals: ['reactive', 'user', 'state', 'notification'] },
+      });
+      const chunks = [];
+      for await (const chunk of output.fullStream) chunks.push(chunk);
+      expect(chunks).toEqual([terminal]);
+      await output._waitUntilFinished();
+    });
+
+    it('closes when every chunk is excluded and cancellation leaves another consumer alive', async () => {
+      const reminder: ChunkType = { type: 'data-signal', data: { type: 'reactive', contents: 'remember this' } };
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([reminder]),
+        messageList: new MessageList(),
+        messageId: 'msg-1',
+        options: { runId: 'all-excluded', hideSignals: ['reactive'] },
+      });
+      const cancelled = output.fullStream;
+      const caller = output.fullStream.getReader();
+      const shared = output.__getUnfilteredFullStream().getReader();
+      await cancelled.cancel();
+      await expect(caller.read()).resolves.toEqual({ done: true, value: undefined });
+      await expect(shared.read()).resolves.toEqual({ done: false, value: reminder });
+      await expect(shared.read()).resolves.toEqual({ done: true, value: undefined });
     });
   });
 

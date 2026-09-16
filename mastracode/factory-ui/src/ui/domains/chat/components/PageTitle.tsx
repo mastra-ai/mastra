@@ -1,7 +1,10 @@
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { useParams } from 'react-router';
 
 import { useDocumentTitle } from '../../../../hooks/useDocumentTitle';
 import { useAgentControllerThreads } from '../../../../hooks/useAgentControllerThreads';
+import { updateCachedSessionTitle } from '../../../../hooks/useWorkspaces';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { workItemIdentifier } from '../../factory/services/relationships';
 import type { WorkItem } from '../../factory/services/workItems';
@@ -23,7 +26,10 @@ export function PageTitle() {
     sessionId?: string;
     threadId?: string;
   }>();
-  const { resourceId, projectPath, baseUrl, resourceReady } = useChatSessionContext();
+  const { resourceId, projectPath, baseUrl, resourceReady, factorySessionState } = useChatSessionContext();
+  const queryClient = useQueryClient();
+  const projectRepositoryId = factorySessionState?.projectRepositoryId;
+  const routeSessionId = sessionId ?? threadId;
 
   const workItems = useWorkItemsQuery(factoryId);
 
@@ -37,6 +43,11 @@ export function PageTitle() {
 
   const identifier = identifierForThread(workItems.data, sessionId, threadId);
   const threadTitle = threadsQuery.data?.find(thread => thread.id === threadId)?.title?.trim();
+
+  useEffect(() => {
+    if (!routeSessionId || !threadTitle) return;
+    void updateCachedSessionTitle(queryClient, projectRepositoryId, routeSessionId, threadTitle);
+  }, [projectRepositoryId, queryClient, routeSessionId, threadTitle]);
 
   useDocumentTitle(identifier ?? threadTitle);
   return null;

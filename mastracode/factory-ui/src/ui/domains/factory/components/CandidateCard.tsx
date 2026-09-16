@@ -1,76 +1,79 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { Popover, PopoverContent } from '@mastra/playground-ui/components/Popover';
-import { Textarea } from '@mastra/playground-ui/components/Textarea';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowUpRight, EllipsisVertical, PencilLine, Plus } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { ArrowUpRight, EllipsisVertical, Plus } from 'lucide-react';
+import type { ReactElement } from 'react';
+import { useId } from 'react';
 
-import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
+import { useCardMorph } from '../hooks/useCardMorph';
 import { boardCardStatus } from '../boardCardStatus';
 import type { BoardCandidate } from '../boardCandidates';
 import { setDragPayload } from '../boardDrag';
-import { externalLinkLabel, metadataLabels } from '../boardItems';
-import type { RunAction } from '../boardRunSpecs';
-import { CardLabels, CardStatus, CardTitleTooltip, REVEAL_ON_CARD_HOVER, SourceTitle } from './BoardCardParts';
-import { SourceIcon, actionIcon } from './BoardIcons';
+import { externalLinkLabel } from '../boardItems';
+import { cardMoves } from '../cardPrimaryAction';
+import type { CardMove } from '../cardPrimaryAction';
+import { CardActions, CardDetailsHint, REVEAL_ON_CARD_HOVER } from './BoardCardParts';
+import { actionIcon } from './BoardIcons';
+import { CandidateCardRows } from './CandidateCardRows';
+import { CandidateDetailsPanel } from './CandidateDetailsPanel';
 
-/**
- * A GitHub/Linear item with no work-item record yet. Same click target, menu
- * and status row as a filed card: acting on it is what creates the record.
- */
+// Acting on it is what files the record.
 export function CandidateCard({
   candidate,
-  pendingRunRoles,
-  preparing,
-  disabled,
+  projectRepositoryId,
+  factoryProjectId,
   onRun,
   onFile,
 }: {
   candidate: BoardCandidate;
-  pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
-  /** Status text while the click is resolving, before the run mutation starts. */
-  preparing?: string;
-  disabled: boolean;
-  /** Start a run; `prompt` undefined = the action's default prompt. */
-  onRun: (action: RunAction, prompt?: string) => void;
-  /** File the candidate onto the board without starting a run. */
+  /** Repository id resolving GitHub descriptions in the detail panel. */
+  projectRepositoryId: string;
+  /** Factory project id resolving Linear descriptions in the detail panel. */
+  factoryProjectId: string;
+  /** File the candidate and move it into the lane; `prompt` undefined = no typed guidance. */
+  onRun: (move: CardMove, prompt?: string) => void;
   onFile: () => void;
 }) {
-  const anchorRef = useRef<HTMLElement>(null);
-  const [promptOpen, setPromptOpen] = useState(false);
-  const [prompt, setPrompt] = useState('');
+  const detailsTitleId = useId();
+  const morph = useCardMorph();
 
-  const labels = metadataLabels(candidate.metadata);
-  const [defaultAction] = candidate.runActions;
-  const runPending = pendingRunRoles.size > 0 || preparing !== undefined;
-  const status = boardCardStatus({
-    idle: { label: defaultAction.label, affordance: 'run' },
-    runs: candidate.runActions
-      .filter(action => pendingRunRoles.has(action.role))
-      .map(action => ({ label: action.label, phase: pendingRunRoles.get(action.role) })),
-    preparing,
-  });
+  const moves = cardMoves(candidate, candidate.column);
+  const [defaultMove] = moves;
+  const status = boardCardStatus({});
 
-  const closePrompt = () => {
-    setPromptOpen(false);
-    setPrompt('');
+  const fileFromDetails = () => {
+    morph.closeDetails();
+    onFile();
   };
 
-  const runPrompt = () => {
-    const trimmed = prompt.trim();
-    if (!trimmed || runPending) return;
-    closePrompt();
-    onRun(defaultAction, trimmed);
-  };
+  const menuItems: ReactElement[] = [
+    ...moves.map(move => (
+      <DropdownMenu.Item
+        key={move.label}
+        onClick={() => {
+          morph.closeDetails();
+          onRun(move);
+        }}
+      >
+        {actionIcon(move.label)}
+        <span>{move.label}</span>
+      </DropdownMenu.Item>
+    )),
+    <DropdownMenu.Item key="file" onClick={fileFromDetails}>
+      <Plus aria-hidden />
+      <span>Add to board</span>
+    </DropdownMenu.Item>,
+    <DropdownMenu.Item key="source" render={<a href={candidate.url} target="_blank" rel="noreferrer" />}>
+      <ArrowUpRight aria-hidden />
+      <span>{externalLinkLabel(candidate.source)}</span>
+    </DropdownMenu.Item>,
+  ];
 
   return (
-    <CardTitleTooltip title={candidate.title}>
+    <>
       <article
-        ref={anchorRef}
+        ref={morph.cardRef}
         draggable
         aria-label={candidate.title}
-        aria-busy={runPending || undefined}
         data-testid="candidate-card"
         onDragStart={event =>
           setDragPayload(event, {
@@ -84,115 +87,62 @@ export function CandidateCard({
             },
           })
         }
-        className="group border-border1/50 bg-neutral6/5 hover:bg-surface3 relative flex cursor-grab flex-col gap-3 rounded-xl border p-3 transition-colors outline-none active:cursor-grabbing"
+        // Offscreen cards skip layout and paint; an Intake column can hold hundreds.
+        className="group border-border1/50 bg-neutral6/5 hover:bg-surface3 rounded-card relative flex min-h-36 cursor-grab flex-col gap-3 border p-2 transition-colors outline-none [contain-intrinsic-size:auto_9rem] [content-visibility:auto] active:cursor-grabbing"
       >
-        {/* Starting the default run is also what files the candidate. */}
         <button
           type="button"
           draggable={false}
-          disabled={disabled || runPending}
-          aria-busy={runPending || undefined}
-          aria-label={`${defaultAction.label} ${candidate.title}`}
-          className="focus-visible:outline-accent1 absolute inset-0 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
-          onClick={() => onRun(defaultAction)}
+          aria-label={`Details for ${candidate.title}`}
+          aria-expanded={morph.open}
+          className="focus-visible:outline-accent1 rounded-card absolute inset-0 cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+          onClick={morph.openDetails}
         />
-        <div className="absolute top-2 right-2">
-          <DropdownMenu>
-            <DropdownMenu.Trigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  disabled={disabled}
-                  aria-label={`Actions for ${candidate.title}`}
-                  className={REVEAL_ON_CARD_HOVER}
-                >
-                  <EllipsisVertical size={13} aria-hidden />
-                </Button>
-              }
-            />
-            <DropdownMenu.Content align="end" className="min-w-44">
-              {candidate.runActions.map(action => (
-                <DropdownMenu.Item key={action.label} disabled={runPending} onClick={() => onRun(action)}>
-                  {actionIcon(action.label)}
-                  <span>{pendingRunRoles.has(action.role) ? 'Starting…' : action.label}</span>
-                </DropdownMenu.Item>
-              ))}
-              <DropdownMenu.Item disabled={runPending} onClick={() => setPromptOpen(true)}>
-                <PencilLine aria-hidden />
-                <span>Custom prompt…</span>
-              </DropdownMenu.Item>
-              <DropdownMenu.Item render={<a href={candidate.url} target="_blank" rel="noreferrer" />}>
-                <ArrowUpRight aria-hidden />
-                <span>{externalLinkLabel(candidate.source)}</span>
-              </DropdownMenu.Item>
-              <DropdownMenu.Item onClick={onFile}>
-                <Plus aria-hidden />
-                <span>Add to board</span>
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu>
-        </div>
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-ui-xs text-icon2 truncate pr-8">{candidate.meta}</span>
-          <div className="flex min-w-0 items-center gap-1.5">
-            <SourceIcon source={candidate.source} />
-            <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-semibold">
-              <SourceTitle source={candidate.source} title={candidate.title} />
-            </span>
-            {/* Triage reads the source before deciding, so keep it one click away. */}
-            <a
-              href={candidate.url}
-              target="_blank"
-              rel="noreferrer"
-              draggable={false}
-              aria-label={externalLinkLabel(candidate.source)}
-              className={cn('text-icon3 hover:text-icon5 relative shrink-0', REVEAL_ON_CARD_HOVER)}
-            >
-              <ArrowUpRight size={12} aria-hidden />
-            </a>
-          </div>
-        </div>
-        <CardLabels labels={labels} />
-        <CardStatus status={status} />
-        <Popover open={promptOpen} onOpenChange={open => (open ? setPromptOpen(true) : closePrompt())}>
-          <PopoverContent anchor={anchorRef} align="end" className="w-80 p-3">
-            <form
-              aria-label={`Custom prompt for ${candidate.title}`}
-              className="flex flex-col gap-2"
-              onSubmit={event => {
-                event.preventDefault();
-                runPrompt();
-              }}
-            >
-              <Textarea
-                autoFocus
-                rows={3}
-                size="sm"
-                value={prompt}
-                placeholder="What should the agent do with this?"
-                aria-label={`Prompt for ${candidate.title}`}
-                onChange={event => setPrompt(event.target.value)}
-                onKeyDown={event => {
-                  if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-                    event.preventDefault();
-                    runPrompt();
+        <CandidateCardRows
+          candidate={candidate}
+          status={status}
+          actions={
+            defaultMove === undefined ? undefined : (
+              <CardActions actions={[{ label: defaultMove.label, start: () => onRun(defaultMove) }]} />
+            )
+          }
+          controls={
+            <>
+              <CardDetailsHint />
+              <DropdownMenu>
+                <DropdownMenu.Trigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`Actions for ${candidate.title}`}
+                      className={REVEAL_ON_CARD_HOVER}
+                    >
+                      <EllipsisVertical size={13} aria-hidden />
+                    </Button>
                   }
-                }}
-              />
-              <div className="flex justify-end gap-2">
-                <Button type="button" variant="ghost" size="xs" onClick={closePrompt}>
-                  Cancel
-                </Button>
-                <Button type="submit" size="xs" disabled={runPending || !prompt.trim()}>
-                  Run
-                </Button>
-              </div>
-            </form>
-          </PopoverContent>
-        </Popover>
+                />
+                <DropdownMenu.Content align="end" className="min-w-44">
+                  {menuItems}
+                </DropdownMenu.Content>
+              </DropdownMenu>
+            </>
+          }
+        />
       </article>
-    </CardTitleTooltip>
+
+      <CandidateDetailsPanel
+        candidate={candidate}
+        labelledBy={detailsTitleId}
+        morph={morph}
+        status={status}
+        projectRepositoryId={projectRepositoryId}
+        factoryProjectId={factoryProjectId}
+        menu={menuItems}
+        defaultMove={defaultMove}
+        onRun={onRun}
+      />
+    </>
   );
 }

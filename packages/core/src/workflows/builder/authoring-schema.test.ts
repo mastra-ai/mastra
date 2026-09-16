@@ -9,6 +9,7 @@ import {
   workflowBuilderForeachEntrySchema,
   workflowBuilderNestedWorkflowEntrySchema,
   workflowBuilderParallelEntrySchema,
+  workflowBuilderScheduleConfigSchema,
   storedWorkflowDefinitionSchema,
 } from './index';
 
@@ -249,13 +250,28 @@ describe('shared workflow builder authoring schema', () => {
     it.each([
       ['an invented foreach input selector', { type: 'foreach', input: { step: 'lookup', path: 'customers' } }],
       ['an invented foreach items selector', { type: 'foreach', items: { initData: true, path: 'customers' } }],
-      ['a container id', { type: 'foreach', id: 'lookup-each' }],
     ])('rejects %s', (_label, extra) => {
       const result = workflowBuilderDefinitionInputSchema.safeParse({
         ...authoringDefinition,
         graph: [{ step: { type: 'tool', id: 'lookup', toolId: 'lookupCustomer' }, ...extra }],
       });
       expect(result.success).toBe(false);
+    });
+
+    it('accepts the identity/display fields (id, description, metadata) on a container entry', () => {
+      const result = workflowBuilderDefinitionInputSchema.safeParse({
+        ...authoringDefinition,
+        graph: [
+          {
+            type: 'foreach',
+            id: 'lookup-each',
+            description: 'Look up every customer',
+            metadata: { title: 'Lookup each' },
+            step: { type: 'tool', id: 'lookup', toolId: 'lookupCustomer' },
+          },
+        ],
+      });
+      expect(result.success).toBe(true);
     });
 
     it('rejects a bogus inputMapping descriptor on a container child', () => {
@@ -274,6 +290,29 @@ describe('shared workflow builder authoring schema', () => {
         ],
       });
       expect(result.success).toBe(false);
+    });
+  });
+
+  describe('schedule configuration', () => {
+    it('accepts valid cron, timezone, and nested JSON values', () => {
+      expect(
+        workflowBuilderScheduleConfigSchema.safeParse({
+          cron: '0 9 * * 1',
+          timezone: 'America/New_York',
+          inputData: { nested: [null, true, 42, 'value'] },
+          requestContext: { tenant: { id: 'acme' } },
+        }).success,
+      ).toBe(true);
+    });
+
+    it.each([
+      { cron: 'not a cron' },
+      { cron: '0 9 * * 1', timezone: 'Not/A_Timezone' },
+      { cron: '0 9 * * 1', inputData: { invalid: undefined } },
+      { cron: '0 9 * * 1', initialState: new Date() },
+      { cron: '0 9 * * 1', metadata: { invalid: Number.POSITIVE_INFINITY } },
+    ])('rejects invalid schedule config %#', schedule => {
+      expect(workflowBuilderScheduleConfigSchema.safeParse(schedule).success).toBe(false);
     });
   });
 

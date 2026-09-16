@@ -36,6 +36,7 @@ function sourceControlRow(): SourceControlSession {
     userId: 'user-1',
     branch: 'user/session-1',
     title: null,
+    visibility: 'private',
     baseBranch: 'main',
     sandboxId: null,
     sandboxWorkdir: null,
@@ -65,12 +66,25 @@ function memorySettingsRow(overrides: Partial<MemorySettingsRecord> = {}): Memor
 function createDependencies({
   row = sourceControlRow(),
   settings = memorySettingsRow(),
+  projectDefaultModelId = 'anthropic/claude-sonnet-4-5',
 }: {
   row?: SourceControlSession | null;
   settings?: MemorySettingsRecord | null;
+  projectDefaultModelId?: string | null;
 } = {}): MemorySettingsHydrationDependencies {
   return {
     sourceControl: { sessions: { getBySessionId: vi.fn().mockResolvedValue(row) } },
+    projects: {
+      get: vi.fn().mockResolvedValue(
+        projectDefaultModelId === null
+          ? null
+          : {
+              id: 'project-1',
+              orgId: 'org-1',
+              defaultModelId: projectDefaultModelId,
+            },
+      ),
+    } as MemorySettingsHydrationDependencies['projects'],
     memorySettings: { get: vi.fn().mockResolvedValue(settings) },
   };
 }
@@ -152,7 +166,9 @@ describe('hydrateSessionMemorySettings', () => {
   });
 
   it('applies stored thresholds and attachment preferences to session state', async () => {
-    const session = createSession();
+    // Org pre-seeded: the seed has its own cases, and these assert the exact
+    // settings write.
+    const session = createSession({ factoryOrgId: 'org-1' });
     const dependencies = createDependencies({
       settings: memorySettingsRow({ observationThreshold: 12_000, observeAttachments: false }),
     });
@@ -168,7 +184,7 @@ describe('hydrateSessionMemorySettings', () => {
 
   it('resets stale session state when the stored row has null knobs', async () => {
     const session = createSession(
-      { observationThreshold: 99_000 },
+      { observationThreshold: 99_000, factoryOrgId: 'org-1' },
       { observer: 'google/gemini-3.5-flash', reflector: 'google/gemini-3.5-flash' },
     );
     const dependencies = createDependencies();
@@ -181,14 +197,229 @@ describe('hydrateSessionMemorySettings', () => {
     });
   });
 
-  it('skips factory-run sessions, which hydrate through the start coordinator', async () => {
-    const session = createSession({ factoryProjectId: 'project-1' });
+  it('seeds the tenant org from the session row so knowledge curation is scoped to it', async () => {
+    // Without this seed the curation side falls back to the session owner id —
+    // the controller's own id for web chat sessions — and every curated node
+    // lands under an org rung the knowledge reader never queries.
+    const session = createSession();
     const dependencies = createDependencies();
 
     await hydrateSessionMemorySettings(session, dependencies);
 
-    expect(dependencies.sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
+  });
+
+  it('does not rewrite an org that already matches the row', async () => {
+    const session = createSession({ factoryOrgId: 'org-1' });
+    const dependencies = createDependencies();
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.state.set).not.toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
+  });
+
+  it('overwrites a stale org with the row org, since the row is authoritative', async () => {
+    const session = createSession({ factoryOrgId: 'stale-org' });
+    const dependencies = createDependencies();
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
+  });
+
+  it('marks the session unresolved and does not throw when it has no source-control row', async () => {
+    // No row means no org. Staying silent here is what let a Factory session be
+    // mistaken for a local one and filed under a scope nothing can read.
+    const session = createSession();
+    const dependencies = createDependencies({ row: null });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
+    expect(session.state.set).not.toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: expect.anything() }));
+    expect(dependencies.memorySettings.get).not.toHaveBeenCalled();
+  });
+
+  it('marks the session unresolved when the row carries an empty org', async () => {
+    const session = createSession();
+    const dependencies = createDependencies({ row: { orgId: '  ', userId: 'user-1' } as never });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
+  });
+
+  it('re-resolves a tagged session whose stored org is blank', async () => {
+    // The coordinator-hydrated early return has to agree with the curation side,
+    // which trims: a blank org is unresolved, so this session still needs a seed.
+    const session = createSession({ factoryProjectId: 'project-1', factoryOrgId: '   ' });
+    const dependencies = createDependencies({ row: { orgId: 'org-1', userId: 'user-1' } as never });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: 'org-1' }));
+  });
+
+  it('marks the session unresolved when the row lookup rejects', async () => {
+    const session = createSession();
+    const dependencies = createDependencies();
+    dependencies.sourceControl.sessions.getBySessionId.mockRejectedValueOnce(new Error('storage down'));
+
+    await expect(hydrateSessionMemorySettings(session, dependencies)).resolves.toBeUndefined();
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
+  });
+
+  it('applies project-scoped settings to a tagged web session that never went through the coordinator', async () => {
+    const session = createSession({ factoryProjectId: 'project-1' });
+    const dependencies = createDependencies({
+      settings: memorySettingsRow({
+        userId: 'factory-project:project-1',
+        observerModelId: 'openai/gpt-5.6-sol',
+        reflectorModelId: 'openai/gpt-5.6-sol',
+      }),
+    });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
+    expect(dependencies.memorySettings.get).toHaveBeenCalledExactlyOnceWith({
+      orgId: 'org-1',
+      userId: 'factory-project:project-1',
+    });
+    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
+  });
+
+  it('uses the project provider fallback when a project settings row only configures thresholds', async () => {
+    const session = createSession(
+      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
+      { observer: 'anthropic/claude-haiku-4-5', reflector: 'anthropic/claude-haiku-4-5' },
+    );
+    const dependencies = createDependencies({
+      settings: memorySettingsRow({
+        userId: 'factory-project:project-1',
+        observerModelId: null,
+        reflectorModelId: null,
+        observationThreshold: 12_000,
+      }),
+    });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(dependencies.projects.get).toHaveBeenCalledExactlyOnceWith({ orgId: 'org-1', id: 'project-1' });
     expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
+    expect(session.state.set).toHaveBeenCalledExactlyOnceWith({
+      observationThreshold: 12_000,
+      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
+    });
+  });
+
+  it('preserves current models for threshold-only settings when the project has no default model', async () => {
+    const session = createSession(
+      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
+      { observer: 'anthropic/claude-haiku-4-5', reflector: 'openai/gpt-5.4-mini' },
+    );
+    const dependencies = createDependencies({
+      projectDefaultModelId: null,
+      settings: memorySettingsRow({
+        userId: 'factory-project:project-1',
+        observerModelId: null,
+        reflectorModelId: null,
+        observationThreshold: 12_000,
+      }),
+    });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
+    expect(session.state.set).toHaveBeenCalledExactlyOnceWith({
+      observationThreshold: 12_000,
+      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
+    });
+  });
+
+  it('applies an explicit role model without replacing the unset role when the project has no default model', async () => {
+    const session = createSession(
+      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
+      { observer: 'anthropic/claude-haiku-4-5', reflector: 'openai/gpt-5.4-mini' },
+    );
+    const dependencies = createDependencies({
+      projectDefaultModelId: null,
+      settings: memorySettingsRow({
+        userId: 'factory-project:project-1',
+        observerModelId: 'openai/gpt-5.6-sol',
+        reflectorModelId: null,
+      }),
+    });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
+  });
+
+  it('uses an explicit project role model and the project provider fallback for the unset role', async () => {
+    const session = createSession(
+      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
+      { observer: 'anthropic/claude-haiku-4-5', reflector: 'openai/gpt-5.4-mini' },
+    );
+    const dependencies = createDependencies({
+      settings: memorySettingsRow({
+        userId: 'factory-project:project-1',
+        observerModelId: 'openai/gpt-5.6-sol',
+        reflectorModelId: null,
+      }),
+    });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledExactlyOnceWith({
+      modelId: 'anthropic/claude-haiku-4-5',
+    });
+  });
+
+  it('repairs a tagged web session whose org was previously seeded without project settings', async () => {
+    const session = createSession(
+      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
+      { observer: 'openai/gpt-5.4-mini', reflector: 'openai/gpt-5.4-mini' },
+    );
+    const dependencies = createDependencies({
+      settings: memorySettingsRow({
+        userId: 'factory-project:project-1',
+        observerModelId: 'openai/gpt-5.6-sol',
+        reflectorModelId: 'openai/gpt-5.6-sol',
+      }),
+    });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(dependencies.memorySettings.get).toHaveBeenCalledExactlyOnceWith({
+      orgId: 'org-1',
+      userId: 'factory-project:project-1',
+    });
+    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
+  });
+
+  it('preserves a coordinator-hydrated provider fallback when the project has no stored settings', async () => {
+    const session = createSession(
+      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
+      { observer: 'anthropic/claude-haiku-4-5', reflector: 'anthropic/claude-haiku-4-5' },
+    );
+    const dependencies = createDependencies({ settings: null });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(dependencies.memorySettings.get).toHaveBeenCalledExactlyOnceWith({
+      orgId: 'org-1',
+      userId: 'factory-project:project-1',
+    });
+    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
   });
 
   it('skips sessions without a source-control row', async () => {
@@ -205,7 +436,7 @@ describe('hydrateSessionMemorySettings', () => {
     // A missing row must behave like the settings routes: stale persisted
     // session values reset to the built-in defaults instead of surviving.
     const session = createSession(
-      { observationThreshold: 99_000 },
+      { observationThreshold: 99_000, factoryOrgId: 'org-1' },
       { observer: 'openai/gpt-5-mini', reflector: 'openai/gpt-5-mini' },
     );
     const dependencies = createDependencies({ settings: null });

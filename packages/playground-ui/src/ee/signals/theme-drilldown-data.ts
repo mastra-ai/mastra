@@ -61,6 +61,16 @@ export function findThemeSelection(
   return { kind: 'theme', signalName: stage.signalName, themeId: node.themeId, label: node.label };
 }
 
+export function findThemeSelectionById(flow: ThemeFlowResponse, themeId: string): SelectedTheme | undefined {
+  for (const stage of flow.stages) {
+    const node = stage.nodes.find(candidate => candidate.kind === 'theme' && candidate.themeId === themeId);
+    if (node?.kind === 'theme' && node.themeId) {
+      return { kind: 'theme', signalName: stage.signalName, themeId: node.themeId, label: node.label };
+    }
+  }
+  return undefined;
+}
+
 /** Resolves a chart node to a noise selection when the node is that stage's noise bucket. */
 export function findNoiseSelection(
   flow: ThemeFlowResponse,

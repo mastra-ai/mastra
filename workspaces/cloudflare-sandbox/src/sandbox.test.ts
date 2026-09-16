@@ -1,4 +1,5 @@
 import { createSandboxLifecycleTests } from '@internal/workspace-test-utils';
+import { SandboxUnsupportedFeatureError } from '@mastra/core/workspace';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { CloudflareSandbox } from './sandbox';
@@ -49,6 +50,79 @@ describe('CloudflareSandbox', () => {
       timeout_ms: 300_000,
       cwd: '/workspace/app',
     });
+  });
+
+  it('runs a bare command string through a shell so pipes and chaining work', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    await sandbox.executeCommand("printf '%s' native-tool-ok");
+
+    expect(bridge.execs[0]!.argv).toEqual(['/bin/bash', '-c', "printf '%s' native-tool-ok"]);
+  });
+
+  it('keeps the env prefix before the shell when running a bare command string', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge, { env: { BASE: '1' } });
+    await sandbox._start();
+
+    await sandbox.executeCommand('echo hi');
+
+    expect(bridge.execs[0]!.argv).toEqual(['env', 'BASE=1', '/bin/bash', '-c', 'echo hi']);
+  });
+
+  it('treats an empty args array as a bare shell command string', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    await sandbox.executeCommand('echo hello && echo world', []);
+
+    expect(bridge.execs[0]!.argv).toEqual(['/bin/bash', '-c', 'echo hello && echo world']);
+  });
+
+  it('keeps explicit argument arrays literal', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    await sandbox.executeCommand('printf', ['%s', 'direct-control-ok']);
+
+    expect(bridge.execs[0]!.argv).toEqual(['printf', '%s', 'direct-control-ok']);
+  });
+
+  it('per-command cwd overrides the configured workingDirectory', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge, { workingDirectory: '/workspace/app' });
+    await sandbox._start();
+
+    await sandbox.executeCommand('pwd', undefined, { cwd: '/workspace/other' });
+
+    expect(bridge.execs[0]!.cwd).toBe('/workspace/other');
+    expect(sandbox.workingDirectory).toBe('/workspace/app');
+  });
+
+  it('omits cwd when no workingDirectory is configured', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    await sandbox.executeCommand('pwd');
+
+    expect(bridge.execs[0]!.cwd).toBeUndefined();
+    expect(sandbox.workingDirectory).toBeUndefined();
+  });
+
+  it('setEnv after construction reaches subsequent commands', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+    await sandbox.executeCommand('echo', ['hi']);
+
+    expect(bridge.execs[0]!.argv).toEqual(['env', 'GH_TOKEN=tok_1', 'echo', 'hi']);
   });
 
   it('decodes streamed output and reports the exit code', async () => {
@@ -114,6 +188,58 @@ describe('CloudflareSandbox', () => {
 
     await expect(sandbox.executeCommand('echo', ['hi'])).rejects.toThrow(/has not been started/);
     await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'x' }])).rejects.toThrow(/has not been started/);
+  });
+
+  it('rejects an explicit per-file mode without writing', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'x', mode: 0o600 }])).rejects.toThrow(
+      SandboxUnsupportedFeatureError,
+    );
+    expect(bridge.files.size).toBe(0);
+  });
+
+  it('reads a file back under /workspace', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+    await sandbox.writeFiles([{ path: 'src/index.ts', content: 'export const a = 1;' }]);
+
+    const bytes = await sandbox.readFile('src/index.ts');
+
+    expect(Buffer.from(bytes).toString('utf8')).toBe('export const a = 1;');
+  });
+
+  it('rejects reads that escape /workspace', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    await expect(sandbox.readFile('../../etc/passwd')).rejects.toThrow(/under \/workspace/);
+  });
+
+  it('persists and hydrates /workspace through the bridge', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    const archive = await sandbox.persistWorkspace({ excludes: ['node_modules'] });
+    expect(Buffer.from(archive).toString('utf8')).toBe('fake-tar-archive');
+    expect(bridge.persists.at(-1)).toBe('node_modules');
+
+    await sandbox.hydrateWorkspace(new Uint8Array([9, 8, 7]));
+    expect(Array.from(bridge.hydrations.at(-1)!)).toEqual([9, 8, 7]);
+  });
+
+  it('requires start before readFile, persistWorkspace and hydrateWorkspace', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge, { id: 'not-started-2' });
+
+    await expect(sandbox.readFile('a.txt')).rejects.toThrow(/has not been started/);
+    await expect(sandbox.persistWorkspace()).rejects.toThrow(/has not been started/);
+    await expect(sandbox.hydrateWorkspace(new Uint8Array([1]))).rejects.toThrow(/has not been started/);
   });
 });
 

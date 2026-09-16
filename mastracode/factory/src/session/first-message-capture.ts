@@ -14,18 +14,22 @@ export interface FirstMessageCaptureDependencies {
 }
 
 /**
- * Record when a session's agent first started working on a message.
+ * Record when a session's agent first produced an actual conversational
+ * message (the TTFI anchor — "time to first interaction").
  *
- * `agent_start` is the earliest reliable session event for "a message reached
- * the agent": it fires when the run engine begins processing an accepted
- * message — a user's chat message, a factory run's kickoff prompt, or a
- * channel message — for every session kind (user, work, review). The plain
- * user message itself is never emitted as a `message_start` event, so the run
- * start is the observable proxy, milliseconds after arrival.
+ * We stamp on the first `message_start` whose role is `user` or `assistant`.
+ * The coordinator writes `role='signal'` rows into the thread (skill loads,
+ * phase markers, memory reminders) before the model is ever invoked; those
+ * signals used to trigger a stamp via `agent_start`, giving every session —
+ * including zero-message model-init failures — a false TTFI of a few seconds.
+ * Gating on real conversational roles keeps the TTFI column honest: sessions
+ * that never produced a user or assistant message stay NULL and drop out of
+ * TTFI percentiles instead of contaminating them.
  *
- * The listener unsubscribes after the first event; the storage write is
- * guarded (`first_message_at IS NULL`), so restarts, re-materialized sessions,
- * and sessions without a source-control row (chat-only channels) are no-ops.
+ * The listener unsubscribes after the first qualifying message; the storage
+ * write is guarded (`first_message_at IS NULL`), so restarts, re-materialized
+ * sessions, and sessions without a source-control row (chat-only channels)
+ * are no-ops.
  */
 export function observeSessionFirstMessage(
   session: FirstMessageCaptureSession,
@@ -33,7 +37,9 @@ export function observeSessionFirstMessage(
 ): () => void {
   let seen = false;
   const unsubscribe = session.subscribe(event => {
-    if (seen || event.type !== 'agent_start') return;
+    if (seen || event.type !== 'message_start') return;
+    const role = event.message.role;
+    if (role !== 'user' && role !== 'assistant') return;
     seen = true;
     unsubscribe();
     void sourceControl.sessions

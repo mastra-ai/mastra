@@ -10,21 +10,35 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { itemScorers } from '../../__tests__/fixtures/item-scorers';
 import { DatasetItemPanel } from '../dataset-item-panel';
 import { baseItem, itemWithEmptyScorers, itemWithMocks, itemWithScorers } from './fixtures/dataset-item-panel';
+import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
+
+// The panel's history button renders through the framework Link (null by default).
+const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+  <a {...props}>{children}</a>
+);
 const scorerControlTestTimeout = 15_000;
 
 const renderPanel = (item: DatasetItem) => {
+  // The panel embeds CompareWithList, which fetches the dataset's items.
+  server.use(
+    http.get(`${BASE_URL}/api/datasets/ds-1/items`, () =>
+      HttpResponse.json({ items: [], pagination: { total: 0, page: 0, perPage: 10 } }),
+    ),
+  );
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
-          <DatasetItemPanel datasetId="ds-1" item={item} items={[item]} onItemChange={() => {}} onClose={() => {}} />
-        </MemoryRouter>
+        <LinkComponentProvider Link={StubLink as never} navigate={() => {}} paths={{} as never}>
+          <MemoryRouter>
+            <DatasetItemPanel datasetId="ds-1" item={item} items={[item]} onItemChange={() => {}} onClose={() => {}} />
+          </MemoryRouter>
+        </LinkComponentProvider>
       </QueryClientProvider>
     </MastraReactProvider>,
   );
@@ -61,6 +75,13 @@ describe('DatasetItemPanel', () => {
 
       expect(screen.getByText('Tool Mocks')).not.toBeNull();
       expect(screen.getByText(/getWeather/)).not.toBeNull();
+    });
+
+    it('links to the versions history with the item version pre-selected', () => {
+      renderPanel(baseItem);
+
+      const link = screen.getByRole('link', { name: 'Go to item versions history' });
+      expect(link.getAttribute('href')).toBe(`/datasets/ds-1/items/${baseItem.id}/versions?version=1`);
     });
 
     it('shows that absent scorer IDs inherit from the dataset', () => {

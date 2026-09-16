@@ -123,6 +123,15 @@ const sidebars = {
           label: 'SvelteKit',
           customProps: { icon: 'https://cdn.simpleicons.org/svelte?viewbox=auto&size=28' },
         },
+        {
+          type: 'doc',
+          id: 'frameworks/tanstack-start',
+          label: 'TanStack Start',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/tanstack/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/tanstack?viewbox=auto&size=28',
+          },
+        },
       ],
     },
     {
@@ -205,6 +214,12 @@ const sidebars = {
           type: 'doc',
           id: 'sandboxes/e2b',
           label: 'E2B',
+          customProps: { icon: '/img/integrations/e2b.svg', customCSS: 'dark:invert' },
+        },
+        {
+          type: 'doc',
+          id: 'sandboxes/e2b-desktop',
+          label: 'E2B Desktop',
           customProps: { icon: '/img/integrations/e2b.svg', customCSS: 'dark:invert' },
         },
         {
@@ -326,7 +341,10 @@ const sidebars = {
           type: 'doc',
           id: 'observability/sentry',
           label: 'Sentry',
-          customProps: { icon: 'https://cdn.simpleicons.org/sentry/362d59/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: '/img/integrations/sentry.svg',
+            iconDark: '/img/integrations/sentry-dark.svg',
+          },
         },
       ],
     },
@@ -385,6 +403,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'databases/elasticsearch',
+          label: 'Elasticsearch',
+          customProps: { icon: 'https://cdn.simpleicons.org/elasticsearch?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
           id: 'databases/spanner',
           label: 'Google Cloud Spanner',
           customProps: { icon: 'https://cdn.simpleicons.org/googlecloudspanner?viewbox=auto&size=28' },
@@ -407,6 +431,12 @@ const sidebars = {
           id: 'databases/mongodb',
           label: 'MongoDB',
           customProps: { icon: 'https://cdn.simpleicons.org/mongodb?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
+          id: 'databases/mysql',
+          label: 'MySQL',
+          customProps: { icon: 'https://cdn.simpleicons.org/mysql?viewbox=auto&size=28' },
         },
         {
           type: 'doc',
@@ -437,6 +467,12 @@ const sidebars = {
           id: 'databases/redis',
           label: 'Redis',
           customProps: { icon: 'https://cdn.simpleicons.org/redis?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
+          id: 'databases/valkey',
+          label: 'Valkey',
+          customProps: { icon: '/img/integrations/valkey.svg' },
         },
         {
           type: 'doc',
@@ -509,10 +545,25 @@ const sidebars = {
           customProps: { icon: 'https://cdn.simpleicons.org/kubernetes?viewbox=auto&size=28' },
         },
         {
+          type: 'doc',
+          id: 'deploy/kubernetes-helm',
+          label: 'Kubernetes (Helm)',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/helm?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/helm/white?viewbox=auto&size=28',
+          },
+        },
+        {
           type: 'link',
           label: 'Mastra',
           href: '/docs/mastra-platform/deploy',
           customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
+        },
+        {
+          type: 'doc',
+          id: 'deploy/neon',
+          label: 'Neon',
+          customProps: { icon: 'https://cdn.simpleicons.org/neon?viewbox=auto&size=28' },
         },
         {
           type: 'doc',
@@ -568,6 +619,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'tools/parallel',
+          label: 'Parallel',
+          customProps: { icon: '/img/integrations/parallel.svg' },
+        },
+        {
+          type: 'doc',
           id: 'tools/perplexity',
           label: 'Perplexity',
           customProps: { icon: 'https://cdn.simpleicons.org/perplexity?viewbox=auto&size=28' },
@@ -618,6 +675,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'voice/gladia',
+          label: 'Gladia',
+          customProps: { icon: '/img/integrations/gladia.svg', customCSS: 'dark:invert' },
+        },
+        {
+          type: 'doc',
           id: 'voice/google',
           label: 'Google',
           customProps: { icon: 'https://svgl.app/library/google.svg' },
@@ -642,6 +705,12 @@ const sidebars = {
           id: 'voice/mistral',
           label: 'Mistral',
           customProps: { icon: 'https://cdn.simpleicons.org/mistralai?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
+          id: 'voice/modelslab',
+          label: 'ModelsLab',
+          customProps: { icon: '/img/integrations/modelslab.svg' },
         },
         { type: 'doc', id: 'voice/murf', label: 'Murf', customProps: { icon: '/img/integrations/murf.svg' } },
         {

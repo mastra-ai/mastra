@@ -33,6 +33,44 @@ function workspaceFileUrl(workspacePath: string | undefined, path: string | unde
   return `/web/workspace/file?${new URLSearchParams({ workspacePath, path, threadId })}`;
 }
 
+export function isPlanReadablePath(path: string | undefined): path is string {
+  return Boolean(path?.startsWith('.artifacts/'));
+}
+
+/**
+ * Resolve a submitted plan `path` to a workspace-relative `.artifacts/…` path the
+ * session file route accepts. Relative `.artifacts/*` paths pass through; an
+ * absolute path (e.g. `/leadrvision/.artifacts/plans/issue.md`) is normalized
+ * against the authoritative `rootPath` from `/web/workspace/rendered/list`
+ * (the confined absolute `.artifacts` root). Traversal, wrong-root, backslash,
+ * and NUL inputs are rejected rather than guessed — including for relative
+ * `.artifacts/*` paths — though the backend still enforces its own
+ * `assertRelativePath`/symlink guards.
+ */
+export function normalizePlanPath(path: string | undefined, rootPath: string | undefined): string | undefined {
+  if (!path) return undefined;
+  // Reject malformed inputs before any pass-through so relative and absolute
+  // paths share the same traversal/backslash/NUL guards.
+  if (path.includes('\\') || path.includes('\0')) return undefined;
+  if (path.split('/').includes('..')) return undefined;
+  if (path.startsWith('.artifacts/')) return path;
+  // Only absolute posix paths are normalization candidates.
+  if (!path.startsWith('/')) return undefined;
+  if (!rootPath) return undefined;
+  const base = rootPath.endsWith('/') ? rootPath.slice(0, -1) : rootPath;
+  if (path !== base && !path.startsWith(`${base}/`)) return undefined;
+  const remainder = path.slice(base.length).replace(/^\/+/, '');
+  const relative = remainder ? `.artifacts/${remainder}` : '.artifacts';
+  return isPlanReadablePath(relative) ? relative : undefined;
+}
+
+function planFileUrl(workspacePath: string | undefined, path: string | undefined) {
+  if (!workspacePath || !isPlanReadablePath(path)) return undefined;
+  // The session file route only approves `.artifacts/*` reads without a thread
+  // file listing; Factory plans always live under `.artifacts/plans/`.
+  return `/web/workspace/file?${new URLSearchParams({ workspacePath, path })}`;
+}
+
 function workspaceChangesUrl(workspacePath: string | undefined) {
   if (!workspacePath) return undefined;
   return `/web/workspace/changes?${new URLSearchParams({ workspacePath })}`;
@@ -104,16 +142,37 @@ export function useWorkspaceFiles(
   });
 }
 
-export function useWorkspaceFile(
+export function useWorkspaceFile<TData = WorkspaceFile>(
   workspacePath: string | undefined,
   filePath: string | undefined,
   threadId: string | undefined,
-  { enabled = true }: { enabled?: boolean } = {},
+  { enabled = true, select }: { enabled?: boolean; select?: (file: WorkspaceFile) => TData } = {},
 ) {
   const { client } = useApiConfig();
   const url = workspaceFileUrl(workspacePath, filePath, threadId);
-  return useQuery<WorkspaceFile>({
+  return useQuery<WorkspaceFile, Error, TData>({
     queryKey: queryKeys.workspaceFile(workspacePath, filePath, threadId),
+    enabled,
+    queryFn: url ? () => client.get<WorkspaceFile>(url) : skipToken,
+    select,
+  });
+}
+
+/**
+ * Read a submitted plan's markdown from the session workspace. Keyed by
+ * `toolCallId` so a plan resubmission (same path, new tool call) fetches the
+ * revised file instead of replaying the previous submission from cache.
+ */
+export function usePlanFile(
+  workspacePath: string | undefined,
+  path: string | undefined,
+  toolCallId: string | undefined,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  const { client } = useApiConfig();
+  const url = planFileUrl(workspacePath, path);
+  return useQuery<WorkspaceFile>({
+    queryKey: queryKeys.planFile(workspacePath, path, toolCallId),
     enabled,
     queryFn: url ? () => client.get<WorkspaceFile>(url) : skipToken,
   });

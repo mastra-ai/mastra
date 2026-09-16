@@ -4,14 +4,37 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
-import { builtInFactoryRules } from '../rules/defaults.js';
+import { createBoardRegistry, defineBoard } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleActor } from '../rules/types.js';
-import type { AuditEmitter } from '../storage/domains/audit/domain.js';
-import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/base.js';
+import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
+import {
+  FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
+  FACTORY_RULE_MATERIALIZATION_KEY,
+  WorkItemUpdateConflictError,
+} from '../storage/domains/work-items/base.js';
+import type { FactoryDeferredDecisionRecord } from '../storage/domains/work-items/base.js';
 
 let auditRecorded: Array<Record<string, any>> = [];
 let auditFailure: Error | undefined;
+
+const auditRecorder: AuditRecorder = {
+  async record(input) {
+    if (auditFailure) throw auditFailure;
+    auditRecorded.push({
+      orgId: input.orgId,
+      actorId: input.actorId,
+      actorType: input.actorType,
+      action: input.action,
+      factoryProjectId: input.factoryProjectId,
+      targets: input.targets,
+      metadata: input.metadata,
+      context: input.context,
+    });
+    return null;
+  },
+};
 
 const audit: AuditEmitter = {
   async emit({ context, input }) {
@@ -42,11 +65,15 @@ import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items.js';
 
 // ── Test harness ─────────────────────────────────────────────────────────
+const PARKED_RUN = { toolName: 'ask_user', suspendedAt: 0 };
+
 function buildApp(
   user: { workosId: string; organizationId?: string } | null,
   startCoordinator?: { prepare: (input: any) => Promise<any> },
   requestContext?: RequestContext,
   running: ReadonlySet<string> = new Set(),
+  boardRegistry: BoardRegistry = createBoardRegistry(),
+  parked: ReadonlySet<string> = new Set(),
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -61,10 +88,21 @@ function buildApp(
       audit,
       projects: seed.projects,
       workItems: seed.workItems,
+      boardRegistry,
+      comments: seed.comments,
       queueHealth: seed.queueHealth,
-      transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
+      transitionService: new FactoryTransitionService({
+        configVersion: 'factory-config-v1',
+        storage: seed.workItems,
+        boards: boardRegistry,
+        audit: auditRecorder,
+      }),
       startCoordinator,
-      liveSessions: { isRunning: sessionId => running.has(sessionId) },
+      liveSessions: {
+        isRunning: sessionId => running.has(sessionId),
+        parked: sessionId => (parked.has(sessionId) ? PARKED_RUN : undefined),
+        parkedIn: () => [...parked].map(sessionId => ({ sessionId, run: PARKED_RUN })),
+      },
     }).routes(),
   );
   return app;
@@ -121,6 +159,76 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe('installed board catalog', () => {
+  it.each([true, false])('returns only structural metadata (defaults: %s)', async includeDefaultBoards => {
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release Preview',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'preparing' },
+        preparing: {
+          title: 'Preparing',
+          kind: 'working',
+          role: 'release-preparer',
+          next: 'shipped',
+          onEnter: { 'github-issue': () => [] },
+        },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+      transitionPolicy: () => undefined,
+    });
+    const app = buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      createBoardRegistry({ boards: [board], includeDefaultBoards }),
+    );
+    const response = await app.request(`/web/factory/projects/${PROJECT_ID}/boards`);
+    expect(response.status).toBe(200);
+    const { boards } = await response.json();
+    expect(boards.map((entry: { id: string }) => entry.id)).toEqual(
+      includeDefaultBoards ? ['work', 'review', 'release'] : ['release'],
+    );
+    expect(boards.at(-1)).toEqual({
+      id: 'release',
+      title: 'Release Preview',
+      initialPhase: 'queued',
+      phases: [
+        { id: 'queued', title: 'Queued', kind: 'resting', transitions: [{ outcome: null, to: 'preparing' }] },
+        {
+          id: 'preparing',
+          title: 'Preparing',
+          kind: 'working',
+          role: 'release-preparer',
+          transitions: [{ outcome: null, to: 'shipped' }],
+        },
+        { id: 'shipped', title: 'Shipped', kind: 'terminal', transitions: [] },
+      ],
+    });
+  });
+
+  it('supports an empty installation', async () => {
+    const app = buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      createBoardRegistry({ includeDefaultBoards: false }),
+    );
+    const response = await app.request(`/web/factory/projects/${PROJECT_ID}/boards`);
+    expect(await response.json()).toEqual({ boards: [] });
+  });
+
+  it('requires authentication and project membership', async () => {
+    expect((await buildApp(null).request(`/web/factory/projects/${PROJECT_ID}/boards`)).status).toBe(401);
+    expect((await buildApp({ workosId: 'u1' }).request(`/web/factory/projects/${PROJECT_ID}/boards`)).status).toBe(403);
+    await seedProject('other-org');
+    expect((await buildApp(orgUser).request(`/web/factory/projects/${PROJECT_ID}/boards`)).status).toBe(404);
+  });
+});
+
 // ── Auth / scoping ───────────────────────────────────────────────────────
 describe('auth and scoping', () => {
   it('401s without a user', async () => {
@@ -172,6 +280,7 @@ describe('POST /web/factory/projects/:id/work-items', () => {
         url: 'https://github.com/acme/app/issues/42',
       },
       title: 'Fix the login flow',
+      board: 'work',
       stages: ['intake'],
       metadata: { number: 42 },
     });
@@ -179,6 +288,69 @@ describe('POST /web/factory/projects/:id/work-items', () => {
     expect(workItem.stageHistory[0]).toMatchObject({ stage: 'intake', by: 'u1' });
     expect(workItem.stageHistory[0].enteredAt).toBeTruthy();
     expect(workItem.stageHistory[0].exitedAt).toBeUndefined();
+  });
+
+  it('imports incident.io incidents and follow-ups onto an installed custom board at its initial phase', async () => {
+    const releaseBoard = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+    });
+    const boardRegistry = createBoardRegistry({ boards: [releaseBoard], includeDefaultBoards: false });
+    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistry);
+    const importedItems = [
+      {
+        externalSource: {
+          integrationId: 'incidentio',
+          type: 'issue',
+          externalId: 'incidentio:incident:incident-1',
+          url: 'https://app.incident.io/acme/incidents/incident-1',
+        },
+        title: 'INC-42: API unavailable',
+      },
+      {
+        externalSource: {
+          integrationId: 'incidentio',
+          type: 'issue',
+          externalId: 'incidentio:follow-up:follow-up-1',
+          url: 'https://app.incident.io/acme/incidents/incident-1',
+        },
+        title: 'Add database failover alert',
+      },
+    ];
+
+    for (const importedItem of importedItems) {
+      const res = await app.request(`/web/factory/projects/${PROJECT_ID}/work-items`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(createBody({ ...importedItem, board: 'release', stages: undefined })),
+      });
+      expect(res.status).toBe(200);
+      expect((await res.json()).workItem).toMatchObject({
+        ...importedItem,
+        board: 'release',
+        stages: ['queued'],
+      });
+    }
+
+    await expect(listItems()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          externalSource: importedItems[0]!.externalSource,
+          board: 'release',
+          stages: ['queued'],
+        }),
+        expect.objectContaining({
+          externalSource: importedItems[1]!.externalSource,
+          board: 'release',
+          stages: ['queued'],
+        }),
+      ]),
+    );
   });
 
   it('rejects an external-source upsert that tries to bypass governed stage transition', async () => {
@@ -219,23 +391,66 @@ describe('POST /web/factory/projects/:id/work-items', () => {
 
 // ── Read wire ────────────────────────────────────────────────────────────
 describe('work item read wire', () => {
-  it('keeps the dispatcher idempotency token in storage and out of every read', async () => {
-    const created = await json(
-      'POST',
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
-      createBody({ metadata: { number: 42, [FACTORY_RULE_MATERIALIZATION_KEY]: 'rule-7:issue-42' } }),
-    );
-    const { workItem } = await created.json();
-    expect(workItem.metadata).toEqual({ number: 42 });
+  it('keeps internal tokens in storage and out of every read', async () => {
+    const { item } = await seed.workItems.upsert({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: '42',
+          url: 'https://github.com/acme/app/issues/42',
+        },
+        title: 'Fix the login flow',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {
+          number: 42,
+          [FACTORY_RULE_MATERIALIZATION_KEY]: 'rule-7:issue-42',
+          [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged',
+        },
+      },
+    });
 
     const listed = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`);
     expect((await listed.json()).workItems[0].metadata).toEqual({ number: 42 });
 
-    const patched = await json('PATCH', `/web/factory/work-items/${workItem.id}`, { metadata: { prNumber: 7 } });
+    const patched = await json('PATCH', `/web/factory/work-items/${item.id}`, { metadata: { prNumber: 7 } });
     expect((await patched.json()).workItem.metadata).toEqual({ number: 42, prNumber: 7 });
 
     const [stored] = await listItems();
     expect(stored?.metadata[FACTORY_RULE_MATERIALIZATION_KEY]).toBe('rule-7:issue-42');
+    expect(stored?.metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY]).toBe('merged');
+  });
+
+  it('drops internal tokens from browser writes', async () => {
+    const created = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({
+        metadata: {
+          number: 42,
+          [FACTORY_RULE_MATERIALIZATION_KEY]: 'caller-materialization',
+          [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged',
+        },
+      }),
+    );
+    const { workItem } = await created.json();
+    expect(workItem.metadata).toEqual({ number: 42 });
+
+    const patched = await json('PATCH', `/web/factory/work-items/${workItem.id}`, {
+      metadata: {
+        prNumber: 7,
+        [FACTORY_RULE_MATERIALIZATION_KEY]: 'replacement-materialization',
+        [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'closed',
+      },
+    });
+    expect((await patched.json()).workItem.metadata).toEqual({ number: 42, prNumber: 7 });
+
+    const [stored] = await listItems();
+    expect(stored?.metadata).toEqual({ number: 42, prNumber: 7 });
   });
 });
 
@@ -261,6 +476,117 @@ describe('PATCH /web/factory/work-items/:id', () => {
     const [canonical] = await listItems();
     expect(canonical?.stages).toEqual(['intake']);
     expect(canonical?.stageHistory).toHaveLength(1);
+  });
+
+  it('assigns a legacy item to an installed board and phase', async () => {
+    const { item } = await seed.workItems.upsert({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      input: { title: 'Legacy item', stages: ['intake'], sessions: {} },
+    });
+    const releaseBoard = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+    });
+    const app = buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      createBoardRegistry({ boards: [releaseBoard], includeDefaultBoards: false }),
+    );
+
+    const response = await app.request(`/web/factory/work-items/${item.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ board: 'release', stages: ['queued'] }),
+    });
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).workItem).toMatchObject({ board: 'release', stages: ['queued'] });
+  });
+
+  it('atomically assigns a legacy item to only one installed board', async () => {
+    const { item } = await seed.workItems.upsert({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      input: { title: 'Legacy item', stages: ['intake'], sessions: {} },
+    });
+    const releaseBoard = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: { queued: { title: 'Queued', kind: 'resting' } },
+    });
+    const supportBoard = defineBoard({
+      id: 'support',
+      title: 'Support',
+      initialPhase: 'backlog',
+      phases: { backlog: { title: 'Backlog', kind: 'resting' } },
+    });
+    const app = buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      createBoardRegistry({ boards: [releaseBoard, supportBoard], includeDefaultBoards: false }),
+    );
+
+    const responses = await Promise.all([
+      app.request(`/web/factory/work-items/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ board: 'release', stages: ['queued'] }),
+      }),
+      app.request(`/web/factory/work-items/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ board: 'support', stages: ['backlog'] }),
+      }),
+    ]);
+
+    expect(responses.map(response => response.status).sort()).toEqual([200, 409]);
+    expect(await responses.find(response => response.status === 409)?.json()).toEqual({
+      error: 'board_already_assigned',
+    });
+    const assigned = await seed.workItems.get({ orgId: 'org1', id: item.id });
+    expect([
+      { board: 'release', stages: ['queued'] },
+      { board: 'support', stages: ['backlog'] },
+    ]).toContainEqual({ board: assigned?.board, stages: assigned?.stages });
+  });
+
+  it('distinguishes a stale revision from an assigned board conflict', async () => {
+    const { item } = await seed.workItems.upsert({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      input: { title: 'Legacy item', stages: ['intake'], sessions: {} },
+    });
+    await seed.workItems.update({
+      orgId: 'org1',
+      id: item.id,
+      userId: 'u2',
+      patch: { title: 'Concurrent edit' },
+    });
+
+    await expect(
+      seed.workItems.update({
+        orgId: 'org1',
+        id: item.id,
+        userId: 'u1',
+        patch: { board: 'release', stages: ['queued'] },
+        expectedBoard: null,
+        expectedRevision: item.revision,
+      }),
+    ).rejects.toMatchObject<WorkItemUpdateConflictError>({ reason: 'revision' });
   });
 
   it('rejects creation outside exclusive intake', async () => {
@@ -327,6 +653,21 @@ describe('PATCH /web/factory/work-items/:id', () => {
     expect((await json('PATCH', `/web/factory/work-items/${item.id}`, {})).status).toBe(400);
     expect((await json('PATCH', `/web/factory/work-items/${item.id}`, { title: '' })).status).toBe(400);
   });
+
+  it('stamps a hands-off grant once and refuses anything but true', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+    const item = await createItem();
+    expect((await json('PATCH', `/web/factory/work-items/${item.id}`, { plansPreapproved: true })).status).toBe(200);
+    const granted = (await listItems())[0]?.plansPreapprovedAt;
+    expect(granted).toBeInstanceOf(Date);
+
+    vi.setSystemTime(new Date('2030-01-02T00:00:00.000Z'));
+    await json('PATCH', `/web/factory/work-items/${item.id}`, { plansPreapproved: true });
+    expect((await listItems())[0]?.plansPreapprovedAt).toEqual(granted);
+
+    expect((await json('PATCH', `/web/factory/work-items/${item.id}`, { plansPreapproved: false })).status).toBe(400);
+  });
 });
 
 describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () => {
@@ -361,7 +702,39 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     expect(auditRecorded).toContainEqual(
       expect.objectContaining({
         action: 'factory.work_item.stage_moved',
-        metadata: expect.objectContaining({ ingressType: 'human', ruleSetVersion: 'factory-default-v1' }),
+        metadata: expect.objectContaining({ ingressType: 'human', configVersion: 'factory-config-v1' }),
+      }),
+    );
+  });
+
+  it('stamps the browser request onto the row a move leaves behind', async () => {
+    const item = await createItem();
+    auditRecorded = [];
+
+    const res = await buildApp(orgUser).request(
+      `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/transition`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'user-agent': 'Mozilla/5.0 (factory board)',
+          'x-forwarded-for': '203.0.113.7, 10.0.0.1',
+        },
+        body: JSON.stringify({
+          board: 'work',
+          stage: 'execute',
+          expectedRevision: item.revision,
+          requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
+          cause: 'board_drag',
+        }),
+      },
+    );
+
+    expect(res.status).toBe(200);
+    expect(auditRecorded).toContainEqual(
+      expect.objectContaining({
+        action: 'factory.work_item.stage_moved',
+        context: { location: '203.0.113.7', userAgent: 'Mozilla/5.0 (factory board)' },
       }),
     );
   });
@@ -397,6 +770,29 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     expect(res.status).toBe(400);
   });
 
+  it('re-runs the lane only when the body asks to re-enter it', async () => {
+    const decisionCount = async () =>
+      ((await (await json('GET', `/web/factory/projects/${PROJECT_ID}/decisions`)).json()).decisions as unknown[])
+        .length;
+    const item = await createItem();
+    const moved = (await (await transition(item, { stage: 'triage' })).json()).result;
+    expect(await decisionCount()).toBe(1);
+
+    const stayed = await transition(
+      { id: item.id, revision: moved.revision },
+      { stage: 'triage', requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2' },
+    );
+    expect(stayed.status).toBe(200);
+    expect(await decisionCount()).toBe(1);
+
+    const reentered = await transition(
+      { id: item.id, revision: (await stayed.json()).result.revision },
+      { stage: 'triage', reenter: true, requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3' },
+    );
+    expect(reentered.status).toBe(200);
+    expect(await decisionCount()).toBe(2);
+  });
+
   it('rejects a work item addressed through the Review board', async () => {
     const item = await createItem();
     const res = await transition(item, { board: 'review' });
@@ -409,10 +805,7 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
   const startBody = (workItemId?: string) => ({
     sessionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
     threadTitle: 'Investigate issue 42',
-    threadTags: { role: 'plan' },
     kickoffKey: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
-    invocation: { type: 'prompt' as const, prompt: 'Start' },
-    destinationStage: 'planning',
     workItem: {
       id: workItemId,
       role: 'plan',
@@ -460,15 +853,10 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
         requestContext,
       }),
     );
-    expect(auditRecorded).toContainEqual(
-      expect.objectContaining({
-        action: 'factory.run.started',
-        metadata: expect.objectContaining({ bindingId: 'binding-1', role: 'plan' }),
-      }),
-    );
+    expect(auditRecorded).toEqual([]);
   });
 
-  it('arms the item so the runs that follow a person’s start need no further consent', async () => {
+  it('starts the run under the caller, whatever actor the body claims', async () => {
     const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     const { workItem } = await created.json();
     const prepare = vi.fn(async (input: any) => ({
@@ -487,13 +875,16 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
     const res = await app.request(`/web/factory/projects/${PROJECT_ID}/runs/start`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(startBody(workItem.id)),
+      body: JSON.stringify({
+        ...startBody(workItem.id),
+        actor: { type: 'system', id: 'forged' },
+        userId: 'forged',
+        orgId: 'forged',
+      }),
     });
 
     expect(res.status).toBe(202);
-    // Arming rides inside prepareRunStart's transaction; the route's contract
-    // is passing the flag through to the coordinator.
-    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ armAutonomy: true }));
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org1', userId: 'u1' }));
   });
 
   it('rejects a non-UUID kickoff identity before coordination', async () => {
@@ -503,7 +894,7 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
     const res = await app.request(`/web/factory/projects/${PROJECT_ID}/runs/start`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ...startBody(), kickoffKey: 'reused-kickoff' }),
+      body: JSON.stringify({ ...startBody('cccccccc-cccc-4ccc-8ccc-ccccccccccc1'), kickoffKey: 'reused-kickoff' }),
     });
 
     expect(res.status).toBe(400);
@@ -528,11 +919,10 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
     },
   );
 
-  it('refuses non-Intake creation before the coordinator can bypass transition authority', async () => {
+  it('rejects a start without a work item id', async () => {
     const prepare = vi.fn();
     const app = buildApp(orgUser, { prepare });
     const body = startBody();
-    body.workItem.input.stages = ['planning'];
 
     const res = await app.request(`/web/factory/projects/${PROJECT_ID}/runs/start`, {
       method: 'POST',
@@ -540,7 +930,7 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
       body: JSON.stringify(body),
     });
 
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(400);
     expect(prepare).not.toHaveBeenCalled();
   });
 });
@@ -660,6 +1050,861 @@ describe('work item relations', () => {
   });
 });
 
+describe('GET /web/factory/projects/:id/decisions', () => {
+  it('names the linked-card source on the summary and leaves it null for other effects', async () => {
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await seed.workItems.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: null,
+      ingress: { identity: 'decision-source', triggerType: 'test' },
+      configVersion: 'rules-v1',
+      expectedRevision: null,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: 'decision-source-linked',
+          board: 'review',
+          source: 'github-pr',
+          sourceKey: 'github-pr:7',
+          title: 'Fix the login flow',
+          url: null,
+          stage: 'intake',
+          metadata: {},
+        },
+        {
+          type: 'sendMessage',
+          role: 'work',
+          message: 'Notify the session.',
+          idempotencyKey: 'decision-source-message',
+        },
+      ],
+      causalChain: [],
+      now,
+    });
+
+    const body = await (await json('GET', `/web/factory/projects/${PROJECT_ID}/decisions`)).json();
+    expect(body.decisions).toHaveLength(2);
+    expect(body.decisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'github-pr' }),
+        expect.objectContaining({ type: 'sendMessage', source: null }),
+      ]),
+    );
+  });
+});
+
+describe('GET /web/factory/projects/:id/attention', () => {
+  it('tracks read and archived failure occurrences across retries', async () => {
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const createdBody = await created.json();
+    const workItem = createdBody.workItem;
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await seed.workItems.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: workItem.id,
+      ingress: { identity: 'attention-failure', triggerType: 'test' },
+      configVersion: 'rules-v1',
+      expectedRevision: workItem.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'sendMessage',
+          role: 'work',
+          message: 'Notify the session.',
+          idempotencyKey: 'attention-failure',
+        },
+      ],
+      causalChain: [],
+      now,
+    });
+
+    const failNextAttempt = async () => {
+      const [claimed] = await seed.workItems.claimDeferredDecisions({
+        ownerId: 'worker-1',
+        now,
+        leaseExpiresAt: new Date(now.getTime() + 60_000),
+        limit: 1,
+      });
+      if (!claimed) throw new Error('Expected a deferred decision');
+      const failed = await seed.workItems.failDeferredDecision({
+        id: claimed.id,
+        orgId: claimed.orgId,
+        factoryProjectId: claimed.factoryProjectId,
+        ownerId: 'worker-1',
+        now,
+        availableAt: now,
+        lastError: 'No active Factory binding for role work.',
+        failureCode: 'source_control_missing',
+        terminal: true,
+      });
+      if (!failed) throw new Error('Expected a failed deferred decision');
+      return failed;
+    };
+
+    const firstFailure = await failNextAttempt();
+    const firstKey = `factory:${PROJECT_ID}:attention:automation-failed:${firstFailure.id}:1`;
+    const findMany = vi.spyOn(seed.storage.ops, 'findMany');
+    await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
+      items: [
+        {
+          key: firstKey,
+          kind: 'automation-failed',
+          decisionId: firstFailure.id,
+          occurrence: 1,
+          workItemId: workItem.id,
+          title: 'Fix the login flow',
+          detail: 'No active Factory binding for role work.',
+          decisionType: 'sendMessage',
+          failureCode: 'source_control_missing',
+          canRetry: true,
+          occurredAt: now.toISOString(),
+          read: false,
+          archived: false,
+          target: { kind: 'work-item', workItemId: workItem.id, board: 'work' },
+        },
+      ],
+      kinds: {
+        'automation-failed': { open: 1, unread: 1, latest: { key: firstKey, at: now.toISOString(), unread: true } },
+      },
+      hasMore: false,
+    });
+    const receiptRead = findMany.mock.calls.find(([collection]) => collection === 'factory_attention_receipts');
+    expect(receiptRead?.[1]).toMatchObject({ source_id: { in: [firstFailure.id] } });
+    const decisionReads = findMany.mock.calls.filter(([collection]) => collection === 'factory_deferred_decisions');
+    expect(decisionReads.every(([, , options]) => options?.limit !== undefined)).toBe(true);
+
+    expect(
+      (
+        await json('PATCH', `/web/factory/work-items/${workItem.id}`, {
+          sessions: {
+            triage: { sessionId: 'session-triage', branch: 'factory/triage', threadId: 'thread-triage' },
+          },
+        })
+      ).status,
+    ).toBe(200);
+    await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
+      items: [{ decisionId: firstFailure.id, target: { kind: 'work-item', workItemId: workItem.id, board: 'work' } }],
+    });
+
+    expect(
+      (
+        await json('PATCH', `/web/factory/work-items/${workItem.id}`, {
+          sessions: {
+            work: { sessionId: 'session-attention', branch: 'factory/attention', threadId: 'thread-attention' },
+          },
+        })
+      ).status,
+    ).toBe(200);
+    await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
+      items: [
+        {
+          decisionId: firstFailure.id,
+          target: { kind: 'thread', sessionId: 'session-attention', threadId: 'thread-attention' },
+        },
+      ],
+    });
+    const receiptPath = `/web/factory/projects/${PROJECT_ID}/attention/automation-failed/${firstFailure.id}/1`;
+    expect((await json('POST', `${receiptPath}/read`)).status).toBe(200);
+    await expect(
+      (await json('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=unread`)).json(),
+    ).resolves.toMatchObject({ items: [], kinds: { 'automation-failed': { open: 1, unread: 0 } } });
+
+    expect((await json('POST', `${receiptPath}/archive`)).status).toBe(200);
+    await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
+      items: [],
+      kinds: { 'automation-failed': { open: 0, unread: 0 } },
+    });
+    expect((await json('POST', `${receiptPath}/read`)).status).toBe(200);
+    await expect(
+      (await json('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=archived`)).json(),
+    ).resolves.toMatchObject({
+      items: [{ key: firstKey, read: true, archived: true }],
+    });
+
+    expect((await json('POST', `${receiptPath}/restore`)).status).toBe(200);
+    await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
+      items: [{ key: firstKey, read: true, archived: false }],
+      kinds: { 'automation-failed': { open: 1, unread: 0 } },
+    });
+    await seed.workItems.setAttentionReceipt({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      userId: 'u2',
+      identity: {
+        kind: 'automation-failed',
+        sourceId: firstFailure.id,
+        occurrence: firstFailure.failureOccurrence,
+      },
+      action: 'archive',
+      now,
+    });
+
+    expect((await json('POST', `/web/factory/projects/${PROJECT_ID}/decisions/${firstFailure.id}/retry`)).status).toBe(
+      200,
+    );
+    const receiptsAfterRetry = await Promise.all(
+      ['u1', 'u2'].map(userId =>
+        seed.workItems.listAttentionReceipts({
+          orgId: 'org1',
+          factoryProjectId: PROJECT_ID,
+          userId,
+          identities: [
+            {
+              kind: 'automation-failed',
+              sourceId: firstFailure.id,
+              occurrence: firstFailure.failureOccurrence,
+            },
+          ],
+        }),
+      ),
+    );
+    expect(receiptsAfterRetry).toEqual([[], []]);
+    const secondFailure = await failNextAttempt();
+    expect(secondFailure.failureOccurrence).toBe(2);
+    await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
+      items: [
+        {
+          key: `factory:${PROJECT_ID}:attention:automation-failed:${secondFailure.id}:2`,
+          read: false,
+          archived: false,
+        },
+      ],
+      kinds: { 'automation-failed': { open: 1, unread: 1 } },
+    });
+
+    const readAll = await json('POST', `/web/factory/projects/${PROJECT_ID}/attention/read-all`);
+    expect(readAll.status).toBe(200);
+    await expect(readAll.json()).resolves.toEqual({ ok: true, hasMore: false });
+    await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
+      items: [{ occurrence: 2, read: true, archived: false }],
+      kinds: { 'automation-failed': { open: 1, unread: 0 } },
+    });
+
+    const [retried, staleReceipt] = await Promise.all([
+      seed.workItems.retryDeferredDecision('org1', PROJECT_ID, secondFailure.id, now),
+      seed.workItems.setAttentionReceipt({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        userId: 'u3',
+        identity: {
+          kind: 'automation-failed',
+          sourceId: secondFailure.id,
+          occurrence: secondFailure.failureOccurrence,
+        },
+        action: 'archive',
+        now,
+      }),
+    ]);
+    expect(retried).toMatchObject({ status: 'retry' });
+    expect(staleReceipt).toBeNull();
+    await expect(
+      seed.workItems.listAttentionReceipts({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        userId: 'u3',
+        identities: [
+          {
+            kind: 'automation-failed',
+            sourceId: secondFailure.id,
+            occurrence: secondFailure.failureOccurrence,
+          },
+        ],
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it('lists a parked run as an attention item and drops it once it is superseded', async () => {
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const workItem = (await created.json()).workItem;
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await seed.workItems.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: workItem.id,
+      ingress: { identity: 'approval-queue', triggerType: 'test' },
+      configVersion: 'rules-v1',
+      expectedRevision: workItem.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'invokeSkill',
+          role: 'triage',
+          skillName: 'factory-triage',
+          idempotencyKey: 'approval-queue-triage',
+        },
+      ],
+      causalChain: [],
+      now,
+    });
+    const [claimed] = await seed.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 60_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a proposed decision');
+    await seed.workItems.proposeDeferredDecision(
+      { id: claimed.id, orgId: claimed.orgId, factoryProjectId: claimed.factoryProjectId, ownerId: 'worker-1' },
+      now,
+    );
+
+    await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
+      items: [
+        {
+          key: `factory:${PROJECT_ID}:attention:automation-proposed:${claimed.id}:0`,
+          kind: 'automation-proposed',
+          decisionId: claimed.id,
+          occurrence: 0,
+          workItemId: workItem.id,
+          detail: 'Waiting for approval to run triage',
+          decisionType: 'invokeSkill',
+          read: false,
+          archived: false,
+        },
+      ],
+      kinds: { 'automation-proposed': { open: 1, unread: 1 } },
+    });
+
+    await seed.workItems.supersedeTerminalDecisionsForWorkItem({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: workItem.id,
+      supersededAt: now,
+    });
+    await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
+      items: [],
+      kinds: { 'automation-proposed': { open: 0 } },
+    });
+  });
+
+  it('stamps the approver on the decision when a proposed run is approved', async () => {
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const workItem = (await created.json()).workItem;
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await seed.workItems.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: workItem.id,
+      ingress: { identity: 'approve-attribution', triggerType: 'test' },
+      configVersion: 'rules-v1',
+      expectedRevision: workItem.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'invokeSkill',
+          role: 'triage',
+          skillName: 'factory-triage',
+          idempotencyKey: 'approve-attribution-triage',
+        },
+      ],
+      causalChain: [],
+      now,
+    });
+    const [claimed] = await seed.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 60_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a proposed decision');
+    await seed.workItems.proposeDeferredDecision(
+      { id: claimed.id, orgId: claimed.orgId, factoryProjectId: claimed.factoryProjectId, ownerId: 'worker-1' },
+      now,
+    );
+
+    const approved = await json('POST', `/web/factory/projects/${PROJECT_ID}/decisions/${claimed.id}/approve`);
+    expect(approved.status).toBe(200);
+
+    const decision = await seed.workItems.getDeferredDecision('org1', PROJECT_ID, claimed.id);
+    expect(decision?.approvedBy).toBe('u1');
+  });
+
+  it('orders a re-failed old decision by its latest failure occurrence', async () => {
+    const createdAt = new Date('2030-01-01T00:00:00.000Z');
+    await seed.workItems.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: null,
+      ingress: { identity: 'attention-refailure-order', triggerType: 'test' },
+      configVersion: 'rules-v1',
+      expectedRevision: null,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'sendMessage',
+          role: 'work',
+          message: 'Older decision.',
+          idempotencyKey: 'attention-refailure-older',
+        },
+        {
+          type: 'sendMessage',
+          role: 'work',
+          message: 'Newer decision.',
+          idempotencyKey: 'attention-refailure-newer',
+        },
+      ],
+      causalChain: [],
+      now: createdAt,
+    });
+    const claimed = await seed.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now: createdAt,
+      leaseExpiresAt: new Date(createdAt.getTime() + 60_000),
+      limit: 2,
+    });
+    const [older, newer] = [...claimed].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    if (!older || !newer) throw new Error('Expected two deferred decisions');
+    const fail = (decision: FactoryDeferredDecisionRecord, now: Date) =>
+      seed.workItems.failDeferredDecision({
+        id: decision.id,
+        orgId: decision.orgId,
+        factoryProjectId: decision.factoryProjectId,
+        ownerId: 'worker-1',
+        now,
+        availableAt: now,
+        lastError: `Failure ${decision.id}`,
+        failureCode: 'unknown',
+        terminal: true,
+      });
+    const firstFailureAt = new Date(createdAt.getTime() + 60_000);
+    const newerFailureAt = new Date(createdAt.getTime() + 120_000);
+    await fail(older, firstFailureAt);
+    await fail(newer, newerFailureAt);
+
+    const refailureAt = new Date(createdAt.getTime() + 180_000);
+    await seed.workItems.retryDeferredDecision('org1', PROJECT_ID, older.id, refailureAt);
+    const [reclaimed] = await seed.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now: refailureAt,
+      leaseExpiresAt: new Date(refailureAt.getTime() + 60_000),
+      limit: 1,
+    });
+    if (!reclaimed) throw new Error('Expected the retried decision');
+    await fail(reclaimed, refailureAt);
+
+    const firstPage = await (await json('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=1`)).json();
+    expect(firstPage).toMatchObject({
+      items: [{ decisionId: older.id, occurrence: 2, occurredAt: refailureAt.toISOString() }],
+      hasMore: true,
+    });
+    if (typeof firstPage.nextCursor !== 'string') throw new Error('Expected an attention cursor');
+    await expect(
+      (
+        await json(
+          'GET',
+          `/web/factory/projects/${PROJECT_ID}/attention?limit=1&before=${encodeURIComponent(firstPage.nextCursor)}`,
+        )
+      ).json(),
+    ).resolves.toMatchObject({
+      items: [{ decisionId: newer.id, occurredAt: newerFailureAt.toISOString() }],
+      hasMore: false,
+    });
+  });
+
+  it('repairs only legacy decisions whose canonical work is finished', async () => {
+    const terminalResponse = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({ title: 'Terminal repair target' }),
+    );
+    const terminalItem = (await terminalResponse.json()).workItem;
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await seed.workItems.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: terminalItem.id,
+      ingress: { identity: 'legacy-repair-terminal', triggerType: 'test' },
+      configVersion: 'rules-v1',
+      expectedRevision: terminalItem.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'transition',
+          board: 'work',
+          stage: 'done',
+          idempotencyKey: 'legacy-transition-accepted',
+        },
+        {
+          type: 'invokeSkill',
+          role: 'work',
+          skillName: 'factory-plan',
+          idempotencyKey: 'legacy-terminal-skill',
+        },
+        {
+          type: 'sendMessage',
+          role: 'work',
+          message: 'Obsolete message.',
+          idempotencyKey: 'legacy-terminal-message',
+        },
+        {
+          type: 'invokeSkill',
+          role: 'review',
+          skillName: 'factory-review',
+          idempotencyKey: 'legacy-terminal-proposal',
+        },
+      ],
+      causalChain: [],
+      now,
+    });
+    const terminalDecisions = await seed.workItems.listDeferredDecisions('org1', PROJECT_ID);
+    const byKey = new Map(terminalDecisions.map(decision => [decision.idempotencyKey, decision]));
+    const transition = byKey.get('legacy-transition-accepted');
+    const failedSkill = byKey.get('legacy-terminal-skill');
+    const failedMessage = byKey.get('legacy-terminal-message');
+    const proposal = byKey.get('legacy-terminal-proposal');
+    if (!transition || !failedSkill || !failedMessage || !proposal) {
+      throw new Error('Expected legacy repair decisions');
+    }
+    await seed.storage.ops.updateMany(
+      'factory_deferred_decisions',
+      { id: { in: [transition.id, failedSkill.id, failedMessage.id] } },
+      { status: 'failed', last_error: 'Legacy failure.', completed_at: now, updated_at: now },
+    );
+    await seed.storage.ops.updateMany(
+      'factory_deferred_decisions',
+      { id: proposal.id },
+      { status: 'proposed', updated_at: now },
+    );
+    await seed.workItems.setAttentionReceipt({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      userId: 'u1',
+      identity: { kind: 'automation-failed', sourceId: failedSkill.id, occurrence: 0 },
+      action: 'archive',
+      now,
+    });
+    await seed.storage.ops.insertOne('factory_rule_ingress', {
+      org_id: 'org1',
+      factory_project_id: PROJECT_ID,
+      identity: 'decision:legacy-transition-accepted',
+      trigger_type: 'rule',
+      transition_id: crypto.randomUUID(),
+      result: { status: 'accepted', stage: 'done' },
+      created_at: now,
+    });
+    await seed.workItems.update({
+      orgId: 'org1',
+      id: terminalItem.id,
+      userId: 'user-1',
+      patch: { stages: ['done'] },
+    });
+
+    const activeResponse = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({
+        title: 'Active repair target',
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: '43',
+          url: 'https://github.com/acme/app/issues/43',
+        },
+        metadata: { number: 43 },
+      }),
+    );
+    const activeItem = (await activeResponse.json()).workItem;
+    await seed.workItems.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: activeItem.id,
+      ingress: { identity: 'legacy-repair-active', triggerType: 'test' },
+      configVersion: 'rules-v1',
+      expectedRevision: activeItem.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'invokeSkill',
+          role: 'work',
+          skillName: 'factory-plan',
+          idempotencyKey: 'legacy-active-skill',
+        },
+        {
+          type: 'invokeSkill',
+          role: 'review',
+          skillName: 'factory-review',
+          idempotencyKey: 'legacy-multistage-proposal',
+        },
+      ],
+      causalChain: [],
+      now,
+    });
+    const activeDecisions = await seed.workItems.listDeferredDecisions('org1', PROJECT_ID);
+    const activeDecision = activeDecisions.find(decision => decision.idempotencyKey === 'legacy-active-skill');
+    const multistageProposal = activeDecisions.find(
+      decision => decision.idempotencyKey === 'legacy-multistage-proposal',
+    );
+    if (!activeDecision || !multistageProposal) throw new Error('Expected active legacy decisions');
+    await seed.storage.ops.updateMany(
+      'factory_deferred_decisions',
+      { id: activeDecision.id },
+      { status: 'failed', last_error: 'Still unresolved.', completed_at: now, updated_at: now },
+    );
+    await seed.storage.ops.updateMany(
+      'factory_deferred_decisions',
+      { id: multistageProposal.id },
+      { status: 'proposed', updated_at: now },
+    );
+    await seed.workItems.update({
+      orgId: 'org1',
+      id: activeItem.id,
+      userId: 'user-1',
+      patch: { stages: ['review', 'done'] },
+    });
+
+    await seed.workItems.repairLegacyAttentionState();
+
+    const repaired = await seed.workItems.listDeferredDecisions('org1', PROJECT_ID);
+    expect(repaired.find(decision => decision.id === transition.id)?.status).toBe('succeeded');
+    expect(repaired.find(decision => decision.id === failedSkill.id)?.status).toBe('superseded');
+    expect(repaired.find(decision => decision.id === proposal.id)?.status).toBe('superseded');
+    expect(repaired.find(decision => decision.id === failedMessage.id)?.status).toBe('superseded');
+    expect(repaired.find(decision => decision.id === activeDecision.id)?.status).toBe('failed');
+    expect(repaired.find(decision => decision.id === multistageProposal.id)?.status).toBe('proposed');
+    await expect(
+      seed.workItems.listAttentionReceipts({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        userId: 'u1',
+        identities: [
+          {
+            kind: 'automation-failed',
+            sourceId: failedSkill.id,
+            occurrence: 0,
+          },
+        ],
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it('rejects malformed structured receipt rows', async () => {
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await seed.storage.ops.insertOne('factory_attention_receipts', {
+      org_id: 'org1',
+      factory_project_id: PROJECT_ID,
+      user_id: 'u1',
+      kind: 'automation-failed',
+      source_id: 'bad-state',
+      occurrence: 0,
+      state: 'corrupt',
+      read_at: now,
+      archived_at: null,
+      created_at: now,
+      updated_at: now,
+    });
+    await seed.storage.ops.insertOne('factory_attention_receipts', {
+      org_id: 'org1',
+      factory_project_id: PROJECT_ID,
+      user_id: 'u1',
+      kind: 'corrupt',
+      source_id: 'bad-kind',
+      occurrence: 0,
+      state: 'read',
+      read_at: now,
+      archived_at: null,
+      created_at: now,
+      updated_at: now,
+    });
+
+    await expect(
+      seed.workItems.listAttentionReceipts({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        userId: 'u1',
+        identities: [{ kind: 'automation-failed', sourceId: 'bad-state', occurrence: 0 }],
+      }),
+    ).rejects.toThrow("Unsupported attention receipt state 'corrupt'.");
+    const invalidIdentity = JSON.parse('{"kind":"corrupt","sourceId":"bad-kind","occurrence":0}');
+    await expect(
+      seed.workItems.listAttentionReceipts({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        userId: 'u1',
+        identities: [invalidIdentity],
+      }),
+    ).rejects.toThrow("Unsupported attention receipt kind 'corrupt'.");
+  });
+  it('accepts receipts for legacy failed decisions at occurrence zero', async () => {
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await seed.workItems.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: null,
+      ingress: { identity: 'legacy-attention-failure', triggerType: 'test' },
+      configVersion: 'rules-v1',
+      expectedRevision: null,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'sendMessage',
+          role: 'work',
+          message: 'Legacy failure.',
+          idempotencyKey: 'legacy-attention-failure',
+        },
+      ],
+      causalChain: [],
+      now,
+    });
+    const [legacy] = await seed.workItems.listDeferredDecisions('org1', PROJECT_ID);
+    if (!legacy) throw new Error('Expected a legacy deferred decision');
+    await seed.storage.ops.updateMany(
+      'factory_deferred_decisions',
+      { id: legacy.id, org_id: 'org1', factory_project_id: PROJECT_ID },
+      {
+        status: 'failed',
+        last_error: 'Legacy terminal failure.',
+        failure_code: 'unsupported_provider_item',
+        completed_at: now,
+        updated_at: now,
+      },
+    );
+
+    await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
+      items: [
+        {
+          key: `factory:${PROJECT_ID}:attention:automation-failed:${legacy.id}:0`,
+          occurrence: 0,
+          failureCode: 'unsupported_provider_item',
+          canRetry: false,
+          read: false,
+        },
+      ],
+    });
+    expect((await json('POST', `/web/factory/projects/${PROJECT_ID}/decisions/${legacy.id}/retry`)).status).toBe(409);
+    expect(
+      (await json('POST', `/web/factory/projects/${PROJECT_ID}/attention/automation-failed/${legacy.id}/0junk/read`))
+        .status,
+    ).toBe(422);
+    expect(
+      (await json('POST', `/web/factory/projects/${PROJECT_ID}/attention/automation-failed/${legacy.id}/0/read`))
+        .status,
+    ).toBe(200);
+  });
+
+  it('scans past a fully archived raw decision page', async () => {
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const workItem = (await created.json()).workItem;
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await seed.workItems.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: workItem.id,
+      ingress: { identity: 'attention-pagination', triggerType: 'test' },
+      configVersion: 'rules-v1',
+      expectedRevision: workItem.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: Array.from({ length: 51 }, (_, index) => ({
+        type: 'sendMessage',
+        role: 'work',
+        message: `Message ${index}`,
+        idempotencyKey: `attention-pagination-${index}`,
+      })),
+      causalChain: [],
+      now,
+    });
+    const claimed = await seed.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 60_000),
+      limit: 51,
+    });
+    const failed: FactoryDeferredDecisionRecord[] = [];
+    for (const decision of claimed) {
+      const record = await seed.workItems.failDeferredDecision({
+        id: decision.id,
+        orgId: decision.orgId,
+        factoryProjectId: decision.factoryProjectId,
+        ownerId: 'worker-1',
+        now,
+        availableAt: now,
+        lastError: `Terminal failure ${decision.id}.`,
+        failureCode: 'unknown',
+        terminal: true,
+      });
+      if (record) failed.push(record);
+    }
+    const newestFirst = [...failed].sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id),
+    );
+    for (const decision of newestFirst.slice(0, 50)) {
+      await seed.workItems.setAttentionReceipt({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        userId: 'u1',
+        identity: { kind: 'automation-failed', sourceId: decision.id, occurrence: decision.failureOccurrence },
+        action: 'archive',
+        now,
+      });
+    }
+    const target = newestFirst[50];
+    if (!target) throw new Error('Expected an unarchived attention item');
+
+    await expect(
+      (await json('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=1`)).json(),
+    ).resolves.toMatchObject({
+      items: [{ decisionId: target.id }],
+      kinds: { 'automation-failed': { open: 1, unread: 1 } },
+      hasMore: false,
+    });
+    await expect(
+      (
+        await json(
+          'GET',
+          `/web/factory/projects/${PROJECT_ID}/attention?limit=1&search=${encodeURIComponent(target.id)}`,
+        )
+      ).json(),
+    ).resolves.toMatchObject({
+      items: [{ decisionId: target.id }],
+      hasMore: false,
+    });
+
+    const listPage = seed.workItems.listDecisionPageByStatus.bind(seed.workItems);
+    let scannedPages = 0;
+    let lastScanned: FactoryDeferredDecisionRecord | undefined;
+    const pageSpy = vi.spyOn(seed.workItems, 'listDecisionPageByStatus').mockImplementation(async input => {
+      if (input.status !== 'failed' || input.limit === 1) return listPage(input);
+      scannedPages += 1;
+      const decisions = Array.from({ length: 50 }, (_, index) => {
+        const ordinal = scannedPages * 50 + index;
+        const occurredAt = new Date(now.getTime() - ordinal * 1_000);
+        return {
+          ...target,
+          id: `00000000-0000-4000-8000-${String(ordinal).padStart(12, '0')}`,
+          workItemId: null,
+          lastError: 'Unrelated terminal failure.',
+          completedAt: occurredAt,
+          updatedAt: occurredAt,
+        };
+      });
+      lastScanned = decisions.at(-1);
+      return { decisions, hasMore: true };
+    });
+    const bounded = await (
+      await json('GET', `/web/factory/projects/${PROJECT_ID}/attention?search=never-matches`)
+    ).json();
+    pageSpy.mockRestore();
+
+    expect(scannedPages).toBe(4);
+    expect(bounded).toMatchObject({ items: [], hasMore: true });
+    expect(typeof bounded.nextCursor).toBe('string');
+    expect(JSON.parse(Buffer.from(bounded.nextCursor, 'base64url').toString('utf8'))).toEqual({
+      'automation-failed': [lastScanned?.completedAt?.toISOString(), lastScanned?.id],
+    });
+  });
+});
+
 // ── Metrics ──────────────────────────────────────────────────────────────
 describe('GET /web/factory/projects/:id/metrics', () => {
   it('401s without a user and 404s for projects outside the org', async () => {
@@ -748,7 +1993,7 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     // finishes it (triage → planning), then a human approves planning into done.
     const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ sessions: run }));
     const { workItem } = await created.json();
-    const service = new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems });
+    const service = new FactoryTransitionService({ configVersion: 'factory-config-v1', storage: seed.workItems });
     const move = (stage: 'triage' | 'planning', expectedRevision: number, identity: string, actor: FactoryRuleActor) =>
       service.transition({
         orgId: 'org1',
@@ -760,6 +2005,7 @@ describe('GET /web/factory/projects/:id/metrics', () => {
         actor,
         ingress: { type: 'rule', identity },
         cause: 'auto_triage',
+        ...(actor.type === 'agent' && actor.role === 'triage' ? { triageType: 'bug' as const } : {}),
       });
     const triaged = await move('triage', workItem.revision, 'auto-1', {
       type: 'system',
@@ -810,6 +2056,35 @@ describe('run activity on the work-item listing', () => {
     });
   }
 
+  it('stamps only the starting role, preserving other roles’ sessions and startedBy (#22254)', async () => {
+    const first = await seed.workItems.prepareRunStart({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      workItem: { input: { title: 'Multi-role card', stages: ['triage', 'execute'] } },
+      role: 'triage',
+      session: { sessionId: 'session-triage', branch: 'factory/triage', threadId: 'thread-triage' },
+      resourceId: 'session-triage',
+      kickoffKey: 'kickoff-triage',
+      kickoffMessage: null,
+    });
+
+    const second = await seed.workItems.prepareRunStart({
+      orgId: 'org1',
+      userId: 'u2',
+      factoryProjectId: PROJECT_ID,
+      workItem: { id: first.item.id, input: { title: 'Multi-role card', stages: ['triage', 'execute'] } },
+      role: 'execute',
+      session: { sessionId: 'session-execute', branch: 'factory/execute', threadId: 'thread-execute' },
+      resourceId: 'session-execute',
+      kickoffKey: 'kickoff-execute',
+      kickoffMessage: null,
+    });
+
+    expect(second.item.sessions.triage).toMatchObject({ sessionId: 'session-triage', startedBy: 'u1' });
+    expect(second.item.sessions.execute).toMatchObject({ sessionId: 'session-execute', startedBy: 'u2' });
+  });
+
   it('reports the listed cards whose session has a run in flight', async () => {
     await startRun('session-running');
     await startRun('session-idle');
@@ -822,6 +2097,23 @@ describe('run activity on the work-item listing', () => {
     const body = await res.json();
     expect(body.workItems).toHaveLength(2);
     expect(body.runningSessionIds).toEqual(['session-running']);
+    expect(body.parkedSessionIds).toEqual([]);
+  });
+
+  it('reports the listed cards whose session waits on an answer', async () => {
+    await startRun('session-parked');
+    await startRun('session-idle');
+
+    const res = await buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      undefined,
+      new Set(['session-parked']),
+    ).request(`/web/factory/projects/${PROJECT_ID}/work-items`);
+
+    expect((await res.json()).parkedSessionIds).toEqual(['session-parked']);
   });
 
   it('reports no activity for a session that belongs to no card in the project', async () => {
@@ -905,24 +2197,14 @@ describe('audit events', () => {
     expect(auditRecorded).toEqual([]);
   });
 
-  it('records run.started when a PATCH introduces a new session role, but not on re-file', async () => {
+  it('files a session onto a role as an update, never as a run start', async () => {
     const item = await createItem();
     auditRecorded = [];
 
     const session = { sessionId: '/sb/wt/issue-42', branch: 'factory/issue-42', threadId: 't-1' };
     await json('PATCH', `/web/factory/work-items/${item.id}`, { sessions: { work: session } });
-    expect(auditRecorded.map(e => e.action)).toEqual(['factory.work_item.updated', 'factory.run.started']);
-    expect(auditRecorded[1].metadata).toEqual({
-      role: 'work',
-      branch: 'factory/issue-42',
-      threadId: 't-1',
-      sessionId: '/sb/wt/issue-42',
-    });
-
-    // Re-filing the same role is not a new run.
-    auditRecorded = [];
-    await json('PATCH', `/web/factory/work-items/${item.id}`, { sessions: { work: session } });
     expect(auditRecorded.map(e => e.action)).toEqual(['factory.work_item.updated']);
+    expect(auditRecorded[0].metadata).toEqual({ fields: ['sessions'] });
   });
 
   it('records only updated when the patch does not move stages', async () => {

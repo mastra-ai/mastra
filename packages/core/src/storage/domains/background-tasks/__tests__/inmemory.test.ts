@@ -56,20 +56,42 @@ describe('BackgroundTasksInMemory', () => {
       const task = makeTask();
       await storage.createTask(task);
 
-      await storage.updateTask(task.id, {
+      const updated = await storage.updateTask(task.id, {
         status: 'running',
         startedAt: new Date(),
       });
 
       const result = await storage.getTask(task.id);
+      expect(updated).toBe(true);
       expect(result!.status).toBe('running');
       expect(result!.startedAt).toBeDefined();
       expect(result!.toolName).toBe('test-tool'); // unchanged
     });
 
-    it('is a no-op for non-existent tasks', async () => {
-      await storage.updateTask('non-existent', { status: 'running' });
-      // Should not throw
+    it('updates when the current status matches the expected status', async () => {
+      const task = makeTask();
+      await storage.createTask(task);
+
+      const updated = await storage.updateTask(task.id, { status: 'running' }, { expectedStatus: 'pending' });
+
+      expect(updated).toBe(true);
+      expect((await storage.getTask(task.id))!.status).toBe('running');
+    });
+
+    it('does not update when the current status differs from the expected status', async () => {
+      const task = makeTask({ status: 'cancelled' });
+      await storage.createTask(task);
+
+      const updated = await storage.updateTask(task.id, { status: 'running' }, { expectedStatus: 'pending' });
+
+      expect(updated).toBe(false);
+      expect((await storage.getTask(task.id))!.status).toBe('cancelled');
+    });
+
+    it('returns false for non-existent tasks', async () => {
+      const updated = await storage.updateTask('non-existent', { status: 'running' });
+
+      expect(updated).toBe(false);
     });
   });
 

@@ -6,7 +6,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, ChevronsUpDown, Factory as FactoryIcon, Plus } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { useFactoriesQuery, useFactoryQuery } from '../../../../hooks/useFactories';
-import { factorySwitchPath } from '../services/factoryPaths';
+import { createFactoryPath, factorySwitchPath } from '../services/factoryPaths';
 
 /** Inline factory selection with a single Create Factory action. */
 export function FactorySwitcher() {
@@ -19,8 +19,10 @@ export function FactorySwitcher() {
   const navigate = useNavigate();
   const { setOpenMobile } = useMainSidebar();
 
-  const openFactories = () => {
-    void navigate('/factories/create');
+  const createFactoryFrom = factoryId ?? factories[0]?.id;
+  const openCreateFactory = () => {
+    if (!createFactoryFrom) return;
+    void navigate(createFactoryPath(createFactoryFrom));
     setOpenMobile(false);
   };
 
@@ -58,7 +60,7 @@ export function FactorySwitcher() {
         ))}
 
         {factories.length > 0 && <DropdownMenu.Separator />}
-        <DropdownMenu.Item onSelect={openFactories}>
+        <DropdownMenu.Item disabled={!createFactoryFrom} onSelect={openCreateFactory}>
           <Plus />
           <span>Create Factory</span>
         </DropdownMenu.Item>

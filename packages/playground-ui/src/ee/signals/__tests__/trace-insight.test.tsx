@@ -2,8 +2,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useThemeSnapshots } from '../hooks/use-theme-snapshots';
 import { SankeySignals } from '../sankey-signals';
 import {
   allThemePathsResponse,
@@ -42,11 +44,31 @@ class ChartResizeObserver implements ResizeObserver {
   disconnect() {}
 }
 
+function ControlledSankeySignals() {
+  const [selectedThemeId, setSelectedThemeId] = useState<string>();
+  const [selectedFrameId, setSelectedFrameId] = useState<string>();
+  const snapshotsQuery = useThemeSnapshots('support-agent', 'agent', ['goal', 'outcome', 'behavior']);
+  const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
+  const frameId = selectedFrameId ?? snapshots[0]?.snapshotId;
+  if (!frameId) return null;
+  return (
+    <SankeySignals
+      entityId="support-agent"
+      entityType="agent"
+      signalNames={['goal', 'outcome', 'behavior']}
+      selectedThemeId={selectedThemeId}
+      onSelectedThemeIdChange={setSelectedThemeId}
+      selectedFrameId={frameId}
+      onFrameIdChange={setSelectedFrameId}
+    />
+  );
+}
+
 function renderSignals() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <SankeySignals entityId="support-agent" entityType="agent" signalNames={['goal', 'outcome', 'behavior']} />
+      <ControlledSankeySignals />
     </QueryClientProvider>,
   );
 }
@@ -154,7 +176,7 @@ describe('Trace signals trace insight', () => {
       await openThemeExampleInsight();
 
       const link = await screen.findByRole('link', { name: 'Open full trace' });
-      expect(link.getAttribute('href')).toBe('/traces/trace-1');
+      expect(link.getAttribute('href')).toBe('/traces?traceId=trace-1');
     });
   });
 
@@ -283,7 +305,7 @@ describe('Trace signals trace insight', () => {
 
       expect(await screen.findByText('No insight available yet for this trace.')).not.toBeNull();
       const link = screen.getByRole('link', { name: 'Open full trace' });
-      expect(link.getAttribute('href')).toBe('/traces/trace-2');
+      expect(link.getAttribute('href')).toBe('/traces?traceId=trace-2');
     });
   });
 });

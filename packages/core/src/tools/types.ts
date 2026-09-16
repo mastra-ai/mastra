@@ -7,7 +7,6 @@ import type {
   ToolExecutionOptions,
   Schema,
 } from '@internal/external-types';
-import type { ElicitRequest, ElicitResult, ServerContext } from '@modelcontextprotocol/server';
 import type { MastraPrimitives, MastraUnion } from '../action';
 export type { MastraPrimitives, MastraUnion };
 import type { ActorSignal } from '../auth/ee';
@@ -19,6 +18,7 @@ import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import type { SuspendOptions, OutputWriter } from '../workflows';
 import type { Workspace } from '../workspace/workspace';
+import type { ElicitRequest, ElicitResult, ServerContext } from './mcp-types';
 import type { ToolStream } from './stream';
 import type { ValidationError } from './validation';
 
@@ -226,6 +226,13 @@ export interface AgentToolExecutionContext<TSuspend, TResume> {
    * See `MastraToolInvocationOptions.flushMessages` for details.
    */
   flushMessages?: () => Promise<void>;
+
+  /**
+   * True when the tool is running as a dispatched background task rather than
+   * inline in the agent loop. The parent model has already received a
+   * placeholder result by the time the tool executes.
+   */
+  isBackgroundTask?: boolean;
 }
 
 // Workflow tool execution context - properties specific when tools are executed in workflows
@@ -323,6 +330,8 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
     flushMessages?: () => Promise<void>;
     /** Observability helper to expose on the final tool execution context. */
     observe?: ToolObserve;
+    /** Set by the agent tool-call step when the tool runs as a background task. */
+    isBackgroundTask?: boolean;
   };
 
 /**

@@ -25,9 +25,7 @@ export const WorkflowEntityHeader = ({ workflowId }: WorkflowEntityHeaderProps) 
           <Tooltip>
             <TooltipTrigger asChild>
               <button type="button" onClick={handleCopy} className="h-badge-default shrink-0">
-                <Badge icon={<CopyIcon />} variant="default">
-                  {workflowId}
-                </Badge>
+                <Badge icon={<CopyIcon />}>{workflowId}</Badge>
               </button>
             </TooltipTrigger>
             <TooltipContent>Copy Workflow ID for use in code</TooltipContent>
@@ -38,19 +36,23 @@ export const WorkflowEntityHeader = ({ workflowId }: WorkflowEntityHeaderProps) 
           </Badge>
 
           {workflow?.isProcessorWorkflow && (
-            <Badge icon={<Cpu className="h-3 w-3" />} className="bg-violet-500/20 text-violet-400">
+            <Badge icon={<Cpu />} variant="purple">
               Processor
             </Badge>
           )}
 
           {workflow?.origin === 'dynamic' && (
             <Tooltip>
-              <TooltipTrigger asChild>
-                <div>
-                  <Badge icon={<Database className="h-3 w-3" />} variant="info">
-                    Dynamic
-                  </Badge>
-                </div>
+              <TooltipTrigger
+                render={<span />}
+                role="note"
+                tabIndex={0}
+                aria-label="Dynamic workflow"
+                className="focus-visible:outline-neutral5/55 rounded-[7px] focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-solid"
+              >
+                <Badge icon={<Database />} variant="blue">
+                  Dynamic
+                </Badge>
               </TooltipTrigger>
               <TooltipContent>Registered via the dynamic-workflows API — lives in storage</TooltipContent>
             </Tooltip>

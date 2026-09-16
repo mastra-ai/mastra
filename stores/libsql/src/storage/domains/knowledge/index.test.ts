@@ -9,6 +9,58 @@ import { KnowledgeLibSQL } from '.';
 createKnowledgeStorageTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
 
 describe('KnowledgeLibSQL initialization', () => {
+  it('adds the description column to pre-existing tables and reads legacy rows as undefined', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      // Pre-description table shape, created via raw DDL.
+      await client.execute(
+        `CREATE TABLE "mastra_knowledge_nodes" (
+          id TEXT PRIMARY KEY,
+          type TEXT NOT NULL,
+          name TEXT NOT NULL,
+          canonicalName TEXT NOT NULL,
+          kind TEXT,
+          content TEXT,
+          scope TEXT NOT NULL,
+          scopeKey TEXT NOT NULL,
+          version INTEGER NOT NULL,
+          mergedInto TEXT,
+          createdAt TEXT NOT NULL,
+          updatedAt TEXT NOT NULL
+        )`,
+      );
+      await client.execute({
+        sql: `INSERT INTO "mastra_knowledge_nodes" (id,type,name,canonicalName,kind,content,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+        args: [
+          '01LEGACY000000000000000000',
+          'node',
+          'Legacy',
+          'legacy',
+          'task',
+          'legacy body',
+          JSON.stringify(['org:acme', 'resource:mastra']),
+          'org:acme\u001fresource:mastra',
+          1,
+          null,
+          new Date().toISOString(),
+          new Date().toISOString(),
+        ],
+      });
+
+      const store = new KnowledgeLibSQL({ client });
+      await store.init();
+
+      const columns = await client.execute(`PRAGMA table_info("mastra_knowledge_nodes")`);
+      expect(columns.rows.map(row => String(row.name))).toContain('description');
+
+      const legacy = await store.getNode('01LEGACY000000000000000000');
+      expect(legacy?.description).toBeUndefined();
+      expect(legacy?.content).toBe('legacy body');
+    } finally {
+      client.close();
+    }
+  });
+
   it('claims outbox work once across concurrent store instances', async () => {
     const firstClient = createClient({ url: 'file::memory:?cache=shared' });
     const secondClient = createClient({ url: 'file::memory:?cache=shared' });

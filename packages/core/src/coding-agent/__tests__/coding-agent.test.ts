@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../../agent/agent';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '../../agent/goal/objective';
+import { signalToXmlMarkup } from '../../agent/signals';
 import { LocalFilesystem, LocalSandbox, Workspace } from '../../workspace';
 import type { PromptContext } from '../index';
 import { buildBasePrompt, createCodingAgent } from '../index';
@@ -139,26 +140,46 @@ describe('createCodingAgent', () => {
 });
 
 describe('buildBasePrompt', () => {
-  it('defaults the product name to "Mastra Code"', () => {
+  it('defaults the product name and co-author to Mastra Code and the platform bot', () => {
     const prompt = buildBasePrompt(promptContext());
     expect(prompt).toContain('You are Mastra Code, an interactive CLI coding agent');
-    expect(prompt).toContain('Co-Authored-By: Mastra Code <noreply@mastra.ai>');
+    expect(prompt).toContain(
+      'Co-Authored-By: mastra-platform[bot] <284800079+mastra-platform[bot]@users.noreply.github.com>',
+    );
   });
 
   it('parameterizes productName and coAuthorName', () => {
     const prompt = buildBasePrompt(promptContext({ productName: 'Acme Coder', coAuthorName: 'Acme Bot' }));
     expect(prompt).toContain('You are Acme Coder, an interactive CLI coding agent');
     expect(prompt).toContain('Acme Coder has a goal mode');
-    expect(prompt).toContain('Co-Authored-By: Acme Bot <noreply@mastra.ai>');
+    expect(prompt).toContain('Co-Authored-By: Acme Bot <284800079+mastra-platform[bot]@users.noreply.github.com>');
   });
 
-  it('includes the model id in the Co-Authored-By line when provided', () => {
+  it('does not include the model id in the Co-Authored-By line', () => {
     const prompt = buildBasePrompt(promptContext({ modelId: 'openai/gpt-4o' }));
-    expect(prompt).toContain('Co-Authored-By: Mastra Code (openai/gpt-4o) <noreply@mastra.ai>');
+    expect(prompt).toContain(
+      'Co-Authored-By: mastra-platform[bot] <284800079+mastra-platform[bot]@users.noreply.github.com>',
+    );
+    expect(prompt).not.toContain('Co-Authored-By: mastra-platform[bot] (openai/gpt-4o)');
   });
 
   it('parameterizes the Co-Authored-By email', () => {
     const prompt = buildBasePrompt(promptContext({ coAuthorName: 'Acme Bot', coAuthorEmail: 'bot@acme.dev' }));
     expect(prompt).toContain('Co-Authored-By: Acme Bot <bot@acme.dev>');
+  });
+
+  it('names the delivery wrapper the runtime emits, and no other', () => {
+    const wrapped = signalToXmlMarkup({
+      type: 'user',
+      attributes: { delivery: 'while-active' },
+      contents: 'fix the bug',
+    });
+    const openingTag = wrapped.slice(0, wrapped.indexOf('>') + 1);
+    const emittedTagName = openingTag.slice(1, openingTag.indexOf(' '));
+    const prompt = buildBasePrompt(promptContext());
+    const namedTagNames = new Set([...prompt.matchAll(/<([a-zA-Z][\w-]*) delivery="/g)].map(([, name]) => name));
+
+    expect(prompt).toContain(openingTag);
+    expect(namedTagNames).toEqual(new Set([emittedTagName]));
   });
 });

@@ -3,13 +3,16 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
 import { MessageList } from '../agent/message-list';
 import {
+  anthropicStripEmptySignedReasoningContent,
   anthropicStripForeignReasoningContent,
   azureSystemReminderTransform,
   cerebrasStripReasoningContent,
   isMaybeAnthropic,
+  isMaybeAnthropicWithoutAssistantPrefill,
   isMaybeAzure,
   isMaybeCerebras,
   ProviderHistoryCompat,
+  stripForeignProviderExecutedTools,
 } from './provider-history-compat';
 import type { CompatRule } from './provider-history-compat';
 import { ProcessorRunner } from './runner';
@@ -325,6 +328,41 @@ describe('isMaybeAnthropic', () => {
   });
 });
 
+describe('isMaybeAnthropicWithoutAssistantPrefill', () => {
+  it('matches Claude 4.6 and later Anthropic models', () => {
+    expect(isMaybeAnthropicWithoutAssistantPrefill('anthropic/claude-opus-4-6')).toBe(true);
+    expect(isMaybeAnthropicWithoutAssistantPrefill('anthropic/claude-opus-5')).toBe(true);
+    expect(
+      isMaybeAnthropicWithoutAssistantPrefill({ provider: 'anthropic.messages', modelId: 'claude-sonnet-4.6' }),
+    ).toBe(true);
+    expect(
+      isMaybeAnthropicWithoutAssistantPrefill({
+        provider: 'openai-compatible.chat',
+        modelId: 'anthropic/claude-opus-5',
+      }),
+    ).toBe(true);
+  });
+
+  it('does not match older Claude models or non-Anthropic models', () => {
+    expect(isMaybeAnthropicWithoutAssistantPrefill('anthropic/claude-haiku-4-5-20251001')).toBe(false);
+    expect(
+      isMaybeAnthropicWithoutAssistantPrefill({ provider: 'anthropic.messages', modelId: 'claude-sonnet-4.5' }),
+    ).toBe(false);
+    expect(isMaybeAnthropicWithoutAssistantPrefill('openai/gpt-5')).toBe(false);
+  });
+
+  it('uses a conservative result for unresolved Anthropic model versions and fallback arrays', () => {
+    expect(isMaybeAnthropicWithoutAssistantPrefill({ provider: 'anthropic.messages' })).toBe(true);
+    expect(isMaybeAnthropicWithoutAssistantPrefill(() => 'anthropic/claude-opus-5')).toBe(true);
+    expect(
+      isMaybeAnthropicWithoutAssistantPrefill([
+        { model: 'anthropic/claude-haiku-4-5-20251001' },
+        { model: 'anthropic/claude-opus-5' },
+      ]),
+    ).toBe(true);
+  });
+});
+
 describe('isMaybeAzure', () => {
   it('matches Azure provider and gateway model forms', () => {
     expect(isMaybeAzure('azure/gpt-4o')).toBe(true);
@@ -425,6 +463,101 @@ const mockLogger = {
   trackException: () => {},
 } as any;
 
+describe('stripForeignProviderExecutedTools', () => {
+  const hostedToolPrompt = (provider: 'anthropic' | 'openai', toolCallId: string): LanguageModelV2Prompt => [
+    { role: 'user', content: [{ type: 'text', text: 'search for this' }] },
+    {
+      role: 'assistant',
+      content: [
+        { type: 'text', text: 'I will search.' },
+        {
+          type: 'tool-call',
+          toolCallId,
+          toolName: 'web_search',
+          input: { query: 'Mastra' },
+          providerExecuted: true,
+          providerOptions: { [provider]: { itemId: toolCallId } },
+        } as any,
+        { type: 'text', text: 'Search complete.' },
+      ],
+    },
+    {
+      role: 'tool',
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId,
+          toolName: 'web_search',
+          output: { type: 'text', value: 'result' },
+          providerOptions: { [provider]: { itemId: toolCallId } },
+        } as any,
+      ],
+    },
+    { role: 'user', content: [{ type: 'text', text: 'summarize it' }] },
+  ];
+
+  it('strips Anthropic hosted-tool pairs before an OpenAI Responses request', () => {
+    const result = stripForeignProviderExecutedTools.applyToPrompt!({
+      prompt: hostedToolPrompt('anthropic', 'srvtoolu_abc123'),
+      model: { provider: 'openai.responses', modelId: 'gpt-5' },
+    });
+
+    expect(result).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'search for this' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'I will search.' },
+          { type: 'text', text: 'Search complete.' },
+        ],
+      },
+      { role: 'user', content: [{ type: 'text', text: 'summarize it' }] },
+    ]);
+  });
+
+  it('strips OpenAI hosted-tool pairs before an Anthropic request', () => {
+    const result = stripForeignProviderExecutedTools.applyToPrompt!({
+      prompt: hostedToolPrompt('openai', 'ws_abc123'),
+      model: { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' },
+    });
+
+    expect(result?.some(message => message.role === 'tool')).toBe(false);
+    expect((result?.[1]?.content as any[]).map(part => part.type)).toEqual(['text', 'text']);
+  });
+
+  it('preserves same-provider hosted-tool history', () => {
+    const prompt = hostedToolPrompt('anthropic', 'srvtoolu_abc123');
+    const result = stripForeignProviderExecutedTools.applyToPrompt!({
+      prompt,
+      model: { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' },
+    });
+
+    expect(result).toBeUndefined();
+  });
+
+  it('preserves OpenAI hosted-tool history for OpenAI-compatible destinations', () => {
+    const prompt = hostedToolPrompt('openai', 'ws_abc123');
+    const result = stripForeignProviderExecutedTools.applyToPrompt!({
+      prompt,
+      model: { provider: 'azure-openai.responses', modelId: 'gpt-5' },
+    });
+
+    expect(result).toBeUndefined();
+  });
+
+  it('does not remove client-executed tool pairs', () => {
+    const prompt = hostedToolPrompt('anthropic', 'call_abc123');
+    delete (prompt[1].content as any[])[1].providerExecuted;
+
+    const result = stripForeignProviderExecutedTools.applyToPrompt!({
+      prompt,
+      model: { provider: 'openai.responses', modelId: 'gpt-5' },
+    });
+
+    expect(result).toBeUndefined();
+  });
+});
+
 describe('anthropicStripForeignReasoningContent', () => {
   it('strips foreign reasoning parts from assistant messages when model is Anthropic', () => {
     const result = anthropicStripForeignReasoningContent.applyToPrompt!({
@@ -466,6 +599,131 @@ describe('anthropicStripForeignReasoningContent', () => {
       model: { provider: 'openai.chat', modelId: 'gpt-4o' },
     });
     expect(result).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Trailing assistant protection (Anthropic "thinking blocks in the latest
+// assistant message cannot be modified")
+// ---------------------------------------------------------------------------
+
+describe('trailing assistant message protection', () => {
+  const anthropicModel = { provider: 'anthropic.messages', modelId: 'claude-opus-4-6' };
+
+  /** Active tool-use continuation: last assistant is followed only by tool messages. */
+  function toolContinuationPrompt(): LanguageModelV2Prompt {
+    return [
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      {
+        role: 'assistant',
+        content: [
+          // Historical assistant turn with a strippable part
+          { type: 'reasoning', text: 'old foreign reasoning' },
+          { type: 'text', text: 'earlier answer' },
+        ],
+      },
+      { role: 'user', content: [{ type: 'text', text: 'do the thing' }] },
+      {
+        role: 'assistant',
+        content: [
+          // Unsigned interleaved thinking (no anthropic metadata) — must NOT be
+          // stripped from the latest assistant message.
+          { type: 'reasoning', text: 'live thinking' },
+          // Signed-but-empty block — must also survive untouched.
+          { type: 'reasoning', text: '', providerOptions: { anthropic: { signature: 'sig-live' } } },
+          { type: 'tool-call', toolCallId: 'call-1', toolName: 'doThing', input: {} },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'call-1', toolName: 'doThing', output: { type: 'text', value: 'ok' } },
+        ],
+      },
+    ];
+  }
+
+  it('foreign-reasoning strip skips the trailing assistant of a tool continuation', () => {
+    const result = anthropicStripForeignReasoningContent.applyToPrompt!({
+      prompt: toolContinuationPrompt(),
+      model: anthropicModel,
+    });
+
+    expect(result).toBeDefined();
+    // Historical assistant stripped
+    expect((result![1].content as any[]).map(p => p.type)).toEqual(['text']);
+    // Trailing assistant untouched
+    expect((result![3].content as any[]).map(p => p.type)).toEqual(['reasoning', 'reasoning', 'tool-call']);
+  });
+
+  it('strips foreign reasoning from a trailing tool continuation after switching to Anthropic', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'do the thing' }] },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'reasoning',
+            text: '',
+            providerOptions: {
+              openai: {
+                itemId: 'rs_123',
+                reasoningEncryptedContent: 'encrypted-reasoning',
+              },
+            },
+          },
+          { type: 'tool-call', toolCallId: 'call-1', toolName: 'doThing', input: {} },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'call-1', toolName: 'doThing', output: { type: 'text', value: 'ok' } },
+        ],
+      },
+    ];
+
+    const result = anthropicStripForeignReasoningContent.applyToPrompt!({
+      prompt,
+      model: anthropicModel,
+    });
+
+    expect(result).toBeDefined();
+    expect((result![1].content as any[]).map(p => p.type)).toEqual(['tool-call']);
+  });
+
+  it('empty-signed strip skips the trailing assistant of a tool continuation', () => {
+    const prompt = toolContinuationPrompt();
+    // Give the historical assistant an empty signed block so the rule has
+    // something to strip outside the protected message.
+    (prompt[1].content as any[]).unshift({
+      type: 'reasoning',
+      text: '',
+      providerOptions: { anthropic: { signature: 'sig-legacy' } },
+    });
+
+    const result = anthropicStripEmptySignedReasoningContent.applyToPrompt!({
+      prompt,
+      model: anthropicModel,
+    });
+
+    expect(result).toBeDefined();
+    expect((result![1].content as any[]).map(p => p.type)).toEqual(['reasoning', 'text']);
+    // Trailing assistant keeps its empty signed block untouched
+    expect((result![3].content as any[]).map(p => p.type)).toEqual(['reasoning', 'reasoning', 'tool-call']);
+  });
+
+  it('still strips the last assistant message when a new user turn follows it', () => {
+    const prompt = toolContinuationPrompt();
+    prompt.push({ role: 'user', content: [{ type: 'text', text: 'next question' }] });
+
+    const result = anthropicStripForeignReasoningContent.applyToPrompt!({
+      prompt,
+      model: anthropicModel,
+    });
+
+    expect(result).toBeDefined();
+    expect((result![3].content as any[]).map(p => p.type)).toEqual(['reasoning', 'tool-call']);
   });
 });
 
@@ -679,6 +937,55 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
     expect((assistant.content as any[]).map(p => p.type)).toEqual(['text']);
   });
 
+  it('strips foreign provider-executed tool pairs through the built-in rule set', async () => {
+    const handler = new ProviderHistoryCompat();
+    const prompt: LanguageModelV2Prompt = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Before' },
+          {
+            type: 'tool-call',
+            toolCallId: 'srvtoolu_123',
+            toolName: 'web_search',
+            input: { query: 'weather' },
+            providerExecuted: true,
+            providerOptions: { anthropic: { type: 'server_tool_use' } },
+          },
+          { type: 'text', text: 'After' },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'srvtoolu_123',
+            toolName: 'web_search',
+            output: { type: 'json', value: { temperature: 72 } },
+            providerOptions: { anthropic: { type: 'web_search_tool_result' } },
+          },
+        ],
+      },
+    ];
+
+    const result = await handler.processLLMRequest(
+      makeRequestArgs(prompt, { provider: 'openai.responses', modelId: 'gpt-5' }),
+    );
+
+    expect(result).toEqual({
+      prompt: [
+        {
+          role: 'assistant',
+          content: [
+            { type: 'text', text: 'Before' },
+            { type: 'text', text: 'After' },
+          ],
+        },
+      ],
+    });
+  });
+
   it('returns undefined when nothing needs to change', async () => {
     const handler = new ProviderHistoryCompat();
     const prompt: LanguageModelV2Prompt = [
@@ -790,5 +1097,194 @@ describe('ProcessorRunner.runProcessLLMRequest', () => {
 
     const assistant = result.prompt.find(m => m.role === 'assistant')!;
     expect((assistant.content as any[]).map(p => p.type)).toEqual(['reasoning', 'text']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// anthropic-strip-foreign-signed-reasoning (reactive cross-provider backstop)
+// ---------------------------------------------------------------------------
+
+describe('anthropicStripForeignSignedReasoning', () => {
+  const KIMI = 'kimi-for-coding';
+  const ANTHROPIC = 'anthropic.messages';
+
+  /** A persisted assistant turn with signed thinking, stamped with the provider that produced it. */
+  const stampedSignedAssistant = (
+    provider: string,
+    options: { signature?: string; redactedData?: string; text?: string } = {},
+  ) => {
+    const anthropic: Record<string, unknown> = {};
+    if (options.signature !== undefined) anthropic.signature = options.signature;
+    if (options.redactedData !== undefined) anthropic.redactedData = options.redactedData;
+    const text = options.text ?? 'thinking that was signed';
+    return {
+      id: `msg-${provider}-${options.signature ?? options.redactedData ?? 'unsigned'}`,
+      role: 'assistant' as const,
+      content: {
+        format: 2 as const,
+        metadata: { provider },
+        parts: [
+          {
+            // Canonical V2 stored reasoning shape (AIV5Adapter writes
+            // `reasoning` + `details`, not `text`).
+            type: 'reasoning' as const,
+            reasoning: text,
+            details: [{ type: 'text' as const, text }],
+            ...(Object.keys(anthropic).length > 0 ? { providerMetadata: { anthropic } } : {}),
+          },
+          { type: 'text' as const, text: 'the visible answer' },
+        ],
+      },
+      createdAt: new Date(),
+    };
+  };
+
+  /** A persisted assistant turn that holds ONLY signed thinking (no visible text). */
+  const thinkingOnlyAssistant = (provider: string, signature: string) => {
+    const message = stampedSignedAssistant(provider, { signature }) as any;
+    message.id = `msg-${provider}-thinking-only-${signature}`;
+    message.content.parts = message.content.parts.filter((p: any) => p.type === 'reasoning');
+    return message;
+  };
+
+  describe('preemptive applyToPrompt', () => {
+    const promptSignatures = (prompt: LanguageModelV2Prompt) =>
+      prompt.flatMap(message =>
+        Array.isArray(message.content)
+          ? message.content
+              .filter(part => part.type === 'reasoning')
+              .map(
+                part =>
+                  (part as { providerOptions?: { anthropic?: { signature?: unknown; redactedData?: unknown } } })
+                    .providerOptions?.anthropic,
+              )
+              .flatMap(anthropic => [anthropic?.signature ?? anthropic?.redactedData])
+          : [],
+      );
+
+    const promptAssistantContent = (prompt: LanguageModelV2Prompt) =>
+      prompt.filter(message => message.role === 'assistant').flatMap(message => message.content as any[]);
+
+    const runRequest = (handler: ProviderHistoryCompat, messageList: MessageList, provider: string) =>
+      handler.processLLMRequest({
+        ...makeRequestArgs(messageList.get.all.aiV5.prompt(), { provider }),
+        messageList,
+      });
+
+    it('drops foreign signed reasoning from the outbound prompt (kimi turn, anthropic target)', async () => {
+      const handler = new ProviderHistoryCompat();
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([stampedSignedAssistant(KIMI, { signature: 'kimi-sig' })], 'response');
+      messageList.add([createUserMessage('continue on claude')], 'input');
+
+      const result = await runRequest(handler, messageList, ANTHROPIC);
+
+      expect(result).toEqual({ prompt: expect.any(Array) });
+      const prompt = (result as { prompt: LanguageModelV2Prompt }).prompt;
+      expect(promptSignatures(prompt)).toEqual([]);
+      // The visible text of the foreign turn is kept.
+      expect(promptAssistantContent(prompt).map(part => part.type)).toEqual(['text']);
+    });
+
+    it('drops foreign signed reasoning in the other direction (anthropic turn, kimi target)', async () => {
+      const handler = new ProviderHistoryCompat();
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([stampedSignedAssistant(ANTHROPIC, { signature: 'anthropic-sig' })], 'response');
+      messageList.add([createUserMessage('continue on kimi')], 'input');
+
+      const result = await runRequest(handler, messageList, KIMI);
+
+      expect(result).toEqual({ prompt: expect.any(Array) });
+      expect(promptSignatures((result as { prompt: LanguageModelV2Prompt }).prompt)).toEqual([]);
+    });
+
+    it('keeps the target provider’s own signed reasoning', async () => {
+      const handler = new ProviderHistoryCompat();
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([stampedSignedAssistant(ANTHROPIC, { signature: 'anthropic-sig' })], 'response');
+      messageList.add([createUserMessage('keep going')], 'input');
+
+      const result = await runRequest(handler, messageList, ANTHROPIC);
+
+      expect(result).toBeUndefined();
+    });
+
+    it('drops only the foreign turn when providers are interleaved', async () => {
+      const handler = new ProviderHistoryCompat();
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([stampedSignedAssistant(KIMI, { signature: 'kimi-sig' })], 'response');
+      messageList.add([createUserMessage('switch to claude')], 'input');
+      messageList.add([stampedSignedAssistant(ANTHROPIC, { signature: 'anthropic-sig' })], 'response');
+      messageList.add([createUserMessage('keep going on claude')], 'input');
+
+      const result = await runRequest(handler, messageList, ANTHROPIC);
+
+      const prompt = (result as { prompt: LanguageModelV2Prompt }).prompt;
+      expect(promptSignatures(prompt)).toEqual(['anthropic-sig']);
+    });
+
+    it('drops foreign redactedData blocks the same way', async () => {
+      const handler = new ProviderHistoryCompat();
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([stampedSignedAssistant(KIMI, { redactedData: 'kimi-redacted' })], 'response');
+      messageList.add([createUserMessage('continue on claude')], 'input');
+
+      const result = await runRequest(handler, messageList, ANTHROPIC);
+
+      expect(promptSignatures((result as { prompt: LanguageModelV2Prompt }).prompt)).toEqual([]);
+    });
+
+    it('drops foreign signed reasoning on the trailing assistant turn too (no protected-index exemption)', async () => {
+      const handler = new ProviderHistoryCompat();
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createUserMessage('do a thing on kimi')], 'input');
+      messageList.add([stampedSignedAssistant(KIMI, { signature: 'kimi-sig' })], 'response');
+
+      const result = await runRequest(handler, messageList, ANTHROPIC);
+
+      expect(promptSignatures((result as { prompt: LanguageModelV2Prompt }).prompt)).toEqual([]);
+    });
+
+    it('removes a turn emptied of all content by the drop (Anthropic rejects empty assistant content)', async () => {
+      const handler = new ProviderHistoryCompat();
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([thinkingOnlyAssistant(KIMI, 'kimi-sig')], 'response');
+      messageList.add([createUserMessage('continue on claude')], 'input');
+
+      const result = await runRequest(handler, messageList, ANTHROPIC);
+
+      const prompt = (result as { prompt: LanguageModelV2Prompt }).prompt;
+      // The thinking-only foreign turn loses its only part; the message itself
+      // must be removed rather than sent with `content: []`.
+      expect(prompt.filter(message => message.role === 'assistant')).toEqual([]);
+    });
+
+    it('leaves unstamped history untouched', async () => {
+      const handler = new ProviderHistoryCompat();
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      const unstamped = stampedSignedAssistant(KIMI, { signature: 'legacy-sig' }) as any;
+      delete unstamped.content.metadata.provider;
+      messageList.add([unstamped], 'response');
+      messageList.add([createUserMessage('continue on claude')], 'input');
+
+      const result = await runRequest(handler, messageList, ANTHROPIC);
+
+      // Nothing provably foreign -> no change from this rule. (Other rules
+      // keep the anthropic-keyed reasoning too.)
+      expect(result).toBeUndefined();
+    });
+
+    it('does nothing without a message list', async () => {
+      const handler = new ProviderHistoryCompat();
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([stampedSignedAssistant(KIMI, { signature: 'kimi-sig' })], 'response');
+      messageList.add([createUserMessage('continue on claude')], 'input');
+
+      const result = await handler.processLLMRequest(
+        makeRequestArgs(messageList.get.all.aiV5.prompt(), { provider: ANTHROPIC }),
+      );
+
+      expect(result).toBeUndefined();
+    });
   });
 });

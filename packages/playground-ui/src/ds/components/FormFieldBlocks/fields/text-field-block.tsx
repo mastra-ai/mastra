@@ -31,7 +31,7 @@ export function TextFieldBlock({
   labelSize,
   layout = 'vertical',
   placeholder,
-  size = 'default',
+  size = 'md',
   testId,
   className,
   ...props
@@ -52,6 +52,7 @@ export function TextFieldBlock({
           </FieldBlock.Label>
         ) : null}
         <Input
+          id={`input-${name}`}
           name={name}
           disabled={disabled}
           required={required}

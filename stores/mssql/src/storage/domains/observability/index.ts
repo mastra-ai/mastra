@@ -825,6 +825,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
   }
 
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
+    this.assertUnscopedBatchDeleteTraces(args);
     if (!args.traceIds || args.traceIds.length === 0) {
       return;
     }

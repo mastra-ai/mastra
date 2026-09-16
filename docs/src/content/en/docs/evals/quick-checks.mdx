@@ -1,13 +1,13 @@
 ---
 title: "Quick Checks | Evals"
-description: "Zero-LLM micro-scorers for fast, deterministic assertions on agent output text and tool usage."
+description: "Add fast, deterministic Quick Checks to Mastra evals for assertions on output text and tool calls without using an LLM or changing scorer workflows."
 packages:
   - "@mastra/evals"
 ---
 
 # Quick checks
 
-Quick Checks are composable micro-scorers for common assertions like "output contains X" or "agent called tool Y." They require no LLM, run instantly, and plug into the same `scorers: [...]` array as any other scorer.
+Quick Checks are composable micro-scorers for common assertions like "output contains X" or "agent called tool Y." They run instantly without an LLM and plug into the same `scorers: [...]` array as any other scorer.
 
 ## When to use Quick Checks
 

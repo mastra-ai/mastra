@@ -5,8 +5,9 @@ import type { ListIntakeIssuesInput } from '../../capabilities/intake.js';
 import type { CreatePullRequestInput, ListPullRequestsInput } from '../../capabilities/version-control.js';
 import type { RouteAuth } from '../../routes/route.js';
 import { mountApiRoutes } from '../../routes/test-utils.js';
-import type { SandboxFleet } from '../../sandbox/fleet.js';
+
 import { SessionRetirementCoordinator } from '../../sandbox/session-retirement.js';
+import { __clearSessionSandboxesForTests, getSessionSandbox } from '../../sandbox/session-sandbox.js';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 // Mock drizzle's `eq`/`and` so the fake DB below can honour `where` predicates.
@@ -107,7 +108,6 @@ function projectRepositoryRow(row: Record<string, any>) {
     sandboxProvider: row.sandboxProvider ?? 'railway',
     sandboxWorkdir: row.sandboxWorkdir,
     setupCommand: row.setupCommand ?? null,
-    baseCheckpoint: row.baseCheckpoint ?? null,
     teardownCommand: row.teardownCommand ?? null,
     createdAt: now,
     updatedAt: now,
@@ -270,6 +270,57 @@ const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFull
   ],
   nextPage: null as number | null,
 }));
+const getIssueDetail = vi.fn(
+  async (_installationId: number, _repoFullName: string, issueId: string): Promise<Record<string, unknown> | null> =>
+    issueId === '12'
+      ? {
+          id: '12',
+          identifier: '#12',
+          title: 'Fix flaky test',
+          url: 'https://github.com/octo/hello/issues/12',
+          author: 'ada',
+          state: 'open',
+          stateType: 'open',
+          priority: null,
+          assignee: 'grace',
+          source: 'octo/hello',
+          labels: ['bug'],
+          commentCount: 3,
+          createdAt: '2026-07-01T00:00:00Z',
+          updatedAt: '2026-07-02T00:00:00Z',
+          description: 'The test flakes on CI.',
+          comments: [],
+        }
+      : null,
+);
+const getPullRequestDetail = vi.fn(
+  async (
+    _installationId: number,
+    _repoFullName: string,
+    pullRequestId: string,
+  ): Promise<Record<string, unknown> | null> =>
+    pullRequestId === '34'
+      ? {
+          id: '34',
+          title: 'Add factory pages',
+          url: 'https://github.com/octo/hello/pull/34',
+          author: 'grace',
+          assignees: ['ada'],
+          requestedReviewers: [],
+          labels: [],
+          body: 'Implements the factory pages.',
+          state: 'open',
+          draft: false,
+          merged: false,
+          mergeable: null,
+          baseBranch: 'main',
+          headBranch: 'feat/factory',
+          headSha: 'abc123',
+          createdAt: '2026-07-03T00:00:00Z',
+          updatedAt: '2026-07-04T00:00:00Z',
+        }
+      : null,
+);
 
 // Stub GithubIntegration instance injected into `buildGithubRoutes` — real DI
 // instead of module mocking (github/client.ts no longer exists).
@@ -314,6 +365,14 @@ const githubStub = {
   listRepoOpenIssues: (installationId: number, repoFullName: string, page: number, options?: { label?: string }) =>
     listRepoOpenIssues(installationId, repoFullName, page, options),
   intake: {
+    getIssue: async (input: {
+      connection: { type: string; installationId: number };
+      sourceId?: string;
+      issueId: string;
+    }) => {
+      if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
+      return getIssueDetail(input.connection.installationId, input.sourceId ?? '', input.issueId);
+    },
     listIssues: async (input: ListIntakeIssuesInput) => {
       if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
       const result = await listRepoOpenIssues(
@@ -348,6 +407,14 @@ const githubStub = {
       cloneUrl: `https://github.com/octo/hello.git`,
       authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
     })),
+    getPullRequest: async (input: {
+      connection: { type: string; installationId: number };
+      sourceId: string;
+      pullRequestId: string;
+    }) => {
+      if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
+      return getPullRequestDetail(input.connection.installationId, input.sourceId, input.pullRequestId);
+    },
     listPullRequests: async (input: ListPullRequestsInput) => {
       if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
       const result = await listRepoOpenPullRequests(
@@ -394,55 +461,22 @@ const stateSigner = {
   },
 };
 
-const ensureProjectSandbox = vi.fn(
-  async (opts: {
-    row: any;
-    storage: SourceControlStorageInMemory['sandboxes'];
-    token: string;
-    onProgress?: (e: any) => void;
-    seedCheckpointName?: string;
-  }) => {
-    const freshProvision = !opts.row.sandboxId;
-    await opts.storage.setSandboxId({ id: opts.row.id, sandboxId: 'sb' });
-    opts.onProgress?.({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
-    return {
-      id: 'sb',
-      ...(freshProvision && opts.seedCheckpointName ? { seedCheckpointNameUsed: opts.seedCheckpointName } : {}),
-    };
-  },
-);
-const materializeRepo = vi.fn(
-  async (opts: { onProgress?: (e: any) => void; skipPullOnExistingCheckout?: boolean }) => {
-    opts.onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
-  },
-);
-const reattachSandbox = vi.fn(async (_id: string, _options?: { actingUserId?: string }) => ({ id: 'sb' }));
-const recycleClaimedWorkdir = vi.fn(async (_sb: any, _workdir: string, _defaultBranch: string) => {});
-const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
-  worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
-  branch: opts.branch,
-  baseBranch: opts.baseBranch,
-}));
-const removeWorktree = vi.fn(async (_sb: any, _workdir: string, _opts: { branch: string; worktreePath: string }) => {});
-const runWorktreeSetup = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
-const runWorktreeTeardown = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
+const materializeRepo = vi.fn(async (opts: { onProgress?: (e: any) => void }) => {
+  opts.onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
+});
+const runSetupCommand = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
+const runTeardownCommand = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
 const createPullRequest = vi.fn(async (_input: CreatePullRequestInput) => ({
   url: 'https://github.com/octo/hello/pull/1',
 }));
 let sandboxEnabled = true;
-/** DI-injected fleet stub — routes read `enabled`/`provider`/`computeWorkdir`/`reattachSandbox`. */
-const fleet = {
-  get enabled() {
-    return sandboxEnabled;
-  },
-  get provider() {
-    return sandboxEnabled ? 'railway' : 'none';
-  },
-  computeWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
-  reattachSandbox: (id: string, options?: { actingUserId?: string }) => reattachSandbox(id, options),
-} as unknown as SandboxFleet;
+/**
+ * DI-injected sandbox callback stub — presence signals "configured".
+ * A `vi.fn` so tests can assert the factory never constructed a sandbox.
+ */
+const sandboxCallback = vi.fn((ctx: { sessionId: string }) => ({ id: `sbx-${ctx.sessionId}` })) as any;
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
     code: string;
@@ -451,7 +485,7 @@ vi.mock('./sandbox', () => {
       this.code = code;
     }
   }
-  class WorktreeError extends Error {
+  class SetupCommandError extends Error {
     code: string;
     constructor(m: string, code: string) {
       super(m);
@@ -460,17 +494,10 @@ vi.mock('./sandbox', () => {
   }
   return {
     DEFAULT_COMMAND_TIMEOUT_MS: 15 * 60_000,
-    computeWorktreePath: (repoWorkdir: string, branch: string) =>
-      `${repoWorkdir.replace(/\/+$/, '').split('/').slice(0, -1).join('/')}/worktrees/${branch.replace('/', '-')}-aeab418d`,
-    ensureProjectSandbox: (opts: any) => ensureProjectSandbox(opts),
     materializeRepo: (opts: any) => materializeRepo(opts),
-    ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
-    removeWorktree: (sb: any, workdir: string, opts: any) => removeWorktree(sb, workdir, opts),
-    runWorktreeSetup: (sb: any, worktreePath: string, command: string) => runWorktreeSetup(sb, worktreePath, command),
-    runWorktreeTeardown: (sb: any, worktreePath: string, command: string, options?: { timeoutMs?: number }) =>
-      runWorktreeTeardown(sb, worktreePath, command, options),
-    recycleClaimedWorkdir: (sb: any, workdir: string, defaultBranch: string) =>
-      recycleClaimedWorkdir(sb, workdir, defaultBranch),
+    runSetupCommand: (sb: any, worktreePath: string, command: string) => runSetupCommand(sb, worktreePath, command),
+    runTeardownCommand: (sb: any, worktreePath: string, command: string, options?: { timeoutMs?: number }) =>
+      runTeardownCommand(sb, worktreePath, command, options),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
     createPullRequest: (input: any) => createPullRequest(input),
@@ -478,7 +505,7 @@ vi.mock('./sandbox', () => {
     isValidGitRef: (v: unknown): v is string =>
       typeof v === 'string' && v.length > 0 && v.length <= 255 && /^[A-Za-z0-9_./-]+$/.test(v),
     MaterializeError,
-    WorktreeError,
+    SetupCommandError,
   };
 });
 
@@ -607,6 +634,8 @@ function buildApp(
   user: { workosId: string; organizationId?: string } | null,
   options: {
     controller?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
+    memorySettings?: Parameters<typeof buildGithubRoutes>[0]['memorySettings'];
+    users?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['users'];
     stateSigner?: typeof stateSigner | null;
     sessionRetirement?: SessionRetirementCoordinator;
   } = {},
@@ -628,8 +657,9 @@ function buildApp(
       baseUrl: 'http://localhost:4111',
       github: githubStub as any,
       auth: testAuth,
-      fleet,
+      sandbox: sandboxEnabled ? sandboxCallback : undefined,
       stateSigner: signerOverride === null ? undefined : (signerOverride ?? stateSigner),
+      memorySettings: { get: async () => null },
       emitAudit: async ({ context, input }) => {
         try {
           if (auditFailure) throw auditFailure;
@@ -683,14 +713,10 @@ beforeEach(() => {
   process.env.GITHUB_APP_WEBHOOK_SECRET = 'test-webhook-secret';
   // The webhook route verifies deliveries against the injected instance's secret.
   githubStub.webhookSecret = 'test-webhook-secret';
-  ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
-  reattachSandbox.mockClear();
-  recycleClaimedWorkdir.mockClear();
-  ensureWorktree.mockClear();
-  removeWorktree.mockClear();
-  runWorktreeSetup.mockClear();
-  runWorktreeTeardown.mockClear();
+  sandboxCallback.mockClear();
+  runSetupCommand.mockClear();
+  runTeardownCommand.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();
@@ -702,6 +728,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  __clearSessionSandboxesForTests();
   delete process.env.GITHUB_APP_WEBHOOK_SECRET;
   vi.clearAllMocks();
 });
@@ -792,7 +819,10 @@ describe('webhook route', () => {
     const controller = {
       // Delivery confirms this deployment holds the subscribed thread and reads
       // the resource that owns it; here that is the subscription's own resource.
-      queryThreadById: vi.fn(async ({ threadId }: { threadId: string }) => ({ id: threadId, resourceId: 'resource-1' })),
+      queryThreadById: vi.fn(async ({ threadId }: { threadId: string }) => ({
+        id: threadId,
+        resourceId: 'resource-1',
+      })),
       getSessionByResource: vi.fn(async () => session),
       createSession: vi.fn(),
     } as unknown as NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
@@ -1065,8 +1095,13 @@ describe('repos route', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.repos).toHaveLength(1);
-    expect(json.repos[0].fullName).toBe('octo/hello');
-    expect(tables.repositories).toHaveLength(1);
+    expect(json.repos[0]).toMatchObject({
+      fullName: 'octo/hello',
+      installationStorageId: tables.installations[0]!.id,
+      sandboxWorkdir: '~/hello',
+    });
+    expect(json.repos[0]).not.toHaveProperty('repositoryStorageId');
+    expect(tables.repositories).toHaveLength(0);
   });
 
   it('prunes installations GitHub no longer knows (404) and keeps listing the rest', async () => {
@@ -1272,211 +1307,6 @@ it('does not expose the removed GitHub project-creation route', async () => {
   expect(res.status).toBe(404);
 });
 
-describe('ensure (materialize)', () => {
-  it('503s when the sandbox is not configured', async () => {
-    sandboxEnabled = false;
-    tables.projectRepositories.push(
-      projectRepositoryRow({
-        id: 'p1',
-        orgId: 'org1',
-        userId: 'u1',
-        installationId: 7,
-        repoFullName: 'octo/hello',
-        sandboxWorkdir: '/workspace/hello',
-      }),
-    );
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
-    expect(res.status).toBe(503);
-    expect((await res.json()).error).toBe('sandbox_not_configured');
-  });
-
-  it('provisions + materializes and returns a resourceId', async () => {
-    tables.projectRepositories.push(
-      projectRepositoryRow({
-        id: 'p1',
-        orgId: 'org1',
-        userId: 'u1',
-        installationId: 7,
-        repoFullName: 'octo/hello',
-        defaultBranch: 'main',
-        sandboxWorkdir: '/workspace/hello',
-      }),
-    );
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
-      resourceId: 'factory-p1',
-      factoryProjectId: 'factory-p1',
-      projectRepositoryId: 'p1',
-    });
-    expect(ensureProjectSandbox).toHaveBeenCalledOnce();
-    expect(ensureProjectSandbox).toHaveBeenCalledWith(
-      expect.objectContaining({ token: 'repo-token-repository-octo/hello' }),
-    );
-    expect(githubStub.versionControl.getRepositoryAccess).toHaveBeenCalledWith({
-      orgId: 'org1',
-      repositoryId: 'repository-octo/hello',
-    });
-    expect(githubStub.mintInstallationToken).not.toHaveBeenCalled();
-    expect(materializeRepo).toHaveBeenCalledOnce();
-    expect(materializeRepo).toHaveBeenCalledWith(
-      expect.objectContaining({ token: 'repo-token-repository-octo/hello' }),
-    );
-    // A per-user sandbox binding row was created for the caller.
-    expect(tables.sandboxes).toHaveLength(1);
-    expect(tables.sandboxes[0]).toMatchObject({ projectRepositoryId: 'p1', userId: 'u1' });
-    // No base checkpoint on this repo → no seed name is passed.
-    expect(ensureProjectSandbox.mock.calls[0]![0].seedCheckpointName).toBeUndefined();
-  });
-
-  it('seeds provisioning from the repo base checkpoint when one exists', async () => {
-    tables.projectRepositories.push(
-      projectRepositoryRow({
-        id: 'p1',
-        orgId: 'org1',
-        userId: 'u1',
-        installationId: 7,
-        repoFullName: 'octo/hello',
-        defaultBranch: 'main',
-        sandboxWorkdir: '/workspace/hello',
-        baseCheckpoint: { name: 'repo-p1', sha: 'abc123', builtAt: new Date(), setupCommandHash: null },
-      }),
-    );
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
-    expect(res.status).toBe(200);
-    expect(ensureProjectSandbox).toHaveBeenCalledOnce();
-    expect(ensureProjectSandbox).toHaveBeenCalledWith(expect.objectContaining({ seedCheckpointName: 'repo-p1' }));
-    expect(materializeRepo).toHaveBeenCalledWith(
-      expect.objectContaining({ skipPullOnExistingCheckout: true }),
-    );
-  });
-
-  it('does not skip the pull when the provider restores the primary session checkpoint', async () => {
-    tables.projectRepositories.push(
-      projectRepositoryRow({
-        id: 'p1',
-        orgId: 'org1',
-        userId: 'u1',
-        installationId: 7,
-        repoFullName: 'octo/hello',
-        defaultBranch: 'main',
-        sandboxWorkdir: '/workspace/hello',
-        baseCheckpoint: { name: 'repo-p1', sha: 'abc123', builtAt: new Date(), setupCommandHash: null },
-      }),
-    );
-    ensureProjectSandbox.mockResolvedValueOnce({ id: 'sb' });
-
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
-
-    expect(res.status).toBe(200);
-    expect(ensureProjectSandbox).toHaveBeenCalledWith(expect.objectContaining({ seedCheckpointName: 'repo-p1' }));
-    expect(materializeRepo).toHaveBeenCalledWith(
-      expect.objectContaining({ skipPullOnExistingCheckout: false }),
-    );
-  });
-
-  it('does not seed provisioning from a stale repo base checkpoint', async () => {
-    tables.projectRepositories.push(
-      projectRepositoryRow({
-        id: 'p1',
-        orgId: 'org1',
-        userId: 'u1',
-        installationId: 7,
-        repoFullName: 'octo/hello',
-        defaultBranch: 'main',
-        sandboxWorkdir: '/workspace/hello',
-        setupCommand: 'pnpm install',
-        baseCheckpoint: { name: 'repo-p1', sha: 'abc123', builtAt: new Date(), setupCommandHash: null },
-      }),
-    );
-
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
-
-    expect(res.status).toBe(200);
-    expect(ensureProjectSandbox.mock.calls[0]![0].seedCheckpointName).toBeUndefined();
-    expect(materializeRepo).toHaveBeenCalledWith(
-      expect.objectContaining({ skipPullOnExistingCheckout: false }),
-    );
-  });
-
-  it('404s for a project the user does not own', async () => {
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/missing/ensure', {
-      method: 'POST',
-    });
-    expect(res.status).toBe(404);
-  });
-
-  it('self-heals a stale sandbox provider by recomputing the workdir against the current fleet', async () => {
-    // The row was linked while a different provider was active — its workdir
-    // points into that provider's filesystem and would fail to clone here.
-    tables.projectRepositories.push(
-      projectRepositoryRow({
-        id: 'p1',
-        orgId: 'org1',
-        userId: 'u1',
-        installationId: 7,
-        repoFullName: 'octo/hello',
-        defaultBranch: 'main',
-        sandboxProvider: 'platform',
-        sandboxWorkdir: '/old-provider/hello',
-      }),
-    );
-    // A per-user binding already inherited the stale workdir and thinks it is materialized.
-    tables.sandboxes.push(
-      sandboxRow({
-        id: 'sbrow-1',
-        projectRepositoryId: 'p1',
-        userId: 'u1',
-        sandboxId: 'sb-old',
-        sandboxWorkdir: '/old-provider/hello',
-        materializedAt: new Date(),
-      }),
-    );
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ projectRepositoryId: 'p1', sandboxWorkdir: '/workspace/hello' });
-    // The project row was healed to the current fleet's provider + workdir…
-    expect(tables.projectRepositories[0]).toMatchObject({
-      sandboxProvider: 'railway',
-      sandboxWorkdir: '/workspace/hello',
-    });
-    // …and the per-user binding was re-pointed and forced to re-materialize.
-    expect(tables.sandboxes[0]).toMatchObject({ sandboxWorkdir: '/workspace/hello', materializedAt: null });
-    expect(materializeRepo).toHaveBeenCalledOnce();
-    expect(materializeRepo).toHaveBeenCalledWith(
-      expect.objectContaining({ row: expect.objectContaining({ sandboxWorkdir: '/workspace/hello' }) }),
-    );
-  });
-
-  it('streams server-side progress events when the client accepts an event stream', async () => {
-    tables.projectRepositories.push(
-      projectRepositoryRow({
-        id: 'p1',
-        orgId: 'org1',
-        userId: 'u1',
-        installationId: 7,
-        repoFullName: 'octo/hello',
-        defaultBranch: 'main',
-        sandboxWorkdir: '/workspace/hello',
-      }),
-    );
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', {
-      method: 'POST',
-      headers: { Accept: 'text/event-stream' },
-    });
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toContain('text/event-stream');
-    const body = await res.text();
-    // Progress events surface each server step, then a terminal `done` carries the result.
-    expect(body).toContain('event: progress');
-    expect(body).toContain('Provisioning a new sandbox…');
-    expect(body).toContain('Cloning octo/hello…');
-    expect(body).toContain('event: done');
-    expect(body).toContain('"resourceId":"factory-p1"');
-    expect(body).toContain('"projectRepositoryId":"p1"');
-  });
-});
-
 // ── Phase 4: worktree / commit / push / pr git routes ─────────────────────
 function seedMaterializedProject(
   opts: { orgId?: string; userId?: string; setupCommand?: string | null; teardownCommand?: string | null } = {},
@@ -1527,6 +1357,24 @@ function seedMaterializedSession() {
     createdAt: now,
     updatedAt: now,
   });
+  // The session's live sandbox in the per-process memo — git write routes
+  // resolve through it (they never provision).
+  seedLiveSandbox('stored-session-1', '/workspace/worktrees/feat-x', {
+    id: 'sb-1',
+    executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+  });
+}
+
+/**
+ * Seed the per-process session-sandbox memo with a live instance whose
+ * derived workdir equals `workdir` exactly: a local-provider instance checks
+ * out under `<workingDirectory>/<repo name>`.
+ */
+function seedLiveSandbox(sessionRowId: string, workdir: string, sandbox: Record<string, unknown>) {
+  const cut = workdir.lastIndexOf('/');
+  // Mutate in place so callers can assert on the exact seeded instance.
+  Object.assign(sandbox, { provider: 'local', workingDirectory: workdir.slice(0, cut) });
+  getSessionSandbox(sessionRowId, `seed/${workdir.slice(cut + 1)}`, () => sandbox as never);
 }
 
 function postJson(app: ReturnType<typeof buildApp>, path: string, body: unknown) {
@@ -1626,6 +1474,50 @@ describe('issues route', () => {
   });
 });
 
+describe('issue detail route', () => {
+  it("returns one issue's description for the project repo", async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues/12');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      number: 12,
+      title: 'Fix flaky test',
+      description: 'The test flakes on CI.',
+      comments: 3,
+    });
+  });
+
+  it('404s when the issue does not exist', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues/99');
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'issue_not_found' });
+  });
+
+  it('400s on a malformed issue number', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues/abc');
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid_number' });
+    expect(getIssueDetail).not.toHaveBeenCalled();
+  });
+
+  it('404s for a project owned by another org', async () => {
+    seedMaterializedProject({ orgId: 'other-org' });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues/12');
+    expect(res.status).toBe(404);
+    expect(getIssueDetail).not.toHaveBeenCalled();
+  });
+
+  it('502s when GitHub is unavailable', async () => {
+    seedMaterializedProject();
+    getIssueDetail.mockRejectedValueOnce(new Error('GitHub unavailable'));
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues/12');
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ error: 'github_fetch_failed', message: 'GitHub unavailable' });
+  });
+});
+
 describe('prs route', () => {
   it('401s without an authenticated user', async () => {
     seedMaterializedProject();
@@ -1673,6 +1565,79 @@ describe('prs route', () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs');
     expect(res.status).toBe(502);
     expect(await res.json()).toMatchObject({ error: 'github_fetch_failed' });
+  });
+});
+
+describe('pr detail route', () => {
+  it("returns one pull request's description for the project repo", async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs/34');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      number: 34,
+      title: 'Add factory pages',
+      description: 'Implements the factory pages.',
+      headBranch: 'feat/factory',
+    });
+  });
+
+  it('404s when the pull request does not exist', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs/99');
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'pull_request_not_found' });
+  });
+
+  it('400s on a malformed pull request number', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs/abc');
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid_number' });
+    expect(getPullRequestDetail).not.toHaveBeenCalled();
+  });
+});
+
+describe('commits route', () => {
+  function stubCommitFetch() {
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => [] }) as unknown as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('reads history on a host with no sandbox provider configured', async () => {
+    seedMaterializedProject();
+    sandboxEnabled = false;
+    const fetchMock = stubCommitFetch();
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/commits');
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ commits: [], branch: 'main' });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('asks GitHub for a whole number of commits', async () => {
+    seedMaterializedProject();
+    const fetchMock = stubCommitFetch();
+
+    await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/commits?limit=1.5');
+
+    const asked = new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams;
+
+    expect(asked.get('per_page')).toBe('1');
+  });
+
+  it('defaults to the branch the project selected, not the repository default', async () => {
+    seedMaterializedProject();
+    tables.projectRepositories[0].branch = 'release/v2';
+    const fetchMock = stubCommitFetch();
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/commits');
+
+    expect(await res.json()).toMatchObject({ branch: 'release/v2' });
+    expect(new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams.get('sha')).toBe('release/v2');
   });
 });
 
@@ -1793,8 +1758,111 @@ describe('Factory session routes', () => {
     });
     expect(session.sessionId).toEqual(expect.any(String));
     expect(tables.sessions).toHaveLength(1);
-    expect(ensureWorktree).not.toHaveBeenCalled();
-    expect(ensureProjectSandbox).not.toHaveBeenCalled();
+    // Creating a session provisions nothing: no repo is materialized and the
+    // configured sandbox callback is never even constructed. A sandbox boots
+    // lazily, at the session's first command.
+    expect(materializeRepo).not.toHaveBeenCalled();
+    expect(sandboxCallback).not.toHaveBeenCalled();
+  });
+
+  it('enriches listed sessions with owner names and avatars', async () => {
+    seedMaterializedProject();
+    const profiles = {
+      u1: { id: 'u1', name: 'Ada Lovelace', email: 'ada@example.com', avatarUrl: 'https://example.com/ada.png' },
+      u2: { id: 'u2', name: 'Grace Hopper', email: 'grace@example.com', avatarUrl: 'https://example.com/grace.png' },
+    };
+    const users = {
+      getUser: vi.fn(async (id: string) => profiles[id as keyof typeof profiles] ?? null),
+      getUsers: vi.fn(async (ids: string[]) => ids.map(id => profiles[id as keyof typeof profiles]).filter(Boolean)),
+    };
+    await postJson(buildApp({ workosId: 'u1' }, { users }), '/web/github/projects/p1/sessions', {
+      branch: 'feat/mine',
+    });
+    await postJson(buildApp({ workosId: 'u2' }, { users }), '/web/github/projects/p1/sessions', {
+      branch: 'feat/theirs',
+    });
+
+    const response = await buildApp({ workosId: 'u1' }, { users }).request('/web/github/projects/p1/sessions');
+
+    expect(response.status).toBe(200);
+    expect(users.getUsers).toHaveBeenCalledWith(expect.arrayContaining(['u1', 'u2']));
+    expect((await response.json()).sessions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          userId: 'u1',
+          owner: { id: 'u1', name: 'Ada Lovelace', avatarUrl: 'https://example.com/ada.png' },
+        }),
+        expect.objectContaining({
+          userId: 'u2',
+          owner: { id: 'u2', name: 'Grace Hopper', avatarUrl: 'https://example.com/grace.png' },
+        }),
+      ]),
+    );
+  });
+
+  it('falls back to individual profile lookups without dropping successful owners', async () => {
+    seedMaterializedProject();
+    await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', { branch: 'feat/mine' });
+    await postJson(buildApp({ workosId: 'u2' }), '/web/github/projects/p1/sessions', { branch: 'feat/theirs' });
+    const users = {
+      getUser: vi.fn(async (id: string) => {
+        if (id === 'u1') return { id, email: 'ada@example.com' };
+        throw new Error('Profile unavailable');
+      }),
+    };
+
+    const response = await buildApp({ workosId: 'u1' }, { users }).request('/web/github/projects/p1/sessions');
+
+    expect(response.status).toBe(200);
+    expect(users.getUser).toHaveBeenCalledTimes(2);
+    const { sessions } = await response.json();
+    expect(sessions.find((session: { userId: string }) => session.userId === 'u1')).toEqual(
+      expect.objectContaining({ owner: { id: 'u1', name: 'ada@example.com' } }),
+    );
+    expect(sessions.find((session: { userId: string }) => session.userId === 'u2')).not.toHaveProperty('owner');
+  });
+
+  it('falls back to individual lookups when the bulk owner lookup fails', async () => {
+    seedMaterializedProject();
+    await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', { branch: 'feat/mine' });
+    await postJson(buildApp({ workosId: 'u2' }), '/web/github/projects/p1/sessions', { branch: 'feat/theirs' });
+    const users = {
+      getUsers: vi.fn(async () => {
+        throw new Error('Directory unavailable');
+      }),
+      getUser: vi.fn(async (id: string) => (id === 'u1' ? { id, name: 'Ada Lovelace' } : { id, name: '', email: '' })),
+    };
+
+    const response = await buildApp({ workosId: 'u1' }, { users }).request('/web/github/projects/p1/sessions');
+
+    expect(response.status).toBe(200);
+    expect(users.getUsers).toHaveBeenCalledOnce();
+    expect(users.getUser).toHaveBeenCalledTimes(2);
+    const { sessions } = await response.json();
+    expect(sessions.find((session: { userId: string }) => session.userId === 'u1')).toEqual(
+      expect.objectContaining({ owner: { id: 'u1', name: 'Ada Lovelace' } }),
+    );
+    expect(sessions.find((session: { userId: string }) => session.userId === 'u2')).not.toHaveProperty('owner');
+  });
+
+  it('caches session owner profiles between list requests', async () => {
+    seedMaterializedProject();
+    const users = {
+      getUser: vi.fn(async (id: string) => ({ id, name: 'Ada Lovelace' })),
+      getUsers: vi.fn(async (ids: string[]) => ids.map(id => ({ id, name: 'Ada Lovelace' }))),
+    };
+    const app = buildApp({ workosId: 'u1' }, { users });
+    await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/mine' });
+
+    const first = await app.request('/web/github/projects/p1/sessions');
+    const second = await app.request('/web/github/projects/p1/sessions');
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(users.getUsers).toHaveBeenCalledOnce();
+    expect((await second.json()).sessions).toEqual([
+      expect.objectContaining({ owner: { id: 'u1', name: 'Ada Lovelace' } }),
+    ]);
   });
 
   it('uses a supplied UUID for branch identity and persists a normalized title', async () => {
@@ -1884,7 +1952,7 @@ describe('Factory session routes', () => {
     expect(allowed.status).toBe(200);
   });
 
-  it('lists org-visible sessions from other users plus the caller\'s own private ones', async () => {
+  it("lists org-visible sessions from other users plus the caller's own private ones", async () => {
     seedMaterializedProject();
     const now = new Date();
     const row = (overrides: Record<string, unknown>) => ({
@@ -2020,7 +2088,7 @@ describe('Factory session routes', () => {
     expect(tables.sessions).toHaveLength(0);
   });
 
-  it('runs repository teardown before reclaiming and invalidates an explicitly deleted session', async () => {
+  it('runs repository teardown before releasing and invalidates an explicitly deleted session', async () => {
     seedMaterializedProject({ teardownCommand: 'docker compose down --remove-orphans' });
     const order: string[] = [];
     const controller = {
@@ -2032,41 +2100,33 @@ describe('Factory session routes', () => {
     const invalidateSession = vi.fn(async () => {
       order.push('invalidate');
     });
-    const sessionRetirement = new SessionRetirementCoordinator({
-      fleet: fleet as any,
-      invalidateSession,
-    });
+    const sessionRetirement = new SessionRetirementCoordinator({ invalidateSession });
     const app = buildApp({ workosId: 'u1' }, { controller, sessionRetirement });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
-    Object.assign(tables.sessions.find(row => row.sessionId === sessionId)!, {
-      sandboxId: 'sb-live',
-      sandboxWorkdir: '/workspace/hello',
-    });
-    reattachSandbox.mockImplementationOnce(async () => {
-      order.push('reattach');
-      return { id: 'sb-live' } as any;
-    });
-    runWorktreeTeardown.mockImplementationOnce(async () => {
+    const row = tables.sessions.find(r => r.sessionId === sessionId)!;
+    // Seed the per-process memo: the session's sandbox is live in this replica.
+    const live = {
+      id: 'sb-live',
+      destroy: vi.fn(async () => order.push('destroy')),
+      executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+    };
+    seedLiveSandbox(row.id, '/workspace/hello', live);
+    runTeardownCommand.mockImplementationOnce(async () => {
       order.push('teardown');
-    });
-    recycleClaimedWorkdir.mockImplementationOnce(async () => {
-      order.push('reclaim');
     });
 
     const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
 
     expect(deleted.status).toBe(200);
     expect(controller.deleteSession).toHaveBeenCalledWith({ resourceId: sessionId });
-    expect(runWorktreeTeardown).toHaveBeenCalledWith(
-      { id: 'sb-live' },
-      '/workspace/hello',
-      'docker compose down --remove-orphans',
-      { timeoutMs: 15 * 60_000 },
-    );
+    expect(runTeardownCommand).toHaveBeenCalledWith(live, '/workspace/hello', 'docker compose down --remove-orphans', {
+      timeoutMs: 15 * 60_000,
+    });
     expect(invalidateSession).toHaveBeenCalledWith(sessionId);
     expect(tables.sessions).toHaveLength(0);
-    expect(order).toEqual(['controller', 'reattach', 'teardown', 'reclaim', 'invalidate']);
+    // Deleted sessions destroy their VM — nothing resolves this id again.
+    expect(order).toEqual(['controller', 'teardown', 'destroy', 'invalidate']);
   });
 
   it('does not tear down a controller session for an unauthorized deletion', async () => {
@@ -2084,6 +2144,145 @@ describe('Factory session routes', () => {
     expect(controller.deleteSession).not.toHaveBeenCalled();
   });
 
+  it('names a session from its conversation and mirrors the title onto the row', async () => {
+    seedMaterializedProject();
+    const controller = {
+      queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
+      generateThreadTitle: vi.fn(async () => 'Log parser rewrite'),
+    } as any;
+    const memorySettings = { get: vi.fn(async () => ({ observerModelId: 'anthropic/claude-haiku-4-5' })) } as any;
+    const app = buildApp({ workosId: 'u1' }, { controller, memorySettings });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { title: 'rewrite the log parser' });
+    const sessionId = (await created.json()).session.sessionId;
+
+    const response = await app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ title: 'Log parser rewrite' });
+    const named = controller.generateThreadTitle.mock.calls[0][0];
+    expect(named.threadId).toBe('thread-1');
+    expect(named.resourceId).toBe(sessionId);
+    // Naming runs as the session's owner, so it bills their model credentials.
+    expect(named.requestContext.get('user')).toEqual({ workosId: 'u1', organizationId: 'org1' });
+    // A closed session has no live state, so the owner's stored observer model
+    // is what keeps a manual rename on the model that names threads on its own.
+    expect(named.model({ requestContext: named.requestContext }).modelId).toContain('claude-haiku-4-5');
+    expect(tables.sessions.find(row => row.sessionId === sessionId)?.title).toBe('Log parser rewrite');
+  });
+
+  it('names a session whose owner never configured a memory model', async () => {
+    seedMaterializedProject();
+    const controller = {
+      queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
+      generateThreadTitle: vi.fn(async () => 'Log parser rewrite'),
+    } as any;
+    const app = buildApp({ workosId: 'u1' }, { controller });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { title: 'rewrite the log parser' });
+    const sessionId = (await created.json()).session.sessionId;
+
+    const response = await app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
+
+    expect(response.status).toBe(200);
+    // No stored model to override with, so naming runs on the memory's own title model.
+    expect(controller.generateThreadTitle.mock.calls[0][0].model).toBeUndefined();
+    expect(tables.sessions.find(row => row.sessionId === sessionId)?.title).toBe('Log parser rewrite');
+  });
+
+  it('joins a second naming request to the one already in flight', async () => {
+    seedMaterializedProject();
+    let release = () => {};
+    const naming = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const controller = {
+      queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
+      generateThreadTitle: vi.fn(async () => {
+        await naming;
+        return 'Log parser rewrite';
+      }),
+    } as any;
+    const app = buildApp({ workosId: 'u1' }, { controller });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { title: 'rewrite the log parser' });
+    const sessionId = (await created.json()).session.sessionId;
+
+    const first = app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
+    await vi.waitFor(() => expect(controller.generateThreadTitle).toHaveBeenCalledOnce());
+    const second = app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
+    await vi.waitFor(() => expect(controller.queryThreads).toHaveBeenCalledTimes(2));
+    release();
+    const [a, b] = await Promise.all([first, second]);
+
+    // A second tab or API client cannot pay for a second naming, nor race its rename.
+    expect(controller.generateThreadTitle).toHaveBeenCalledOnce();
+    expect(await a.json()).toEqual({ title: 'Log parser rewrite' });
+    expect(await b.json()).toEqual({ title: 'Log parser rewrite' });
+    expect(tables.sessions.find(row => row.sessionId === sessionId)?.title).toBe('Log parser rewrite');
+  });
+
+  it('caps and tidies the title the model returned', async () => {
+    seedMaterializedProject();
+    const controller = {
+      queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
+      generateThreadTitle: vi.fn(async () => `  Rewrite   the log parser ${'and more '.repeat(20)}`),
+    } as any;
+    const app = buildApp({ workosId: 'u1' }, { controller });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { title: 'rewrite the log parser' });
+    const sessionId = (await created.json()).session.sessionId;
+
+    const response = await app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
+
+    const { title } = await response.json();
+    expect(title.length).toBeLessThanOrEqual(80);
+    expect(title.startsWith('Rewrite the log parser and more')).toBe(true);
+    expect(tables.sessions.find(row => row.sessionId === sessionId)?.title).toBe(title);
+  });
+
+  it('rejects a title the model returned as whitespace', async () => {
+    seedMaterializedProject();
+    const controller = {
+      queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
+      generateThreadTitle: vi.fn(async () => '   '),
+    } as any;
+    const app = buildApp({ workosId: 'u1' }, { controller });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { title: 'rewrite the log parser' });
+    const sessionId = (await created.json()).session.sessionId;
+
+    const response = await app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
+
+    expect(response.status).toBe(502);
+    expect(tables.sessions.find(row => row.sessionId === sessionId)?.title).toBe('rewrite the log parser');
+  });
+
+  it('explains that a session with no conversation cannot be named', async () => {
+    seedMaterializedProject();
+    const controller = { queryThreads: vi.fn(async () => []), generateThreadTitle: vi.fn() } as any;
+    const app = buildApp({ workosId: 'u1' }, { controller });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+    const sessionId = (await created.json()).session.sessionId;
+
+    const response = await app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
+
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toBe('This session has no conversation to name yet.');
+    expect(controller.generateThreadTitle).not.toHaveBeenCalled();
+  });
+
+  it('does not name a session belonging to another user', async () => {
+    seedMaterializedProject();
+    const controller = { queryThreads: vi.fn(), generateThreadTitle: vi.fn() } as any;
+    const ownerApp = buildApp({ workosId: 'u1' }, { controller });
+    const created = await postJson(ownerApp, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+    const sessionId = (await created.json()).session.sessionId;
+
+    const response = await buildApp({ workosId: 'u2' }, { controller }).request(
+      `/web/user-sessions/${sessionId}/title`,
+      { method: 'POST' },
+    );
+
+    expect(response.status).toBe(404);
+    expect(controller.generateThreadTitle).not.toHaveBeenCalled();
+  });
+
   it('continues sandbox reclamation and returns success when controller teardown fails', async () => {
     seedMaterializedProject();
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -2091,92 +2290,46 @@ describe('Factory session routes', () => {
     const app = buildApp({ workosId: 'u1' }, { controller });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
-    Object.assign(
-      tables.sessions.find(row => row.sessionId === sessionId)!,
-      {
-        sandboxId: 'sb-live',
-        sandboxWorkdir: '/workspace/hello',
-      },
-    );
+    const row = tables.sessions.find(r => r.sessionId === sessionId)!;
+    const live = {
+      id: 'sb-live',
+      destroy: vi.fn(async () => {}),
+      executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+    };
+    seedLiveSandbox(row.id, '/workspace/hello', live);
 
     const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
 
     expect(deleted.status).toBe(200);
     expect(tables.sessions).toHaveLength(0);
-    await vi.waitFor(() =>
-      expect(reattachSandbox).toHaveBeenCalledWith('sb-live', { actingUserId: 'u1' }),
-    );
+    await vi.waitFor(() => expect(live.destroy).toHaveBeenCalledTimes(1));
     error.mockRestore();
   });
 
-  it('returns a remote session sandbox to the reuse pool on delete instead of destroying it', async () => {
+  it('destroys the deleted session sandbox held by this process instead of pooling it', async () => {
+    // The cross-session reuse pool died with the fleet: sandbox identity is
+    // the session id, so a deleted session's VM is destroyed, not shelved.
     seedMaterializedProject();
     const app = buildApp({ workosId: 'u1' });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
-    Object.assign(
-      tables.sessions.find(row => row.sessionId === sessionId)!,
-      {
-        sandboxId: 'sb-live',
-        sandboxWorkdir: '/workspace/hello',
-      },
-    );
+    const row = tables.sessions.find(r => r.sessionId === sessionId)!;
+    const live = {
+      id: 'sb-live',
+      destroy: vi.fn(async () => {}),
+      executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+    };
+    seedLiveSandbox(row.id, '/workspace/hello', live);
 
     const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
 
     expect(deleted.status).toBe(200);
     expect(tables.sessions).toHaveLength(0);
-    // The VM stays alive for the next session, but the released session's
-    // work is scrubbed off it before it enters the pool.
-    await vi.waitFor(() => {
-      expect(reattachSandbox).toHaveBeenCalledWith('sb-live', { actingUserId: 'u1' });
-      expect(recycleClaimedWorkdir).toHaveBeenCalledWith(expect.anything(), '/workspace/hello', 'main');
-      expect(sourceControlStorage.sandboxPoolRows).toEqual([
-        expect.objectContaining({
-          orgId: 'org1',
-          projectRepositoryId: 'p1',
-          userId: 'u1',
-          sandboxId: 'sb-live',
-          sandboxWorkdir: '/workspace/hello',
-        }),
-      ]);
-    });
-  });
-
-  it('deletes the session without waiting for the sandbox scrub to finish', async () => {
-    seedMaterializedProject();
-    const app = buildApp({ workosId: 'u1' });
-    const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
-    const sessionId = (await created.json()).session.sessionId;
-    Object.assign(
-      tables.sessions.find(row => row.sessionId === sessionId)!,
-      {
-        sandboxId: 'sb-live',
-        sandboxWorkdir: '/workspace/hello',
-      },
-    );
-    // Scrubbing a large checkout takes minutes on a real VM.
-    let finishScrub!: () => void;
-    const scrubbing = new Promise<void>(resolve => {
-      finishScrub = resolve;
-    });
-    recycleClaimedWorkdir.mockImplementationOnce(async () => {
-      await scrubbing;
-    });
-
-    const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
-
-    // The workspace is gone from the user's list while the VM is still busy.
-    expect(deleted.status).toBe(200);
-    expect(tables.sessions).toHaveLength(0);
-    // Nothing can claim the sandbox until the scrub completes.
+    await vi.waitFor(() => expect(live.destroy).toHaveBeenCalledTimes(1));
     expect(sourceControlStorage.sandboxPoolRows).toEqual([]);
-
-    finishScrub();
-    await vi.waitFor(() => expect(sourceControlStorage.sandboxPoolRows).toHaveLength(1));
   });
 
-  it('does not expose another organization\'s session regardless of visibility', async () => {
+  it("does not expose another organization's session regardless of visibility", async () => {
     seedMaterializedProject();
     const created = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', {
       branch: 'feat/x',
@@ -2225,6 +2378,14 @@ describe('commit route', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ committed: true });
     expect((commitAll.mock.calls[0] as unknown as any[])[1]).toBe('/workspace/worktrees/feat-x');
+  });
+});
+
+describe('sandbox teardown route', () => {
+  it('is gone: the project-level sandbox concept no longer exists', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/sandbox', { method: 'DELETE' });
+    expect(res.status).toBe(404);
   });
 });
 

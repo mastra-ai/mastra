@@ -100,6 +100,18 @@ export function tryRepairJson(input: string): Record<string, any> | null {
 
 export type StreamPart =
   | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
+  // Present on newer AI SDK provider specs (V4 / AI SDK v7) but absent from the V2 union.
+  | {
+      type: 'reasoning-file';
+      data: string | Uint8Array;
+      mediaType: string;
+      providerMetadata?: SharedV2ProviderMetadata;
+    }
+  | {
+      type: 'custom';
+      kind: string;
+      providerMetadata?: SharedV2ProviderMetadata;
+    }
   | {
       type: 'finish';
       /** Includes 'tripwire' and 'retry' for processor scenarios */
@@ -115,6 +127,10 @@ export type StreamPart =
 
 export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: string }): ChunkType | undefined {
   switch (value.type) {
+    // Intentionally not converted: warnings are surfaced separately by the input stream.
+    case 'stream-start':
+      return;
+
     case 'response-metadata':
       return {
         type: 'response-metadata',
@@ -237,8 +253,11 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
             if (repaired) {
               toolCallInput = repaired;
             } else {
+              // Log only metadata: raw tool inputs can carry credentials or PII.
               console.error('Error converting tool call input to JSON', {
-                input: value.input,
+                toolCallId: value.toolCallId,
+                toolName: value.toolName,
+                inputLength: value.input.length,
               });
               toolCallInput = undefined;
             }
@@ -364,8 +383,42 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         from: ChunkFrom.AGENT,
         payload: value.rawValue as Record<string, unknown>,
       };
+
+    case 'reasoning-file':
+      return {
+        type: 'reasoning-file',
+        runId: ctx.runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          data: value.data,
+          // URL-backed generated files flatten to URL strings, which are not base64.
+          base64: typeof value.data === 'string' && !isUrlString(value.data) ? value.data : undefined,
+          mimeType: value.mediaType,
+          ...(value.providerMetadata != null ? { providerMetadata: value.providerMetadata } : {}),
+        },
+      };
+
+    case 'custom':
+      return {
+        type: 'custom',
+        runId: ctx.runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          kind: value.kind,
+          ...(value.providerMetadata != null ? { providerMetadata: value.providerMetadata } : {}),
+        },
+      };
+
+    default:
+      // Unknown stream part types must not disappear silently: surface them as raw chunks
+      // so consumers opting into raw chunks still receive the provider data.
+      return {
+        type: 'raw',
+        runId: ctx.runId,
+        from: ChunkFrom.AGENT,
+        payload: value as Record<string, unknown>,
+      };
   }
-  return;
 }
 
 export type OutputChunkType<OUTPUT = undefined> =
@@ -605,11 +658,29 @@ function isV3Usage(usage: unknown): usage is LanguageModelV3Usage {
   return (
     typeof u.inputTokens === 'object' &&
     u.inputTokens !== null &&
-    'total' in (u.inputTokens as object) &&
+    'total' in u.inputTokens &&
     typeof u.outputTokens === 'object' &&
     u.outputTokens !== null &&
-    'total' in (u.outputTokens as object)
+    'total' in u.outputTokens
   );
+}
+
+/**
+ * Peel `{ total: { total: … } }` down to the innermost token-detail object.
+ *
+ * AI SDK v7 wraps any model that advertises `specificationVersion: 'v2'` in a
+ * compatibility shim that nests flat usage as `{ total: usage.inputTokens }`.
+ * Mastra's model router advertises 'v2' but forwards V3/V4 usage untouched, so
+ * wrapping it with `wrapLanguageModel` nests the already-nested counts once more.
+ * Only the innermost object carries the real counts and cache/reasoning details;
+ * the wrapper's own detail fields are `undefined`.
+ */
+function innermostTokens<T extends { total?: unknown }>(tokens: T): T {
+  let current = tokens;
+  while (typeof current.total === 'object' && current.total !== null) {
+    current = current.total as T;
+  }
+  return current;
 }
 
 /**
@@ -655,15 +726,17 @@ function normalizeUsage(
 
   if (isV3Usage(usage)) {
     // V3 format - extract from nested structure
-    const inputTokens = usage.inputTokens.total;
-    const outputTokens = usage.outputTokens.total;
+    const input = innermostTokens(usage.inputTokens);
+    const output = innermostTokens(usage.outputTokens);
+    const inputTokens = input.total;
+    const outputTokens = output.total;
     return {
       inputTokens,
       outputTokens,
       totalTokens: (inputTokens ?? 0) + (outputTokens ?? 0),
-      reasoningTokens: usage.outputTokens.reasoning,
-      cachedInputTokens: usage.inputTokens.cacheRead,
-      cacheCreationInputTokens: usage.inputTokens.cacheWrite,
+      reasoningTokens: output.reasoning,
+      cachedInputTokens: input.cacheRead,
+      cacheCreationInputTokens: input.cacheWrite,
       ...cacheCreationUsage,
       raw: usage,
     };
@@ -704,22 +777,24 @@ function isV3FinishReason(
 function normalizeFinishReason(
   finishReason: LanguageModelV2FinishReason | LanguageModelV3FinishReason | 'tripwire' | 'retry' | undefined,
 ): LanguageModelV2FinishReason | 'tripwire' | 'retry' {
-  if (!finishReason) {
+  // V3/V6 format - extract unified value. Peel repeated envelopes: the AI SDK v7
+  // 'v2' compatibility shim re-wraps an already-nested reason (see innermostTokens).
+  let reason = finishReason;
+  while (isV3FinishReason(reason)) {
+    reason = reason.unified as typeof finishReason;
+  }
+
+  if (!reason) {
     return 'other';
   }
 
   // Handle Mastra-specific finish reasons
-  if (finishReason === 'tripwire' || finishReason === 'retry') {
-    return finishReason;
-  }
-
-  // V3/V6 format - extract unified value
-  if (isV3FinishReason(finishReason)) {
-    return finishReason.unified;
+  if (reason === 'tripwire' || reason === 'retry') {
+    return reason;
   }
 
   // V2/V5 format - already a string, but normalize 'unknown' to 'other' for consistency with V6
-  return finishReason === 'unknown' ? 'other' : finishReason;
+  return reason === 'unknown' ? 'other' : reason;
 }
 
 /**
@@ -735,5 +810,13 @@ function normalizeFinishReason(
 function extractRawFinishReason(
   finishReason: LanguageModelV2FinishReason | LanguageModelV3FinishReason | 'tripwire' | 'retry' | undefined,
 ): string | undefined {
-  return isV3FinishReason(finishReason) ? finishReason.raw : undefined;
+  // Walk nested envelopes: an outer compatibility wrapper carries `raw: undefined`,
+  // the provider's own string sits on the innermost object.
+  let raw: string | undefined;
+  let reason = finishReason;
+  while (isV3FinishReason(reason)) {
+    raw = reason.raw ?? raw;
+    reason = reason.unified as typeof finishReason;
+  }
+  return raw;
 }

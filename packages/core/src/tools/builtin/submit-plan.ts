@@ -104,6 +104,7 @@ export const submitPlanTool = createTool({
               title: resumeData.title,
               path: resumeData.path,
               plan: resumeData.plan,
+              feedback: resumeData.feedback,
             },
           };
         }

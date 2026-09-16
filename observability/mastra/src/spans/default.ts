@@ -81,7 +81,16 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     if (this.isEvent) {
       return;
     }
+    if (this.endTime) {
+      return;
+    }
+    if (options?.endTree) {
+      // Close open descendants first (bare, without these options) so
+      // exporters that wait for the root still see it end last.
+      this.endOpenDescendants();
+    }
     this.endTime = new Date();
+    this.detachFromParent();
     // Metadata is always updated (read by correlation/logger/metrics contexts).
     if (options?.metadata) {
       this.metadata = {
@@ -110,7 +119,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       return;
     }
 
-    const { error, endSpan = true, attributes, metadata } = options;
+    const { error, endSpan = true, endTree, attributes, metadata } = options;
 
     if (metadata) {
       this.metadata = {
@@ -150,7 +159,9 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       }
     }
 
-    if (endSpan) {
+    if (endTree) {
+      this.end({ endTree: true });
+    } else if (endSpan) {
       this.end();
     } else {
       // Trigger span update event when not ending the span

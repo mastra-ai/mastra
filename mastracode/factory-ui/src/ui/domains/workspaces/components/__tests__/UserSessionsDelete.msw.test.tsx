@@ -6,7 +6,7 @@ import { describe, expect, it, onTestFinished } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import type { FactoryUserSession } from '../../services/github';
+import type { FactoryUserSession } from '../../services/user-sessions';
 import { UserSessionsSection } from '../UserSessionsSection';
 
 const projectRepositoryId = 'ghp-1';

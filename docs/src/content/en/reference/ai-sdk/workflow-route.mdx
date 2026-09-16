@@ -1,6 +1,6 @@
 ---
 title: "Reference: workflowRoute() | AI SDK"
-description: API reference for workflowRoute(), a function to create workflow route handlers for streaming workflow execution in AI SDK-compatible format.
+description: "Creates a workflow route handler for streaming workflow execution using the AI SDK format."
 packages:
   - "@mastra/ai-sdk"
   - "@mastra/core"
@@ -10,7 +10,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # workflowRoute()
 
-Creates a workflow route handler for streaming workflow execution using the AI SDK format. This function registers an HTTP `POST` endpoint that accepts input data, executes a workflow, and streams the response back to the client in AI SDK-compatible format. You have to use it inside a [custom API route](/docs/server/custom-api-routes).
+Creates a workflow route handler for streaming workflow execution in AI SDK format. The function registers an HTTP `POST` endpoint that accepts input data and executes a workflow before streaming the response to the client in AI SDK-compatible format. Use it inside a [custom API route](/docs/server/custom-api-routes).
 
 Use [`handleWorkflowStream()`](/reference/ai-sdk/handle-workflow-stream) if you need a framework-agnostic handler.
 

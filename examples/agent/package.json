@@ -17,7 +17,9 @@
     "@mastra/auth-workos": "latest",
     "@mastra/client-js": "latest",
     "@mastra/core": "latest",
+    "@mastra/daytona": "latest",
     "@mastra/duckdb": "latest",
+    "@mastra/e2b-desktop": "latest",
     "@mastra/editor": "latest",
     "@mastra/evals": "latest",
     "@mastra/libsql": "latest",
@@ -37,6 +39,13 @@
     "zod": "^4.4.3"
   },
   "pnpm": {
+    "packageExtensions": {
+      "@daytonaio/sdk": {
+        "dependencies": {
+          "tslib": "*"
+        }
+      }
+    },
     "overrides": {
       "@mastra/auth-auth0": "link:../../auth/auth0",
       "@mastra/auth-clerk": "link:../../auth/clerk",
@@ -45,7 +54,10 @@
       "@mastra/auth-workos": "link:../../auth/workos",
       "@mastra/auth-cloud": "link:../../auth/cloud",
       "@mastra/core": "link:../../packages/core",
+      "@mastra/daytona": "link:../../workspaces/daytona",
       "@mastra/duckdb": "link:../../stores/duckdb",
+      "@mastra/e2b": "link:../../workspaces/e2b",
+      "@mastra/e2b-desktop": "link:../../workspaces/e2b-desktop",
       "@mastra/editor": "link:../../packages/editor",
       "@mastra/loggers": "link:../../packages/loggers",
       "@mastra/voice-openai": "link:../../voice/openai",
@@ -67,6 +79,7 @@
     "hitl:approval": "npx tsx src/hitl-approval-recall.ts",
     "item-scorers:seed": "tsx src/seed-item-scorers.ts",
     "item-scorers:run": "tsx src/run-item-scorers.ts",
+    "test": "vitest run",
     "mastra:dev": "mastra dev",
     "mastra:build": "mastra build -s",
     "mastra:start": "mastra start",
@@ -81,6 +94,7 @@
   "devDependencies": {
     "concurrently": "^9.1.2",
     "msw": "^2.12.2",
-    "tsx": "^4"
+    "tsx": "^4",
+    "vitest": "^4.0.0"
   }
 }

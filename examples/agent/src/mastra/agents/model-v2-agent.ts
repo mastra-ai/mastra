@@ -13,6 +13,7 @@ import {
 import { stepLoggerProcessor, responseQualityProcessor } from '../processors';
 import { findUserWorkflow } from '../workflows/other';
 import { createScorer } from '@mastra/core/evals';
+import { alternatingScorer, alwaysPassScorer } from '../scorers/chef-model-v2-scorers';
 import { cryptoResearchTool, cryptoPriceTool } from '../tools';
 import { weatherTool as weatherInfo } from '../tools/weather-tool';
 import {
@@ -107,17 +108,10 @@ export const chefModelV2Agent = new Agent({
     lessComplexWorkflow,
     findUserWorkflow,
   },
-  // scorers: ({ mastra }) => {
-  //   if (!mastra) {
-  //     throw new Error('Mastra not found');
-  //   }
-
-  //   const scorer1 = mastra.getScorerById('scorer1');
-
-  //   return {
-  //     scorer1: { scorer: scorer1, sampling: { rate: 1, type: 'ratio' } },
-  //   };
-  // },
+  scorers: {
+    alwaysPass: { scorer: alwaysPassScorer, sampling: { rate: 1, type: 'ratio' } },
+    alternating: { scorer: alternatingScorer, sampling: { rate: 1, type: 'ratio' } },
+  },
   memory,
   signals: [new TaskSignalProvider()],
   inputProcessors: [moderationProcessor],

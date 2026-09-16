@@ -278,12 +278,14 @@ describe('JiraIntegration capability surface', () => {
     ).resolves.toBeNull();
   });
 
-  it('resolves intake dispatches for issue sources only', async () => {
+  it('resolves intake dispatches for issue sources only, without leaking the API token', async () => {
     const jira = integration();
 
+    // The placeholder connection keeps the deployment credential out of the
+    // generic dispatch path — the intake methods authenticate via the client.
     await expect(
       jira.intake.resolveIntakeDispatch!({ orgId: 'org-1', externalSource: { type: 'issue', externalId: 'ENG-42' } }),
-    ).resolves.toEqual({ connection: { type: 'oauth', accessToken: 'jira-token' }, issueId: 'ENG-42' });
+    ).resolves.toEqual({ connection: { type: 'oauth', accessToken: 'deployment-global' }, issueId: 'ENG-42' });
     await expect(
       jira.intake.resolveIntakeDispatch!({ orgId: 'org-1', externalSource: { type: 'pull-request', externalId: '1' } }),
     ).resolves.toBeNull();

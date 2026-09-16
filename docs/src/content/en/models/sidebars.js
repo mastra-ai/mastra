@@ -126,6 +126,21 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/above',
+          label: 'above.dev',
+        },
+        {
+          type: 'doc',
+          id: 'providers/agentrouter',
+          label: 'AgentRouter',
+        },
+        {
+          type: 'doc',
+          id: 'providers/agnes',
+          label: 'Agnes AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/ai-router',
           label: 'AI-ROUTER',
         },
@@ -138,6 +153,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/aihubmix',
           label: 'AIHubMix',
+        },
+        {
+          type: 'doc',
+          id: 'providers/aixy',
+          label: 'Aixy',
         },
         {
           type: 'doc',
@@ -236,6 +256,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/bothub',
+          label: 'Bothub',
+        },
+        {
+          type: 'doc',
           id: 'providers/cerebras',
           label: 'Cerebras',
         },
@@ -328,6 +353,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/deepinfra',
           label: 'Deep Infra',
+        },
+        {
+          type: 'doc',
+          id: 'providers/llmgateway',
+          label: 'DevPass (LLM Gateway)',
         },
         {
           type: 'doc',
@@ -446,6 +476,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/infer',
+          label: 'Infer by Flow7',
+        },
+        {
+          type: 'doc',
           id: 'providers/inference',
           label: 'Inference',
         },
@@ -463,6 +498,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/io-net',
           label: 'IO.NET',
+        },
+        {
+          type: 'doc',
+          id: 'providers/iteracompute',
+          label: 'IteraCompute',
         },
         {
           type: 'doc',
@@ -491,6 +531,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/klokintegration',
+          label: 'klokintegration.se',
+        },
+        {
+          type: 'doc',
           id: 'providers/kosmik',
           label: 'Kosmik Compute',
         },
@@ -511,8 +556,13 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/llmgateway',
+          id: 'providers/llmgateway-providers',
           label: 'LLM Gateway',
+        },
+        {
+          type: 'doc',
+          id: 'providers/llmtech',
+          label: 'LLM Tech',
         },
         {
           type: 'doc',
@@ -543,6 +593,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/meganova',
           label: 'Meganova',
+        },
+        {
+          type: 'doc',
+          id: 'providers/melious',
+          label: 'Melious',
         },
         {
           type: 'doc',
@@ -616,6 +671,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/nan',
+          label: 'NaN',
+        },
+        {
+          type: 'doc',
           id: 'providers/nano-gpt',
           label: 'NanoGPT',
         },
@@ -628,6 +688,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/nebius',
           label: 'Nebius Token Factory',
+        },
+        {
+          type: 'doc',
+          id: 'providers/neosmith',
+          label: 'NeoSmith',
         },
         {
           type: 'doc',
@@ -676,6 +741,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/openreason',
+          label: 'OpenReason',
+        },
+        {
+          type: 'doc',
+          id: 'providers/opper',
+          label: 'Opper',
+        },
+        {
+          type: 'doc',
           id: 'providers/orcarouter',
           label: 'OrcaRouter',
         },
@@ -683,6 +758,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/ovhcloud',
           label: 'OVHcloud AI Endpoints',
+        },
+        {
+          type: 'doc',
+          id: 'providers/pendra',
+          label: 'Pendra',
         },
         {
           type: 'doc',
@@ -776,6 +856,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/sensenova',
+          label: 'SenseNova (China)',
+        },
+        {
+          type: 'doc',
           id: 'providers/siliconflow',
           label: 'SiliconFlow',
         },
@@ -793,6 +878,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/stackit',
           label: 'STACKIT',
+        },
+        {
+          type: 'doc',
+          id: 'providers/standardcompute',
+          label: 'Standard Compute',
         },
         {
           type: 'doc',
@@ -871,6 +961,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/tokengo',
+          label: 'TokenGo',
+        },
+        {
+          type: 'doc',
+          id: 'providers/tokenrouter',
+          label: 'TokenRouter',
+        },
+        {
+          type: 'doc',
           id: 'providers/trustedrouter',
           label: 'TrustedRouter',
         },
@@ -896,8 +996,28 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/vancine',
+          label: 'Vancine',
+        },
+        {
+          type: 'doc',
+          id: 'providers/vispark',
+          label: 'Vispark',
+        },
+        {
+          type: 'doc',
           id: 'providers/vivgrid',
           label: 'Vivgrid',
+        },
+        {
+          type: 'doc',
+          id: 'providers/volcengine',
+          label: 'Volcengine Ark',
+        },
+        {
+          type: 'doc',
+          id: 'providers/volcengine-coding-plan',
+          label: 'Volcengine Ark Coding Plan',
         },
         {
           type: 'doc',
@@ -908,6 +1028,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/wafer.ai',
           label: 'Wafer',
+        },
+        {
+          type: 'doc',
+          id: 'providers/wallaby',
+          label: 'Wallaby',
         },
         {
           type: 'doc',

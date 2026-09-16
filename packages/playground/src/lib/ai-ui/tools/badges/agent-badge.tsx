@@ -1,14 +1,17 @@
+import { ToolCallMono } from '@mastra/playground-ui/components/ai/tool-call';
+import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
+import { BadgeWrapper } from '@mastra/playground-ui/domains/chat/components/badge-wrapper';
+import { NetworkChoiceMetadataDialogTrigger } from '@mastra/playground-ui/domains/chat/components/network-choice-metadata-dialog';
+import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/section-label';
+import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
+import { ToolApprovalButtons } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import React from 'react';
 import Markdown from 'react-markdown';
 import { ToolCard } from '../tool-card';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
-import { BadgeWrapper } from './badge-wrapper';
-import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
-import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
-import { ToolApprovalButtons } from './tool-approval-buttons';
-import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 type TextMessage = {
   type: 'text';
@@ -34,6 +37,9 @@ export interface AgentBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCal
   toolCalled?: boolean;
   isComplete?: boolean;
   keepOpenForStreamingChildMessages?: boolean;
+  status?: ToolCallStatus;
+  /** Error message when the delegation failed (tool part state `output-error`). */
+  errorText?: string;
 }
 
 export const AgentBadge = ({
@@ -48,6 +54,8 @@ export const AgentBadge = ({
   toolCalled: toolCalledProp,
   isComplete = false,
   keepOpenForStreamingChildMessages = false,
+  status = 'idle',
+  errorText,
 }: AgentBadgeProps) => {
   const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
   const selectionReason =
@@ -83,11 +91,14 @@ export const AgentBadge = ({
     toolCalled = toolCalledProp ?? allChildToolsComplete;
   }
 
-  const shouldCollapseContent = isComplete && !toolApprovalMetadata && !keepOpenForStreamingChildMessages;
+  const isError = status === 'error';
+  const shouldCollapseContent = isComplete && !isError && !toolApprovalMetadata && !keepOpenForStreamingChildMessages;
 
   let suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
-      <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{suspendPayload}</pre>
+      <ToolCallMono copyText={suspendPayload} className="text-icon3">
+        {suspendPayload}
+      </ToolCallMono>
     ) : (
       <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
     );
@@ -97,6 +108,7 @@ export const AgentBadge = ({
       data-testid="agent-badge"
       icon={<AgentIcon className="text-accent1" />}
       title={agentId}
+      status={status}
       initialCollapsed={shouldCollapseContent}
       extraInfo={
         metadata?.mode === 'network' ? (
@@ -140,9 +152,15 @@ export const AgentBadge = ({
         );
       })}
 
+      {isError && errorText && (
+        <ToolCallMono copyText={errorText} data-testid="agent-error" className="text-error/90">
+          {errorText}
+        </ToolCallMono>
+      )}
+
       {suspendPayloadSlot !== undefined && suspendPayload && (
         <div>
-          <p className="pb-2 font-medium">Agent suspend payload</p>
+          <SectionLabel>Agent suspend payload</SectionLabel>
           {suspendPayloadSlot}
         </div>
       )}

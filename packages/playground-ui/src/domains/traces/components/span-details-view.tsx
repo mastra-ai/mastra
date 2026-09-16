@@ -1,6 +1,7 @@
 import type { SpanRecord } from '@mastra/core/storage';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
-import { formatSpanDuration, formatSpanPanelTimestamp } from '../utils/span-utils';
+import { SpanSummaryDescription } from './span-summary-description';
+import { TraceIdButton } from './trace-id-button';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
 
 const KV = DataDetailsPanel.KeyValueList;
@@ -19,16 +20,16 @@ export interface SpanDetailsViewProps {
  * full-width span view with scoring tab + prev/next nav, use `SpanDataPanelView`.
  */
 export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetailsViewProps) {
-  const duration = formatSpanDuration(span?.startedAt, span?.endedAt);
-  const startedAt = formatSpanPanelTimestamp(span?.startedAt);
-  const endedAt = formatSpanPanelTimestamp(span?.endedAt);
-
   return (
     <DataDetailsPanel>
       <DataDetailsPanel.Header>
-        <DataDetailsPanel.Heading>
-          Span <b># {spanId}</b>
-        </DataDetailsPanel.Heading>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <DataDetailsPanel.Heading className="items-center">
+            Span
+            <TraceIdButton id={spanId} />
+          </DataDetailsPanel.Heading>
+          {span && <SpanSummaryDescription span={span} />}
+        </div>
         <DataDetailsPanel.CloseButton onClick={onClose} />
       </DataDetailsPanel.Header>
 
@@ -38,34 +39,15 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
         <DataDetailsPanel.NoData>Span not found.</DataDetailsPanel.NoData>
       ) : (
         <DataDetailsPanel.Content>
-          <KV>
-            {span.spanType && (
-              <>
+          {span.spanType && (
+            <>
+              <KV>
                 <KV.Key>Type</KV.Key>
                 <KV.Value>{span.spanType}</KV.Value>
-              </>
-            )}
-            {startedAt && (
-              <>
-                <KV.Key>Started</KV.Key>
-                <KV.Value>{startedAt}</KV.Value>
-              </>
-            )}
-            {endedAt && (
-              <>
-                <KV.Key>Ended</KV.Key>
-                <KV.Value>{endedAt}</KV.Value>
-              </>
-            )}
-            {duration && (
-              <>
-                <KV.Key>Duration</KV.Key>
-                <KV.Value>{duration}</KV.Value>
-              </>
-            )}
-          </KV>
-
-          <br />
+              </KV>
+              <br />
+            </>
+          )}
 
           <DataDetailsPanel.CodeSection
             title="Input"

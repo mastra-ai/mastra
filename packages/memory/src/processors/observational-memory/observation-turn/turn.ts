@@ -1,4 +1,5 @@
 import type { MessageList } from '@mastra/core/agent';
+import type { MemoryRunState } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -11,6 +12,7 @@ import type { MemoryContextProvider } from '../processor';
 import type { ObservationModelContext } from '../types';
 
 import { loadMemoryContextMessages } from './load-memory-context';
+import { selectSafeBufferPrefix } from './safe-buffer-prefix';
 import { ObservationStep } from './step';
 import type { ObservationTurnHooks, TurnContext, TurnResult } from './types';
 
@@ -136,11 +138,12 @@ export class ObservationTurn {
    * If a MemoryContextProvider is passed, loads historical messages and adds
    * them to the MessageList. Without a provider, only fetches/caches the record.
    */
-  async start(memory?: MemoryContextProvider): Promise<TurnContext> {
+  async start(memory?: MemoryContextProvider, runState?: MemoryRunState): Promise<TurnContext> {
     if (this._started) throw new Error('Turn already started');
     this._started = true;
 
     this._record = await this.om.getOrCreateRecord(this.threadId, this.resourceId);
+    runState?.set(`observational-memory:record:${this.threadId}:${this.resourceId ?? ''}`, this._record);
     this._generationCountAtStart = this._record.generationCount;
     this.memory = memory;
 
@@ -150,6 +153,7 @@ export class ObservationTurn {
         messageList: this.messageList,
         threadId: this.threadId,
         resourceId: this.resourceId,
+        runState,
       });
 
       this._context = {
@@ -226,13 +230,16 @@ export class ObservationTurn {
       const allMessages = getObservableMessages(this.messageList);
       const record = this._record!;
       const unobservedMessages = this.om.getUnobservedMessages(allMessages, record);
-      if (unobservedMessages.length > 0) {
+      // Buffer only the safe prefix before a tool call still pending on the newest
+      // message; defer when the cut before it is unsafe (see selectSafeBufferPrefix).
+      const idleMessages = selectSafeBufferPrefix(unobservedMessages);
+      if (idleMessages.length > 0) {
         void this.om.trackBackgroundWork(
           this.om
             .buffer({
               threadId: this.threadId,
               resourceId: this.resourceId,
-              messages: unobservedMessages,
+              messages: idleMessages,
               record,
               writer: this.writer,
               agent: this.agent,

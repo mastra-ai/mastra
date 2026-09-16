@@ -15,7 +15,7 @@ import type { CallToolResult } from '@modelcontextprotocol/server';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 
-import { InternalMastraMCPClient } from './client.js';
+import { InternalMastraMCPClient, getMcpCallToolContent, getMcpCallToolMeta } from './client.js';
 
 describe('InternalMastraMCPClient - server instructions', () => {
   afterEach(() => {
@@ -563,6 +563,9 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
       },
     });
 
+    // The Tool-level validator stays a no-op so envelope returns (no structuredContent,
+    // isError + onToolError: 'return') aren't validated against the outputSchema.
+    // Enforcement happens inside the execute wrapper on the structuredContent path.
     const invalidOutput = { result: 'not-a-number', extraField: true };
     expect(calculateTool.outputSchema?.['~standard'].validate(invalidOutput)).toEqual({ value: invalidOutput });
     expect(toStandardSchema(outputSchema)['~standard'].validate(invalidOutput)).toHaveProperty('issues');
@@ -573,6 +576,118 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     };
     vi.spyOn(sdkClient, 'callTool').mockResolvedValue(callToolResult);
     await expect(calculateTool.execute?.({ expression: '1 + 1' })).resolves.toEqual(callToolResult);
+  });
+
+  it('validates structuredContent against outputSchema and returns a structured validation error on mismatch', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'calculate',
+          description: 'Calculates a math expression',
+          inputSchema: { type: 'object' as const, properties: { expression: { type: 'string' } } },
+          outputSchema: {
+            type: 'object' as const,
+            properties: { result: { type: 'number' } },
+            required: ['result'],
+          },
+        },
+      ],
+    });
+
+    const tools = await client.tools();
+    const calculateTool = tools['calculate'];
+
+    // Mocking callTool bypasses the MCP SDK's own AJV check, which is exactly the
+    // situation on the cached-catalog path (the SDK output-schema cache is empty).
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: 'nope' }],
+      structuredContent: { result: 'not-a-number' },
+      isError: false,
+    });
+
+    const result = await calculateTool.execute?.({ expression: '1 + 1' });
+    expect(result).toMatchObject({ error: true });
+    expect((result as any).message).toContain('Tool output validation failed for calculate');
+    expect((result as any).validationErrors).toBeDefined();
+  });
+
+  it('passes valid structuredContent through unchanged with content metadata intact', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'calculate',
+          description: 'Calculates a math expression',
+          inputSchema: { type: 'object' as const, properties: { expression: { type: 'string' } } },
+          outputSchema: {
+            type: 'object' as const,
+            properties: { result: { type: 'number' } },
+            required: ['result'],
+          },
+        },
+      ],
+    });
+
+    const tools = await client.tools();
+    const calculateTool = tools['calculate'];
+
+    const content = [{ type: 'text', text: JSON.stringify({ result: 2 }) }];
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content,
+      structuredContent: { result: 2 },
+      isError: false,
+    });
+
+    const result = await calculateTool.execute?.({ expression: '1 + 1' });
+    expect(result).toEqual({ result: 2 });
+    expect(getMcpCallToolContent(result)).toEqual(content);
+  });
+
+  it('does not schema-validate isError results when onToolError is "return"', async () => {
+    const returnClient = new InternalMastraMCPClient({
+      name: 'output-schema-test-client-return',
+      server: { url: testServer.baseUrl, onToolError: 'return' },
+    });
+    await returnClient.connect();
+    try {
+      const sdkClient = (returnClient as any).client as Client;
+
+      vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+        tools: [
+          {
+            name: 'calculate',
+            description: 'Calculates a math expression',
+            inputSchema: { type: 'object' as const, properties: { expression: { type: 'string' } } },
+            outputSchema: {
+              type: 'object' as const,
+              properties: { result: { type: 'number' } },
+              required: ['result'],
+            },
+          },
+        ],
+      });
+
+      const tools = await returnClient.tools();
+      const calculateTool = tools['calculate'];
+
+      // An error envelope with structuredContent that doesn't match the schema must not
+      // be masked by a validation error — the isError path owns this result.
+      const callToolResult = {
+        content: [{ type: 'text', text: 'boom' }],
+        structuredContent: { result: 'not-a-number' },
+        isError: true,
+      };
+      vi.spyOn(sdkClient, 'callTool').mockResolvedValue(callToolResult);
+
+      const result = await calculateTool.execute?.({ expression: '1 + 1' });
+      expect(result).toEqual(callToolResult.structuredContent);
+      expect((result as any).error).toBeUndefined();
+    } finally {
+      await returnClient.disconnect().catch(() => {});
+    }
   });
 });
 
@@ -963,6 +1078,79 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
       type: 'json',
       value: fullResult,
     });
+  });
+
+  it('should preserve result _meta (with serverId stamped into ui) on structured results', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'ui_tool',
+          description: 'Returns an MCP App resource',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: {
+            type: 'object' as const,
+            properties: { count: { type: 'number' } },
+          },
+        },
+      ],
+    });
+
+    const structured = { count: 2 };
+    const content = [{ type: 'text', text: 'Found 2 items' }];
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: structured,
+      content,
+      _meta: { ui: { resourceUri: 'ui://ui_tool/app.html' }, traceId: 'trace-9' },
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const result = await tools['ui_tool'].execute?.({});
+
+    // execute() return shape is unchanged: enumerable keys are only the structured output
+    expect(result).toEqual(structured);
+    expect(Object.keys(result)).toEqual(['count']);
+    expect(JSON.stringify(result)).toBe(JSON.stringify(structured));
+
+    // Hidden channels expose the rest of the CallToolResult envelope
+    expect(getMcpCallToolContent(result)).toEqual(content);
+    expect(getMcpCallToolMeta(result)).toEqual({
+      ui: { resourceUri: 'ui://ui_tool/app.html', serverId: 'structured-content-test-client' },
+      traceId: 'trace-9',
+    });
+  });
+
+  it('should return undefined from getMcpCallToolMeta when the result has no _meta', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'plain_tool',
+          description: 'No _meta',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: {
+            type: 'object' as const,
+            properties: { count: { type: 'number' } },
+          },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: { count: 0 },
+      content: [{ type: 'text', text: 'none' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const result = await tools['plain_tool'].execute?.({});
+
+    expect(getMcpCallToolMeta(result)).toBeUndefined();
+    expect(getMcpCallToolContent(result)).toEqual([{ type: 'text', text: 'none' }]);
   });
 
   it('should use JSON content text in toModelOutput when the server mirrors structuredContent in content', async () => {
@@ -2823,6 +3011,14 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
 });
 
 describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => {
+  // Resolve the filesystem server from the workspace instead of `npx -y`, which
+  // downloads it on the fly and can hang or produce no output in CI.
+  const filesystemServer = path.join(
+    path.dirname(require.resolve('@modelcontextprotocol/server-filesystem/package.json')),
+    'dist',
+    'index.js',
+  );
+
   /**
    * Integration test using the actual @modelcontextprotocol/server-filesystem
    * This reproduces the exact scenario from issue #8660:
@@ -2845,7 +3041,7 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
       let settled = false;
       let ready = false;
 
-      const proc = spawn('npx', ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'], {
+      const proc = spawn(process.execPath, [filesystemServer, '/tmp'], {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
@@ -2980,8 +3176,8 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
     const client = new InternalMastraMCPClient({
       name: 'with-roots-proof-test',
       server: {
-        command: 'npx',
-        args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
+        command: process.execPath,
+        args: [filesystemServer, '/tmp'],
         roots: [{ uri: 'file:///tmp', name: 'Temp Directory' }],
       },
     });
@@ -3010,8 +3206,8 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
     const client = new InternalMastraMCPClient({
       name: 'filesystem-roots-test',
       server: {
-        command: 'npx',
-        args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
+        command: process.execPath,
+        args: [filesystemServer, '/tmp'],
         roots: [{ uri: 'file:///tmp', name: 'Temp Directory' }],
       },
     });
@@ -3039,8 +3235,8 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
     const client = new InternalMastraMCPClient({
       name: 'filesystem-roots-update-test',
       server: {
-        command: 'npx',
-        args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
+        command: process.execPath,
+        args: [filesystemServer, '/tmp'],
         roots: [{ uri: 'file:///tmp' }],
       },
     });
@@ -4356,9 +4552,11 @@ describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
     (client as any).transport = transport;
 
     let rejectToolCall!: (error: Error) => void;
-    const callTool = vi.spyOn(sdkClient, 'callTool').mockImplementationOnce(
-      () => new Promise((_, reject) => (rejectToolCall = reject)) as ReturnType<Client['callTool']>,
-    );
+    const callTool = vi
+      .spyOn(sdkClient, 'callTool')
+      .mockImplementationOnce(
+        () => new Promise((_, reject) => (rejectToolCall = reject)) as ReturnType<Client['callTool']>,
+      );
     const connect = vi.spyOn(client, 'connect');
     const tool = (await client.tools())['ping'];
     const result = tool.execute?.({});

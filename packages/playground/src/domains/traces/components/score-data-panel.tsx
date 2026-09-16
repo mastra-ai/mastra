@@ -3,7 +3,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { format } from 'date-fns/format';
 import { FileInputIcon, FileOutputIcon, GaugeIcon, ReceiptText, SaveIcon } from 'lucide-react';
@@ -38,9 +37,10 @@ export interface ScoreDataPanelProps {
   onClose: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
+  className?: string;
 }
 
-export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreDataPanelProps) {
+export function ScoreDataPanel({ score, onClose, onPrevious, onNext, className }: ScoreDataPanelProps) {
   const { Link } = useLinkComponent();
   const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
   const isCodeBased = isCodeBasedScorer(score);
@@ -48,19 +48,21 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreData
 
   return (
     <>
-      <DataPanel>
-        <DataPanel.Header>
-          <DataPanel.Heading>
+      <DataPanel className={className}>
+        {/* Matches SpanDataPanelView's header height so neighbouring panel headers stay level. */}
+        <DataPanel.Header className="min-h-16 py-2">
+          <DataPanel.Heading className="items-center whitespace-nowrap">
             Score <b># {score.id}</b>
           </DataPanel.Heading>
-          <ButtonsGroup className="ml-auto shrink-0">
+          <ButtonsGroup className="ml-auto shrink-0 self-start">
             <DataPanel.NextPrevNav
+              variant="ghost"
               onPrevious={onPrevious}
               onNext={onNext}
               previousLabel="Previous score"
               nextLabel="Next score"
             />
-            <DataPanel.CloseButton onClick={onClose} />
+            <DataPanel.CloseButton variant="ghost" onClick={onClose} />
           </ButtonsGroup>
         </DataPanel.Header>
 
@@ -83,7 +85,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreData
             {score.traceId && (
               <>
                 <DataKeysAndValues.Key>Trace Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueLink href={`/traces/${encodeURIComponent(score.traceId)}`} as={Link}>
+                <DataKeysAndValues.ValueLink href={`/traces?traceId=${encodeURIComponent(score.traceId)}`} as={Link}>
                   {score.traceId}
                 </DataKeysAndValues.ValueLink>
               </>
@@ -92,7 +94,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreData
               <>
                 <DataKeysAndValues.Key>Span Id</DataKeysAndValues.Key>
                 <DataKeysAndValues.ValueLink
-                  href={`/traces/${encodeURIComponent(score.traceId)}?spanId=${encodeURIComponent(score.spanId)}`}
+                  href={`/traces?traceId=${encodeURIComponent(score.traceId)}&spanId=${encodeURIComponent(score.spanId)}`}
                   as={Link}
                 >
                   {score.spanId}
@@ -102,10 +104,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreData
           </DataKeysAndValues>
 
           <div className="mt-6 mb-6 flex justify-end">
-            <Button size="sm" onClick={() => setDatasetDialogOpen(true)}>
-              <Icon>
-                <SaveIcon />
-              </Icon>
+            <Button size="sm" onClick={() => setDatasetDialogOpen(true)} icon={<SaveIcon />}>
               Save as Dataset Item
             </Button>
           </div>
@@ -113,7 +112,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreData
           <div className="text-neutral4 mb-6">
             <div
               className={cn(
-                'text-neutral2 text-ui-lg flex gap-2 items-baseline',
+                'text-neutral2 text-ui-md flex gap-2 items-baseline',
                 '[&>svg]:w-5 [&>svg]:h-5 [&>svg]:translate-y-1',
               )}
             >

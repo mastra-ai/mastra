@@ -9,6 +9,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import CodeMirror from '@uiw/react-codemirror';
+import { Play } from 'lucide-react';
 import { useState, useId, useEffect } from 'react';
 import type {
   ProcessorDetail,
@@ -46,7 +47,7 @@ export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
 
   if (isLoading) {
     return (
-      <div className="p-6">
+      <div className="p-4">
         <Skeleton className="mb-4 h-8 w-48" />
         <Skeleton className="h-32 w-full" />
       </div>
@@ -57,7 +58,7 @@ export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
 
   if (!processor)
     return (
-      <div className="px-6 py-12 text-center">
+      <div className="px-4 py-8 text-center">
         <Txt variant="header-md" className="text-neutral3">
           Processor not found
         </Txt>
@@ -181,6 +182,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
           </div>
 
           <Button
+            icon={<Play />}
             onClick={handleExecute}
             disabled={executeProcessor.isPending || selectedPhase === 'outputStream'}
             className="w-full"
@@ -200,8 +202,8 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
                 Status
               </Txt>
               <div className="flex items-center gap-2">
-                <Badge variant={result.success ? 'success' : 'error'}>{result.success ? 'Success' : 'Failed'}</Badge>
-                {result.tripwire?.triggered && <Badge variant="info">Tripwire Triggered</Badge>}
+                <Badge variant={result.success ? 'green' : 'red'}>{result.success ? 'Success' : 'Failed'}</Badge>
+                {result.tripwire?.triggered && <Badge variant="blue">Tripwire Triggered</Badge>}
               </div>
               {result.tripwire?.triggered && result.tripwire.reason && (
                 <div className="bg-accent6Dark border-accent6/20 mt-2 rounded-md border p-3">
@@ -246,9 +248,7 @@ function ProcessorInformation({ processor }: ProcessorInformationProps) {
       )}
       <div className="mt-3 flex flex-wrap gap-1">
         {processor.phases.map(phase => (
-          <Badge key={phase} variant="default">
-            {phase}
-          </Badge>
+          <Badge key={phase}>{phase}</Badge>
         ))}
       </div>
       <div className="mt-3">

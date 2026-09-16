@@ -1,11 +1,10 @@
 /**
  * Typed Jira Cloud REST client (API v3).
  *
- * Deployment-global Basic auth (`email:apiToken`) against a single
- * `https://<site>.atlassian.net` base URL — no OAuth, no per-org connections
- * (see the JiraIntegration for how credentials are configured). Uses global
- * `fetch` with the same 15s timeout and error-normalization approach as the
- * Linear integration's GraphQL helper.
+ * Shared by the direct and Platform-managed Jira integrations. Direct Jira
+ * uses Basic auth against an Atlassian site; Platform Jira points the same
+ * client at a connection proxy with a bearer token. Both modes use the same
+ * request shapes, timeout, and error normalization.
  *
  * Endpoint notes (Jira Cloud, 2026):
  * - Issue search is `POST /rest/api/3/search/jql` — the legacy
@@ -21,6 +20,8 @@ import type { AdfNode } from './adf.js';
 import { textToAdf } from './adf.js';
 
 const JIRA_TIMEOUT_MS = 15_000;
+/** Hosts allowed to receive Basic credentials over plain http (local development mocks). */
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
 /** Issue page size — Linear parity (`LINEAR_ISSUES_PAGE_SIZE`). */
 export const JIRA_ISSUES_PAGE_SIZE = 30;
 /** Comment page size — Linear parity (`LINEAR_COMMENTS_PAGE_SIZE`). */
@@ -42,14 +43,28 @@ export const JIRA_ISSUE_FIELDS = [
   'updated',
 ] as const;
 
-export interface JiraApiClientConfig {
-  /** Site base URL, e.g. `https://acme.atlassian.net`. */
+interface JiraApiClientBaseConfig {
+  /** Jira API base URL, either the Atlassian site or a Platform connection proxy. */
   baseUrl: string;
-  /** Atlassian account email the API token belongs to. */
-  email: string;
-  /** API token from id.atlassian.com → Security → API tokens. */
-  apiToken: string;
+  fetchImpl?: typeof fetch;
 }
+
+export type JiraApiClientConfig = JiraApiClientBaseConfig &
+  (
+    | {
+        /** Atlassian account email the API token belongs to. */
+        email: string;
+        /** API token from id.atlassian.com → Security → API tokens. */
+        apiToken: string;
+        accessToken?: never;
+      }
+    | {
+        /** Bearer token used when the base URL is a Mastra Platform connection proxy. */
+        accessToken: string;
+        email?: never;
+        apiToken?: never;
+      }
+  );
 
 /** Stable error code the routes/tools surface to the SPA and agents. */
 export type JiraApiErrorCode = 'jira_auth_failed' | 'jira_request_failed';
@@ -88,6 +103,11 @@ export interface JiraProjectSearchPage {
   values: JiraProject[];
   startAt: number;
   isLast: boolean;
+}
+
+export interface JiraServerInfo {
+  baseUrl: string;
+  serverTitle?: string;
 }
 
 export interface JiraUser {
@@ -144,14 +164,42 @@ export interface JiraTransition {
 export class JiraApiClient {
   readonly #baseUrl: string;
   readonly #authHeader: string;
+  readonly #fetch: typeof fetch;
 
   constructor(config: JiraApiClientConfig) {
-    const missing = (['baseUrl', 'email', 'apiToken'] as const).filter(key => !config[key]);
-    if (missing.length > 0) {
-      throw new Error(`JiraApiClient is missing required config: ${missing.join(', ')}.`);
+    if (!config.baseUrl) {
+      throw new Error('JiraApiClient is missing required config: baseUrl.');
+    }
+    // Fail fast on a malformed base URL: a bare host like `acme.atlassian.net`
+    // would otherwise surface later as an opaque `TypeError: Invalid URL`.
+    let parsed: URL;
+    try {
+      parsed = new URL(config.baseUrl);
+    } catch {
+      throw new Error(`JiraApiClient baseUrl is not an absolute URL: "${config.baseUrl}".`);
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      throw new Error(`JiraApiClient baseUrl must be an http(s) URL: "${config.baseUrl}".`);
+    }
+    if (config.accessToken !== undefined) {
+      if (!config.accessToken) {
+        throw new Error('JiraApiClient is missing required config: accessToken.');
+      }
+      this.#authHeader = `Bearer ${config.accessToken}`;
+    } else {
+      const missing = (['email', 'apiToken'] as const).filter(key => !config[key]);
+      if (missing.length > 0) {
+        throw new Error(`JiraApiClient is missing required config: ${missing.join(', ')}.`);
+      }
+      // Basic credentials ride on every request, so never send them over
+      // plaintext to a remote host. Loopback stays allowed for local mocks.
+      if (parsed.protocol === 'http:' && !LOOPBACK_HOSTS.has(parsed.hostname)) {
+        throw new Error('JiraApiClient baseUrl must use https when Basic credentials are configured.');
+      }
+      this.#authHeader = `Basic ${Buffer.from(`${config.email}:${config.apiToken}`).toString('base64')}`;
     }
     this.#baseUrl = config.baseUrl.replace(/\/+$/, '');
-    this.#authHeader = `Basic ${Buffer.from(`${config.email}:${config.apiToken}`).toString('base64')}`;
+    this.#fetch = config.fetchImpl ?? globalThis.fetch;
   }
 
   /** Normalized site base URL (no trailing slash) — used for `/browse/<key>` links. */
@@ -169,7 +217,7 @@ export class JiraApiClient {
       if (value !== undefined) url.searchParams.set(key, String(value));
     }
     const hasBody = options.body !== undefined;
-    const res = await fetch(url, {
+    const res = await this.#fetch(url, {
       method,
       signal: AbortSignal.timeout(JIRA_TIMEOUT_MS),
       headers: {
@@ -180,12 +228,24 @@ export class JiraApiClient {
       ...(hasBody ? { body: JSON.stringify(options.body) } : {}),
     });
     if (!res.ok) {
-      // Jira reports validation failures as `errorMessages` (list) and/or
-      // field-keyed `errors` — surface the first message, not just the code.
+      // Jira reports validation failures as `errorMessages` and `errors`;
+      // the Platform proxy reports upstream failures through `detail`/`error`/`title`.
       let detail: string | null = null;
       try {
-        const errBody = (await res.json()) as { errorMessages?: string[]; errors?: Record<string, string> };
-        detail = errBody.errorMessages?.[0] ?? Object.values(errBody.errors ?? {})[0] ?? null;
+        const errBody = (await res.json()) as {
+          errorMessages?: string[];
+          errors?: Record<string, string>;
+          detail?: string;
+          error?: string;
+          title?: string;
+        };
+        detail =
+          errBody.errorMessages?.[0] ??
+          Object.values(errBody.errors ?? {})[0] ??
+          errBody.detail ??
+          errBody.error ??
+          errBody.title ??
+          null;
       } catch {
         // Non-JSON error body; fall back to the status code alone.
       }
@@ -193,6 +253,10 @@ export class JiraApiClient {
     }
     if (res.status === 204) return undefined as T;
     return (await res.json()) as T;
+  }
+
+  async getServerInfo(): Promise<JiraServerInfo> {
+    return this.#request<JiraServerInfo>('GET', '/rest/api/3/serverInfo');
   }
 
   /** One page of the site's projects (Settings intake-source picker). */

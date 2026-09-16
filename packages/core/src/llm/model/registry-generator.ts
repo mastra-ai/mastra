@@ -32,28 +32,19 @@ interface GatewayWithStructuredOutputCapabilities {
 function hasAttachmentCapabilities(
   gateway: MastraModelGatewayInterface,
 ): gateway is MastraModelGatewayInterface & GatewayWithAttachmentCapabilities {
-  return (
-    'getAttachmentCapabilities' in gateway &&
-    typeof (gateway as { getAttachmentCapabilities?: unknown }).getAttachmentCapabilities === 'function'
-  );
+  return 'getAttachmentCapabilities' in gateway && typeof gateway.getAttachmentCapabilities === 'function';
 }
 
 function hasTemperatureCapabilities(
   gateway: MastraModelGatewayInterface,
 ): gateway is MastraModelGatewayInterface & GatewayWithTemperatureCapabilities {
-  return (
-    'getTemperatureCapabilities' in gateway &&
-    typeof (gateway as { getTemperatureCapabilities?: unknown }).getTemperatureCapabilities === 'function'
-  );
+  return 'getTemperatureCapabilities' in gateway && typeof gateway.getTemperatureCapabilities === 'function';
 }
 
 function hasStructuredOutputCapabilities(
   gateway: MastraModelGatewayInterface,
 ): gateway is MastraModelGatewayInterface & GatewayWithStructuredOutputCapabilities {
-  return (
-    'getStructuredOutputCapabilities' in gateway &&
-    typeof (gateway as { getStructuredOutputCapabilities?: unknown }).getStructuredOutputCapabilities === 'function'
-  );
+  return 'getStructuredOutputCapabilities' in gateway && typeof gateway.getStructuredOutputCapabilities === 'function';
 }
 
 /**
@@ -327,15 +318,16 @@ export async function writeRegistryFiles(
   await atomicWriteFile(typesPath, typeContent, 'utf-8');
 
   // 3. Write per-provider capability files into a capabilities/ directory
+  const capDir = path.join(jsonDir, 'capabilities');
   const hasCapabilities =
     (attachmentCapabilities && Object.keys(attachmentCapabilities).length > 0) ||
     (temperatureCapabilities && Object.keys(temperatureCapabilities).length > 0) ||
     (structuredOutputCapabilities && Object.keys(structuredOutputCapabilities).length > 0);
-  if (hasCapabilities) {
-    const capDir = path.join(jsonDir, 'capabilities');
 
-    // Replace the directory so stale files and legacy nested gateway paths are removed.
-    await fs.rm(capDir, { recursive: true, force: true });
+  // Remove stale files even when the latest registry has no capability data.
+  await fs.rm(capDir, { recursive: true, force: true });
+
+  if (hasCapabilities) {
     await fs.mkdir(capDir, { recursive: true });
 
     // Build a merged capability object per provider

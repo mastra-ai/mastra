@@ -1,4 +1,5 @@
 import type { ValidatableStepFlowEntry } from '../../../workflows/dynamic/validate/types';
+import type { WorkflowScheduleConfig } from '../../../workflows/scheduler/types';
 import { StorageDomain } from '../base';
 
 /**
@@ -37,6 +38,13 @@ export interface WorkflowDefinition {
    */
   graph: ValidatableStepFlowEntry[];
 
+  /**
+   * Optional declarative schedule config(s), JSON-safe (literal values only).
+   * Persisted so rehydrated workflows re-declare their schedules on boot
+   * instead of having their `wf_*` schedule rows swept as orphans.
+   */
+  schedule?: WorkflowScheduleConfig | WorkflowScheduleConfig[];
+
   /** Lifecycle status. Only 'active' definitions are loaded at startWorkers(). */
   status: 'active' | 'archived';
 
@@ -58,6 +66,7 @@ export interface CreateWorkflowDefinitionInput {
   stateSchema?: unknown;
   requestContextSchema?: unknown;
   graph: ValidatableStepFlowEntry[];
+  schedule?: WorkflowScheduleConfig | WorkflowScheduleConfig[];
   authorId?: string;
 }
 
@@ -71,6 +80,7 @@ export interface UpdateWorkflowDefinitionInput {
   stateSchema?: unknown;
   requestContextSchema?: unknown;
   graph?: ValidatableStepFlowEntry[];
+  schedule?: WorkflowScheduleConfig | WorkflowScheduleConfig[] | null;
   status?: 'active' | 'archived';
   authorId?: string;
 }

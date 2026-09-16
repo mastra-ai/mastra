@@ -139,8 +139,7 @@ function resolveWriteScope(options: PinnedToolsOptions, level?: KnowledgeScopeLe
 
 const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: ['resource', 'thread'] };
 
-/** Shared pin write path used by the tool and capture-time pinning. */
-export async function writePinnedKnowledge(
+async function writePinnedKnowledge(
   store: KnowledgeStorage,
   options: PinnedToolsOptions,
   text: string,

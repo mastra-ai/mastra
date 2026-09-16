@@ -1,6 +1,6 @@
 ---
 title: "Guardrails | Agents"
-description: "Built-in security and safety processors for content moderation, prompt injection prevention, PII redaction, and more."
+description: "Protect Mastra agents with built-in guardrail processors for prompt injection, content moderation, PII redaction, Unicode normalization, and output safety."
 packages:
   - "@mastra/core"
 ---
@@ -40,7 +40,7 @@ Visit [`UnicodeNormalizer()`](/reference/processors/unicode-normalizer) referenc
 
 The `PromptInjectionDetector()` scans user messages for prompt injection, jailbreak attempts, and system override patterns. It uses an LLM to classify risky input and can block or rewrite it before it reaches the model.
 
-```typescript {7-12} title="src/mastra/agents/secure-agent.ts"
+```typescript {7-13} title="src/mastra/agents/secure-agent.ts"
 import { PromptInjectionDetector } from '@mastra/core/processors'
 
 export const secureAgent = new Agent({
@@ -51,11 +51,14 @@ export const secureAgent = new Agent({
       model: 'openrouter/openai/gpt-oss-safeguard-20b',
       threshold: 0.8,
       strategy: 'rewrite',
+      errorStrategy: 'strict',
       detectionTypes: ['injection', 'jailbreak', 'system-override'],
     }),
   ],
 })
 ```
+
+Model-backed guardrail processors default to `errorStrategy: 'warn'`, which logs internal model failures and continues with the processor's fallback. Use `errorStrategy: 'strict'` when unchecked content must not proceed if the guardrail model is unavailable or returns invalid output. Strict mode stops processing with a tripwire.
 
 Visit [`PromptInjectionDetector()`](/reference/processors/prompt-injection-detector) reference for a full list of configuration options.
 

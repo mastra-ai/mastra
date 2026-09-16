@@ -6,11 +6,11 @@
  * org-wide, so every member of the org reads and moves the same cards.
  */
 
-import type { FactoryRuleStage } from '@mastra/factory/rules/types';
+import type { FactoryRuleStage, FactoryTriageType } from '@mastra/factory/rules/types';
 
 import { requestJson } from './request';
 
-export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'slack-thread' | 'manual';
+export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'jira-issue' | 'slack-thread' | 'manual';
 
 export interface WorkItemSessionRef {
   sessionId: string;
@@ -33,6 +33,7 @@ export interface WorkItem {
   orgId: string;
   createdBy: string;
   githubProjectId: string;
+  board?: string | null;
   source: WorkItemSource;
   sourceKey: string | null;
   parentWorkItemId: string | null;
@@ -42,6 +43,13 @@ export interface WorkItem {
   stageHistory: WorkItemStageEntry[];
   sessions: Record<string, WorkItemSessionRef>;
   metadata: Record<string, unknown>;
+  /** Classification the triage run recorded; non-bug kinds wait for a person before agents advance them. */
+  triageType: FactoryTriageType | null;
+  /** When a person first moved the card into Planning/Build, which is the approval agents then honor. */
+  acceptedAt: string | null;
+  commentCount: number;
+  /** Bumped server-side on every feed mutation; clients refetch comments when it moves. */
+  feedActivityAt: string | null;
   revision: number;
   createdAt: string;
   updatedAt: string;
@@ -55,12 +63,13 @@ export interface WorkItemSessionInput {
 }
 
 export interface CreateWorkItemInput {
+  board?: string;
   source: WorkItemSource;
   sourceKey: string | null;
   parentWorkItemId?: string | null;
   title: string;
   url?: string | null;
-  stages: string[];
+  stages?: string[];
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown>;
 }
@@ -72,10 +81,25 @@ interface ExternalWorkItemSource {
   url?: string;
 }
 
-interface WireWorkItem extends Omit<WorkItem, 'githubProjectId' | 'source' | 'sourceKey' | 'url' | 'metadata'> {
+interface WireWorkItem extends Omit<
+  WorkItem,
+  | 'githubProjectId'
+  | 'source'
+  | 'sourceKey'
+  | 'url'
+  | 'metadata'
+  | 'commentCount'
+  | 'feedActivityAt'
+  | 'triageType'
+  | 'acceptedAt'
+> {
   factoryProjectId: string;
   externalSource: ExternalWorkItemSource | null;
   metadata: Record<string, unknown> | null;
+  commentCount?: number;
+  feedActivityAt?: string | null;
+  triageType?: WorkItem['triageType'];
+  acceptedAt?: string | null;
 }
 
 interface WireCreateWorkItemInput extends Omit<CreateWorkItemInput, 'source' | 'sourceKey' | 'url'> {
@@ -87,6 +111,7 @@ function sourceFromExternalSource(source: ExternalWorkItemSource | null): WorkIt
   if (source.integrationId === 'github' && source.type === 'issue') return 'github-issue';
   if (source.integrationId === 'github' && source.type === 'pull-request') return 'github-pr';
   if (source.integrationId === 'linear' && source.type === 'issue') return 'linear-issue';
+  if (source.integrationId === 'jira' && source.type === 'issue') return 'jira-issue';
   if (source.integrationId === 'slack' && source.type === 'slack-thread') return 'slack-thread';
   return 'manual';
 }
@@ -101,6 +126,8 @@ function externalSourceTarget(
       return { integrationId: 'github', type: 'pull-request' };
     case 'linear-issue':
       return { integrationId: 'linear', type: 'issue' };
+    case 'jira-issue':
+      return { integrationId: 'jira', type: 'issue' };
     case 'slack-thread':
       return { integrationId: 'slack', type: 'slack-thread' };
   }
@@ -123,7 +150,8 @@ function toWireCreateInput(input: CreateWorkItemInput): WireCreateWorkItemInput 
 }
 
 function fromWireWorkItem(item: WireWorkItem): WorkItem {
-  const { factoryProjectId, externalSource, metadata, ...rest } = item;
+  const { factoryProjectId, externalSource, metadata, commentCount, feedActivityAt, triageType, acceptedAt, ...rest } =
+    item;
   return {
     ...rest,
     githubProjectId: factoryProjectId,
@@ -131,10 +159,14 @@ function fromWireWorkItem(item: WireWorkItem): WorkItem {
     sourceKey: externalSource?.externalId ?? null,
     url: externalSource?.url ?? null,
     metadata: metadata ?? {},
+    commentCount: commentCount ?? 0,
+    feedActivityAt: feedActivityAt ?? null,
+    triageType: triageType ?? null,
+    acceptedAt: acceptedAt ?? null,
   };
 }
 
-export type FactoryBoard = 'work' | 'review';
+export type FactoryBoard = string;
 
 export type FactoryTransitionResult =
   | {
@@ -152,6 +184,8 @@ export interface UpdateWorkItemInput {
   title?: string;
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown>;
+  /** Hands-off: every plan this card parks is approved from here on. Stamped once. */
+  plansPreapproved?: true;
 }
 
 /**
@@ -162,6 +196,8 @@ export interface UpdateWorkItemInput {
 export interface BoardSnapshot {
   workItems: WorkItem[];
   runningSessionIds: string[];
+  /** Sessions parked on a tool until someone answers, read live with the cards. */
+  parkedSessionIds: string[];
 }
 
 /** List the org's work items for a Factory project. */
@@ -170,11 +206,16 @@ export async function listWorkItems(
   factoryProjectId: string,
   signal?: AbortSignal,
 ): Promise<BoardSnapshot> {
-  const data = await requestJson<{ workItems: WireWorkItem[]; runningSessionIds?: string[] }>(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`,
-    { signal },
-  );
-  return { workItems: data.workItems.map(fromWireWorkItem), runningSessionIds: data.runningSessionIds ?? [] };
+  const data = await requestJson<{
+    workItems: WireWorkItem[];
+    runningSessionIds?: string[];
+    parkedSessionIds?: string[];
+  }>(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`, { signal });
+  return {
+    workItems: data.workItems.map(fromWireWorkItem),
+    runningSessionIds: data.runningSessionIds ?? [],
+    parkedSessionIds: data.parkedSessionIds ?? [],
+  };
 }
 
 /** Create a work item; the server upserts on its external source identity so repeats reuse the card. */
@@ -194,7 +235,15 @@ export async function transitionWorkItem(
   baseUrl: string,
   githubProjectId: string,
   id: string,
-  input: { board: FactoryBoard; stage: FactoryRuleStage; expectedRevision: number; requestId: string; cause: string },
+  input: {
+    board: FactoryBoard;
+    stage: FactoryRuleStage;
+    expectedRevision: number;
+    requestId: string;
+    cause: string;
+    /** Re-enter the lane the card is already in, so its rule runs again. */
+    reenter?: boolean;
+  },
 ): Promise<FactoryTransitionResult> {
   const res = await fetch(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/work-items/${encodeURIComponent(id)}/transition`,
@@ -222,12 +271,9 @@ export async function updateWorkItem(baseUrl: string, id: string, patch: UpdateW
 export interface StartFactoryRunRequest {
   sessionId: string;
   threadTitle: string;
-  threadTags?: Record<string, string>;
   kickoffKey: string;
-  invocation?: { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
-  destinationStage: FactoryRuleStage;
   workItem: {
-    id?: string;
+    id: string;
     role: string;
     input: CreateWorkItemInput;
   };

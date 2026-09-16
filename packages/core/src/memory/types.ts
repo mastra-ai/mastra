@@ -12,6 +12,7 @@ import type { MastraCompositeStore } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 import type { VectorFilter } from '../vector/filter/base';
+import type { MemoryRunStateAccessor } from './run-state';
 import type { MemoryProcessor } from '.';
 
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
@@ -79,6 +80,21 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Thread metadata flag marking the title as user-pinned. Set by
+ * `session.thread.rename()` so Observational Memory's title extractor never
+ * overwrites a manual rename, and cleared (set to `false`) when the user
+ * explicitly regenerates the title via `generateThreadTitle()`.
+ */
+export const TITLE_PINNED_THREAD_METADATA_KEY = 'titlePinned';
+
+/**
+ * Whether the thread's title is pinned against automatic updates.
+ */
+export function isThreadTitlePinned(threadMetadata?: Record<string, unknown>): boolean {
+  return threadMetadata?.[TITLE_PINNED_THREAD_METADATA_KEY] === true;
+}
+
+/**
  * Helper to get OM metadata from a thread's metadata object.
  * Returns undefined if not present or if the structure is invalid.
  */
@@ -125,6 +141,8 @@ export type MemoryRequestContext = {
   thread?: Partial<StorageThreadType> & { id: string };
   resourceId?: string;
   memoryConfig?: MemoryConfigInternal;
+  /** Internal accessor for non-serializable state shared within one agent run. */
+  runState?: MemoryRunStateAccessor;
 };
 
 /**
@@ -948,8 +966,24 @@ type BaseMemoryConfig = {
    * lastMessages: 5 // Include last 5 messages
    * lastMessages: false // Disable conversation history
    * ```
+   * @deprecated Counting messages is a poor proxy for context size. Prefer `messageHistory`
+   * to bound history by a token budget. `lastMessages: false` still disables history.
    */
   lastMessages?: number | false;
+
+  /**
+   * Token budget for conversation history. When set, remembered messages are trimmed
+   * oldest-first until the context fits; system instructions and the current turn are never removed.
+   * Trimmed history stays in storage but is excluded from context on later turns.
+   * When set without a numeric `lastMessages`, history is limited by tokens only.
+   *
+   * @example
+   * ```typescript
+   * messageHistory: { maxTokens: 8000 } // frees 25% of the budget when exceeded
+   * messageHistory: { maxTokens: 8000, atMaxRemoveTokens: 1000 }
+   * ```
+   */
+  messageHistory?: import('./message-history-config').MessageHistoryConfig;
 
   /**
    * Semantic recall configuration for RAG-based retrieval of relevant past messages.
@@ -1273,6 +1307,9 @@ export type SerializedMemoryConfig = {
 
     /** Number of recent messages to include, or false to disable */
     lastMessages?: number | false;
+
+    /** Token budget for conversation history */
+    messageHistory?: import('./message-history-config').MessageHistoryConfig;
 
     /** Semantic recall configuration */
     semanticRecall?: boolean | SemanticRecall;

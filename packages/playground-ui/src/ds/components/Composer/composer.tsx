@@ -32,7 +32,7 @@ export const ComposerBox = forwardRef<HTMLDivElement, ComposerBoxProps>(
       ref={ref}
       data-slot="composer-box"
       className={cn(
-        'duration-normal @container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border2/40 bg-surface3 transition-colors focus-within:border-border2',
+        '@container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border2/40 bg-surface3 transition-colors duration-normal focus-within:border-border2',
         className,
       )}
       {...props}
@@ -61,7 +61,7 @@ export const ComposerRing = ({ busy = false, className, ...props }: ComposerRing
       ref={ringRef}
       data-slot="composer-ring"
       data-busy={busy ? 'true' : 'false'}
-      className={cn('composer-ring mx-auto w-full max-w-3xl', className)}
+      className={cn('composer-ring relative mx-auto w-full max-w-3xl rounded-[23px] p-px', className)}
       {...props}
     />
   );
@@ -88,7 +88,7 @@ export const ComposerInput = forwardRef<HTMLTextAreaElement, ComposerInputProps>
         ref={ref}
         data-slot="composer-input"
         className={cn(
-          'min-h-17 field-sizing-content w-full resize-none overflow-hidden bg-transparent px-3 pt-3 pb-2 text-ui-lg leading-ui-lg text-neutral6 outline-hidden placeholder:text-neutral3 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
+          'field-sizing-content min-h-14 w-full resize-none overflow-hidden bg-transparent px-3 pt-2.5 pb-2 text-ui-md leading-ui-md text-neutral6 outline-hidden placeholder:text-neutral3 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
           className,
         )}
         {...props}

@@ -3,6 +3,7 @@ import { z } from 'zod/v4';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
+import { MemoryRunState } from '../../../memory/run-state';
 import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
 import { resolveObservabilityContext } from '../../../observability';
 import type { ProcessorState } from '../../../processors/runner';
@@ -14,7 +15,12 @@ import { MessageList } from '../../message-list';
 import { mastraDBMessageToSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
 import type { PrepareStreamRunScope } from './run-scope';
-import { INITIAL_SIGNAL_ECHOES_KEY, MESSAGE_LIST_KEY, PROCESSOR_STATES_KEY } from './run-scope-keys';
+import {
+  INITIAL_SIGNAL_ECHOES_KEY,
+  MEMORY_RUN_STATE_KEY,
+  MESSAGE_LIST_KEY,
+  PROCESSOR_STATES_KEY,
+} from './run-scope-keys';
 import type { AgentCapabilities } from './schema';
 import { prepareMemoryStepOutputSchema } from './schema';
 
@@ -194,11 +200,21 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         });
       }
 
+      const memoryRunState = new MemoryRunState({
+        memory,
+        threadId: thread.id,
+        resourceId,
+        thread: threadObject ?? null,
+        ownershipValidated: true,
+      });
+      runScope.set(MEMORY_RUN_STATE_KEY, memoryRunState);
+
       // Set memory context in RequestContext for processors to access
       requestContext.set('MastraMemory', {
         thread: threadObject,
         resourceId,
         memoryConfig,
+        runState: () => runScope.get(MEMORY_RUN_STATE_KEY),
       });
 
       // Add user messages - memory processors will handle history/semantic recall/working memory

@@ -58,7 +58,7 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
               </div>
             ))
           ) : tools.length === 0 ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex items-center justify-center py-8">
               <Txt variant="ui-sm" className="text-neutral3">
                 No tools found
               </Txt>

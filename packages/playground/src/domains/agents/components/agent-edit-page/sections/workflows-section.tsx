@@ -27,8 +27,8 @@ export function WorkflowsSection({ control, error, readOnly = false }: Workflows
     if (!workflows) return [];
     return Object.entries(workflows).map(([id, workflow]) => ({
       value: id,
-      label: (workflow as { name?: string }).name || id,
-      description: (workflow as { description?: string }).description || '',
+      label: workflow.name || id,
+      description: workflow.description || '',
     }));
   }, [workflows]);
 

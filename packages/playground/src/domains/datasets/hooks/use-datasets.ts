@@ -1,5 +1,8 @@
+import type { ExperimentTargetType } from '@mastra/client-js';
+import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
 import { useMastraClient } from '@mastra/react';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
 
 /**
  * Hook to list all datasets with optional pagination
@@ -11,6 +14,45 @@ export const useDatasets = (pagination?: { page?: number; perPage?: number }) =>
     queryFn: () => client.listDatasets(pagination),
     placeholderData: previousData => previousData,
   });
+};
+
+const DATASETS_PER_PAGE = 20;
+
+export interface DatasetTargetFilter {
+  targetType?: ExperimentTargetType | '';
+  targetId?: string;
+}
+
+/**
+ * Hook to list datasets with infinite scroll pagination, optionally scoped server-side to a target.
+ */
+export const useInfiniteDatasets = (filter?: DatasetTargetFilter) => {
+  const client = useMastraClient();
+  const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
+  const targetType = filter?.targetType || undefined;
+  const targetIds = filter?.targetId ? [filter.targetId] : undefined;
+
+  const query = useInfiniteQuery({
+    queryKey: ['datasets', 'infinite', { targetType, targetIds }],
+    queryFn: ({ pageParam }) =>
+      client.listDatasets({ page: pageParam, perPage: DATASETS_PER_PAGE, targetType, targetIds }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, _, lastPageParam) => {
+      if (!lastPage?.datasets?.length || !lastPage.pagination?.hasMore) {
+        return undefined;
+      }
+      return lastPageParam + 1;
+    },
+    select: data => data.pages.flatMap(page => page?.datasets ?? []),
+  });
+
+  useEffect(() => {
+    if (isEndOfListInView && query.hasNextPage && !query.isFetchingNextPage) {
+      void query.fetchNextPage();
+    }
+  }, [isEndOfListInView, query]);
+
+  return { ...query, setEndOfListElement };
 };
 
 /**

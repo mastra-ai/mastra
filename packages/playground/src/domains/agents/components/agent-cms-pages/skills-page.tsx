@@ -5,7 +5,7 @@ import { Entity, EntityContent, EntityName, EntityDescription } from '@mastra/pl
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Switch } from '@mastra/playground-ui/components/Switch';
-import { Plus, Drill, SearchIcon } from 'lucide-react';
+import { Plus, CircleSlashIcon, SearchIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
@@ -62,7 +62,7 @@ export function SkillsPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <SectionHeader
             title="Skills"
@@ -70,8 +70,7 @@ export function SkillsPage() {
           />
 
           {!readOnly && (
-            <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
-              <Plus className="size-3" />
+            <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)} icon={<Plus />}>
               Add a skill
             </Button>
           )}
@@ -110,15 +109,14 @@ export function SkillsPage() {
         )}
 
         {!isLoading && storedSkills.length === 0 && (
-          <div className="py-12">
+          <div className="py-8">
             <EmptyState
-              iconSlot={<Drill height={40} width={40} />}
+              iconSlot={<CircleSlashIcon height={40} width={40} />}
               titleSlot="No skills available"
               descriptionSlot="Create a skill to give your agent specialized knowledge."
               actionSlot={
                 !readOnly ? (
-                  <Button onClick={() => setDialogOpen(true)}>
-                    <Plus />
+                  <Button onClick={() => setDialogOpen(true)} icon={<Plus />}>
                     Add a skill
                   </Button>
                 ) : undefined

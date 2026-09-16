@@ -2878,10 +2878,16 @@ describe('ProcessorRunner', () => {
         cacheKey: 'workflow-state-cache-key',
         contents: 'workflow state',
       }));
-      const processor: Processor = {
+      const firstProcessInputStep = vi.fn(() => ({ runId: 'processor-overwrite-attempt' }) as any);
+      const secondProcessInputStep = vi.fn(() => undefined);
+      const firstProcessor: Processor = {
         id: 'workflow-state-processor',
-        processInputStep: () => undefined,
+        processInputStep: firstProcessInputStep,
         computeStateSignal,
+      };
+      const secondProcessor: Processor = {
+        id: 'workflow-run-id-processor',
+        processInputStep: secondProcessInputStep,
       };
       const workflow = createWorkflow({
         id: 'workflow-state-test',
@@ -2890,9 +2896,10 @@ describe('ProcessorRunner', () => {
         type: 'processor',
         options: { validateInputs: false },
       })
-        .then(createStep(processor as any))
+        .then(createStep(firstProcessor as any))
+        .then(createStep(secondProcessor as any))
         .commit() as ProcessorWorkflow;
-      workflow.__stateSignalProcessors = [processor];
+      workflow.__stateSignalProcessors = [firstProcessor];
       const chunks: unknown[] = [];
 
       runner = new ProcessorRunner({
@@ -2909,6 +2916,7 @@ describe('ProcessorRunner', () => {
         model: {} as any,
         tools: {},
         retryCount: 0,
+        runId: 'run-workflow-processor',
         requestContext,
         memory: memory as any,
         writer: {
@@ -2918,6 +2926,8 @@ describe('ProcessorRunner', () => {
         },
       });
 
+      expect(firstProcessInputStep).toHaveBeenCalledWith(expect.objectContaining({ runId: 'run-workflow-processor' }));
+      expect(secondProcessInputStep).toHaveBeenCalledWith(expect.objectContaining({ runId: 'run-workflow-processor' }));
       expect(computeStateSignal).toHaveBeenCalledTimes(1);
       expect(messageList.get.all.db().at(-1)?.content.metadata?.signal).toEqual(
         expect.objectContaining({
@@ -3736,6 +3746,78 @@ describe('ProcessorRunner', () => {
       expect(firstTracking?.version).toBe(1);
       expect(secondTracking?.version).toBe(2);
       expect(secondTracking?.lastSignalId).not.toBe(firstTracking?.lastSignalId);
+    });
+  });
+
+  describe('applyMessagesToMessageList', () => {
+    it('preserves a message promoted from memory to response after source capture', () => {
+      const message = createMessage('final response', 'assistant');
+      messageList.add(message, 'memory');
+      const idsBeforeProcessing = messageList.get.all.db().map(({ id }) => id);
+      const check = messageList.makeMessageSourceChecker();
+
+      messageList.add(message, 'response');
+      ProcessorRunner.applyMessagesToMessageList([message], messageList, idsBeforeProcessing, check, 'response');
+
+      expect(messageList.get.response.db()).toEqual([message]);
+      expect(messageList.get.remembered.db()).toEqual([]);
+    });
+
+    it('preserves exact-reference messages without changing identity, order, or source', () => {
+      const inputMessage = createMessage('input');
+      const responseMessage = createMessage('response', 'assistant');
+      messageList.add(inputMessage, 'input').add(responseMessage, 'response');
+      const idsBeforeProcessing = messageList.get.all.db().map(({ id }) => id);
+      const check = messageList.makeMessageSourceChecker();
+
+      ProcessorRunner.applyMessagesToMessageList(
+        [inputMessage, responseMessage],
+        messageList,
+        idsBeforeProcessing,
+        check,
+      );
+
+      expect(messageList.get.all.db()).toEqual([inputMessage, responseMessage]);
+      expect(messageList.get.input.db()).toEqual([inputMessage]);
+      expect(messageList.get.response.db()).toEqual([responseMessage]);
+    });
+
+    it('replaces a distinct message with the same id using the captured source', () => {
+      const original = createMessage('original');
+      const replacement = {
+        ...original,
+        content: { ...original.content, parts: [{ type: 'text' as const, text: 'updated' }] },
+      };
+      messageList.add(original, 'input');
+      const idsBeforeProcessing = [original.id];
+      const check = messageList.makeMessageSourceChecker();
+
+      ProcessorRunner.applyMessagesToMessageList([replacement], messageList, idsBeforeProcessing, check, 'response');
+
+      expect(messageList.get.all.db()).toEqual([replacement]);
+      expect(messageList.get.input.db()).toEqual([replacement]);
+      expect(messageList.get.response.db()).toEqual([]);
+    });
+
+    it('removes omitted messages and assigns the default source to new messages', () => {
+      const omitted = createMessage('omitted');
+      const retained = createMessage('retained');
+      const added = createMessage('added', 'assistant');
+      messageList.add([omitted, retained], 'input');
+      const idsBeforeProcessing = messageList.get.all.db().map(({ id }) => id);
+      const check = messageList.makeMessageSourceChecker();
+
+      ProcessorRunner.applyMessagesToMessageList(
+        [retained, added],
+        messageList,
+        idsBeforeProcessing,
+        check,
+        'response',
+      );
+
+      expect(messageList.get.all.db()).toEqual([retained, added]);
+      expect(messageList.get.input.db()).toEqual([retained]);
+      expect(messageList.get.response.db()).toEqual([added]);
     });
   });
 

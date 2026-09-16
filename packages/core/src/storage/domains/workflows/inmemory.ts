@@ -301,7 +301,9 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     const data: StorageWorkflowRun = {
       workflow_name: workflowName,
       run_id: runId,
-      resourceId,
+      // A re-persist without a resourceId (e.g. resume) must not erase a
+      // previously-set value. Matches the persistent stores' COALESCE upserts.
+      resourceId: resourceId ?? existing?.resourceId,
       snapshot,
       // Preserve the original creation time when re-persisting an existing run; only set it
       // on first insert. Otherwise listWorkflowRuns ordering and date filters drift to the

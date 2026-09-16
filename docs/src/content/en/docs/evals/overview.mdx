@@ -1,6 +1,6 @@
 ---
 title: "Evals"
-description: Overview of evaluations and scorers in Mastra, including Quick Checks, live evaluations, and trace evaluations.
+description: "Evaluate Mastra agents and workflows with model-graded, rule-based, and programmatic scorers through live evaluations, trace scoring, and Quick Checks."
 packages:
   - "@mastra/core"
   - "@mastra/evals"
@@ -67,36 +67,36 @@ export const evaluatedAgent = new Agent({
 
 You can also add scorers to individual workflow steps to evaluate outputs at specific points in your process. Each scorer receives that step's own input and output, so you can measure quality at each step instead of only scoring the final answer:
 
-```typescript title="src/mastra/workflows/content-generation.ts" prettier:false
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-import { customStepScorer } from "../scorers/custom-step-scorer";
+```typescript title="src/mastra/workflows/content-generation.ts"
+import { createWorkflow, createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
+import { customStepScorer } from '../scorers/custom-step-scorer'
 
 const contentStep = createStep({
-  id: "content-step",
+  id: 'content-step',
   inputSchema: z.object({ topic: z.string() }),
   outputSchema: z.object({ content: z.string() }),
   scorers: {
     customStepScorer: {
       scorer: customStepScorer(),
       sampling: {
-        type: "ratio",
+        type: 'ratio',
         rate: 1, // Score every step execution
       },
     },
   },
   execute: async ({ inputData }) => {
-    return { content: await generateContent(inputData.topic) };
+    return { content: await generateContent(inputData.topic) }
   },
-});
+})
 
 export const contentWorkflow = createWorkflow({
-  id: "content-workflow",
+  id: 'content-workflow',
   inputSchema: z.object({ topic: z.string() }),
   outputSchema: z.object({ content: z.string() }),
 })
   .then(contentStep)
-  .commit();
+  .commit()
 ```
 
 For the step-level `scorers` API, see the [Step class reference](/reference/workflows/step#scoring-step-output).
@@ -105,14 +105,76 @@ For the step-level `scorers` API, see the [Step class reference](/reference/work
 
 **Asynchronous execution**: Live evaluations run in the background without blocking your agent responses or workflow execution. Your AI systems remain responsive while live evaluations monitor them.
 
-**Sampling control**: The `sampling.rate` parameter (0-1) controls what percentage of outputs get scored:
+**Sampling control**: The `sampling.rate` parameter (0-1) controls what fraction of outputs get scored:
 
 - `1.0`: Score every single response (100%)
 - `0.5`: Score half of all responses (50%)
 - `0.1`: Score 10% of responses
 - `0.0`: Disable scoring
 
+Sampling is deterministic per trace: the decision is derived from the trace ID, not drawn at random. In practice:
+
+- Scorers configured at the same rate score the same traces, so their scores are comparable on shared traffic.
+- Re-running the same trace produces the same sampling decision, so sampled coverage is reproducible.
+
+When a run has no trace (observability not configured), the decision is derived from the run ID instead. If [trace sampling](../observability/tracing/overview) declined the trace, scorers skip that run entirely, so scores aren't created for traces that were never stored.
+
+**Eligibility filters**: The optional `filter` parameter uses a declarative predicate over the run context to restrict scorer eligibility. Because filtering occurs before sampling, `sampling.rate` applies only to matching runs:
+
+```typescript title="src/mastra/agents/evaluated-agent.ts"
+export const myAgent = new Agent({
+  // ...
+  scorers: {
+    relevancy: {
+      scorer: createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
+      filter: {
+        op: 'eq',
+        left: { path: 'requestContext.plan' },
+        right: { literal: 'enterprise' },
+      },
+      sampling: { type: 'ratio', rate: 0.1 },
+    },
+  },
+})
+```
+
+This scores 10% of enterprise-plan traffic and none of the rest. To score different segments at different rates, bind the same scorer twice with complementary filters.
+
+Predicates can reference `requestContext.*`, `entity.*`, `entityType`, `source`, `threadId`, `resourceId`, and `projectId`. They support comparisons (`eq`, `ne`, `lt`, `lte`, `gt`, `gte`), membership (`in`, `notIn`), existence (`exists`, `notExists`), truthiness (`truthy`, `falsy`), and boolean composition (`and`, `or`, `not`). A filter that references an unknown root fails at agent construction rather than silently skipping scoring at runtime. Filters are plain JSON, so they're unaffected by durable agent state serialization.
+
+Eligibility filters decide _whether a scorer runs_; to filter _which messages a scorer sees_ once it runs, use [`filterRun()`](/reference/evals/filter-run).
+
 **Automatic storage**: All scoring results are automatically stored in the `mastra_scorers` table in your configured database, allowing you to analyze performance trends over time.
+
+## Score persistence
+
+Scores are persisted when the Mastra instance has `storage` configured, and when the scorer is registered on that instance. Registration is what lets Mastra resolve the scorer's metadata (name, description, type) through [`getScorerById()`](/reference/core/getScorerById) before writing the score.
+
+Scorers you attach to an agent or a workflow step register themselves. Scorers you pass directly to [`runEvals()`](/reference/evals/run-evals), including [Quick Checks](/docs/evals/quick-checks), need the `scorers` option on the [`Mastra` class](/reference/core/mastra-class):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+import { checks } from '@mastra/evals/checks'
+import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt'
+import { myAgent } from './agents/my-agent'
+
+export const mastra = new Mastra({
+  agents: { myAgent },
+  storage: new LibSQLStore({ url: 'file:./mastra.db' }),
+  scorers: {
+    calledTool: checks.calledTool('get_weather'),
+    includes: checks.includes('Brooklyn'),
+    relevancy: createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
+  },
+})
+```
+
+The lookup compares only scorer IDs, which allows the registered instance to use different configuration from the evaluated instance. Every `checks.calledTool()` instance uses the ID `check-called-tool`. Registering one therefore covers every tool name you evaluate.
+
+The arguments still shape the `description` stored alongside each score, which comes from the registered instance, not the one you evaluate with. `checks.calledTool('')` is accepted and persists scores fine, but stores `Checks that "" was called`, so pass a representative value.
+
+Skipping registration doesn't change scoring results, but each save fails with a `Scorer with id <id> not found` warning and the scores never reach the store.
 
 ## Trace evaluations
 

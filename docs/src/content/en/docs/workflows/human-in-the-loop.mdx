@@ -1,6 +1,6 @@
 ---
 title: "Human-in-the-loop | Workflows"
-description: "Human-in-the-loop workflows in Mastra allow you to pause execution for manual approvals, reviews, or user input before continuing."
+description: "Pause Mastra workflows for approvals, reviews, or user input, then resume with supplied data, reject with bail, or support repeated human interactions."
 packages:
   - "@mastra/core"
 ---
@@ -112,7 +112,8 @@ As with [restarting a workflow](/docs/workflows/suspend-and-resume#restarting-a-
 flowchart LR
   accTitle: Resuming a workflow with human input
   accDescr: Human input resumes step1. The step then completes the workflow.
-  paused@{ shape: manual-input, label: "human input" } pending1@-. resume .-> step1([step1])
+  paused@{ shape: manual-input, label: "human input" }
+  paused pending1@-. resume .-> step1([step1])
   step1 -- out --> stop(( end ))
 
   class paused pending
@@ -170,7 +171,7 @@ const step1 = createStep({
 
 For workflows that require input at multiple stages, the suspend pattern remains the same. Each step defines a `resumeSchema`, and `suspendSchema` typically with a reason that can be used to provide user feedback.
 
-```typescript {11-16,21-25} title="src/mastra/workflows/test-workflow.ts" prettier:false
+```typescript {11-16,21-25} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
 const step1 = createStep({...});
 
 const step2 = createStep({

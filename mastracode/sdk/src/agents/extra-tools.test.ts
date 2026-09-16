@@ -6,6 +6,8 @@ import z from 'zod';
 vi.mock('../tools/index.js', () => ({
   createWebSearchTool: () => ({ description: 'web search' }),
   createWebExtractTool: () => ({ description: 'web extract' }),
+  createConfiguredWebTools: () => undefined,
+  hasParallelKey: () => false,
   hasTavilyKey: () => false,
   requestSandboxAccessTool: { description: 'request sandbox access' },
 }));
@@ -248,10 +250,10 @@ describe('createDynamicTools – extraTools', () => {
     ).resolves.toMatchObject({ notifications: [{ id: 'n1' }] });
     expect(notificationStore.listNotifications).toHaveBeenCalledWith({
       threadId: 'thread-1',
-      status: undefined,
+      status: ['pending', 'delivered'],
       priority: undefined,
       source: undefined,
-      limit: undefined,
+      limit: 21,
     });
   });
 

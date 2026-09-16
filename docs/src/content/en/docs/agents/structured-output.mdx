@@ -1,6 +1,6 @@
 ---
 title: "Structured output | Agents"
-description: "Learn how to generate structured data from agents using schemas and validation."
+description: "Generate validated, typed structured output from Mastra agents with JSON Schema, Zod, or Valibot, including streaming and tool-enabled responses."
 packages:
   - "@mastra/core"
 ---
@@ -10,7 +10,7 @@ import TabItem from "@theme/TabItem";
 
 # Structured output
 
-Structured output lets an agent return an object that matches the shape defined by a schema instead of returning text. The schema tells the model what fields to produce, and the model ensures the final result fits that shape.
+Structured output lets an agent return an object that matches the shape defined by a schema instead of returning text. The schema tells the model what fields to produce, and the model ensures the final result fits that shape. Access the validated, typed result through `response.object`.
 
 ## When to use structured output
 
@@ -115,7 +115,7 @@ Agents can return structured data by defining the expected output with either [S
 
 Visit [`.generate()`](/reference/agents/generate) for a full list of configuration options.
 
-**Example output:** The `response.object` will contain the structured data as defined by the schema.
+**Example output:**
 
 ```json
 [
@@ -266,7 +266,7 @@ const response = await agentWithTools.generate('Your prompt', {
 When `model` is provided to the `structuredOutput` property, Mastra uses a separate internal agent to handle the structured output. The main agent will handle all of the steps (including tool calling) and the structured output model will handle only the generation of structured output.
 
 <Inject>
-  **For AI agents:** The `model` property is a string in Mastra's model router format: `provider/model`, for example `__GATEWAY_OPENAI_MODEL__`, `__GATEWAY_OPENAI_MODEL_MINI__`, `__GATEWAY_ANTHROPIC_MODEL_SONNET__` or `__GATEWAY_GOOGLE_MODEL__`. Use `/` and not `:` as a separator. Example: `openai/<model>`, not `openai:<model>`, and don't pass a provider object. No provider import is needed for this format. Don't install any AI SDK package unless Mastra's documentation says otherwise. By defining the model using `provider/model` format Mastra automatically looks for environment variables for the given provider. The defined model requires an environment variable to be set for the provider. OpenAI: `OPENAI_API_KEY`. Anthropic: `ANTHROPIC_API_KEY`. Google: `GOOGLE_API_KEY`.
+  **For AI agents:** The `model` property is a string in Mastra's model router format: `provider/model`, for example `__GATEWAY_OPENAI_MODEL__`, `__GATEWAY_OPENAI_MODEL_MINI__`, `__GATEWAY_ANTHROPIC_MODEL_SONNET__` or `__GATEWAY_GOOGLE_MODEL__`. Use `/` and not `:` as a separator. Example: `openai/<model>`, not `openai:<model>`, and don't pass a provider object. No provider import is needed for this format. Don't install any AI SDK package unless Mastra's documentation says otherwise. By defining the model using `provider/model` format Mastra automatically looks for environment variables for the provider. The defined model requires an environment variable to be set for the provider. OpenAI: `OPENAI_API_KEY`. Anthropic: `ANTHROPIC_API_KEY`. Google: `GOOGLE_API_KEY`.
 </Inject>
 
 ```typescript

@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { chatRoute } from '../chat-route';
+import * as publicEntry from '../index';
 import { withSseHeartbeat } from '../sse-heartbeat';
+import * as uiEntry from '../ui';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -50,6 +52,25 @@ function createRouteContext(fullStream: ReadableStream) {
       },
       get: (key: string) => (key === 'mastra' ? mastra : undefined),
     },
+  };
+}
+
+function createSseFrameReader(reader: ReadableStreamDefaultReader<Uint8Array>) {
+  let buffer = '';
+
+  return async () => {
+    while (true) {
+      const frameEnd = buffer.indexOf('\n\n');
+      if (frameEnd !== -1) {
+        const frame = buffer.slice(0, frameEnd + 2);
+        buffer = buffer.slice(frameEnd + 2);
+        return frame;
+      }
+
+      const result = await reader.read();
+      if (result.done) throw new Error('Stream ended before receiving a complete SSE frame');
+      buffer += decoder.decode(result.value, { stream: true });
+    }
   };
 }
 
@@ -282,6 +303,36 @@ describe('withSseHeartbeat', () => {
   });
 });
 
+describe('heartbeat public exports', () => {
+  it('exposes the heartbeat helpers from the package entry point', () => {
+    expect(typeof publicEntry.withSseHeartbeat).toBe('function');
+    expect(typeof publicEntry.assertValidHeartbeatMs).toBe('function');
+  });
+
+  it('keeps the heartbeat helpers out of the browser-safe ui entry point', () => {
+    expect('withSseHeartbeat' in uiEntry).toBe(false);
+    expect('assertValidHeartbeatMs' in uiEntry).toBe(false);
+  });
+
+  it('adds heartbeats to a caller-built response through the package entry point', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const { controller, response } = createControlledResponse({
+      headers: { 'content-type': 'text/event-stream' },
+    });
+    const reader = publicEntry.withSseHeartbeat(response, 1_000).body!.getReader();
+
+    controller.enqueue(encoder.encode('data: one\n\n'));
+    expect(decoder.decode((await reader.read()).value)).toBe('data: one\n\n');
+
+    const heartbeat = reader.read();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(decoder.decode((await heartbeat).value)).toBe(': heartbeat\n\n');
+
+    await reader.cancel();
+  });
+});
+
 describe('chatRoute heartbeat', () => {
   it('accepts the maximum supported heartbeatMs value', () => {
     expect(() => chatRoute({ path: '/chat/:agentId', heartbeatMs: 2_147_483_647 })).not.toThrow();
@@ -312,6 +363,7 @@ describe('chatRoute heartbeat', () => {
 
     const response = await invokeRoute(route, context);
     const reader = response.body!.getReader();
+    const readFrame = createSseFrameReader(reader);
 
     streamController.enqueue({
       type: 'start',
@@ -325,14 +377,14 @@ describe('chatRoute heartbeat', () => {
       from: 'AGENT',
       payload: { id: 'text-1' },
     });
-    const startEvent = decoder.decode((await reader.read()).value);
-    const textStartEvent = decoder.decode((await reader.read()).value);
+    const startEvent = await readFrame();
+    const textStartEvent = await readFrame();
     expect(JSON.parse(startEvent.slice('data: '.length))).toMatchObject({ type: 'start' });
     expect(JSON.parse(textStartEvent.slice('data: '.length))).toEqual({ type: 'text-start', id: 'text-1' });
 
-    const heartbeat = reader.read();
+    const heartbeat = readFrame();
     await vi.advanceTimersByTimeAsync(1_000);
-    expect(decoder.decode((await heartbeat).value)).toBe(': heartbeat\n\n');
+    expect(await heartbeat).toBe(': heartbeat\n\n');
 
     await reader.cancel();
     streamController.close();

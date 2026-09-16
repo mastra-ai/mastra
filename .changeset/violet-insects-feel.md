@@ -1,0 +1,5 @@
+---
+'@mastra/core': patch
+---
+
+Fixed sub-agent failures being reported to the supervisor as an empty successful result when using `stream()`. A sub-agent whose model call fails (for example an invalid API key) now produces an error tool result in both `generate()` and `stream()`, with a generic error message by default. The underlying cause remains available to the completion hook and diagnostics rather than being included in the supervisor's tool-result text. `onDelegationComplete` receives `success: false` with the error, and calling `bail()` from that hook on a failed delegation now stops the supervisor loop as expected. Partial streamed child messages and available result metadata remain available to the completion hook. Failed invocations retain child-thread references so Studio can restore the partial transcript after reload. Background failures follow the configured retry policy, with completion hooks invoked per attempt. A failure hook's `resultText` replaces the error text seen by the supervisor without recovering the failed delegation or discarding its original error.

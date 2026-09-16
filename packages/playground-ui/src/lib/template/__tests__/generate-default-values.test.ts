@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { generateDefaultValues } from '../generate-default-values';
-import type { JsonSchema } from '@/lib/json-schema';
+import type { JsonSchema, JsonSchemaProperty } from '@/lib/json-schema';
 
 describe('generateDefaultValues', () => {
   describe('basic type defaults', () => {
@@ -220,88 +220,29 @@ describe('generateDefaultValues', () => {
   });
 
   describe('circular reference protection', () => {
-    it('should handle very deep nesting by stopping at max depth', () => {
-      // Create a deeply nested schema (deeper than MAX_DEPTH of 10)
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const createDeepSchema = (depth: number): JsonSchema => {
-        if (depth === 0) {
-          return {
-            type: 'object',
-            properties: {
-              value: { type: 'string' },
-            },
-          };
-        }
-        return {
-          type: 'object',
-          properties: {
-            nested: createDeepSchema(depth - 1).properties?.nested || { type: 'string' },
-          },
-        };
-      };
+    // A chain of `levels` nested object properties ending in a string leaf.
+    const deepChain = (levels: number): JsonSchema => {
+      let node: JsonSchemaProperty = { type: 'string' };
+      for (let level = levels; level >= 1; level -= 1) {
+        node = { type: 'object', properties: { [`level${level}`]: node } };
+      }
+      return node as JsonSchema;
+    };
 
-      // This should not cause infinite recursion
-      const schema: JsonSchema = {
-        type: 'object',
-        properties: {
-          level1: {
-            type: 'object',
-            properties: {
-              level2: {
-                type: 'object',
-                properties: {
-                  level3: {
-                    type: 'object',
-                    properties: {
-                      level4: {
-                        type: 'object',
-                        properties: {
-                          level5: {
-                            type: 'object',
-                            properties: {
-                              level6: {
-                                type: 'object',
-                                properties: {
-                                  level7: {
-                                    type: 'object',
-                                    properties: {
-                                      level8: {
-                                        type: 'object',
-                                        properties: {
-                                          level9: {
-                                            type: 'object',
-                                            properties: {
-                                              level10: {
-                                                type: 'object',
-                                                properties: {
-                                                  level11: { type: 'string' },
-                                                },
-                                              },
-                                            },
-                                          },
-                                        },
-                                      },
-                                    },
-                                  },
-                                },
-                              },
-                            },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      };
+    it('stops recursing once the nesting reaches the max depth', () => {
+      let node: unknown = generateDefaultValues(deepChain(14));
 
-      // Should complete without error and stop recursing at some point
-      const result = generateDefaultValues(schema);
-      expect(result).toBeDefined();
-      expect(result.level1).toBeDefined();
+      // level1..level10 are materialized; level11 sits at MAX_DEPTH and is dropped.
+      for (let level = 1; level <= 10; level += 1) {
+        expect(node).toBeTypeOf('object');
+        node = (node as Record<string, unknown>)[`level${level}`];
+      }
+
+      expect(node).toStrictEqual({ level11: undefined });
+    });
+
+    it('materializes the whole chain when it stays under the max depth', () => {
+      expect(generateDefaultValues(deepChain(3))).toEqual({ level1: { level2: { level3: '' } } });
     });
   });
 });

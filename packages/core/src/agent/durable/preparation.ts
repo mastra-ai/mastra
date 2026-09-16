@@ -9,6 +9,7 @@ import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcesso
 import type { ProcessorState } from '../../processors/runner';
 import {
   RequestContext,
+  MASTRA_AUTH_TOKEN_KEY,
   MASTRA_INHERITED_MEMORY_KEY,
   MASTRA_VERSIONS_KEY,
   mergeVersionOverrides,
@@ -36,7 +37,10 @@ import type {
   ToolsetsInput,
   ToolsInput,
 } from '../types';
-import { fireClientToolOutputHooks } from '../workflows/prepare-stream/client-tool-output-hooks';
+import {
+  applyClientToolModelOutput,
+  fireClientToolOutputHooks,
+} from '../workflows/prepare-stream/client-tool-output-hooks';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import { createWorkflowInput } from './utils/serialize-state';
 import { generateDurableThreadTitle } from './workflows/finalize-run';
@@ -59,6 +63,12 @@ function snapshotRequestContextEntries(
     // workflow input and hand the resumed run an object whose methods are gone; the
     // resumed agent resolves memory from its own config instead.
     if (key === MASTRA_INHERITED_MEMORY_KEY) continue;
+    // Framework-managed per-run memory context is rebuilt from persisted run
+    // state. A caller may carry a parent run's serializable value here.
+    if (key === 'MastraMemory') continue;
+    // Never persist the framework-managed bearer token in durable workflow
+    // input; a resumed authenticated request supplies its own fresh token.
+    if (key === MASTRA_AUTH_TOKEN_KEY) continue;
     // Serialize each entry exactly once with a bounded pass: a shared-reference
     // graph would otherwise make JSON.stringify expand exponentially and wedge
     // the event loop on every durable step, and reading the value twice (probe
@@ -132,6 +142,8 @@ interface DurablePreparationAgent {
     hooks?: ToolHooks;
     delegation?: DelegationConfig;
     methodType?: AgentMethodType;
+    backgroundTaskEnabled?: boolean;
+    backgroundTaskPolicy?: AgentExecutionOptions<any>['backgroundTaskPolicy'];
   }): Promise<Record<string, CoreTool>>;
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
@@ -486,6 +498,14 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     }
   }
 
+  // Resolve background task configuration before converting tools so eligible
+  // tools expose the per-call `_background` override in their input schemas.
+  const backgroundTasksConfig = typedAgent.getBackgroundTasksConfig?.();
+  const backgroundTaskManager =
+    execOptions?.disableBackgroundTasks || execOptions?.backgroundTaskPolicy?.allowToolDispatch === false
+      ? undefined
+      : mastra?.backgroundTaskManager;
+
   // 7. Convert tools to CoreTool format for execution
   let tools: Record<string, CoreTool> = {};
   try {
@@ -501,6 +521,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       hooks: execOptions?.hooks,
       delegation: execOptions?.delegation,
       methodType,
+      backgroundTaskEnabled: Boolean(backgroundTaskManager),
+      backgroundTaskPolicy: execOptions?.backgroundTaskPolicy,
     });
   } catch (error) {
     logger?.warn?.(`[DurableAgent] Error converting tools: ${error}`);
@@ -519,6 +541,13 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       messages,
       tools,
       abortSignal: execOptions?.abortSignal,
+      logger,
+    });
+    // Apply server-defined toModelOutput to client-executed results by
+    // enriching the ingested MessageList parts.
+    await applyClientToolModelOutput({
+      messageList,
+      tools,
       logger,
     });
   }
@@ -567,12 +596,6 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       }
     }
   }
-
-  // 11. Get background task config. When the caller opts out with
-  // `disableBackgroundTasks: true`, drop the manager so the registry entry
-  // signals "no background tasks for this run" to the check step.
-  const backgroundTasksConfig = typedAgent.getBackgroundTasksConfig?.();
-  const backgroundTaskManager = execOptions?.disableBackgroundTasks ? undefined : mastra?.backgroundTaskManager;
 
   // Resolve tool payload transform policy with the same precedence the
   // non-durable Agent uses: per-call > agent-level > mastra-level. The
@@ -635,12 +658,13 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
       maxProcessorRetries: execOptions?.maxProcessorRetries,
       includeRawChunks: execOptions?.includeRawChunks,
-      returnScorerData: (execOptions as any)?.returnScorerData,
+      returnScorerData: execOptions?.returnScorerData,
       hasErrorProcessors: errorProcessors.length > 0,
       providerOptions: execOptions?.providerOptions,
       structuredOutput: serializedStructuredOutput,
       skipBgTaskWait: (execOptions as any)?._skipBgTaskWait,
       disableBackgroundTasks: execOptions?.disableBackgroundTasks,
+      backgroundTaskPolicy: execOptions?.backgroundTaskPolicy,
       tracingOptions: execOptions?.tracingOptions,
       actor: execOptions?.actor,
       instructionsOverride: execOptions?.instructions,
@@ -750,6 +774,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           schema: toStandardSchema(execOptions.structuredOutput.schema),
         }
       : undefined,
+    // Call-time returnScorerData flag. Also serialized into the workflow
+    // input; parked here too so warm resume()/observe() can rebuild
+    // scoringData without re-reading the snapshot.
+    returnScorerData: execOptions?.returnScorerData,
     cleanup: () => {},
   };
 

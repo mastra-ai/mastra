@@ -88,13 +88,6 @@ export function useOverlayControllerHandlers() {
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
     ),
-    http.post(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/ensure`, () =>
-      HttpResponse.json({
-        resourceId: 'test-resource',
-        sandboxId: 'sandbox-overlay',
-        sandboxWorkdir: '/workspace/overlay',
-      }),
-    ),
     http.post(`${API}/sessions`, async ({ request }) => {
       const resourceId = resourceIdFromRequestBody(await request.json());
       return HttpResponse.json({ controllerId: 'code', resourceId, threadId: 'thread-test' });
@@ -129,6 +122,7 @@ export function useOverlayControllerHandlers() {
           headers: { 'content-type': 'text/event-stream' },
         }),
     ),
+    http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
     http.get(`${TEST_BASE_URL}/web/fs/list`, () =>
       HttpResponse.json({ root: '/tmp', path: '/tmp', parent: null, entries: [] }),
     ),

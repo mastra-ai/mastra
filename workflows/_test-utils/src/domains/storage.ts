@@ -568,11 +568,19 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
         });
         expect(resumeResult.status).toBe('success');
 
-        // After resume, snapshot should still be the suspended one (success is not persisted)
         const { runs: afterRuns, total: afterTotal } = await (workflow as any).listWorkflowRuns();
-        expect(afterTotal).toBe(1);
-        expect(afterRuns).toHaveLength(1);
-        expect((afterRuns[0]?.snapshot as any)?.status).toBe('suspended');
+        if (ctx.deletesDeclinedTerminalSnapshots) {
+          // Engines that delete declined terminal snapshots (evented, #22209)
+          // drop the row entirely once the run finishes: a terminal run the
+          // workflow declined to persist can never be resumed.
+          expect(afterTotal).toBe(0);
+          expect(afterRuns).toHaveLength(0);
+        } else {
+          // After resume, snapshot should still be the suspended one (success is not persisted)
+          expect(afterTotal).toBe(1);
+          expect(afterRuns).toHaveLength(1);
+          expect((afterRuns[0]?.snapshot as any)?.status).toBe('suspended');
+        }
       },
     );
   });

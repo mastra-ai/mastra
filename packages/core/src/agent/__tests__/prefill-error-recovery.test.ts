@@ -213,6 +213,15 @@ describe('PrefillErrorHandler Recovery', () => {
         }),
       });
       expect((retryReminderMessage?.content.metadata as any)?.signal).not.toHaveProperty('contents');
+
+      // The prefill failure was recovered by the error processor, so it never
+      // reached the terminal branch and must not leave an `error` part behind.
+      expect(
+        rawMessages.messages.flatMap(message => message.content?.parts ?? []).filter(part => part.type === 'error'),
+      ).toEqual([]);
+      expect(
+        visibleMessages.messages.flatMap(message => message.content?.parts ?? []).filter(part => part.type === 'error'),
+      ).toEqual([]);
     });
 
     it('should still run processAPIError after the retry cap is reached without retrying again', async () => {
@@ -252,6 +261,68 @@ describe('PrefillErrorHandler Recovery', () => {
       expect(callCount).toBe(5);
       expect(seenRetryCounts).toEqual([0, 1, 2, 3, 4]);
       expect(exhaustedHandler).toHaveBeenCalledTimes(5);
+    });
+
+    it('should persist exactly one error part once the error-processor retry budget is exhausted', async () => {
+      let callCount = 0;
+      const seenRetryCounts: number[] = [];
+      // Always asks for a retry, so only the retry budget can make this terminal.
+      const alwaysRetryHandler = vi.fn(async ({ retryCount }: { retryCount: number }) => {
+        seenRetryCounts.push(retryCount);
+        return { retry: true };
+      });
+
+      const model = new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount++;
+          throw new APICallError({
+            message: 'Budget exhausted prefill failure',
+            url: 'https://api.anthropic.com/v1/messages',
+            requestBodyValues: {},
+            statusCode: 400,
+            isRetryable: false,
+          });
+        },
+      });
+
+      const mockMemory = new MockMemory();
+      const threadId = randomUUID();
+      const resourceId = randomUUID();
+
+      const agent = new Agent({
+        id: 'prefill-test-budget-exhausted',
+        name: 'Prefill Test Budget Exhausted',
+        instructions: 'You are a test agent',
+        model: [{ model, maxRetries: 0 }],
+        memory: mockMemory,
+        maxProcessorRetries: 2,
+        errorProcessors: [{ id: 'always-retry', processAPIError: alwaysRetryHandler }],
+      });
+
+      // The processor keeps asking for a retry, so only the budget can make this
+      // terminal — and the run then rejects with the original error.
+      await expect(
+        agent.generate('Continue the conversation', {
+          memory: { thread: threadId, resource: resourceId },
+        }),
+      ).rejects.toThrow('Budget exhausted prefill failure');
+
+      // 1 initial attempt + 2 processor retries, then the budget makes it terminal.
+      expect(callCount).toBe(3);
+      expect(seenRetryCounts).toEqual([0, 1, 2]);
+
+      const recalled = await mockMemory.recall({ threadId, resourceId });
+      expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant']);
+
+      // Exactly one error part: the two retried attempts must not each leave a record.
+      const errorParts = recalled.messages
+        .flatMap(message => message.content?.parts ?? [])
+        .filter(part => part.type === 'error');
+      expect(errorParts).toHaveLength(1);
+      expect(errorParts[0]).toMatchObject({
+        type: 'error',
+        error: { name: 'AI_APICallError', message: 'Budget exhausted prefill failure' },
+      });
     });
 
     it('should recover from qwen enable_thinking prefill errors', async () => {
@@ -459,6 +530,12 @@ describe('PrefillErrorHandler Recovery', () => {
           msg.content.some((part: any) => part.type === 'text' && part.text === ANTHROPIC_PREFILL_RETRY_REMINDER),
       );
       expect(hasRetryReminderMessage).toBe(true);
+
+      // A recovered stream attempt must not persist a terminal error part.
+      const recalled = await mockMemory.recall({ threadId, resourceId, includeSystemReminders: true });
+      expect(
+        recalled.messages.flatMap(message => message.content?.parts ?? []).filter(part => part.type === 'error'),
+      ).toEqual([]);
     });
 
     it('should only retry once even if the error persists', async () => {

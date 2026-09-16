@@ -99,6 +99,29 @@ export function executeWithContextSync<T>(params: { span?: AnySpan; fn: () => T 
 }
 
 /**
+ * Resolve the spanId an observability signal should reference for a span.
+ *
+ * Signals (logs, metrics, and a suspending run's resume link) must name a span
+ * that actually reached exporters. An internal or excluded span is never
+ * stored, so referencing its raw id leaves the signal pointing at nothing:
+ * log/metric span lookups 404, and a resumed run's exported children inherit a
+ * dangling parentSpanId and land as orphans. `undefined` is a valid answer — it
+ * omits the reference rather than pointing it at a span that does not exist.
+ *
+ * `getExportedSpanId` is optional on the `Span` interface, so the typeof guard
+ * separates "this implementation predates the method" (keep the old behavior of
+ * referencing the span's own id) from "the method ran and found nothing
+ * exportable" (undefined). Without it the two collapse and custom span
+ * implementations silently lose correlation.
+ */
+export function resolveExportedSpanId(
+  span: { id?: string; getExportedSpanId?: () => string | undefined } | undefined | null,
+): string | undefined {
+  if (!span) return undefined;
+  return typeof span.getExportedSpanId === 'function' ? span.getExportedSpanId() : span.id;
+}
+
+/**
  * Creates or gets a child span from existing tracing context or starts a new trace.
  * This helper consolidates the common pattern of creating spans that can either be:
  * 1. Children of an existing span (when tracingContext.currentSpan exists)
@@ -110,9 +133,11 @@ export function executeWithContextSync<T>(params: { span?: AnySpan; fn: () => T 
 export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOptions<T>): Span<T> | undefined {
   const { type, attributes, tracingContext, requestContext, tracingOptions, resumedFromSpanId, ...rest } = options;
 
+  // tracingOptions.metadata takes precedence, but a key it merely names with
+  // an `undefined` value must not erase the span's own metadata value.
   const metadata = {
     ...(rest.metadata ?? {}),
-    ...(tracingOptions?.metadata ?? {}),
+    ...Object.fromEntries(Object.entries(tracingOptions?.metadata ?? {}).filter(([, value]) => value !== undefined)),
   };
 
   // If we have a current span, create a child span

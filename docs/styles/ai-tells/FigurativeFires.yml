@@ -1,0 +1,41 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. Say the rule matches or reports. Disable this rule for firearms or ceramics prose."
+level: error
+nonword: true
+ignorecase: true
+# "Fires" is an AI fingerprint for a check doing its job: a rule "fires," a
+# hook "fires on every commit," a warning that "never fires." The subject is
+# the discriminator. Pre-LLM systems prose reaches for the same verb, but
+# almost always with timers and events ("the timer fired," "the event
+# fires"), and both standard libraries measure zero once those two subjects
+# are excluded, so the token gates on the checking-and-alerting nouns and
+# leaves "timer" and "event" alone. Literal firing (a gun, a kiln, an
+# employee, a neuron) never puts these subjects in front of the verb;
+# firearms or ceramics writing disables the rule.
+tokens:
+  # --- Subject-gated: a checking or alerting noun given the trigger-pull.
+  # An optional adverb sits between subject and verb ("the hook still
+  # fires," "the rule never fired").
+  - "\\b(?:rule|hook|check|checker|linter|lint|gate|guard|trigger|alert|alarm|warning|notification|webhook|workflow|action|validation|exemption|assertion)s? (?:never |still |always |only |then |also |actually |reliably |rarely |sometimes )?fir(?:es?|ed|ing)\\b"
+
+  # --- The per-occasion token with the subject left open ("so the hooks
+  # fire on every commit," "the alert fires on every push"). The complement
+  # is the tell here, so no subject gate is needed. Measured at zero across
+  # the Go and Python standard libraries.
+  - "\\bfir(?:es?|ed|ing) on every (?:commit|push|merge|save|run|line|match)\\b"
+
+  # --- Pronoun subjects: the checking noun from the previous sentence
+  # carried by "it" or "they" ("they fire nothing and never reach the next
+  # stage," "so it fires nothing"). A documentation-corpus audit (2026-09)
+  # found these escaping the subject gate above. The trailing lookahead
+  # keeps the literal senses out (a gun fired at, an employee fired, a
+  # rocket fired into orbit); the two corpus hits are timers ("to prove it
+  # fires exactly once"), the register the subject gate excludes and this
+  # token cannot see, so timer prose disables the rule.
+  - "\\b(?:it|they|these|those|each|one|both|all|none|neither|which|that) (?:never |still |always |only |then |also |actually |reliably |rarely |sometimes |may |can |will |would |could |should |might |must |to )?fir(?:es?|ed|ing)\\b(?! (?:up|off|at|a|an|the|him|her|them|me|us|you|people|employees|staff|workers|shots?|bullets?|rounds?|guns?|missiles?|rockets?|arrows?|torpedoes|weapons?|back|away|into|upon|on all)\\b)"
+  - "\\bfir(?:es?|ed|ing) nothing\\b"
+
+  # --- The sibling verb ("where they misfire," "the rule misfired on the
+  # heading"). Measured at zero across both standard libraries.
+  - "\\bmisfir(?:es?|ed|ing)\\b"

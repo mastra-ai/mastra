@@ -11,7 +11,7 @@ import type { MastraServerCache } from '../cache/base';
 import type { AgentChannels } from '../channels/agent-channels';
 import type { ChannelConfig } from '../channels/types';
 import type { WaitUntilFn } from '../channels/wait-until';
-import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
+import type { MastraScorer, MastraScorers, ScoringFilter, ScoringSamplingConfig } from '../evals';
 import type { PubSub } from '../events/pubsub';
 import type {
   CoreMessage,
@@ -62,12 +62,13 @@ import type { ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import type { MastraVoice } from '../voice';
 import type { Workflow } from '../workflows';
+import type { ShouldPersistSnapshotFn } from '../workflows/types';
 import type { AnyWorkspace } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
-import type { AgentSignalAttributes, CreatedAgentSignal } from './signals';
+import type { AgentSignalAttributes, AgentSignalType, CreatedAgentSignal } from './signals';
 import type { SubAgent } from './subagent';
 export type {
   MastraDBMessage,
@@ -160,11 +161,40 @@ export type AgentSignalIfIdleOptions<OUTPUT = unknown> = {
   behavior?: AgentSignalIdleBehavior;
   streamOptions?: AgentExecutionOptions<OUTPUT>;
   attributes?: AgentSignalAttributes;
+  /** Reject the wake unless an advertised thread owner acknowledges it. */
+  requireClaimedOwner?: boolean;
 };
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
+export type AgentThreadPeerInfo = {
+  id: string;
+  agentId: string;
+  resourceId: string;
+  threadId: string;
+  label?: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type AgentClaimThreadPeerOptions = {
+  id?: string;
+  agentId?: string;
+  label?: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type AgentThreadPeerAdvertisement = AgentThreadPeerInfo & {
+  sourceId: string;
+  discoveredAt: Date;
+};
+
+export type DiscoverAgentThreadPeersOptions = {
+  timeoutMs?: number;
+};
+
 export type SendAgentSignalOptions<OUTPUT = unknown> =
   | {
       runId: string;
@@ -198,11 +228,11 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
  *               `output` is the run's `MastraModelOutput` for in-process
  *               consumption. Only the runtime that actually runs the agent
  *               resolves to `wake`.
- * - `deliver` — the signal was handed off rather than started here. This covers
- *               a follow-up signal joining an already-active run and the loser
- *               of a cross-process wake race (whose signal is forwarded to the
- *               winning run). No new run was started locally and no stream is
- *               owned; `runId` is the run the signal joined.
+ * - `deliver` — the signal was admitted by a run rather than started here. This
+ *               covers a follow-up signal joining an already-active run and a
+ *               remote claimed owner acknowledging an idle wake after fencing
+ *               competing owners. No new run was started locally and no stream
+ *               is owned; `runId` is the run the signal joined.
  * - `persist` — the signal was written to memory by a `persist` behavior. To
  *               await the storage write, use the top-level `persisted` promise.
  * - `discard` — policy dropped the signal; nothing ran and nothing was stored.
@@ -231,9 +261,9 @@ export interface SendAgentSignalResult<OUTPUT = unknown> {
    * not reject here; that error surfaces on the `wake` member's `output`.
    *
    * `wake` means this process ran the agent and `output` is its
-   * `MastraModelOutput`. A signal queued onto an existing run, or one whose
-   * cross-process wake race was lost (and forwarded to the winning run),
-   * resolves to `deliver`. `blocked` means the signal targeted a suspended
+   * `MastraModelOutput`. A signal queued onto an existing run, or an idle wake
+   * acknowledged by a remote claimed owner after owner fencing, resolves to
+   * `deliver`. `blocked` means the signal targeted a suspended
    * thread that cannot accept a new idle wake. `runId` is present on
    * `wake`/`deliver`/`blocked` only; for `persist`/`discard`, correlate via
    * {@link signal}'s `id`. To await a `persist` write, use {@link persisted}.
@@ -257,12 +287,51 @@ export type SendAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OUT
 /**
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
-export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT>;
+export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT> & {
+  /** Local grouping metadata for queue observation and cancellation. It is not serialized or authorization. */
+  queueOwnerId?: string;
+};
 
 /**
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
 export type QueueAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OUTPUT>;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export interface SubscribeAgentThreadEventsOptions {
+  resourceId: string;
+  threadId: string;
+  /** Omit to observe all locally pending messages on the shared thread. */
+  queueOwnerId?: string;
+}
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type AgentThreadEvent =
+  /** Locally pending messages: FIFO entries plus a non-cancelled lease handoff. */
+  { type: 'queue-count-changed'; count: number };
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type AgentThreadEventListener = (event: AgentThreadEvent) => void;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type CancelQueuedAgentMessagesOptions =
+  | { resourceId: string; threadId: string; signalIds: string[]; queueOwnerId?: never }
+  | { resourceId: string; threadId: string; queueOwnerId: string; signalIds?: never };
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export interface CancelQueuedAgentMessagesResult {
+  cancelledSignalIds: string[];
+}
 
 /**
  * @experimental Agent stream resume APIs are experimental and may change in a future release.
@@ -355,9 +424,15 @@ export interface AgentThreadRun<OUTPUT = unknown> {
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
-export interface AgentSubscribeToThreadOptions {
+export interface AgentThreadIdentityOptions {
   resourceId?: string;
   threadId: string;
+}
+
+/** @experimental Agent signals are experimental and may change in a future release. */
+export interface AgentSubscribeToThreadOptions extends AgentThreadIdentityOptions {
+  /** Subscriber-local signal filtering: true hides all recognized types, false hides none, or select types with an array. Defaults to none. */
+  hideSignals?: boolean | AgentSignalType[];
 }
 
 /**
@@ -519,7 +594,7 @@ export interface GoalConfig {
  *
  * - `true`  → wrap with `createDurableAgent` using defaults on Mastra registration.
  * - object  → forwarded to `createDurableAgent` (cache, pubsub, maxSteps,
- *   cleanupTimeoutMs, id, name).
+ *   cleanupTimeoutMs, shouldCache, shouldPersistSnapshot, id, name).
  *
  * See `packages/core/src/agent/durable/create-durable-agent.ts`.
  */
@@ -534,6 +609,15 @@ export type AgentDurableOption =
       maxSteps?: number;
       /** Auto-cleanup timer for durable stream state (ms). */
       cleanupTimeoutMs?: number;
+      /** See createDurableAgent options: per-topic opt-out of the replay cache. */
+      shouldCache?: (topic: string) => boolean;
+      /**
+       * See createDurableAgent options: overrides the snapshot-persistence
+       * policy. By default `pending | paused | suspended` are always
+       * persisted and `running` checkpoints only when the Mastra instance
+       * sets `recovery: { durableAgents: 'auto' }`.
+       */
+      shouldPersistSnapshot?: ShouldPersistSnapshotFn;
       /** Optional id override (defaults to agent.id). */
       id?: string;
       /** Optional name override (defaults to agent.name). */
@@ -1015,7 +1099,9 @@ export type AgentGenerateOptions<
    */
   versions?: VersionOverrides;
   /** Scorers to use for this generation */
-  scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+  scorers?:
+    | MastraScorers
+    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }>;
   /** Whether to return the input required to run scorers for agents, defaults to false */
   returnScorerData?: boolean;
   /**
@@ -1128,7 +1214,9 @@ export type AgentStreamOptions<
   /** tracing options for starting new traces */
   tracingOptions?: TracingOptions;
   /** Scorers to use for this generation */
-  scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+  scorers?:
+    | MastraScorers
+    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }>;
   /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
   providerOptions?: ProviderOptions;
 } & Partial<ObservabilityContext> &
@@ -1172,7 +1260,9 @@ export type AgentExecuteOnFinishOptions = {
   messageList: MessageList;
   threadExists: boolean;
   structuredOutput?: boolean;
-  overrideScorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+  overrideScorers?:
+    | MastraScorers
+    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }>;
   onTitleGenerated?: (title: string) => void | Promise<void>;
   /**
    * Optional platform `waitUntil` so detached title generation survives

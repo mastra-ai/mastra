@@ -184,30 +184,28 @@ describe('Observational Memory extracted metadata persistence', () => {
 - User shared durable schema-backed profile details.
 </observations>`;
     const model = new MockLanguageModelV2({
-      doStream: async () => ({
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          { type: 'response-metadata', id: 'obs-wm-2', modelId: 'mock-observer', timestamp: new Date() },
-          { type: 'text-start', id: 'text-wm-2' },
-          { type: 'text-delta', id: 'text-wm-2', delta: observerOutput },
-          { type: 'text-end', id: 'text-wm-2' },
-          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 } },
-        ]),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-      }),
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { inputTokens: 80, outputTokens: 10, totalTokens: 90 },
-        warnings: [],
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({ 'working-memory': { profile: { location: 'Seattle' }, preferences: ['weather'] } }),
-          },
-        ],
-      }),
+      doStream: async ({ prompt }) => {
+        const isExtraction = JSON.stringify(prompt).includes('Extract structured data from the observations you made.');
+        const text = isExtraction
+          ? JSON.stringify({ 'working-memory': { profile: { location: 'Seattle' }, preferences: ['weather'] } })
+          : observerOutput;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'obs-wm-2', modelId: 'mock-observer', timestamp: new Date() },
+            { type: 'text-start', id: 'text-wm-2' },
+            { type: 'text-delta', id: 'text-wm-2', delta: text },
+            { type: 'text-end', id: 'text-wm-2' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
     });
 
     const workingMemory = new Memory({

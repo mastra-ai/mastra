@@ -40,7 +40,29 @@ export class EditorMCPNamespace extends CrudEditorNamespace<
 
     return {
       create: input => store.create({ mcpClient: input }),
-      getByIdResolved: id => store.getByIdResolved(id),
+      getByIdResolved: async (id, options) => {
+        if (options?.versionId || options?.versionNumber !== undefined) {
+          const mcpClient = await store.getById(id);
+          if (!mcpClient) return null;
+
+          const version = options.versionId
+            ? await store.getVersion(options.versionId)
+            : await store.getVersionByNumber(id, options.versionNumber!);
+          if (!version || version.mcpClientId !== id) return null;
+
+          const {
+            id: versionId,
+            mcpClientId: _mcpClientId,
+            versionNumber: _versionNumber,
+            changedFields: _changedFields,
+            changeMessage: _changeMessage,
+            createdAt: _createdAt,
+            ...snapshot
+          } = version;
+          return { ...mcpClient, ...snapshot, resolvedVersionId: versionId } as StorageResolvedMCPClientType;
+        }
+        return store.getByIdResolved(id, options?.status ? { status: options.status } : undefined);
+      },
       update: input => store.update(input),
       delete: id => store.delete(id),
       list: args => store.list(args),

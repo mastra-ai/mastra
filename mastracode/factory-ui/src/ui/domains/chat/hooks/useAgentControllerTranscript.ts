@@ -1,71 +1,77 @@
-import type { AgentControllerEvent, AgentControllerSessionState, MastraDBMessage } from '@mastra/client-js';
-import { useReducer, useRef } from 'react';
+import type { AgentControllerEvent, MastraDBMessage } from '@mastra/client-js';
+import { useCallback, useReducer } from 'react';
 
-import { createInitialTranscript, transcriptReducer } from '../services/transcript';
-import type { OutgoingFile, TranscriptState } from '../services/transcript';
-
-/** What the session-state route hydrates the status line with before the first event lands. */
-export type SessionStateSnapshot = Pick<AgentControllerSessionState, 'omProgress' | 'tokenUsage'>;
+import { createInitialTranscript, createLocalMessageId, transcriptReducer } from '../services/transcript';
+import type { OutgoingFile } from '../services/transcript';
 
 export function useAgentControllerTranscript({
   initialThreadId,
   initialMessages,
-  initialState,
+  viewerId,
 }: {
   initialThreadId?: string;
   initialMessages?: MastraDBMessage[];
-  initialState?: SessionStateSnapshot;
+  viewerId?: string;
 } = {}) {
   const [transcript, dispatch] = useReducer(transcriptReducer, undefined, () =>
     createInitialTranscript({
       messages: initialMessages,
       threadId: initialThreadId,
-      omProgress: initialState?.omProgress,
-      usage: initialState?.tokenUsage,
     }),
   );
-  const transcriptRef = useRef<TranscriptState>(transcript);
-  transcriptRef.current = transcript;
+  const [initialHistoryReady, markInitialHistoryReady] = useReducer(
+    () => true,
+    !initialThreadId || initialMessages !== undefined,
+  );
 
-  const reset = (threadId?: string, state?: SessionStateSnapshot) => {
+  const reset = useCallback((threadId?: string) => {
     dispatch({
       type: 'reset',
       threadId,
-      omProgress: state?.omProgress,
-      usage: state?.tokenUsage,
     });
-  };
+  }, []);
 
-  const onEvent = (event: AgentControllerEvent) => {
-    dispatch({ type: 'event', event });
-  };
+  const onEvent = useCallback(
+    (event: AgentControllerEvent) => {
+      dispatch({ type: 'event', event, viewerId });
+    },
+    [viewerId],
+  );
 
-  const localUser = (text: string, steer?: boolean, files?: OutgoingFile[]) => {
-    dispatch({ type: 'localUser', text, steer, files });
-  };
+  const localUser = useCallback((text: string, steer?: boolean, files?: OutgoingFile[]) => {
+    const id = createLocalMessageId();
+    dispatch({ type: 'localUser', id, text, steer, files });
+    return id;
+  }, []);
 
-  const resolvePrompt = (id: string) => {
+  const failLocalUser = useCallback((id: string) => {
+    dispatch({ type: 'failLocalUser', id });
+  }, []);
+
+  const resolvePrompt = useCallback((id: string) => {
     dispatch({ type: 'resolvePrompt', id });
-  };
+  }, []);
 
-  const clearPending = () => {
+  const clearPending = useCallback(() => {
     dispatch({ type: 'clearPending' });
-  };
+  }, []);
 
-  const pushNotice = (text: string, level: 'info' | 'error' = 'info') => {
+  const pushNotice = useCallback((text: string, level: 'info' | 'error' = 'info') => {
     dispatch({ type: 'localNotice', text, level });
-  };
+  }, []);
 
-  const mergeWindow = (messages: MastraDBMessage[]) => {
+  const mergeWindow = useCallback((messages: MastraDBMessage[]) => {
     dispatch({ type: 'mergeWindow', messages });
-  };
+    markInitialHistoryReady();
+  }, []);
 
   return {
     transcript,
-    transcriptRef,
+    initialHistoryReady,
     reset,
     onEvent,
     localUser,
+    failLocalUser,
     resolvePrompt,
     clearPending,
     pushNotice,

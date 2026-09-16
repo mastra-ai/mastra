@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../agent/message-list';
 import { isTransientSignalMessage } from '../agent/signals';
 import type { IMastraLogger } from '../logger';
+import type { MastraDBMessage } from '../memory';
 import { ProcessorRunner } from './runner';
+import { createProcessorSendSignal } from './send-signal';
 import type { ProcessorStreamWriter } from './index';
 
 const mockLogger: IMastraLogger = {
@@ -135,7 +137,7 @@ describe('sendSignal integration through ProcessorRunner', () => {
     );
   });
 
-  it('sendSignal emits a data part to the stream writer', async () => {
+  it('sendSignal emits reactive signals to the stream writer', async () => {
     const chunks: unknown[] = [];
     const writer: ProcessorStreamWriter = {
       custom: async chunk => {
@@ -171,17 +173,13 @@ describe('sendSignal integration through ProcessorRunner', () => {
       writer,
     });
 
-    expect(chunks).toHaveLength(1);
-    expect(chunks[0]).toEqual(
+    expect(chunks).toEqual([
       expect.objectContaining({
         type: 'data-signal',
-        data: expect.objectContaining({
-          type: 'reactive',
-          tagName: 'system-reminder',
-          contents: 'stream test',
-        }),
+        data: expect.objectContaining({ type: 'reactive', tagName: 'system-reminder', contents: 'stream test' }),
+        transient: true,
       }),
-    );
+    ]);
   });
 
   it('sendSignal rotates the response message ID and updates the step result', async () => {
@@ -448,5 +446,148 @@ describe('sendSignal integration through ProcessorRunner', () => {
     // The flag survived addSignal → the save-time filters will drop this from storage.
     expect((signals[0]!.content.metadata?.signal as Record<string, unknown>).transient).toBe(true);
     expect(isTransientSignalMessage(signals[0]!)).toBe(true);
+  });
+
+  it('re-sending a transient reminder each step keeps a single fresh copy in the prompt', async () => {
+    // Regression for #22060: processInputStep runs once per model call within a turn, and the
+    // docs' SteeringReminderProcessor pattern re-sends a transient reminder on every step.
+    // Without dedupe, each re-send appended a new row (5 copies by step 5).
+    const runner = new ProcessorRunner({
+      inputProcessors: [
+        {
+          id: 'steering-reminder',
+          processInputStep: async ({ sendSignal }) => {
+            await sendSignal?.({
+              type: 'system-reminder',
+              contents: 'Stay focused on the current task.',
+              transient: true,
+            });
+          },
+        },
+      ],
+      outputProcessors: [],
+      logger: mockLogger,
+      agentName: 'test-agent',
+    });
+
+    const runStep = (stepNumber: number) =>
+      runner.runProcessInputStep({
+        messageList,
+        stepNumber,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        messageId: `response-${stepNumber}`,
+        writer: { custom: async () => {} },
+      });
+
+    await runStep(0);
+    messageList.add([{ role: 'assistant', content: 'calling tool' }], 'response');
+    await runStep(1);
+    messageList.add([{ role: 'assistant', content: 'calling another tool' }], 'response');
+    await runStep(2);
+
+    // Exactly one copy of the reminder, not one per step.
+    const dbMessages = messageList.get.all.db();
+    const signals = dbMessages.filter(m => m.role === 'signal');
+    expect(signals).toHaveLength(1);
+    expect(signals[0]!.content.parts[0]).toEqual(
+      expect.objectContaining({ type: 'text', text: 'Stay focused on the current task.' }),
+    );
+
+    // The surviving copy is the freshest one — positioned after the latest assistant message.
+    const lastAssistantIndex = dbMessages.map(m => m.role).lastIndexOf('assistant');
+    const signalIndex = dbMessages.findIndex(m => m.role === 'signal');
+    expect(signalIndex).toBeGreaterThan(lastAssistantIndex);
+
+    // And the prompt sent to the model contains the reminder exactly once.
+    const promptMessages = await messageList.get.all.aiV5.prompt();
+    const reminderCount = promptMessages.filter((m: any) =>
+      extractPromptText(m).includes('Stay focused on the current task.'),
+    ).length;
+    expect(reminderCount).toBe(1);
+
+    // Transient: only one signal row is drained, and it's flagged so save-time filters drop it.
+    const unsavedSignals = messageList.drainUnsavedMessages().filter(m => m.role === 'signal');
+    expect(unsavedSignals).toHaveLength(1);
+    expect(isTransientSignalMessage(unsavedSignals[0]!)).toBe(true);
+  });
+});
+
+describe('sendSignal without rotation must not corrupt the in-flight response message (issue #21940)', () => {
+  it('preserves tool call/result parts when the next step streams under the same message id', async () => {
+    const threadId = 'thread-21940';
+    const assistantId = 'asst-21940';
+    const corruptableList = new MessageList({ threadId });
+    corruptableList.add([{ role: 'user', content: 'delegate the task' }], 'input');
+
+    // Step 0's assistant message with the completed tool call, as it looks after
+    // the tool result was patched in (state: 'result').
+    const step0: MastraDBMessage = {
+      id: assistantId,
+      role: 'assistant',
+      type: 'text',
+      createdAt: new Date(1),
+      threadId,
+      content: {
+        format: 2,
+        parts: [
+          { type: 'step-start' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tc-1',
+              toolName: 'delegate',
+              args: { task: 'task-1' },
+              result: 'delegated-task-1',
+            },
+          },
+        ],
+      },
+    };
+    corruptableList.add(step0, 'response');
+
+    // The processToolResult phase has no rotateResponseMessageId wired
+    // (runner.runProcessToolResult / createStepFromProcessor for phase 'toolResult'),
+    // so this sendSignal must NOT stamp a response boundary on the in-flight message.
+    const sendSignal = createProcessorSendSignal({ messageList: corruptableList });
+    await sendSignal({ type: 'system-reminder', contents: 'Subagent handled task-1.', transient: true });
+
+    const stamped = corruptableList.get.all.db().find(m => m.id === assistantId);
+    expect(
+      (stamped?.content.metadata as { mastra?: { responseBoundary?: boolean } } | undefined)?.mastra?.responseBoundary,
+    ).toBeFalsy();
+
+    // Step 1 then streams under the SAME message id (no rotation happened). Without a
+    // boundary it merges into step 0's message; pre-fix, the boundary blocked
+    // MessageMerger.shouldMerge and addOne REPLACED the message wholesale with the
+    // text-only step-1 content, destroying the tool call/result.
+    const step1: MastraDBMessage = {
+      id: assistantId,
+      role: 'assistant',
+      type: 'text',
+      createdAt: new Date(2),
+      threadId,
+      content: {
+        format: 2,
+        parts: [{ type: 'step-start' }, { type: 'text', text: 'All done.' }],
+      },
+    };
+    corruptableList.add(step1, 'response');
+
+    const assistants = corruptableList.get.all.db().filter(m => m.role === 'assistant');
+    expect(assistants).toHaveLength(1);
+    const parts = assistants[0]!.content.parts;
+    expect(
+      parts.some(
+        p =>
+          p.type === 'tool-invocation' &&
+          p.toolInvocation?.toolCallId === 'tc-1' &&
+          p.toolInvocation?.state === 'result',
+      ),
+    ).toBe(true);
+    expect(parts.some(p => p.type === 'text' && p.text === 'All done.')).toBe(true);
   });
 });

@@ -10,6 +10,7 @@
 
 import { Daytona, DaytonaNotFoundError, SandboxState } from '@daytonaio/sdk';
 import type {
+  ComputerUse,
   CreateSandboxFromImageParams,
   CreateSandboxFromSnapshotParams,
   Sandbox,
@@ -25,16 +26,19 @@ import type {
   MountManager,
   CommandResult,
   ExecuteCommandOptions,
+  SandboxComputer,
   SandboxNetworking,
   SandboxFileInput,
   SandboxCloneOptions,
+  SandboxStartResult,
 } from '@mastra/core/workspace';
-import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
+import { MastraSandbox, SandboxNotReadyError, assertModesUnsupported } from '@mastra/core/workspace';
 
 import { compact } from '../utils/compact';
 import { shellQuote } from '../utils/shell-quote';
 import { mountS3, mountGCS, mountAzure, LOG_PREFIX, runCommand } from './mounts';
 import type { DaytonaMountConfig, MountContext } from './mounts';
+import { cleanupS3Credentials } from './mounts/s3-credentials';
 import { DaytonaProcessManager } from './process-manager';
 import type { DaytonaResources } from './types';
 
@@ -75,6 +79,9 @@ function validateMountPath(mountPath: string): void {
 
 /** Allowlist for marker filenames from ls output — e.g. "mount-abc123" */
 const SAFE_MARKER_NAME = /^mount-[a-z0-9]+$/;
+
+/** Default port of the noVNC web viewer started by Daytona computer use. */
+const DEFAULT_NOVNC_PORT = 6080;
 
 /** Patterns indicating the sandbox is dead/gone (@daytonaio/sdk@0.143.0). */
 const SANDBOX_DEAD_PATTERNS: RegExp[] = [
@@ -169,6 +176,43 @@ export interface DaytonaSandboxOptions extends Omit<MastraSandboxOptions, 'proce
    * change. Daytona defines and enforces the policy; this option selects it.
    */
   domainAllowList?: string;
+  /**
+   * Daytona Secrets to expose inside the sandbox, mapping environment variable
+   * names to Daytona Secret names (e.g. `{ GITHUB_TOKEN: 'github-token' }`).
+   *
+   * The environment variable holds an opaque placeholder; Daytona's egress
+   * proxy substitutes the real value into HTTPS request headers toward the
+   * Secret's allowed hosts, so the raw value never enters the sandbox.
+   * Secrets are created at the organization level (Daytona dashboard or SDK).
+   */
+  secrets?: Record<string, string>;
+  /**
+   * Computer-use (desktop) capability configuration.
+   *
+   * Set to `true` or provide an options object to expose the `computer`
+   * capability and emit the `mastra_workspace_computer_*` workspace tools.
+   * The desktop processes (Xvfb, xfce4, x11vnc, noVNC) are started lazily on
+   * the first computer operation.
+   *
+   * @default false
+   */
+  computerUse?:
+    | boolean
+    | {
+        /**
+         * Automatically start the desktop processes on the first computer
+         * operation. Set to `false` if you manage
+         * `sandbox.daytona.computerUse.start()` yourself.
+         * @default true
+         */
+        autoStart?: boolean;
+        /**
+         * Port of the noVNC web viewer inside the sandbox, used by
+         * `computer.streamUrl()`.
+         * @default 6080
+         */
+        noVncPort?: number;
+      };
 }
 
 // =============================================================================
@@ -240,18 +284,30 @@ export class DaytonaSandbox extends MastraSandbox {
     },
   };
 
+  /**
+   * Computer-use (desktop) capability: screenshot, mouse, and keyboard control
+   * of the sandbox's desktop environment via Daytona's computer use API.
+   *
+   * Available when the sandbox is constructed with `computerUse: true` or an
+   * options object. Desktop processes are started lazily on the first operation
+   * unless `computerUse.autoStart` is `false`.
+   */
+  declare readonly computer?: SandboxComputer;
+
   status: ProviderStatus = 'pending';
 
   private _daytona: Daytona | null = null;
   private _sandbox: Sandbox | null = null;
   private _createdAt: Date | null = null;
-  private _workingDir: string | null = null;
   private _isRetrying = false;
+  private _computerUseStarted: Promise<void> | null = null;
+  private readonly computerUseAutoStart: boolean;
+  private readonly noVncPort: number;
 
   private readonly timeout: number;
   private readonly language: 'typescript' | 'javascript' | 'python';
   private readonly resources?: DaytonaResources;
-  private readonly env: Record<string, string>;
+
   private readonly labels: Record<string, string>;
   private readonly snapshotId?: string;
   private readonly image?: string;
@@ -267,24 +323,33 @@ export class DaytonaSandbox extends MastraSandbox {
   private readonly networkBlockAll?: boolean;
   private readonly networkAllowList?: string;
   private readonly domainAllowList?: string;
+  private readonly secrets?: Record<string, string>;
   private readonly connectionOpts: { apiKey?: string; apiUrl?: string; target?: string };
   private readonly _constructorOptions: DaytonaSandboxOptions;
+
+  /**
+   * The `workingDirectory` option as explicitly configured, as distinct from
+   * the probe-filled base field. The process manager's cwd fallback uses only
+   * this value so the runtime probe (which just reports the session home)
+   * never displaces the FUSE-mount default for relative paths.
+   * @internal
+   */
+  readonly explicitWorkingDirectory?: string;
 
   constructor(options: DaytonaSandboxOptions = {}) {
     super({
       ...options,
       name: 'DaytonaSandbox',
       processes: new DaytonaProcessManager({
-        env: options.env,
         defaultTimeout: options.timeout ?? 300_000,
       }),
     });
 
     this.id = options.id ?? this.generateId();
+    this.explicitWorkingDirectory = options.workingDirectory;
     this.timeout = options.timeout ?? 300_000;
     this.language = options.language ?? 'typescript';
     this.resources = options.resources;
-    this.env = options.env ?? {};
     this.labels = options.labels ?? {};
     this.snapshotId = options.snapshot;
     this.image = options.image;
@@ -299,6 +364,7 @@ export class DaytonaSandbox extends MastraSandbox {
     this.networkBlockAll = options.networkBlockAll;
     this.networkAllowList = options.networkAllowList;
     this.domainAllowList = options.domainAllowList;
+    this.secrets = options.secrets;
 
     this.connectionOpts = {
       ...(options.apiKey !== undefined && { apiKey: options.apiKey }),
@@ -306,6 +372,14 @@ export class DaytonaSandbox extends MastraSandbox {
       ...(options.target !== undefined && { target: options.target }),
     };
     this._constructorOptions = { ...options };
+
+    const computerUseOption = options.computerUse;
+    this.computerUseAutoStart = typeof computerUseOption === 'object' ? (computerUseOption.autoStart ?? true) : true;
+    this.noVncPort =
+      typeof computerUseOption === 'object' ? (computerUseOption.noVncPort ?? DEFAULT_NOVNC_PORT) : DEFAULT_NOVNC_PORT;
+    if (computerUseOption === true || typeof computerUseOption === 'object') {
+      this.computer = this.createComputer();
+    }
   }
 
   private generateId(): string {
@@ -368,13 +442,15 @@ export class DaytonaSandbox extends MastraSandbox {
   // ---------------------------------------------------------------------------
 
   /**
-   * Start the Daytona sandbox.
-   * Reconnects to an existing sandbox with the same logical ID if one exists,
-   * otherwise creates a new sandbox instance.
+   * Acquisition primitives (base-orchestrated start): the base derives
+   * `created` structurally from whether an existing sandbox was found, so
+   * reconnecting to one with the same logical ID reports `connected`.
+   * Lookup errors other than not-found propagate deliberately — creating a
+   * duplicate sandbox on a transient/auth error would be worse than failing.
    */
-  async start(): Promise<void> {
+  protected override async find(): Promise<Sandbox | undefined> {
     if (this._sandbox) {
-      return;
+      return this._sandbox;
     }
 
     // Create Daytona client if not exists
@@ -382,21 +458,38 @@ export class DaytonaSandbox extends MastraSandbox {
       this._daytona = new Daytona(this.connectionOpts);
     }
 
-    // Try to reconnect to an existing sandbox with the same logical ID
-    const existing = await this.findExistingSandbox();
-    if (existing) {
-      this._sandbox = existing;
-      this._daytonaSandboxId = existing.id;
-      this._createdAt = existing.createdAt ? new Date(existing.createdAt) : new Date();
-      this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox ${existing.id} for: ${this.id}`);
+    return (await this.findExistingSandbox()) ?? undefined;
+  }
 
-      // Reconcile FUSE mounts — clean up stale mounts from a previous session
-      const expectedPaths = Array.from(this.mounts.entries.keys());
-      this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
-      await this.reconcileMounts(expectedPaths);
-      this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
-      await this.detectWorkingDir();
+  protected override async connect(existing: Sandbox): Promise<void> {
+    if (existing === this._sandbox) {
       return;
+    }
+
+    // Wake a stopped/archived sandbox before adopting it.
+    if (existing.state !== SandboxState.STARTED) {
+      this.logger.debug(`${LOG_PREFIX} Restarting sandbox ${existing.id} (state: ${existing.state})`);
+      await this.waitForStableStateAndStart(existing);
+    }
+
+    this._sandbox = existing;
+    this._daytonaSandboxId = existing.id;
+    this._createdAt = existing.createdAt ? new Date(existing.createdAt) : new Date();
+    this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox ${existing.id} for: ${this.id}`);
+
+    // Reconcile FUSE mounts — clean up stale mounts from a previous session
+    const expectedPaths = Array.from(this.mounts.entries.keys());
+    this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
+    await this.reconcileMounts(expectedPaths);
+    this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
+    await this.detectWorkingDir();
+  }
+
+  protected override async create(): Promise<void> {
+    // find() always runs first through the base ladder and constructs the
+    // client, so reaching here without one means create() was called directly.
+    if (!this._daytona) {
+      this._daytona = new Daytona(this.connectionOpts);
     }
 
     this.logger.debug(`${LOG_PREFIX} Creating sandbox for: ${this.id}`);
@@ -416,6 +509,7 @@ export class DaytonaSandbox extends MastraSandbox {
       networkBlockAll: this.networkBlockAll,
       networkAllowList: this.networkAllowList,
       domainAllowList: this.domainAllowList,
+      secrets: this.secrets,
     });
 
     // Snapshot takes precedence. Image alone (with optional resources) triggers image-based creation.
@@ -478,6 +572,7 @@ export class DaytonaSandbox extends MastraSandbox {
       }
     }
     this._sandbox = null;
+    this._computerUseStarted = null;
   }
 
   /**
@@ -508,6 +603,7 @@ export class DaytonaSandbox extends MastraSandbox {
     this._sandbox = null;
     this._daytonaSandboxId = undefined;
     this._daytona = null;
+    this._computerUseStarted = null;
     this.mounts?.clear();
   }
 
@@ -562,8 +658,8 @@ export class DaytonaSandbox extends MastraSandbox {
     const mountInfo = mountCount > 0 ? ` ${mountCount} filesystem(s) mounted via FUSE.` : '';
     parts.push(`Cloud sandbox with isolated execution (${this.language} runtime).${mountInfo}`);
 
-    if (this._workingDir) {
-      parts.push(`Default working directory: ${this._workingDir}.`);
+    if (this.workingDirectory) {
+      parts.push(`Default working directory: ${this.workingDirectory}.`);
     }
 
     parts.push(`Command timeout: ${Math.ceil(this.timeout / 1000)}s.`);
@@ -585,25 +681,18 @@ export class DaytonaSandbox extends MastraSandbox {
   // Command Execution
   // ---------------------------------------------------------------------------
 
-  /**
-   * Execute a command in the sandbox and return the result.
-   */
-  async executeCommand(
-    command: string,
-    args: string[] = [],
-    options: ExecuteCommandOptions = {},
-  ): Promise<CommandResult> {
-    await this.ensureRunning();
-    const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
-    const handle = await this.processes!.spawn(fullCommand, options);
-    const result = await handle.wait();
-    return { ...result, command, args };
-  }
+  // No executeCommand override: the base default (built from the process
+  // manager) releases the handle when the command settles. The override that
+  // used to live here never called pm.release, so it leaked handles.
 
   /**
    * Bulk-write files into the sandbox filesystem via the SDK's native upload.
+   *
+   * Per-file permission modes are not supported; an explicit `mode` is
+   * rejected rather than silently discarded.
    */
   async writeFiles(files: SandboxFileInput[]): Promise<void> {
+    assertModesUnsupported(files, 'Daytona');
     await this.ensureRunning();
     await this.daytona.fs.uploadFiles(
       files.map(file => ({
@@ -611,6 +700,112 @@ export class DaytonaSandbox extends MastraSandbox {
         destination: file.path,
       })),
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Computer Use
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Ensure the Daytona computer use processes (Xvfb, xfce4, x11vnc, noVNC)
+   * are running. Memoized per attached sandbox; the memo is reset when the
+   * sandbox stops, dies, or is destroyed so a fresh sandbox restarts them.
+   */
+  private async ensureComputerUseStarted(): Promise<void> {
+    if (!this.computerUseAutoStart) return;
+    if (!this._computerUseStarted) {
+      this._computerUseStarted = this.daytona.computerUse
+        .start()
+        .then(() => undefined)
+        .catch((error: unknown) => {
+          this._computerUseStarted = null;
+          throw error;
+        });
+    }
+    return this._computerUseStarted;
+  }
+
+  /**
+   * Build the {@link SandboxComputer} capability backed by Daytona's
+   * computer use API (`sandbox.computerUse`).
+   *
+   * Every operation ensures the sandbox is running and the desktop processes
+   * are started, and retries once if the sandbox died (mirroring command
+   * execution behavior).
+   */
+  private createComputer(): SandboxComputer {
+    const run = async <T>(fn: (computerUse: ComputerUse) => Promise<T>): Promise<T> => {
+      await this.ensureRunning();
+      return this.retryOnDead(async () => {
+        await this.ensureComputerUseStarted();
+        return fn(this.daytona.computerUse);
+      });
+    };
+
+    return {
+      screenshot: async () => {
+        const response = await run(computerUse => computerUse.screenshot.takeFullScreen());
+        if (!response.screenshot) {
+          throw new Error(`${LOG_PREFIX} Daytona returned an empty screenshot response`);
+        }
+        return {
+          data: new Uint8Array(Buffer.from(response.screenshot, 'base64')),
+          mediaType: 'image/png' as const,
+        };
+      },
+      leftClick: async (x, y) => {
+        await run(computerUse => computerUse.mouse.click(x, y, 'left'));
+      },
+      rightClick: async (x, y) => {
+        await run(computerUse => computerUse.mouse.click(x, y, 'right'));
+      },
+      doubleClick: async (x, y) => {
+        await run(computerUse => computerUse.mouse.click(x, y, 'left', true));
+      },
+      moveMouse: async (x, y) => {
+        await run(computerUse => computerUse.mouse.move(x, y));
+      },
+      drag: async (from, to) => {
+        await run(computerUse => computerUse.mouse.drag(from.x, from.y, to.x, to.y));
+      },
+      scroll: async (direction, amount) => {
+        // Daytona scrolls at explicit coordinates — use the current cursor position.
+        await run(async computerUse => {
+          const position = await computerUse.mouse.getPosition();
+          return computerUse.mouse.scroll(position.x ?? 0, position.y ?? 0, direction, amount);
+        });
+      },
+      type: async text => {
+        await run(computerUse => computerUse.keyboard.type(text));
+      },
+      press: async key => {
+        // Daytona's hotkey API takes a '+'-joined combination (e.g. 'ctrl+s').
+        await run(computerUse =>
+          Array.isArray(key) ? computerUse.keyboard.hotkey(key.join('+')) : computerUse.keyboard.press(key),
+        );
+      },
+      getScreenSize: async () => {
+        const info = await run(computerUse => computerUse.display.getInfo());
+        const display = info.displays?.find(d => d.isActive) ?? info.displays?.[0];
+        if (!display || display.width === undefined || display.height === undefined) {
+          throw new Error(`${LOG_PREFIX} Daytona did not return display information`);
+        }
+        return { width: display.width, height: display.height };
+      },
+      getCursorPosition: async () => {
+        const position = await run(computerUse => computerUse.mouse.getPosition());
+        return { x: position.x ?? 0, y: position.y ?? 0 };
+      },
+      streamUrl: async () => {
+        try {
+          // Ensure the desktop (and its noVNC process) is up before resolving the link.
+          const preview = await run(() => this.daytona.getPreviewLink(this.noVncPort));
+          return preview?.url ?? null;
+        } catch {
+          return null;
+        }
+      },
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -755,13 +950,22 @@ export class DaytonaSandbox extends MastraSandbox {
         `${LOG_PREFIX} Error mounting "${filesystem.provider}" (${filesystem.id}) at "${mountPath}":`,
         error,
       );
+      if (config.type === 's3') {
+        // The daemon may have mounted successfully before its readiness check failed.
+        // Detach it before retrying, otherwise the missing marker makes it look unmanaged.
+        try {
+          await this.unmount(mountPath);
+        } catch (cleanupError) {
+          this.logger.warn(`${LOG_PREFIX} Could not unmount failed S3 mount at ${mountPath}:`, cleanupError);
+        }
+      }
+      // unmount() removes the registry entry; retain the original failure for callers.
       this.mounts.set(mountPath, { filesystem, state: 'error', config, error: errorToString(error) });
-
-      // Clean up the directory we created since mount failed
-      await runCommand(sandbox, `sudo rmdir ${shellQuote(mountPath)} 2>/dev/null || true`, {
-        timeout: MOUNT_COMMAND_TIMEOUT_MS,
-      });
-      this.logger.debug(`${LOG_PREFIX} Cleaned up directory after failed mount: ${mountPath}`);
+      if (config.type !== 's3') {
+        await runCommand(sandbox, `sudo rmdir ${shellQuote(mountPath)} 2>/dev/null || true`, {
+          timeout: MOUNT_COMMAND_TIMEOUT_MS,
+        });
+      }
       return { success: false, mountPath, error: errorToString(error) };
     }
 
@@ -792,16 +996,26 @@ export class DaytonaSandbox extends MastraSandbox {
     // Do NOT pkill the FUSE daemon — a killed daemon leaves a stale mount
     // (ENOTCONN) that blocks subsequent mkdir/stat on the path.
     const quotedPath = shellQuote(mountPath);
+    // Validation rejects repeated slashes, so at most one trailing slash remains.
+    const normalizedMountPath = mountPath.endsWith('/') ? mountPath.slice(0, -1) : mountPath;
     await runCommand(
       sandbox,
       `sudo fusermount -u ${quotedPath} 2>/dev/null; ` +
         `sudo umount -l ${quotedPath} 2>/dev/null; ` +
-        // Last resort: move a stuck FUSE mount aside so the directory can be cleaned up.
-        `mountpoint -q ${quotedPath} 2>/dev/null && ` +
+        // Dead FUSE mounts can make mountpoint fail with ENOTCONN. Read the kernel table
+        // instead so the existing move-aside fallback also handles disconnected mounts.
+        `grep -Fq -- ${shellQuote(` ${normalizedMountPath || '/'} `)} /proc/mounts && ` +
         `{ _p="/tmp/.mastra-defunct-$$"; sudo mkdir -p "$_p" && sudo mount --move ${quotedPath} "$_p" 2>/dev/null; sudo umount -l "$_p" 2>/dev/null; sudo rmdir "$_p" 2>/dev/null; }`,
       { timeout: MOUNT_COMMAND_TIMEOUT_MS },
     );
 
+    await cleanupS3Credentials(mountPath, {
+      run: async (cmd, timeout) => {
+        const result = await runCommand(sandbox, cmd, { timeout: timeout ?? MOUNT_COMMAND_TIMEOUT_MS });
+        return { exitCode: result.exitCode, stdout: result.output, stderr: '' };
+      },
+      logger: this.logger,
+    });
     this.mounts.delete(mountPath);
 
     // Clean up marker file and mount directory in one round-trip.
@@ -1024,11 +1238,14 @@ export class DaytonaSandbox extends MastraSandbox {
    */
   private async detectWorkingDir(): Promise<void> {
     if (!this._sandbox) return;
+    // An explicit workingDirectory option wins; the probe only fills the
+    // default in when nothing was configured.
+    if (this.explicitWorkingDirectory !== undefined) return;
     try {
       const result = await runCommand(this._sandbox, 'pwd', { timeout: MOUNT_COMMAND_TIMEOUT_MS });
       const dir = result.output?.trim();
       if (dir) {
-        this._workingDir = dir;
+        this.setWorkingDirectory(dir);
         this.logger.debug(`${LOG_PREFIX} Detected working directory: ${dir}`);
       }
     } catch {
@@ -1100,11 +1317,8 @@ export class DaytonaSandbox extends MastraSandbox {
       return null;
     }
 
-    if (state !== SandboxState.STARTED) {
-      this.logger.debug(`${LOG_PREFIX} Restarting sandbox ${sandbox.id} (state: ${state})`);
-      await this.waitForStableStateAndStart(sandbox);
-    }
-
+    // Note: a stopped-but-alive sandbox is returned as-is — waking it is
+    // connect()'s job, not the lookup's.
     return sandbox;
   }
 
@@ -1195,6 +1409,7 @@ export class DaytonaSandbox extends MastraSandbox {
    */
   private handleSandboxTimeout(): void {
     this._sandbox = null;
+    this._computerUseStarted = null;
 
     // Reset mounted entries to pending so they get re-mounted on restart
     if (this.mounts) {

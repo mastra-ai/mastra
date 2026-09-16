@@ -5,11 +5,13 @@ import {
   useUpdateWorkItemMutation,
   useUpsertWorkItemMutation,
 } from '../../../../hooks/useWorkItems';
+import type { InstalledBoardInfo } from '../../../../api/types';
+import { itemBoard } from '../boardStages';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 
 /** The inline "new card" composer: which lane owns it, where focus returns, and what a submit files. */
-export function useBoardComposer(factoryProjectId: string) {
+export function useBoardComposer(factoryProjectId: string, board: InstalledBoardInfo) {
   const [stage, setStage] = useState<BoardStageId>();
   const triggerRefs = useRef(new Map<BoardStageId, HTMLButtonElement>());
   const pendingItemRef = useRef<{ stage: BoardStageId; title: string; item: WorkItem } | undefined>(undefined);
@@ -34,7 +36,7 @@ export function useBoardComposer(factoryProjectId: string) {
     const pendingItem = pendingItemRef.current?.stage === forStage ? pendingItemRef.current : undefined;
     let item: WorkItem;
     if (pendingItem === undefined) {
-      item = await create.mutateAsync({ source: 'manual', sourceKey: null, title, stages: ['intake'] });
+      item = await create.mutateAsync({ source: 'manual', sourceKey: null, title, board: board.id });
       pendingItemRef.current = { stage: forStage, title, item };
     } else if (pendingItem.title !== title) {
       item = await update.mutateAsync({ id: pendingItem.item.id, patch: { title } });
@@ -42,8 +44,13 @@ export function useBoardComposer(factoryProjectId: string) {
     } else {
       item = pendingItem.item;
     }
-    if (forStage !== 'intake') {
-      const result = await transition.mutateAsync({ item, board: 'work', stage: forStage, cause: 'manual_creation' });
+    if (forStage !== board.initialPhase) {
+      const result = await transition.mutateAsync({
+        item,
+        board: itemBoard(item),
+        stage: forStage,
+        cause: 'manual_creation',
+      });
       if (result.status === 'rejected') throw new Error(result.reason);
     }
     pendingItemRef.current = undefined;

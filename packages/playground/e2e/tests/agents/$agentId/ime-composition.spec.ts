@@ -81,9 +81,10 @@ test.describe('Chat input IME composition', () => {
       // Guard returns early during composition without calling preventDefault.
       expect(defaultPreventedDuringComposition).toBe(false);
 
-      // The real user-facing check: the URL should still be /chat/new because no
-      // submit happened, and the textarea should still hold the in-progress text.
-      await expect(page).toHaveURL(/\/chat\/new$/);
+      // The real user-facing check: the URL should still be /threads/new (the
+      // /chat/new redirect target) because no submit happened, and the textarea
+      // should still hold the in-progress text.
+      await expect(page).toHaveURL(/\/threads\/new$/);
       await expect(chatInput).toHaveValue('hello');
 
       // End the composition session, mirroring the user confirming an IME candidate.
@@ -100,7 +101,7 @@ test.describe('Chat input IME composition', () => {
       await chatInput.focus();
       await page.keyboard.press('Enter');
 
-      await expect(page).not.toHaveURL(/\/chat\/new/, { timeout: 20000 });
+      await expect(page).not.toHaveURL(/\/threads\/new/, { timeout: 20000 });
       await expect(page.getByTestId('pending-signal-message')).not.toBeVisible({ timeout: 20000 });
       await expect(page.getByTestId('thread-wrapper').getByText('hello')).toBeVisible({ timeout: 20000 });
     });
@@ -165,7 +166,7 @@ test.describe('Chat input IME composition', () => {
       await chatInput.focus();
       await page.keyboard.press('Enter');
 
-      await expect(page).not.toHaveURL(/\/chat\/new/, { timeout: 20000 });
+      await expect(page).not.toHaveURL(/\/threads\/new/, { timeout: 20000 });
       await expect(page.getByTestId('pending-signal-message')).not.toBeVisible({ timeout: 20000 });
       await expect(page.getByTestId('thread-wrapper').getByText('hello')).toBeVisible({ timeout: 20000 });
     });

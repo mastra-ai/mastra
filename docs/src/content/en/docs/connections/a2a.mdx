@@ -1,6 +1,6 @@
 ---
 title: "A2A (Agent-to-Agent) | Connections"
-description: "Expose and call remote Mastra agents over the Agent-to-Agent protocol."
+description: "Expose Mastra agents through the Agent-to-Agent protocol and consume remote A2A agents as subagents or call them directly with the client SDK."
 packages:
   - "@mastra/client-js"
   - "@mastra/core"
@@ -145,7 +145,7 @@ console.log(card.name, card.capabilities)
 
 Use `sendMessageStream()` to send a message and receive task status and artifact updates over Server-Sent Events (SSE):
 
-```typescript title="src/a2a-client.ts"
+```typescript title="src/a2a-client.ts" oxfmt:false
 const stream = a2a.sendMessageStream({
   message: {
     kind: 'message',
@@ -164,7 +164,7 @@ for await (const event of stream) {
 
 If a stream disconnects while a task is still running, use `resubscribeTask()` to receive live updates for the in-progress task:
 
-```typescript title="src/a2a-client.ts"
+```typescript title="src/a2a-client.ts" oxfmt:false
 const updates = a2a.resubscribeTask({
   id: 'task-123',
 })

@@ -1,6 +1,6 @@
 ---
 title: "Reference: GraphRAG | RAG"
-description: Documentation for the GraphRAG class in Mastra, which implements a graph-based approach to retrieval augmented generation.
+description: "The GraphRAG class implements a graph-based approach to retrieval augmented generation."
 packages:
   - "@mastra/rag"
 ---
@@ -55,7 +55,7 @@ const results = await graphRag.query({
 
 Creates a knowledge graph from document chunks and their embeddings.
 
-```typescript prettier:false
+```typescript oxfmt:false
 createGraph(chunks: GraphChunk[], embeddings: GraphEmbedding[]): void
 ```
 
@@ -82,7 +82,7 @@ createGraph(chunks: GraphChunk[], embeddings: GraphEmbedding[]): void
 
 Performs a graph-based search combining vector similarity and graph traversal.
 
-```typescript prettier:false
+```typescript oxfmt:false
 query({
   query,
   topK = 10,
@@ -163,7 +163,7 @@ Returns an array of `RankedNode` objects, where each node contains:
 
 Returns a JSON-safe snapshot of the graph so it can be persisted and restored later instead of rebuilt with `createGraph`.
 
-```typescript prettier:false
+```typescript oxfmt:false
 serialize(): GraphRAGSnapshot
 ```
 
@@ -207,7 +207,7 @@ The snapshot is a deep copy, so mutating it doesn't affect the graph it came fro
 
 Rebuilds a `GraphRAG` instance from a snapshot produced by `serialize`.
 
-```typescript prettier:false
+```typescript oxfmt:false
 static deserialize(snapshot: GraphRAGSnapshot): GraphRAG
 ```
 

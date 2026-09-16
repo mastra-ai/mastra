@@ -1,6 +1,6 @@
 ---
 title: "Reference: Agent.getDefaultGenerateOptionsLegacy() | Agents"
-description: "Documentation for the `Agent.getDefaultGenerateOptionsLegacy()` method in Mastra agents, which retrieves the default options used for legacy generation requests."
+description: "Agents can be configured with default generation options for controlling model behavior, output formatting and tool and workflow calls."
 packages:
   - "@mastra/core"
 ---
@@ -13,7 +13,7 @@ packages:
 
 :::
 
-Agents can be configured with default generation options for controlling model behavior, output formatting and tool and workflow calls. The `.getDefaultGenerateOptionsLegacy()` method retrieves these defaults, resolving them if they're functions. These options apply to all `generateLegacy()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
+Configure agents with default generation options that control model behavior and output formatting, including tool and workflow calls. The `.getDefaultGenerateOptionsLegacy()` method retrieves these defaults and resolves any functions. These options apply to all `generateLegacy()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
 
 ## Usage example
 

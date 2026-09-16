@@ -453,7 +453,7 @@ export async function handleChatStream<OUTPUT = undefined>({
   }) as ReadableStream<any>;
 }
 
-export type chatRouteOptions<OUTPUT = undefined> = {
+export type chatRouteOptions<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage> = {
   defaultOptions?: ChatStreamDefaultOptions<OUTPUT>;
   /** Experimental transforms applied before converting Mastra chunks to AI SDK UI chunks. */
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
@@ -476,6 +476,8 @@ export type chatRouteOptions<OUTPUT = undefined> = {
     /** Target interval for periodic SSE comment heartbeats. Values up to 0 disable heartbeats. `NaN`, positive infinity, and values above 2,147,483,647 throw a `RangeError`. */
     heartbeatMs?: number;
     onError?: (error: unknown) => string;
+    /** Metadata attached to start and finish message parts in the AI SDK stream. */
+    messageMetadata?: ChatStreamHandlerOptions<UI_MESSAGE, OUTPUT>['messageMetadata'];
   };
 
 /**
@@ -493,6 +495,7 @@ export type chatRouteOptions<OUTPUT = undefined> = {
  * @param {boolean} [options.sendSources=false] - Whether to include source citations in the stream
  * @param {number} [options.heartbeatMs] - Target interval for periodic SSE comment heartbeats. Already-buffered source events and stream lifecycle signals take priority. Values up to 0 disable heartbeats. `NaN`, positive infinity, and values above 2,147,483,647 throw a `RangeError`.
  * @param {(error: unknown) => string} [options.onError] - Custom error serializer streamed to the client. When omitted, errors are passed through a default serializer that strips sensitive fields (e.g. `APICallError.requestBodyValues`, which holds the system prompt) before they reach the client.
+ * @param {Function} [options.messageMetadata] - Maps stream parts to metadata attached to AI SDK start and finish message parts.
  *
  * @returns {ReturnType<typeof registerApiRoute>} A registered API route handler
  *
@@ -524,7 +527,7 @@ export type chatRouteOptions<OUTPUT = undefined> = {
  * - If both `agent` and `:agentId` are present, a warning is logged and the fixed `agent` takes precedence
  * - Request context from the incoming request overrides `defaultOptions.requestContext` if both are present
  */
-export function chatRoute<OUTPUT = undefined>({
+export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage>({
   path = '/chat/:agentId',
   agent,
   defaultOptions,
@@ -537,7 +540,8 @@ export function chatRoute<OUTPUT = undefined>({
   sendSources = false,
   heartbeatMs,
   onError,
-}: chatRouteOptions<OUTPUT>): ReturnType<typeof registerApiRoute> {
+  messageMetadata,
+}: chatRouteOptions<OUTPUT, UI_MESSAGE>): ReturnType<typeof registerApiRoute> {
   if (!agent && !path.includes('/:agentId')) {
     throw new Error('Path must include :agentId to route to the correct agent or pass the agent explicitly');
   }
@@ -742,16 +746,21 @@ export function chatRoute<OUTPUT = undefined>({
         const uiMessageStream = await handleChatStream({
           ...handlerOptions,
           version: 'v7',
+          messageMetadata: messageMetadata as UIMessageStreamOptionsV7<V7UIMessage>['messageMetadata'],
         });
         response = createUIMessageStreamResponseV7({ stream: uiMessageStream });
       } else if (version === 'v6') {
         const uiMessageStream = await handleChatStream({
           ...handlerOptions,
           version: 'v6',
+          messageMetadata: messageMetadata as UIMessageStreamOptionsV6<V6UIMessage>['messageMetadata'],
         });
         response = createUIMessageStreamResponseV6({ stream: uiMessageStream });
       } else {
-        const uiMessageStream = await handleChatStream(handlerOptions);
+        const uiMessageStream = await handleChatStream({
+          ...handlerOptions,
+          messageMetadata: messageMetadata as UIMessageStreamOptionsV5<V5UIMessage>['messageMetadata'],
+        });
         response = createUIMessageStreamResponseV5({ stream: uiMessageStream });
       }
 

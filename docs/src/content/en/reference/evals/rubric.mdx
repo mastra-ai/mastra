@@ -1,6 +1,6 @@
 ---
 title: "Reference: Rubric scorer | Evals"
-description: Documentation for the Rubric Scorer in Mastra. An LLM-as-judge scorer that grades an agent output against a checklist of criteria and returns a binary verdict with per-criterion feedback, designed to drive isTaskComplete loops.
+description: "The createRubricScorer() function creates an LLM-as-judge scorer that grades an agent's output against a rubric (a checklist of criteria)."
 packages:
   - "@mastra/evals"
 ---
@@ -177,7 +177,7 @@ If no rubric resolves, the scorer returns `1` and doesn't gate the loop.
 The scorer runs in two phases:
 
 1. **Grade**: The judge model evaluates each criterion independently and returns a per-criterion verdict (`satisfied` / not) with reasoning.
-1. **Score**: The result is `1` only when every required criterion is `satisfied`, otherwise `0`. If no criteria are marked required, all criteria are treated as required.
+1. **Score**: The scorer returns `1` only when every required criterion is `satisfied` and treats every criterion as required when none are marked. All other results receive `0`.
 
 The `reason` summarizes the result and lists each criterion with its verdict, so a failing grade gives the agent targeted, useful feedback rather than a generic "try again".
 

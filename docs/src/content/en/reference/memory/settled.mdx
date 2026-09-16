@@ -1,6 +1,6 @@
 ---
 title: "Reference: Memory.settled() | Memory"
-description: "Documentation for the `Memory.settled()` method in Mastra, which waits for background memory work to finish before you close the storage connection."
+description: "Use Memory.settled() to wait for asynchronous memory work, including working-memory updates and observational memory, before closing storage."
 packages:
   - "@mastra/memory"
   - "@mastra/core"
@@ -65,7 +65,7 @@ await store.close()
 
 <Callout>
   `settled()` joins the work that had started by the time you called it, plus any
-  work that work enqueues. It does not prevent new work from starting afterwards,
+  work that work enqueues. It doesn't prevent new work from starting afterwards,
   so call it once the agent runs you care about have returned.
 </Callout>
 

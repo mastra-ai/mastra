@@ -1,0 +1,61 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. Say the item is unchanged, or name what it avoids. Disable this rule for lodging or travel prose."
+level: error
+nonword: true
+ignorecase: true
+# "Stays" is an AI fingerprint for personified restraint: a check "stays
+# green," a helper "stays out of the way," a section decides "what stays in
+# and what stays out." The complement is the discriminator, so a guest
+# staying at a hotel stays quiet; lodging or travel writing disables the
+# rule. The one measured hit across the Go and Python standard libraries is
+# a Python README asking buildbots "to stay green," which is the figurative
+# usage itself. "Stays quiet" and "stays silent" stay in FigurativeQuiet,
+# so the two rules never double-flag.
+#
+# The state complement began as eight curated adjectives, which a
+# documentation-corpus audit (2026-09) found leaking on ninety-two
+# occurrences of every other adjective ("stays complete," "stays
+# optional," "stays empty," "stays deterministic," "stays put"). No closed
+# list covers that, so the determiner-gated subject token takes any
+# complement that is not a place, a time, or a person's condition, in the
+# FigurativeLives mold, and the bare-verb token keeps a list grown to the
+# adjectives the audit saw. The open token shows eleven corpus hits
+# ("stays robust," "stay aggregated," "stays blocked," "the map stays
+# small") and the list fifteen ("stay unchanged," "stays idle," "assists
+# stay flat"), each the figure with "remains" or "is" as the plain word.
+# "Stays in sync" and "stay consistent" stay out on purpose: with ten hits
+# they are the corpora's own idiom for a maintained invariant. The same
+# corpus showed "remains" in the sibling file of every "stays" sentence,
+# so the fix is one the writers already know.
+tokens:
+  # --- State complement: an artifact holding a personified pose ("stays
+  # green," "stays honest," "stays dormant," "stays complete," "stays
+  # put").
+  - "\\bstay(?:s|ed|ing)? (?:clean|green|red|dark|dormant|hidden|honest|frozen|complete|incomplete|optional|safe|unsafe|high|low|stable|unstable|empty|current|legible|visible|invisible|deterministic|pristine|settled|immutable|mutable|whole|put|small|fast|slow|cheap|intact|valid|invalid|correct|incorrect|accurate|readable|portable|simple|flat|thin|lean|tight|light|sharp|fresh|stale|idle|open|closed|alive|dead|untouched|unchanged|constant|fixed|static|separate|distinct|exact|exempt|eligible|opaque|transparent|private|public|local|remote|true|false|null|nil|zero|nonzero|sorted|ordered|balanced|healthy|responsive|reachable|unreachable|available|unavailable|compatible|unaffected|unresolved|undefined|anonymous|generic|abstract|concrete|explicit|implicit|literal|figurative|robust|aggregated|blocked|associated|deleted|model-free|free|bounded|unbounded|finite|linear|positive|negative)\\b"
+
+  # --- The determiner-gated subject with the complement left open ("the
+  # value stays complete across runs," "each field stays optional," "the
+  # index stayed small"). The lookahead refuses the prepositions, places,
+  # times, and human conditions that make the verb literal, so a guest
+  # who stays at the hotel or stays overnight is never read.
+  - "\\b(?:a|an|the|this|that|these|those|each|every|its|their|both|all|any|some|most) (?:(?!(?:one|nobody|somebody|anybody|everybody|someone|anyone|everyone)\\b)[a-z'-]+ )?[a-z]+ (?:always |still |also |then |never |now |otherwise |thus |therefore )?stay(?:s|ed|ing)? (?!(?:in|on|at|with|for|until|till|there|here|away|home|out|behind|inside|outside|near|by|under|over|up|off|the|a|an|to|as|around|after|ahead|within|where|late|longer|overnight|awake|asleep|tuned|and|or|but|so|that|when|if|while|because|of|from|between|among|across|through|into|onto|upon|beyond|above|below|beneath|down|back|close|closer|nearby|indoors|outdoors|abroad|forever|together|apart|calm|cool|warm|hot|cold|dry|wet|rough|smooth|bumpy|slippery|icy|muddy|healthy|fit|alert|focused|humble|positive|strong|young|sober|single|married|friends|connected|logged|signed|quiet|silent|mute)\\b)[a-z][a-z-]+\\b"
+
+  # --- Avoidance complement: the artifact keeping a polite distance
+  # ("stays out of the way," "stays clear of the hot path").
+  - "\\bstay(?:s|ed|ing)? out of the (?:way|picture|diff|loop)\\b"
+  - "\\bstay(?:s|ed|ing)? clear of\\b"
+
+  # --- Left waiting: work personified as the one not picked ("the test
+  # family stayed behind on an assumption"). Measured at zero across the
+  # Go and Python standard libraries; a pupil kept after class takes the
+  # disable note in the message.
+  - "\\bstay(?:s|ed|ing)? behind\\b"
+
+  # --- Membership idioms: presence framed as loyalty ("stays in the
+  # picture," "stays in lockstep").
+  - "\\bstay(?:s|ed|ing)? in (?:the loop|the picture|play|lockstep|force)\\b"
+
+  # --- Scoping triage: content sorted by residence ("what stays in, what
+  # stays out," "what stays and what goes").
+  - "\\bwhat stays (?:in|out|and)\\b"

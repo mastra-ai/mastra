@@ -31,6 +31,38 @@ vi.mock('@aws-sdk/client-s3', () => ({
 }));
 
 describe('S3Filesystem', () => {
+  describe('initialization access checks', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    it('checks only the configured prefix, including its directory boundary', async () => {
+      const { ListObjectsV2Command, HeadBucketCommand } = await import('@aws-sdk/client-s3');
+      const fs = new S3Filesystem({ bucket: 'test', region: 'auto', prefix: '/resource/thread/' });
+      await fs.init();
+      expect(ListObjectsV2Command).toHaveBeenCalledWith({
+        Bucket: 'test',
+        Prefix: 'resource/thread/',
+        MaxKeys: 1,
+      });
+      expect(HeadBucketCommand).not.toHaveBeenCalled();
+    });
+
+    it('retains the bucket check when no prefix is configured', async () => {
+      const { HeadBucketCommand, ListObjectsV2Command } = await import('@aws-sdk/client-s3');
+      const fs = new S3Filesystem({ bucket: 'test', region: 'auto' });
+      await fs.init();
+      expect(HeadBucketCommand).toHaveBeenCalledWith({ Bucket: 'test' });
+      expect(ListObjectsV2Command).not.toHaveBeenCalled();
+    });
+
+    it('does not fall back to broader access when the prefix is denied', async () => {
+      const { HeadBucketCommand } = await import('@aws-sdk/client-s3');
+      const fs = new S3Filesystem({ bucket: 'test', region: 'auto', prefix: 'resource/thread' });
+      vi.mocked(fs.client.send).mockRejectedValueOnce({ name: 'AccessDenied', $metadata: { httpStatusCode: 403 } });
+      await expect(fs.init()).rejects.toMatchObject({ status: 403 });
+      expect(HeadBucketCommand).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Constructor & Options', () => {
     it('generates unique id if not provided', () => {
       const fs1 = new S3Filesystem({ bucket: 'test', region: 'us-east-1' });
@@ -1452,6 +1484,7 @@ describe('S3Filesystem SDK Operations', () => {
       const lastMod = new Date('2024-01-15T10:30:00Z');
       mockSend.mockResolvedValueOnce({
         ContentLength: 1024,
+        ContentType: 'text/plain',
         LastModified: lastMod,
       });
 
@@ -1462,9 +1495,20 @@ describe('S3Filesystem SDK Operations', () => {
         path: '/docs/readme.txt',
         type: 'file',
         size: 1024,
+        mimeType: 'text/plain',
         createdAt: lastMod,
         modifiedAt: lastMod,
       });
+    });
+
+    it('falls back to an extension-based MIME type when HeadObject has no ContentType', async () => {
+      mockSend.mockResolvedValueOnce({
+        ContentLength: 2048,
+      });
+
+      const stat = await fs.stat('/images/no-content-type.png');
+
+      expect(stat.mimeType).toBe('image/png');
     });
 
     it('returns directory stat when file not found but prefix exists', async () => {

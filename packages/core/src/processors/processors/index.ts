@@ -30,6 +30,7 @@ export {
 } from './language-detector';
 export { StructuredOutputProcessor, type StructuredOutputOptions } from './structured-output';
 export { type LastMessageOnlyOption } from './message-selection';
+export { type ModelErrorStrategy } from './model-error-strategy';
 export { BatchPartsProcessor, type BatchPartsOptions, type BatchPartsState } from './batch-parts';
 export {
   TokenLimiterProcessor,
@@ -81,7 +82,7 @@ export {
   type ToolSearchFilterPhase,
   type ToolSearchProcessorOptions,
 } from './tool-search';
-export { SkillsProcessor, type SkillsProcessorOptions } from './skills';
+export { SkillsProcessor, formatSkillsCatalog, type SkillCatalogEntry, type SkillsProcessorOptions } from './skills';
 export { SkillSearchProcessor, type SkillSearchProcessorOptions } from './skill-search';
 export { WorkspaceInstructionsProcessor, type WorkspaceInstructionsProcessorOptions } from './workspace-instructions';
 export {

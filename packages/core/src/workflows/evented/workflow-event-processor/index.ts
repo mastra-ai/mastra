@@ -5,6 +5,7 @@ import { EventProcessor } from '../../../events/processor';
 import type { Event } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
+import { resolveExportedSpanId } from '../../../observability';
 import { RequestContext } from '../../../request-context/';
 import type { StepExecutionStrategy } from '../../../worker/types';
 import { getEntryId, getEntryRetries, getEntrySchemas, getEntryWorkflow } from '../../../workflows/step-entry';
@@ -18,6 +19,7 @@ import type {
   WorkflowRunState,
 } from '../../../workflows/types';
 import type { Workflow } from '../../../workflows/workflow';
+import { computeScheduleDefinitionHash } from '../../scheduler/definition-hash';
 import {
   createRestartExecutionParams,
   createTimeTravelExecutionParams,
@@ -113,30 +115,6 @@ function readForeachResult(
 ): ForeachStepResult | undefined {
   const result = stepResults[id] as (StepResult<any, any, any, any> & ForeachStepResult) | undefined;
   return result;
-}
-
-/**
- * True when the workflow opts out of persisting snapshots for *every* status,
- * including the resumable 'suspended' one — i.e. it wants no durable trace at
- * all (the notification dispatcher, internal fire-and-forget runs).
- *
- * Such a run still gets a 'running' row written unconditionally at start, so
- * without an explicit terminal cleanup it would accumulate one dead row per
- * run forever (issue #20254). Workflows that persist *some* statuses keep
- * their existing behavior: the last persisted snapshot is left in place.
- */
-function neverPersistsSnapshots({
-  workflow,
-  stepResults,
-}: {
-  workflow?: { options?: { shouldPersistSnapshot?: (params: any) => boolean } };
-  stepResults: Record<string, StepResult<any, any, any, any>>;
-}): boolean {
-  const shouldPersistSnapshot = workflow?.options?.shouldPersistSnapshot;
-  if (!shouldPersistSnapshot) return false;
-  return (['running', 'suspended', 'pending', 'waiting'] as const).every(
-    workflowStatus => !shouldPersistSnapshot({ stepResults, workflowStatus }),
-  );
 }
 
 export class WorkflowEventProcessor extends EventProcessor {
@@ -352,10 +330,17 @@ export class WorkflowEventProcessor extends EventProcessor {
     runId: string,
   ): { traceId?: string; spanId?: string; parentSpanId?: string } | undefined {
     const span = this.resolveRunTracingContext(runId)?.currentSpan as
-      | { id?: string; traceId?: string; getParentSpanId?: () => string | undefined }
+      | {
+          id?: string;
+          traceId?: string;
+          getParentSpanId?: () => string | undefined;
+          getExportedSpanId?: () => string | undefined;
+        }
       | undefined;
     if (!span) return undefined;
-    return { traceId: span.traceId, spanId: span.id, parentSpanId: span.getParentSpanId?.() };
+    // See default.ts: the persisted spanId becomes the resumed span's parentSpanId,
+    // so it must reference a span that actually reaches exporters.
+    return { traceId: span.traceId, spanId: resolveExportedSpanId(span), parentSpanId: span.getParentSpanId?.() };
   }
 
   /**
@@ -416,6 +401,64 @@ export class WorkflowEventProcessor extends EventProcessor {
     } catch {
       return undefined;
     }
+  }
+
+  /**
+   * Stale-build fence for scheduled fires (#19169).
+   *
+   * A `workflow.start` published by the scheduler carries no step graph —
+   * only a workflow id, which this process resolves against its *own*
+   * registry. When the scheduler cannot keep the fire local (scheduler-only
+   * topology) the event reaches every consumer on the shared topic, so a
+   * straggler from a previous deploy could execute an outdated graph and
+   * skip steps the current build added (e.g. a gate enforcing a disable).
+   *
+   * The scheduler stamps `scheduleDefinitionHash` from the schedule row.
+   * If our locally registered definition hashes differently, we refuse the
+   * fire and record a failed trigger so the mismatch is visible in schedule
+   * history rather than silently doing nothing.
+   *
+   * Fails open when the event carries no hash (imperative/legacy schedules
+   * and all non-scheduled runs) or when our own graph can't be hashed.
+   *
+   * @returns `true` to proceed with execution, `false` to abandon the fire.
+   */
+  async #ensureScheduledDefinitionMatches(data: unknown, workflow: Workflow): Promise<boolean> {
+    const expected = (data as { scheduleDefinitionHash?: unknown } | undefined)?.scheduleDefinitionHash;
+    if (typeof expected !== 'string' || !expected) return true;
+
+    const localHash = computeScheduleDefinitionHash(workflow.serializedStepGraph);
+    if (!localHash || localHash === expected) return true;
+
+    const { workflowId, runId } = data as { workflowId: string; runId: string };
+    this.mastra
+      .getLogger()
+      ?.error?.(
+        'Refusing scheduled workflow fire: local definition does not match the schedule row. This instance is running a different build of the workflow.',
+        { workflowId, runId, expectedDefinitionHash: expected, localDefinitionHash: localHash },
+      );
+
+    try {
+      const schedulesStore = await this.mastra.getStorage()?.getStore('schedules');
+      // The scheduler derives runId as `sched_<scheduleId>_<scheduledFireAt>`.
+      const match = /^sched_(.+)_(\d+)$/.exec(runId);
+      if (schedulesStore && match) {
+        await schedulesStore.recordTrigger({
+          scheduleId: match[1]!,
+          runId,
+          scheduledFireAt: Number(match[2]),
+          actualFireAt: Date.now(),
+          outcome: 'failed',
+          error: `Stale workflow definition on consuming instance (expected ${expected}, local ${localHash})`,
+          triggerKind: 'schedule-fire',
+        });
+      }
+    } catch (err) {
+      // History is diagnostic — never let it resurrect a refused fire.
+      this.mastra.getLogger()?.warn?.('Failed to record stale-definition schedule trigger', { runId, error: err });
+    }
+
+    return false;
   }
 
   private async errorWorkflow(
@@ -636,16 +679,15 @@ export class WorkflowEventProcessor extends EventProcessor {
           activeStepsPath: activeStepsPath,
         },
       });
-    } else if (
-      finalStatus !== 'paused' &&
-      (parentWorkflow || neverPersistsSnapshots({ workflow, stepResults: stepResults ?? {} }))
-    ) {
+    } else if (finalStatus !== 'paused') {
       // The run reached a terminal state its workflow opted not to persist
-      // (e.g. the internal `executionWorkflow` inside `agentic-loop`, or the
-      // notification dispatcher). A row may still exist from an earlier phase —
-      // 'pending' at nested-run start, 'suspended' before a resume, or the
-      // 'running' record every run writes at start — and without the terminal
-      // update it would leak as a stale, resumable-looking record. Terminal
+      // (e.g. the durable agentic loop, the internal `executionWorkflow`
+      // inside `agentic-loop`, or the notification dispatcher). A row may
+      // still exist from an earlier phase — 'pending' at nested-run start,
+      // 'suspended' before a resume, or the 'running' record every run writes
+      // at start — and without the terminal update it would leak forever as a
+      // stale record byte-identical to a genuinely orphaned run, polluting
+      // `listActiveRuns()` / `recoverActiveRuns()` (issue #22209). Terminal
       // runs can't be resumed, so drop the row entirely. Best-effort: a storage
       // failure here must not abort run completion.
       try {
@@ -924,10 +966,10 @@ export class WorkflowEventProcessor extends EventProcessor {
           activeStepsPath: activeStepsPath,
         },
       });
-    } else if (parentWorkflow || neverPersistsSnapshots({ workflow, stepResults: stepResults ?? {} })) {
+    } else {
       // Mirrors endWorkflow: a run whose workflow opted out of persisting the
       // terminal 'failed' status would otherwise leak its earlier-phase
-      // ('running'/'pending'/'suspended') snapshot row forever.
+      // ('running'/'pending'/'suspended') snapshot row forever (issue #22209).
       // Best-effort: a storage failure here must not abort run completion.
       try {
         await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
@@ -1977,7 +2019,11 @@ export class WorkflowEventProcessor extends EventProcessor {
     state: Record<string, any>;
     outputOptions?: { includeState?: boolean; includeResumeLabels?: boolean };
   }) {
-    const currentState = resolveCurrentState({ stepResults, state });
+    const baseState = resolveCurrentState({ stepResults, state });
+    // Merge each branch's setState() delta key-by-key on top of the resolved
+    // state so sibling branches' updates aren't lost to last-writer-wins on
+    // full state snapshots (#22319).
+    const currentState = { ...baseState };
     const parentIdx = branchExecutionPath[0]!;
     const finishedBranchIdx = branchExecutionPath.length > 1 ? branchExecutionPath[1]! : undefined;
 
@@ -1995,6 +2041,13 @@ export class WorkflowEventProcessor extends EventProcessor {
       const res = stepResults?.[branchId] as any;
       if (!res || !res.status) {
         return; // branch not finished yet
+      }
+      const stateDelta =
+        idx === finishedBranchIdx && (latestBranchResult as any)?.__stateDelta
+          ? (latestBranchResult as any).__stateDelta
+          : res.__stateDelta;
+      if (stateDelta) {
+        Object.assign(currentState, stateDelta);
       }
       if (res.status === 'success') {
         // For the branch that just completed, prefer its in-flight result so structured
@@ -2057,7 +2110,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           executionPath: branchExecutionPath,
           resumeSteps,
           parentWorkflow,
-          stepResults,
+          stepResults: { ...stepResults, __state: currentState },
           prevResult: { status: 'suspended' } as any,
           activeStepsPath,
           requestContext,
@@ -2070,6 +2123,16 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
+    // All branches finished: drop the internal per-branch deltas and forward the
+    // merged state so downstream steps resolve it from stepResults.__state.
+    const cleanedStepResults: Record<string, any> = { ...stepResults, __state: currentState };
+    for (const [key, res] of Object.entries(cleanedStepResults)) {
+      if (res && typeof res === 'object' && '__stateDelta' in res) {
+        const { __stateDelta: _removedDelta, ...cleanRes } = res;
+        cleanedStepResults[key] = cleanRes;
+      }
+    }
+
     await this.mastra.pubsub.publish('workflows', {
       type: 'workflow.step.end',
       runId,
@@ -2079,7 +2142,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         runId,
         executionPath: branchExecutionPath.slice(0, -1),
         resumeSteps,
-        stepResults,
+        stepResults: cleanedStepResults,
         prevResult: { status: 'success', output: allResults },
         activeStepsPath,
         requestContext,
@@ -2119,10 +2182,18 @@ export class WorkflowEventProcessor extends EventProcessor {
       : ((prevResult as any)?.__state ?? stepResults?.__state ?? state ?? {});
 
     // Create a clean version of prevResult without __state for storing
-    const { __state: _removedState, ...cleanPrevResult } = prevResult as any;
-    prevResult = cleanPrevResult as typeof prevResult;
+    const { __state: _removedState, __stateDelta: extractedStateDelta, ...cleanPrevResult } = prevResult as any;
 
     const rawStep = workflow.stepGraph[executionPath[0]!];
+
+    // For branches of a parallel/conditional entry, keep the setState() delta on
+    // the stored branch result so aggregateBranchResults can merge sibling
+    // updates key-by-key instead of last-writer-wins on full snapshots (#22319).
+    // For all other steps the delta is redundant with __state and is dropped.
+    const isParallelBranch =
+      (rawStep?.type === 'parallel' || rawStep?.type === 'conditional') && executionPath.length > 1;
+    const branchStateDelta = isParallelBranch ? (extractedStateDelta as Record<string, any> | undefined) : undefined;
+    prevResult = cleanPrevResult as typeof prevResult;
 
     // The just-finished entry. Keep it raw (declarative agent / tool / mapping
     // entries are not materialized); we only need its id and type here.
@@ -2213,12 +2284,21 @@ export class WorkflowEventProcessor extends EventProcessor {
           });
         }
 
-        // For foreach, store the full iteration result (including status, suspendPayload, etc.)
-        // not just the output, so suspend state is preserved
-        const iterationResult =
-          prevResult.status === 'suspended'
-            ? prevResult // Keep full result for suspended iterations
-            : (prevResult as any).output; // Just output for completed iterations
+        // For foreach, store the full suspended result so its resume state is preserved.
+        // Completed iterations keep the public output array shape.
+        const iterationResult = prevResult.status === 'suspended' ? prevResult : (prevResult as any).output;
+        const existingSuspendPayload = existingStepResult?.suspendPayload as any;
+        const iterationSuspendPayload = prevResult.suspendPayload as any;
+        const foreachOutput = [...(existingSuspendPayload?.__workflow_meta?.foreachOutput ?? [])];
+        foreachOutput[currentIdx] =
+          prevResult.status === 'suspended' ? prevResult : { ...prevResult, suspendPayload: {} };
+        const suspendPayload = {
+          ...(existingSuspendPayload ?? iterationSuspendPayload),
+          __workflow_meta: {
+            ...(existingSuspendPayload?.__workflow_meta ?? iterationSuspendPayload?.__workflow_meta),
+            foreachOutput,
+          },
+        };
 
         if (currentResult) {
           currentResult[currentIdx] = iterationResult;
@@ -2230,15 +2310,14 @@ export class WorkflowEventProcessor extends EventProcessor {
             ...prevResult, // Get iteration timing info
             output: currentResult,
             payload: originalPayload,
-            // Preserve suspend metadata from first suspension
-            suspendPayload: existingStepResult?.suspendPayload ?? prevResult.suspendPayload,
+            suspendPayload,
             suspendedAt: existingStepResult?.suspendedAt ?? (prevResult as any).suspendedAt,
             // Update resume metadata to most recent resume (new iteration takes precedence)
             resumePayload: (prevResult as any).resumePayload ?? existingStepResult?.resumePayload,
             resumedAt: (prevResult as any).resumedAt ?? existingStepResult?.resumedAt,
           } as any;
         } else {
-          newResult = { ...prevResult, output: [iterationResult], payload: originalPayload } as any;
+          newResult = { ...prevResult, output: [iterationResult], payload: originalPayload, suspendPayload } as any;
         }
       }
       const newStepResults = await workflowsStore?.updateWorkflowResults({
@@ -2513,11 +2592,18 @@ export class WorkflowEventProcessor extends EventProcessor {
         };
       }
 
+      // For branches of a parallel/conditional entry, persist the setState()
+      // delta on the stored branch result so aggregateBranchResults can merge
+      // sibling updates key-by-key instead of last-writer-wins on full state
+      // snapshots (#22319). The delta is stripped again before results are
+      // surfaced to users.
+      const storedResult = branchStateDelta ? { ...prevResult, __stateDelta: branchStateDelta } : prevResult;
+
       const newStepResults = await workflowsStore?.updateWorkflowResults({
         workflowName: workflow.id,
         runId,
         stepId,
-        result: prevResult,
+        result: storedResult,
         requestContext,
       });
 
@@ -2528,7 +2614,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       // source of truth — merge prevResult into the inline stepResults instead
       // of treating it as a hard early-return.
       if (!newStepResults || Object.keys(newStepResults).length === 0) {
-        stepResults = { ...(stepResults ?? {}), [stepId]: prevResult };
+        stepResults = { ...(stepResults ?? {}), [stepId]: storedResult };
       } else {
         stepResults = newStepResults;
       }
@@ -3035,6 +3121,10 @@ export class WorkflowEventProcessor extends EventProcessor {
           }),
         );
       }
+    }
+
+    if (type === 'workflow.start' && workflow && !(await this.#ensureScheduledDefinitionMatches(data, workflow))) {
+      return;
     }
 
     if (type === 'workflow.start' || type === 'workflow.resume') {

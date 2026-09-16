@@ -65,6 +65,32 @@ describe('fetchDatabases', () => {
   });
 });
 
+describe('fetchDatabaseCatalog', () => {
+  it('returns the org-filtered provider catalog', async () => {
+    const providers = [
+      { kind: 'turso', name: 'Turso', status: 'available' },
+      { kind: 'neon', name: 'Postgres', status: 'available' },
+    ];
+    mockPlatformFetch.mockResolvedValue(jsonResponse(200, { providers }));
+
+    const { fetchDatabaseCatalog } = await import('./platform-api.js');
+    await expect(fetchDatabaseCatalog('tok', 'org-1', 'proj-1')).resolves.toEqual(providers);
+    expect(mockPlatformFetch).toHaveBeenCalledWith(
+      'http://localhost:9999/v1/server/projects/proj-1/databases/catalog',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer tok', 'x-organization-id': 'org-1' }),
+      }),
+    );
+  });
+
+  it('surfaces API failures', async () => {
+    mockPlatformFetch.mockResolvedValue(jsonResponse(500, { detail: 'nope' }));
+
+    const { fetchDatabaseCatalog } = await import('./platform-api.js');
+    await expect(fetchDatabaseCatalog('tok', 'org-1', 'proj-1')).rejects.toThrow('nope');
+  });
+});
+
 describe('attachDatabase', () => {
   it('posts the attach input and returns the database', async () => {
     mockPlatformFetch.mockResolvedValue(jsonResponse(201, { database: dbRow }));

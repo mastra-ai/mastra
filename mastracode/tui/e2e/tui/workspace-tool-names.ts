@@ -1,3 +1,5 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { McE2eScenario } from './types.js';
 
 const PROMPT = 'List the available workspace tool aliases.';
@@ -21,6 +23,12 @@ export const workspaceToolNamesScenario: McE2eScenario = {
   testName: 'exposes stable workspace tool aliases to the model request',
   useOpenAIModel: true,
   aimockFixture: 'workspace-tool-names.json',
+  prepare({ appDataDir }) {
+    const settingsPath = join(appDataDir, 'settings.json');
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>;
+    settings.lsp = true;
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+  },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Resource ID:/i, terminal);
