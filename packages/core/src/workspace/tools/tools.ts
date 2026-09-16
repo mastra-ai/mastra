@@ -401,18 +401,21 @@ function wrapWithWriteLock(tool: any, writeLock: FileWriteLock): any {
  */
 export async function createWorkspaceTools(
   workspace: Workspace,
-  configContext?: Omit<ToolConfigContext, 'requestContext'> & { requestContext?: unknown; threadId?: string },
+  configContext?: Omit<ToolConfigContext, 'requestContext'> & {
+    requestContext?: unknown;
+    readTracker?: FileReadTracker;
+  },
 ) {
   // Seed fallback context so dynamic enabled functions always get called,
   // even if the caller omits configContext.  Normalize requestContext so
   // user-provided functions always receive a plain Record, not a Map.
-  // threadId is factory-internal (read-tracker keying) and is not exposed to
-  // user dynamic-config functions.
+  // readTracker is factory-internal (read-before-write tracking) and is not
+  // exposed to user dynamic-config functions.
   let effectiveConfigContext: ToolConfigContext;
-  let threadId: string | undefined;
+  let contextReadTracker: FileReadTracker | undefined;
   if (configContext) {
-    const { threadId: contextThreadId, ...rest } = configContext;
-    threadId = contextThreadId;
+    const { readTracker: providedReadTracker, ...rest } = configContext;
+    contextReadTracker = providedReadTracker;
     effectiveConfigContext = { ...rest, requestContext: toPlainRequestContext(configContext.requestContext) };
   } else {
     effectiveConfigContext = { requestContext: {}, workspace };
@@ -429,12 +432,11 @@ export async function createWorkspaceTools(
 
   // Shared read tracker — always active so optimistic concurrency (mtime
   // checking) works on every write, regardless of the requireReadBeforeWrite
-  // policy setting. Precedence: an explicitly injected tracker (caller owns
-  // persistence, e.g. serverless storage) → the workspace's per-thread
-  // tracker (records survive suspend/resume and turns within the thread) →
-  // a per-run tracker when there is no thread identity to key on.
-  const readTracker: FileReadTracker =
-    toolsConfig?.readTracker ?? (threadId ? workspace.getReadTracker(threadId) : new InMemoryFileReadTracker());
+  // policy setting. The agent provides a thread-scoped, storage-backed
+  // tracker when it has thread identity and Mastra storage (records survive
+  // suspend/resume, later turns, and process restarts); otherwise tracking
+  // is per-run.
+  const readTracker: FileReadTracker = contextReadTracker ?? new InMemoryFileReadTracker();
 
   // Helper: add a tool with config-driven filtering
   const addTool = async (

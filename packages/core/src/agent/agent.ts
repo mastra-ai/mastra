@@ -143,6 +143,7 @@ import type { AnyWorkflow } from '../workflows/workflow';
 import { createStep, createStepFromProcessor, isProcessor } from '../workflows/workflow';
 import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
+import { ThreadStateFileReadTracker } from '../workspace/filesystem/thread-state-read-tracker';
 import { createSkillTools } from '../workspace/skills';
 import type { SkillFormat } from '../workspace/skills';
 import type { Skill, SkillMetadata, WorkspaceSkills } from '../workspace/skills/types';
@@ -4001,12 +4002,18 @@ export class Agent<
       return convertedWorkspaceTools;
     }
 
+    // Read-before-write records persist per thread in the `threadState`
+    // storage domain (alongside task lists and goal objectives), so they
+    // survive suspend/resume, later turns, and process restarts. Without
+    // thread identity or storage, tracking falls back to per-run.
+    const threadStateStore = threadId ? await this.#mastra?.getStorage()?.getStore('threadState') : undefined;
     const workspaceTools = await createWorkspaceTools(workspace, {
       requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
       workspace,
-      // Keys the default read-before-write tracker per memory thread so read
-      // records survive suspend/resume and multiple turns within the thread.
-      threadId,
+      readTracker:
+        threadStateStore && threadId
+          ? new ThreadStateFileReadTracker({ threadId, store: threadStateStore, logger: this.logger })
+          : undefined,
     });
 
     if (Object.keys(workspaceTools).length > 0) {

@@ -9,7 +9,6 @@
 
 import type { ToolBackgroundConfig } from '../../background-tasks/types';
 import type { WorkspaceToolName, WORKSPACE_TOOLS } from '../constants';
-import type { FileReadTracker } from '../filesystem/file-read-tracker';
 
 // =============================================================================
 // Dynamic Tool Config Types
@@ -356,20 +355,6 @@ export type WorkspaceToolsConfig = {
    * its first write, and the default rejects those before they ever land.
    */
   writeLockTimeoutMs?: number;
-
-  /**
-   * Custom tracker for read-before-write records (`requireReadBeforeWrite`).
-   *
-   * By default, read records are kept in a per-thread in-memory tracker owned
-   * by the `Workspace` instance, so they survive suspend/resume and multiple
-   * turns within the same process. Provide your own implementation (backed by
-   * your storage) to persist records across process restarts — e.g. serverless
-   * runtimes where the process is torn down between suspend and resume.
-   *
-   * The caller owns the instance lifetime; the same tracker is reused for
-   * every run that receives this config.
-   */
-  readTracker?: FileReadTracker;
 } & {
   [K in typeof WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]?: ExecuteCommandToolConfig;
 } & {

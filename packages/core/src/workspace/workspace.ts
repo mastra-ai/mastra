@@ -38,8 +38,8 @@ import { pMap, pMapSkip } from '../utils/p-map';
 import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError, WorkspaceNotReadyError } from './errors';
-import { CompositeFilesystem, InMemoryFileReadTracker, LocalFilesystem } from './filesystem';
-import type { WorkspaceFilesystem, FilesystemInfo, FileReadTracker } from './filesystem';
+import { CompositeFilesystem, LocalFilesystem } from './filesystem';
+import type { WorkspaceFilesystem, FilesystemInfo } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
 import { resolvePathPattern } from './glob';
 import type { ReaddirEntry } from './glob';
@@ -531,13 +531,6 @@ export interface WorkspaceInfo {
 const FS_READ_CONCURRENCY = 8;
 
 /**
- * Maximum number of per-thread read-before-write trackers kept in memory.
- * Threads are unbounded on long-lived servers; least-recently-used entries
- * are evicted beyond this cap.
- */
-const MAX_READ_TRACKERS = 500;
-
-/**
  * Parse the user-facing `bm25` config union into the `BM25SearchConfig` shape
  * that `SearchEngine` expects.
  */
@@ -603,9 +596,6 @@ export class Workspace<
   private readonly _sandboxRequestCache = new WeakMap<RequestContext, Promise<WorkspaceSandbox>>();
   // Resolver memoization keyed by sandboxCacheKey (survives RequestContext churn).
   private readonly _sandboxKeyCache = new Map<string, Promise<WorkspaceSandbox>>();
-  // Read-before-write records keyed by memory thread, so records survive
-  // suspend/resume and multiple turns within the same process (bounded LRU).
-  private readonly _readTrackers = new Map<string, InMemoryFileReadTracker>();
   private readonly _sandboxCacheKey?: WorkspaceSandboxCacheKey;
   private readonly _dynamicSandboxInstructions: DynamicSandboxInstructions;
   private readonly _browser?: MastraBrowser;
@@ -954,29 +944,6 @@ export class Workspace<
       return;
     }
     this._sandboxKeyCache.delete(cacheKey);
-  }
-
-  /**
-   * Get the read-before-write tracker for a memory thread, creating it on
-   * first access. Records survive across runs within the same thread, so
-   * suspend/resume and multi-turn conversations don't force re-reads of files
-   * the model already has in context. Bounded LRU: least-recently-used
-   * threads are evicted beyond `MAX_READ_TRACKERS`.
-   */
-  getReadTracker(threadId: string): FileReadTracker {
-    let tracker = this._readTrackers.get(threadId);
-    if (tracker) {
-      // Refresh recency (Map preserves insertion order).
-      this._readTrackers.delete(threadId);
-    } else {
-      tracker = new InMemoryFileReadTracker();
-      if (this._readTrackers.size >= MAX_READ_TRACKERS) {
-        const oldest = this._readTrackers.keys().next().value;
-        if (oldest !== undefined) this._readTrackers.delete(oldest);
-      }
-    }
-    this._readTrackers.set(threadId, tracker);
-    return tracker;
   }
 
   /**
