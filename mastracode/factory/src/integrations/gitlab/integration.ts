@@ -29,12 +29,14 @@ import {
   GitLabApiError,
 } from './api.js';
 import type { GitLabIssue, GitLabNote, GitLabProject } from './api.js';
+import { buildGitLabVersionControl } from './version-control.js';
 
 interface GitLabConnectionContext {
   id: string;
   label: string | null;
   api: GitLabApiClient;
   connection: IntegrationConnection;
+  host: string;
 }
 
 interface GitLabSourceReference {
@@ -75,6 +77,9 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
     createComment: input => this.#createComment(input),
     updateIssue: input => this.#updateIssue(input),
   };
+  readonly versionControl = buildGitLabVersionControl({
+    contextForConnection: connection => this.#versionControlContext(connection),
+  });
 
   initialize({ projects, auth }: { projects: FactoryProjectsStorage; auth: RouteAuth }): void {
     this.#projects = projects;
@@ -128,6 +133,19 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   }
 
   abstract diagnostics(): Record<string, unknown>;
+
+  async #versionControlContext(connection: IntegrationConnection): Promise<GitLabConnectionContext> {
+    const connectionId = connectionIdFromConnection(connection);
+    if (connectionId) return this.contextById(connectionId);
+    const contexts = await this.activeContexts();
+    if (contexts.length !== 1) {
+      throw new GitLabApiError(
+        'GitLab version-control requests must identify a connection when multiple GitLab accounts are connected.',
+        400,
+      );
+    }
+    return contexts[0]!;
+  }
 
   async #resolveIntakeDispatch({ externalSource }: ResolveIntakeDispatchInput): Promise<ResolvedIntakeDispatch | null> {
     if (externalSource.type !== 'issue') return null;
@@ -377,6 +395,7 @@ export class GitLabIntegration extends GitLabIntegrationBase {
       label: new URL(this.#baseUrl).host,
       api,
       connection: { type: 'oauth', accessToken: this.#accessToken },
+      host: new URL(this.#baseUrl).host,
     };
   }
 
