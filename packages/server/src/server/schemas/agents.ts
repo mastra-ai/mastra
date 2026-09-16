@@ -307,7 +307,6 @@ export const providerSchema = z.object({
   description: z.string().optional(),
   envVar: z.union([z.string(), z.array(z.string())]),
   connected: z.boolean(),
-  connectedModels: z.array(z.string()).optional(),
   docUrl: z.string().optional(),
   models: z.array(z.string()),
 });

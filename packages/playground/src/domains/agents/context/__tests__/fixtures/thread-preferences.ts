@@ -6,18 +6,6 @@ export const allowedModels: RouteResponse<'GET /editor/builder/models/available'
 export const restrictedModels: RouteResponse<'GET /editor/builder/models/available'> = {
   providers: allowedModels.providers.map(provider => ({ ...provider, models: ['gpt-5-mini'] })),
 };
-export const partiallyAuthenticatedModels: RouteResponse<'GET /agents/providers'> = {
-  providers: [
-    {
-      id: 'openai',
-      name: 'OpenAI',
-      envVar: 'OPENAI_API_KEY',
-      connected: true,
-      connectedModels: ['gpt-4o-mini'],
-      models: ['gpt-4o', 'gpt-4o-mini'],
-    },
-  ],
-};
 export const currentUser: RouteResponse<'GET /auth/me'> = { id: 'user-1' };
 export const memoryConfig: RouteResponse<'GET /memory/config'> = { config: {} };
 export const workingMemory: RouteResponse<'GET /memory/threads/:threadId/working-memory'> = {

@@ -17,4 +17,4 @@
 '@mastra/temporal': patch
 ---
 
-Raised the `@mastra/core` peer dependency floor to stable 1.68.0 to match `@mastra/server`, which now resolves provider auth through the core gateway manager. Earlier 1.68.0 prereleases don't export the required API.
+Raised the `@mastra/core` peer dependency floor to stable 1.68.0 to match `@mastra/server`, which now reads provider credential status through the core gateway manager. Earlier 1.68.0 prereleases don't export the required API.

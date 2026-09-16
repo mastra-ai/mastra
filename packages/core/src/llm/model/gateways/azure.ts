@@ -461,6 +461,10 @@ export class AzureOpenAIGateway extends MastraModelGateway {
     return this.config.authentication?.type === 'entraId' ? '' : (this.config.apiKey ?? '');
   }
 
+  hasProviderCredentials(providerId: string): boolean {
+    return providerId === this.id && !!(this.config.apiKey || this.config.authentication?.type === 'entraId');
+  }
+
   private async getEntraIdToken(): Promise<string> {
     if (this.config.authentication?.type !== 'entraId') {
       throw new MastraError({

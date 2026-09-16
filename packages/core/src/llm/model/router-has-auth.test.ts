@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { GatewayLanguageModel, MastraModelGatewayInterface, ProviderConfig } from './gateways/base.js';
+import type { MastraModelGatewayInterface, ProviderConfig } from './gateways/base.js';
 import { ModelRouterLanguageModel } from './router.js';
 
 function createOAuthGateway(): MastraModelGatewayInterface {
@@ -11,7 +11,9 @@ function createOAuthGateway(): MastraModelGatewayInterface {
     fetchProviders: async (): Promise<Record<string, ProviderConfig>> => ({}),
     buildUrl: () => undefined,
     getApiKey: async () => '',
-    resolveLanguageModel: () => ({}) as GatewayLanguageModel,
+    resolveLanguageModel: () => {
+      throw new Error('Credential checks must not construct a model');
+    },
   };
 }
 

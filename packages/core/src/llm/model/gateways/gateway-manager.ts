@@ -1,7 +1,25 @@
 import { MastraError } from '../../../error/index.js';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import type { GatewayAuthRequest, GatewayAuthResult, MastraModelGatewayInterface, ProviderConfig } from './base.js';
-import { findGatewayForModel, getGatewayId, hasAuthCredentials, shouldEnableGateway } from './gateway-helpers.js';
+import {
+  findGatewayForModel,
+  findPrefixedGateway,
+  getGatewayId,
+  hasAuthCredentials,
+  shouldEnableGateway,
+} from './gateway-helpers.js';
+
+function readProviderCredentials(gateway: MastraModelGatewayInterface, providerId: string): boolean | undefined {
+  try {
+    return gateway.hasProviderCredentials?.(providerId);
+  } catch (error) {
+    console.warn(
+      `Failed to read credentials for provider "${providerId}" from gateway "${getGatewayId(gateway)}":`,
+      error,
+    );
+    return false;
+  }
+}
 
 /**
  * MastraError IDs that represent expected "auth not available" states —
@@ -50,7 +68,7 @@ export interface GatewayModel {
   provider: string;
   /** Model name without provider prefix */
   modelName: string;
-  /** Includes OAuth and header credentials. */
+  /** Whether the provider has valid authentication */
   hasApiKey: boolean;
   /** Environment variable for the provider's API key */
   apiKeyEnvVar?: string;
@@ -187,6 +205,20 @@ export class GatewayManager {
     }
   }
 
+  hasProviderCredentials(providerKey: string): boolean | undefined {
+    const prefixedGateway = findPrefixedGateway(providerKey, this.gateways);
+    if (prefixedGateway) {
+      const gatewayId = getGatewayId(prefixedGateway);
+      const providerId = providerKey === gatewayId ? providerKey : providerKey.slice(gatewayId.length + 1);
+      return readProviderCredentials(prefixedGateway, providerId);
+    }
+
+    for (const gateway of this.gateways) {
+      if (readProviderCredentials(gateway, providerKey)) return true;
+    }
+    return undefined;
+  }
+
   /**
    * Fetch and flatten providers from all gateways, deduped by provider key
    * (configured / earlier gateway wins). Each gateway's `fetchProviders()`
@@ -211,6 +243,10 @@ export class GatewayManager {
     return registry;
   }
 
+  /**
+   * Build the model catalog from gateway providers, resolving auth per
+   * provider (using the first model). Returns models without use-count.
+   */
   async listAvailableModels(): Promise<GatewayModel[]> {
     const registry = await this.listProviders();
     const models: GatewayModel[] = [];
@@ -222,12 +258,16 @@ export class GatewayManager {
       const modelNames = providerConfig.models;
       if (!Array.isArray(modelNames)) continue;
 
+      // Auth is resolved once per provider (using the first model) via the
+      // gateway chain, then applied to every model the provider exposes.
+      const hasApiKey = modelNames[0] ? await this.hasAuth(`${provider}/${modelNames[0]}`) : false;
+
       for (const modelName of modelNames) {
         models.push({
           id: `${provider}/${modelName}`,
           provider,
           modelName,
-          hasApiKey: await this.hasAuth(`${provider}/${modelName}`),
+          hasApiKey,
           apiKeyEnvVar: apiKeyEnvVar || undefined,
         });
       }

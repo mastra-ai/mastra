@@ -1,13 +1,15 @@
 ---
-'@mastra/core': patch
+'@mastra/core': minor
 ---
 
-Exported `GatewayManager` from `@mastra/core/llm` and added `ModelRouterLanguageModel.hasAuth()` to check credentials through the model's gateway chain. Available-model listings now check authentication for each model, so a gateway that authenticates one model doesn't mark every model from its provider as authenticated.
+Added optional `hasProviderCredentials(providerId)` to model gateways so provider catalogs can read local credential presence without refreshing tokens or checking individual models. The built-in Mastra and Azure gateways report credentials supplied through their constructors.
+
+Exported `GatewayManager` from `@mastra/core/llm` to query registered gateways. Added `ModelRouterLanguageModel.hasAuth()` to check authentication through an existing model's explicit credentials and gateway chain.
 
 ```typescript
 import { GatewayManager } from '@mastra/core/llm';
 import { mastra } from './mastra';
 
 const gateways = new GatewayManager(Object.values(mastra.listGateways() ?? {}));
-const hasAuth = await gateways.hasAuth('openai/gpt-5.6-sol');
+const connected = gateways.hasProviderCredentials('openai');
 ```

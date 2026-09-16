@@ -1,4 +1,4 @@
-import type { BuilderModelPolicy, ListAgentsModelProvidersResponse } from '@mastra/client-js';
+import type { BuilderModelPolicy } from '@mastra/client-js';
 import { useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -14,7 +14,6 @@ import { ThreadPreferencesProvider } from '../thread-preferences-provider';
 import {
   allowedModels,
   restrictedModels,
-  partiallyAuthenticatedModels,
   currentUser,
   memoryConfig,
   workingMemory,
@@ -92,7 +91,6 @@ function mountSession(
   threadId = 'thread-a',
   modelPolicy: BuilderModelPolicy = { active: false },
   modelsHandler?: HttpHandler,
-  providers: ListAgentsModelProvidersResponse = allowedModels,
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   client.setQueryData(['builder-settings'], buildBuilderSettings({ modelPolicy }));
@@ -108,7 +106,7 @@ function mountSession(
     modelsHandler ??
       http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
     http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json(currentUser)),
-    http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json(providers)),
+    http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json(allowedModels)),
     http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(memoryConfig)),
     http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => HttpResponse.json(workingMemory)),
   );
@@ -122,18 +120,6 @@ afterEach(() => {
 });
 
 describe('ThreadPreferencesProvider', () => {
-  describe('when a gateway authenticates only some models of a provider', () => {
-    it('shows the authentication warning only for the selected unauthenticated model', async () => {
-      mountSession('thread-a', { active: false }, undefined, partiallyAuthenticatedModels);
-
-      expect(await screen.findByText('OPENAI_API_KEY')).toBeTruthy();
-      fireEvent.click(screen.getByText('Customize'));
-
-      await waitFor(() => expect(screen.queryByText('OPENAI_API_KEY')).toBeNull());
-      expect(screen.getByText('gpt-4o-mini:0.2')).toBeTruthy();
-    });
-  });
-
   describe('when a customized chat is revisited', () => {
     it('isolates a different chat and restores the original preferences', async () => {
       const view = mountSession();

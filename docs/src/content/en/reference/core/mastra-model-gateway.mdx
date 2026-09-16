@@ -198,27 +198,19 @@ Resolves credentials before Mastra creates the language model. Implement this op
 
 A `GatewayAuthResult` may include `apiKey`, `bearerToken`, `headers`, and an optional `source` field to trace where auth came from.
 
-Studio uses this hook to check which models have credentials. A provider response includes `connectedModels`, an array of authenticated model IDs without the provider prefix. `connected` is `true` when that array has at least one model. Studio checks the selected model against this list, and the agent builder offers only those models. Older servers that omit `connectedModels` retain provider-level connection checks in Studio.
+### `hasProviderCredentials()`
 
-The server checks models sequentially within each provider, with a five-second deadline per provider. On timeout, it returns the models checked successfully so far and stops starting further checks. The deadline doesn't cancel an auth request already in progress. Unexpected auth errors are logged once per provider without preventing other providers from loading. Gateway provider discovery runs before this deadline.
+Reports whether the gateway has credentials for a provider. Implement this optional synchronous method to let Studio recognize stored OAuth credentials or API keys supplied through gateway configuration.
 
-#### Check model authentication
+**Parameters:** `providerId: string`, without the gateway prefix. For example, the `custom/openai` catalog entry passes `openai` to the `custom` gateway.
 
-Use `GatewayManager.hasAuth(routerId)` to check a model through the registered gateway chain:
+**Returns:** `boolean`
 
-```typescript
-import { GatewayManager } from '@mastra/core/llm'
-import { mastra } from './mastra'
+Read the same credential source used by `resolveAuth()`. Return `false` for providers the gateway doesn't authenticate. This method must only check local credential presence: don't refresh tokens, contact the provider, or check individual models.
 
-const gateways = new GatewayManager(Object.values(mastra.listGateways() ?? {}))
-const hasAuth = await gateways.hasAuth('__GATEWAY_OPENAI_MODEL__')
-```
+Studio reads this status on each provider-catalog request. Signing in or out is reflected on the next fetch. Gateways that don't implement this method retain environment-variable detection.
 
-**Returns:** `Promise<boolean>`. Missing credentials return `false`; unexpected gateway errors reject the promise. This checks whether credentials are available, without validating them against the provider or generating a response. Auth resolution may perform network requests, such as a token exchange.
-
-`GatewayManager.listAvailableModels()` returns a `hasApiKey` flag for each model using the same check. Despite the field name, OAuth and header-based credentials count too.
-
-For an existing `ModelRouterLanguageModel`, call `model.hasAuth()` to use that instance's gateway chain and explicit `apiKey` or `url` configuration. Direct AI SDK model instances don't inherit credentials from registered gateways.
+A connected provider has configured credentials. This doesn't verify token validity or access to every listed model. Model discovery stays in `fetchProviders()`, and authentication for a model request stays in `resolveAuth()` and `getApiKey()`.
 
 ### `resolveLanguageModel()`
 
@@ -255,6 +247,22 @@ Creates a language model instance.
 Returns the gateway's unique identifier.
 
 **Returns:** `string` - The gateway's `id` property
+
+## Checking credentials outside a gateway
+
+Use `GatewayManager` from `@mastra/core/llm` to check the registered gateways:
+
+```typescript
+import { GatewayManager } from '@mastra/core/llm'
+import { mastra } from './mastra'
+
+const gateways = new GatewayManager(Object.values(mastra.listGateways() ?? {}))
+const connected = gateways.hasProviderCredentials('openai')
+```
+
+For a prefixed provider, the manager asks only the owning gateway. For an unprefixed provider, it returns `true` if any registered gateway reports credentials. It returns `undefined` if the owning gateway has no hook, or if no gateway reports credentials for an unprefixed provider. The caller can then use environment-variable detection.
+
+To check authentication for an existing `ModelRouterLanguageModel`, call `await model.hasAuth()`. This uses that model's explicit credentials and gateway chain, including any asynchronous authentication hooks.
 
 ## Model ID format
 

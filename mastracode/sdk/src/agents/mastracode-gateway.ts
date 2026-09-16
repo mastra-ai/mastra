@@ -175,6 +175,16 @@ function getProviderAuthKey(providerId: string, credentials: CredentialStore = a
   return authProviderId === 'kimi-for-coding' ? process.env.KIMI_API_KEY?.trim() || undefined : undefined;
 }
 
+function resolveProviderCredentials(providerId: string, credentials: CredentialStore): GatewayAuthResult | undefined {
+  const storedCred = credentials.get(getAuthProviderId(providerId));
+  if (storedCred?.type === 'oauth') {
+    return { bearerToken: 'oauth', source: 'gateway' };
+  }
+
+  const apiKey = getProviderAuthKey(providerId, credentials);
+  return apiKey ? { apiKey, source: 'gateway' } : undefined;
+}
+
 export function resolveAuth(request: GatewayAuthRequest, mastraGatewayApiKey?: string): GatewayAuthResult | undefined {
   return MastraCodeGateway.resolveProviderAuth(request, mastraGatewayApiKey);
 }
@@ -308,23 +318,11 @@ export class MastraCodeGateway extends MastraModelGateway {
   handlesModel(modelId: string): boolean {
     const parsed = parseGatewayRouterId(modelId, this);
     if (!parsed.providerId || !parsed.modelId) return false;
-    if (this.#routeThroughMastraGateway && this.#mastraGatewayApiKey) return true;
-    const customProvider = this.#getCustomProviders().find(
-      provider => parsed.providerId === getCustomProviderId(provider.name),
-    );
-    if (customProvider?.apiKey) return true;
-    return hasResolvedAuth(
-      MastraCodeGateway.resolveProviderAuth(
-        {
-          gatewayId: this.id,
-          providerId: parsed.providerId,
-          modelId: parsed.modelId,
-          routerId: modelId,
-        },
-        undefined,
-        this.#credentials,
-      ),
-    );
+    return this.hasProviderCredentials(parsed.providerId);
+  }
+
+  hasProviderCredentials(providerId: string): boolean {
+    return hasResolvedAuth(this.#resolveProviderAuth(providerId));
   }
 
   static resolveProviderAuth(
@@ -336,14 +334,7 @@ export class MastraCodeGateway extends MastraModelGateway {
       return { apiKey: mastraGatewayApiKey, source: 'gateway' };
     }
 
-    const authProviderId = getAuthProviderId(request.providerId);
-    const storedCred = credentials.get(authProviderId);
-    if (storedCred?.type === 'oauth') {
-      return { bearerToken: 'oauth', source: 'gateway' };
-    }
-
-    const apiKey = getProviderAuthKey(request.providerId, credentials);
-    return apiKey ? { apiKey, source: 'gateway' } : undefined;
+    return resolveProviderCredentials(request.providerId, credentials);
   }
 
   static createModelCatalogProvider(gateway: MastraModelGatewayInterface): CustomModelCatalogProvider {
@@ -438,18 +429,22 @@ export class MastraCodeGateway extends MastraModelGateway {
   }
 
   resolveAuth(request: GatewayAuthRequest): GatewayAuthResult | undefined {
+    return this.#resolveProviderAuth(request.providerId);
+  }
+
+  #resolveProviderAuth(providerId: string): GatewayAuthResult | undefined {
     if (this.#routeThroughMastraGateway && this.#mastraGatewayApiKey) {
       return { apiKey: this.#mastraGatewayApiKey, source: 'gateway' };
     }
 
     const customProvider = this.#getCustomProviders().find(
-      provider => request.providerId === getCustomProviderId(provider.name),
+      provider => providerId === getCustomProviderId(provider.name),
     );
     if (customProvider?.apiKey) {
       return { apiKey: customProvider.apiKey, source: 'gateway' };
     }
 
-    return MastraCodeGateway.resolveProviderAuth(request, undefined, this.#credentials);
+    return resolveProviderCredentials(providerId, this.#credentials);
   }
 
   resolveLanguageModel(args: {

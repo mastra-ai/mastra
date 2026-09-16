@@ -1,11 +1,15 @@
 import { openai } from '@ai-sdk/openai-v5';
-import { ModelRouterLanguageModel, NetlifyGateway, PROVIDER_REGISTRY } from '@mastra/core/llm';
+import {
+  AzureOpenAIGateway,
+  MastraGateway,
+  ModelRouterLanguageModel,
+  NetlifyGateway,
+  PROVIDER_REGISTRY,
+} from '@mastra/core/llm';
 import type { MastraModelGatewayInterface } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE } from './editor-builder';
 import { buildProvidersList, isModelUsable } from './provider-catalog';
-import { createTestServerContext } from './test-utils';
 
 function createKeyedGateway(id: string, providerId: string, apiKeyEnvVar: string): MastraModelGatewayInterface {
   return {
@@ -25,6 +29,7 @@ function createOAuthGateway(handledProvider: string): MastraModelGatewayInterfac
     id: 'oauth-gateway',
     name: 'OAuth Gateway',
     handlesModel: modelId => modelId.startsWith(`${handledProvider}/`),
+    hasProviderCredentials: providerId => providerId === handledProvider || providerId === 'github-copilot',
     resolveAuth: () => ({ bearerToken: 'oauth-token', source: 'gateway' }),
     fetchProviders: async () => ({
       'github-copilot': { name: 'GitHub Copilot', models: ['gpt-4.1'], apiKeyEnvVar: '', gateway: 'oauth-gateway' },
@@ -38,8 +43,8 @@ function createOAuthGateway(handledProvider: string): MastraModelGatewayInterfac
 function createBrokenGateway(): MastraModelGatewayInterface {
   return {
     ...createKeyedGateway('broken', 'broken-llm', 'BROKEN_API_KEY'),
-    resolveAuth: () => {
-      throw new Error('token exchange failed');
+    hasProviderCredentials: () => {
+      throw new Error('credential store failed');
     },
   };
 }
@@ -60,72 +65,68 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
 describe('buildProvidersList', () => {
-  it('reports and offers only the models a gateway authenticates, regardless of catalog order', async () => {
-    const gateway = {
-      ...createOAuthGateway('openai'),
-      handlesModel: (modelId: string) => modelId === 'openai/gpt-4.1',
-    };
-    const mastra = createMastra({ oauth: gateway });
-    const provider = await findProvider(mastra, 'openai');
-
-    expect(provider).toMatchObject({ connected: true, connectedModels: ['gpt-4.1'] });
-    expect(provider?.models).toContain('gpt-4');
-
-    const available = await GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE.handler(createTestServerContext({ mastra }));
-    expect(available.providers.find(provider => provider.id === 'openai')?.models).toEqual(['gpt-4.1']);
-  });
-
-  it('keeps authenticated models when another model from the same provider fails', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('reads credentials once for a large catalog without resolving model auth', async () => {
+    vi.stubEnv('AUTO_BLOCK_EXTERNAL_PROVIDERS', 'true');
+    const models = Array.from({ length: 10000 }, (_, index) => `model-${index}`);
+    const hasProviderCredentials = vi.fn(() => true);
+    const getApiKey = vi.fn(async () => {
+      throw new Error('Must not exchange tokens');
+    });
+    const resolveAuth = vi.fn(() => {
+      throw new Error('Must not resolve model auth');
+    });
     const gateway = {
       ...createKeyedGateway('acme', 'acme', ''),
-      fetchProviders: async () => ({
-        acme: { name: 'Acme', models: ['broken', 'working'], apiKeyEnvVar: '', gateway: 'acme' },
-      }),
-      getApiKey: async (modelId: string) => {
-        if (modelId.endsWith('/broken')) throw new Error('token exchange failed');
-        return 'test-key';
-      },
+      fetchProviders: async () => ({ acme: { name: 'Acme', models, apiKeyEnvVar: '', gateway: 'acme' } }),
+      hasProviderCredentials,
+      getApiKey,
+      resolveAuth,
     };
 
-    expect(await findProvider(createMastra({ acme: gateway }), 'acme')).toMatchObject({
-      connected: true,
-      connectedModels: ['working'],
-    });
-    expect(warn).toHaveBeenCalledOnce();
+    const provider = await findProvider(createMastra({ acme: gateway }), 'acme');
+
+    expect(provider).toMatchObject({ connected: true, models });
+    expect(provider).not.toHaveProperty('connectedModels');
+    expect(hasProviderCredentials).toHaveBeenCalledExactlyOnceWith('acme');
+    expect(getApiKey).not.toHaveBeenCalled();
+    expect(resolveAuth).not.toHaveBeenCalled();
   });
 
-  it('returns the catalog when authentication stalls and stops checking that provider after the deadline', async () => {
-    vi.useFakeTimers();
-    vi.stubEnv('AUTO_BLOCK_EXTERNAL_PROVIDERS', 'true');
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const stalledAuth = Promise.withResolvers<string>();
-    const getApiKey = vi.fn(() => stalledAuth.promise);
+  it('reads current credentials on each request without caching connection status', async () => {
+    let signedIn = false;
+    const gateway = {
+      ...createOAuthGateway('openai'),
+      hasProviderCredentials: (providerId: string) => providerId === 'openai' && signedIn,
+    };
+    const mastra = createMastra({ oauth: gateway });
+
+    expect((await findProvider(mastra, 'openai'))?.connected).toBe(false);
+    signedIn = true;
+    expect((await findProvider(mastra, 'openai'))?.connected).toBe(true);
+    signedIn = false;
+    expect((await findProvider(mastra, 'openai'))?.connected).toBe(false);
+  });
+
+  it('recognizes constructor credentials without fetching an access token', async () => {
+    const getToken = vi.fn();
     const mastra = createMastra({
-      acme: {
-        ...createKeyedGateway('acme', 'acme', ''),
-        fetchProviders: async () => ({
-          acme: { name: 'Acme', models: ['first', 'second'], apiKeyEnvVar: '', gateway: 'acme' },
-        }),
-        getApiKey,
-      },
+      mastra: new MastraGateway({ apiKey: 'configured-key' }),
+      azure: new AzureOpenAIGateway({
+        resourceName: 'test-resource',
+        deployments: ['deployment'],
+        authentication: { type: 'entraId', credential: { getToken } },
+      }),
     });
 
-    const catalog = buildProvidersList(mastra);
-    await vi.advanceTimersByTimeAsync(5000);
-    const providers = await catalog;
-    expect(providers).toMatchObject([{ connected: false, connectedModels: [] }]);
-
-    stalledAuth.resolve('late-key');
-    await vi.advanceTimersByTimeAsync(0);
-    expect(providers[0]?.connectedModels).toEqual([]);
-    expect(getApiKey).toHaveBeenCalledOnce();
+    const providers = await buildProvidersList(mastra);
+    expect(providers.find(provider => provider.id === 'mastra')?.connected).toBe(true);
+    expect(providers.find(provider => provider.id === 'azure-openai')?.connected).toBe(true);
+    expect(getToken).not.toHaveBeenCalled();
   });
 
   it('lists every registry provider with its env var and models', async () => {
@@ -175,16 +176,17 @@ describe('buildProvidersList', () => {
     expect((await findProvider(mastra, 'anthropic'))?.connected).toBe(false);
   });
 
-  it('keeps the rest of the catalog when one gateway fails to resolve auth', async () => {
+  it('keeps the rest of the catalog when one gateway fails to read credentials', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.stubEnv('OPENAI_API_KEY', 'test-key');
-    const mastra = createMastra({ broken: createBrokenGateway() });
+    const mastra = createMastra({ broken: createBrokenGateway(), oauth: createOAuthGateway('anthropic') });
 
     const providers = await buildProvidersList(mastra);
 
     expect(providers.find(provider => provider.id === 'broken/broken-llm')?.connected).toBe(false);
     expect(providers.find(provider => provider.id === 'openai')?.connected).toBe(true);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('broken/broken-llm'), expect.any(Error));
+    expect(providers.find(provider => provider.id === 'anthropic')?.connected).toBe(true);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('provider "broken-llm"'), expect.any(Error));
   });
 
   it('hides the registry and the default gateways when AUTO_BLOCK_EXTERNAL_PROVIDERS is set', async () => {

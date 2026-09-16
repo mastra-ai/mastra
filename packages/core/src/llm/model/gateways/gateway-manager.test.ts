@@ -1,13 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { MastraError } from '../../../error/index.js';
-import type {
-  GatewayAuthRequest,
-  GatewayAuthResult,
-  GatewayLanguageModel,
-  MastraModelGatewayInterface,
-  ProviderConfig,
-} from './base';
+import type { GatewayAuthRequest, GatewayAuthResult, MastraModelGatewayInterface, ProviderConfig } from './base';
 import { defaultGateways } from './defaults';
 import { GatewayManager } from './gateway-manager';
 
@@ -52,7 +46,9 @@ function createFakeGateway(options?: {
     }),
     resolveAuth: options?.resolveAuth,
     handlesModel: options?.handlesModel,
-    resolveLanguageModel: () => ({}) as GatewayLanguageModel,
+    resolveLanguageModel: () => {
+      throw new Error('Credential checks must not construct a model');
+    },
   };
 }
 
@@ -365,6 +361,41 @@ describe('GatewayManager', () => {
     });
   });
 
+  describe('hasProviderCredentials', () => {
+    it('uses the prefixed gateway without borrowing another gateway credentials', () => {
+      const ownerStatus = vi.fn(() => false);
+      const otherStatus = vi.fn(() => true);
+      const manager = new GatewayManager([
+        { ...createFakeGateway({ id: 'oauth' }), hasProviderCredentials: otherStatus },
+        { ...createFakeGateway({ id: 'acme' }), hasProviderCredentials: ownerStatus },
+      ]);
+
+      expect(manager.hasProviderCredentials('acme/openai')).toBe(false);
+      expect(ownerStatus).toHaveBeenCalledExactlyOnceWith('openai');
+      expect(otherStatus).not.toHaveBeenCalled();
+    });
+
+    it('finds an unprefixed provider with credentials without selecting a model', () => {
+      const gateway = {
+        ...createFakeGateway(),
+        hasProviderCredentials: (provider: string) => provider === 'openai',
+      };
+      const manager = new GatewayManager([gateway]);
+
+      expect(manager.hasProviderCredentials('openai')).toBe(true);
+      expect(manager.hasProviderCredentials('anthropic')).toBeUndefined();
+      expect(gateway.getApiKey).not.toHaveBeenCalled();
+      expect(gateway.fetchProviders).not.toHaveBeenCalled();
+    });
+
+    it('leaves legacy gateways to the caller environment check', () => {
+      const gateway = createFakeGateway({ id: 'legacy', apiKey: 'runtime-key' });
+
+      expect(new GatewayManager([gateway]).hasProviderCredentials('legacy/acme')).toBeUndefined();
+      expect(gateway.getApiKey).not.toHaveBeenCalled();
+    });
+  });
+
   describe('listProviders', () => {
     it('flattens providers from all gateways and stamps the gateway id', async () => {
       const gateway = createFakeGateway({ id: 'test-gateway', provider: 'acme', models: ['sonic-fast'] });
@@ -392,20 +423,7 @@ describe('GatewayManager', () => {
   });
 
   describe('listAvailableModels', () => {
-    it('does not share credentials between models of the same provider', async () => {
-      const gateway = createFakeGateway({
-        models: ['unauthenticated', 'authenticated'],
-        resolveAuth: request => (request.modelId === 'authenticated' ? { apiKey: 'model-key' } : undefined),
-      });
-
-      const models = await new GatewayManager([gateway]).listAvailableModels();
-      expect(models.map(model => [model.modelName, model.hasApiKey])).toEqual([
-        ['unauthenticated', false],
-        ['authenticated', true],
-      ]);
-    });
-
-    it('builds model entries with id/provider/modelName and resolves auth for each model', async () => {
+    it('builds model entries with id/provider/modelName and applies auth per provider', async () => {
       const gateway = createFakeGateway({
         id: 'test-gateway',
         provider: 'acme',
