@@ -80,6 +80,21 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Thread metadata flag marking the title as user-pinned. Set by
+ * `session.thread.rename()` so Observational Memory's title extractor never
+ * overwrites a manual rename, and cleared (set to `false`) when the user
+ * explicitly regenerates the title via `generateThreadTitle()`.
+ */
+export const TITLE_PINNED_THREAD_METADATA_KEY = 'titlePinned';
+
+/**
+ * Whether the thread's title is pinned against automatic updates.
+ */
+export function isThreadTitlePinned(threadMetadata?: Record<string, unknown>): boolean {
+  return threadMetadata?.[TITLE_PINNED_THREAD_METADATA_KEY] === true;
+}
+
+/**
  * Helper to get OM metadata from a thread's metadata object.
  * Returns undefined if not present or if the structure is invalid.
  */

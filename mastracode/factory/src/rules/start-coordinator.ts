@@ -75,7 +75,9 @@ async function resolveSourceSession(
 
 async function configureThread(session: FactorySession, request: FactoryStartRequest): Promise<string> {
   const threadId = session.thread.requireId();
-  await session.thread.rename({ title: request.threadTitle });
+  // Derived from the work item, not a user rename, so leave the title
+  // unpinned and let auto-naming keep refining it.
+  await session.thread.rename({ title: request.threadTitle, pin: false });
   await session.thread.setSetting({ key: 'factorySessionId', value: request.sessionId });
   return threadId;
 }
