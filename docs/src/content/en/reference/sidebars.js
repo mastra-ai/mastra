@@ -406,11 +406,13 @@ const sidebars = {
       label: 'Memory',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'memory/branch-utilities', label: 'Branch Navigation' },
         { type: 'doc', id: 'memory/clone-utilities', label: 'Cloned Thread Utilities' },
         { type: 'doc', id: 'memory/memory-class', label: 'Memory Class' },
         { type: 'doc', id: 'memory/observational-memory', label: 'Observational Memory' },
         { type: 'doc', id: 'memory/serialized-memory-config', label: 'SerializedMemoryConfig' },
         { type: 'doc', id: 'memory/summarizeConversation', label: 'summarizeConversation()' },
+        { type: 'doc', id: 'memory/branchThread', label: '.branchThread()' },
         { type: 'doc', id: 'memory/cloneThread', label: '.cloneThread()' },
         { type: 'doc', id: 'memory/copyThread', label: '.copyThread()' },
         { type: 'doc', id: 'memory/createThread', label: '.createThread()' },
