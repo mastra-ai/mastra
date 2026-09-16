@@ -1,9 +1,7 @@
 import type { Mastra } from '@mastra/core/mastra';
-import { createMCPTool } from '@mastra/core/mcp';
-import type { MCPServerBase, MCPServerBaseV2, ServerInfo, ServerDetailInfo } from '@mastra/core/mcp';
+import type { MCPServerBase, ServerInfo, ServerDetailInfo } from '@mastra/core/mcp';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import { checkRouteFGA } from '../server-adapter';
 import {
@@ -730,21 +728,13 @@ describe('MCP Registry Handlers', () => {
   });
 
   describe('MCP v2 servers', () => {
-    const nativeTool = createMCPTool({
-      id: 'askUser',
-      description: 'Needs a native input round',
-      inputSchema: z.object({}),
-      outputSchema: z.string(),
-      execute: async () => ({ kind: 'completed', value: 'done' }),
-    });
-
     const v2Info: ServerInfo = {
       id: 'modern',
       name: 'Modern Server',
       version_detail: { version: '2.0.0', release_date: '2026-07-28T00:00:00Z', is_latest: true },
     };
 
-    let v2Server: Partial<MCPServerBaseV2>;
+    let v2Server: Partial<MCPServerBase>;
     let v2Mastra: Mastra;
 
     beforeEach(() => {
@@ -754,13 +744,11 @@ describe('MCP Registry Handlers', () => {
         mcpVersion: 2,
         getServerInfo: vi.fn(() => v2Info),
         getServerDetail: vi.fn(() => ({ ...v2Info, packages: [], remotes: [] })),
-        tools: vi.fn(() => ({ askUser: nativeTool })),
-        executeTool: vi.fn(async () => 'should not run'),
       };
       v2Mastra = {
-        listMCPServers: vi.fn(() => ({ modern: v2Server as MCPServerBaseV2, server1: mockMCPServer as MCPServerBase })),
+        listMCPServers: vi.fn(() => ({ modern: v2Server as MCPServerBase, server1: mockMCPServer as MCPServerBase })),
         getMCPServerById: vi.fn((id: string) => {
-          if (id === 'modern') return v2Server as MCPServerBaseV2;
+          if (id === 'modern') return v2Server as MCPServerBase;
           if (id === 'server1') return mockMCPServer as MCPServerBase;
           return undefined;
         }),
@@ -801,18 +789,6 @@ describe('MCP Registry Handlers', () => {
         serverId: 'server1',
       });
       expect(legacySse).toMatchObject({ ssePath: '/mcp/server1/sse', messagePath: '/mcp/server1/messages' });
-    });
-
-    it('refuses to run native tools over REST instead of returning protocol control as a result', async () => {
-      await expect(
-        EXECUTE_MCP_SERVER_TOOL_ROUTE.handler({
-          ...createTestServerContext({ mastra: v2Mastra }),
-          serverId: 'modern',
-          toolId: 'askUser',
-          data: {},
-        }),
-      ).rejects.toMatchObject({ status: 422 });
-      expect(v2Server.executeTool).not.toHaveBeenCalled();
     });
   });
 });

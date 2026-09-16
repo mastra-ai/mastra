@@ -1,82 +1,62 @@
-import { createMCPTool } from '@mastra/core/mcp';
 import { createTool } from '@mastra/core/tools';
 import { MCPServer } from '@mastra/mcp';
-import { createRequestStateCodec, inputRequired } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
-type BookingState = { phase: 'address'; opKey: string } | { phase: 'confirm'; opKey: string; address: string };
-
-export const codec = createRequestStateCodec<BookingState>({ key: 'packed-consumer-proof-key-0123456789abcdef' });
+/** Shared signing key: any instance holding it can resume a round another instance started. */
+export const REQUEST_STATE_KEY = 'packed-consumer-proof-key-0123456789abcdef';
 
 export const journal = { bookings: new Map<string, string>(), writes: 0 };
 
-/** Ordinary business tool: reusable by agents and workflows; receives no legacy `context.mcp`. */
+/** Ordinary tool: reusable by agents and workflows; reports what `context.mcp` looks like on a 2.x server. */
 export const echo = createTool({
   id: 'echo',
   description: 'Echo a message',
   inputSchema: z.object({ message: z.string() }),
-  outputSchema: z.object({ echoed: z.string(), hadLegacyContext: z.boolean() }),
-  execute: async ({ message }, context) => ({ echoed: message, hadLegacyContext: 'mcp' in (context ?? {}) }),
+  outputSchema: z.object({ echoed: z.string(), protocolVersion: z.string(), deprecatedElicitationThrows: z.boolean() }),
+  execute: async ({ message }, context) => {
+    let deprecatedElicitationThrows = false;
+    try {
+      // 2026-07-28 removed server-initiated elicitation; the unified context keeps the member but it throws.
+      await context.mcp?.elicitation.sendRequest({ message: 'x', requestedSchema: { type: 'object', properties: {} } });
+    } catch {
+      deprecatedElicitationThrows = true;
+    }
+    return { echoed: message, protocolVersion: context.mcp?.protocolVersion ?? 'none', deprecatedElicitationThrows };
+  },
 });
 
-/** Native tool: address round, confirmation round, one counted booking write. */
-export const bookDelivery = createMCPTool({
+/** Suspends for an address, then for a confirmation, then performs one counted booking write. */
+export const bookDelivery = createTool({
   id: 'bookDelivery',
   description: 'Books a delivery after collecting an address and a confirmation',
   inputSchema: z.object({ opKey: z.string() }),
   outputSchema: z.object({ status: z.string(), address: z.string().optional(), writes: z.number() }),
-  execute: async ({ opKey }, { request }) => {
-    const state = request.requestState as BookingState | undefined;
-    const responses = request.inputResponses ?? {};
-    if (!state) {
-      await request.log('info', { message: `start ${opKey}` });
-      return {
-        kind: 'input_required',
-        result: inputRequired({
-          inputRequests: {
-            address: inputRequired.elicit({
-              message: 'Delivery address?',
-              requestedSchema: { type: 'object', properties: { address: { type: 'string' } }, required: ['address'] },
-            }),
-          },
-          requestState: await codec.mint({ phase: 'address', opKey }),
-        }),
-      };
+  suspendSchema: z.object({
+    phase: z.enum(['address', 'confirm']),
+    message: z.string(),
+    address: z.string().optional(),
+  }),
+  resumeSchema: z.object({ address: z.string().optional(), ok: z.boolean().optional() }),
+  execute: async ({ opKey }, context) => {
+    if (!context.resumeData) {
+      await context.mcp?.log?.('info', `start ${opKey}`);
+      await context.suspend?.({ phase: 'address', message: 'Delivery address?' });
+      return;
     }
-    if (state.opKey !== opKey) throw new Error('Continuation belongs to a different operation');
-    if (state.phase === 'address') {
-      const address = responses.address;
-      if (!address) throw new Error('Missing response for "address"');
-      if (address.action !== 'accept')
-        return { kind: 'completed', value: { status: 'declined', writes: journal.writes } };
-      return {
-        kind: 'input_required',
-        result: inputRequired({
-          inputRequests: {
-            confirm: inputRequired.elicit({
-              message: 'Confirm booking?',
-              requestedSchema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] },
-            }),
-          },
-          requestState: await codec.mint({
-            phase: 'confirm',
-            opKey,
-            address: (address.content as { address: string }).address,
-          }),
-        }),
-      };
+    if (context.suspendPayload?.phase === 'address') {
+      if (!context.resumeData.address) return { status: 'declined', writes: journal.writes };
+      await context.suspend?.({ phase: 'confirm', message: 'Confirm booking?', address: context.resumeData.address });
+      return;
     }
-    const confirm = responses.confirm;
-    if (!confirm) throw new Error('Missing response for "confirm"');
-    if (confirm.action !== 'accept' || !(confirm.content as { ok: boolean }).ok) {
-      return { kind: 'completed', value: { status: 'cancelled', writes: journal.writes } };
-    }
-    if (!journal.bookings.has(state.opKey)) {
-      journal.bookings.set(state.opKey, state.address);
+    if (!context.resumeData.ok) return { status: 'cancelled', writes: journal.writes };
+    const address = context.suspendPayload!.address!;
+    // Domain-owned idempotency: the operation key decides whether to write, not the round.
+    if (!journal.bookings.has(opKey)) {
+      journal.bookings.set(opKey, address);
       journal.writes += 1;
     }
-    await request.log('info', { message: `booked ${opKey}` });
-    return { kind: 'completed', value: { status: 'booked', address: state.address, writes: journal.writes } };
+    await context.mcp?.log?.('info', `booked ${opKey}`);
+    return { status: 'booked', address, writes: journal.writes };
   },
 });
 
@@ -85,6 +65,6 @@ export function makeServer(): MCPServer {
     name: 'packed-v2',
     version: '2.0.0',
     tools: { echo, bookDelivery },
-    requestState: { verify: (state, ctx) => codec.verify(state, ctx) },
+    requestState: { key: REQUEST_STATE_KEY },
   });
 }

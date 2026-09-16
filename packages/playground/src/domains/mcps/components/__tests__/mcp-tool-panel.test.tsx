@@ -38,19 +38,23 @@ describe('MCPToolPanel execution results', () => {
     await waitForMutationsIdle(queryClient);
   });
 
-  it('shows an unsupported-interaction result when the tool needs native MCP input rounds', async () => {
+  it('reports a suspended tool truthfully instead of pretending it finished', async () => {
     useBaseHandlers();
     server.use(
       http.post(`${TOOL_URL}/execute`, () =>
-        HttpResponse.json({ error: 'Native MCP interaction requires an MCP protocol client' }, { status: 422 }),
+        HttpResponse.json({
+          status: 'suspended',
+          suspendPayload: { phase: 'confirm' },
+          resumeSchema: { type: 'object', properties: { ok: { type: 'boolean' } } },
+        }),
       ),
     );
     const { container, queryClient } = renderPanel();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Submit' }));
 
-    await waitFor(() => expect(container.textContent).toMatch(/"unsupported":\s*"native-interaction"/));
-    expect(container.textContent).toContain('cannot run from Studio');
+    await waitFor(() => expect(container.textContent).toMatch(/"status":\s*"suspended"/));
+    expect(container.textContent).toMatch(/"phase":\s*"confirm"/);
     await waitForMutationsIdle(queryClient);
   });
 
@@ -62,7 +66,6 @@ describe('MCPToolPanel execution results', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Submit' }));
 
     await waitFor(() => expect(container.textContent).toContain('HTTP error! status: 500'));
-    expect(container.textContent).not.toContain('native-interaction');
     await waitForMutationsIdle(queryClient);
   });
 });

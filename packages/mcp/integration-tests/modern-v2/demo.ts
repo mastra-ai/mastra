@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import { once } from 'node:events';
 import { Mastra } from '@mastra/core/mastra';
-import { isMCPServerV2, MCPServerBaseV2 } from '@mastra/core/mcp';
+import { MCPServerBase } from '@mastra/core/mcp';
 import { MCPClient } from '@mastra/mcp';
 import {
   Client,
@@ -22,18 +22,27 @@ import { bookDelivery, echo, journal, makeServer } from './shared.js';
 const pass = (label: string) => console.log(`PASS: ${label}`);
 const accept = (content: Record<string, string | number | boolean>): ElicitResult => ({ action: 'accept', content });
 
-// --- Registry: v2 instances sit in the typed union without touching the 1.x base ---
+// --- Registry: a 2.x server is an ordinary MCPServerBase flagged with mcpVersion 2 ---
 const server = makeServer();
-assert.ok(server instanceof MCPServerBaseV2);
+assert.ok(server instanceof MCPServerBase);
+assert.equal(server.mcpVersion, 2);
 const mastra = new Mastra({ mcpServers: { packed: server } });
 const registered = mastra.getMCPServer('packed');
-assert.ok(registered && isMCPServerV2(registered));
-// Native tools are rejected at the type level and, for untyped callers, at runtime.
-// @ts-expect-error native tools are not business tools
-assert.throws(() => new Mastra({ tools: { bookDelivery } }), /Native MCP tools/);
-assert.ok(mastra.listTools()?.echo, 'ordinary tools from a v2 server register globally');
-assert.equal(mastra.listTools()?.bookDelivery, undefined);
-pass('v2 server registers on the core union; native tools stay out of the business registry');
+assert.equal(registered?.mcpVersion, 2);
+// Suspending tools stay ordinary tools: agents and workflows can reuse them.
+assert.ok(mastra.listTools()?.echo && mastra.listTools()?.bookDelivery, 'tools from a 2.x server register globally');
+// The REST-facing executeTool reports a suspension instead of a completed result.
+const rest = await server.executeTool('bookDelivery', { opKey: 'rest' });
+assert.equal(rest.status, 'suspended');
+assert.deepEqual(rest.suspendPayload, { phase: 'address', message: 'Delivery address?' });
+await assert.rejects(
+  server.executeTool(
+    'bookDelivery',
+    { opKey: 'rest' },
+    { resumeData: { address: 1 }, suspendPayload: rest.suspendPayload },
+  ),
+);
+pass('2.x server registers on the shared base; executeTool distinguishes suspension from completion');
 
 // --- HTTP: self-contained modern requests, observed on the wire ---
 const seen: Array<{ method: string; headers: IncomingMessage['headers']; body: string }> = [];
@@ -83,11 +92,15 @@ pass('modern discovery: 2026-07-28 only, no initialize, no session header, no ro
 const tools = await modern.listTools();
 assert.deepEqual(tools.tools.map(t => t.name).sort(), ['bookDelivery', 'echo']);
 const echoed = await modern.callTool({ name: 'echo', arguments: { message: 'hi' } });
-assert.deepEqual(echoed.structuredContent, { echoed: 'hi', hadLegacyContext: false });
+assert.deepEqual(echoed.structuredContent, {
+  echoed: 'hi',
+  protocolVersion: '2026-07-28',
+  deprecatedElicitationThrows: true,
+});
 assert.equal(echoed.isError, false);
-pass('ordinary createTool executes without a legacy MCP context');
+pass('ordinary createTool executes with a 2026-07-28 context whose deprecated members throw');
 
-// Two keyed rounds, signed state, one counted write, duplicate completion is idempotent.
+// Two suspend rounds, signed state, one counted write, duplicate completion is idempotent.
 // Manual rounds use the SDK's documented path: `request()` + `withInputRequired()` with
 // `allowInputRequired`, so `input_required` comes back typed instead of auto-fulfilled.
 const callToolOrInputRequired = withInputRequired(specTypeSchemas.CallToolResult);
@@ -103,38 +116,38 @@ const round = (args: Record<string, unknown>, continuation?: Record<string, unkn
 
 const first = await round({ opKey: 'op-1' }, undefined, { [LOG_LEVEL_META_KEY]: 'info' });
 assert.equal(first.resultType, 'input_required');
-assert.deepEqual(Object.keys(first.inputRequests ?? {}), ['address']);
+assert.deepEqual(Object.keys(first.inputRequests ?? {}), ['input']);
 assert.equal(typeof first.requestState, 'string');
 assert.deepEqual(logs, [{ level: 'info', data: { message: 'start op-1' } }]);
 logs.length = 0;
 
 const second = await round(
   { opKey: 'op-1' },
-  { inputResponses: { address: accept({ address: '1 Main St' }) }, requestState: first.requestState },
+  { inputResponses: { input: accept({ address: '1 Main St' }) }, requestState: first.requestState },
 );
 assert.equal(second.resultType, 'input_required');
-assert.deepEqual(Object.keys(second.inputRequests ?? {}), ['confirm']);
+assert.deepEqual(Object.keys(second.inputRequests ?? {}), ['input']);
 assert.deepEqual(logs, [], 'no opt-in, no log delivery');
 
 const booked = await round(
   { opKey: 'op-1' },
-  { inputResponses: { confirm: accept({ ok: true }) }, requestState: second.requestState },
+  { inputResponses: { input: accept({ ok: true }) }, requestState: second.requestState },
   { [LOG_LEVEL_META_KEY]: 'warning' },
 );
 assert.deepEqual(booked.structuredContent, { status: 'booked', address: '1 Main St', writes: 1 });
 assert.deepEqual(logs, [], 'info log filtered below the warning opt-in');
 const again = await round(
   { opKey: 'op-1' },
-  { inputResponses: { confirm: accept({ ok: true }) }, requestState: second.requestState },
+  { inputResponses: { input: accept({ ok: true }) }, requestState: second.requestState },
 );
 assert.deepEqual(again.structuredContent, { status: 'booked', address: '1 Main St', writes: 1 });
 assert.equal(journal.writes, 1);
-pass('native input_required: two keyed rounds, per-request log opt-in and filtering, one counted write');
+pass('input_required: two suspend rounds, per-request log opt-in and filtering, one counted write');
 
 await assert.rejects(
   round(
     { opKey: 'op-1' },
-    { inputResponses: { confirm: accept({ ok: true }) }, requestState: `${second.requestState}x` },
+    { inputResponses: { input: accept({ ok: true }) }, requestState: `${second.requestState}x` },
   ),
   (error: unknown) => (error as { code?: number }).code === -32602,
 );
@@ -195,7 +208,10 @@ const mcp = new MCPClient({
   servers: {
     packed: {
       url,
-      inputRequests: async ({ key }) => (key === 'address' ? accept({ address: '2 Side St' }) : accept({ ok: true })),
+      inputRequests: async ({ params }) =>
+        params.mode === 'form' && params.message === 'Delivery address?'
+          ? accept({ address: '2 Side St' })
+          : accept({ ok: true }),
     },
   },
 });
@@ -205,7 +221,7 @@ const result = await mastraTools.packed_bookDelivery.execute!({ opKey: 'op-2' },
 assert.deepEqual(result, { status: 'booked', address: '2 Side St', writes: 2 });
 assert.ok(!('elicitation' in mcp) && !('sessionIds' in mcp));
 await mcp.disconnect();
-pass('@mastra/mcp client fulfils keyed input rounds end to end');
+pass('@mastra/mcp client answers input rounds end to end');
 
 await modern.close();
 await server.close();

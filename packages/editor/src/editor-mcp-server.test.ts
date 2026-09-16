@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { Mastra } from '@mastra/core';
-import { MCPServerBaseV2 } from '@mastra/core/mcp';
+import { MCPServerBase } from '@mastra/core/mcp';
 import { createTool } from '@mastra/core/tools';
 import { MCPServer } from '@mastra/mcp';
 import { LibSQLStore } from '@mastra/libsql';
@@ -93,7 +93,7 @@ describe('EditorMCPServerNamespace', () => {
       });
 
       expect(server).toBeDefined();
-      expect(server).toBeInstanceOf(MCPServerBaseV2);
+      expect(server).toBeInstanceOf(MCPServerBase);
       expect(server.id).toBe('my-server');
       expect(server.name).toBe('My Server');
     });
@@ -371,7 +371,7 @@ describe('EditorMCPServerNamespace', () => {
       expect(calcResult).toEqual({ result: 30 });
     });
 
-    it('should produce a real MCPServer instance (not just MCPServerBaseV2)', async () => {
+    it('should produce a real MCPServer instance (not just MCPServerBase)', async () => {
       const server = await editor.mcpServer.create({
         id: 'real-instance',
         name: 'Real MCPServer',
@@ -379,9 +379,9 @@ describe('EditorMCPServerNamespace', () => {
         tools: { getWeather: {} },
       });
 
-      // The hydrated server is a real MCPServer, not just MCPServerBaseV2
+      // The hydrated server is a real MCPServer, not just MCPServerBase
       expect(server).toBeInstanceOf(MCPServer);
-      expect(server).toBeInstanceOf(MCPServerBaseV2);
+      expect(server).toBeInstanceOf(MCPServerBase);
     });
   });
 

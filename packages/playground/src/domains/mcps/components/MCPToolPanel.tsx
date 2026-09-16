@@ -1,4 +1,3 @@
-import { MastraClientError } from '@mastra/client-js';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -29,24 +28,8 @@ function getAppResourceUri(meta?: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
-/**
- * A native MCP tool answers with protocol continuation (`input_required`) that the
- * REST route cannot carry, so the server refuses it with 422; say so instead of
- * showing an empty result.
- */
+/** Execution failures are shown in the result panel instead of leaving it empty. */
 function describeExecutionError(error: unknown): string {
-  if (error instanceof MastraClientError && error.status === 422) {
-    return JSON.stringify(
-      {
-        unsupported: 'native-interaction',
-        message:
-          'This tool uses native MCP input rounds and cannot run from Studio. Connect an MCP client that answers input requests to run it.',
-        detail: error.message,
-      },
-      null,
-      2,
-    );
-  }
   return JSON.stringify({ error: error instanceof Error ? error.message : String(error) }, null, 2);
 }
 
