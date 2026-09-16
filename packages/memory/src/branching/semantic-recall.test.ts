@@ -1,4 +1,5 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
+import { MessageList, type MastraDBMessage } from '@mastra/core/agent';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraVector, QueryResult } from '@mastra/core/vector';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -112,6 +113,51 @@ describe('branch semantic recall', () => {
       $and: [{ thread_id: { $in: ['root', child.thread.id] } }, { project: { $eq: 'kept' } }],
     });
     expect(vector.upsert).not.toHaveBeenCalled();
+  });
+
+  it('keeps auto-attached model-facing semantic recall on the reachable branch path', async () => {
+    const ranked: QueryResult[] = [];
+    query.mockImplementation(async ({ topK }: { topK: number }) => ranked.slice(0, topK));
+    const { memory } = createMemory(query);
+    await memory.createThread({ threadId: 'root', resourceId });
+    await memory.saveMessages({
+      messages: [message('root-a', 'root', 1), message('root-b', 'root', 2), message('root-post', 'root', 3)],
+    });
+    const child = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'root-b' });
+    const sibling = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'root-a' });
+    await memory.saveMessages({
+      messages: [message('child-tail', child.thread.id, 4), message('sibling-tail', sibling.thread.id, 5)],
+    });
+    ranked.push(
+      hit('v-parent-post', 'root-post', 'root', 0.99),
+      hit('v-sibling', 'sibling-tail', sibling.thread.id, 0.98),
+      hit('v-root-a', 'root-a', 'root', 0.8),
+      hit('v-child', 'child-tail', child.thread.id, 0.7),
+    );
+
+    const processor = (await memory.getInputProcessors()).find(candidate => candidate.id === 'semantic-recall');
+    expect(processor).toBeDefined();
+
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', {
+      thread: child.thread,
+      resourceId,
+    });
+    const input = message('current-query', child.thread.id, 6);
+    const messageList = new MessageList().add([input], 'input');
+    const result = await processor!.processInput({
+      messages: [input],
+      messageList,
+      abort: vi.fn() as never,
+      requestContext,
+    });
+    const rendered = JSON.stringify(Array.isArray(result) ? result : result.get.all.aiV4.prompt());
+
+    expect(rendered).toContain('root-a');
+    expect(rendered).toContain('child-tail');
+    expect(rendered).not.toContain('root-post');
+    expect(rendered).not.toContain('sibling-tail');
+    expect(query.mock.calls.map(call => call[0].topK)).toEqual([2, 4]);
   });
 
   it('excludes child-tail vectors when recalling from a root with descendants', async () => {
