@@ -58,7 +58,7 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
               <CopyButton content={instructions} tooltip="Copy system prompt" variant="ghost" size="icon-sm" />
             </div>
             <TabContent value="read" className="overflow-visible py-0">
-              <MarkdownRenderer codeBlockVariant="embedded">{instructions}</MarkdownRenderer>
+              <MarkdownRenderer>{instructions}</MarkdownRenderer>
             </TabContent>
             <TabContent value="source" className="overflow-visible py-0">
               <Code

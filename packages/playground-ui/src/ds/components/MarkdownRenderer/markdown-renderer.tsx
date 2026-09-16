@@ -10,7 +10,6 @@ import { splitBlocks } from './blocks';
 import { MarkdownTable } from './markdown-table';
 import { remarkTableMarkdown } from './table-markdown';
 import { useSettledWords } from './use-settled';
-import { Code } from '@/ds/components/Code';
 import { CodeBlock } from '@/ds/components/CodeBlock';
 import { cn } from '@/lib/utils';
 
@@ -26,7 +25,6 @@ export interface MarkdownRendererProps {
   streaming?: boolean;
   /** Opt in to table copy/download controls; disabled while this text is streaming. */
   tableActions?: boolean;
-  codeBlockVariant?: 'default' | 'embedded';
 }
 
 /**
@@ -54,12 +52,11 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   externalLinkTarget = 'tab',
   streaming = false,
   tableActions = false,
-  codeBlockVariant = 'default',
 }: MarkdownRendererProps) {
   const shown = decodeEscapedNewlines(children);
   const blocks = useMemo(() => splitBlocks(shown), [shown]);
   const last = blocks.length - 1;
-  const components = (tableActions ? TABLE_COMPONENTS : DEFAULT_COMPONENTS)[codeBlockVariant][externalLinkTarget];
+  const components = (tableActions ? TABLE_COMPONENTS : DEFAULT_COMPONENTS)[externalLinkTarget];
 
   const spans = wordSpans(blocks);
   const settled = useSettledWords(spans.at(-1)?.end ?? 0, streaming);
@@ -169,26 +166,15 @@ function fencedCode(node: MarkdownNode | undefined): { code: string; language?: 
   return { code: code.replace(/\n$/, ''), language: languageOf(child) };
 }
 
-interface MarkdownCodeBlockProps {
+function MarkdownCodeBlock({
+  node,
+  children,
+  className,
+}: {
   node?: MarkdownNode;
   children?: ReactNode;
   className?: string;
-}
-
-function EmbeddedMarkdownCodeBlock({ node, children, className }: MarkdownCodeBlockProps) {
-  const fenced = fencedCode(node);
-  if (!fenced) return <pre className={className}>{children}</pre>;
-
-  return (
-    <Code
-      code={fenced.code}
-      lang={fenced.language}
-      className={cn('my-3 whitespace-pre-wrap break-words font-mono text-ui-smd', className)}
-    />
-  );
-}
-
-function MarkdownCodeBlock({ node, children, className }: MarkdownCodeBlockProps) {
+}) {
   const fenced = fencedCode(node);
   if (!fenced) return <pre className={className}>{children}</pre>;
 
@@ -258,20 +244,8 @@ const WINDOW_COMPONENTS: Components = {
   a: markdownLink('window'),
 };
 
-const DEFAULT_COMPONENTS = {
-  default: { tab: COMPONENTS, window: WINDOW_COMPONENTS },
-  embedded: {
-    tab: { ...COMPONENTS, pre: EmbeddedMarkdownCodeBlock },
-    window: { ...WINDOW_COMPONENTS, pre: EmbeddedMarkdownCodeBlock },
-  },
-};
+const DEFAULT_COMPONENTS = { tab: COMPONENTS, window: WINDOW_COMPONENTS };
 const TABLE_COMPONENTS = {
-  default: {
-    tab: { ...DEFAULT_COMPONENTS.default.tab, table: MarkdownTable },
-    window: { ...DEFAULT_COMPONENTS.default.window, table: MarkdownTable },
-  },
-  embedded: {
-    tab: { ...DEFAULT_COMPONENTS.embedded.tab, table: MarkdownTable },
-    window: { ...DEFAULT_COMPONENTS.embedded.window, table: MarkdownTable },
-  },
+  tab: { ...COMPONENTS, table: MarkdownTable },
+  window: { ...WINDOW_COMPONENTS, table: MarkdownTable },
 };
