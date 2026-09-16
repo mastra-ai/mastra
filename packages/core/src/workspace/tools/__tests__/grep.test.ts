@@ -838,6 +838,22 @@ describe('workspace_grep', () => {
       expect(result).not.toContain('target path not found');
     });
 
+    it('treats an ENOTDIR target resolution failure as a missing target, not a read error', async () => {
+      const filesystem = new FailingLocalFilesystem({ basePath: tempDir });
+      filesystem.errorCode = 'ENOTDIR';
+      filesystem.failStatFor = p => p.endsWith('missing') || p === 'file.ts/missing';
+      const workspace = new Workspace({ filesystem });
+      const tools = await createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
+        { pattern: 'needle', path: 'file.ts/missing' },
+        { workspace },
+      );
+
+      expect(result).toContain('target path not found');
+      expect(result).not.toContain('path skipped: read error');
+    });
+
     it('reports a read error when a subdirectory cannot be listed but still searches the rest', async () => {
       await fs.mkdir(path.join(tempDir, 'good'), { recursive: true });
       await fs.mkdir(path.join(tempDir, 'bad'), { recursive: true });
@@ -890,13 +906,10 @@ describe('workspace_grep', () => {
         const workspace = new Workspace({
           filesystem: new LocalFilesystem({ basePath: tempDir }),
         });
-        const tools = await createWorkspaceTools(workspace);
+        const tools = await createWorkspaceTools(workspace, undefined, { grep: { strict: true } });
 
         await expect(
-          tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
-            { pattern: 'needle', path: 'does-not-exist', strict: true },
-            { workspace },
-          ),
+          tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'needle', path: 'does-not-exist' }, { workspace }),
         ).rejects.toThrow();
       });
 
@@ -907,10 +920,10 @@ describe('workspace_grep', () => {
         const filesystem = new FailingLocalFilesystem({ basePath: tempDir });
         filesystem.failReaddirFor = p => p.endsWith('bad');
         const workspace = new Workspace({ filesystem });
-        const tools = await createWorkspaceTools(workspace);
+        const tools = await createWorkspaceTools(workspace, undefined, { grep: { strict: true } });
 
         await expect(
-          tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'needle', strict: true }, { workspace }),
+          tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'needle' }, { workspace }),
         ).rejects.toThrow();
       });
 
@@ -920,10 +933,10 @@ describe('workspace_grep', () => {
         const filesystem = new FailingLocalFilesystem({ basePath: tempDir });
         filesystem.failReadFileFor = p => p.endsWith('a.ts');
         const workspace = new Workspace({ filesystem });
-        const tools = await createWorkspaceTools(workspace);
+        const tools = await createWorkspaceTools(workspace, undefined, { grep: { strict: true } });
 
         await expect(
-          tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'needle', strict: true }, { workspace }),
+          tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'needle' }, { workspace }),
         ).rejects.toThrow();
       });
     });
