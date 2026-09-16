@@ -5,6 +5,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { RequestContextProvider, useRequestContext } from '@mastra/playground-ui/domains/request-context';
 import { RunOptionsPopover } from '@mastra/playground-ui/domains/run-options';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import type { ReactNode } from 'react';
 import type { ZodType } from 'zod';
 import { ToolInformation } from '@/domains/tools/components/ToolInformation';
 import { DynamicForm } from '@/lib/form/dynamic-form';
@@ -22,6 +23,7 @@ interface ToolExecutorProps {
   requestContextSchema?: string;
   /** Owner of the persisted request context, e.g. `tool:<toolId>` or `agent:<agentId>`. */
   entityKey: string;
+  beforeContent?: ReactNode;
 }
 
 /** Inner component that can access the entity request context */
@@ -81,9 +83,10 @@ const ToolExecutorContent = ({
   );
 };
 
-const ToolExecutor = ({ executionResult: result, entityKey, ...props }: ToolExecutorProps) => {
+const ToolExecutor = ({ executionResult: result, entityKey, beforeContent, ...props }: ToolExecutorProps) => {
   return (
     <RequestContextProvider key={entityKey} entityKey={entityKey}>
+      {beforeContent}
       <ToolExecutorContent {...props} result={result} />
     </RequestContextProvider>
   );

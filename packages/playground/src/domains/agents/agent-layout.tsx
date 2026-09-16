@@ -30,6 +30,17 @@ const AgentShortcuts = ({ agentId }: { agentId: string }) => {
 
 export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const { agentId } = useParams();
+
+  return (
+    <TracingSettingsProvider entityId={agentId!} entityType="agent">
+      <RequestContextProvider key={agentId} entityKey={`agent:${agentId}`}>
+        <AgentLayoutContent agentId={agentId!}>{children}</AgentLayoutContent>
+      </RequestContextProvider>
+    </TracingSettingsProvider>
+  );
+};
+
+const AgentLayoutContent = ({ agentId, children }: { agentId: string; children: React.ReactNode }) => {
   const location = useLocation();
   const { isCmsAvailable } = useIsCmsAvailable();
   const { hasObservability } = useHasObservability();
@@ -77,18 +88,14 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   );
 
   return (
-    <TracingSettingsProvider entityId={agentId!} entityType="agent">
-      <RequestContextProvider key={agentId} entityKey={`agent:${agentId}`}>
-        <PlaygroundModelProvider
-          key={`${agentId}:${defaultProvider}/${defaultModel}`}
-          defaultProvider={defaultProvider}
-          defaultModel={defaultModel}
-        >
-          <GenerationProvider>
-            <ReviewQueueProvider>{content}</ReviewQueueProvider>
-          </GenerationProvider>
-        </PlaygroundModelProvider>
-      </RequestContextProvider>
-    </TracingSettingsProvider>
+    <PlaygroundModelProvider
+      key={`${agentId}:${defaultProvider}/${defaultModel}`}
+      defaultProvider={defaultProvider}
+      defaultModel={defaultModel}
+    >
+      <GenerationProvider>
+        <ReviewQueueProvider>{content}</ReviewQueueProvider>
+      </GenerationProvider>
+    </PlaygroundModelProvider>
   );
 };

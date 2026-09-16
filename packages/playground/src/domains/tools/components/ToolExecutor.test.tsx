@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { useRequestContext } from '@mastra/playground-ui/domains/request-context';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ZodType } from 'zod';
@@ -25,7 +26,46 @@ function renderToolExecutor(zodInputSchema: ZodType = z.object({}), handleExecut
   );
 }
 
+function ContextSlot() {
+  const { requestContext } = useRequestContext();
+  return <output>{JSON.stringify(requestContext)}</output>;
+}
+
+function SlotExecutor({ entityKey }: { entityKey: string }) {
+  return (
+    <TooltipProvider>
+      <ToolExecutor
+        executionResult={undefined}
+        handleExecuteTool={vi.fn()}
+        isExecutingTool={false}
+        toolDescription="Context slot"
+        toolId="test-tool"
+        entityKey={entityKey}
+        zodInputSchema={z.object({})}
+        beforeContent={<ContextSlot />}
+      />
+    </TooltipProvider>
+  );
+}
+
 describe('ToolExecutor', () => {
+  describe('when a context consumer is rendered before the form', () => {
+    it('shares the persisted entity context', () => {
+      localStorage.setItem('mastra:request-context:tool:a', JSON.stringify({ locale: 'fr' }));
+      render(<SlotExecutor entityKey="tool:a" />);
+      expect(screen.getByRole('status').textContent).toBe('{"locale":"fr"}');
+    });
+  });
+
+  describe('when the entity key changes', () => {
+    it('loads the new entity context in the slot', () => {
+      localStorage.setItem('mastra:request-context:tool:a', JSON.stringify({ locale: 'fr' }));
+      localStorage.setItem('mastra:request-context:tool:b', JSON.stringify({ locale: 'en' }));
+      const { rerender } = render(<SlotExecutor entityKey="tool:a" />);
+      rerender(<SlotExecutor entityKey="tool:b" />);
+      expect(screen.getByRole('status').textContent).toBe('{"locale":"en"}');
+    });
+  });
   describe('when the tool has no input fields or request context schema', () => {
     it('still renders the run options trigger', () => {
       renderToolExecutor();

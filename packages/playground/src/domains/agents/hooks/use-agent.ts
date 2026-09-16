@@ -1,6 +1,6 @@
 import { useOptionalRequestContext } from '@mastra/playground-ui/domains/request-context';
 import { useMastraClient } from '@mastra/react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 export const useAgent = (agentId?: string) => {
   const client = useMastraClient();
@@ -11,9 +11,9 @@ export const useAgent = (agentId?: string) => {
     queryFn: () => (agentId ? client.getAgent(agentId).details(requestContext) : null),
     retry: false,
     enabled: Boolean(agentId),
-    // The key changes whenever the per-entity request context is saved; keep the
-    // previous agent so the page doesn't drop into its loading skeleton (which
-    // would remount the chat and close the run options popover).
-    placeholderData: keepPreviousData,
+    // Preserve the chat and popover during context refetches, but never show
+    // another agent's details while navigating.
+    placeholderData: (previousData, previousQuery) =>
+      agentId && previousQuery?.queryKey[1] === agentId ? previousData : undefined,
   });
 };
