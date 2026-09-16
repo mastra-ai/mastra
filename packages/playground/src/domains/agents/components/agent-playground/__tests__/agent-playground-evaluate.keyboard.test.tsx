@@ -7,7 +7,6 @@ import { describe, expect, it } from 'vitest';
 
 import { AgentEditFormProvider } from '../../../context/agent-edit-form-context';
 import { PlaygroundModelProvider } from '../../../context/playground-model-context';
-import { ReviewQueueProvider } from '../../../context/review-queue-context';
 import type { AgentFormValues } from '../../agent-edit-page/utils/form-validation';
 import { AgentPlaygroundEvaluate } from '../agent-playground-evaluate';
 import { GenerationProvider } from '@/domains/datasets/context/generation-context';
@@ -69,9 +68,7 @@ function Harness() {
     <AgentEditFormProvider form={form} mode="edit" isSubmitting={false} handlePublish={async () => {}}>
       <PlaygroundModelProvider>
         <GenerationProvider>
-          <ReviewQueueProvider>
-            <AgentPlaygroundEvaluate agentId="chef-agent" />
-          </ReviewQueueProvider>
+          <AgentPlaygroundEvaluate agentId="chef-agent" />
         </GenerationProvider>
       </PlaygroundModelProvider>
     </AgentEditFormProvider>
@@ -90,6 +87,9 @@ const setupHandlers = (experiments: DatasetExperiment[] = []) => {
         pagination: { total: datasetExperiments.length, page: 0, perPage: 100, hasMore: false },
       });
     }),
+    http.get('*/api/experiments', () =>
+      HttpResponse.json({ experiments: [], pagination: { total: 0, page: 0, perPage: 100, hasMore: false } }),
+    ),
     http.get('*/api/scores/scorers', () => HttpResponse.json({})),
   );
 };
@@ -99,7 +99,7 @@ describe('Evaluate navigation', () => {
     it('shows the review queue empty state', async () => {
       setupHandlers();
       renderWithProviders(<Harness />, { router: { initialEntries: ['/agents/chef-agent/evaluate?tab=review'] } });
-      expect(await screen.findByText('No items to review yet')).not.toBeNull();
+      expect(await screen.findByText('No items to review')).not.toBeNull();
       expect(screen.getByRole('tab', { name: 'Review' }).getAttribute('aria-selected')).toBe('true');
     });
   });
