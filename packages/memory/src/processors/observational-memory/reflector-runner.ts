@@ -290,10 +290,8 @@ export class ReflectorRunner {
       instructions: buildReflectorSystemPrompt(this.reflectionConfig.instruction, extractors),
       model,
       ...(memory ? { memory } : {}),
+      ...(this.mastra ? { mastra: this.mastra } : {}),
     });
-    if (this.mastra) {
-      agent.__registerMastra(this.mastra);
-    }
     return agent;
   }
 

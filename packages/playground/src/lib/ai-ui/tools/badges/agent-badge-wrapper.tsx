@@ -1,4 +1,5 @@
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
 import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
 import { LoadingBadge } from '@mastra/playground-ui/domains/chat/components/loading-badge';
 import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
@@ -27,6 +28,8 @@ interface AgentBadgeWrapperProps extends Omit<ToolApprovalButtonsProps, 'toolCal
   suspendPayload?: any;
   toolCalled?: boolean;
   isComplete?: boolean;
+  status?: ToolCallStatus;
+  errorText?: string;
 }
 
 export const AgentBadgeWrapper = ({
@@ -40,6 +43,8 @@ export const AgentBadgeWrapper = ({
   suspendPayload,
   toolCalled,
   isComplete,
+  status,
+  errorText,
 }: AgentBadgeWrapperProps) => {
   const shouldFetchAgentMessages = Boolean(
     result?.subAgentThreadId && !result.text && !result.subAgentToolResults?.length,
@@ -99,6 +104,8 @@ export const AgentBadgeWrapper = ({
       suspendPayload={suspendPayload}
       toolCalled={toolCalled}
       isComplete={isComplete}
+      status={status}
+      errorText={errorText}
     />
   );
 };

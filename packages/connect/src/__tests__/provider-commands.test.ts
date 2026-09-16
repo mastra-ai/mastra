@@ -5,6 +5,8 @@ import { resolve } from 'node:path';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { TEMPLATE_REPO } from '../../scripts/templates-config.js';
+
 const actionTemplate = `import { z } from 'zod';
 import { createAction } from 'nango';
 
@@ -21,6 +23,122 @@ const action = createAction({
     const response = await nango.post({ endpoint: '/echo', data: input });
     return OutputSchema.parse(response.data);
   },
+});
+
+export default action;
+`;
+
+const imageActionTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ prompt: z.string() });
+const OutputSchema = z.object({
+  data: z.array(z.object({
+    url: z.string().optional(),
+    b64_json: z.string().optional(),
+    revised_prompt: z.string().optional(),
+  })),
+});
+
+const action = createAction({
+  description: 'Generate an image.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const response = await nango.post({ endpoint: '/images', data: input });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`;
+
+const proxyConfigurationTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+import type { ProxyConfiguration } from 'nango';
+
+const InputSchema = z.object({ value: z.string() });
+const OutputSchema = z.object({ value: z.string() });
+
+const action = createAction({
+  description: 'Echo a value with a typed proxy request.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const config: ProxyConfiguration = { endpoint: '/echo', data: input };
+    const response = await nango.post(config);
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`;
+
+const unsupportedResponseTypeTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ value: z.string() });
+const OutputSchema = z.object({ value: z.string() });
+
+const action = createAction({
+  description: 'Fetch a binary value.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const response = await nango.post({ endpoint: '/binary', data: input, responseType: 'arraybuffer' });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`;
+
+const connectionContextTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ value: z.string() });
+const OutputSchema = z.object({ value: z.string() });
+
+const action = createAction({
+  description: 'Use connection configuration and metadata.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const connection = await nango.getConnection();
+    const metadata = await nango.getMetadata();
+    const response = await nango.post({
+      endpoint: '/echo',
+      baseUrlOverride: connection.connection_config.projectUrl,
+      data: { ...input, metadata },
+    });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`;
+
+const noProxyCallTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ value: z.string() });
+const OutputSchema = z.object({ value: z.string() });
+
+const action = createAction({
+  description: 'Return a local value.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (_nango, input): Promise<z.infer<typeof OutputSchema>> => input,
 });
 
 export default action;
@@ -43,7 +161,17 @@ describe('maintainer provider commands', () => {
       const actionDir = resolve(packageRoot, '.templates', 'integrations', providerId, 'actions');
       mkdirSync(actionDir, { recursive: true });
       writeFileSync(resolve(actionDir, 'echo.ts'), actionTemplate);
+      if (providerId === 'second-provider') {
+        writeFileSync(resolve(actionDir, 'proxy-configuration.ts'), proxyConfigurationTemplate);
+        writeFileSync(resolve(actionDir, 'connection-context.ts'), connectionContextTemplate);
+        writeFileSync(resolve(actionDir, 'unsupported-no-proxy.ts'), noProxyCallTemplate);
+        writeFileSync(resolve(actionDir, 'unsupported-response-type.ts'), unsupportedResponseTypeTemplate);
+      }
     }
+    const openaiActionDir = resolve(packageRoot, '.templates', 'integrations', 'openai', 'actions');
+    mkdirSync(openaiActionDir, { recursive: true });
+    writeFileSync(resolve(openaiActionDir, 'create-image.ts'), imageActionTemplate);
+
     execFileSync('git', ['init', '-q'], { cwd: resolve(packageRoot, '.templates') });
     execFileSync('git', ['add', '.'], { cwd: resolve(packageRoot, '.templates') });
     execFileSync(
@@ -101,7 +229,13 @@ describe('maintainer provider commands', () => {
     const manifest = JSON.parse(
       readFileSync(resolve(packageRoot, 'src/providers/first-provider/.manifest.json'), 'utf8'),
     ) as { providerId: string; localId: string; toolCount: number };
-    expect(manifest).toMatchObject({ providerId: 'first-provider', localId: 'first-provider', toolCount: 1 });
+    expect(manifest).toMatchObject({
+      providerId: 'first-provider',
+      localId: 'first-provider',
+      toolCount: 1,
+      templateSha,
+      templateRepo: TEMPLATE_REPO,
+    });
     const providerIndex = readFileSync(resolve(packageRoot, 'src/providers/index.ts'), 'utf8');
     expect(providerIndex).toContain("import { firstProviderProvider } from './first-provider/index.js';");
     expect(providerIndex).toMatch(
@@ -158,13 +292,67 @@ export default createAction({
     ]);
   });
 
+  it('adds model-native image output to the OpenAI image generation tool', async () => {
+    await addProvider({ providerId: 'openai', localId: 'openai', yes: true, expectedTemplateSha: templateSha });
+
+    const generatedTool = readFileSync(resolve(packageRoot, 'src/providers/openai/tools/create-image.ts'), 'utf8');
+    expect(generatedTool).toMatch(
+      /import \{ toImageGenerationModelOutput \} from ["']\.\.\/\.\.\/\.\.\/runtime\/model-output\.js["'];/,
+    );
+    expect(generatedTool).toContain('toModelOutput: toImageGenerationModelOutput,');
+  });
+
   it('lists available providers and searches by installed alias', async () => {
     await addProvider({ providerId: 'first-provider', localId: 'custom', yes: true, expectedTemplateSha: templateSha });
 
     expect(listProviders({ installedOnly: false, search: 'custom' })).toEqual([
       'first-provider (1 action templates) [installed as custom]',
     ]);
-    expect(listProviders({ installedOnly: false, search: 'second' })).toEqual(['second-provider (1 action templates)']);
+    expect(listProviders({ installedOnly: false, search: 'second' })).toEqual(['second-provider (5 action templates)']);
+  });
+
+  it('rewrites proxy request types and skips actions the platform proxy cannot execute', async () => {
+    await addProvider({
+      providerId: 'second-provider',
+      localId: 'second-provider',
+      yes: true,
+      expectedTemplateSha: templateSha,
+    });
+
+    const generatedTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/proxy-configuration.ts'),
+      'utf8',
+    );
+    expect(generatedTool).toMatch(/import type \{[\s\S]*PlatformProxy,[\s\S]*PlatformProxyRequest,[\s\S]*\} from/);
+    expect(generatedTool).toContain('const config: PlatformProxyRequest =');
+    expect(generatedTool).not.toContain('ProxyConfiguration');
+
+    const connectionContextTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/connection-context.ts'),
+      'utf8',
+    );
+    expect(connectionContextTool).toContain('await platformProxy.getConnection()');
+    expect(connectionContextTool).toContain('await platformProxy.getMetadata()');
+    expect(connectionContextTool).toContain('baseUrlOverride: connection.connection_config.projectUrl');
+    expect(existsSync(resolve(packageRoot, 'src/providers/second-provider/tools/unsupported-no-proxy.ts'))).toBe(false);
+    expect(existsSync(resolve(packageRoot, 'src/providers/second-provider/tools/unsupported-response-type.ts'))).toBe(
+      false,
+    );
+
+    const manifest = JSON.parse(
+      readFileSync(resolve(packageRoot, 'src/providers/second-provider/.manifest.json'), 'utf8'),
+    ) as { toolCount: number; skippedActions: { action: string; reason: string }[] };
+    expect(manifest.toolCount).toBe(3);
+    expect(manifest.skippedActions).toEqual([
+      {
+        action: 'unsupported-no-proxy',
+        reason: 'exec does not call the provider proxy',
+      },
+      {
+        action: 'unsupported-response-type',
+        reason: 'exec uses unsupported proxy options: responseType',
+      },
+    ]);
   });
 
   it('regenerates an unmodified installed provider after confirmation', async () => {
@@ -217,7 +405,7 @@ export default createAction({
     expect(providerIndex).not.toContain('.stale.generate-123');
     expect(listProviders({ installedOnly: true })).toEqual([
       'local <- first-provider (1 tools, 0 skipped)',
-      'other <- second-provider (1 tools, 0 skipped)',
+      'other <- second-provider (3 tools, 2 skipped)',
     ]);
   });
 
