@@ -8,6 +8,14 @@ import type {
   ListMemoryThreadMessagesResponse,
   CloneMemoryThreadParams,
   CloneMemoryThreadResponse,
+  BranchMemoryThreadParams,
+  BranchMemoryThreadResponse,
+  GetMemoryThreadParentParams,
+  GetMemoryThreadParentResponse,
+  ListMemoryThreadBranchesParams,
+  ListMemoryThreadBranchesResponse,
+  GetMemoryThreadBranchHistoryParams,
+  GetMemoryThreadBranchHistoryResponse,
   TransferMemoryThreadParams,
 } from '../types';
 
@@ -168,6 +176,53 @@ export class MemoryThread extends BaseResource {
       method: 'POST',
       body,
     });
+  }
+
+  /**
+   * Creates a shared-history child thread at an inclusive message fork point.
+   */
+  branch(params: BranchMemoryThreadParams): Promise<BranchMemoryThreadResponse> {
+    const agentId = this.requireAgentId(params.agentId, 'branch');
+    const { agentId: _omitAgentId, requestContext, ...body } = params;
+    const contextParam = requestContextQueryString(requestContext, '&');
+    return this.request(`/memory/threads/${this.threadId}/branch?agentId=${agentId}${contextParam}`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  /**
+   * Retrieves this thread's direct parent, or `null` when this thread is a root.
+   */
+  getParent(params: GetMemoryThreadParentParams = {}): Promise<GetMemoryThreadParentResponse> {
+    const agentIdParam = this.getAgentIdQueryParam('?', params.agentId);
+    const contextParam = requestContextQueryString(params.requestContext, agentIdParam ? '&' : '?');
+    return this.request(`/memory/threads/${this.threadId}/parent${agentIdParam}${contextParam}`);
+  }
+
+  /**
+   * Lists this thread's direct shared-history children.
+   */
+  listBranches(params: ListMemoryThreadBranchesParams = {}): Promise<ListMemoryThreadBranchesResponse> {
+    const agentId = params.agentId ?? this.agentId;
+    const queryParams = new URLSearchParams();
+    if (agentId) queryParams.set('agentId', agentId);
+    if (params.page !== undefined) queryParams.set('page', String(params.page));
+    if (params.perPage !== undefined) queryParams.set('perPage', String(params.perPage));
+    const queryString = queryParams.toString();
+    const contextParam = requestContextQueryString(params.requestContext, queryString ? '&' : '?');
+    return this.request(
+      `/memory/threads/${this.threadId}/branches${queryString ? `?${queryString}` : ''}${contextParam}`,
+    );
+  }
+
+  /**
+   * Retrieves the inclusive root-to-current shared-history lineage.
+   */
+  getBranchHistory(params: GetMemoryThreadBranchHistoryParams = {}): Promise<GetMemoryThreadBranchHistoryResponse> {
+    const agentIdParam = this.getAgentIdQueryParam('?', params.agentId);
+    const contextParam = requestContextQueryString(params.requestContext, agentIdParam ? '&' : '?');
+    return this.request(`/memory/threads/${this.threadId}/branch-history${agentIdParam}${contextParam}`);
   }
 
   /**
