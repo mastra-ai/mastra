@@ -72,7 +72,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
 
   beforeAll(async () => {
     server = new MCPServer({
-      name: 'Modern Test Server',
+      name: 'HTTP Test Server',
       version: '1.0.0',
       cacheHints: { 'tools/list': { ttlMs: 60_000, cacheScope: 'private' } },
       tools: makeTools(),

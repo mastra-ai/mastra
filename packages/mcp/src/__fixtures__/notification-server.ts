@@ -32,7 +32,7 @@ const askName = createTool({
 });
 
 server = new MCPServer({
-  name: 'Modern Era Notification Server',
+  name: 'Notification Server',
   version: '1.0.0',
   tools: { triggerToolListChanged, askName },
   requestState: { key: 'fixture-key-fixture-key-fixture-key-1234' },

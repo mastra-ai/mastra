@@ -5329,6 +5329,9 @@ importers:
       '@mendable/firecrawl-js':
         specifier: ^1.29.3
         version: 1.29.3(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
+      '@modelcontextprotocol/conformance':
+        specifier: 0.2.0-alpha.11
+        version: 0.2.0-alpha.11(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -16073,6 +16076,10 @@ packages:
   '@modelcontextprotocol/client@2.0.0':
     resolution: {integrity: sha512-8f1OghQ2rjzIOfqgUCP+8GiUWqRs89njoWLNqAe8kWmDePv3s1fZXseej+QXemssEuuOvLLmLO/kqM3IQHtISw==}
     engines: {node: '>=20'}
+
+  '@modelcontextprotocol/conformance@0.2.0-alpha.11':
+    resolution: {integrity: sha512-imPK9tx5gQsL6ZKQq4MrsyDYfSaIwpRmX6+ogjbeAXs9LGvxkBxWcY7KcS7TvwaBk/ZiVWl6b/naF4q83UwDRA==}
+    hasBin: true
 
   '@modelcontextprotocol/core@2.0.0':
     resolution: {integrity: sha512-pJCEwGG7Lfr/+PQp9ZTwKXNeO5wzbfKL7H3MYpCorM4oFBoQrdjnBgEoqG+RjhsvS1FKrDbKux+M1HhlnGWqcA==}
@@ -40776,6 +40783,23 @@ snapshots:
       pkce-challenge: 5.0.0
       zod: 4.6.5
 
+  '@modelcontextprotocol/conformance@0.2.0-alpha.11(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)':
+    dependencies:
+      '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
+      '@octokit/rest': 22.0.1
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      commander: 14.0.3
+      eventsource-parser: 3.0.8
+      express: 5.2.1(supports-color@10.2.2)
+      jose: 6.2.12
+      undici: 7.29.0
+      yaml: 2.9.0
+      zod: 4.6.5
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - supports-color
+
   '@modelcontextprotocol/core@2.0.0':
     dependencies:
       zod: 4.6.5
@@ -41382,7 +41406,7 @@ snapshots:
       debug: 4.4.3(supports-color@10.2.2)
       openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.78)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(ws@8.21.0(bufferutil@4.1.0))(zod@4.6.5)
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
+      '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
       zod: 4.6.5
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-node'

@@ -2281,7 +2281,7 @@ describe('MastraMCPClient fetch with requestContext', () => {
     });
 
     await client.connect();
-    await client.listen({ toolsListChanged: true });
+    await client.setToolListChangedNotificationHandler(() => {});
 
     // Only the long-lived subscriptions/listen request is detached from the active span.
     const listenCalls = fetchSpy.mock.calls.filter(

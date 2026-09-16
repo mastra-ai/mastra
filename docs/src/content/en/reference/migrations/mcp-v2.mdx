@@ -122,19 +122,15 @@ On the client, `enableServerLogs` (default `true`) attaches the metadata key to 
   },
 ```
 
-### Resource updates arrive through `subscriptions.listen`
+### Resource subscriptions keep their API and ride one listen stream
 
-`resources.subscribe` and `resources.unsubscribe` are replaced by a single `subscriptions/listen` stream that carries list-changed and resource-updated notifications. Register handlers first, then open the stream with the filter you need. Close the returned subscription to stop.
+`resources.subscribe` and `resources.unsubscribe` keep their signatures. Under the hood the client carries every subscription and list-changed handler on a single `subscriptions/listen` stream per server, replaces the stream when the set changes, and reopens it after a reconnect. Register handlers before subscribing so nothing is missed. A subscription the server declines rejects and leaves earlier subscriptions in place.
 
-```diff
-  await mcp.resources.onUpdated('weather', ({ uri }) => refresh(uri));
-- await mcp.resources.subscribe('weather', 'weather://forecast');
-+ const subscription = await mcp.subscriptions.listen('weather', {
-+   resourceSubscriptions: ['weather://forecast'],
-+ });
-  // later
-- await mcp.resources.unsubscribe('weather', 'weather://forecast');
-+ await subscription.close();
+```ts
+await mcp.resources.onUpdated('weather', ({ uri }) => refresh(uri));
+await mcp.resources.subscribe('weather', 'weather://forecast');
+// later
+await mcp.resources.unsubscribe('weather', 'weather://forecast');
 ```
 
 ### Client input handlers are configured per server
@@ -157,7 +153,7 @@ The client answered server elicitation with `mcp.elicitation.onRequest(serverNam
 
 The 1.x client accepted `protocolVersion: '2025-11-25' | '2026-07-28' | 'auto'`. The 2.0 client always speaks 2026-07-28 and, when the option is omitted, probes the server with `server/discover` and falls back to the `initialize` handshake for servers that haven't upgraded. Pin `'2026-07-28'` to skip the probe and fail on a legacy server, or `'legacy'` to skip the probe and use the handshake directly. The negotiated revision is cached per connection for reconnects and reported by `mcp.getServerProtocolVersions()`.
 
-On a legacy-negotiated connection the shared verbs work (`tools/list`, `tools/call`, `resources/read`, `prompts/get`, list-changed notifications). `subscriptions.listen` and embedded input requests throw an error naming the negotiated revision.
+On a legacy-negotiated connection the shared verbs work (`tools/list`, `tools/call`, `resources/read`, `prompts/get`). Resource subscriptions, list-changed handlers and embedded input requests throw an error naming the negotiated revision.
 
 ```diff
   servers: {
@@ -257,7 +253,7 @@ Servers keep the static `logging` capability required by the specification but r
 
 ### `resources/subscribe` and `resources/unsubscribe`
 
-Legacy resource subscriptions are removed from both sides. Use `subscriptions.listen` instead.
+Legacy `resources/subscribe` is removed from both sides; `resources.subscribe` now uses `subscriptions/listen`.
 
 ### Dynamic client registration
 

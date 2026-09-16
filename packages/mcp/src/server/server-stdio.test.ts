@@ -7,7 +7,7 @@ vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 describe('MCPServer over stdio (2026-07-28)', () => {
   const tsxCli = path.join(path.dirname(require.resolve('tsx/package.json')), 'dist', 'cli.mjs');
-  const fixturePath = path.join(__dirname, '..', '__fixtures__/modern-era-notification-server.ts');
+  const fixturePath = path.join(__dirname, '..', '__fixtures__/notification-server.ts');
 
   let client: Client | undefined;
 

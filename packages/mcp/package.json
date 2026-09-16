@@ -30,6 +30,7 @@
     "test:server": "vitest run ./src/server",
     "test:integration": "cd integration-tests && pnpm test:mcp",
     "test:compat": "bash integration-tests/compat.sh",
+    "test:conformance": "tsx ./src/conformance/run.ts",
     "test": "pnpm test:server && pnpm test:client && pnpm test:integration",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix ."
@@ -59,6 +60,7 @@
     "@mastra/observability": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
     "@mendable/firecrawl-js": "^1.29.3",
+    "@modelcontextprotocol/conformance": "0.2.0-alpha.11",
     "@types/node": "22.20.1",
     "@types/semver": "^7.7.1",
     "@vitest/coverage-v8": "catalog:",
