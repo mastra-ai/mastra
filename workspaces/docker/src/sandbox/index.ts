@@ -805,7 +805,8 @@ export class DockerSandbox extends MastraSandbox {
   private async _resolveTemplate(): Promise<void> {
     if (!this._templateSpec) return;
     const template = typeof this._templateSpec === 'function' ? await this._templateSpec() : this._templateSpec;
-    const result = await template.build();
+    // Build on this sandbox's daemon, which may differ from the template's default.
+    const result = await template.build({ docker: this._docker });
     if (result.status !== 'ready') {
       throw new SandboxError(`Docker template build failed: ${result.error ?? 'unknown error'}`, 'START_FAILED', {
         templateId: result.templateId,

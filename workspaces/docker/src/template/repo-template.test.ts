@@ -13,36 +13,29 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildRepoTemplate, createDockerRepoTemplate, resolveHead } from './repo-template';
 
 const cloneUrl = 'https://example.com/acme/app.git';
+const sha = '0123456789abcdef0123456789abcdef01234567';
 
 describe('buildRepoTemplate', () => {
-  it('clones the default branch under /workspace/<repo> and sets the workdir', () => {
-    const dockerfile = buildRepoTemplate({ cloneUrl, workingDirectory: '/workspace' }).dockerfile;
+  it('clones under /workspace/<repo>, installs git first, and sets the workdir', () => {
+    const dockerfile = buildRepoTemplate({ cloneUrl, sha, workingDirectory: '/workspace' }).dockerfile;
     // The slim default base has no git, so it is installed before the clone stage.
     expect(dockerfile.indexOf('apt-get install')).toBeLessThan(dockerfile.indexOf('git clone'));
     expect(dockerfile).toMatch(/apt-get install[^\n]*\bgit\b/);
-    expect(dockerfile).toContain(
-      "git clone --depth=1 --single-branch 'https://example.com/acme/app.git' '/workspace/app'",
-    );
+    expect(dockerfile).toContain("git clone 'https://example.com/acme/app.git' '/workspace/app'");
     expect(dockerfile).toContain('WORKDIR /workspace/app');
   });
 
-  it('clones a branch ref when no sha could be resolved', () => {
-    const dockerfile = buildRepoTemplate({ cloneUrl, ref: 'dev', workingDirectory: '/workspace' }).dockerfile;
-    expect(dockerfile).toContain("--branch 'dev'");
-  });
-
-  it('pins a resolved sha with a full clone + detached checkout, making it part of the identity', () => {
-    const a = buildRepoTemplate({ cloneUrl, sha: 'a1b2c3d4', workingDirectory: '/workspace' });
-    const b = buildRepoTemplate({ cloneUrl, sha: 'ffffffff', workingDirectory: '/workspace' });
-    expect(a.dockerfile).toContain("git clone 'https://example.com/acme/app.git' '/workspace/app'");
+  it('pins the sha with a full clone + detached checkout, making it part of the identity', () => {
+    const a = buildRepoTemplate({ cloneUrl, sha, workingDirectory: '/workspace' });
+    const b = buildRepoTemplate({ cloneUrl, sha: 'f'.repeat(40), workingDirectory: '/workspace' });
     expect(a.dockerfile).not.toContain('--depth=1');
-    expect(a.dockerfile).toContain("git -C '/workspace/app' checkout --detach 'a1b2c3d4'");
+    expect(a.dockerfile).toContain(`git -C '/workspace/app' checkout --detach '${sha}'`);
     expect(a.templateId).not.toBe(b.templateId);
   });
 
   it('passes the token by value to the clone stage only and keeps it out of the identity', () => {
-    const withToken = buildRepoTemplate({ cloneUrl, token: 'tok-1', workingDirectory: '/workspace' });
-    const rotated = buildRepoTemplate({ cloneUrl, token: 'tok-2', workingDirectory: '/workspace' });
+    const withToken = buildRepoTemplate({ cloneUrl, sha, token: 'tok-1', workingDirectory: '/workspace' });
+    const rotated = buildRepoTemplate({ cloneUrl, sha, token: 'tok-2', workingDirectory: '/workspace' });
     const dockerfile = withToken.dockerfile;
     expect(dockerfile).toContain('AS mastra-secret-');
     expect(dockerfile).toContain('--mount=type=secret,id=GH_TOKEN');
@@ -56,8 +49,18 @@ describe('buildRepoTemplate', () => {
   });
 
   it('bakes buildEnv into ENV and the identity', () => {
-    const a = buildRepoTemplate({ cloneUrl, buildEnv: { NPM_CONFIG_REGISTRY: 'https://r1' }, workingDirectory: '/w' });
-    const b = buildRepoTemplate({ cloneUrl, buildEnv: { NPM_CONFIG_REGISTRY: 'https://r2' }, workingDirectory: '/w' });
+    const a = buildRepoTemplate({
+      cloneUrl,
+      sha,
+      buildEnv: { NPM_CONFIG_REGISTRY: 'https://r1' },
+      workingDirectory: '/w',
+    });
+    const b = buildRepoTemplate({
+      cloneUrl,
+      sha,
+      buildEnv: { NPM_CONFIG_REGISTRY: 'https://r2' },
+      workingDirectory: '/w',
+    });
     expect(a.dockerfile).toContain('ENV NPM_CONFIG_REGISTRY=');
     expect(a.templateId).not.toBe(b.templateId);
   });
@@ -65,6 +68,7 @@ describe('buildRepoTemplate', () => {
   it('runs setup commands and writes the completion marker last', () => {
     const dockerfile = buildRepoTemplate({
       cloneUrl,
+      sha,
       setupCommand: ['npm ci', 'npm run build'],
       workingDirectory: '/workspace',
     }).dockerfile;
@@ -74,7 +78,12 @@ describe('buildRepoTemplate', () => {
   });
 
   it('supports a custom base image and working directory', () => {
-    const dockerfile = buildRepoTemplate({ cloneUrl, baseImage: 'ubuntu:24.04', workingDirectory: '/srv/' }).dockerfile;
+    const dockerfile = buildRepoTemplate({
+      cloneUrl,
+      sha,
+      baseImage: 'ubuntu:24.04',
+      workingDirectory: '/srv/',
+    }).dockerfile;
     expect(dockerfile).toContain('FROM ubuntu:24.04');
     expect(dockerfile).toContain('WORKDIR /srv/app');
   });
@@ -146,6 +155,12 @@ describe('createDockerRepoTemplate', () => {
       await expect(resolveHead(join(dir, 'missing.git'), undefined, undefined)).resolves.toBeUndefined();
     });
 
+    it('only treats a full 40-char sha as already resolved; short hex could be a branch', async () => {
+      await expect(resolveHead(bare, sha, undefined)).resolves.toBe(sha);
+      execFileSync('git', ['branch', 'deadbee', headSha], { cwd: bare });
+      await expect(resolveHead(bare, 'deadbee', undefined)).resolves.toBe(headSha);
+    });
+
     it('passes the token to ls-remote through GIT_CONFIG_* env, never argv', async () => {
       const binDir = join(dir, 'bin');
       mkdirSync(binDir, { recursive: true });
@@ -170,18 +185,42 @@ describe('createDockerRepoTemplate', () => {
       expect(recorded).not.toContain('tok-secret');
     });
 
+    // Clone URLs must be https, so the resolver-level tests stub `git` on PATH
+    // instead of touching the network.
+    const withFakeGit = async (script: string, run: () => Promise<void>) => {
+      const binDir = mkdtempSync(join(dir, 'fake-git-'));
+      writeFileSync(join(binDir, 'git'), `#!/bin/sh\n${script}\n`, { mode: 0o755 });
+      const prevPath = process.env.PATH;
+      process.env.PATH = `${binDir}:${prevPath}`;
+      try {
+        await run();
+      } finally {
+        process.env.PATH = prevPath;
+      }
+    };
+
+    it('rejects when the head cannot be resolved rather than caching an unpinned clone', async () => {
+      await withFakeGit('exit 128', async () => {
+        const resolver = createDockerRepoTemplate({ getRepositoryAccess: async () => ({ cloneUrl }) })!;
+        await expect(resolver()).rejects.toThrow(/Could not resolve HEAD of https:\/\/example\.com/);
+      });
+    });
+
     it('pins the current head sha into the template so a moved branch rebuilds', async () => {
       const getRepositoryAccess = async () => ({ cloneUrl });
-      const resolver = createDockerRepoTemplate({ getRepositoryAccess })!;
-      // Network is unavailable to example.com; resolution must degrade, not throw.
-      const unpinned = await resolver();
-      expect(unpinned.dockerfile).toContain('--depth=1');
-      expect(unpinned.dockerfile).not.toContain('checkout --detach');
-
-      // A sha ref skips the network entirely and is pinned verbatim.
-      const pinned = await createDockerRepoTemplate({ getRepositoryAccess, ref: headSha })!();
-      expect(pinned.dockerfile).toContain(`checkout --detach '${headSha}'`);
-      expect(pinned.templateId).not.toBe(unpinned.templateId);
+      const moved = 'f'.repeat(40);
+      await withFakeGit(`printf '${headSha}\\tHEAD\\n'`, async () => {
+        const before = await createDockerRepoTemplate({ getRepositoryAccess })!();
+        expect(before.dockerfile).toContain(`checkout --detach '${headSha}'`);
+        // A full sha ref skips ls-remote entirely and is pinned verbatim.
+        const pinned = await createDockerRepoTemplate({ getRepositoryAccess, ref: sha })!();
+        expect(pinned.dockerfile).toContain(`checkout --detach '${sha}'`);
+        expect(pinned.templateId).not.toBe(before.templateId);
+      });
+      await withFakeGit(`printf '${moved}\\tHEAD\\n'`, async () => {
+        const after = await createDockerRepoTemplate({ getRepositoryAccess })!();
+        expect(after.dockerfile).toContain(`checkout --detach '${moved}'`);
+      });
     });
   });
 });

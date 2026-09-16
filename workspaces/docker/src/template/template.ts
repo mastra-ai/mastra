@@ -34,7 +34,7 @@ import posixPath from 'node:path/posix';
 import Docker from 'dockerode';
 import { pack as tarPack } from 'tar-stream';
 import { DockerSandbox, type DockerSandboxOptions } from '../sandbox';
-import { openBuildSession } from './build-session';
+import { openBuildSession, type BuildSession } from './build-session';
 import {
   type AptInstallOptions,
   type DockerTemplateDefinition,
@@ -85,6 +85,11 @@ export interface DockerTemplateBuildOptions {
    * would fetch today).
    */
   force?: boolean;
+  /**
+   * Build on this Docker client instead of the template's own. A sandbox
+   * passes its client so the image lands on the daemon that will run it.
+   */
+  docker?: Docker;
   /**
    * Secret values for this build. Overrides the template-level `secrets`
    * source for names it provides. Names still missing after both sources are
@@ -262,17 +267,24 @@ export class DockerTemplate {
    */
   async build(options: DockerTemplateBuildOptions = {}): Promise<DockerTemplateBuildResult> {
     // Many sandboxes starting concurrently from one template must share a
-    // single `docker build` rather than racing to build the same tag.
-    if (!this.#inFlight) {
-      this.#inFlight = this.#build(options).finally(() => {
-        this.#inFlight = undefined;
-      });
-    }
-    return this.#inFlight;
+    // single `docker build` rather than racing to build the same tag. Only a
+    // plain request may join an in-flight build; a forced build, different
+    // secrets, or a different daemon is queued behind it instead.
+    const isPlain = !options.force && options.secrets === undefined && options.docker === undefined;
+    if (isPlain && this.#inFlight) return this.#inFlight;
+    const previous = this.#inFlight?.catch(() => undefined) ?? Promise.resolve();
+    const run = previous.then(() => this.#build(options));
+    this.#inFlight = run;
+    run
+      .finally(() => {
+        if (this.#inFlight === run) this.#inFlight = undefined;
+      })
+      .catch(() => undefined);
+    return run;
   }
 
   async #build(options: DockerTemplateBuildOptions): Promise<DockerTemplateBuildResult> {
-    const docker = this.#getDocker();
+    const docker = options.docker ?? this.#getDocker();
     const tag = this.templateId;
 
     if (!options.force) {
@@ -295,10 +307,18 @@ export class DockerTemplate {
 
     try {
       const nocache = options.force === true;
-      const stream = secrets
-        ? await this.#buildWithSecrets(docker, context, tag, secrets, nocache)
-        : await docker.buildImage(context, { t: tag, nocache });
-      await this.#followBuild(docker, stream);
+      if (secrets) {
+        const { stream, session } = await this.#buildWithSecrets(docker, context, tag, secrets, nocache);
+        try {
+          await this.#followBuild(docker, stream);
+        } finally {
+          // The daemon calls GetSecret only while the build runs; drop the
+          // session however the output stream settled (end, error, or close).
+          session.close();
+        }
+      } else {
+        await this.#followBuild(docker, await docker.buildImage(context, { t: tag, nocache }));
+      }
     } catch (error) {
       this.#built = false;
       return { status: 'failed', templateId: tag, error: error instanceof Error ? error.message : String(error) };
@@ -337,7 +357,7 @@ export class DockerTemplate {
     tag: string,
     secrets: Record<string, string>,
     nocache: boolean,
-  ): Promise<NodeJS.ReadableStream> {
+  ): Promise<{ stream: NodeJS.ReadableStream; session: BuildSession }> {
     const session = await openBuildSession(docker, secrets);
     let stream: NodeJS.ReadableStream;
     try {
@@ -358,10 +378,7 @@ export class DockerTemplate {
       session.close();
       throw error;
     }
-    // The daemon keeps calling GetSecret until the build's output stream ends.
-    stream.once('end', () => session.close());
-    stream.once('error', () => session.close());
-    return stream;
+    return { stream, session };
   }
 
   #followBuild(docker: Docker, stream: NodeJS.ReadableStream): Promise<void> {

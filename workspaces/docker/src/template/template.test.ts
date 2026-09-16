@@ -151,6 +151,40 @@ describe('DockerTemplate.build', () => {
     expect(mockDocker.buildImage).toHaveBeenCalledTimes(1);
   });
 
+  it('queues a build with different options behind the in-flight one instead of sharing it', async () => {
+    mockImage.inspect.mockRejectedValue(new Error('no such image'));
+    let release!: () => void;
+    mockDocker.modem.followProgress.mockImplementationOnce((_stream, onFinish) => {
+      release = () => onFinish(null, []);
+    });
+    const template = new DockerTemplate().runCmd('echo hi');
+    const plain = template.build();
+    const forced = template.build({ force: true });
+    await new Promise(r => setImmediate(r));
+    expect(mockDocker.buildImage).toHaveBeenCalledTimes(1);
+    release();
+    await expect(plain).resolves.toMatchObject({ status: 'ready' });
+    await expect(forced).resolves.toMatchObject({ status: 'ready' });
+    expect(mockDocker.buildImage).toHaveBeenCalledTimes(2);
+    expect((mockDocker.buildImage.mock.calls[0]![1] as { nocache: boolean }).nocache).toBe(false);
+    expect((mockDocker.buildImage.mock.calls[1]![1] as { nocache: boolean }).nocache).toBe(true);
+    // The queue drained: a later plain build is not stuck behind a stale promise.
+    mockImage.inspect.mockResolvedValueOnce({});
+    await expect(template.build()).resolves.toMatchObject({ status: 'ready' });
+    expect(mockDocker.buildImage).toHaveBeenCalledTimes(2);
+  });
+
+  it('builds on the docker client passed in options', async () => {
+    const other = {
+      getImage: vi.fn(() => ({ inspect: vi.fn().mockRejectedValue(new Error('no such image')) })),
+      buildImage: vi.fn(async () => ({})),
+      modem: { followProgress: mockDocker.modem.followProgress },
+    };
+    await new DockerTemplate().runCmd('echo hi').build({ docker: other as never });
+    expect(other.buildImage).toHaveBeenCalledTimes(1);
+    expect(mockDocker.buildImage).not.toHaveBeenCalled();
+  });
+
   it('rebuilds without the layer cache when force is set', async () => {
     const template = new DockerTemplate().runCmd('echo hi');
     await template.build({ force: true });
@@ -172,6 +206,18 @@ describe('DockerTemplate.build', () => {
     expect(dialOpts.options).toEqual({ t: template.templateId, version: '2', session: mockSession.id, nocache: false });
     expect(JSON.stringify(dialOpts.options)).not.toContain('resolved-secret');
     vi.unstubAllEnvs();
+  });
+
+  it('closes the session however the build stream settles, including a bare close', async () => {
+    mockImage.inspect.mockRejectedValue(new Error('no such image'));
+    const template = new DockerTemplate({ secrets: { T: 'v' } }).runWithSecrets('x', { secrets: ['T'], output: '/o' });
+    // Neither end nor error: followProgress reports completion on 'close'.
+    mockDocker.modem.followProgress.mockImplementationOnce((_stream, onFinish) => onFinish(null, []));
+    await template.build();
+    expect(mockSession.close).toHaveBeenCalledTimes(1);
+    mockDocker.modem.followProgress.mockImplementationOnce((_stream, onFinish) => onFinish(new Error('boom'), []));
+    await expect(template.build({ force: true })).resolves.toMatchObject({ status: 'failed' });
+    expect(mockSession.close).toHaveBeenCalledTimes(2);
   });
 
   it('builds without a session when the template uses no secrets', async () => {

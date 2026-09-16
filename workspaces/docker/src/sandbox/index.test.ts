@@ -287,6 +287,8 @@ describe('DockerSandbox', () => {
         await sandbox._start();
 
         expect(template.build).toHaveBeenCalledTimes(1);
+        // Built on the sandbox's own daemon, not whatever the template defaulted to.
+        expect(template.build).toHaveBeenCalledWith({ docker: mockDocker });
         expect(mockDocker.createContainer).toHaveBeenCalledWith(
           expect.objectContaining({ Image: 'mastra-template:abc', WorkingDir: '/srv/repo' }),
         );
