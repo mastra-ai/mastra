@@ -3734,6 +3734,39 @@ export class Session<TState = unknown> {
   }
 
   /**
+   * Send a user message with native file conversion and return its exact
+   * delivery receipt without waiting for completion. Subscribe before sending
+   * to observe early output. Conversion can throw before delivery; routing or
+   * stream setup failures reject the accepted promise.
+   */
+  sendMessageWithReceipt({
+    content,
+    files,
+    tracingContext,
+    tracingOptions,
+    requestContext,
+    untilIdle,
+  }: {
+    content: string;
+    files?: Array<{ data: string; mediaType: string; filename?: string }>;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+    requestContext?: RequestContext;
+    untilIdle?: boolean | { maxIdleMs?: number };
+  }): ReturnType<Session['sendSignal']> {
+    return this.sendSignal(
+      {
+        content: this.createMessageInput({ content, files }),
+        tracingContext,
+        tracingOptions,
+        requestContext,
+        untilIdle,
+      },
+      { requireDelivery: true },
+    );
+  }
+
+  /**
    * Send a message to this session's current agent and await the run. Streams
    * the response and emits events.
    */

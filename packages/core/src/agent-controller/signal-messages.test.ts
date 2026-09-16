@@ -103,6 +103,94 @@ async function createController(
 }
 
 describe('AgentController signal messages', () => {
+  it('returns an exact file-bearing receipt before the run ends and sends only once', async () => {
+    const prompts: unknown[] = [];
+    const releases: Array<() => void> = [];
+    const { session } = await createController(new InMemoryStore(), createGatedAgent(prompts, releases));
+    const events: AgentControllerEvent[] = [];
+    const unsubscribe = session.subscribe(event => events.push(event));
+    const send = vi.spyOn(session, 'sendSignal');
+    try {
+      const receipt = session.sendMessageWithReceipt({
+        content: 'Read these files.',
+        files: [
+          { data: 'data:text/plain;base64,aGVsbG8=', mediaType: 'text/plain', filename: 'notes.txt' },
+          { data: '{invalid JSON is still document text}', mediaType: 'application/json', filename: 'data.json' },
+          { data: 'data:application/pdf;base64,JVBERg==', mediaType: 'application/pdf', filename: 'file.pdf' },
+        ],
+      });
+      const accepted = await receipt.accepted;
+      expect(accepted).toMatchObject({ accepted: true, action: 'wake', runId: expect.any(String) });
+      await waitFor(() => events.some(event => event.type === 'message_update' && event.event.type === 'text-delta'));
+      expect(events).toContainEqual({
+        type: 'message_update',
+        runId: accepted.runId,
+        id: expect.any(String),
+        event: { type: 'text-delta', delta: 'response 1' },
+      });
+      expect(events.some(event => event.type === 'agent_end')).toBe(false);
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: [
+            { type: 'text', text: 'Read these files.' },
+            { type: 'text', text: '[File: notes.txt]\n```\nhello\n```' },
+            { type: 'text', text: '[File: data.json]\n```\n{invalid JSON is still document text}\n```' },
+            {
+              type: 'file',
+              data: 'data:application/pdf;base64,JVBERg==',
+              mediaType: 'application/pdf',
+              filename: 'file.pdf',
+            },
+          ],
+        }),
+        { requireDelivery: true },
+      );
+      expect(prompts).toHaveLength(1);
+      releases.splice(0).forEach(release => release());
+      await waitFor(() => events.some(event => event.type === 'agent_end'));
+    } finally {
+      releases.splice(0).forEach(release => release());
+      session.abort();
+      send.mockRestore();
+      unsubscribe();
+    }
+  });
+
+  it.each(['text/plain', 'application/json'])(
+    'does not deliver invalid %s file data when conversion fails',
+    async mediaType => {
+      const { session } = await createController(new InMemoryStore());
+      const send = vi.spyOn(session, 'sendSignal');
+      try {
+        expect(() =>
+          session.sendMessageWithReceipt({ content: 'Read.', files: [{ data: null as unknown as string, mediaType }] }),
+        ).toThrow();
+        expect(send).not.toHaveBeenCalled();
+      } finally {
+        send.mockRestore();
+      }
+    },
+  );
+
+  it('passes the exact delivery rejection through without retrying', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const failure = new Error('Stream setup refused.');
+    const accepted = Promise.reject(failure);
+    const send = vi.spyOn(session, 'sendSignal').mockReturnValue({ id: 'signal-1', type: 'user', accepted });
+    try {
+      const receipt = session.sendMessageWithReceipt({
+        content: 'Read.',
+        files: [{ data: '{}', mediaType: 'application/json' }],
+      });
+      expect(receipt.accepted).toBe(accepted);
+      await expect(receipt.accepted).rejects.toBe(failure);
+      expect(send).toHaveBeenCalledTimes(1);
+    } finally {
+      send.mockRestore();
+    }
+  });
+
   it('converts sendMessage files into fenced text and preserved binary file parts', async () => {
     const { session } = await createController(new InMemoryStore());
     const createMessageInput = (
@@ -375,6 +463,7 @@ describe('AgentController signal messages', () => {
       type: 'message_update',
       id: assistantStarts[0]!.message.id,
       event: { type: 'text-delta', delta: 'Hello' },
+      runId: expect.any(String),
     });
     expect(session.getCurrentRunId()).toBeNull();
   });
@@ -1236,6 +1325,7 @@ describe('AgentController signal messages', () => {
       type: 'message_update',
       id: assistantStart!.message.id,
       event: { type: 'text-delta', delta: 'Hello' },
+      runId: expect.any(String),
     });
     expect(events).toContainEqual({ type: 'message_end', id: signalStart!.message.id });
     expect(events).toContainEqual({ type: 'message_end', id: assistantStart!.message.id });
