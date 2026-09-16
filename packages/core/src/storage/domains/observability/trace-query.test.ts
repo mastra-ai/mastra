@@ -71,8 +71,9 @@ function validationError(fn: () => unknown): TraceQueryValidationError {
 }
 
 describe('traceQueryRequestSchema', () => {
-  it('normalizes keyset and list-compatible page defaults', () => {
-    expect(parsed()).toMatchObject({ page: { limit: 100 } });
+  it('leaves omitted keyset pagination for the planner and normalizes page-mode defaults', () => {
+    expect(parsed()).not.toHaveProperty('page');
+    expect(planTraceQuery(parsed())).toMatchObject({ paginationMode: 'keyset', limit: 100 });
     expect(parsed({ ...baseRequest, pagination: {} })).toMatchObject({ pagination: { page: 0, perPage: 10 } });
     expect(parsed({ ...baseRequest, pagination: { page: 2, perPage: 100 } })).toMatchObject({
       pagination: { page: 2, perPage: 100 },
@@ -83,17 +84,35 @@ describe('traceQueryRequestSchema', () => {
     expect(traceQueryRequestSchema.safeParse({ ...baseRequest, pagination: { perPage: 101 } }).success).toBe(false);
   });
 
-  it('rejects mixed and grouped list-compatible pagination during planning', () => {
-    const mixed = validationError(() =>
-      planTraceQuery(parsed({ ...baseRequest, page: { limit: 10 }, pagination: { page: 0, perPage: 10 } })),
+  it('rejects mixed and grouped list-compatible pagination in the request schema', () => {
+    const mixedRequest = { ...baseRequest, page: { limit: 10 }, pagination: { page: 0, perPage: 10 } };
+    const mixedResult = traceQueryRequestSchema.safeParse(mixedRequest);
+    expect(mixedResult.error?.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'custom',
+        path: ['pagination'],
+        message: 'Trace queries cannot combine keyset and page pagination',
+      }),
     );
+    const mixed = validationError(() => parsed(mixedRequest));
     expect(mixed.issues).toContainEqual(
       expect.objectContaining({ code: 'pagination_mode_conflict', path: ['pagination'] }),
     );
 
-    const grouped = validationError(() =>
-      planTraceQuery(parsed({ ...baseRequest, group: { by: ['threadId'] }, pagination: { page: 0, perPage: 10 } })),
+    const groupedRequest = {
+      ...baseRequest,
+      group: { by: ['threadId'] },
+      pagination: { page: 0, perPage: 10 },
+    };
+    const groupedResult = traceQueryRequestSchema.safeParse(groupedRequest);
+    expect(groupedResult.error?.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'custom',
+        path: ['pagination'],
+        message: 'Grouped trace queries do not support page pagination',
+      }),
     );
+    const grouped = validationError(() => parsed(groupedRequest));
     expect(grouped.issues).toContainEqual(
       expect.objectContaining({ code: 'group_pagination_not_supported', path: ['pagination'] }),
     );

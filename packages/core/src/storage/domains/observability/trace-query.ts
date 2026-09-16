@@ -17,6 +17,8 @@ export const TRACE_QUERY_DEFAULT_TIMEOUT_MS = 15_000;
 export const TRACE_QUERY_MAX_TIMEOUT_MS = 300_000;
 
 const PREDICATE_COMPLEXITY_MESSAGE = `Predicates are limited to ${TRACE_QUERY_MAX_NODES} nodes and ${TRACE_QUERY_MAX_DEPTH} levels`;
+const PAGINATION_MODE_CONFLICT_MESSAGE = 'Trace queries cannot combine keyset and page pagination';
+const GROUP_PAGINATION_NOT_SUPPORTED_MESSAGE = 'Grouped trace queries do not support page pagination';
 
 export function compareTraceQueryStrings(left: string, right: string): number {
   if (left < right) return -1;
@@ -276,7 +278,22 @@ const traceQueryRequestObjectSchema = z
     pagination: paginationArgsSchema.optional(),
   })
   .strict()
-  .transform(request => (request.page || request.pagination ? request : { ...request, page: { limit: 100 } }));
+  .superRefine((request, context) => {
+    if (request.page && request.pagination) {
+      context.addIssue({
+        code: 'custom',
+        path: ['pagination'],
+        message: PAGINATION_MODE_CONFLICT_MESSAGE,
+      });
+    }
+    if (request.group && request.pagination) {
+      context.addIssue({
+        code: 'custom',
+        path: ['pagination'],
+        message: GROUP_PAGINATION_NOT_SUPPORTED_MESSAGE,
+      });
+    }
+  });
 
 export const traceQueryRequestSchema = z.preprocess((input, context) => {
   const issuePath = findPredicateComplexityIssue(input, [['where']]);
@@ -829,13 +846,20 @@ export function planTraceQueryValues(args: NormalizedGetTraceQueryValuesArgs): T
 
 export function formatTraceQuerySchemaIssues(error: z.ZodError): TraceQueryIssue[] {
   return error.issues.map(issue => {
-    const predicateTooComplex = issue.code === 'custom' && issue.message === PREDICATE_COMPLEXITY_MESSAGE;
+    const customIssueCode =
+      issue.code === 'custom'
+        ? issue.message === PREDICATE_COMPLEXITY_MESSAGE
+          ? 'predicate_too_complex'
+          : issue.message === PAGINATION_MODE_CONFLICT_MESSAGE
+            ? 'pagination_mode_conflict'
+            : issue.message === GROUP_PAGINATION_NOT_SUPPORTED_MESSAGE
+              ? 'group_pagination_not_supported'
+              : undefined
+        : undefined;
     return {
-      code: predicateTooComplex ? 'predicate_too_complex' : 'invalid_request',
+      code: customIssueCode ?? 'invalid_request',
       path: issue.path.map(part => (typeof part === 'symbol' ? String(part) : part)),
-      message: predicateTooComplex
-        ? PREDICATE_COMPLEXITY_MESSAGE
-        : 'The value does not match the trace-query request contract',
+      message: customIssueCode ? issue.message : 'The value does not match the trace-query request contract',
     };
   });
 }
@@ -882,21 +906,6 @@ export function planTraceQuery(
       message: 'Grouped trace queries use fixed threadId ordering',
     });
   }
-  if (request.page && request.pagination) {
-    issues.push({
-      code: 'pagination_mode_conflict',
-      path: ['pagination'],
-      message: 'Trace queries cannot combine keyset and page pagination',
-    });
-  }
-  if (request.group && request.pagination) {
-    issues.push({
-      code: 'group_pagination_not_supported',
-      path: ['pagination'],
-      message: 'Grouped trace queries do not support page pagination',
-    });
-  }
-
   const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
   const where = request.where ? planPredicate(request.where, 'trace', ['where'], 1, state) : undefined;
   if (issues.length > 0) throw new TraceQueryValidationError(issues);
@@ -907,7 +916,7 @@ export function planTraceQuery(
     const result = 'groups' as const;
     const orderBy = { field: 'threadId', direction: 'asc' } as const;
     const binding = digestBinding({ timeRange, where, result, orderBy, authorization: options.authorizationBinding });
-    const page = request.page!;
+    const page = request.page ?? { limit: 100 };
     const cursor = page.after ? decodeTraceQueryCursor(page.after, result, binding) : undefined;
     return {
       result,
@@ -935,7 +944,7 @@ export function planTraceQuery(
     };
   }
 
-  const page = request.page!;
+  const page = request.page ?? { limit: 100 };
   const binding = digestBinding({ timeRange, where, result, orderBy, authorization: options.authorizationBinding });
   const cursor = page.after ? decodeTraceQueryCursor(page.after, result, binding) : undefined;
   return {
