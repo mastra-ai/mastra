@@ -7,7 +7,8 @@ import { BOUNDARY_WITH_DATE_RE } from '../../src/processors/observational-memory
  *
  * `source` records how the cycle was recovered:
  * - `generation-head` — the leading chunk of generation 0 (a genuine first cycle)
- * - `reflection-head` — the leading chunk of a generation > 0, which is the
+ * - `archive-head`    — the retained live tail at the start of an archive-origin generation
+ * - `reflection-head` — the leading chunk of a reflection generation, which is
  *   reflection text rather than observation output, and is never replayed
  * - `boundary`        — a chunk that followed a message-boundary delimiter
  * - `buffered-chunk`  — an unactivated chunk carrying exact per-cycle metadata
@@ -18,7 +19,7 @@ export type ReconstructedCycle = {
   observations: string;
   observedAt: Date | null;
   generationCount: number;
-  source: 'boundary' | 'buffered-chunk' | 'generation-head' | 'reflection-head';
+  source: 'archive-head' | 'boundary' | 'buffered-chunk' | 'generation-head' | 'reflection-head';
 };
 
 export type ReconstructionWarning = {
@@ -43,12 +44,10 @@ type OrderedCycle = ReconstructedCycle & { splitIndex: number };
  *
  * Pure: no database, network, or model access.
  *
- * The one correctness rule that matters: a reflection generation's
- * `activeObservations` starts with the *reflection text*, not new observations
- * (see `createReflectionGeneration`). So the leading chunk is a real cycle for
- * generation 0 and a reflection for every generation above it. Treating them
- * alike would replay reflection prose through curation and repeat every earlier
- * cycle once per generation.
+ * Reflection generations start with synthesized reflection text, so their heads
+ * are excluded. Archive generations start with the retained live observation
+ * tail, so their heads remain replayable. Treating every later generation alike
+ * would either replay reflection prose or drop archived observations.
  */
 export function reconstructCycles(records: ObservationalMemoryRecord[]): ReconstructionResult {
   const warnings: ReconstructionWarning[] = [];
@@ -96,13 +95,19 @@ export function reconstructCycles(records: ObservationalMemoryRecord[]): Reconst
 
     const head = parts[0]?.trim();
     if (head) {
+      const isReplayableHead = generationCount === 0 || record.originType === 'archive';
       const headCycle: ReconstructedCycle = {
         observations: head,
         observedAt: null,
         generationCount,
-        source: generationCount === 0 ? 'generation-head' : 'reflection-head',
+        source:
+          generationCount === 0
+            ? 'generation-head'
+            : record.originType === 'archive'
+              ? 'archive-head'
+              : 'reflection-head',
       };
-      if (generationCount === 0) {
+      if (isReplayableHead) {
         cycles.push({ ...headCycle, splitIndex: splitIndex++ });
       } else {
         excluded.push(headCycle);

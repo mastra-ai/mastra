@@ -371,7 +371,13 @@ export async function handleTypedOperation(
     case 'omSwapBuffered':
     case 'omUpdateBufferedReflection':
     case 'omSwapBufferedReflection':
-    case 'omUpdateConfig': {
+    case 'omUpdateConfig':
+    case 'omCreateReflectionGeneration':
+    case 'omCreateArchiveGeneration':
+    case 'omListArchives':
+    case 'omGetArchive':
+    case 'omGetArchivesByGroupIds':
+    case 'omClearBufferedReflection': {
       if (convexTable !== CONVEX_TABLE_OBSERVATIONAL_MEMORY) {
         throw new Error(`${request.op} is only supported for ${CONVEX_TABLE_OBSERVATIONAL_MEMORY}`);
       }
@@ -622,7 +628,14 @@ export async function handleTypedOperation(
     case 'patch': {
       const patchRecord = stripPatchKeys(request.record, ['id']);
       const matchesExpected = (record: Record<string, any>) =>
-        !request.expected || Object.entries(request.expected).every(([key, value]) => record[key] === value);
+        !request.expected ||
+        Object.entries(request.expected).every(([key, value]) => {
+          if (convexTable === 'mastra_observational_memory') {
+            if (key === 'recordState') return (record[key] ?? 'active') === value;
+            if (key === 'writeEpoch') return (record[key] ?? 0) === value;
+          }
+          return record[key] === value;
+        });
       const existing = await ctx.db
         .query(convexTable)
         .withIndex('by_record_id', (q: any) => q.eq('id', request.id))

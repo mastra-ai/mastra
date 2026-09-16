@@ -25,7 +25,13 @@ type OMRequest = Extract<
       | 'omSwapBuffered'
       | 'omUpdateBufferedReflection'
       | 'omSwapBufferedReflection'
-      | 'omUpdateConfig';
+      | 'omUpdateConfig'
+      | 'omCreateReflectionGeneration'
+      | 'omCreateArchiveGeneration'
+      | 'omListArchives'
+      | 'omGetArchive'
+      | 'omGetArchivesByGroupIds'
+      | 'omClearBufferedReflection';
   }
 >;
 
@@ -189,6 +195,69 @@ function requireRecord(doc: unknown, id: string) {
   return doc as Record<string, any> & { _id: any };
 }
 
+function requireWritableRecord(doc: unknown, id: string, expectedWriteEpoch?: number) {
+  const record = requireRecord(doc, id);
+  if ((record.recordState ?? 'active') !== 'active' || Number(record.writeEpoch ?? 0) !== (expectedWriteEpoch ?? 0)) {
+    throw new Error(`Observational memory record is stale or sealed: ${id}`);
+  }
+  return record;
+}
+
+function parseStoredArray(value: unknown): Array<Record<string, any>> {
+  if (typeof value !== 'string' || !value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseArchive(doc: Record<string, any>): Record<string, any> | null {
+  const parsed = parseJsonObject(doc.archive);
+  return typeof parsed.archiveId === 'string' ? parsed : null;
+}
+
+function archiveEntry(doc: Record<string, any>, input: Record<string, any>) {
+  const archive = parseArchive(doc);
+  if (!archive || doc.resourceId !== input.resourceId) return null;
+  if (input.scope === 'thread' && doc.scope === 'thread' && doc.threadId !== input.threadId) return null;
+  const projectedThreadId = input.scope === 'thread' ? input.threadId : input.filterThreadId;
+  const groups = (Array.isArray(archive.groups) ? archive.groups : []).filter((group: Record<string, any>) => {
+    if (!projectedThreadId) return true;
+    if (doc.scope === 'thread') return doc.threadId === projectedThreadId;
+    return group.sourceThreadId === projectedThreadId;
+  });
+  if (groups.length === 0) return null;
+  return {
+    archiveId: archive.archiveId,
+    recordId: doc.id,
+    scope: doc.scope,
+    threadId: doc.threadId ?? null,
+    resourceId: doc.resourceId,
+    archivedAt: archive.archivedAt,
+    generationCount: doc.generationCount,
+    observationTokenCount: archive.observationTokenCount,
+    groups,
+  };
+}
+
+function archiveCompare(a: Record<string, any>, b: Record<string, any>): number {
+  return (
+    String(b.archivedAt).localeCompare(String(a.archivedAt)) ||
+    Number(b.generationCount) - Number(a.generationCount) ||
+    String(b.archiveId).localeCompare(String(a.archiveId))
+  );
+}
+
+function encodeArchiveCursor(entry: Record<string, any>): string {
+  return JSON.stringify({
+    archivedAt: entry.archivedAt,
+    generationCount: entry.generationCount,
+    archiveId: entry.archiveId,
+  });
+}
+
 const EMPTY_SWAP_RESULT = {
   chunksActivated: 0,
   messageTokensActivated: 0,
@@ -207,11 +276,12 @@ export async function handleObservationalMemoryOperation(
     case 'omGetLatest': {
       // by_lookup_key is [lookupKey, generationCount]; after eq(lookupKey) the
       // descending order sorts by generationCount, so first() is the latest generation.
-      const doc = await ctx.db
+      const docs = await ctx.db
         .query(convexTable)
         .withIndex('by_lookup_key', (q: any) => q.eq('lookupKey', request.lookupKey))
         .order('desc')
-        .first();
+        .take(OM_QUERY_MAX_DOCS);
+      const doc = docs.find((candidate: any) => (candidate.recordState ?? 'active') === 'active');
       return { ok: true, result: doc ?? null };
     }
 
@@ -236,11 +306,16 @@ export async function handleObservationalMemoryOperation(
     }
 
     case 'omUpdateActive': {
-      const doc = requireRecord(await findRecordById(ctx, convexTable, request.id), request.id);
+      const doc = requireWritableRecord(
+        await findRecordById(ctx, convexTable, request.id),
+        request.id,
+        request.expectedWriteEpoch,
+      );
       const safeTokenCount = Number.isFinite(request.tokenCount) && request.tokenCount >= 0 ? request.tokenCount : 0;
 
       await ctx.db.patch(doc._id, {
         activeObservations: request.observations,
+        observationGroups: request.observationGroups ? JSON.stringify(request.observationGroups) : null,
         lastObservedAt: request.lastObservedAt,
         // Reset pending tokens since we've now observed them
         pendingMessageTokens: 0,
@@ -253,8 +328,13 @@ export async function handleObservationalMemoryOperation(
     }
 
     case 'omAppendBufferedChunk': {
-      const doc = requireRecord(await findRecordById(ctx, convexTable, request.id), request.id);
+      const doc = requireWritableRecord(
+        await findRecordById(ctx, convexTable, request.id),
+        request.id,
+        request.expectedWriteEpoch,
+      );
       const chunks = parseStoredChunks(doc.bufferedObservationChunks);
+      if (chunks.some(chunk => chunk.cycleId === request.chunk.cycleId)) return { ok: true };
       chunks.push(request.chunk);
 
       const patch: Record<string, unknown> = {
@@ -269,7 +349,11 @@ export async function handleObservationalMemoryOperation(
     }
 
     case 'omSwapBuffered': {
-      const doc = requireRecord(await findRecordById(ctx, convexTable, request.id), request.id);
+      const doc = requireWritableRecord(
+        await findRecordById(ctx, convexTable, request.id),
+        request.id,
+        request.expectedWriteEpoch,
+      );
 
       const persistedChunks = parseStoredChunks(doc.bufferedObservationChunks);
       // Nothing buffered (or already swapped) — report zero activation.
@@ -309,6 +393,8 @@ export async function handleObservationalMemoryOperation(
       const existingActive = (doc.activeObservations as string) || '';
       const boundary = `\n\n--- message boundary (${lastObservedAt}) ---\n\n`;
       const newActive = existingActive ? `${existingActive}${boundary}${activatedContent}` : activatedContent;
+      const existingGroups = parseStoredArray(doc.observationGroups);
+      const activatedGroups = activatedChunks.flatMap(chunk => chunk.observationGroups ?? []);
 
       // NOTE: We intentionally do NOT add activatedMessageIds to observedMessageIds.
       // observedMessageIds is used by getUnobservedMessages to filter future messages.
@@ -318,6 +404,7 @@ export async function handleObservationalMemoryOperation(
 
       await ctx.db.patch(doc._id, {
         activeObservations: newActive,
+        observationGroups: JSON.stringify([...existingGroups, ...activatedGroups]),
         observationTokenCount: Number(doc.observationTokenCount || 0) + activatedTokens,
         // Decrement pending message tokens (clamped to zero)
         pendingMessageTokens: Math.max(0, Number(doc.pendingMessageTokens || 0) - activatedMessageTokens),
@@ -353,7 +440,11 @@ export async function handleObservationalMemoryOperation(
     }
 
     case 'omUpdateBufferedReflection': {
-      const doc = requireRecord(await findRecordById(ctx, convexTable, request.id), request.id);
+      const doc = requireWritableRecord(
+        await findRecordById(ctx, convexTable, request.id),
+        request.id,
+        request.expectedWriteEpoch,
+      );
 
       const existingContent = (doc.bufferedReflection as string) || '';
       await ctx.db.patch(doc._id, {
@@ -368,7 +459,11 @@ export async function handleObservationalMemoryOperation(
 
     case 'omSwapBufferedReflection': {
       const { currentRecord, newId, tokenCount, now } = request;
-      const doc = requireRecord(await findRecordById(ctx, convexTable, currentRecord.id), currentRecord.id);
+      const doc = requireWritableRecord(
+        await findRecordById(ctx, convexTable, currentRecord.id),
+        currentRecord.id,
+        request.expectedWriteEpoch ?? currentRecord.writeEpoch,
+      );
 
       const bufferedReflection = (doc.bufferedReflection as string) || '';
       if (!bufferedReflection) {
@@ -381,13 +476,15 @@ export async function handleObservationalMemoryOperation(
         Number(doc.reflectedObservationLineCount || 0),
       );
 
-      // Create the new generation record
+      // Create the new generation record after sealing the predecessor in this transaction.
       const newRecord = {
         id: newId,
         lookupKey: currentRecord.lookupKey,
         scope: currentRecord.scope,
         resourceId: currentRecord.resourceId,
         threadId: currentRecord.threadId,
+        recordState: 'active',
+        writeEpoch: 0,
         activeObservations: newObservations,
         activeObservationsPendingUpdate: null,
         originType: 'reflection',
@@ -409,22 +506,26 @@ export async function handleObservationalMemoryOperation(
         createdAt: now,
         updatedAt: now,
       };
-      await ctx.db.insert(convexTable, newRecord);
-
-      // Clear buffered state on the old record
+      // Seal and clear buffered state on the old record.
       await ctx.db.patch(doc._id, {
+        recordState: 'sealed',
         bufferedReflection: null,
         bufferedReflectionTokens: null,
         bufferedReflectionInputTokens: null,
         reflectedObservationLineCount: null,
         updatedAt: now,
       });
+      await ctx.db.insert(convexTable, newRecord);
 
       return { ok: true, result: newRecord };
     }
 
     case 'omUpdateConfig': {
-      const doc = requireRecord(await findRecordById(ctx, convexTable, request.id), request.id);
+      const doc = requireWritableRecord(
+        await findRecordById(ctx, convexTable, request.id),
+        request.id,
+        request.expectedWriteEpoch,
+      );
 
       const existing = parseJsonObject(doc.config);
       const incoming = parseJsonObject(request.config);
@@ -435,6 +536,217 @@ export async function handleObservationalMemoryOperation(
         updatedAt: request.updatedAt,
       });
       return { ok: true };
+    }
+
+    case 'omCreateReflectionGeneration': {
+      const doc = requireWritableRecord(
+        await findRecordById(ctx, convexTable, request.currentRecordId),
+        request.currentRecordId,
+        request.expectedWriteEpoch,
+      );
+      if (Number(doc.generationCount) !== request.expectedGenerationCount) {
+        throw new Error(`Observational memory record is stale: ${request.currentRecordId}`);
+      }
+      await ctx.db.patch(doc._id, {
+        recordState: 'sealed',
+        bufferedReflection: null,
+        bufferedReflectionTokens: null,
+        bufferedReflectionInputTokens: null,
+        reflectedObservationLineCount: null,
+        isReflecting: false,
+        isBufferingReflection: false,
+        updatedAt: request.newRecord.updatedAt,
+      });
+      await ctx.db.insert(convexTable, request.newRecord);
+      return { ok: true, result: request.newRecord };
+    }
+
+    case 'omCreateArchiveGeneration': {
+      const input = request.input;
+      const allDocs = await ctx.db.query(convexTable).take(OM_QUERY_MAX_DOCS);
+      const priorDoc = allDocs.find((candidate: any) => parseArchive(candidate)?.archiveId === input.archiveId);
+      if (priorDoc) {
+        const priorArchive = parseArchive(priorDoc)!;
+        const priorGroups = Array.isArray(priorArchive.groups) ? priorArchive.groups : [];
+        const retiredGroups = Array.isArray(input.retiredGroups) ? input.retiredGroups : [];
+        const identical =
+          priorArchive.sourceRecordId === input.currentRecordId &&
+          priorArchive.sourceGenerationCount === input.expectedGenerationCount &&
+          priorArchive.sourceWriteEpoch === input.expectedWriteEpoch &&
+          priorArchive.contentDigest === input.contentDigest &&
+          priorGroups.length === retiredGroups.length &&
+          priorGroups.every((group: any, index: number) => group.groupId === retiredGroups[index]?.groupId);
+        if (!identical) throw new Error(`Archive ID ${input.archiveId} is already bound to a different transition`);
+        const successor = allDocs.find((candidate: any) => candidate.id === priorArchive.successorRecordId);
+        if (!successor) throw new Error(`Archive successor not found: ${priorArchive.successorRecordId}`);
+        return { ok: true, result: successor };
+      }
+      const doc = requireWritableRecord(
+        await findRecordById(ctx, convexTable, input.currentRecordId),
+        input.currentRecordId,
+        input.expectedWriteEpoch,
+      );
+      if (Number(doc.generationCount) !== input.expectedGenerationCount) {
+        throw new Error(`Observational memory record is stale: ${input.currentRecordId}`);
+      }
+      const archive = {
+        archiveId: input.archiveId,
+        archivedAt: input.archivedAt,
+        sourceRecordId: doc.id,
+        successorRecordId: request.successorId,
+        generationCount: doc.generationCount,
+        sourceGenerationCount: doc.generationCount,
+        sourceWriteEpoch: Number(doc.writeEpoch ?? 0),
+        contentDigest: input.contentDigest,
+        observationTokenCount: input.retiredObservationTokenCount,
+        groups: input.retiredGroups,
+      };
+      await ctx.db.patch(doc._id, {
+        recordState: 'sealed',
+        updatedAt: input.archivedAt,
+        activeObservations: input.retiredObservations,
+        observationGroups: JSON.stringify(input.retiredGroups),
+        archive: JSON.stringify(archive),
+        observationTokenCount: input.retiredObservationTokenCount,
+        pendingMessageTokens: 0,
+        bufferedObservationChunks: null,
+        bufferedReflection: null,
+        bufferedReflectionTokens: null,
+        bufferedReflectionInputTokens: null,
+        reflectedObservationLineCount: null,
+        isReflecting: false,
+        isObserving: false,
+        isBufferingObservation: false,
+        isBufferingReflection: false,
+      });
+      const successor = {
+        ...doc,
+        _id: undefined,
+        _creationTime: undefined,
+        id: request.successorId,
+        recordState: 'active',
+        writeEpoch: 0,
+        createdAt: input.archivedAt,
+        updatedAt: input.archivedAt,
+        originType: 'archive',
+        generationCount: Number(doc.generationCount) + 1,
+        activeObservations: input.retainedObservations,
+        observationGroups: JSON.stringify(input.retainedGroups),
+        archive: null,
+        observationTokenCount: input.retainedObservationTokenCount,
+        bufferedReflection: null,
+        bufferedReflectionTokens: null,
+        bufferedReflectionInputTokens: null,
+        reflectedObservationLineCount: null,
+        isReflecting: false,
+        isBufferingReflection: false,
+      };
+      delete successor._id;
+      delete successor._creationTime;
+      await ctx.db.insert(convexTable, successor);
+      return { ok: true, result: successor };
+    }
+
+    case 'omListArchives': {
+      const input = request.input;
+      const limit = Math.min(Math.max(Number(input.limit ?? 20), 1), 20);
+      const docs = await ctx.db.query(convexTable).take(OM_QUERY_MAX_DOCS);
+      const normalizedText = input.text ? String(input.text).normalize('NFKC').toLocaleLowerCase() : undefined;
+      let entries = docs
+        .map((doc: any) => archiveEntry(doc, input))
+        .filter((entry: any) => entry !== null)
+        .map((entry: any) => ({
+          ...entry,
+          groups: entry.groups.filter((group: any) => {
+            if (input.from && (!group.observedAt || group.observedAt.to < input.from)) return false;
+            if (input.to && (!group.observedAt || group.observedAt.from > input.to)) return false;
+            if (normalizedText && !String(group.searchText).includes(normalizedText)) return false;
+            return true;
+          }),
+        }))
+        .filter((entry: any) => entry.groups.length > 0)
+        .sort(archiveCompare);
+      if (input.cursor) {
+        let cursor: Record<string, any>;
+        try {
+          cursor = JSON.parse(input.cursor);
+        } catch {
+          throw new Error('Invalid observation archive cursor');
+        }
+        entries = entries.filter((entry: any) => archiveCompare(entry, cursor) > 0);
+      }
+      const page = entries.slice(0, limit + 1);
+      const hasMore = page.length > limit;
+      const archives = hasMore ? page.slice(0, limit) : page;
+      return {
+        ok: true,
+        result: {
+          archives,
+          nextCursor: hasMore ? encodeArchiveCursor(archives[archives.length - 1]!) : undefined,
+        },
+      };
+    }
+
+    case 'omGetArchive': {
+      const input = request.input;
+      const docs = await ctx.db.query(convexTable).take(OM_QUERY_MAX_DOCS);
+      const doc = docs.find((candidate: any) => parseArchive(candidate)?.archiveId === input.archiveId);
+      if (!doc) return { ok: true, result: null };
+      const entry = archiveEntry(doc, input);
+      if (!entry) return { ok: true, result: null };
+      const groups = input.groupId
+        ? entry.groups.filter((group: any) => group.groupId === input.groupId)
+        : entry.groups;
+      if (groups.length === 0) return { ok: true, result: null };
+      entry.groups = groups;
+      return {
+        ok: true,
+        result: {
+          archive: entry,
+          observations: groups
+            .map((group: any) => String(doc.activeObservations).slice(group.textStart, group.textEnd))
+            .join('\n\n'),
+        },
+      };
+    }
+
+    case 'omGetArchivesByGroupIds': {
+      const input = request.input;
+      const groupIds = Array.from(new Set(input.groupIds as string[]));
+      if (groupIds.length > 20) throw new Error('Observation archive group lookup supports at most 20 group IDs');
+      const requested = new Set(groupIds);
+      const docs = await ctx.db.query(convexTable).take(OM_QUERY_MAX_DOCS);
+      const matches = docs
+        .map((doc: any) => archiveEntry(doc, input))
+        .filter((entry: any) => entry !== null)
+        .map((entry: any) => {
+          const groups = entry.groups.filter((group: any) => requested.has(group.groupId));
+          entry.groups = groups;
+          return { archive: entry, groupIds: groups.map((group: any) => group.groupId) };
+        })
+        .filter((match: any) => match.groupIds.length > 0)
+        .sort((a: any, b: any) => archiveCompare(a.archive, b.archive));
+      return { ok: true, result: { matches } };
+    }
+
+    case 'omClearBufferedReflection': {
+      const doc = requireWritableRecord(
+        await findRecordById(ctx, convexTable, request.id),
+        request.id,
+        request.expectedWriteEpoch,
+      );
+      const patch = {
+        bufferedReflection: null,
+        bufferedReflectionTokens: null,
+        bufferedReflectionInputTokens: null,
+        reflectedObservationLineCount: null,
+        isReflecting: false,
+        isBufferingReflection: false,
+        writeEpoch: Number(doc.writeEpoch ?? 0) + 1,
+        updatedAt: request.updatedAt,
+      };
+      await ctx.db.patch(doc._id, patch);
+      return { ok: true, result: { ...doc, ...patch } };
     }
   }
 }

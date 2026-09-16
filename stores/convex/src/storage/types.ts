@@ -1,4 +1,4 @@
-import type { TABLE_NAMES } from '@mastra/core/storage';
+import type { ObservationGroupMetadata, TABLE_NAMES } from '@mastra/core/storage';
 
 /**
  * Observational memory table name. Defined locally (not value-imported from
@@ -46,6 +46,7 @@ export type SerializedOMChunk = {
   threadTitle?: string;
   extractedValues?: Record<string, unknown>;
   extractionFailures?: Array<{ slug: string; error: string }>;
+  observationGroups?: ObservationGroupMetadata[];
 };
 
 /**
@@ -65,6 +66,7 @@ export type SerializedOMCurrentRecord = {
   lastObservedAt: string | null;
   totalTokensObserved: number;
   generationCount: number;
+  writeEpoch: number;
 };
 
 export type StorageRequest =
@@ -217,6 +219,8 @@ export type StorageRequest =
       /** ISO timestamp */
       lastObservedAt: string;
       observedMessageIds: string[] | null;
+      observationGroups?: ObservationGroupMetadata[];
+      expectedWriteEpoch?: number;
       /** ISO timestamp */
       updatedAt: string;
     }
@@ -227,6 +231,7 @@ export type StorageRequest =
       chunk: SerializedOMChunk;
       /** ISO timestamp */
       lastBufferedAtTime?: string;
+      expectedWriteEpoch?: number;
       /** ISO timestamp */
       updatedAt: string;
     }
@@ -244,6 +249,7 @@ export type StorageRequest =
       bufferedChunks?: SerializedOMChunk[];
       /** ISO timestamp used for updatedAt and lastObservedAt fallback */
       now: string;
+      expectedWriteEpoch?: number;
     }
   | {
       op: 'omUpdateBufferedReflection';
@@ -253,6 +259,7 @@ export type StorageRequest =
       tokenCount: number;
       inputTokenCount: number;
       reflectedObservationLineCount: number;
+      expectedWriteEpoch?: number;
       /** ISO timestamp */
       updatedAt: string;
     }
@@ -264,6 +271,7 @@ export type StorageRequest =
       newId: string;
       /** Token count of the combined new activeObservations */
       tokenCount: number;
+      expectedWriteEpoch?: number;
       /** ISO timestamp */
       now: string;
     }
@@ -273,7 +281,44 @@ export type StorageRequest =
       id: string;
       /** JSON string; deep-merged into the stored config server-side */
       config: string;
+      expectedWriteEpoch?: number;
       /** ISO timestamp */
+      updatedAt: string;
+    }
+  | {
+      op: 'omCreateReflectionGeneration';
+      tableName: TABLE_NAMES | string;
+      currentRecordId: string;
+      expectedGenerationCount: number;
+      expectedWriteEpoch: number;
+      newRecord: Record<string, any>;
+    }
+  | {
+      op: 'omCreateArchiveGeneration';
+      tableName: TABLE_NAMES | string;
+      input: Record<string, any>;
+      successorId: string;
+    }
+  | {
+      op: 'omListArchives';
+      tableName: TABLE_NAMES | string;
+      input: Record<string, any>;
+    }
+  | {
+      op: 'omGetArchive';
+      tableName: TABLE_NAMES | string;
+      input: Record<string, any>;
+    }
+  | {
+      op: 'omGetArchivesByGroupIds';
+      tableName: TABLE_NAMES | string;
+      input: Record<string, any>;
+    }
+  | {
+      op: 'omClearBufferedReflection';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      expectedWriteEpoch: number;
       updatedAt: string;
     };
 

@@ -658,7 +658,7 @@ describe('MemoryConvex observational memory', () => {
     expect(result).toEqual(serverResult);
   });
 
-  it('createReflectionGeneration inserts the next generation built from the current record', async () => {
+  it('createReflectionGeneration atomically seals the current record and inserts the next generation', async () => {
     const { calls, memory } = createMemoryDomain(() => undefined);
 
     const currentRecord = {
@@ -693,11 +693,16 @@ describe('MemoryConvex observational memory', () => {
     });
 
     expect(calls[0]).toMatchObject({
-      op: 'insert',
+      op: 'omCreateReflectionGeneration',
       tableName: OM_TABLE,
-      record: {
+      currentRecordId: currentRecord.id,
+      expectedGenerationCount: 3,
+      expectedWriteEpoch: 0,
+      newRecord: {
         id: record.id,
         lookupKey: 'resource:resource-1',
+        recordState: 'active',
+        writeEpoch: 0,
         originType: 'reflection',
         generationCount: 4,
         activeObservations: 'the reflection',

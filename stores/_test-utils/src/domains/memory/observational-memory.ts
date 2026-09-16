@@ -1606,14 +1606,12 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
           },
         ];
         const archiveId = `archive-${randomUUID()}`;
-        const successorId = `om-${randomUUID()}`;
 
         const successor = await memoryStorage.createObservationArchiveGeneration({
           currentRecordId: record.id,
           expectedGenerationCount: record.generationCount,
           expectedWriteEpoch: record.writeEpoch ?? 0,
           archiveId,
-          successorId,
           archivedAt,
           contentDigest: `digest-${randomUUID()}`,
           retiredObservations,
@@ -1624,7 +1622,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
           retainedGroups,
         });
 
-        expect(successor.id).toBe(successorId);
+        expect(successor.id).not.toBe(record.id);
         expect(successor.originType).toBe('archive');
         expect(successor.recordState).toBe('active');
         expect(successor.activeObservations).toBe('retained observation');
@@ -1641,14 +1639,14 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         expect(page.archives[0]?.archiveId).toBe(archiveId);
         expect(page.archives[0]?.groups).toEqual(retiredGroups);
 
-        const direct = await memoryStorage.getObservationArchiveById({
+        const direct = await memoryStorage.getObservationArchive({
           scope: 'thread',
           threadId,
           resourceId,
           archiveId,
         });
         expect(direct?.observations).toBe(retiredObservations);
-        expect(direct?.recordState).toBe('sealed');
+        expect(direct?.archive.recordId).toBe(record.id);
 
         const byGroup = await memoryStorage.getObservationArchivesByGroupIds({
           scope: 'thread',
@@ -1657,7 +1655,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
           groupIds: [retiredGroups[0]!.groupId],
         });
         expect(byGroup.matches).toHaveLength(1);
-        expect(byGroup.matches[0]?.archiveId).toBe(archiveId);
+        expect(byGroup.matches[0]?.archive.archiveId).toBe(archiveId);
       });
 
       it('fences stale writes and clears buffered reflection atomically', async () => {

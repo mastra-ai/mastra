@@ -3402,8 +3402,8 @@ Notes:
       newThreadId: sourceOM.scope === 'thread' ? clonedThreadId : null,
       newResourceId: clonedResourceId,
       messageIdMap,
-      sourceThreadId: resourceChanged ? sourceThreadId : undefined,
-      clonedThreadId: resourceChanged ? clonedThreadId : undefined,
+      sourceThreadId,
+      clonedThreadId,
       hasher: resourceChanged ? hasher : undefined,
     });
     const now = new Date();
@@ -3451,6 +3451,22 @@ Notes:
       cloned.bufferedMessageIds = undefined;
     }
 
+    const remapObservationGroup = (group: NonNullable<ObservationalMemoryRecord['observationGroups']>[number]) => {
+      const [startId, endId] = group.messageRange?.split(':') ?? [];
+      const remappedStartId = startId ? messageIdMap[startId] : undefined;
+      const remappedEndId = endId ? messageIdMap[endId] : undefined;
+      const hasCompleteRange = Boolean(remappedStartId && remappedEndId);
+
+      return {
+        ...group,
+        messageRange: hasCompleteRange ? `${remappedStartId}:${remappedEndId}` : undefined,
+        sourceUnavailable: group.sourceUnavailable || !hasCompleteRange || undefined,
+        sourceThreadId: group.sourceThreadId === sourceThreadId ? clonedThreadId : group.sourceThreadId,
+      };
+    };
+
+    cloned.observationGroups = cloned.observationGroups?.map(remapObservationGroup);
+
     // Remap bufferedObservationChunks
     if (Array.isArray(cloned.bufferedObservationChunks)) {
       cloned.bufferedObservationChunks = cloned.bufferedObservationChunks.map(
@@ -3459,11 +3475,16 @@ Notes:
           messageIds: Array.isArray(chunk.messageIds)
             ? chunk.messageIds.map((id: string) => messageIdMap[id]).filter((id): id is string => Boolean(id))
             : [],
+          observationGroups: chunk.observationGroups?.map(remapObservationGroup),
         }),
       );
     } else {
       cloned.bufferedObservationChunks = undefined;
     }
+
+    cloned.recordState = 'active';
+    cloned.writeEpoch = 0;
+    cloned.archive = undefined;
 
     // For resource-scoped OM cloned to a new resource, remap thread tags in text fields
     if (sourceThreadId && clonedThreadId && hasher) {

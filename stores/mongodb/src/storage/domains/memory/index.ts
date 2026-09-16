@@ -23,6 +23,30 @@ import {
  * versions that don't export TABLE_OBSERVATIONAL_MEMORY.
  */
 const OM_TABLE = 'mastra_observational_memory' as const;
+
+function parseObservationGroups(value: unknown): ObservationGroupMetadata[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.map(group => {
+    const typed = group as ObservationGroupMetadata;
+    return {
+      ...typed,
+      observedAt: typed.observedAt
+        ? { from: new Date(typed.observedAt.from), to: new Date(typed.observedAt.to) }
+        : undefined,
+    };
+  });
+}
+
+function parseObservationArchive(value: unknown): ObservationArchiveMetadata | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const archive = value as ObservationArchiveMetadata;
+  return {
+    ...archive,
+    archivedAt: new Date(archive.archivedAt),
+    groups: (parseObservationGroups(archive.groups) as ArchivedObservationGroup[] | undefined) ?? [],
+  };
+}
+
 import type {
   PruneOptions,
   PruneResult,
@@ -48,6 +72,18 @@ import type {
   UpdateBufferedReflectionInput,
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
+  CreateObservationArchiveGenerationInput,
+  ListObservationArchivesInput,
+  ListObservationArchivesResult,
+  GetObservationArchiveInput,
+  GetObservationArchiveResult,
+  GetObservationArchivesByGroupIdsInput,
+  GetObservationArchivesByGroupIdsResult,
+  ObservationArchiveEntry,
+  ObservationGroupMetadata,
+  ObservationArchiveMetadata,
+  ArchivedObservationGroup,
+  ClearBufferedReflectionInput,
   UpdateObservationalMemoryConfigInput,
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
@@ -1473,6 +1509,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       scope: doc.scope,
       threadId: doc.threadId || null,
       resourceId: doc.resourceId,
+      recordState: doc.recordState || 'active',
+      writeEpoch: Number(doc.writeEpoch || 0),
       createdAt: doc.createdAt instanceof Date ? doc.createdAt : new Date(doc.createdAt),
       updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt : new Date(doc.updatedAt),
       lastObservedAt: doc.lastObservedAt
@@ -1483,6 +1521,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       originType: doc.originType || 'initial',
       generationCount: Number(doc.generationCount || 0),
       activeObservations: doc.activeObservations || '',
+      observationGroups: parseObservationGroups(doc.observationGroups),
+      archive: parseObservationArchive(doc.archive),
       // Handle new chunk-based structure
       bufferedObservationChunks: Array.isArray(doc.bufferedObservationChunks)
         ? doc.bufferedObservationChunks
@@ -1518,11 +1558,73 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     };
   }
 
+  private toObservationArchiveEntry(
+    record: ObservationalMemoryRecord,
+    input: Pick<ListObservationArchivesInput, 'scope' | 'resourceId' | 'threadId' | 'filterThreadId'>,
+  ): ObservationArchiveEntry | null {
+    const archive = record.archive;
+    if (!archive || record.resourceId !== input.resourceId) return null;
+    if (input.scope === 'thread' && record.scope === 'thread' && record.threadId !== input.threadId) return null;
+    const projectedThreadId = input.scope === 'thread' ? input.threadId : input.filterThreadId;
+    const groups = archive.groups.filter(group => {
+      if (!projectedThreadId) return true;
+      if (record.scope === 'thread') return record.threadId === projectedThreadId;
+      return group.sourceThreadId === projectedThreadId;
+    });
+    if (groups.length === 0) return null;
+    return {
+      archiveId: archive.archiveId,
+      recordId: record.id,
+      scope: record.scope,
+      threadId: record.threadId,
+      resourceId: record.resourceId,
+      archivedAt: archive.archivedAt,
+      generationCount: record.generationCount,
+      observationTokenCount: archive.observationTokenCount,
+      groups,
+    };
+  }
+
+  private encodeObservationArchiveCursor(entry: ObservationArchiveEntry): string {
+    return Buffer.from(
+      JSON.stringify({
+        archivedAt: entry.archivedAt.toISOString(),
+        generationCount: entry.generationCount,
+        archiveId: entry.archiveId,
+      }),
+    ).toString('base64url');
+  }
+
+  private decodeObservationArchiveCursor(cursor: string): {
+    archivedAt: Date;
+    generationCount: number;
+    archiveId: string;
+  } {
+    try {
+      const value = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Record<string, unknown>;
+      const archivedAt = typeof value.archivedAt === 'string' ? new Date(value.archivedAt) : new Date(Number.NaN);
+      if (
+        !Number.isFinite(archivedAt.getTime()) ||
+        !Number.isInteger(value.generationCount) ||
+        typeof value.archiveId !== 'string' ||
+        !value.archiveId
+      ) {
+        throw new Error('invalid fields');
+      }
+      return { archivedAt, generationCount: value.generationCount as number, archiveId: value.archiveId };
+    } catch {
+      throw new Error('Invalid observation archive cursor');
+    }
+  }
+
   async getObservationalMemory(threadId: string | null, resourceId: string): Promise<ObservationalMemoryRecord | null> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
       const collection = await this.getCollection(OM_TABLE);
-      const doc = await collection.findOne({ lookupKey }, { sort: { generationCount: -1 } });
+      const doc = await collection.findOne(
+        { lookupKey, $or: [{ recordState: 'active' }, { recordState: { $exists: false } }] },
+        { sort: { generationCount: -1 } },
+      );
       if (!doc) return null;
       return this.parseOMDocument(doc);
     } catch (error) {
@@ -1586,6 +1688,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         scope: input.scope,
         threadId: input.threadId,
         resourceId: input.resourceId,
+        recordState: 'active',
+        writeEpoch: 0,
         createdAt: now,
         updatedAt: now,
         lastObservedAt: undefined,
@@ -1612,6 +1716,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         scope: input.scope,
         resourceId: input.resourceId,
         threadId: input.threadId || null,
+        recordState: 'active',
+        writeEpoch: 0,
         activeObservations: '',
         activeObservationsPendingUpdate: null,
         originType: 'initial',
@@ -1657,7 +1763,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         scope: record.scope,
         resourceId: record.resourceId,
         threadId: record.threadId || null,
+        recordState: record.recordState ?? 'active',
+        writeEpoch: record.writeEpoch ?? 0,
         activeObservations: record.activeObservations || '',
+        observationGroups: record.observationGroups ?? null,
+        archive: record.archive ?? null,
         activeObservationsPendingUpdate: null,
         originType: record.originType || 'initial',
         config: record.config || null,
@@ -1711,11 +1821,16 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         pendingMessageTokens: 0,
         observationTokenCount: safeTokenCount,
         observedMessageIds: input.observedMessageIds ?? null,
+        observationGroups: input.observationGroups ?? null,
         updatedAt: now,
       };
 
       const result = await collection.updateOne(
-        { id: input.id },
+        {
+          id: input.id,
+          $or: [{ recordState: 'active' }, { recordState: { $exists: false } }],
+          $expr: { $eq: [{ $ifNull: ['$writeEpoch', 0] }, input.expectedWriteEpoch ?? 0] },
+        },
         {
           $set: updateDoc,
           $inc: { totalTokensObserved: safeTokenCount },
@@ -1747,17 +1862,272 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
+  async createObservationArchiveGeneration(
+    input: CreateObservationArchiveGenerationInput,
+  ): Promise<ObservationalMemoryRecord> {
+    if (!(await this.#connector.supportsTransactions())) {
+      throw new Error('Observation archive transitions require MongoDB transaction support');
+    }
+    const collection = await this.getCollection(OM_TABLE);
+    return this.#connector.withTransaction(async session => {
+      const priorDoc = await collection.findOne({ 'archive.archiveId': input.archiveId }, { session });
+      if (priorDoc) {
+        const prior = this.parseOMDocument(priorDoc);
+        const archive = prior.archive!;
+        const sameTransition =
+          archive.sourceRecordId === input.currentRecordId &&
+          archive.sourceGenerationCount === input.expectedGenerationCount &&
+          archive.sourceWriteEpoch === input.expectedWriteEpoch &&
+          archive.contentDigest === input.contentDigest &&
+          archive.groups.length === input.retiredGroups.length &&
+          archive.groups.every((group, index) => group.groupId === input.retiredGroups[index]?.groupId);
+        if (!sameTransition) {
+          throw new Error(`Archive ID ${input.archiveId} is already bound to a different transition`);
+        }
+        const successorDoc = await collection.findOne({ id: archive.successorRecordId }, { session });
+        if (!successorDoc) throw new Error(`Archive successor not found: ${archive.successorRecordId}`);
+        return this.parseOMDocument(successorDoc);
+      }
+
+      const currentDoc = await collection.findOne({ id: input.currentRecordId }, { session });
+      if (!currentDoc) throw new Error(`Observational memory record not found: ${input.currentRecordId}`);
+      const current = this.parseOMDocument(currentDoc);
+      if (
+        current.recordState !== 'active' ||
+        (current.writeEpoch ?? 0) !== input.expectedWriteEpoch ||
+        current.generationCount !== input.expectedGenerationCount
+      ) {
+        throw new Error(`Observational memory record is stale or sealed: ${input.currentRecordId}`);
+      }
+
+      const successorId = randomUUID();
+      const archive: ObservationArchiveMetadata = {
+        archiveId: input.archiveId,
+        archivedAt: input.archivedAt,
+        sourceRecordId: current.id,
+        successorRecordId: successorId,
+        generationCount: current.generationCount,
+        sourceGenerationCount: current.generationCount,
+        sourceWriteEpoch: current.writeEpoch ?? 0,
+        contentDigest: input.contentDigest,
+        observationTokenCount: input.retiredObservationTokenCount,
+        groups: input.retiredGroups,
+      };
+      const updated = await collection.updateOne(
+        {
+          id: current.id,
+          generationCount: input.expectedGenerationCount,
+          $or: [{ recordState: 'active' }, { recordState: { $exists: false } }],
+          $expr: { $eq: [{ $ifNull: ['$writeEpoch', 0] }, input.expectedWriteEpoch] },
+        },
+        {
+          $set: {
+            recordState: 'sealed',
+            updatedAt: input.archivedAt,
+            activeObservations: input.retiredObservations,
+            observationGroups: input.retiredGroups,
+            archive,
+            observationTokenCount: input.retiredObservationTokenCount,
+            pendingMessageTokens: 0,
+            isReflecting: false,
+            isObserving: false,
+            isBufferingObservation: false,
+            isBufferingReflection: false,
+          },
+          $unset: {
+            bufferedObservationChunks: '',
+            bufferedReflection: '',
+            bufferedReflectionTokens: '',
+            bufferedReflectionInputTokens: '',
+            reflectedObservationLineCount: '',
+          },
+        },
+        { session },
+      );
+      if (updated.matchedCount !== 1) {
+        throw new Error(`Observational memory record is stale or sealed: ${input.currentRecordId}`);
+      }
+
+      const { _id: _ignored, ...mutable } = currentDoc;
+      const successorDoc = {
+        ...mutable,
+        id: successorId,
+        recordState: 'active',
+        writeEpoch: 0,
+        createdAt: input.archivedAt,
+        updatedAt: input.archivedAt,
+        originType: 'archive',
+        generationCount: current.generationCount + 1,
+        activeObservations: input.retainedObservations,
+        observationGroups: input.retainedGroups,
+        archive: null,
+        observationTokenCount: input.retainedObservationTokenCount,
+        bufferedReflection: null,
+        bufferedReflectionTokens: null,
+        bufferedReflectionInputTokens: null,
+        reflectedObservationLineCount: null,
+        isReflecting: false,
+        isBufferingReflection: false,
+      };
+      await collection.insertOne(successorDoc, { session });
+      return this.parseOMDocument(successorDoc);
+    });
+  }
+
+  async listObservationArchives(input: ListObservationArchivesInput): Promise<ListObservationArchivesResult> {
+    if (input.scope === 'thread' && !input.threadId) {
+      throw new Error('threadId is required for thread-scoped observation archive access');
+    }
+    const limit = Math.min(Math.max(input.limit ?? 20, 1), 20);
+    const filter: Record<string, any> = { resourceId: input.resourceId, archive: { $ne: null } };
+    if (input.scope === 'thread') {
+      filter.$and = [{ $or: [{ scope: 'resource' }, { scope: 'thread', threadId: input.threadId }] }];
+    }
+    const projectedThreadId = input.scope === 'thread' ? input.threadId : input.filterThreadId;
+    const groupMatch: Record<string, any> = {};
+    if (projectedThreadId) groupMatch.sourceThreadId = projectedThreadId;
+    if (input.from) groupMatch['observedAt.to'] = { $gte: input.from };
+    if (input.to) groupMatch['observedAt.from'] = { $lte: input.to };
+    if (input.text) {
+      groupMatch.searchText = {
+        $regex: input.text
+          .normalize('NFKC')
+          .toLowerCase()
+          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+      };
+    }
+    if (Object.keys(groupMatch).length > 0) filter['archive.groups'] = { $elemMatch: groupMatch };
+    if (input.cursor) {
+      const cursor = this.decodeObservationArchiveCursor(input.cursor);
+      const afterCursor = {
+        $or: [
+          { 'archive.archivedAt': { $lt: cursor.archivedAt } },
+          { 'archive.archivedAt': cursor.archivedAt, generationCount: { $lt: cursor.generationCount } },
+          {
+            'archive.archivedAt': cursor.archivedAt,
+            generationCount: cursor.generationCount,
+            'archive.archiveId': { $lt: cursor.archiveId },
+          },
+        ],
+      };
+      filter.$and = [...(filter.$and ?? []), afterCursor];
+    }
+    const collection = await this.getCollection(OM_TABLE);
+    const docs = await collection
+      .find(filter)
+      .sort({ 'archive.archivedAt': -1, generationCount: -1, 'archive.archiveId': -1 })
+      .limit(limit + 1)
+      .toArray();
+    const normalizedText = input.text?.normalize('NFKC').toLowerCase();
+    const entries = docs
+      .map(doc => this.toObservationArchiveEntry(this.parseOMDocument(doc), input))
+      .filter((entry): entry is ObservationArchiveEntry => entry !== null)
+      .map(entry => ({
+        ...entry,
+        groups: entry.groups.filter(group => {
+          if (input.from && (!group.observedAt || group.observedAt.to < input.from)) return false;
+          if (input.to && (!group.observedAt || group.observedAt.from > input.to)) return false;
+          if (normalizedText && !group.searchText.includes(normalizedText)) return false;
+          return true;
+        }),
+      }))
+      .filter(entry => entry.groups.length > 0);
+    const hasMore = entries.length > limit;
+    const archives = hasMore ? entries.slice(0, limit) : entries;
+    return {
+      archives,
+      nextCursor: hasMore ? this.encodeObservationArchiveCursor(archives[archives.length - 1]!) : undefined,
+    };
+  }
+
+  async getObservationArchive(input: GetObservationArchiveInput): Promise<GetObservationArchiveResult | null> {
+    const collection = await this.getCollection(OM_TABLE);
+    const doc = await collection.findOne({ resourceId: input.resourceId, 'archive.archiveId': input.archiveId });
+    if (!doc) return null;
+    const record = this.parseOMDocument(doc);
+    const entry = this.toObservationArchiveEntry(record, input);
+    if (!entry) return null;
+    const groups = input.groupId ? entry.groups.filter(group => group.groupId === input.groupId) : entry.groups;
+    if (groups.length === 0) return null;
+    entry.groups = groups;
+    return {
+      archive: entry,
+      observations: groups.map(group => record.activeObservations.slice(group.textStart, group.textEnd)).join('\n\n'),
+    };
+  }
+
+  async getObservationArchivesByGroupIds(
+    input: GetObservationArchivesByGroupIdsInput,
+  ): Promise<GetObservationArchivesByGroupIdsResult> {
+    const groupIds = Array.from(new Set(input.groupIds));
+    if (groupIds.length > 20) throw new Error('Observation archive group lookup supports at most 20 group IDs');
+    if (groupIds.length === 0) return { matches: [] };
+    if (input.scope === 'thread' && !input.threadId) {
+      throw new Error('threadId is required for thread-scoped observation archive access');
+    }
+    const filter: Record<string, any> = {
+      resourceId: input.resourceId,
+      'archive.groups.groupId': { $in: groupIds },
+    };
+    if (input.scope === 'thread') {
+      filter.$or = [{ scope: 'resource' }, { scope: 'thread', threadId: input.threadId }];
+    }
+    const collection = await this.getCollection(OM_TABLE);
+    const docs = await collection
+      .find(filter)
+      .sort({ 'archive.archivedAt': -1, generationCount: -1, 'archive.archiveId': -1 })
+      .limit(400)
+      .toArray();
+    const requested = new Set(groupIds);
+    const matches = docs
+      .map(doc => this.toObservationArchiveEntry(this.parseOMDocument(doc), input))
+      .filter((entry): entry is ObservationArchiveEntry => entry !== null)
+      .map(archive => {
+        const groups = archive.groups.filter(group => requested.has(group.groupId));
+        archive.groups = groups;
+        return { archive, groupIds: groups.map(group => group.groupId) };
+      })
+      .filter(match => match.groupIds.length > 0);
+    return { matches };
+  }
+
+  async clearBufferedReflection(input: ClearBufferedReflectionInput): Promise<ObservationalMemoryRecord> {
+    const collection = await this.getCollection(OM_TABLE);
+    const result = await collection.findOneAndUpdate(
+      {
+        id: input.id,
+        $or: [{ recordState: 'active' }, { recordState: { $exists: false } }],
+        $expr: { $eq: [{ $ifNull: ['$writeEpoch', 0] }, input.expectedWriteEpoch] },
+      },
+      {
+        $set: { isReflecting: false, isBufferingReflection: false, updatedAt: new Date() },
+        $unset: {
+          bufferedReflection: '',
+          bufferedReflectionTokens: '',
+          bufferedReflectionInputTokens: '',
+          reflectedObservationLineCount: '',
+        },
+        $inc: { writeEpoch: 1 },
+      },
+      { returnDocument: 'after' },
+    );
+    if (!result) throw new Error(`Observational memory record is stale or sealed: ${input.id}`);
+    return this.parseOMDocument(result);
+  }
+
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
     try {
       const id = randomUUID();
       const now = new Date();
       const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
-
+      const expectedWriteEpoch = input.expectedWriteEpoch ?? input.currentRecord.writeEpoch ?? 0;
       const record: ObservationalMemoryRecord = {
         id,
         scope: input.currentRecord.scope,
         threadId: input.currentRecord.threadId,
         resourceId: input.currentRecord.resourceId,
+        recordState: 'active',
+        writeEpoch: 0,
         createdAt: now,
         updatedAt: now,
         lastObservedAt: input.currentRecord.lastObservedAt,
@@ -1774,39 +2144,73 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         lastBufferedAtTokens: 0,
         lastBufferedAtTime: null,
         config: input.currentRecord.config,
-        metadata: input.currentRecord.metadata,
+        metadata: {},
         observedTimezone: input.currentRecord.observedTimezone,
       };
 
       const collection = await this.getCollection(OM_TABLE);
-      await collection.insertOne({
-        id,
-        lookupKey,
-        scope: record.scope,
-        resourceId: record.resourceId,
-        threadId: record.threadId || null,
-        activeObservations: input.reflection,
-        activeObservationsPendingUpdate: null,
-        originType: 'reflection',
-        config: record.config,
-        generationCount: input.currentRecord.generationCount + 1,
-        lastObservedAt: record.lastObservedAt || null,
-        lastReflectionAt: now,
-        pendingMessageTokens: record.pendingMessageTokens,
-        totalTokensObserved: record.totalTokensObserved,
-        observationTokenCount: record.observationTokenCount,
-        isObserving: false,
-        isReflecting: false,
-        isBufferingObservation: false,
-        isBufferingReflection: false,
-        lastBufferedAtTokens: 0,
-        lastBufferedAtTime: null,
-        observedTimezone: record.observedTimezone || null,
-        createdAt: now,
-        updatedAt: now,
-        metadata: record.metadata || null,
+      await this.#connector.withTransaction(async session => {
+        const sealed = await collection.updateOne(
+          {
+            id: input.currentRecord.id,
+            generationCount: input.currentRecord.generationCount,
+            $or: [{ recordState: 'active' }, { recordState: { $exists: false } }],
+            $expr: { $eq: [{ $ifNull: ['$writeEpoch', 0] }, expectedWriteEpoch] },
+          },
+          {
+            $set: {
+              recordState: 'sealed',
+              updatedAt: now,
+              isReflecting: false,
+              isBufferingReflection: false,
+            },
+            $unset: {
+              bufferedReflection: '',
+              bufferedReflectionTokens: '',
+              bufferedReflectionInputTokens: '',
+              reflectedObservationLineCount: '',
+            },
+          },
+          { session },
+        );
+        if (sealed.matchedCount !== 1) {
+          throw new Error(`Observational memory record is stale or sealed: ${input.currentRecord.id}`);
+        }
+        await collection.insertOne(
+          {
+            id,
+            lookupKey,
+            scope: record.scope,
+            resourceId: record.resourceId,
+            threadId: record.threadId || null,
+            recordState: 'active',
+            writeEpoch: 0,
+            activeObservations: input.reflection,
+            activeObservationsPendingUpdate: null,
+            observationGroups: null,
+            archive: null,
+            originType: 'reflection',
+            config: record.config,
+            generationCount: record.generationCount,
+            lastObservedAt: record.lastObservedAt || null,
+            lastReflectionAt: now,
+            pendingMessageTokens: 0,
+            totalTokensObserved: record.totalTokensObserved,
+            observationTokenCount: record.observationTokenCount,
+            isObserving: false,
+            isReflecting: false,
+            isBufferingObservation: false,
+            isBufferingReflection: false,
+            lastBufferedAtTokens: 0,
+            lastBufferedAtTime: null,
+            observedTimezone: record.observedTimezone || null,
+            createdAt: now,
+            updatedAt: now,
+            metadata: {},
+          },
+          { session },
+        );
       });
-
       return record;
     } catch (error) {
       throw new MastraError(
@@ -1821,10 +2225,17 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
+  async setReflectingFlag(id: string, isReflecting: boolean, expectedWriteEpoch?: number): Promise<void> {
     try {
       const collection = await this.getCollection(OM_TABLE);
-      const result = await collection.updateOne({ id }, { $set: { isReflecting, updatedAt: new Date() } });
+      const result = await collection.updateOne(
+        {
+          id,
+          $or: [{ recordState: 'active' }, { recordState: { $exists: false } }],
+          $expr: { $eq: [{ $ifNull: ['$writeEpoch', 0] }, expectedWriteEpoch ?? 0] },
+        },
+        { $set: { isReflecting, updatedAt: new Date() } },
+      );
 
       if (result.matchedCount === 0) {
         throw new MastraError({
@@ -1851,10 +2262,17 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  async setObservingFlag(id: string, isObserving: boolean): Promise<void> {
+  async setObservingFlag(id: string, isObserving: boolean, expectedWriteEpoch?: number): Promise<void> {
     try {
       const collection = await this.getCollection(OM_TABLE);
-      const result = await collection.updateOne({ id }, { $set: { isObserving, updatedAt: new Date() } });
+      const result = await collection.updateOne(
+        {
+          id,
+          $or: [{ recordState: 'active' }, { recordState: { $exists: false } }],
+          $expr: { $eq: [{ $ifNull: ['$writeEpoch', 0] }, expectedWriteEpoch ?? 0] },
+        },
+        { $set: { isObserving, updatedAt: new Date() } },
+      );
 
       if (result.matchedCount === 0) {
         throw new MastraError({
@@ -1881,7 +2299,12 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  async setBufferingObservationFlag(id: string, isBuffering: boolean, lastBufferedAtTokens?: number): Promise<void> {
+  async setBufferingObservationFlag(
+    id: string,
+    isBuffering: boolean,
+    lastBufferedAtTokens?: number,
+    expectedWriteEpoch?: number,
+  ): Promise<void> {
     try {
       const collection = await this.getCollection(OM_TABLE);
       const updateDoc: any = {
@@ -1893,7 +2316,14 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         updateDoc.lastBufferedAtTokens = lastBufferedAtTokens;
       }
 
-      const result = await collection.updateOne({ id }, { $set: updateDoc });
+      const result = await collection.updateOne(
+        {
+          id,
+          $or: [{ recordState: 'active' }, { recordState: { $exists: false } }],
+          $expr: { $eq: [{ $ifNull: ['$writeEpoch', 0] }, expectedWriteEpoch ?? 0] },
+        },
+        { $set: updateDoc },
+      );
 
       if (result.matchedCount === 0) {
         throw new MastraError({
@@ -1920,11 +2350,15 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  async setBufferingReflectionFlag(id: string, isBuffering: boolean): Promise<void> {
+  async setBufferingReflectionFlag(id: string, isBuffering: boolean, expectedWriteEpoch?: number): Promise<void> {
     try {
       const collection = await this.getCollection(OM_TABLE);
       const result = await collection.updateOne(
-        { id },
+        {
+          id,
+          $or: [{ recordState: 'active' }, { recordState: { $exists: false } }],
+          $expr: { $eq: [{ $ifNull: ['$writeEpoch', 0] }, expectedWriteEpoch ?? 0] },
+        },
         { $set: { isBufferingReflection: isBuffering, updatedAt: new Date() } },
       );
 
@@ -1971,7 +2405,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  async setPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
+  async setPendingMessageTokens(id: string, tokenCount: number, expectedWriteEpoch?: number): Promise<void> {
     // Validate tokenCount before using in $set
     if (typeof tokenCount !== 'number' || !Number.isFinite(tokenCount) || tokenCount < 0) {
       throw new MastraError({
@@ -1986,7 +2420,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     try {
       const collection = await this.getCollection(OM_TABLE);
       const result = await collection.updateOne(
-        { id },
+        {
+          id,
+          $or: [{ recordState: 'active' }, { recordState: { $exists: false } }],
+          $expr: { $eq: [{ $ifNull: ['$writeEpoch', 0] }, expectedWriteEpoch ?? 0] },
+        },
         {
           $set: { pendingMessageTokens: tokenCount, updatedAt: new Date() },
         },
@@ -2022,7 +2460,12 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const collection = await this.getCollection(OM_TABLE);
 
       // Read current config
-      const doc = await collection.findOne({ id: input.id }, { projection: { config: 1 } });
+      const writableFilter = {
+        id: input.id,
+        $or: [{ recordState: 'active' }, { recordState: { $exists: false } }],
+        $expr: { $eq: [{ $ifNull: ['$writeEpoch', 0] }, input.expectedWriteEpoch ?? 0] },
+      };
+      const doc = await collection.findOne(writableFilter, { projection: { config: 1 } });
 
       if (!doc) {
         throw new MastraError({
@@ -2037,7 +2480,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const existing: Record<string, unknown> = (doc.config as Record<string, unknown>) ?? {};
       const merged = this.deepMergeConfig(existing, input.config);
 
-      await collection.updateOne({ id: input.id }, { $set: { config: merged, updatedAt: new Date() } });
+      const result = await collection.updateOne(writableFilter, { $set: { config: merged, updatedAt: new Date() } });
+      if (result.matchedCount !== 1) {
+        throw new Error(`Observational memory record is stale or sealed: ${input.id}`);
+      }
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
@@ -2067,6 +2513,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         id: `ombuf-${randomUUID()}`,
         cycleId: input.chunk.cycleId,
         observations: input.chunk.observations,
+        observationGroups: input.chunk.observationGroups,
         tokenCount: input.chunk.tokenCount,
         messageIds: input.chunk.messageIds,
         messageTokens: input.chunk.messageTokens,
@@ -2091,7 +2538,14 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         setStage.lastBufferedAtTime = input.lastBufferedAtTime;
       }
 
-      const result = await collection.updateOne({ id: input.id }, [{ $set: setStage }]);
+      const result = await collection.updateOne(
+        {
+          id: input.id,
+          $or: [{ recordState: 'active' }, { recordState: { $exists: false } }],
+          $expr: { $eq: [{ $ifNull: ['$writeEpoch', 0] }, input.expectedWriteEpoch ?? 0] },
+        },
+        [{ $set: setStage }],
+      );
 
       if (result.matchedCount === 0) {
         throw new MastraError({
@@ -2123,7 +2577,12 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const collection = await this.getCollection(OM_TABLE);
 
       // Get current record
-      const doc = await collection.findOne({ id: input.id });
+      const writableFilter = {
+        id: input.id,
+        $or: [{ recordState: 'active' }, { recordState: { $exists: false } }],
+        $expr: { $eq: [{ $ifNull: ['$writeEpoch', 0] }, input.expectedWriteEpoch ?? 0] },
+      };
+      const doc = await collection.findOne(writableFilter);
       if (!doc) {
         throw new MastraError({
           id: createStorageErrorId('MONGODB', 'SWAP_BUFFERED_TO_ACTIVE', 'NOT_FOUND'),
@@ -2232,6 +2691,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       // Get existing values
       const existingActive = (doc.activeObservations as string) || '';
+      const existingGroups = parseObservationGroups(doc.observationGroups) ?? [];
+      const activatedGroups = activatedChunks.flatMap(chunk => chunk.observationGroups ?? []);
       const existingTokenCount = Number(doc.observationTokenCount || 0);
 
       // Calculate new values
@@ -2251,12 +2712,13 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Conditional update — only proceed if chunks haven't been swapped by a concurrent run
       const updateResult = await collection.updateOne(
         {
-          id: input.id,
+          ...writableFilter,
           bufferedObservationChunks: { $exists: true, $ne: null, $not: { $size: 0 } },
         },
         {
           $set: {
             activeObservations: newActive,
+            observationGroups: [...existingGroups, ...activatedGroups],
             observationTokenCount: newTokenCount,
             pendingMessageTokens: newPending,
             bufferedObservationChunks: remainingChunks,
@@ -2267,6 +2729,13 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       );
 
       if (updateResult.modifiedCount === 0) {
+        const latest = await collection.findOne({ id: input.id });
+        if (
+          latest &&
+          (latest.recordState === 'sealed' || Number(latest.writeEpoch ?? 0) !== (input.expectedWriteEpoch ?? 0))
+        ) {
+          throw new Error(`Observational memory record is stale or sealed: ${input.id}`);
+        }
         return {
           chunksActivated: 0,
           messageTokensActivated: 0,
@@ -2319,7 +2788,12 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const collection = await this.getCollection(OM_TABLE);
 
       // First get current record to merge buffered content
-      const doc = await collection.findOne({ id: input.id });
+      const writableFilter = {
+        id: input.id,
+        $or: [{ recordState: 'active' }, { recordState: { $exists: false } }],
+        $expr: { $eq: [{ $ifNull: ['$writeEpoch', 0] }, input.expectedWriteEpoch ?? 0] },
+      };
+      const doc = await collection.findOne(writableFilter);
       if (!doc) {
         throw new MastraError({
           id: createStorageErrorId('MONGODB', 'UPDATE_BUFFERED_REFLECTION', 'NOT_FOUND'),
@@ -2339,18 +2813,15 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const newTokens = existingTokens + input.tokenCount;
       const newInputTokens = existingInputTokens + input.inputTokenCount;
 
-      const result = await collection.updateOne(
-        { id: input.id },
-        {
-          $set: {
-            bufferedReflection: newContent,
-            bufferedReflectionTokens: newTokens,
-            bufferedReflectionInputTokens: newInputTokens,
-            reflectedObservationLineCount: input.reflectedObservationLineCount,
-            updatedAt: new Date(),
-          },
+      const result = await collection.updateOne(writableFilter, {
+        $set: {
+          bufferedReflection: newContent,
+          bufferedReflectionTokens: newTokens,
+          bufferedReflectionInputTokens: newInputTokens,
+          reflectedObservationLineCount: input.reflectedObservationLineCount,
+          updatedAt: new Date(),
         },
-      );
+      });
 
       if (result.matchedCount === 0) {
         throw new MastraError({
@@ -2382,7 +2853,12 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const collection = await this.getCollection(OM_TABLE);
 
       // Get current record
-      const doc = await collection.findOne({ id: input.currentRecord.id });
+      const expectedWriteEpoch = input.expectedWriteEpoch ?? input.currentRecord.writeEpoch ?? 0;
+      const doc = await collection.findOne({
+        id: input.currentRecord.id,
+        $or: [{ recordState: 'active' }, { recordState: { $exists: false } }],
+        $expr: { $eq: [{ $ifNull: ['$writeEpoch', 0] }, expectedWriteEpoch] },
+      });
       if (!doc) {
         throw new MastraError({
           id: createStorageErrorId('MONGODB', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NOT_FOUND'),
@@ -2421,27 +2897,12 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       // Create new generation with the merged content.
       // tokenCount is computed by the processor using its token counter on the combined content.
-      const newRecord = await this.createReflectionGeneration({
+      return this.createReflectionGeneration({
         currentRecord: input.currentRecord,
+        expectedWriteEpoch,
         reflection: newObservations,
         tokenCount: input.tokenCount,
       });
-
-      // Clear buffered state on old record
-      await collection.updateOne(
-        { id: input.currentRecord.id },
-        {
-          $set: {
-            bufferedReflection: null,
-            bufferedReflectionTokens: null,
-            bufferedReflectionInputTokens: null,
-            reflectedObservationLineCount: null,
-            updatedAt: new Date(),
-          },
-        },
-      );
-
-      return newRecord;
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;

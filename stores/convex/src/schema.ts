@@ -300,7 +300,11 @@ export const mastraObservationalMemoryTable = defineTable({
   // Nullable in core's OBSERVATIONAL_MEMORY_SCHEMA; the adapter always writes it.
   resourceId: v.optional(v.union(v.string(), v.null())),
   threadId: v.optional(v.union(v.string(), v.null())),
+  recordState: v.optional(v.union(v.string(), v.null())),
+  writeEpoch: v.optional(v.union(v.number(), v.null())),
   activeObservations: v.string(),
+  observationGroups: v.optional(v.union(v.string(), v.null())),
+  archive: v.optional(v.union(v.string(), v.null())),
   activeObservationsPendingUpdate: v.optional(v.union(v.string(), v.null())),
   originType: v.string(),
   config: v.string(),
