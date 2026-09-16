@@ -875,8 +875,8 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
         <div className="flex-1 overflow-hidden px-4 pb-4">
           <TabContent value="review" className="grid h-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden py-0">
             <DatasetReview
-              targetType="agent"
-              targetId={agentId}
+              experiments={experiments ?? []}
+              isLoadingExperiments={isLoadingExperiments}
               detailPanelVariant="inline"
               onCreateScorer={handleCreateScorerFromFailures}
             />
