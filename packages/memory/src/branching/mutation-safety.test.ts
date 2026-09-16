@@ -313,6 +313,26 @@ describe('branch mutation integrity', () => {
     ).toEqual([]);
   });
 
+  it.each([
+    { clockOffset: 0, generatedOffset: 2 },
+    { clockOffset: 100, generatedOffset: 100 },
+    { clockOffset: 100, generatedOffset: 2 },
+  ])(
+    'preserves an already-valid generated timestamp in an ordinary mixed batch clock=$clockOffset generated=$generatedOffset',
+    async ({ clockOffset, generatedOffset }) => {
+      const start = forkTime.getTime();
+      vi.spyOn(Date, 'now').mockReturnValue(start + clockOffset);
+      const explicit = message(`ordinary-explicit-${clockOffset}-${generatedOffset}`, 'root', forkTime);
+      const generatedAt = new Date(start + generatedOffset);
+      const generated = message(`ordinary-generated-${clockOffset}-${generatedOffset}`, 'root', generatedAt);
+
+      await persistGeneratedMessages(memory, { messages: [explicit, generated] }, [generated.id]);
+
+      const stored = (await store.listMessagesById({ messageIds: [generated.id] })).messages[0]!;
+      expect(stored.createdAt).toEqual(generatedAt);
+    },
+  );
+
   it('preserves caller order while accepting an existing generated-message upsert', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(forkTime.getTime());
     const branch = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' });
