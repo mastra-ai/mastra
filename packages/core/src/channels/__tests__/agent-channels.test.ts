@@ -1418,6 +1418,41 @@ describe('AgentChannels', () => {
         getThreadById.mockRestore();
       });
 
+      it('lets only one of two concurrent rebinds replace the mapping', async () => {
+        const mockMastra = makeMastra();
+        await agentChannels.initialize(mockMastra);
+        const chatThread = makeChatThread({ adapter: agentChannels.adapters.discord });
+        await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+        const memoryStore = await mockMastra.getStorage().getStore('memory');
+
+        const results = await Promise.allSettled([
+          agentChannels.rebindThread({
+            ...coordinates,
+            resourceId: 'session-b',
+            threadId: 'session-b',
+            mastra: mockMastra,
+          }),
+          agentChannels.rebindThread({
+            ...coordinates,
+            resourceId: 'session-c',
+            threadId: 'session-c',
+            mastra: mockMastra,
+          }),
+        ]);
+
+        const fulfilled = results.filter(result => result.status === 'fulfilled');
+        const rejected = results.filter(result => result.status === 'rejected');
+        expect(fulfilled).toHaveLength(1);
+        expect(rejected).toHaveLength(1);
+        expect((rejected[0] as PromiseRejectedResult).reason.message).toMatch(/already handed off/);
+
+        const { threads } = await memoryStore.listThreads({ filter: { metadata: legacyFilter }, perPage: 10 });
+        expect(threads).toHaveLength(1);
+        expect(threads[0]!.id).toBe(
+          (fulfilled[0] as PromiseFulfilledResult<{ thread: { id: string } }>).value.thread.id,
+        );
+      });
+
       it('refuses a thread id that already exists', async () => {
         const mockMastra = makeMastra();
         await agentChannels.initialize(mockMastra);

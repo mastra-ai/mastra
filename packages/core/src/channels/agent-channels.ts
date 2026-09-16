@@ -1716,17 +1716,37 @@ export class AgentChannels {
       throw new Error(`Cannot rebind ${platform} thread ${externalThreadId}: thread ${threadId} already exists`);
     }
 
-    const previousMetadata = { ...previous?.metadata };
+    let previousMetadata: Record<string, unknown> = {};
     if (previous) {
-      await memoryStore.patchThread({
+      // Serialized per thread: of two concurrent rebinds only the first sees
+      // the mapping still active; the second finds it retired and stops before
+      // it can save a second replacement.
+      let retired = false;
+      await memoryStore.updateThreadMetadata({
         id: previous.id,
-        metadata: {
-          ...previousMetadata,
-          channel_platform: HANDED_OFF_PLATFORM,
-          channel_handedOffPlatform: platform,
-          channel_handedOffTo: threadId,
+        update: current => {
+          const currentMetadata = (current.metadata ?? {}) as Record<string, unknown>;
+          if (
+            currentMetadata.channel_platform !== platform ||
+            currentMetadata.channel_externalThreadId !== externalThreadId
+          ) {
+            return undefined;
+          }
+          retired = true;
+          previousMetadata = { ...currentMetadata };
+          return {
+            ...currentMetadata,
+            channel_platform: HANDED_OFF_PLATFORM,
+            channel_handedOffPlatform: platform,
+            channel_handedOffTo: threadId,
+          };
         },
       });
+      if (!retired) {
+        throw new Error(
+          `Cannot rebind ${platform} thread ${externalThreadId}: thread ${previous.id} was already handed off`,
+        );
+      }
     }
 
     const boundMetadata: Record<string, unknown> = { ...metadata };
@@ -1750,9 +1770,13 @@ export class AgentChannels {
       // metadata, so the handoff markers are cleared explicitly.
       if (previous) {
         await memoryStore
-          .patchThread({
+          .updateThreadMetadata({
             id: previous.id,
-            metadata: { ...previousMetadata, channel_handedOffPlatform: undefined, channel_handedOffTo: undefined },
+            update: () => ({
+              ...previousMetadata,
+              channel_handedOffPlatform: undefined,
+              channel_handedOffTo: undefined,
+            }),
           })
           .catch(restoreError =>
             this.log(
