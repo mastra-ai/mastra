@@ -391,6 +391,67 @@ describe('MastraPlatformTraceTarget', () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
+  it('classifies a response body stream failure as retryable', async () => {
+    const fetch = vi.fn(
+      async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(new Error('socket failed'));
+            },
+          }),
+          { status: 200 },
+        ),
+    );
+    const target = new MastraPlatformTraceTarget({ accessToken: 'secret-token', projectId: 'project_1' }, { fetch });
+
+    await expect(target.readTrace('00000000000000000000000000000001')).resolves.toEqual({
+      kind: 'retryable',
+      reason: 'Could not read the Mastra Platform query response.',
+    });
+  });
+
+  it('preserves caller cancellation while reading a response body', async () => {
+    const controller = new AbortController();
+    const reason = new Error('customer cancelled');
+    const fetch = vi.fn(
+      async (_input: string | URL | Request, init?: RequestInit) =>
+        new Response(
+          new ReadableStream({
+            start(streamController) {
+              init?.signal?.addEventListener('abort', () => streamController.error(init.signal?.reason), {
+                once: true,
+              });
+            },
+          }),
+          { status: 200 },
+        ),
+    );
+    const target = new MastraPlatformTraceTarget({ accessToken: 'secret-token', projectId: 'project_1' }, { fetch });
+
+    const result = target.readTrace('00000000000000000000000000000001', { signal: controller.signal });
+    await Promise.resolve();
+    controller.abort(reason);
+
+    await expect(result).rejects.toBe(reason);
+  });
+
+  it('treats an oversized lightweight response as unavailable without retrying it', async () => {
+    const fetch = vi.fn(
+      async () =>
+        new Response(null, {
+          status: 200,
+          headers: { 'Content-Length': String(16 * 1024 * 1024 + 1) },
+        }),
+    );
+    const target = new MastraPlatformTraceTarget({ accessToken: 'secret-token', projectId: 'project_1' }, { fetch });
+
+    await expect(target.readTrace('00000000000000000000000000000001')).resolves.toEqual({
+      kind: 'unavailable',
+      reason: 'Mastra Platform query response exceeds the 16 MiB verification limit.',
+    });
+  });
+
   it('treats malformed or inconsistent lightweight responses as unavailable', async () => {
     const fetch = vi.fn(async () =>
       Response.json({

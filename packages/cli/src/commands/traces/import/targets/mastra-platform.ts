@@ -14,6 +14,13 @@ const MAX_QUERY_RESPONSE_BYTES = 16 * 1024 * 1024;
 const OBSERVABILITY_CAPABILITIES_HEADER = 'x-mastra-observability-capabilities';
 const QUOTA_PAUSE_CAPABILITY = 'quota-pause-v1';
 
+class QueryResponseTooLargeError extends Error {
+  constructor() {
+    super('Mastra Platform query response exceeds the 16 MiB verification limit.');
+    this.name = 'QueryResponseTooLargeError';
+  }
+}
+
 type Fetch = typeof globalThis.fetch;
 type Sleep = (milliseconds: number, signal?: AbortSignal) => Promise<void>;
 
@@ -237,22 +244,39 @@ export class MastraPlatformTraceTarget implements TraceImportTarget, TraceImport
       return { kind: 'unavailable', reason: `Mastra Platform query returned HTTP ${response.status}.` };
     }
 
+    let body: string;
     try {
-      const parsed = storedTraceSchema.parse(JSON.parse(await readResponseText(response, MAX_QUERY_RESPONSE_BYTES)));
-      if (parsed.traceId !== traceId || parsed.spans.some(span => span.traceId !== traceId)) {
-        return { kind: 'unavailable', reason: 'Mastra Platform query returned a trace with inconsistent IDs.' };
+      body = await readResponseText(response, MAX_QUERY_RESPONSE_BYTES);
+    } catch (cause) {
+      if (options.signal?.aborted) throw options.signal.reason ?? cause;
+      if (cause instanceof QueryResponseTooLargeError) {
+        return { kind: 'unavailable', reason: cause.message };
       }
-      return {
-        kind: 'found',
-        spans: parsed.spans.map(span => ({
-          ...span,
-          parentSpanId: span.parentSpanId ?? null,
-          endedAt: span.endedAt ?? null,
-        })),
-      };
+      return { kind: 'retryable', reason: 'Could not read the Mastra Platform query response.' };
+    }
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(body);
     } catch {
       return { kind: 'unavailable', reason: 'Mastra Platform query returned an invalid lightweight trace.' };
     }
+
+    const parsed = storedTraceSchema.safeParse(payload);
+    if (!parsed.success) {
+      return { kind: 'unavailable', reason: 'Mastra Platform query returned an invalid lightweight trace.' };
+    }
+    if (parsed.data.traceId !== traceId || parsed.data.spans.some(span => span.traceId !== traceId)) {
+      return { kind: 'unavailable', reason: 'Mastra Platform query returned a trace with inconsistent IDs.' };
+    }
+    return {
+      kind: 'found',
+      spans: parsed.data.spans.map(span => ({
+        ...span,
+        parentSpanId: span.parentSpanId ?? null,
+        endedAt: span.endedAt ?? null,
+      })),
+    };
   }
 }
 
@@ -396,7 +420,7 @@ async function readResponseText(response: Response, maximumBytes: number): Promi
   const contentLength = Number(response.headers.get('content-length'));
   if (Number.isFinite(contentLength) && contentLength > maximumBytes) {
     await discardResponseBody(response);
-    throw new Error('Mastra Platform query response is too large.');
+    throw new QueryResponseTooLargeError();
   }
   if (!response.body) return '';
 
@@ -410,7 +434,7 @@ async function readResponseText(response: Response, maximumBytes: number): Promi
     bytes += value.byteLength;
     if (bytes > maximumBytes) {
       await reader.cancel();
-      throw new Error('Mastra Platform query response is too large.');
+      throw new QueryResponseTooLargeError();
     }
     text += decoder.decode(value, { stream: true });
   }
