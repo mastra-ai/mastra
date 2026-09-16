@@ -705,6 +705,13 @@ const stream = await agent.stream('message for agent')
               'Maximum number of tool calls to execute concurrently. Defaults to 1 when approval may be required, otherwise 10.',
           },
           {
+            name: 'eagerToolExecution',
+            type: 'boolean',
+            isOptional: true,
+            description:
+              "Defaults to `false`. When `true`, a tool call whose arguments have finished streaming starts executing immediately, instead of waiting for the model to finish the whole step. Tool results and message history keep their model-call order either way. Only server-side tools are started early: approval-gated, suspendable, provider-executed, client-side, missing and inactive tools keep the default behaviour, as does any run using `toolCallConcurrency.strategy: 'called'` (the full set of called tools is not known until the step finishes). Eager executions share the configured `toolCallConcurrency` limit, and aborting the run stops any further dispatch. Not supported by durable agents, which reject the option.",
+          },
+          {
             name: 'providerOptions',
             type: 'Record<string, Record<string, JSONValue>>',
             isOptional: true,
