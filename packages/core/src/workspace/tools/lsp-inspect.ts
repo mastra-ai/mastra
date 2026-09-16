@@ -86,6 +86,29 @@ export const lspInspectTool = createTool({
     'Returns hover information, any diagnostics reported on that line, plus definition and implementation locations when available. ' +
     'Use this for type information, symbol navigation, and go-to-definition; use view to read the surrounding implementation.',
 
+  outputSchema: z.object({
+    hover: z.object({ value: z.string(), kind: z.string() }).optional(),
+    diagnostics: z
+      .array(
+        z.object({
+          severity: z.string(),
+          message: z.string(),
+          source: z.string().nullable(),
+        }),
+      )
+      .optional(),
+    definition: z
+      .array(
+        z.object({
+          location: z.string(),
+          preview: z.string().nullable(),
+        }),
+      )
+      .optional(),
+    implementation: z.array(z.string()).optional(),
+    error: z.string().optional(),
+  }),
+
   inputSchema: z.object({
     path: z.string().describe('Absolute path to the file'),
     line: z.number().int().positive().describe('Line number (1-indexed)'),
@@ -176,7 +199,7 @@ export const lspInspectTool = createTool({
       };
     }
 
-    const { client, uri } = queryResult;
+    const { client, uri, release } = queryResult;
 
     // LSP uses 0-indexed positions
     const position = { line: line - 1, character: character - 1 };
@@ -235,7 +258,9 @@ export const lspInspectTool = createTool({
                     : diagnostic.severity === 3
                       ? 'info'
                       : 'hint'
-                : diagnostic.severity,
+                : typeof diagnostic.severity === 'string'
+                  ? diagnostic.severity
+                  : 'error',
             message: diagnostic.message,
             source: diagnostic.source ?? null,
           }))
@@ -300,8 +325,9 @@ export const lspInspectTool = createTool({
     } catch (err) {
       result.error = `LSP query failed: ${err instanceof Error ? err.message : String(err)}`;
     } finally {
-      // Clean up - close the file
+      // Clean up - close the file and release the client lease
       client.notifyClose(absolutePath);
+      release();
     }
 
     span.end({ success: !result.error });

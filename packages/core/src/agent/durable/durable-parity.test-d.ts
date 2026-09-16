@@ -67,6 +67,8 @@ type ConsumedDuringPreparation =
   | 'onError'
   | 'onAbort'
   | 'experimentalTransform'
+  // Applied to caller-local stream output, never serialized or used to filter generation.
+  | 'hideSignals'
   // AbortSignal is managed via the registry's abortController/abortSignal
   | 'abortSignal'
   // Toolsets and clientTools are resolved into the `tools` record during
@@ -83,6 +85,9 @@ type ConsumedDuringPreparation =
   | '_skipBgTaskWait'
   // untilIdle is handled by DurableAgent.streamUntilIdle() before preparation
   | 'untilIdle'
+  // Serverless waitUntil is call-site only for non-durable generate/stream.
+  // Durable finish already awaits title generation, so this is intentionally unused.
+  | 'serverless'
   // Observability context keys from Partial<ObservabilityContext>
   | 'tracing'
   | 'loggerVNext'

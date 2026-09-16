@@ -1,3 +1,4 @@
+import type { DatasetExperimentResult } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
@@ -8,6 +9,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ThumbsUp, ThumbsDown, Trash2, CheckCircle, GaugeIcon } from 'lucide-react';
 import { useState } from 'react';
 import { TagPicker } from './tag-picker';
+import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 export interface ReviewItem {
   id: string;
@@ -23,6 +25,10 @@ export interface ReviewItem {
   clusterId?: string;
   experimentId?: string;
   traceId?: string;
+  createdAt?: DatasetExperimentResult['createdAt'];
+  status?: DatasetExperimentResult['status'];
+  groundTruth?: unknown;
+  toolMockReport?: DatasetExperimentResult['toolMockReport'];
 }
 
 function formatUnknown(value: unknown): string {
@@ -32,6 +38,12 @@ function formatUnknown(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+function getScoreBadgeVariant(score: number) {
+  if (score >= 0.7) return 'green';
+  if (score >= 0.4) return 'yellow';
+  return 'red';
 }
 
 export function ReviewItemCard({
@@ -144,9 +156,7 @@ export function ReviewItemCard({
             {isCompleted ? (
               <div className="flex flex-wrap gap-1">
                 {item.tags.map(tag => (
-                  <Badge key={tag} variant="default">
-                    {tag}
-                  </Badge>
+                  <ComputedTag key={tag} value={tag} size="sm" />
                 ))}
               </div>
             ) : (
@@ -164,13 +174,11 @@ export function ReviewItemCard({
                 {Object.entries(item.scores)
                   .slice(0, 2)
                   .map(([name, score]) => (
-                    <Badge key={name} variant={score >= 0.7 ? 'success' : score >= 0.4 ? 'warning' : 'error'}>
+                    <Badge key={name} variant={getScoreBadgeVariant(score)}>
                       {name}: {typeof score === 'number' ? score.toFixed(2) : score}
                     </Badge>
                   ))}
-                {Object.keys(item.scores).length > 2 && (
-                  <Badge variant="default">+{Object.keys(item.scores).length - 2}</Badge>
-                )}
+                {Object.keys(item.scores).length > 2 && <Badge>+{Object.keys(item.scores).length - 2}</Badge>}
               </div>
             </div>
           )}
@@ -203,7 +211,7 @@ export function ReviewItemCard({
               <Txt variant="ui-xs" className="text-neutral3">
                 Experiment:
               </Txt>
-              <code className="text-neutral4 bg-surface2 rounded px-1.5 py-0.5 font-mono text-[10px]">
+              <code className="text-neutral4 bg-surface2 text-ui-xs rounded px-1.5 py-0.5 font-mono">
                 {item.experimentId.slice(0, 8)}
               </code>
             </div>
@@ -212,7 +220,7 @@ export function ReviewItemCard({
             <Txt variant="ui-xs" className="text-neutral3 mb-1 block font-semibold">
               Input
             </Txt>
-            <pre className="text-neutral5 bg-surface2 max-h-40 overflow-auto rounded p-2 text-xs whitespace-pre-wrap">
+            <pre className="text-neutral5 bg-surface2 text-ui-sm max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
               {formatUnknown(item.input)}
             </pre>
           </div>
@@ -221,7 +229,7 @@ export function ReviewItemCard({
               <Txt variant="ui-xs" className="text-neutral3 mb-1 block font-semibold">
                 Output
               </Txt>
-              <pre className="text-neutral5 bg-surface2 max-h-40 overflow-auto rounded p-2 text-xs whitespace-pre-wrap">
+              <pre className="text-neutral5 bg-surface2 text-ui-sm max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
                 {formatUnknown(item.output)}
               </pre>
             </div>
@@ -231,7 +239,7 @@ export function ReviewItemCard({
               <Txt variant="ui-xs" className="text-neutral3 mb-1 block font-semibold">
                 Error
               </Txt>
-              <pre className="text-negative1 bg-surface2 max-h-20 overflow-auto rounded p-2 text-xs whitespace-pre-wrap">
+              <pre className="text-negative1 bg-surface2 text-ui-sm max-h-20 overflow-auto rounded p-2 whitespace-pre-wrap">
                 {formatUnknown(item.error)}
               </pre>
             </div>
@@ -257,7 +265,7 @@ export function ReviewItemCard({
                 }}
                 placeholder="Add a note about this item..."
                 rows={2}
-                className="text-xs"
+                className="text-ui-sm"
               />
               {commentSaved && (
                 <Txt variant="ui-xs" className="text-positive1 mt-0.5">

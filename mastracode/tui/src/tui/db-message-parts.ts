@@ -289,18 +289,23 @@ export interface StateSignalView {
   mode: 'snapshot' | 'delta';
   cacheKey?: string;
   version?: number;
+  value?: unknown;
+  delta?: unknown;
   message: string;
 }
 
-/** Fields the state-signal UI needs, sourced from a `state` signal's `metadata.state`. */
+/** Fields the state-signal UI needs, sourced from a `state` signal's metadata. */
 export function getStateSignalView(message: MastraDBMessage): StateSignalView {
   const signal = getSignalView(message);
-  const stateMeta = asRecord(asRecord(signal.metadata)?.state) ?? {};
+  const metadata = asRecord(signal.metadata) ?? {};
+  const stateMeta = asRecord(metadata.state) ?? {};
   return {
     stateId: asString(stateMeta.id) ?? asString(signal.tagName) ?? 'state',
     mode: stateMeta.mode === 'delta' ? 'delta' : 'snapshot',
     cacheKey: asString(stateMeta.cacheKey),
     version: asNumber(stateMeta.version),
+    ...('value' in metadata ? { value: metadata.value } : {}),
+    ...('delta' in metadata ? { delta: metadata.delta } : {}),
     message: contentsToText(signal.contents),
   };
 }

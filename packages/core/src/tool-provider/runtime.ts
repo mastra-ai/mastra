@@ -1,5 +1,6 @@
 import type { IMastraLogger } from '../logger';
 import { MASTRA_RESOURCE_ID_KEY } from '../request-context';
+import type { RequestContext } from '../request-context';
 import type { ToolAction } from '../tools/types';
 import type { ToolProvider, ToolProviderConnection, ToolProviders } from './types';
 import { SHARED_BUCKET_ID } from './types';
@@ -10,8 +11,8 @@ import { SHARED_BUCKET_ID } from './types';
 export type ToolProviderLookup = (providerId: string) => ToolProvider;
 
 export interface ResolveStoredToolProvidersOpts {
-  /** Per-request context plumbed to each `provider.resolveToolsVNext` call. */
-  requestContext?: Record<string, unknown>;
+  /** Live per-request context plumbed to each `provider.resolveToolsVNext` call. */
+  requestContext?: RequestContext;
   /**
    * Agent author's user id. Used as the provider user bucket for
    * `kind: 'author'` connections so pinned credentials work for any invoker.
@@ -146,6 +147,8 @@ export async function resolveStoredToolProviders(
               toolMeta: tools,
               connectionId: resolvedAuthorId,
               authorId: resolvedAuthorId,
+              kind: 'author',
+              toolkit,
               scope: 'caller-supplied',
               requestContext,
             });
@@ -212,6 +215,8 @@ export async function resolveStoredToolProviders(
             toolMeta: cfg.tools ?? {},
             connectionId: connection.connectionId,
             authorId: resolvedAuthorId,
+            kind: connection.kind,
+            toolkit,
             scope: connection.scope,
             requestContext,
           });
@@ -259,10 +264,14 @@ function warnDefaultBucketFallback(logger: IMastraLogger | undefined): void {
 /**
  * Resolve the provider user bucket for a pinned connection.
  *
- * - `kind !== 'author'` → undefined (invoker/platform are reserved for later phases).
+ * - `kind === 'invoker'` → undefined. The provider resolves the invoker's
+ *   user id from trusted request context (its identity resolver /
+ *   authenticated user), never from the Memory resource id. The pinned
+ *   `connectionId` is passed through unchanged as the exact account.
+ * - `kind === 'platform'` → undefined (reserved for later phases).
  * - `scope === 'shared'` → {@link SHARED_BUCKET_ID}.
- * - `scope === 'caller-supplied'` → `requestContext[MASTRA_RESOURCE_ID_KEY]` when
- *   present, otherwise falls back to the shared `'default'` bucket (matching legacy
+ * - `scope === 'caller-supplied'` → `requestContext.getRaw(MASTRA_RESOURCE_ID_KEY)`
+ *   when present, otherwise falls back to the shared `'default'` bucket (matching legacy
  *   `ComposioToolProvider` semantics on main). Multi-tenant deployments should wire
  *   `authConfig.mapUserToResourceId` to avoid cross-user bucket sharing.
  * - otherwise → the caller's resolved authorId.
@@ -270,7 +279,7 @@ function warnDefaultBucketFallback(logger: IMastraLogger | undefined): void {
 function resolveConnectionAuthorId(
   connection: ToolProviderConnection,
   callerAuthorId: string | undefined,
-  requestContext: Record<string, unknown> | undefined,
+  requestContext: RequestContext | undefined,
   logger: IMastraLogger | undefined,
 ): string | undefined {
   if (connection.kind !== 'author') return undefined;
@@ -282,13 +291,13 @@ function resolveConnectionAuthorId(
 }
 
 function resolveCallerSuppliedAuthorId(
-  requestContext: Record<string, unknown> | undefined,
+  requestContext: RequestContext | undefined,
   logger: IMastraLogger | undefined,
 ): string {
-  const resourceId = requestContext?.[MASTRA_RESOURCE_ID_KEY];
+  const resourceId = requestContext?.getRaw(MASTRA_RESOURCE_ID_KEY);
   if (typeof resourceId === 'string' && resourceId.length > 0) return resourceId;
   // Match legacy ComposioToolProvider behavior: when the host app has not
-  // wired requestContext[MASTRA_RESOURCE_ID_KEY] (e.g. via
+  // wired requestContext.getRaw(MASTRA_RESOURCE_ID_KEY) (e.g. via
   // authConfig.mapUserToResourceId), fall back to a shared 'default' bucket
   // so tools still resolve. Multi-tenant deployments must wire the resource
   // id explicitly to avoid cross-user bucket sharing.

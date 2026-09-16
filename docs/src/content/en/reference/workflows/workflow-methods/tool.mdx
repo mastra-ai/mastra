@@ -1,6 +1,6 @@
 ---
 title: "Reference: Workflow.tool() | Workflows"
-description: Documentation for the `Workflow.tool()` method in workflows, which adds a tool as a declarative step.
+description: "The .tool() method adds a tool as a declarative step. The tool's own input and output schemas apply, so the previous step's output must satisfy the tool's input schema."
 packages:
   - "@mastra/core"
 ---
@@ -9,12 +9,12 @@ packages:
 
 The `.tool()` method adds a tool as a declarative step. The tool's own input and output schemas apply, so the previous step's output must satisfy the tool's input schema. Use `.map()` to transform the data if they don't match.
 
-Unlike wrapping a tool with `createStep()`, `.tool()` records a declarative entry in the workflow graph. This makes the workflow portable: the same graph can be serialized and persisted as a [stored workflow](/docs/workflows/stored-workflows).
+Unlike wrapping a tool with `createStep()`, `.tool()` records a declarative entry in the workflow graph. This makes the workflow portable: the same graph can be serialized and persisted as a [dynamic workflow](/docs/workflows/dynamic-workflows).
 
 ## Usage example
 
-```typescript filename="src/mastra/workflows/test-workflow.ts" prettier:false
-workflow.tool(testTool).commit();
+```typescript filename="src/mastra/workflows/test-workflow.ts"
+workflow.tool(testTool).commit()
 ```
 
 ## Parameters
@@ -60,16 +60,16 @@ workflow.tool(testTool).commit();
 
 Pass a string to reference a registered tool without importing it. The tool must be registered on the Mastra instance when the workflow runs:
 
-```typescript filename="src/mastra/workflows/test-workflow.ts" prettier:false
-workflow.tool("lookup-customer", { retries: 2 }).commit();
+```typescript filename="src/mastra/workflows/test-workflow.ts"
+workflow.tool('lookup-customer', { retries: 2 }).commit()
 ```
 
 ## Persisting tool steps
 
-Workflows built with `.tool()` serialize to the same declarative entries that [stored workflows](/docs/workflows/stored-workflows) use. Only `retries` and `metadata` round-trip through storage. A function-valued `scorers` option throws an error when the workflow is stored.
+Workflows built with `.tool()` serialize to the same declarative entries that [dynamic workflows](/docs/workflows/dynamic-workflows) use. Only `retries` and `metadata` round-trip through storage. A function-valued `scorers` option throws an error when the workflow is stored.
 
 ## Related
 
 - [Agents and Tools](/docs/workflows/agents-and-tools)
-- [Stored workflows](/docs/workflows/stored-workflows)
+- [Dynamic workflows](/docs/workflows/dynamic-workflows)
 - [Workflow.agent()](/reference/workflows/workflow-methods/agent)

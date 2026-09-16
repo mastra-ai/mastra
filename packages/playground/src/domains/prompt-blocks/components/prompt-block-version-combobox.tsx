@@ -54,9 +54,9 @@ export function PromptBlockVersionCombobox({
         value: version.id,
         description: formatTimestamp(version.createdAt),
         end: isPublished ? (
-          <Badge variant="success">Published</Badge>
+          <Badge variant="green">Published</Badge>
         ) : isDraft ? (
-          <Badge variant="info">Draft</Badge>
+          <Badge variant="blue">Draft</Badge>
         ) : undefined,
       };
     }),

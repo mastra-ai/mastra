@@ -47,7 +47,7 @@ function createCtx(version = '0.1.0') {
   return {
     state: {
       options: { version },
-      chatContainer: { addChild: vi.fn() },
+      chatContainer: { children: [] as any[] },
       ui: { requestRender: vi.fn() },
       activeInlineQuestion: undefined,
     },
@@ -85,7 +85,7 @@ describe('handleUpdateCommand', () => {
 
     expect(ctx.showInfo).toHaveBeenCalledWith('Checking for updates…');
     expect(ctx.showError).toHaveBeenCalledWith('Could not reach the npm registry. Check your network connection.');
-    expect(ctx.state.chatContainer.addChild).not.toHaveBeenCalled();
+    expect(ctx.state.chatContainer.children).toHaveLength(0);
     expect(fetchChangelogMock).not.toHaveBeenCalled();
   });
 
@@ -99,7 +99,7 @@ describe('handleUpdateCommand', () => {
 
     expect(ctx.showInfo).toHaveBeenCalledWith('You are already on the latest version (v0.2.0).');
     expect(saveSettingsMock).not.toHaveBeenCalled();
-    expect(ctx.state.chatContainer.addChild).not.toHaveBeenCalled();
+    expect(ctx.state.chatContainer.children).toHaveLength(0);
   });
 
   it('shows changelog text, clears previous dismissals, and persists No for the new version', async () => {
@@ -117,7 +117,7 @@ describe('handleUpdateCommand', () => {
       { label: 'Yes', description: 'Update and restart' },
       { label: 'No', description: 'Skip this version' },
     ]);
-    expect(ctx.state.chatContainer.addChild).toHaveBeenCalledWith(component);
+    expect(ctx.state.chatContainer.children).toContain(component);
     expect(component.focused).toBe(true);
     expect(ctx.state.ui.requestRender).toHaveBeenCalled();
     expect(saveSettingsMock).toHaveBeenCalledWith({ updateDismissedVersion: null });

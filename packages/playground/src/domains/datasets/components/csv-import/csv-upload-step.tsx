@@ -91,7 +91,7 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
         onDrop={handleDrop}
         className={cn(
           'flex flex-col items-center justify-center gap-3',
-          'min-h-[160px] rounded-lg border-2 border-dashed p-6',
+          'min-h-[160px] rounded-lg border-2 border-dashed p-4',
           'cursor-pointer transition-colors',
           // Default state
           'border-surface4 bg-surface2',
@@ -106,7 +106,7 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
         {isParsing ? (
           <>
             <Spinner />
-            <span className="text-neutral4 text-sm">Parsing CSV...</span>
+            <span className="text-neutral4 text-ui-md">Parsing CSV...</span>
           </>
         ) : (
           <>
@@ -114,15 +114,15 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
               <Upload className="h-8 w-8" />
             </Icon>
             <div className="flex flex-col items-center gap-1">
-              <span className="text-neutral1 text-sm font-medium">Click to upload or drag and drop</span>
-              <span className="text-neutral4 text-xs">CSV files only</span>
+              <span className="text-neutral1 text-ui-md font-medium">Click to upload or drag and drop</span>
+              <span className="text-neutral4 text-ui-sm">CSV files only</span>
             </div>
           </>
         )}
       </div>
 
       {/* Error message */}
-      {error && <div className="text-accent2 text-sm">{error}</div>}
+      {error && <div className="text-accent2 text-ui-md">{error}</div>}
     </div>
   );
 }

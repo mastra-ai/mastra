@@ -1,6 +1,20 @@
 import { MastraError } from '@mastra/core/error';
 import { describe, expect, it } from 'vitest';
-import { copyPnpmWorkspaceSettings } from './deps';
+import { copyPnpmWorkspaceSettings, getPnpmIgnoredBuildPackages } from './deps';
+
+describe('getPnpmIgnoredBuildPackages', () => {
+  it('extracts package names from pnpm ignored-build diagnostics', () => {
+    expect(
+      getPnpmIgnoredBuildPackages(
+        '[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: utf-8-validate@6.0.5, @duckdb/node-bindings@1.3.2, fixture-native-build@file:fixture-native-build-1.0.0.tgz',
+      ),
+    ).toEqual(['utf-8-validate', '@duckdb/node-bindings', 'fixture-native-build']);
+  });
+
+  it('ignores unrelated package-manager output', () => {
+    expect(getPnpmIgnoredBuildPackages('Process exited with code 1')).toEqual([]);
+  });
+});
 
 describe('copyPnpmWorkspaceSettings', () => {
   it('copies pnpm install policy without copying source workspace packages', () => {

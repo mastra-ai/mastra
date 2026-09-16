@@ -21,6 +21,15 @@ import type { ThreadData, ThreadStepData, PendingToolResult } from './thread-rec
 type BraintrustSpanType = 'llm' | 'score' | 'function' | 'eval' | 'task' | 'tool';
 
 /**
+ * Explicit span parentage accepted by Braintrust's `startSpan()`.
+ * `rootSpanId` groups rows into a trace; `spanId` / `parentSpanIds` populate
+ * the row's `span_parents`.
+ */
+export type BraintrustParentSpanIds =
+  | { spanId: string; rootSpanId: string }
+  | { parentSpanIds: string[]; rootSpanId: string };
+
+/**
  * The subset of a Braintrust span used by the exporter.
  *
  * This structural interface lets applications provide spans from a different
@@ -34,6 +43,7 @@ export interface BraintrustSpan {
     name: string;
     type: BraintrustSpanType;
     startTime: number;
+    parentSpanIds?: BraintrustParentSpanIds;
     event: Record<string, any>;
   }): BraintrustSpan;
   log(event: Record<string, any>): void;
@@ -52,6 +62,7 @@ export interface BraintrustLogger {
     name: string;
     type: BraintrustSpanType;
     startTime: number;
+    parentSpanIds?: BraintrustParentSpanIds;
     event: Record<string, any>;
   }): BraintrustSpan;
   logFeedback(event: {
@@ -228,8 +239,12 @@ export class BraintrustExporter extends TrackingExporter<
     }
   }
 
-  private startSpan(args: { parent: BraintrustSpan | BraintrustLogger; span: AnyExportedSpan }): BraintrustSpanData {
-    const { parent, span } = args;
+  private startSpan(args: {
+    parent: BraintrustSpan | BraintrustLogger;
+    span: AnyExportedSpan;
+    parentSpanIds?: BraintrustParentSpanIds;
+  }): BraintrustSpanData {
+    const { parent, span, parentSpanIds } = args;
     const payload = this.buildSpanPayload(span);
 
     // Braintrust's startSpan() accepts data properties via the `event` parameter
@@ -240,6 +255,7 @@ export class BraintrustExporter extends TrackingExporter<
       name: span.name,
       type: mapSpanType(span.type),
       startTime: span.startTime.getTime() / 1000,
+      ...(parentSpanIds ? { parentSpanIds } : {}),
       event: {
         id: span.id, // Use Mastra span ID as Braintrust row ID for logFeedback() compatibility
         ...payload,
@@ -255,6 +271,36 @@ export class BraintrustExporter extends TrackingExporter<
       threadData: isModelGeneration ? [] : undefined,
       pendingToolResults: isModelGeneration ? new Map() : undefined,
     };
+  }
+
+  /**
+   * Explicit parentage for a root span started directly from a logger.
+   *
+   * Pinning `rootSpanId` to the Mastra trace ID makes every root sharing a
+   * trace land in the same Braintrust trace — required for a resumed workflow
+   * run to rejoin the trace of its suspended half, which was exported by an
+   * earlier process. Genuine roots keep empty `span_parents` so Braintrust
+   * still treats them as trace roots; only a resumed continuation (marked by
+   * core with `resumedFromSpanId`) links to its persisted parent span. Roots
+   * with other parent IDs (e.g. an ambient OTEL span from the bridge) are not
+   * linked — their parent was never exported to Braintrust.
+   *
+   * Spans nested under an enclosing Braintrust span (Eval(), logger.traced(),
+   * or a span passed as `braintrustLogger`) get no explicit parentage: the
+   * startSpan() chain already inherits the external trace's rootSpanId.
+   */
+  private rootParentSpanIds(root: BraintrustRoot, span: AnyExportedSpan): BraintrustParentSpanIds | undefined {
+    // Braintrust SDK objects carry a `kind` discriminant ('logger' | 'span').
+    // Structural stand-ins may omit it; for those, spans are the ones that end().
+    const kind = (root as { kind?: string }).kind;
+    const isLoggerRoot = kind ? kind === 'logger' : !('end' in root);
+    if (!isLoggerRoot) {
+      return undefined;
+    }
+    if (span.parentSpanId && span.parentSpanId === span.metadata?.resumedFromSpanId) {
+      return { spanId: span.parentSpanId, rootSpanId: span.traceId };
+    }
+    return { parentSpanIds: [], rootSpanId: span.traceId };
   }
 
   protected override async _buildRoot(_args: {
@@ -296,7 +342,7 @@ export class BraintrustExporter extends TrackingExporter<
     if (span.isRootSpan) {
       const root = traceData.getRoot();
       if (root) {
-        return this.startSpan({ parent: root, span });
+        return this.startSpan({ parent: root, span, parentSpanIds: this.rootParentSpanIds(root, span) });
       }
     } else {
       const parent = traceData.getParent(args);

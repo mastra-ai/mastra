@@ -1,4 +1,5 @@
 import type { MessageList } from '@mastra/core/agent';
+import type { MemoryRunState } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -11,6 +12,7 @@ import type { MemoryContextProvider } from '../processor';
 import type { ObservationModelContext } from '../types';
 
 import { loadMemoryContextMessages } from './load-memory-context';
+import { selectSafeBufferPrefix } from './safe-buffer-prefix';
 import { ObservationStep } from './step';
 import type { ObservationTurnHooks, TurnContext, TurnResult } from './types';
 
@@ -67,6 +69,9 @@ export class ObservationTurn {
     signal: Parameters<NonNullable<ProcessorContext['sendSignal']>>[0],
   ) => ReturnType<NonNullable<ProcessorContext['sendSignal']>>;
 
+  /** Optional state signal sender for processor-originated snapshots. */
+  sendStateSignal?: ProcessorContext['sendStateSignal'];
+
   /** Current actor model for this step. Updated by the processor before prepare(). */
   actorModelContext?: ObservationModelContext;
 
@@ -83,6 +88,7 @@ export class ObservationTurn {
     messageList: MessageList;
     agent?: ProcessorContext['agent'];
     sendSignal?: ProcessorContext['sendSignal'];
+    sendStateSignal?: ProcessorContext['sendStateSignal'];
     requestContext?: RequestContext;
     observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
@@ -93,6 +99,7 @@ export class ObservationTurn {
     this.messageList = opts.messageList;
     this.agent = opts.agent;
     this.sendSignal = opts.sendSignal;
+    this.sendStateSignal = opts.sendStateSignal;
     this.requestContext = opts.requestContext;
     this.observabilityContext = opts.observabilityContext;
     this.hooks = opts.hooks ?? {};
@@ -131,11 +138,12 @@ export class ObservationTurn {
    * If a MemoryContextProvider is passed, loads historical messages and adds
    * them to the MessageList. Without a provider, only fetches/caches the record.
    */
-  async start(memory?: MemoryContextProvider): Promise<TurnContext> {
+  async start(memory?: MemoryContextProvider, runState?: MemoryRunState): Promise<TurnContext> {
     if (this._started) throw new Error('Turn already started');
     this._started = true;
 
     this._record = await this.om.getOrCreateRecord(this.threadId, this.resourceId);
+    runState?.set(`observational-memory:record:${this.threadId}:${this.resourceId ?? ''}`, this._record);
     this._generationCountAtStart = this._record.generationCount;
     this.memory = memory;
 
@@ -145,6 +153,7 @@ export class ObservationTurn {
         messageList: this.messageList,
         threadId: this.threadId,
         resourceId: this.resourceId,
+        runState,
       });
 
       this._context = {
@@ -165,6 +174,19 @@ export class ObservationTurn {
     }
 
     return this._context;
+  }
+
+  /** Replace the cached turn record with a specific instance. */
+  setRecord(record: ObservationalMemoryRecord): void {
+    this._record = record;
+    if (this._context) {
+      this._context.record = record;
+    }
+  }
+
+  /** Patch the cached turn record with merged fields. */
+  patchRecord(patch: Partial<ObservationalMemoryRecord>): void {
+    this.setRecord({ ...this.record, ...patch });
   }
 
   /**
@@ -208,24 +230,30 @@ export class ObservationTurn {
       const allMessages = getObservableMessages(this.messageList);
       const record = this._record!;
       const unobservedMessages = this.om.getUnobservedMessages(allMessages, record);
-      if (unobservedMessages.length > 0) {
-        void this.om
-          .buffer({
-            threadId: this.threadId,
-            resourceId: this.resourceId,
-            messages: unobservedMessages,
-            record,
-            writer: this.writer,
-            agent: this.agent,
-            sendSignal: this.sendSignal,
-            requestContext: this.requestContext,
-            currentModel: this.actorModelContext,
-            observabilityContext: this.observabilityContext,
-            skipMinimumTokenCheck: true,
-          })
-          .catch((err: Error) => {
-            omDebug(`[OM:turn.end] idle buffer failed: ${err?.message}`);
-          });
+      // Buffer only the safe prefix before a tool call still pending on the newest
+      // message; defer when the cut before it is unsafe (see selectSafeBufferPrefix).
+      const idleMessages = selectSafeBufferPrefix(unobservedMessages);
+      if (idleMessages.length > 0) {
+        void this.om.trackBackgroundWork(
+          this.om
+            .buffer({
+              threadId: this.threadId,
+              resourceId: this.resourceId,
+              messages: idleMessages,
+              record,
+              writer: this.writer,
+              agent: this.agent,
+              sendSignal: this.sendSignal,
+              sendStateSignal: this.sendStateSignal,
+              requestContext: this.requestContext,
+              currentModel: this.actorModelContext,
+              observabilityContext: this.observabilityContext,
+              skipMinimumTokenCheck: true,
+            })
+            .catch((err: Error) => {
+              omDebug(`[OM:turn.end] idle buffer failed: ${err?.message}`);
+            }),
+        );
       }
     }
 
@@ -237,7 +265,7 @@ export class ObservationTurn {
    * @internal
    */
   async refreshRecord(): Promise<void> {
-    this._record = await this.om.getOrCreateRecord(this.threadId, this.resourceId);
+    this.setRecord(await this.om.getOrCreateRecord(this.threadId, this.resourceId));
   }
 
   /**

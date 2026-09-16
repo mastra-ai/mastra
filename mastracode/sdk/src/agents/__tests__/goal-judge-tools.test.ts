@@ -4,10 +4,12 @@ import * as path from 'node:path';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../onboarding/settings.js', () => ({
+vi.mock('../onboarding/settings.js', async importOriginal => ({
+  ...(await importOriginal<typeof import('../../onboarding/settings.js')>()),
   loadSettings: () => ({}),
 }));
-vi.mock('../../onboarding/settings.js', () => ({
+vi.mock('../../onboarding/settings.js', async importOriginal => ({
+  ...(await importOriginal<typeof import('../../onboarding/settings.js')>()),
   loadSettings: () => ({}),
 }));
 
@@ -33,7 +35,9 @@ function createRequestContext(projectPath: string) {
   return requestContext;
 }
 
-const READONLY = ['view', 'search_content', 'find_files', 'file_stat', 'lsp_inspect'];
+// `lsp_inspect` is intentionally absent: LSP is opt-in, so the tool is only
+// registered when the workspace has LSP enabled.
+const READONLY = ['view', 'search_content', 'find_files', 'file_stat'];
 const MUTATING = ['write_file', 'string_replace_lsp', 'delete_file', 'mkdir', 'ast_smart_edit', 'execute_command'];
 
 describe('getGoalJudgeTools', () => {

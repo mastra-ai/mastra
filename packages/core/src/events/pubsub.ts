@@ -83,6 +83,22 @@ export abstract class PubSub {
   }
 
   /**
+   * Whether this implementation supports replay from a numeric event offset.
+   * Defaults to `false`.
+   */
+  get supportsOffsets(): boolean {
+    return false;
+  }
+
+  /**
+   * Surface attempts to use an unsupported non-zero offset.
+   * Implementations may override this hook to use their configured logger.
+   */
+  protected onUnsupportedOffset(offset: number): void {
+    console.warn(`PubSub implementation does not support replay from offset ${offset}; falling back to full replay.`);
+  }
+
+  /**
    * Get historical events for a topic.
    * Default implementation returns empty array (no history support).
    * Override in implementations that support event caching.
@@ -118,7 +134,10 @@ export abstract class PubSub {
    * @param offset - Start replaying from this index (0-based)
    * @param cb - Callback invoked for each event
    */
-  subscribeFromOffset(topic: string, _offset: number, cb: EventCallback): Promise<void> {
+  subscribeFromOffset(topic: string, offset: number, cb: EventCallback): Promise<void> {
+    if (offset !== 0 && !this.supportsOffsets) {
+      this.onUnsupportedOffset(offset);
+    }
     return this.subscribeWithReplay(topic, cb);
   }
 }

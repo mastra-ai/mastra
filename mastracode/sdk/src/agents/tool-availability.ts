@@ -49,12 +49,15 @@ function getHarnessProjectPath(harness: PlanModeGuardHarness | undefined): strin
   return typeof projectPath === 'string' ? projectPath : undefined;
 }
 
+function getHarnessFactoryProjectId(harness: PlanModeGuardHarness | undefined): string | undefined {
+  const factoryProjectId = getHarnessState(harness)?.factoryProjectId;
+  return typeof factoryProjectId === 'string' ? factoryProjectId : undefined;
+}
+
 function getToolInputPath(input: unknown): string | undefined {
   const toolPath = (input as { path?: unknown } | undefined)?.path;
   return typeof toolPath === 'string' ? toolPath : undefined;
 }
-
-const PLAN_DIR_HINT = `${getLocalPlansRelativeDir()}/`;
 
 export function guardPlanModePlanFileWrites({ workspaceToolName, input, context }: WorkspaceToolHookContext) {
   if (!PLAN_MODE_WRITE_TOOL_NAMES.has(workspaceToolName)) return;
@@ -62,22 +65,25 @@ export function guardPlanModePlanFileWrites({ workspaceToolName, input, context 
   const harness = getHarnessContext(context);
   if (getHarnessModeId(harness) !== 'plan') return;
 
+  const factoryProjectId = getHarnessFactoryProjectId(harness);
+  const planOptions = { factoryProjectId };
+  const planDirHint = `${getLocalPlansRelativeDir(planOptions)}/`;
   const projectPath = getHarnessProjectPath(harness);
   const inputPath = getToolInputPath(input);
   if (!projectPath || !inputPath) {
     return {
       proceed: false as const,
-      output: `Plan mode can only write plan files inside ${PLAN_DIR_HINT}.`,
+      output: `Plan mode can only write plan files inside ${planDirHint}.`,
     };
   }
 
-  // Plan mode may write any `.md` file directly inside `.mastracode/plans/`, but
-  // nothing else in the project.
-  if (isPlanFilePath(projectPath, inputPath)) return;
+  // Plan mode may write any `.md` file directly inside the configured plan directory,
+  // but nothing else in the project.
+  if (isPlanFilePath(projectPath, inputPath, planOptions)) return;
 
   return {
     proceed: false as const,
-    output: `Plan mode can only write plan files inside ${PLAN_DIR_HINT}. Refusing to edit ${inputPath}.`,
+    output: `Plan mode can only write plan files inside ${planDirHint}. Refusing to edit ${inputPath}.`,
   };
 }
 
@@ -96,7 +102,7 @@ export const PLAN_MODE_AVAILABLE_TOOLS: readonly string[] = [
   MC_TOOLS.FILE_STAT,
   MC_TOOLS.LSP_INSPECT,
   // Plan file writing. Tool hooks enforce that these can only write `.md`
-  // files inside `.mastracode/plans/` while the session is in plan mode.
+  // files inside the session's configured plan directory while in plan mode.
   MC_TOOLS.WRITE_FILE,
   MC_TOOLS.STRING_REPLACE_LSP,
   // Plan delivery tools
@@ -109,6 +115,9 @@ export const PLAN_MODE_AVAILABLE_TOOLS: readonly string[] = [
   'task_check',
   // Notification access
   MC_TOOLS.NOTIFICATION_INBOX,
+  // Read-only workflow inspection (no create/run/delete in plan mode).
+  'list-workflows',
+  'get-workflow',
 ];
 
 export const EXPLORE_MODE_AVAILABLE_TOOLS: readonly string[] = [
@@ -118,6 +127,9 @@ export const EXPLORE_MODE_AVAILABLE_TOOLS: readonly string[] = [
   MC_TOOLS.FILE_STAT,
   MC_TOOLS.LSP_INSPECT,
   'ask_user',
+  // Read-only workflow inspection (no create/run/delete in fast mode either).
+  'list-workflows',
+  'get-workflow',
 ];
 
 export const GOAL_JUDGE_READONLY_TOOLS: readonly string[] = [

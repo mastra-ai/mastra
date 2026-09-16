@@ -186,9 +186,9 @@ export function generateStubs(tools: ToolsInput): CodeModeStub[] {
   });
 }
 
-const USAGE_CONTRACT = `# Code Mode
+const createUsageContract = (toolId: string) => `# Code Mode
 
-You have an \`execute_typescript\` tool. Instead of calling tools one at a time,
+You have access to the \`${toolId}\` tool. Instead of calling tools one at a time,
 write a single TypeScript program that orchestrates them and returns one result.
 
 Rules:
@@ -209,5 +209,6 @@ Available functions:`;
 export function createCodeModeInstructions(config: CodeModeConfig): string {
   const stubs = generateStubs(config.tools);
   const declarations = stubs.map(s => s.declaration).join('\n\n');
-  return `${USAGE_CONTRACT}\n\n${declarations}`;
+  const usageContract = createUsageContract(config.id ?? 'execute_typescript');
+  return `${usageContract}\n\n${declarations}`;
 }

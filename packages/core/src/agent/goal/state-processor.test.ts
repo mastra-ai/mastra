@@ -6,6 +6,7 @@ import type { GoalObjectiveRecord } from '../../storage/domains/thread-state/bas
 import { InMemoryStore } from '../../storage/mock';
 
 import { beginGoalActivity, stopGoalActivity } from './activity';
+import { cacheGoalObjective } from './activity-cache';
 import { GOAL_REQUEST_CONTEXT_KEY, GOAL_STATE_TYPE } from './objective';
 import { GoalStateProcessor } from './state-processor';
 
@@ -183,7 +184,34 @@ describe('GoalStateProcessor', () => {
     await stopGoalActivity({ agentId: 'goal-agent', runId: 'cached-stale-run' });
   });
 
-  it('reuses a cached missing objective without reading storage again', async () => {
+  // Regression: the objective cache is populated at run start, before an
+  // asynchronous `setObjective` has landed in the store. A cached miss must not
+  // shadow the store — otherwise an objective the store reports as active is
+  // projected as `status: none` and the model reports the goal as cancelled.
+  it('falls through a cached missing objective to the store', async () => {
+    const { processor } = await createProcessor(objective({ objective: 'Stored active objective' }));
+    const requestContext = new RequestContext();
+    cacheGoalObjective(requestContext, THREAD_ID, undefined);
+
+    // A prior objective snapshot is in the window, so a shadowed store read
+    // retracts it with `status: none` — what the model reads as "goal cancelled".
+    // The prior snapshot carries a different objective so that a correct read
+    // must emit a fresh projection rather than dedupe against an identical one.
+    const result = await processor.computeStateSignal(
+      createArgs({ lastSnapshot: objective({ objective: 'Superseded objective' }), requestContext }),
+    );
+
+    // Pin the projected objective, not merely the absence of the retraction:
+    // emitting nothing at all would also satisfy `status !== 'none'`.
+    expect(result?.attributes?.status).toBe('active');
+    expect(result?.contents).toContain('Stored active objective');
+  });
+
+  // Inverted deliberately: this previously asserted a single store read, i.e. that
+  // a cached miss is authoritative. A miss is no longer memoized, because the
+  // objective can be written after the run-start read — see the fall-through test
+  // above. The cache-hit dedup this protected is covered by the test below.
+  it('re-reads storage when the run-start objective read missed', async () => {
     const { mastra, processor, store } = await createProcessor();
     const requestContext = new RequestContext();
     const getState = vi.spyOn(store, 'getState');
@@ -198,6 +226,26 @@ describe('GoalStateProcessor', () => {
     const result = await processor.computeStateSignal(createArgs({ hasSnapshot: false, requestContext }));
 
     expect(result).toBeUndefined();
+    expect(getState).toHaveBeenCalledTimes(2);
+  });
+
+  // Guards the deduplication the cache exists for: a hit is still read once.
+  it('reuses a cached objective without reading storage again', async () => {
+    const { mastra, processor, store } = await createProcessor(objective());
+    const requestContext = new RequestContext();
+    const getState = vi.spyOn(store, 'getState');
+
+    await beginGoalActivity({
+      mastra,
+      agentId: 'goal-agent',
+      threadId: THREAD_ID,
+      runId: 'cached-hit-run',
+      requestContext,
+    });
+    const result = await processor.computeStateSignal(createArgs({ hasSnapshot: false, requestContext }));
+
+    expect(result?.contents).toContain('Ship the feature');
     expect(getState).toHaveBeenCalledTimes(1);
+    await stopGoalActivity({ agentId: 'goal-agent', runId: 'cached-hit-run' });
   });
 });

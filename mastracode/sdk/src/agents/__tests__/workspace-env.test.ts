@@ -6,13 +6,6 @@ import { RequestContext } from '@mastra/core/request-context';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../onboarding/settings.js', () => ({
-  loadSettings: () => ({}),
-}));
-vi.mock('../../onboarding/settings.js', () => ({
-  loadSettings: () => ({}),
-}));
-
 const originalEnv = { ...process.env };
 
 function createRequestContext(projectPath: string) {

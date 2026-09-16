@@ -185,6 +185,8 @@ describe('dynamic filesystem tools', () => {
         return new LocalFilesystem({ basePath: tempDir });
       },
     });
+    // lsp_inspect is only registered when LSP is active on the workspace.
+    Object.defineProperty(workspace, 'lsp', { get: () => ({}) });
     const tools = await createWorkspaceTools(workspace);
 
     await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
@@ -193,6 +195,24 @@ describe('dynamic filesystem tools', () => {
     );
 
     expect(resolverCalls).toBe(1);
+  });
+
+  it('should not register lsp_inspect when LSP is not active on the workspace', async () => {
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+
+    const tools = await createWorkspaceTools(workspace);
+
+    expect(workspace.lsp).toBeUndefined();
+    expect(tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT]).toBeUndefined();
+  });
+
+  it('should register lsp_inspect when LSP is active on the workspace', async () => {
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    Object.defineProperty(workspace, 'lsp', { get: () => ({}) });
+
+    const tools = await createWorkspaceTools(workspace);
+
+    expect(tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT]).toBeDefined();
   });
 
   it('should allow getInfo callers to opt out of resolving dynamic filesystems', async () => {

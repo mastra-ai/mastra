@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { WORKSPACE_TOOLS } from '../../constants';
 import type { CommandResult } from '../../sandbox';
 import { Workspace } from '../../workspace';
-import { executeCommandTool, executeCommandWithBackgroundTool } from '../execute-command';
+import { executeCommandInputSchema, executeCommandTool, executeCommandWithBackgroundTool } from '../execute-command';
 import { getProcessOutputTool } from '../get-process-output';
 import { killProcessTool } from '../kill-process';
 import {
@@ -213,6 +213,23 @@ describe('execute_command tool', () => {
         expect(result).toContain('line 500');
       });
 
+      it('accepts tail as a numeric string, like timeout', async () => {
+        const sandbox = createMockSandbox({
+          executeCommand: vi.fn().mockResolvedValue({
+            success: true,
+            exitCode: 0,
+            stdout: longOutput,
+            stderr: '',
+            executionTimeMs: 5,
+          }),
+        });
+        const ctx = createContext(sandbox);
+        const result = await executeCommandTool.execute({ command: 'seq 500', tail: '10' as any }, ctx);
+        expect(result).toContain('[showing last 10 of 500 lines]');
+        expect(result).toContain('line 491');
+        expect(result).toContain('line 500');
+      });
+
       it('tail applies to both stdout and stderr on failure', async () => {
         const longStderr = Array.from({ length: 50 }, (_, i) => `err ${i + 1}`).join('\n');
         const sandbox = createMockSandbox({
@@ -380,6 +397,25 @@ describe('get_process_output tool', () => {
     expect(result).toContain('string pid output');
   });
 
+  it('accepts tail as a numeric string', async () => {
+    const handle = createMockHandle({
+      pid: '13',
+      stdout: Array.from({ length: 50 }, (_, i) => `line ${i + 1}`).join('\n'),
+      stderr: '',
+      exitCode: undefined,
+    });
+    const sandbox = createMockSandbox({
+      processes: {
+        get: vi.fn().mockResolvedValue(handle),
+      },
+    });
+    const ctx = createContext(sandbox);
+    const result = await getProcessOutputTool.execute({ pid: '13', tail: '5' as any }, ctx);
+    expect(result).toContain('[showing last 5 of 50 lines]');
+    expect(result).toContain('line 46');
+    expect(result).toContain('line 50');
+  });
+
   it('returns output and exit code for already-exited process (no wait)', async () => {
     const handle = createMockHandle({
       pid: '12',
@@ -474,6 +510,31 @@ describe('get_process_output tool', () => {
       const result = await getProcessOutputTool.execute({ pid: '14', tail: 0 }, ctx);
       expect(result).toContain('log 1\n');
       expect(result).toContain('log 500');
+    });
+  });
+
+  describe('tail schema validation', () => {
+    it('execute_command rejects a fractional tail', () => {
+      expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: 2.5 }).success).toBe(false);
+      expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: '2.5' }).success).toBe(false);
+    });
+
+    it('execute_command accepts an integer tail (number or numeric string)', () => {
+      expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: 2 }).success).toBe(true);
+      expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: '2' }).success).toBe(true);
+      expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: 0 }).success).toBe(true);
+      expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: -5 }).success).toBe(true);
+    });
+
+    it('get_process_output rejects a fractional tail', () => {
+      expect(getProcessOutputTool.inputSchema.safeParse({ pid: '1', tail: 2.5 }).success).toBe(false);
+      expect(getProcessOutputTool.inputSchema.safeParse({ pid: '1', tail: '2.5' }).success).toBe(false);
+    });
+
+    it('get_process_output accepts an integer tail (number or numeric string)', () => {
+      expect(getProcessOutputTool.inputSchema.safeParse({ pid: '1', tail: 2 }).success).toBe(true);
+      expect(getProcessOutputTool.inputSchema.safeParse({ pid: '1', tail: '2' }).success).toBe(true);
+      expect(getProcessOutputTool.inputSchema.safeParse({ pid: '1', tail: 0 }).success).toBe(true);
     });
   });
 

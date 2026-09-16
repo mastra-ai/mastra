@@ -1,0 +1,98 @@
+---
+title: "Reference: Next.js adapter | Server"
+description: "The @mastra/next package provides a server adapter for running Mastra with Next.js."
+packages:
+  - "@mastra/next"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Next.js adapter
+
+The `@mastra/next` package mounts Mastra in a Next.js App Router application. See [Server Adapters](/docs/server/server-adapters) for general adapter concepts.
+
+## Installation
+
+Install the Next.js adapter and its Hono peer dependency:
+
+```bash npm2yarn
+npm install @mastra/next@latest hono
+```
+
+## Usage example
+
+Mount the adapter in a catch-all App Router route:
+
+```typescript title="app/api/[...mastra]/route.ts"
+import { createNextRouteHandler } from '@mastra/next'
+import { mastra } from '@/mastra'
+
+export const { GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD } = createNextRouteHandler({
+  mastra,
+})
+```
+
+The `prefix` option defaults to `/api` and must match the catch-all route's mount path. For example, when mounting at `app/api/mastra/[...mastra]/route.ts`, use `createNextRouteHandler({ mastra, prefix: '/api/mastra' })`.
+
+## Signature
+
+```typescript
+function createNextRouteHandler(options: NextRouteHandlerOptions): NextRouteHandlers
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    description: 'Mastra instance whose server configuration and registered resources are exposed',
+    isOptional: false,
+  },
+  {
+    name: 'tools',
+    type: 'ToolsInput',
+    typeDescription: 'Record<string, ToolAction | VercelTool>',
+    description: 'Additional tools to register with the server',
+    isOptional: true,
+    defaultValue: '{}',
+  },
+  {
+    name: 'prefix',
+    type: 'string',
+    description: 'API route prefix, which must match the catch-all route mount path',
+    isOptional: true,
+    defaultValue: "'/api'",
+  },
+]}
+/>
+
+## Return value
+
+Returns a `NextRouteHandlers` object with `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `OPTIONS`, and `HEAD` properties. Each property is a handler with this signature:
+
+```typescript
+(request: Request) => Response | Promise<Response>
+```
+
+## Serverless deployments & lazy initialization
+
+The adapter exports its route handlers synchronously, then creates the underlying Hono app and `MastraServer` when the first request arrives. That initialized app is reused for subsequent requests in the same process, which supports serverless runtimes without top-level asynchronous initialization.
+
+A2A endpoints use an in-memory task store. Task state lasts only for the lifetime of the process and isn't shared between serverless instances.
+
+## Body size limit
+
+Request bodies have a default limit of 4.5 MB. Requests that exceed the limit receive `{ error: 'Request body too large' }`.
+
+Set `server.bodySizeLimit` on the `Mastra` instance to configure the limit.
+
+## Middleware
+
+Middleware configured with `server.middleware` or `setServerMiddleware()` runs through the adapter's Hono-based server, except on framework-public routes such as those marked `requiresAuth: false`. See [Server middleware](/docs/server/middleware).
+
+## Related
+
+- [Server Adapters](/docs/server/server-adapters)
+- [MastraServer](/reference/server/mastra-server)

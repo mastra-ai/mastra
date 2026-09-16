@@ -1,7 +1,7 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
+import type { DatasetExperiment, ExperimentTargetType } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { DataList } from '@mastra/playground-ui/components/DataList';
 import {
   Dialog,
   DialogContent,
@@ -11,48 +11,58 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
-import {
-  CheckCircle,
-  ChevronDown,
-  FilterIcon,
-  GaugeIcon,
-  Sparkles,
-  ThumbsDown,
-  ThumbsUp,
-  Trash2,
-  XIcon,
-} from 'lucide-react';
+import { CheckCircle, CircleSlashIcon, EllipsisIcon, GaugeIcon, Sparkles, Trash2, XIcon, Check, X } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useDatasetReviewItems, useDatasetCompletedItems } from '../hooks/use-dataset-review-items';
+import { useReviewItems, useCompletedItems } from '../hooks/use-dataset-review-items';
 import { ProposalTag } from './proposal-tag';
-import type { ReviewItem } from './review-item-card';
-import { ReviewItemPanel } from './review-item-panel';
+import { RouteItemOverlay } from '@/components/route-item-overlay';
+import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
+import { ExperimentResultsList } from '@/domains/experiments/components/experiment-results-list';
 import { LLMProviders, LLMModels } from '@/domains/llm';
 import { BulkTagPicker } from '@/domains/shared/components/bulk-tag-picker';
+import { useLinkComponent } from '@/lib/framework';
 
-function truncateInput(value: unknown, max: number): string {
-  if (typeof value === 'string') return value.length > max ? value.slice(0, max) + '...' : value;
-  try {
-    const str = JSON.stringify(value);
-    return str.length > max ? str.slice(0, max) + '...' : str;
-  } catch {
-    return String(value);
-  }
-}
+const REVIEW_LIST_COLUMNS = [
+  { name: 'itemId', label: 'Item ID', size: 'auto' },
+  { name: 'input', label: 'Input', size: 'minmax(0,1fr)' },
+  { name: 'tags', label: 'Tags', size: 'auto' },
+  { name: 'scores', label: 'Scores', size: '6rem' },
+];
+
+const UNTAGGED = '__untagged__';
+const ALL_TAGS = 'all';
+
+const STATUS_OPTIONS = [
+  { value: 'review', label: 'Review queue' },
+  { value: 'completed', label: 'Completed' },
+];
 
 export interface DatasetReviewProps {
-  datasetId: string;
-  /** When set, scopes the review (and completed) lists to items produced by this experiment. */
+  /** When set, the dataset's tags seed the tag vocabulary. Without it, tags come from the items only. */
+  datasetId?: string;
+  /** When set, scopes the review (and completed) lists to items produced by this experiment; otherwise project-wide. */
   experimentId?: string;
+  /** Overrides target-based discovery for both lists, including when empty. */
+  experiments?: DatasetExperiment[];
+  isLoadingExperiments?: boolean;
+  /** When set, scopes the lists to experiments run against this target type (server-side). */
+  targetType?: ExperimentTargetType | '';
+  /** When set, scopes the lists to experiments run against this target ID (server-side). */
+  targetId?: string;
   /**
    * Optional request from the parent to auto-feature this item. Whenever this prop changes
    * to a non-null value, the matching review row is selected. Internal interactions still
@@ -60,21 +70,45 @@ export interface DatasetReviewProps {
    * to `null` when navigating away so a re-open of the same id retriggers selection).
    */
   featuredItemId?: string | null;
+  detailPanelVariant?: 'inline' | 'overlay';
+  /** Rendered before the status/tag filters in the toolbar (e.g. an experiment picker). */
+  toolbarStart?: ReactNode;
+  /** Rendered at the end of the toolbar, after the bulk actions. */
+  toolbarEnd?: ReactNode;
+  /** When set, shows a "Create Scorer" action fed with the visible review items (input/output). */
+  onCreateScorer?: (items: Array<{ input: unknown; output: unknown }>) => void;
 }
 
-export function DatasetReview({ datasetId, experimentId, featuredItemId: featuredItemIdRequest }: DatasetReviewProps) {
+export function DatasetReview({
+  datasetId,
+  experimentId,
+  experiments,
+  isLoadingExperiments,
+  targetType,
+  targetId,
+  featuredItemId: featuredItemIdRequest,
+  detailPanelVariant = 'inline',
+  toolbarStart,
+  toolbarEnd,
+  onCreateScorer,
+}: DatasetReviewProps) {
   const client = useMastraClient();
-  const { data: dataset } = useDataset(datasetId);
-  const { data: reviewItemsRaw, isLoading: isLoadingReview } = useDatasetReviewItems(datasetId);
-  const { data: completedItemsRaw, isLoading: isLoadingCompleted } = useDatasetCompletedItems(datasetId);
-  const reviewItems = useMemo(
-    () => (experimentId ? (reviewItemsRaw ?? []).filter(i => i.experimentId === experimentId) : reviewItemsRaw),
-    [reviewItemsRaw, experimentId],
-  );
-  const completedItems = useMemo(
-    () => (experimentId ? (completedItemsRaw ?? []).filter(i => i.experimentId === experimentId) : completedItemsRaw),
-    [completedItemsRaw, experimentId],
-  );
+  const { paths } = useLinkComponent();
+  const { data: dataset } = useDataset(datasetId ?? '');
+  const { data: reviewItems, isLoading: isLoadingReview } = useReviewItems({
+    experimentId,
+    targetType,
+    targetId,
+    experiments,
+    isLoadingExperiments,
+  });
+  const { data: completedItems, isLoading: isLoadingCompleted } = useCompletedItems({
+    experimentId,
+    targetType,
+    targetId,
+    experiments,
+    isLoadingExperiments,
+  });
   const { updateExperimentResult } = useDatasetMutations();
 
   // Local state
@@ -104,23 +138,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
   >([]);
   const [showProposalDialog, setShowProposalDialog] = useState(false);
 
-  // Items in local state — null means "not hydrated yet", [] means "user cleared all"
-  const [localItems, setLocalItems] = useState<ReviewItem[] | null>(null);
-  const items = useMemo(() => localItems ?? reviewItems ?? [], [localItems, reviewItems]);
-
-  // Reset the local cache when the scope changes (different experiment or dataset)
-  // so it re-hydrates from the new queue below, instead of keeping the previous
-  // experiment's rows and running mutations against the wrong results.
-  useEffect(() => {
-    setLocalItems(null);
-  }, [datasetId, experimentId]);
-
-  // Sync server data to local on initial load (and after a scope reset above)
-  useEffect(() => {
-    if (reviewItems && localItems === null) {
-      setLocalItems(reviewItems);
-    }
-  }, [reviewItems, localItems]);
+  const items = useMemo(() => reviewItems ?? [], [reviewItems]);
 
   // Tag vocabulary from dataset + existing item tags
   const datasetTagVocabulary = useMemo(() => {
@@ -147,35 +165,39 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
   // Filtered items
   const filteredItems = useMemo(() => {
     if (!activeTagFilter) return items;
-    if (activeTagFilter === '__untagged__') return items.filter(i => i.tags.length === 0);
+    if (activeTagFilter === UNTAGGED) return items.filter(i => i.tags.length === 0);
     return items.filter(i => i.tags.includes(activeTagFilter));
   }, [items, activeTagFilter]);
 
-  // Tag counts
-  const tagCounts = useMemo(() => {
+  // Tag filter options: most used first, plus "Untagged" when some items have no tag.
+  const tagOptions = useMemo(() => {
     const counts = new Map<string, number>();
+    let untagged = 0;
     for (const item of items) {
+      if (item.tags.length === 0) untagged++;
       for (const tag of item.tags) {
         counts.set(tag, (counts.get(tag) ?? 0) + 1);
       }
     }
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([tag]) => ({ value: tag, label: tag }));
+    return [
+      { value: ALL_TAGS, label: 'All tags' },
+      ...(untagged > 0 ? [{ value: UNTAGGED, label: 'Untagged' }] : []),
+      ...sorted,
+    ];
   }, [items]);
 
-  const untaggedCount = useMemo(() => items.filter(i => i.tags.length === 0).length, [items]);
+  const hasActiveFilters = Boolean(activeTagFilter) || showCompleted;
 
-  // Active filter count for the Filter button badge
-  const activeFilterCount = useMemo(() => {
-    let count = 0;
-    if (activeTagFilter) count++;
-    if (showCompleted) count++;
-    return count;
-  }, [activeTagFilter, showCompleted]);
+  const resetFilters = useCallback(() => {
+    setActiveTagFilter(null);
+    setShowCompleted(false);
+    setFeaturedItemId(null);
+  }, []);
 
   // Item actions
   const setItemTags = useCallback(
     (itemId: string, tags: string[]) => {
-      setLocalItems(prev => (prev ?? []).map(i => (i.id === itemId ? { ...i, tags } : i)));
       const item = items.find(i => i.id === itemId);
       if (item?.experimentId && item?.datasetId) {
         updateExperimentResult.mutate({
@@ -189,65 +211,9 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
     [items, updateExperimentResult],
   );
 
-  const rateItem = useCallback(
-    (itemId: string, rating: 'positive' | 'negative' | undefined) => {
-      const item = items.find(i => i.id === itemId);
-      if (item?.traceId && rating !== undefined) {
-        client
-          .createFeedback({
-            feedback: {
-              traceId: item.traceId,
-              source: 'studio',
-              feedbackSource: 'studio',
-              feedbackType: 'rating',
-              value: rating === 'positive' ? 1 : -1,
-              experimentId: item.experimentId ?? undefined,
-              sourceId: item.id,
-            },
-          })
-          .catch(() => {});
-      }
-      setLocalItems(prev => (prev ?? []).map(i => (i.id === itemId ? { ...i, rating } : i)));
-    },
-    [items, client],
-  );
-
-  const commentItem = useCallback(
-    (itemId: string, comment: string) => {
-      const item = items.find(i => i.id === itemId);
-      if (item?.experimentId && item?.datasetId) {
-        updateExperimentResult.mutate({
-          datasetId: item.datasetId,
-          experimentId: item.experimentId,
-          resultId: item.id,
-          comment,
-        });
-      }
-      if (item?.traceId) {
-        client
-          .createFeedback({
-            feedback: {
-              traceId: item.traceId,
-              source: 'studio',
-              feedbackSource: 'studio',
-              feedbackType: 'comment',
-              value: comment,
-              comment,
-              experimentId: item.experimentId ?? undefined,
-              sourceId: item.id,
-            },
-          })
-          .catch(() => {});
-      }
-      setLocalItems(prev => (prev ?? []).map(i => (i.id === itemId ? { ...i, comment } : i)));
-    },
-    [items, client, updateExperimentResult],
-  );
-
   const removeItem = useCallback(
     (itemId: string) => {
       const item = items.find(i => i.id === itemId);
-      setLocalItems(prev => (prev ?? []).filter(i => i.id !== itemId));
       setSelectedItemIds(prev => {
         const next = new Set(prev);
         next.delete(itemId);
@@ -269,7 +235,6 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
   const completeItem = useCallback(
     (itemId: string) => {
       const item = items.find(i => i.id === itemId);
-      setLocalItems(prev => (prev ?? []).filter(i => i.id !== itemId));
       setSelectedItemIds(prev => {
         const next = new Set(prev);
         next.delete(itemId);
@@ -292,7 +257,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
   const displayItems = useMemo(() => {
     const base = showCompleted ? (completedItems ?? []) : filteredItems;
     if (!showCompleted || !activeTagFilter) return base;
-    if (activeTagFilter === '__untagged__') return base.filter(i => i.tags.length === 0);
+    if (activeTagFilter === UNTAGGED) return base.filter(i => i.tags.length === 0);
     return base.filter(i => i.tags.includes(activeTagFilter));
   }, [showCompleted, completedItems, filteredItems, activeTagFilter]);
   const isLoadingDisplay = showCompleted ? isLoadingCompleted : false;
@@ -302,7 +267,6 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
     [selectedItemIds, visibleIds],
   );
   const isAllSelected = displayItems.length > 0 && selectedVisibleCount === displayItems.length;
-  const isSomeSelected = selectedVisibleCount > 0 && !isAllSelected;
 
   // Bulk selection
   const toggleSelect = useCallback((itemId: string) => {
@@ -430,6 +394,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
     if (!featuredItemId) return null;
     return displayItems.find(i => i.id === featuredItemId) ?? null;
   }, [featuredItemId, displayItems]);
+  const { data: featuredScoresByItemId } = useScoresByExperimentId(featuredItem?.experimentId ?? '');
 
   // Navigation — undefined at the edges so the prev/next buttons disable.
   const featuredIndex = featuredItemId ? displayItems.findIndex(i => i.id === featuredItemId) : -1;
@@ -439,18 +404,143 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
       ? () => setFeaturedItemId(displayItems[featuredIndex + 1].id)
       : undefined;
 
-  const gridColumns = 'auto minmax(15rem,1fr) 10rem 8rem 6rem 6rem';
+  const hasSelection = !showCompleted && selectedItemIds.size > 0;
+  const showCreateScorer = !!onCreateScorer && !showCompleted && filteredItems.length > 0;
+
+  const toolbar = (
+    <div className="flex flex-wrap items-center gap-2">
+      <ButtonsGroup>
+        {toolbarStart}
+        <SelectFieldBlock
+          label="Status"
+          labelIsHidden
+          name="filter-status"
+          options={STATUS_OPTIONS}
+          value={showCompleted ? 'completed' : 'review'}
+          onValueChange={value => {
+            setShowCompleted(value === 'completed');
+            setFeaturedItemId(null);
+          }}
+          className="whitespace-nowrap"
+        />
+        {tagOptions.length > 1 && (
+          <SelectFieldBlock
+            label="Tags"
+            labelIsHidden
+            name="filter-tags"
+            options={tagOptions}
+            value={activeTagFilter ?? ALL_TAGS}
+            onValueChange={value => setActiveTagFilter(value === ALL_TAGS ? null : value)}
+            className="whitespace-nowrap"
+          />
+        )}
+        {hasActiveFilters && (
+          <Button onClick={resetFilters} size="sm" variant="default" icon={<XIcon />}>
+            Reset
+          </Button>
+        )}
+      </ButtonsGroup>
+
+      {(hasSelection || toolbarEnd || showCreateScorer) && (
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {toolbarEnd}
+          {showCreateScorer && (
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => onCreateScorer?.(filteredItems.map(item => ({ input: item.input, output: item.output })))}
+            >
+              <Icon size="sm">
+                <GaugeIcon />
+              </Icon>
+              Create Scorer
+            </Button>
+          )}
+          {hasSelection && (
+            <>
+              <BulkTagPicker
+                size="md"
+                selectedCount={selectedItemIds.size}
+                vocabulary={datasetTagVocabulary}
+                onApplyTag={handleBulkTag}
+                onRemoveTag={handleBulkRemoveTag}
+                onNewTag={tag => handleBulkTag(tag)}
+              />
+              <Button variant="primary" onClick={handleBulkComplete} icon={<CheckCircle />}>
+                Mark as reviewed
+              </Button>
+              <DropdownMenu>
+                <DropdownMenu.Trigger asChild>
+                  <Button variant="outline" disabled={isAnalyzing} aria-label="More actions">
+                    {isAnalyzing ? <Spinner className="h-4 w-4" /> : <EllipsisIcon />}
+                  </Button>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content align="end">
+                  <DropdownMenu.Item onSelect={openAnalyzeDialog}>
+                    <Icon size="sm">
+                      <Sparkles />
+                    </Icon>
+                    Analyze
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Separator />
+                  <DropdownMenu.Item onSelect={handleBulkRemove}>
+                    <Icon size="sm">
+                      <Trash2 />
+                    </Icon>
+                    Remove from queue
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   if (isLoadingReview) {
     return (
-      <div className="flex flex-1 items-center justify-center">
-        <Spinner className="h-6 w-6" />
-      </div>
+      <>
+        <PageLayout.TopArea>{toolbar}</PageLayout.TopArea>
+        <PageLayout.MainArea isCentered>
+          <Spinner className="h-6 w-6" />
+        </PageLayout.MainArea>
+      </>
     );
   }
 
+  const detailPanel = featuredItem ? (
+    <ExperimentResultDetail
+      className="h-full"
+      result={featuredItem}
+      scores={featuredScoresByItemId?.[featuredItem.itemId]}
+      experimentLink={
+        featuredItem.experimentId ? paths.experimentItemLink(featuredItem.experimentId, featuredItem.itemId) : undefined
+      }
+      tagVocabulary={datasetTagVocabulary}
+      onTagsChange={
+        showCompleted
+          ? undefined
+          : tags => {
+              setItemTags(featuredItem.id, tags);
+              for (const tag of tags) {
+                if (!datasetTagVocabulary.includes(tag)) {
+                  syncTagToDataset(tag);
+                }
+              }
+            }
+      }
+      onComplete={showCompleted ? undefined : () => completeItem(featuredItem.id)}
+      onPrevious={toPreviousItem}
+      onNext={toNextItem}
+      onClose={() => setFeaturedItemId(null)}
+    />
+  ) : null;
+
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden">
+    <>
+      <PageLayout.TopArea>{toolbar}</PageLayout.TopArea>
+
       {/* Analyze config dialog */}
       <Dialog open={showAnalyzeDialog} onOpenChange={setShowAnalyzeDialog}>
         <DialogContent>
@@ -461,11 +551,11 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="mb-1 block text-xs">Provider</Label>
+                <Label className="text-ui-sm mb-1 block">Provider</Label>
                 <LLMProviders value={analyzeProvider} onValueChange={setAnalyzeProvider} />
               </div>
               <div>
-                <Label className="mb-1 block text-xs">Model</Label>
+                <Label className="text-ui-sm mb-1 block">Model</Label>
                 <LLMModels llmId={analyzeProvider} value={analyzeModel} onValueChange={setAnalyzeModel} />
               </div>
             </div>
@@ -473,18 +563,18 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
               {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} will be analyzed
             </Txt>
             <div>
-              <Label className="text-xs">Instructions (optional)</Label>
+              <Label className="text-ui-sm">Instructions (optional)</Label>
               <Textarea
                 value={analyzePrompt}
                 onChange={e => setAnalyzePrompt(e.target.value)}
                 placeholder="E.g., Focus on safety issues and factual errors..."
                 rows={3}
-                className="mt-1 text-xs"
+                className="text-ui-sm mt-1"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAnalyzeDialog(false)}>
+            <Button icon={<X />} variant="outline" onClick={() => setShowAnalyzeDialog(false)}>
               Cancel
             </Button>
             <Button onClick={handleAnalyze} disabled={!analyzeProvider || !analyzeModel || isAnalyzing}>
@@ -558,366 +648,70 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
             })}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowProposalDialog(false)}>
+            <Button icon={<X />} variant="outline" onClick={() => setShowProposalDialog(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAcceptProposals} disabled={proposedAssignments.filter(p => p.accepted).length === 0}>
+            <Button
+              icon={<Check />}
+              onClick={handleAcceptProposals}
+              disabled={proposedAssignments.filter(p => p.accepted).length === 0}
+            >
               Accept {proposedAssignments.filter(p => p.accepted).length} proposals
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Main layout: toolbar + List + Detail Panel */}
-      <div
-        className={cn('grid w-full h-full grid-cols-1 gap-4 overflow-y-auto', featuredItem && 'grid-cols-[1fr_1fr]')}
+      {/* Main layout: List + Detail Panel */}
+      <PageLayout.MainArea
+        className={cn(
+          'grid h-full min-h-0 w-full grid-cols-1 gap-4',
+          detailPanelVariant === 'overlay' ? 'overflow-visible' : 'overflow-hidden',
+          featuredItem && detailPanelVariant === 'inline' && 'grid-cols-[1fr_1fr]',
+        )}
       >
-        <div className="grid w-full content-start gap-8 overflow-y-auto">
-          <div className="flex w-full flex-wrap items-center justify-between gap-4 gap-x-6">
-            {/* Filters (left) */}
-            <div className="flex items-center gap-3">
-              <DropdownMenu>
-                <DropdownMenu.Trigger asChild>
-                  <Button variant="outline" size="md">
-                    <FilterIcon />
-                    Filter
-                    {activeFilterCount > 0 && (
-                      <span
-                        className={cn(
-                          'ml-0.5 inline-flex items-center justify-center rounded-full bg-accent1/50 text-neutral5 text-ui-sm w-5 h-5',
-                        )}
-                      >
-                        {activeFilterCount}
-                      </span>
-                    )}
-                  </Button>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content align="start" className={cn('min-w-48')}>
-                  {/* Status */}
-                  <DropdownMenu.Sub>
-                    <DropdownMenu.SubTrigger>
-                      Status
-                      {showCompleted && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
-                    </DropdownMenu.SubTrigger>
-                    <DropdownMenu.SubContent>
-                      <DropdownMenu.CheckboxItem
-                        checked={!showCompleted}
-                        onCheckedChange={() => {
-                          setShowCompleted(false);
-                          setFeaturedItemId(null);
-                        }}
-                        onSelect={e => e.preventDefault()}
-                      >
-                        Review Queue
-                      </DropdownMenu.CheckboxItem>
-                      <DropdownMenu.CheckboxItem
-                        checked={showCompleted}
-                        onCheckedChange={() => {
-                          setShowCompleted(true);
-                          setFeaturedItemId(null);
-                        }}
-                        onSelect={e => e.preventDefault()}
-                      >
-                        Completed
-                      </DropdownMenu.CheckboxItem>
-                    </DropdownMenu.SubContent>
-                  </DropdownMenu.Sub>
-
-                  {/* Tags */}
-                  <DropdownMenu.Sub>
-                    <DropdownMenu.SubTrigger>
-                      Tags
-                      {activeTagFilter && <span className={cn('ml-auto text-ui-sm text-accent1')}>1</span>}
-                    </DropdownMenu.SubTrigger>
-                    <DropdownMenu.SubContent>
-                      <DropdownMenu.CheckboxItem
-                        checked={!activeTagFilter}
-                        onCheckedChange={() => setActiveTagFilter(null)}
-                        onSelect={e => e.preventDefault()}
-                      >
-                        All
-                      </DropdownMenu.CheckboxItem>
-                      {untaggedCount > 0 && (
-                        <DropdownMenu.CheckboxItem
-                          checked={activeTagFilter === '__untagged__'}
-                          onCheckedChange={() =>
-                            setActiveTagFilter(activeTagFilter === '__untagged__' ? null : '__untagged__')
-                          }
-                          onSelect={e => e.preventDefault()}
-                        >
-                          Untagged
-                        </DropdownMenu.CheckboxItem>
-                      )}
-                      {tagCounts.length > 0 && <DropdownMenu.Separator />}
-                      {tagCounts.map(([tag]) => (
-                        <DropdownMenu.CheckboxItem
-                          key={tag}
-                          checked={activeTagFilter === tag}
-                          onCheckedChange={() => setActiveTagFilter(activeTagFilter === tag ? null : tag)}
-                          onSelect={e => e.preventDefault()}
-                        >
-                          {tag}
-                        </DropdownMenu.CheckboxItem>
-                      ))}
-                    </DropdownMenu.SubContent>
-                  </DropdownMenu.Sub>
-
-                  {/* Clear all */}
-                  {activeFilterCount > 0 && (
-                    <>
-                      <DropdownMenu.Separator />
-                      <DropdownMenu.Item
-                        onSelect={() => {
-                          setActiveTagFilter(null);
-                          setShowCompleted(false);
-                          setFeaturedItemId(null);
-                        }}
-                      >
-                        <XIcon />
-                        Clear all filters
-                      </DropdownMenu.Item>
-                    </>
-                  )}
-                </DropdownMenu.Content>
-              </DropdownMenu>
-
-              {activeFilterCount > 0 && (
-                <Button
-                  variant="outline"
-                  size="md"
-                  onClick={() => {
-                    setActiveTagFilter(null);
-                    setShowCompleted(false);
-                    setFeaturedItemId(null);
-                  }}
-                >
-                  <XIcon />
-                  Reset
-                </Button>
-              )}
-            </div>
-
-            {/* Actions (right) */}
-            {!showCompleted && selectedItemIds.size > 0 && (
-              <div className="flex items-center gap-2">
-                <BulkTagPicker
-                  selectedCount={selectedItemIds.size}
-                  vocabulary={datasetTagVocabulary}
-                  onApplyTag={handleBulkTag}
-                  onRemoveTag={handleBulkRemoveTag}
-                  onNewTag={tag => handleBulkTag(tag)}
-                />
-
-                <DropdownMenu>
-                  <DropdownMenu.Trigger asChild>
-                    <Button disabled={isAnalyzing}>
-                      {isAnalyzing ? (
-                        <Spinner className="h-4 w-4" />
-                      ) : (
-                        <Icon size="sm">
-                          <ChevronDown />
-                        </Icon>
-                      )}
-                      Actions
-                    </Button>
-                  </DropdownMenu.Trigger>
-                  <DropdownMenu.Content align="end">
-                    <DropdownMenu.Item onSelect={handleBulkComplete}>
-                      <Icon size="sm">
-                        <CheckCircle />
-                      </Icon>
-                      Complete
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item onSelect={handleBulkRemove}>
-                      <Icon size="sm">
-                        <Trash2 />
-                      </Icon>
-                      Remove
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Separator />
-                    <DropdownMenu.Item onSelect={openAnalyzeDialog}>
-                      <Icon size="sm">
-                        <Sparkles />
-                      </Icon>
-                      Analyze
-                    </DropdownMenu.Item>
-                  </DropdownMenu.Content>
-                </DropdownMenu>
-              </div>
-            )}
-          </div>
-
+        <div className="min-h-0 w-full overflow-hidden">
           {isLoadingDisplay ? (
-            <div className="flex flex-1 items-center justify-center">
+            <div className="flex h-full items-center justify-center">
               <Spinner className="h-6 w-6" />
             </div>
           ) : displayItems.length === 0 ? (
-            <div className="flex flex-1 items-center justify-center">
-              <div className="px-8 text-center">
-                <Txt variant="ui-sm" className="text-neutral3 block">
-                  {showCompleted ? 'No completed reviews yet' : 'No items to review'}
-                </Txt>
-                <Txt variant="ui-xs" className="text-neutral3 mt-2 block">
-                  {showCompleted
+            <div className="flex h-full items-center-safe justify-center-safe overflow-auto py-8">
+              <EmptyState
+                iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
+                titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}
+                descriptionSlot={
+                  showCompleted
                     ? 'Items marked as complete will appear here for auditing.'
-                    : 'When experiment results are flagged for review, they will appear here.'}
-                </Txt>
-              </div>
+                    : 'When experiment results are flagged for review, they will appear here.'
+                }
+              />
             </div>
           ) : (
-            <DataList columns={gridColumns} className="min-w-0">
-              <DataList.Top hasLeadingCell>
-                {!showCompleted ? (
-                  <DataList.TopSelectCell
-                    checked={isAllSelected ? true : isSomeSelected ? 'indeterminate' : false}
-                    onToggle={() => toggleSelectAll()}
-                    aria-label="Select all"
-                  />
-                ) : (
-                  <DataList.TopCell>&nbsp;</DataList.TopCell>
-                )}
-                <DataList.TopCells colStart={2}>
-                  <DataList.TopCell>Input</DataList.TopCell>
-                  <DataList.TopCell>Comment</DataList.TopCell>
-                  <DataList.TopCell>Tags</DataList.TopCell>
-                  <DataList.TopCell>Rating</DataList.TopCell>
-                  <DataList.TopCell>Scores</DataList.TopCell>
-                </DataList.TopCells>
-              </DataList.Top>
-
-              {displayItems.map(item => {
-                const scoreEntries = item.scores ? Object.entries(item.scores) : [];
-                const isFeatured = featuredItemId === item.id;
-
-                const rowCells = (
-                  <>
-                    {/* Input preview */}
-                    <DataList.Cell height="compact" className="text-neutral4 min-w-0">
-                      <span className="block truncate">{truncateInput(item.input, 200)}</span>
-                    </DataList.Cell>
-
-                    {/* Comment preview */}
-                    <DataList.Cell height="compact" className="min-w-0">
-                      {item.comment ? (
-                        <Txt variant="ui-xs" className="text-neutral3 truncate">
-                          {item.comment}
-                        </Txt>
-                      ) : (
-                        <Txt variant="ui-xs" className="text-neutral2">
-                          —
-                        </Txt>
-                      )}
-                    </DataList.Cell>
-
-                    {/* Tags */}
-                    <DataList.Cell height="compact" className="min-w-0">
-                      {item.tags.length > 0 ? (
-                        <Txt variant="ui-xs" className="text-neutral4 truncate">
-                          {item.tags.join(', ')}
-                        </Txt>
-                      ) : (
-                        <Txt variant="ui-xs" className="text-neutral2">
-                          —
-                        </Txt>
-                      )}
-                    </DataList.Cell>
-
-                    {/* Rating */}
-                    <DataList.Cell height="compact">
-                      {item.rating === 'positive' && (
-                        <Icon size="sm" className="text-positive1">
-                          <ThumbsUp />
-                        </Icon>
-                      )}
-                      {item.rating === 'negative' && (
-                        <Icon size="sm" className="text-negative1">
-                          <ThumbsDown />
-                        </Icon>
-                      )}
-                      {!item.rating && (
-                        <Txt variant="ui-xs" className="text-neutral2">
-                          —
-                        </Txt>
-                      )}
-                    </DataList.Cell>
-
-                    {/* Scores */}
-                    <DataList.Cell height="compact">
-                      {scoreEntries.length > 0 ? (
-                        <div className="flex items-center gap-1">
-                          <Icon size="sm" className="text-neutral3">
-                            <GaugeIcon />
-                          </Icon>
-                          <Txt variant="ui-xs" className="text-neutral4 font-mono">
-                            {scoreEntries[0][1].toFixed(2)}
-                          </Txt>
-                          {scoreEntries.length > 1 && <Badge variant="default">+{scoreEntries.length - 1}</Badge>}
-                        </div>
-                      ) : (
-                        <Txt variant="ui-xs" className="text-neutral2">
-                          —
-                        </Txt>
-                      )}
-                    </DataList.Cell>
-                  </>
-                );
-
-                return (
-                  <DataList.RowWrapper key={item.id}>
-                    {!showCompleted ? (
-                      <DataList.SelectCell
-                        checked={selectedItemIds.has(item.id)}
-                        onToggle={() => toggleSelect(item.id)}
-                        aria-label={`Select item ${item.id}`}
-                      />
-                    ) : (
-                      <DataList.Cell height="compact" className="justify-items-center px-4">
-                        <div
-                          role="img"
-                          aria-label={item.error ? 'Error' : 'Success'}
-                          title={item.error ? 'Error' : 'Success'}
-                          className={cn('w-2 h-2 rounded-full', item.error ? 'bg-red-700' : 'bg-green-600')}
-                        />
-                      </DataList.Cell>
-                    )}
-                    <DataList.RowButton
-                      flushLeft
-                      colStart={2}
-                      featured={isFeatured}
-                      onClick={() => handleRowClick(item.id)}
-                    >
-                      {rowCells}
-                    </DataList.RowButton>
-                  </DataList.RowWrapper>
-                );
-              })}
-            </DataList>
+            <ExperimentResultsList
+              results={displayItems}
+              isLoading={false}
+              featuredResultId={featuredItemId}
+              onResultClick={handleRowClick}
+              columns={REVIEW_LIST_COLUMNS}
+              selectedIds={showCompleted ? undefined : selectedItemIds}
+              onToggleSelect={showCompleted ? undefined : toggleSelect}
+              onToggleSelectAll={showCompleted ? undefined : toggleSelectAll}
+            />
           )}
         </div>
 
-        {featuredItem && (
-          <ReviewItemPanel
-            item={featuredItem}
-            isCompleted={showCompleted}
-            tagVocabulary={datasetTagVocabulary}
-            onRate={rating => rateItem(featuredItem.id, rating)}
-            onSetTags={tags => {
-              setItemTags(featuredItem.id, tags);
-              for (const t of tags) {
-                if (!datasetTagVocabulary.includes(t)) {
-                  syncTagToDataset(t);
-                }
-              }
-            }}
-            onComment={comment => commentItem(featuredItem.id, comment)}
-            onRemove={() => removeItem(featuredItem.id)}
-            onComplete={showCompleted ? undefined : () => completeItem(featuredItem.id)}
-            onPrevious={toPreviousItem}
-            onNext={toNextItem}
-            onClose={() => setFeaturedItemId(null)}
-          />
-        )}
-      </div>
-    </div>
+        {detailPanel &&
+          (detailPanelVariant === 'overlay' ? (
+            <RouteItemOverlay label={`Review item ${featuredItem?.id ?? ''}`}>
+              <div className="[&>section]:bg-surface3 h-full min-h-0 p-3 [&>section]:rounded-lg [&>section]:shadow-lg">
+                {detailPanel}
+              </div>
+            </RouteItemOverlay>
+          ) : (
+            detailPanel
+          ))}
+      </PageLayout.MainArea>
+    </>
   );
 }

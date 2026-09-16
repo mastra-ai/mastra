@@ -1,11 +1,5 @@
-export { builtInFactoryRules, defaultFactoryRules, DEFAULT_FACTORY_RULE_VERSION } from './defaults.js';
-export {
-  resolveFactoryGithubRule,
-  resolveFactoryLinearRule,
-  resolveFactoryStageRules,
-  resolveFactoryToolRule,
-} from './resolve.js';
-export type { ResolvedFactoryStageRule, ResolvedFactoryToolRule } from './resolve.js';
+export { resolveFactoryStageRules } from './resolve.js';
+export type { ResolvedFactoryStageRule } from './resolve.js';
 export {
   FACTORY_GITHUB_EVENTS,
   FACTORY_LINEAR_EVENTS,
@@ -13,18 +7,16 @@ export {
   FACTORY_RULE_SOURCES,
   FACTORY_RULE_STAGES,
   factoryRuleSourceForWorkItem,
+  isFactoryRuleStage,
 } from './types.js';
 export type {
   FactoryBoardRuleLeaf,
-  FactoryBoardRules,
   FactoryBoundRuleContext,
   FactoryCommitDecision,
   FactoryGithubEventName,
   FactoryGithubRuleContext,
-  FactoryGithubRuleLeaf,
   FactoryLinearEventName,
   FactoryLinearRuleContext,
-  FactoryLinearRuleLeaf,
   FactoryInvokeSkillDecision,
   FactoryNotifyDecision,
   FactoryRuleActor,
@@ -39,13 +31,10 @@ export type {
   FactoryRuleRejectionCode,
   FactoryRuleRejectDecision,
   FactoryRuleSource,
-  FactoryRules,
-  FactoryRulesOverrides,
   FactoryRuleStage,
   FactorySendMessageDecision,
   FactoryStageRuleContext,
   FactoryToolResultRuleContext,
-  FactoryToolRuleLeaf,
   FactoryTransitionDecision,
   FactoryTransitionResult,
   FactoryTransitionResultAccepted,
@@ -53,7 +42,8 @@ export type {
   FactoryUpsertLinkedWorkItemDecision,
 } from './types.js';
 export {
-  assertFactoryRules,
+  assertFactoryConfigVersion,
+  DEFAULT_FACTORY_CONFIG_VERSION,
   FactoryRuleValidationError,
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
   validateFactoryRuleDecision,

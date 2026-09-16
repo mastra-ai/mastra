@@ -20,8 +20,9 @@ export const NoToolsInfo = () => (
           href="https://mastra.ai/docs/agents/using-tools-and-mcp"
           target="_blank"
           rel="noopener noreferrer"
+          icon={<ExternalLinkIcon />}
         >
-          Tools Documentation <ExternalLinkIcon />
+          Tools Documentation
         </Button>
       }
     />

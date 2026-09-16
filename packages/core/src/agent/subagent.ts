@@ -34,13 +34,16 @@ export type SubAgentGenerateResult = Pick<FullOutput, 'text' | 'finishReason' | 
 export type SubAgentStreamResult = {
   fullStream: ReadableStream<ChunkType>;
   text: Promise<string>;
+  finishReason?: Promise<FullOutput['finishReason']>;
   usage?: Promise<unknown>;
+  /** Set once the stream has been fully consumed if the run ended in an error. */
+  error?: Error;
   messageList: MessageList;
   toolResults?: SubAgentToolResult[] | Promise<SubAgentToolResult[]>;
   runId: string;
 };
 
-export interface SubAgent<TId = string, TRequestContext extends Record<string, any> | unknown = unknown> {
+export interface SubAgent<TId = string, TRequestContext extends Record<string, any> | unknown = any> {
   /** Unique identifier for this subagent */
   readonly id: TId;
 

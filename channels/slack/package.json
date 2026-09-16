@@ -1,14 +1,13 @@
 {
   "name": "@mastra/slack",
-  "version": "1.6.0",
+  "version": "1.6.4-alpha.0",
   "description": "Slack integration for Mastra agents with app factory, OAuth, and slash commands",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "exports": {
     ".": {
@@ -30,14 +29,14 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@chat-adapter/slack": "^4.34.0"
+    "@chat-adapter/slack": "^4.37.0"
   },
   "devDependencies": {
     "@mastra/core": "workspace:*",
     "@types/node": "^22.20.1",
     "tsdown": "0.22.9",
     "typescript": "catalog:",
-    "vitest": "^4.1.10",
+    "vitest": "^4.1.11",
     "zod": "catalog:"
   },
   "peerDependencies": {

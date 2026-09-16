@@ -8,6 +8,7 @@
  */
 
 import { z } from 'zod/v4';
+import { RequestContext } from '../../request-context';
 import type { WorkspaceSandbox } from '../../workspace/sandbox/sandbox';
 import { createTool } from '../tool';
 import type { Tool } from '../tool';
@@ -85,13 +86,17 @@ export function createCodeModeTool(
       // pass `sandbox: new LocalSandbox()` explicitly. Transports that provide
       // their own execution boundary (e.g. in-process V8 isolates) declare
       // `requiresSandbox: false` and run without one.
-      const sandbox: WorkspaceSandbox | undefined = config.sandbox ?? ctx?.workspace?.sandbox;
+      let sandbox: WorkspaceSandbox | undefined = config.sandbox;
       if (!sandbox && transport.requiresSandbox !== false) {
-        throw new Error(
-          'Code Mode requires a sandbox to run model-authored code, but none was configured. ' +
-            'Pass one to createCodeMode({ tools, sandbox }), or run the agent in a workspace that provides a sandbox. ' +
-            'To execute on the host (host privileges — only for trusted/local use), pass `sandbox: new LocalSandbox()`.',
-        );
+        const requestContext = ctx?.requestContext ?? new RequestContext();
+        sandbox = await ctx?.workspace?.resolveSandbox({ requestContext });
+        if (!sandbox) {
+          throw new Error(
+            'Code Mode requires a sandbox to run model-authored code, but none was configured. ' +
+              'Pass one to createCodeMode({ tools, sandbox }), or run the agent in a workspace that provides a sandbox. ' +
+              'To execute on the host (host privileges — only for trusted/local use), pass `sandbox: new LocalSandbox()`.',
+          );
+        }
       }
 
       // Each external_* call re-enters the real Mastra tool pipeline (validation,

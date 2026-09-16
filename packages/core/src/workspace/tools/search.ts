@@ -18,6 +18,7 @@ export const searchTool = createTool({
   id: WORKSPACE_TOOLS.SEARCH.SEARCH,
   description:
     'Search indexed content in the workspace. Supports keyword (BM25), semantic (vector), and hybrid search modes.',
+  outputSchema: z.string(),
   inputSchema: searchInputSchema,
   execute: async ({ query, topK, mode, minScore }, context) => {
     const workspace = requireWorkspace(context);

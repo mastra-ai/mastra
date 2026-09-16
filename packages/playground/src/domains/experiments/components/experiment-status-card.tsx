@@ -1,10 +1,11 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
 import { HorizontalBars } from '@mastra/playground-ui/components/HorizontalBars';
 import { MetricsCard } from '@mastra/playground-ui/components/MetricsCard';
+import { Colors } from '@mastra/playground-ui/tokens';
 import { useMemo } from 'react';
 
 const STATUS_COLORS = {
-  completed: '#22c55e',
+  completed: Colors.neutral3,
   running: '#facc15',
   pending: '#fb923c',
   failed: '#f87171',
@@ -43,7 +44,7 @@ export function ExperimentStatusCard({ experiments, datasets, isLoading, isError
         byDataset.set(key, { completed: 0, running: 0, pending: 0, failed: 0 });
       }
       const counts = byDataset.get(key)!;
-      const status = exp.status as keyof typeof counts;
+      const status = exp.status;
       if (status in counts) {
         counts[status]++;
       }

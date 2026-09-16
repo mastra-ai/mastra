@@ -91,11 +91,11 @@ describe('AIMock loop scenario: conditional requireToolApproval function', () =>
       },
     });
 
-    // Only delete_file should have required approval (the loop suspends on the first
-    // approval and completes after resuming). The pattern-based gating correctly
-    // identified which tool needs approval.
-    expect(approvals).toHaveLength(1);
+    // Both delete tools require explicit approval. The helper resolves each pending
+    // call through approveToolCall before the loop can execute it.
+    expect(approvals).toHaveLength(2);
     expect(approvals).toContain('approve:call_delete');
+    expect(approvals).toContain('approve:call_delete_all');
 
     // read_file and list_files should NOT have triggered approval.
     expect(approvals).not.toContain(expect.stringContaining('call_read'));

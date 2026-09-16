@@ -9,6 +9,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
+import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
 import type { ThinkingLevel } from './openai-codex.js';
@@ -254,7 +255,7 @@ export function buildAnthropicOAuthFetch(opts: { authStorage?: CredentialStore }
 
     const accessToken = await storage.getApiKey('anthropic');
     if (!accessToken) {
-      throw new Error('Not logged in to Anthropic. Run /login first.');
+      throw new ProviderAuthRequiredError('Not logged in to Anthropic.');
     }
 
     // Preserve existing headers, strip auth-related ones

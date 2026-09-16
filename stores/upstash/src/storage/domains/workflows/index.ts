@@ -274,6 +274,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         local key = KEYS[1]
         local optsJson = ARGV[1]
         local now = ARGV[2]
+        local expectedStatusJson = ARGV[3]
 
         -- Get existing data
         local existing = redis.call('GET', key)
@@ -293,6 +294,21 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           return nil
         end
 
+        -- Compare-and-set guard: bail out unless the persisted status is one the caller expects.
+        -- This runs inside the same script as the write, so the check and the write are atomic.
+        if expectedStatusJson ~= '' then
+          local expected = cjson.decode(expectedStatusJson)
+          local matched = false
+          for _, status in ipairs(expected) do
+            if snapshot.status == status then
+              matched = true
+            end
+          end
+          if not matched then
+            return nil
+          end
+        end
+
         -- Merge the new options with the existing snapshot
         local opts = cjson.decode(optsJson)
         for k, v in pairs(opts) do
@@ -310,7 +326,13 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         return cjson.encode(data)
       `;
 
-      const resultJson = await this.client.eval(luaScript, [key], [JSON.stringify(opts), now]);
+      const { expectedStatus, ...state } = opts;
+      const expectedStatusJson =
+        expectedStatus === undefined
+          ? ''
+          : JSON.stringify(Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus]);
+
+      const resultJson = await this.client.eval(luaScript, [key], [JSON.stringify(state), now, expectedStatusJson]);
 
       if (!resultJson) {
         return undefined;

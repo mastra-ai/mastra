@@ -69,6 +69,10 @@ export class InngestPubSub extends PubSub {
     this.workflowId = workflowId;
   }
 
+  async publishWorkflowWatchTo(workflowId: string, runId: string, data: unknown): Promise<void> {
+    await this.inngest.realtime.publish(buildTopicRef(`workflow:${workflowId}:${runId}`, 'watch'), data);
+  }
+
   /**
    * Publish an event to Inngest's realtime system.
    *
@@ -142,13 +146,11 @@ export class InngestPubSub extends PubSub {
     // Await the subscribe call to ensure the WebSocket connection is established
     // before we consider the subscription "ready". This prevents race conditions
     // where the workflow triggers before the subscription can receive events.
-    const stream = await subscribe(
-      {
-        channel,
-        topics: [inngestTopic],
-        app: this.inngest,
-      },
-      (message: any) => {
+    const subscription = await subscribe({
+      channel,
+      topics: [inngestTopic],
+      app: this.inngest,
+      onMessage: (message: any) => {
         // For agent stream events, message.data is the full AgentStreamEvent structure (type, runId, data)
         // For workflow events, wrap message.data in a PubSub Event format
         // IMPORTANT: Always generate a unique `id` and `createdAt` for every event.
@@ -177,12 +179,12 @@ export class InngestPubSub extends PubSub {
           callback(event);
         }
       },
-    );
+    });
 
     this.subscriptions.set(topic, {
       unsubscribe: () => {
         try {
-          void stream.cancel();
+          void subscription.close();
         } catch (err) {
           console.error('InngestPubSub unsubscribe error:', err);
         }

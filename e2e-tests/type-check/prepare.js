@@ -1,7 +1,7 @@
 import { cp, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execa } from 'execa';
+import { installWithRetry } from '../_local-registry-setup/install.js';
 
 /**
  *
@@ -24,9 +24,8 @@ export async function setupTemplate(pathToStoreFiles, pkgManager) {
 
   console.log('Directory:', newPath);
   console.log('Installing dependencies...');
-  await execa(pkgManager, installArgs, {
+  installWithRetry(pkgManager, installArgs, {
     cwd: newPath,
-    stdio: 'inherit',
     env: process.env,
   });
 }

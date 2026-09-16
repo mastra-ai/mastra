@@ -23,6 +23,7 @@ export function DatasetHealthCard({ experiments, isLoading, isError }: DatasetHe
     >();
 
     for (const exp of experiments) {
+      if (!exp.targetType || !exp.targetId) continue;
       const key = exp.targetId;
       if (!targetMap.has(key)) {
         targetMap.set(key, {

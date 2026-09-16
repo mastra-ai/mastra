@@ -7,26 +7,6 @@ import { Thread } from '@/lib/ai-ui/thread';
 
 import type { ChatProps } from '@/types';
 
-interface AvailableSuggestedPromptsOptions {
-  suggestedPrompts?: string[];
-  isNewThread?: boolean;
-  isMessagesLoading: boolean;
-}
-
-/**
- * Keeps existing-thread prompts hidden until message history has loaded, so
- * they do not briefly appear before the conversation replaces the welcome UI.
- */
-const getAvailableSuggestedPrompts = ({
-  suggestedPrompts,
-  isNewThread,
-  isMessagesLoading,
-}: AvailableSuggestedPromptsOptions) => {
-  if (isNewThread) return suggestedPrompts;
-  if (isMessagesLoading) return undefined;
-  return suggestedPrompts;
-};
-
 export const AgentChat = ({
   agentId,
   agentName,
@@ -85,11 +65,6 @@ export const AgentChat = ({
   }
 
   const messages = data?.messages ?? emptyMessagesRef.current.messages;
-  const availableSuggestedPrompts = getAvailableSuggestedPrompts({
-    suggestedPrompts,
-    isNewThread,
-    isMessagesLoading,
-  });
 
   return (
     <ChatProvider
@@ -108,11 +83,12 @@ export const AgentChat = ({
         agentName={agentName ?? ''}
         agentId={agentId}
         threadId={threadId}
-        suggestedPrompts={availableSuggestedPrompts}
+        suggestedPrompts={suggestedPrompts}
         hasModelList={Boolean(modelList)}
         hideModelSwitcher={hideModelSwitcher}
         refreshThreadList={refreshThreadList}
         runOptionsSlot={runOptionsSlot}
+        isHistoryLoading={isMessagesLoading}
       />
     </ChatProvider>
   );

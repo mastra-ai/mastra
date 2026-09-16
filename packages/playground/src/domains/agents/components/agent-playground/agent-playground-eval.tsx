@@ -1,7 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { Chip } from '@mastra/playground-ui/components/Chip';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
@@ -21,6 +20,8 @@ import {
   ClipboardCheck,
   Award,
   ExternalLink,
+  ListChecks,
+  X,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -28,7 +29,12 @@ import type { AgentExperiment } from '../../hooks/use-agent-experiments';
 import { useAgentVersions } from '../../hooks/use-agent-versions';
 import { formatVersionLabel } from './format-version-label';
 import { useDatasetExperimentResults, useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
+import { STATUS_LABEL } from '@/domains/experiments/components/experiment-columns';
 import { useLinkComponent } from '@/lib/framework';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 function formatTimestamp(dateStr: string | Date): string {
   const date = new Date(dateStr);
@@ -42,36 +48,33 @@ function formatTimestamp(dateStr: string | Date): string {
 
 function ExperimentStatusBadge({ status }: { status: string }) {
   switch (status) {
+    // A finished run is not a good result — only a finished one, so it stays neutral.
     case 'completed':
       return (
-        <Badge variant="success" className="gap-1">
-          <CheckCircle className="h-3 w-3" />
-          completed
+        <Badge variant="neutral" icon={<CheckCircle />}>
+          {STATUS_LABEL.completed}
         </Badge>
       );
     case 'failed':
       return (
-        <Badge variant="error" className="gap-1">
-          <XCircle className="h-3 w-3" />
-          failed
+        <Badge variant="red" icon={<XCircle />}>
+          {STATUS_LABEL.failed}
         </Badge>
       );
     case 'running':
       return (
-        <Badge variant="info" className="gap-1">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          running
+        <Badge variant="blue" icon={<Loader2 className="motion-safe:animate-spin motion-reduce:animate-none" />}>
+          {STATUS_LABEL.running}
         </Badge>
       );
     case 'pending':
       return (
-        <Badge variant="default" className="gap-1">
-          <Clock className="h-3 w-3" />
-          pending
+        <Badge variant="neutral" icon={<Clock />}>
+          {STATUS_LABEL.pending}
         </Badge>
       );
     default:
-      return <Badge variant="default">{status}</Badge>;
+      return <Badge>{status}</Badge>;
   }
 }
 
@@ -134,7 +137,7 @@ function TrajectoryStepsSection({ traceId }: { traceId: string }) {
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className="flex items-center gap-1.5 text-xs font-medium text-purple-400 hover:text-purple-300">
+      <CollapsibleTrigger className="text-ui-sm flex items-center gap-1.5 font-medium text-purple-400 hover:text-purple-300">
         <ChevronRight className="h-3 w-3 shrink-0" />
         Trajectory Steps
       </CollapsibleTrigger>
@@ -152,17 +155,20 @@ function TrajectoryStepsSection({ traceId }: { traceId: string }) {
           </Txt>
         ) : trajectory?.steps && trajectory.steps.length > 0 ? (
           <div className="mt-1 space-y-1">
-            {trajectory.steps.map((step: Record<string, unknown>, i: number) => (
-              <div key={i} className="bg-surface1 flex items-center gap-2 rounded px-3 py-1.5 text-xs">
-                <Chip size="small" color="purple">
-                  {String(step.stepType || 'step')}
-                </Chip>
-                <span className="text-neutral5 font-mono font-medium">{String(step.name || `Step ${i + 1}`)}</span>
-                {typeof step.durationMs === 'number' && (
-                  <span className="text-neutral2 ml-auto">{step.durationMs}ms</span>
-                )}
-              </div>
-            ))}
+            {trajectory.steps.map((step, i) => {
+              if (!isRecord(step)) return null;
+              return (
+                <div key={i} className="bg-surface1 text-ui-sm flex items-center gap-2 rounded px-3 py-1.5">
+                  <Badge size="xs" variant="purple">
+                    {String(step.stepType || 'step')}
+                  </Badge>
+                  <span className="text-neutral5 font-mono font-medium">{String(step.name || `Step ${i + 1}`)}</span>
+                  {typeof step.durationMs === 'number' && (
+                    <span className="text-neutral2 ml-auto">{step.durationMs}ms</span>
+                  )}
+                </div>
+              );
+            })}
             {typeof trajectory.totalDurationMs === 'number' && (
               <Txt variant="ui-xs" className="text-neutral3 px-3 py-1">
                 Total: {trajectory.totalDurationMs}ms
@@ -193,31 +199,28 @@ function ResultOutputSection({
 
   return (
     <div className="space-y-2">
-      {/* Response text */}
       {parsed.text ? (
         <div className="space-y-1">
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
             Response
           </Txt>
-          <div className="text-neutral5 bg-surface1 max-h-48 overflow-y-auto rounded px-3 py-2 text-sm wrap-break-word whitespace-pre-wrap">
+          <div className="text-neutral5 bg-surface1 text-ui-md max-h-48 overflow-y-auto rounded px-3 py-2 wrap-break-word whitespace-pre-wrap">
             {parsed.text}
           </div>
         </div>
       ) : null}
 
-      {/* Object output (for structured generation) */}
       {parsed.object && (
         <div className="space-y-1">
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
             Structured Output
           </Txt>
-          <pre className="text-neutral4 bg-surface1 max-h-48 overflow-x-auto overflow-y-auto rounded px-3 py-2 text-xs wrap-break-word whitespace-pre-wrap">
+          <pre className="text-neutral4 bg-surface1 text-ui-sm max-h-48 overflow-x-auto overflow-y-auto rounded px-3 py-2 wrap-break-word whitespace-pre-wrap">
             {JSON.stringify(parsed.object, null, 2)}
           </pre>
         </div>
       )}
 
-      {/* Tool Calls */}
       {parsed.toolCalls.length > 0 && (
         <div className="space-y-1">
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
@@ -226,12 +229,12 @@ function ResultOutputSection({
           <div className="space-y-1">
             {parsed.toolCalls.map((call, i) => (
               <Collapsible key={i}>
-                <CollapsibleTrigger className="text-neutral4 hover:text-neutral5 bg-surface1 flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs">
+                <CollapsibleTrigger className="text-neutral4 hover:text-neutral5 bg-surface1 text-ui-sm flex w-full items-center gap-1.5 rounded px-2 py-1 text-left">
                   <ChevronRight className="h-3 w-3 shrink-0" />
                   <span className="font-mono font-medium">{call.toolName}</span>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <pre className="text-neutral4 bg-surface2 mt-1 ml-4 max-h-32 overflow-x-auto overflow-y-auto rounded px-3 py-2 text-xs wrap-break-word whitespace-pre-wrap">
+                  <pre className="text-neutral4 bg-surface2 text-ui-sm mt-1 ml-4 max-h-32 overflow-x-auto overflow-y-auto rounded px-3 py-2 wrap-break-word whitespace-pre-wrap">
                     {JSON.stringify(call.args, null, 2)}
                   </pre>
                 </CollapsibleContent>
@@ -241,7 +244,6 @@ function ResultOutputSection({
         </div>
       )}
 
-      {/* Tool Results */}
       {parsed.toolResults.length > 0 && (
         <div className="space-y-1">
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
@@ -250,12 +252,12 @@ function ResultOutputSection({
           <div className="space-y-1">
             {parsed.toolResults.map((result, i) => (
               <Collapsible key={i}>
-                <CollapsibleTrigger className="text-neutral4 hover:text-neutral5 bg-surface1 flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs">
+                <CollapsibleTrigger className="text-neutral4 hover:text-neutral5 bg-surface1 text-ui-sm flex w-full items-center gap-1.5 rounded px-2 py-1 text-left">
                   <ChevronRight className="h-3 w-3 shrink-0" />
                   <span className="font-mono">Result {i + 1}</span>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <pre className="text-neutral4 bg-surface2 mt-1 ml-4 max-h-32 overflow-x-auto overflow-y-auto rounded px-3 py-2 text-xs wrap-break-word whitespace-pre-wrap">
+                  <pre className="text-neutral4 bg-surface2 text-ui-sm mt-1 ml-4 max-h-32 overflow-x-auto overflow-y-auto rounded px-3 py-2 wrap-break-word whitespace-pre-wrap">
                     {JSON.stringify(result, null, 2)}
                   </pre>
                 </CollapsibleContent>
@@ -265,7 +267,6 @@ function ResultOutputSection({
         </div>
       )}
 
-      {/* Usage stats */}
       {parsed.usage && (
         <div className="flex items-center gap-3">
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
@@ -278,7 +279,6 @@ function ResultOutputSection({
         </div>
       )}
 
-      {/* Trace ID + View Trace button */}
       {effectiveTraceId && (
         <div className="flex items-center gap-2">
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
@@ -292,7 +292,7 @@ function ResultOutputSection({
             <button
               type="button"
               onClick={() => onViewTrace(effectiveTraceId)}
-              className="text-accent1 hover:text-accent2 flex cursor-pointer items-center gap-1 text-xs transition-colors"
+              className="text-accent1 hover:text-accent2 text-ui-sm flex cursor-pointer items-center gap-1 transition-colors"
             >
               <ExternalLink className="h-3 w-3" />
               View Trace
@@ -301,13 +301,12 @@ function ResultOutputSection({
         </div>
       )}
 
-      {/* Fallback if no structured content */}
       {!parsed.text && !parsed.object && parsed.toolCalls.length === 0 && (
         <div className="space-y-1">
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
             Output
           </Txt>
-          <pre className="text-neutral4 bg-surface1 max-h-48 overflow-x-auto overflow-y-auto rounded px-3 py-2 text-xs wrap-break-word whitespace-pre-wrap">
+          <pre className="text-neutral4 bg-surface1 text-ui-sm max-h-48 overflow-x-auto overflow-y-auto rounded px-3 py-2 wrap-break-word whitespace-pre-wrap">
             {formatResultValue(output)}
           </pre>
         </div>
@@ -340,7 +339,7 @@ export function ExperimentResultsPanel({
   onCreateScorer?: (items: Array<{ input: unknown; output: unknown }>) => void;
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const experimentStatus = experiment.status as 'running' | 'pending' | 'completed' | 'failed';
+  const experimentStatus = experiment.status;
   const {
     data: results,
     isLoading,
@@ -354,7 +353,7 @@ export function ExperimentResultsPanel({
   });
   const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experimentStatus);
 
-  const agentId = experiment.targetType === 'agent' ? experiment.targetId : undefined;
+  const agentId = experiment.targetType === 'agent' ? (experiment.targetId ?? undefined) : undefined;
   const { data: agentVersionsData } = useAgentVersions({ agentId });
   const agentVersions = agentVersionsData?.versions ?? [];
   const { navigate } = useLinkComponent();
@@ -383,7 +382,6 @@ export function ExperimentResultsPanel({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
       <div className="border-border1 flex items-center gap-2 border-b px-4 py-3">
         <button
           type="button"
@@ -424,7 +422,6 @@ export function ExperimentResultsPanel({
         </Txt>
       </div>
 
-      {/* Selection action bar */}
       {selectedIds.size > 0 && (
         <div className="bg-surface3 border-border1 flex items-center gap-2 border-b px-4 py-2">
           <Txt variant="ui-xs" className="text-neutral5 font-medium">
@@ -487,29 +484,27 @@ export function ExperimentResultsPanel({
               Send to Review
             </Button>
           )}
-          <Button variant="ghost" size="sm" onClick={clearSelection}>
+          <Button icon={<X />} variant="ghost" size="sm" onClick={clearSelection}>
             Clear
           </Button>
         </div>
       )}
 
-      {/* Quick filter bar */}
       {results && results.length > 0 && selectedIds.size === 0 && (
         <div className="border-border1 flex items-center gap-2 border-b px-4 py-2">
-          <Button variant="ghost" size="sm" onClick={selectAllFailed}>
+          <Button icon={<ListChecks />} variant="ghost" size="sm" onClick={selectAllFailed}>
             Select all failures
           </Button>
         </div>
       )}
 
-      {/* Results */}
       <ScrollArea className="min-h-0 flex-1">
         {isLoading ? (
-          <div className="flex items-center justify-center py-8">
+          <div className="flex items-center justify-center py-5">
             <Spinner className="h-5 w-5" />
           </div>
         ) : !results || results.length === 0 ? (
-          <div className="px-4 py-8 text-center">
+          <div className="px-4 py-5 text-center">
             <Txt variant="ui-sm" className="text-neutral2">
               No results yet
             </Txt>
@@ -519,6 +514,8 @@ export function ExperimentResultsPanel({
             {results.map(result => {
               const hasError = Boolean(result.error);
               const itemScores = scoresByItemId?.[result.itemId] ?? [];
+              const regularScores = itemScores.filter(score => score.entityType !== 'TRAJECTORY');
+              const trajectoryScores = itemScores.filter(score => score.entityType === 'TRAJECTORY');
               const isChecked = selectedIds.has(result.id);
 
               return (
@@ -528,85 +525,73 @@ export function ExperimentResultsPanel({
                 >
                   <div className="flex items-center gap-2">
                     <Checkbox checked={isChecked} onCheckedChange={() => toggleItem(result.id)} />
-                    <Badge variant={hasError ? 'error' : 'success'}>{hasError ? 'Error' : 'Success'}</Badge>
+                    <Badge variant={hasError ? 'red' : 'green'}>{hasError ? 'Error' : 'Success'}</Badge>
                     <Txt variant="ui-xs" className="text-neutral2 font-mono">
                       {result.itemId.slice(0, 8)}
                     </Txt>
                     {itemScores.length > 0 && (
                       <div className="ml-auto flex flex-wrap items-center gap-2">
-                        {itemScores
-                          .filter(s => s.entityType !== 'TRAJECTORY')
-                          .map(s => (
-                            <Badge key={s.scorerId} variant="default">
-                              {s.scorerId}: {s.score.toFixed(3)}
-                            </Badge>
-                          ))}
-                        {itemScores
-                          .filter(s => s.entityType === 'TRAJECTORY')
-                          .map(s => (
-                            <Chip key={s.scorerId} size="small" color="purple">
-                              {s.scorerId}: {s.score.toFixed(3)}
-                            </Chip>
-                          ))}
+                        {regularScores.map(score => (
+                          <Badge key={score.scorerId}>
+                            {score.scorerId}: {score.score.toFixed(3)}
+                          </Badge>
+                        ))}
+                        {trajectoryScores.map(score => (
+                          <Badge key={score.scorerId} size="xs" variant="purple">
+                            {score.scorerId}: {score.score.toFixed(3)}
+                          </Badge>
+                        ))}
                       </div>
                     )}
                   </div>
 
-                  {/* Trajectory Score Details */}
-                  {itemScores.some(s => s.entityType === 'TRAJECTORY') && (
+                  {trajectoryScores.length > 0 && (
                     <Collapsible>
-                      <CollapsibleTrigger className="flex items-center gap-1.5 text-xs font-medium text-purple-400 hover:text-purple-300">
+                      <CollapsibleTrigger className="text-ui-sm flex items-center gap-1.5 font-medium text-purple-400 hover:text-purple-300">
                         <ChevronRight className="h-3 w-3 shrink-0" />
                         Trajectory Score Details
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <div className="mt-1 space-y-2">
-                          {itemScores
-                            .filter(s => s.entityType === 'TRAJECTORY')
-                            .map(s => (
-                              <div key={s.scorerId} className="bg-surface1 space-y-1 rounded px-3 py-2">
-                                <Txt variant="ui-xs" className="font-medium text-purple-400">
-                                  {s.scorerId}
-                                </Txt>
-                                {s.reason && <p className="text-neutral4 text-xs">{s.reason}</p>}
-                                {s.preprocessStepResult && (
-                                  <pre className="text-neutral3 max-h-48 overflow-x-auto overflow-y-auto text-xs break-words whitespace-pre-wrap">
-                                    {JSON.stringify(s.preprocessStepResult, null, 2)}
-                                  </pre>
-                                )}
-                              </div>
-                            ))}
+                          {trajectoryScores.map(score => (
+                            <div key={score.scorerId} className="bg-surface1 space-y-1 rounded px-3 py-2">
+                              <Txt variant="ui-xs" className="font-medium text-purple-400">
+                                {score.scorerId}
+                              </Txt>
+                              {score.reason && <p className="text-neutral4 text-ui-sm">{score.reason}</p>}
+                              {score.preprocessStepResult && (
+                                <pre className="text-neutral3 text-ui-sm max-h-48 overflow-x-auto overflow-y-auto break-words whitespace-pre-wrap">
+                                  {JSON.stringify(score.preprocessStepResult, null, 2)}
+                                </pre>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       </CollapsibleContent>
                     </Collapsible>
                   )}
 
-                  {/* Trajectory Steps (lazy-loaded) */}
-                  {result.traceId && itemScores.some(s => s.entityType === 'TRAJECTORY') && (
-                    <TrajectoryStepsSection traceId={result.traceId} />
-                  )}
+                  {result.traceId && trajectoryScores.length > 0 && <TrajectoryStepsSection traceId={result.traceId} />}
 
-                  {/* Input */}
                   <Collapsible>
-                    <CollapsibleTrigger className="text-neutral3 hover:text-neutral5 flex items-center gap-1.5 text-xs font-medium">
+                    <CollapsibleTrigger className="text-neutral3 hover:text-neutral5 text-ui-sm flex items-center gap-1.5 font-medium">
                       <ChevronRight className="h-3 w-3 shrink-0" />
                       Input
                     </CollapsibleTrigger>
                     <CollapsibleContent>
-                      <pre className="text-neutral4 bg-surface1 mt-1 max-h-32 overflow-x-auto overflow-y-auto rounded px-3 py-2 text-xs wrap-break-word whitespace-pre-wrap">
+                      <pre className="text-neutral4 bg-surface1 text-ui-sm mt-1 max-h-32 overflow-x-auto overflow-y-auto rounded px-3 py-2 wrap-break-word whitespace-pre-wrap">
                         {formatResultValue(result.input)}
                       </pre>
                     </CollapsibleContent>
                   </Collapsible>
 
-                  {/* Output or Error */}
                   {hasError ? (
                     <div className="space-y-2">
                       <div className="space-y-1">
                         <Txt variant="ui-xs" className="font-medium text-red-400">
                           Error
                         </Txt>
-                        <pre className="bg-surface1 max-h-32 overflow-x-auto overflow-y-auto rounded px-3 py-2 text-xs wrap-break-word whitespace-pre-wrap text-red-300">
+                        <pre className="bg-surface1 text-ui-sm max-h-32 overflow-x-auto overflow-y-auto rounded px-3 py-2 wrap-break-word whitespace-pre-wrap text-red-300">
                           {formatResultValue(result.error)}
                         </pre>
                       </div>
@@ -621,8 +606,8 @@ export function ExperimentResultsPanel({
                           <CopyButton content={result.traceId} tooltip="Copy trace ID" size="sm" />
                           <button
                             type="button"
-                            onClick={() => navigate(`/traces/${result.traceId}`)}
-                            className="text-accent1 hover:text-accent2 flex cursor-pointer items-center gap-1 text-xs transition-colors"
+                            onClick={() => navigate(`/traces?traceId=${encodeURIComponent(result.traceId ?? '')}`)}
+                            className="text-accent1 hover:text-accent2 text-ui-sm flex cursor-pointer items-center gap-1 transition-colors"
                           >
                             <ExternalLink className="h-3 w-3" />
                             View Trace
@@ -634,13 +619,12 @@ export function ExperimentResultsPanel({
                     <ResultOutputSection
                       output={result.output}
                       traceId={result.traceId}
-                      onViewTrace={tid => navigate(`/traces/${tid}`)}
+                      onViewTrace={tid => navigate(`/traces?traceId=${encodeURIComponent(tid)}`)}
                     />
                   )}
                 </div>
               );
             })}
-            {/* Infinite scroll sentinel */}
             <div ref={setEndOfListElement} className="h-1">
               {isFetchingNextPage && (
                 <div className="flex items-center justify-center py-4">
@@ -662,5 +646,5 @@ export function ExperimentResultsPanel({
   );
 }
 
-// Note: AgentPlaygroundEval has been replaced by sidebar-based navigation in agent-playground-evaluate.tsx.
-// ExperimentResultsPanel above is the only component still used externally.
+// AgentPlaygroundEval was replaced by sidebar navigation in agent-playground-evaluate.tsx; only
+// ExperimentResultsPanel above is still used externally.

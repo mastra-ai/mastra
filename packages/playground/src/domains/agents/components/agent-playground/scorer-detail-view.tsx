@@ -1,10 +1,8 @@
 import type { GetScorerResponse } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Chip } from '@mastra/playground-ui/components/Chip';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Pencil } from 'lucide-react';
 
 interface LinkedDataset {
@@ -41,10 +39,10 @@ export function ScorerDetailView({
     );
   }
 
-  const name = scorerData.scorer?.name || scorerId;
-  const description = scorerData.scorer?.description;
+  const name = scorerData.scorer.config.name || scorerId;
+  const description = scorerData.scorer.config.description;
   const isCode = scorerData.source === 'code';
-  const isTrajectory = scorerData.scorer?.config?.type === 'trajectory';
+  const isTrajectory = scorerData.scorer.config.type === 'trajectory';
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -57,13 +55,13 @@ export function ScorerDetailView({
                 {name}
               </Txt>
               {isTrajectory && (
-                <Chip size="small" color="purple">
+                <Badge size="xs" variant="purple">
                   trajectory
-                </Chip>
+                </Badge>
               )}
               {isCode && (
                 <span title="Defined in code — cannot be edited in the UI">
-                  <Badge variant="default">Code</Badge>
+                  <Badge>Code</Badge>
                 </span>
               )}
             </div>
@@ -75,10 +73,7 @@ export function ScorerDetailView({
           </div>
           <div className="flex shrink-0 items-center gap-3">
             {!isCode && (
-              <Button variant="ghost" size="sm" onClick={onEdit}>
-                <Icon size="sm">
-                  <Pencil />
-                </Icon>
+              <Button variant="ghost" size="sm" onClick={onEdit} icon={<Pencil />}>
                 Edit
               </Button>
             )}

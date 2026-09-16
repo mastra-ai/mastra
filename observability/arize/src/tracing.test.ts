@@ -2,7 +2,8 @@ import type { Mutable } from '@arizeai/openinference-genai/types';
 import { SemanticConventions } from '@arizeai/openinference-semantic-conventions';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type { AnyExportedSpan } from '@mastra/core/observability';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { __setObservabilityFeaturesForTest } from '@mastra/otel-exporter';
+import { describe, it, expect, beforeEach, afterEach, vi, beforeAll } from 'vitest';
 import { ArizeExporter } from './tracing';
 
 // Capture spans exported by the mocked OTLP exporter
@@ -52,6 +53,9 @@ vi.mock('@opentelemetry/sdk-trace-base', () => {
   };
 });
 
+// Paired packages emit MODEL_INFERENCE, so it is the exported `chat` call.
+beforeAll(() => __setObservabilityFeaturesForTest(new Set(['model-inference-span'])));
+
 describe('ArizeExporter', () => {
   let exporter: ArizeExporter | undefined;
 
@@ -76,7 +80,7 @@ describe('ArizeExporter', () => {
     const testSpan: Mutable<AnyExportedSpan> = {
       id: 'span-1',
       traceId: 'trace-1',
-      type: SpanType.MODEL_GENERATION,
+      type: SpanType.MODEL_INFERENCE,
       name: 'Test LLM Generation',
       startTime: new Date(),
       endTime: new Date(),
@@ -193,7 +197,7 @@ describe('ArizeExporter', () => {
         "llm.token_count.completion": 5,
         "llm.token_count.prompt": 10,
         "llm.token_count.total": 15,
-        "mastra.span.type": "model_generation",
+        "mastra.span.type": "model_inference",
         "openinference.span.kind": "LLM",
         "output.mime_type": "application/json",
         "output.value": "[{"role":"assistant","parts":[{"type":"text","content":"The weather in Tokyo is sunny."}]}]",
@@ -209,7 +213,7 @@ describe('ArizeExporter', () => {
     const testSpan: Mutable<AnyExportedSpan> = {
       id: 'span-2',
       traceId: 'trace-2',
-      type: SpanType.MODEL_GENERATION,
+      type: SpanType.MODEL_INFERENCE,
       name: 'Session/User Mapping',
       startTime: new Date(),
       endTime: new Date(),
@@ -246,7 +250,7 @@ describe('ArizeExporter', () => {
     const testSpan: Mutable<AnyExportedSpan> = {
       id: 'span-3',
       traceId: 'trace-3',
-      type: SpanType.MODEL_GENERATION,
+      type: SpanType.MODEL_INFERENCE,
       name: 'Custom Metadata',
       startTime: new Date(),
       endTime: new Date(),
@@ -290,7 +294,7 @@ describe('ArizeExporter', () => {
       const testSpan: Mutable<AnyExportedSpan> = {
         id: 'span-partial-usage',
         traceId: 'trace-partial-usage',
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_INFERENCE,
         name: 'Partial Usage Test',
         startTime: new Date(),
         endTime: new Date(),
@@ -334,7 +338,7 @@ describe('ArizeExporter', () => {
       const testSpan: Mutable<AnyExportedSpan> = {
         id: 'span-usage',
         traceId: 'trace-usage',
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_INFERENCE,
         name: 'Detailed Usage Test',
         startTime: new Date(),
         endTime: new Date(),
@@ -632,7 +636,7 @@ describe('ArizeExporter', () => {
       expect(attrs[SemanticConventions.OPENINFERENCE_SPAN_KIND]).toBe('AGENT');
     });
 
-    it('maps model_generation spans to LLM span kind', async () => {
+    it('maps the model call (model_inference) to LLM span kind', async () => {
       exporter = new ArizeExporter({
         endpoint: 'http://localhost:4318/v1/traces',
       });
@@ -641,7 +645,7 @@ describe('ArizeExporter', () => {
         id: 'model-gen-span',
         traceId: 'trace-model-gen',
         parentSpanId: 'parent-agent',
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_INFERENCE,
         name: 'gpt-4 generation',
         startTime: new Date(),
         endTime: new Date(),
@@ -662,8 +666,40 @@ describe('ArizeExporter', () => {
       expect(exportedSpans.length).toBe(1);
       const attrs = exportedSpans[0].attributes;
 
-      // Model generation spans should be mapped to LLM span kind
+      // The model call carries gen_ai.operation.name 'chat' and is the LLM span
       expect(attrs[SemanticConventions.OPENINFERENCE_SPAN_KIND]).toBe('LLM');
+    });
+
+    it('maps the generation loop and its steps to CHAIN so Phoenix counts tokens once', async () => {
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+      });
+
+      for (const [id, type] of [
+        ['model-generation-loop-span', SpanType.MODEL_GENERATION],
+        ['model-generation-step-span', SpanType.MODEL_STEP],
+      ] as const) {
+        await exporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: {
+            id,
+            traceId: 'trace-model-gen',
+            parentSpanId: 'parent-agent',
+            type,
+            name: id,
+            startTime: new Date(),
+            endTime: new Date(),
+            isRootSpan: false,
+            attributes: { model: 'gpt-4', provider: 'openai', usage: { inputTokens: 10, outputTokens: 5 } },
+          } as unknown as AnyExportedSpan,
+        });
+      }
+
+      expect(exportedSpans.length).toBe(2);
+      for (const span of exportedSpans) {
+        expect(span.attributes[SemanticConventions.OPENINFERENCE_SPAN_KIND]).toBe('CHAIN');
+        expect(span.attributes[SemanticConventions.LLM_TOKEN_COUNT_PROMPT]).toBeUndefined();
+      }
     });
 
     it('maps processor_run spans to CHAIN span kind', async () => {
@@ -728,7 +764,11 @@ describe('ArizeExporter', () => {
       expect(attrs[SemanticConventions.OPENINFERENCE_SPAN_KIND]).toBe('CHAIN');
     });
 
-    it('maps mcp_tool_call spans to TOOL span kind', async () => {
+    it.each([
+      { mcpServer: 'filesystem-server', serverVersion: '1.2.0' },
+      { mcpServer: 'roster-server', serverVersion: '9.9.9' },
+      { mcpServer: 'unversioned-server', serverVersion: undefined },
+    ])('preserves MCP tool and server metadata for $mcpServer', async ({ mcpServer, serverVersion }) => {
       exporter = new ArizeExporter({
         endpoint: 'http://localhost:4318/v1/traces',
       });
@@ -739,15 +779,21 @@ describe('ArizeExporter', () => {
         parentSpanId: 'parent-agent',
         type: SpanType.MCP_TOOL_CALL,
         name: 'execute_tool filesystem.readFile',
+        entityName: 'filesystem.readFile',
+        isEvent: false,
         startTime: new Date(),
         endTime: new Date(),
         isRootSpan: false,
         input: { path: '/tmp/file.txt' },
         output: { content: 'file contents' },
         attributes: {
-          mcpServer: 'filesystem-server',
+          mcpServer,
+          serverVersion,
+          toolDescription: 'Read a file',
+          toolType: 'tool',
+          toolCallId: 'mcp-call-1',
         },
-      } as unknown as AnyExportedSpan;
+      };
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,
@@ -757,8 +803,16 @@ describe('ArizeExporter', () => {
       expect(exportedSpans.length).toBe(1);
       const attrs = exportedSpans[0].attributes;
 
-      // MCP tool call spans should be mapped to TOOL span kind
       expect(attrs[SemanticConventions.OPENINFERENCE_SPAN_KIND]).toBe('TOOL');
+      expect(attrs['tool.name']).toBe('filesystem.readFile');
+      expect(attrs['tool.description']).toBe('Read a file');
+      expect(attrs['tool_call.id']).toBe('mcp-call-1');
+      expect(attrs['mastra.mcp_tool_call.server_name']).toBe(mcpServer);
+      if (serverVersion) {
+        expect(attrs['mastra.mcp_tool_call.server_version']).toBe(serverVersion);
+      } else {
+        expect(attrs).not.toHaveProperty('mastra.mcp_tool_call.server_version');
+      }
     });
 
     it('defaults unknown span types to CHAIN span kind', async () => {

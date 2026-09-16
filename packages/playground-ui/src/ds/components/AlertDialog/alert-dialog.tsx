@@ -80,17 +80,17 @@ const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogContentPr
 AlertDialogContent.displayName = 'AlertDialogContent';
 
 const AlertDialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('flex flex-col gap-0.5 px-4 py-3 text-left', className)} {...props} />
+  <div className={cn('flex flex-col gap-0.5 px-3 py-2.5 text-left', className)} {...props} />
 );
 AlertDialogHeader.displayName = 'AlertDialogHeader';
 
 const AlertDialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('flex flex-col-reverse gap-1.5 px-4 py-2.5 sm:flex-row sm:justify-end', className)} {...props} />
+  <div className={cn('flex flex-col-reverse gap-1.5 px-3 py-2 sm:flex-row sm:justify-end', className)} {...props} />
 );
 AlertDialogFooter.displayName = 'AlertDialogFooter';
 
 const AlertDialogBody = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('max-h-[50vh] overflow-y-auto px-4 py-3.5', className)} {...props} />
+  <div className={cn('max-h-[50vh] overflow-y-auto px-3 py-3', className)} {...props} />
 );
 AlertDialogBody.displayName = 'AlertDialogBody';
 

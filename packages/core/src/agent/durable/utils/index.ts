@@ -12,6 +12,8 @@ export {
 
 export { applyToolPayloadTransformToChunk } from './apply-tool-payload-transform';
 
+export { createRunMessageList } from './run-message-list';
+
 export {
   resolveRuntimeDependencies,
   rebuildRunToolsFromMastra,

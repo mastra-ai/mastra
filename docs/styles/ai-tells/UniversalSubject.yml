@@ -1,0 +1,70 @@
+---
+extends: existence
+message: "AI blanket claim: '%s'. Say which cases were checked, or drop the quantifier."
+level: error
+nonword: true
+# The passive sibling of UniversalObject, and the mirror of NegatedSubject:
+# the universal quantifier promoted to subject, with a copula reporting the
+# sweep complete ("All edge cases are handled," "Every concern has been
+# addressed," "All inputs are validated," "Every effort has been made").
+# The completion-report register of an AI summary, and the uniformity
+# sweep of AI documentation ("All errors are logged," "All data is
+# encrypted").
+#
+# The pattern is ordinary in pre-LLM documentation too: the same ~1.3M-line
+# Go+Python corpora as NegatedObject show 86 hits, led by the docs
+# uniformity sweep ("All tabs are expanded to spaces," "All whitespace is
+# removed," "All platforms are guaranteed to fault"). This rule flags that
+# register anyway, the same call as the figurative family: the corpus bar
+# informs the count but does not veto the rule once the construction floods AI
+# prose, and a file whose spec formulas are deliberate adds its own
+# exceptions.
+#
+# Case matters, so no ignorecase: the lowercase spelling is the
+# mid-sentence conditional and subordinate clause ("when all bytes are
+# consumed," "until all tasks are done"), which is process description
+# rather than a claim. The sentence-initial capital is the declarative
+# gate, the same proxy NegatedSubject uses for its "No."
+#
+# The predicate slot takes any -ed form plus the irregular participles,
+# rather than a curated list: the adjective predicates that make the
+# curated approach necessary elsewhere ("All three parts are optional,"
+# "All ports are valid") fail the participle token on their own. An
+# optional adverb slot covers "are properly handled" and "is now covered,"
+# and the "being" alternates cover the status-report progressive ("All
+# concerns are being addressed").
+#
+# The quantifier-float patterns stay out on structure, not cost: "X, Y, and
+# Z are all copied" (36 corpus hits) and "the temps were all aliased"
+# with "have all been observed" (4) resume a list the subject just named, an
+# enumerate-then-summarize move over known members rather than a sweep
+# over an unnamed universe. The future promise ("All feedback will be
+# addressed") also stays out; it claims a plan, not a result, and the
+# modal keeps it out of the copula alternation.
+#
+# The scoreboard token covers the test-status claim with no count: "All
+# tests pass," "Every check passes," "All tests are passing," "All checks
+# green." The counted spelling ("All 47 tests passing") belongs to
+# CommitTestEnumeration in the commit style. One sense collision survives
+# in the corpora: "All tests pass their arguments to the testing methods"
+# forwards rather than clears a bar.
+tokens:
+  # --- Copula form: "All/Every <subject> is/are/was/were/has been
+  # <participle>." Generic -ed predicate plus irregulars, optional adverb.
+  - "\\b(?:All|Every) (?:[A-Za-z][-A-Za-z']* ){1,3}(?:is|are|was|were|has been|have been|is being|are being|is now|are now) (?:[a-z]+ly |now |ever |being )?(?:[a-z][-a-z]*ed|done|made|met|caught|kept|held|run|swept|built|sent|set|taken|given|shown|seen|found|known|written|understood|gone|put|left|read|hidden|chosen|thrown|broken|frozen)\\b"
+  # --- Scoreboard form: the uncounted test-status claim ("All tests
+  # pass," "All checks are green," "Every gate passes," "All suites
+  # passing").
+  - "\\b(?:All|Every) (?:[A-Za-z][-A-Za-z']* ){0,2}(?:test|tests|check|checks|gate|gates|suite|suites|build|builds|pipeline|pipelines|case|cases|scenario|scenarios) (?:pass(?:es|ed|ing)?|(?:is|are) (?:passing|green)|green)\\b"
+  # --- Active form: the quantified subject doing something to one
+  # object ("Every predicate reads a live root," "every membership row
+  # counts as a live root," "All rows carry a timestamp"). Added after a
+  # documentation-corpus audit (2026-09) found the construction escaping both
+  # totality rules. The verb list is curated and the object slot needs a
+  # determiner or a count, so "Every type satisfies the empty interface"
+  # fires with the spec-truth register the copula token already accepts;
+  # the singular token shows nine corpus hits and the plural fifteen, led
+  # by "All Go functions use the internal ABI." A modal in the subject
+  # slot ("All arguments must have") is refused.
+  - "\\bEvery (?!(?:[A-Za-z'-]+ ){0,2}(?:must|should|can|could|may|might|will|would|shall) )(?:[A-Za-z][-A-Za-z']* ){1,3}(?:reads|writes|counts|checks|reaches|produces|yields|returns|holds|names|handles|covers|matches|takes|gets|needs|requires|carries|keeps|owns|runs|passes|survives|fires|touches|creates|emits|stores|loads|opens|uses|has|includes|contains|defines|declares|exposes|sets|records|tracks|maps|points|resolves|ends|starts|begins|feeds|lands|lives|sits|stays|wins) (?:a|an|the|its|one|all|every|no|zero|exactly|only|at least|at most|as|to|with|in|on|from|into|there|here)\\b"
+  - "\\bAll (?!(?:[A-Za-z'-]+ ){0,2}(?:must|should|can|could|may|might|will|would|shall) )(?:[A-Za-z][-A-Za-z']* ){1,3}(?:read|write|count|check|reach|produce|yield|return|hold|name|handle|cover|match|take|get|need|require|carry|keep|own|run|pass|survive|fire|touch|create|emit|store|load|open|use|have|include|contain|define|declare|expose|set|record|track|map|point|resolve|end|start|begin|feed|land|live|sit|stay|win) (?:a|an|the|its|one|all|every|no|zero|exactly|only|at least|at most|as|to|with|in|on|from|into|there|here)\\b"

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
@@ -10,8 +11,18 @@ import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
 import { buildLinearAgentTools } from '../../linear/agent-tools.js';
-import type { LinearConnectionCheck, LinearIntegration } from '../../linear/integration.js';
+import type { LinearEventRules, LinearRuleOverrides } from '../../linear/default-rules.js';
+import { resolveLinearRules } from '../../linear/default-rules.js';
+import type {
+  LinearConnectionCheck,
+  LinearIntegration,
+  LinearIssueDetail as LinearRouteIssueDetail,
+} from '../../linear/integration.js';
 import { attachLinearIssueReconciler } from '../../linear/issue-reconciler.js';
+import {
+  linearIssueReconciliationEnabled,
+  linearIssueReconciliationInterval,
+} from '../../linear/reconciliation-config.js';
 import { buildLinearRoutes } from '../../linear/routes.js';
 import { attachLinearRules } from '../../linear/rules.js';
 import type { LinearConnectionData, LinearConnectionRow, LinearStorageHandle } from '../../linear/storage.js';
@@ -45,6 +56,7 @@ type LinearIssue = {
   labels: Array<{ id: string; name: string }>;
   state: { id: string; name: string; type: string };
   team: { id: string; key: string; name: string };
+  project: { id: string } | null;
   assignee: LinearUser | null;
   creator: LinearUser | null;
   createdAt: string;
@@ -73,7 +85,9 @@ type LinearProject = {
   state: string;
   teams: Array<{ id: string; key: string; name: string }>;
 };
+type LinearTeam = { id: string; key: string; name: string };
 type ProjectSource = { workspace: LinearWorkspace; project: LinearProject };
+type TeamSource = { workspace: LinearWorkspace; team: LinearTeam };
 type LinearWorkflowState = {
   id: string;
   name: string;
@@ -112,11 +126,11 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async () => {
-      const sources = await this.#listProjectSources();
-      return sources.map(({ workspace, project }) => ({
+      const [projectSources, teamSources] = await Promise.all([this.#listProjectSources(), this.#listTeamSources()]);
+      const projects = projectSources.map(({ workspace, project }) => ({
         id: encodeSourceId(workspace.linearWorkspaceId, project.id),
         name: project.name,
-        type: 'project',
+        type: 'project' as const,
         metadata: {
           workspaceId: workspace.linearWorkspaceId,
           workspaceName: workspace.linearWorkspaceName,
@@ -125,13 +139,25 @@ export class PlatformLinearIntegration implements FactoryIntegration {
           teams: project.teams,
         },
       }));
+      const teams = teamSources.map(({ workspace, team }) => ({
+        id: encodeTeamSourceId(workspace.linearWorkspaceId, team.id),
+        name: team.name,
+        type: 'team' as const,
+        metadata: {
+          workspaceId: workspace.linearWorkspaceId,
+          workspaceName: workspace.linearWorkspaceName,
+          workspaceUrlKey: workspace.urlKey,
+          teamKey: team.key,
+        },
+      }));
+      return [...projects, ...teams];
     },
-    listItems: async ({ sourceIds, cursor }) => {
-      const result = await this.#listIssues(sourceIds, cursor);
+    listItems: async ({ sourceIds, attributionSourceIds, cursor }) => {
+      const result = await this.#listIssues(sourceIds, cursor, undefined, attributionSourceIds);
       return {
-        items: result.issues.map(({ issue, source }) => ({
+        items: result.issues.map(({ issue, sourceId, workspace }) => ({
           source: { type: 'issue', externalId: issue.id, url: issue.url },
-          sourceId: encodeSourceId(source.workspace.linearWorkspaceId, source.project.id),
+          sourceId,
           title: issue.title,
           status: issue.state.name,
           labels: issue.labels.map(label => label.name),
@@ -140,10 +166,9 @@ export class PlatformLinearIntegration implements FactoryIntegration {
           updatedAt: issue.updatedAt,
           metadata: {
             identifier: issue.identifier,
-            workspaceId: source.workspace.linearWorkspaceId,
-            workspaceName: source.workspace.linearWorkspaceName,
-            projectId: source.project.id,
-            projectName: source.project.name,
+            workspaceId: workspace.linearWorkspaceId,
+            workspaceName: workspace.linearWorkspaceName,
+            projectId: issue.project?.id ?? null,
             team: issue.team.key,
             priority: issue.priorityLabel,
           },
@@ -151,11 +176,14 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         nextCursor: result.nextCursor,
       };
     },
-    listIssues: async ({ connection, sourceIds, labels, cursor }) => {
+    listIssues: async ({ connection, sourceIds, attributionSourceIds, labels, cursor }) => {
       requireLinearConnection(connection);
-      const result = await this.#listIssues(sourceIds, cursor, labels);
+      const result = await this.#listIssues(sourceIds, cursor, labels, attributionSourceIds);
       return {
-        issues: result.issues.map(({ issue }) => parseIssue(issue)),
+        issues: result.issues.map(({ issue, sourceId }) => ({
+          ...parseIssue(issue),
+          sourceId,
+        })),
         nextCursor: result.nextCursor,
       };
     },
@@ -247,7 +275,14 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     },
   };
 
-  constructor() {
+  readonly #rules: LinearEventRules;
+
+  get rules(): LinearEventRules {
+    return this.#rules;
+  }
+
+  constructor({ rules }: { rules?: LinearRuleOverrides } = {}) {
+    this.#rules = resolveLinearRules(rules);
     const config = platformApiClientConfigFromEnv();
     this.#client = new PlatformApiClient(config);
     this.#endpointHost = new URL(config.baseUrl).host;
@@ -362,17 +397,17 @@ export class PlatformLinearIntegration implements FactoryIntegration {
 
   workers(ctx: IntegrationContext): MastraWorker[] {
     const pollingEnabled = process.env.MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
-    const reconcileEnabled = process.env.MASTRACODE_LINEAR_RECONCILE_ENABLED?.trim().toLowerCase() !== 'false';
+    const reconcileEnabled = linearIssueReconciliationEnabled();
     if (!pollingEnabled && !reconcileEnabled) return [];
 
-    const ingest = attachLinearRules(ctx);
-    const reconcile = reconcileEnabled ? attachLinearIssueReconciler(this as unknown as LinearIntegration, ctx) : undefined;
-    const workItems = ctx.rules?.workItems;
+    const ingest = attachLinearRules(this, ctx);
+    const reconcile = reconcileEnabled ? attachLinearIssueReconciler(this, ctx) : undefined;
+    const workItems = ctx.runtime?.workItems;
     if (!workItems) return [];
     if (!ingest && !reconcile) return [];
 
     const pollIntervalMs = optionalPositiveIntegerEnv('MASTRACODE_PLATFORM_LINEAR_POLLING_INTERVAL_MS');
-    const reconcileIntervalMs = optionalPositiveIntegerEnv('MASTRACODE_LINEAR_RECONCILE_INTERVAL_MS');
+    const reconcileIntervalMs = linearIssueReconciliationInterval();
 
     return [
       new PlatformLinearEventWorker({
@@ -399,7 +434,10 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         stateSigner: ctx.stateSigner,
         baseUrl: ctx.baseUrl,
         intake: ctx.storage.intake,
-        ingestFactoryIssues: attachLinearRules(ctx),
+        projects: ctx.storage.projects,
+        ingestFactoryIssues: attachLinearRules(this, ctx),
+        workItems: ctx.runtime?.workItems,
+        boards: ctx.runtime?.boards,
       }).filter(route => !route.path.startsWith('/auth/linear/')),
     ];
   }
@@ -443,10 +481,66 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     }));
   }
 
-  async #listProjectSources(): Promise<ProjectSource[]> {
+  async listTeams(_accessToken: string): Promise<Array<LinearTeam & { workspaceId: string; sourceId: string }>> {
+    return (await this.#listTeamSources()).map(({ workspace, team }) => ({
+      ...team,
+      workspaceId: workspace.linearWorkspaceId,
+      sourceId: encodeTeamSourceId(workspace.linearWorkspaceId, team.id),
+    }));
+  }
+
+  async fetchIssueDetail(
+    _accessToken: string,
+    idOrIdentifier: string,
+    sourceIds?: string[],
+    routedSourceIds?: string[],
+  ): Promise<LinearRouteIssueDetail | null> {
+    const located = await this.#findIssue(undefined, idOrIdentifier, sourceIds, routedSourceIds);
+    if (!located) return null;
+    const comments = await this.#loadComments(located.workspaceId, located.issue.id, located.issue.comments);
+    const issue = located.issue;
+    return {
+      id: issue.id,
+      projectId: issue.project?.id ?? null,
+      workspaceId: located.workspaceId,
+      teamId: issue.team.id,
+      identifier: issue.identifier,
+      title: issue.title,
+      description: issue.description?.trim() ? issue.description : null,
+      url: issue.url,
+      state: issue.state.name,
+      stateType: issue.state.type,
+      priorityLabel: issue.priorityLabel,
+      assignee: issue.assignee?.displayName ?? issue.assignee?.name ?? null,
+      creator: issue.creator?.displayName ?? issue.creator?.name ?? null,
+      team: issue.team.key,
+      labels: issue.labels.map(label => label.name),
+      createdAt: issue.createdAt,
+      updatedAt: issue.updatedAt,
+      comments: comments.map(comment => ({
+        author: comment.user?.displayName ?? comment.user?.name ?? null,
+        body: comment.body,
+        createdAt: comment.createdAt,
+      })),
+    };
+  }
+
+  sourceMatchesIssue(
+    sourceId: string,
+    issue: Pick<LinearRouteIssueDetail, 'workspaceId' | 'projectId' | 'teamId'>,
+  ): boolean {
+    const source = parseSourceId(sourceId);
+    if (issue.workspaceId !== source.workspaceId) return false;
+    return source.kind === 'team' ? issue.teamId === source.teamId : issue.projectId === source.projectId;
+  }
+
+  async #listProjectSources(workspaceIds?: ReadonlySet<string>): Promise<ProjectSource[]> {
     const workspaces = await this.#listWorkspaces();
+    const scopedWorkspaces = workspaceIds
+      ? workspaces.filter(workspace => workspaceIds.has(workspace.linearWorkspaceId))
+      : workspaces;
     const projectGroups = await Promise.all(
-      workspaces.map(async workspace => {
+      scopedWorkspaces.map(async workspace => {
         const projects: LinearProject[] = [];
         let after: string | undefined;
         for (let page = 0; page < MAX_REFERENCE_PAGES; page += 1) {
@@ -458,12 +552,42 @@ export class PlatformLinearIntegration implements FactoryIntegration {
           );
           projects.push(...result.projects);
           if (!result.pageInfo.hasNextPage || !result.pageInfo.endCursor) break;
+          // A page that hands back the cursor it was asked for would replay forever.
+          if (result.pageInfo.endCursor === after) throw invalidLinearCursor();
           after = result.pageInfo.endCursor;
         }
         return projects.map(project => ({ workspace, project }));
       }),
     );
     return projectGroups.flat();
+  }
+
+  async #listTeamSources(workspaceIds?: ReadonlySet<string>): Promise<TeamSource[]> {
+    const workspaces = await this.#listWorkspaces();
+    const scopedWorkspaces = workspaceIds
+      ? workspaces.filter(workspace => workspaceIds.has(workspace.linearWorkspaceId))
+      : workspaces;
+    const teamGroups = await Promise.all(
+      scopedWorkspaces.map(async workspace => {
+        const teams: LinearTeam[] = [];
+        let after: string | undefined;
+        for (let page = 0; page < MAX_REFERENCE_PAGES; page += 1) {
+          const query = new URLSearchParams({ first: '200' });
+          if (after) query.set('after', after);
+          const result = await this.#client.request<{ teams: LinearTeam[]; pageInfo: PageInfo }>(
+            'GET',
+            `${API_PREFIX}/workspaces/${encodeURIComponent(workspace.linearWorkspaceId)}/teams?${query}`,
+          );
+          teams.push(...result.teams);
+          if (!result.pageInfo.hasNextPage || !result.pageInfo.endCursor) break;
+          // A page that hands back the cursor it was asked for would replay forever.
+          if (result.pageInfo.endCursor === after) throw invalidLinearCursor();
+          after = result.pageInfo.endCursor;
+        }
+        return teams.map(team => ({ workspace, team }));
+      }),
+    );
+    return teamGroups.flat();
   }
 
   async listWorkspaces(): Promise<LinearWorkspace[]> {
@@ -475,63 +599,137 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return result.workspaces.filter(workspace => workspace.connected);
   }
 
-  async #listIssues(sourceIds: string[], cursor?: string, labels?: string[]) {
-    if (sourceIds.length === 0)
-      return { issues: [] as Array<{ issue: LinearIssue; source: ProjectSource }>, nextCursor: null };
-    const sources = await this.#listProjectSources();
-    const sourceMap = new Map(
-      sources.map(source => [encodeSourceId(source.workspace.linearWorkspaceId, source.project.id), source]),
+  async #listIssues(sourceIds: string[], cursor?: string, labels?: string[], attributionSourceIds = sourceIds) {
+    type ListedIssue = { issue: LinearIssue; sourceId: string; workspace: LinearWorkspace };
+    if (sourceIds.length === 0) return { issues: [] as ListedIssue[], nextCursor: null };
+
+    // Resolve every selected source to a concrete listing descriptor. Project
+    // and team sources are listed separately: a project source filters by
+    // `projectIds`, a team source filters by `teamId` (and returns projectless
+    // issues too). Filters are never combined on one request.
+    const parsedSources = sourceIds.map(sourceId => parseSourceId(sourceId));
+    const projectWorkspaceIds = new Set(
+      parsedSources.flatMap(source => (source.kind === 'project' ? [source.workspaceId] : [])),
     );
-    const selected = sourceIds
-      .map(sourceId => sourceMap.get(sourceId))
-      .filter((source): source is ProjectSource => !!source);
-    const cursors = decodeCursor(cursor, sourceIds);
+    const teamWorkspaceIds = new Set(
+      parsedSources.flatMap(source => (source.kind === 'team' ? [source.workspaceId] : [])),
+    );
+    const [projectSources, teamSources] = await Promise.all([
+      projectWorkspaceIds.size > 0
+        ? this.#listProjectSources(projectWorkspaceIds)
+        : Promise.resolve([] as ProjectSource[]),
+      teamWorkspaceIds.size > 0 ? this.#listTeamSources(teamWorkspaceIds) : Promise.resolve([] as TeamSource[]),
+    ]);
+    const projectMap = new Map(
+      projectSources.map(source => [encodeSourceId(source.workspace.linearWorkspaceId, source.project.id), source]),
+    );
+    const teamMap = new Map(
+      teamSources.map(source => [encodeTeamSourceId(source.workspace.linearWorkspaceId, source.team.id), source]),
+    );
+
+    type Descriptor = {
+      kind: 'project' | 'team';
+      sourceId: string;
+      workspace: LinearWorkspace;
+      query: URLSearchParams;
+    };
+    const descriptors: Descriptor[] = [];
+    const selectedProjectIdsByWorkspace = new Map<string, Set<string>>();
+    for (const attributionSourceId of attributionSourceIds) {
+      const source = parseSourceId(attributionSourceId);
+      if (source.kind !== 'project') continue;
+      const selectedProjectIds = selectedProjectIdsByWorkspace.get(source.workspaceId) ?? new Set<string>();
+      selectedProjectIds.add(source.projectId);
+      selectedProjectIdsByWorkspace.set(source.workspaceId, selectedProjectIds);
+    }
+    for (const sourceId of sourceIds) {
+      const projectSource = projectMap.get(sourceId);
+      if (projectSource) {
+        const query = new URLSearchParams({
+          first: String(PAGE_SIZE),
+          projectIds: projectSource.project.id,
+          stateType: 'triage,backlog,unstarted,started',
+          orderBy: 'updatedAt',
+        });
+        const workspaceId = projectSource.workspace.linearWorkspaceId;
+        const selectedProjectIds = selectedProjectIdsByWorkspace.get(workspaceId) ?? new Set<string>();
+        selectedProjectIds.add(projectSource.project.id);
+        selectedProjectIdsByWorkspace.set(workspaceId, selectedProjectIds);
+        descriptors.push({ kind: 'project', sourceId, workspace: projectSource.workspace, query });
+        continue;
+      }
+      const teamSource = teamMap.get(sourceId);
+      if (teamSource) {
+        const query = new URLSearchParams({
+          first: String(PAGE_SIZE),
+          teamId: teamSource.team.id,
+          stateType: 'triage,backlog,unstarted,started',
+          orderBy: 'updatedAt',
+        });
+        descriptors.push({ kind: 'team', sourceId, workspace: teamSource.workspace, query });
+      }
+    }
+
+    const cursors = decodeCursor(cursor, sourceIds, attributionSourceIds);
     const normalizedLabels = normalizeLabels(labels);
     const nextState: Record<string, string | null> = {};
     let hasNextPage = false;
     const pages = await Promise.all(
-      selected.map(async source => {
-        const sourceId = encodeSourceId(source.workspace.linearWorkspaceId, source.project.id);
+      descriptors.map(async ({ kind, sourceId, workspace, query }) => {
         if (cursors[sourceId] === null) {
           nextState[sourceId] = null;
-          return [] as Array<{ issue: LinearIssue; source: ProjectSource }>;
+          return [] as ListedIssue[];
         }
-        const query = new URLSearchParams({
-          first: String(PAGE_SIZE),
-          projectIds: source.project.id,
-          stateType: 'triage,backlog,unstarted,started',
-          orderBy: 'updatedAt',
-        });
         const after = cursors[sourceId];
         if (after) query.set('after', after);
         const result = await this.#client.request<{ issues: LinearIssue[]; pageInfo: PageInfo }>(
           'GET',
-          `${API_PREFIX}/workspaces/${encodeURIComponent(source.workspace.linearWorkspaceId)}/issues?${query}`,
+          `${API_PREFIX}/workspaces/${encodeURIComponent(workspace.linearWorkspaceId)}/issues?${query}`,
         );
         const next = result.pageInfo.hasNextPage ? result.pageInfo.endCursor : null;
+        // A page that hands back the cursor it was asked for would replay forever.
+        if (next !== null && next === after) throw invalidLinearCursor();
         nextState[sourceId] = next;
         hasNextPage ||= next !== null;
         return result.issues
           .filter(
             issue => normalizedLabels.length === 0 || issue.labels.some(label => normalizedLabels.includes(label.name)),
           )
-          .map(issue => ({ issue, source }));
+          .filter(
+            issue =>
+              kind === 'project' ||
+              issue.project === null ||
+              !selectedProjectIdsByWorkspace.get(workspace.linearWorkspaceId)?.has(issue.project.id),
+          )
+          .map(issue => ({ issue, sourceId, workspace }));
       }),
     );
     return {
-      issues: pages.flat(),
-      nextCursor: hasNextPage ? encodeCursor(nextState, sourceIds) : null,
+      issues: dedupeIssuesBySource(pages.flat(), sourceIds),
+      nextCursor: hasNextPage ? encodeCursor(nextState, sourceIds, attributionSourceIds) : null,
     };
   }
 
   async #findIssue(
     sourceId: string | undefined,
     issueId: string,
+    sourceIds?: string[],
+    routedSourceIds?: string[],
   ): Promise<{
     workspaceId: string;
     issue: LinearIssue & { comments?: { nodes: LinearComment[]; pageInfo: PageInfo } };
   } | null> {
-    const workspaceIds = await this.#candidateWorkspaceIds(sourceId);
+    const scopedSourceIds = sourceIds ?? (sourceId ? [sourceId] : undefined);
+    const scopedSources = scopedSourceIds?.map(sourceKey => ({
+      sourceKey,
+      source: parseSourceId(sourceKey),
+    }));
+    const routedSourceSet = routedSourceIds ? new Set(routedSourceIds) : undefined;
+    const workspaceIds = routedSourceIds
+      ? [...new Set(routedSourceIds.map(sourceKey => parseSourceId(sourceKey).workspaceId))]
+      : scopedSources
+        ? [...new Set(scopedSources.map(({ source }) => source.workspaceId))]
+        : await this.#candidateWorkspaceIds(undefined);
     for (const workspaceId of workspaceIds) {
       try {
         const issue = await this.#client.request<
@@ -540,6 +738,15 @@ export class PlatformLinearIntegration implements FactoryIntegration {
           'GET',
           `${API_PREFIX}/workspaces/${encodeURIComponent(workspaceId)}/issues/${encodeURIComponent(issueId)}?include=comments`,
         );
+        if (scopedSources) {
+          const matching = scopedSources.filter(
+            ({ source }) =>
+              source.workspaceId === workspaceId &&
+              (source.kind === 'team' ? issue.team.id === source.teamId : issue.project?.id === source.projectId),
+          );
+          const winner = matching.find(({ source }) => source.kind === 'project') ?? matching[0];
+          if (!winner || (routedSourceSet && !routedSourceSet.has(winner.sourceKey))) continue;
+        }
         return { workspaceId, issue };
       } catch (error) {
         if (!isNotFound(error)) throw error;
@@ -578,7 +785,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   }
 
   async #candidateWorkspaceIds(sourceId: string | undefined): Promise<string[]> {
-    if (sourceId) return [decodeSourceId(sourceId).workspaceId];
+    if (sourceId) return [parseSourceId(sourceId).workspaceId];
     return (await this.#listWorkspaces()).map(workspace => workspace.linearWorkspaceId);
   }
 
@@ -596,6 +803,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         `${API_PREFIX}/workspaces/${encodeURIComponent(workspaceId)}/issues/${encodeURIComponent(issueId)}/comments?first=200&after=${encodeURIComponent(pageInfo.endCursor)}`,
       );
       comments.push(...result.comments);
+      if (result.pageInfo.hasNextPage && result.pageInfo.endCursor === pageInfo.endCursor) throw invalidLinearCursor();
       pageInfo = result.pageInfo;
       page += 1;
     }
@@ -635,7 +843,54 @@ function parseIssueDetail(issue: LinearIssue, comments: LinearComment[]): Intake
   };
 }
 
-function encodeSourceId(workspaceId: string, projectId: string): string {
+/**
+ * Deduplicate issues that surfaced from more than one selected source (a team
+ * source and one of its projects both select the same issue). Keeps one entry
+ * per Linear issue UUID.
+ *
+ * Tie-breaker — MOST-SPECIFIC-WINS: a project source beats a team source, so an
+ * issue that belongs to a selected project is attributed to that project's
+ * source (and therefore routes to the project's board). The team source covers
+ * only the remainder — projectless issues and issues in projects that were not
+ * separately selected. `selectionOrder` breaks a same-kind tie deterministically
+ * by the order the sources were selected.
+ *
+ * This function is the single precedence point; change the comparison here to
+ * change the routing policy.
+ */
+function dedupeIssuesBySource<T extends { issue: { id: string }; sourceId: string }>(
+  entries: T[],
+  selectionOrder: string[],
+): T[] {
+  const rank = new Map(selectionOrder.map((id, index) => [id, index]));
+  const specificity = (sourceId: string): number => (parseSourceId(sourceId).kind === 'project' ? 0 : 1);
+  const winners = new Map<string, T>();
+  for (const entry of entries) {
+    const existing = winners.get(entry.issue.id);
+    if (!existing) {
+      winners.set(entry.issue.id, entry);
+      continue;
+    }
+    const bySpecificity = specificity(entry.sourceId) - specificity(existing.sourceId);
+    const better =
+      bySpecificity < 0 ||
+      (bySpecificity === 0 &&
+        (rank.get(entry.sourceId) ?? Number.MAX_SAFE_INTEGER) <
+          (rank.get(existing.sourceId) ?? Number.MAX_SAFE_INTEGER));
+    if (better) winners.set(entry.issue.id, entry);
+  }
+  // Preserve first-seen order of the surviving issues.
+  const seen = new Set<string>();
+  const ordered: T[] = [];
+  for (const entry of entries) {
+    if (seen.has(entry.issue.id)) continue;
+    seen.add(entry.issue.id);
+    ordered.push(winners.get(entry.issue.id)!);
+  }
+  return ordered;
+}
+
+export function encodeSourceId(workspaceId: string, projectId: string): string {
   return `linear-project:${Buffer.from(JSON.stringify({ workspaceId, projectId })).toString('base64url')}`;
 }
 
@@ -654,25 +909,101 @@ function decodeSourceId(sourceId: string): { workspaceId: string; projectId: str
   }
 }
 
+const TEAM_SOURCE_PREFIX = 'linear-team:';
+
+export function encodeTeamSourceId(workspaceId: string, teamId: string): string {
+  return `${TEAM_SOURCE_PREFIX}${Buffer.from(JSON.stringify({ workspaceId, teamId })).toString('base64url')}`;
+}
+
+export function decodeTeamSourceId(sourceId: string): { workspaceId: string; teamId: string } {
+  if (!sourceId.startsWith(TEAM_SOURCE_PREFIX)) throw new Error('Linear team source id is invalid.');
+  try {
+    const parsed = JSON.parse(Buffer.from(sourceId.slice(TEAM_SOURCE_PREFIX.length), 'base64url').toString('utf8')) as {
+      workspaceId?: unknown;
+      teamId?: unknown;
+    };
+    if (typeof parsed.workspaceId !== 'string' || !parsed.workspaceId) throw new Error();
+    if (typeof parsed.teamId !== 'string' || !parsed.teamId) throw new Error();
+    return { workspaceId: parsed.workspaceId, teamId: parsed.teamId };
+  } catch {
+    throw new Error('Linear team source id is invalid.');
+  }
+}
+
+/**
+ * A decoded intake source: either a Linear project or a whole Linear team.
+ * Downstream code discriminates on `kind` to build the right issue-listing
+ * filter and to apply most-specific-wins routing (project beats team).
+ */
+export type DecodedSource =
+  { kind: 'project'; workspaceId: string; projectId: string } | { kind: 'team'; workspaceId: string; teamId: string };
+
+/** Discriminate any Linear source id by its prefix and decode it. */
+export function parseSourceId(sourceId: string): DecodedSource {
+  if (sourceId.startsWith(TEAM_SOURCE_PREFIX)) {
+    return { kind: 'team', ...decodeTeamSourceId(sourceId) };
+  }
+  return { kind: 'project', ...decodeSourceId(sourceId) };
+}
+
 function normalizeLabels(labels: string[] | undefined): string[] {
   return [...new Set((labels ?? []).map(label => label.trim()).filter(Boolean))];
 }
 
-function decodeCursor(cursor: string | undefined, sourceIds: string[]): Record<string, string | null | undefined> {
+type PlatformListCursor = { v: 1; sourceSet: string; cursors: Array<string | null> };
+
+function canonicalSourceIds(sourceIds: string[]): string[] {
+  return [...new Set(sourceIds)].sort();
+}
+
+function linearSourceSetFingerprint(sourceIds: string[], attributionSourceIds: string[]): string {
+  const scope = {
+    sourceIds: canonicalSourceIds(sourceIds),
+    attributionSourceIds: canonicalSourceIds(attributionSourceIds),
+  };
+  return createHash('sha256').update(JSON.stringify(scope)).digest('base64url');
+}
+
+function invalidLinearCursor(): Error {
+  return Object.assign(new Error('Linear cursor is invalid or stale.'), { code: 'invalid_cursor' as const });
+}
+
+function decodeCursor(
+  cursor: string | undefined,
+  sourceIds: string[],
+  attributionSourceIds: string[],
+): Record<string, string | null | undefined> {
   if (!cursor) return {};
-  if (sourceIds.length === 1) return { [sourceIds[0]!]: cursor };
   try {
-    const parsed = JSON.parse(cursor) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
-    return parsed as Record<string, string | null>;
+    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Partial<PlatformListCursor>;
+    const canonical = canonicalSourceIds(sourceIds);
+    if (
+      parsed.v !== 1 ||
+      parsed.sourceSet !== linearSourceSetFingerprint(sourceIds, attributionSourceIds) ||
+      !Array.isArray(parsed.cursors) ||
+      parsed.cursors.length !== canonical.length ||
+      !parsed.cursors.every(value => value === null || typeof value === 'string')
+    ) {
+      throw invalidLinearCursor();
+    }
+    return Object.fromEntries(canonical.map((sourceId, index) => [sourceId, parsed.cursors![index]]));
   } catch {
-    throw new Error('Linear cursor is invalid.');
+    throw invalidLinearCursor();
   }
 }
 
-function encodeCursor(state: Record<string, string | null>, sourceIds: string[]): string {
-  if (sourceIds.length === 1) return state[sourceIds[0]!]!;
-  return JSON.stringify(state);
+function encodeCursor(
+  state: Record<string, string | null>,
+  sourceIds: string[],
+  attributionSourceIds: string[],
+): string {
+  const canonical = canonicalSourceIds(sourceIds);
+  const cursor: PlatformListCursor = {
+    v: 1,
+    sourceSet: linearSourceSetFingerprint(sourceIds, attributionSourceIds),
+    cursors: canonical.map(sourceId => state[sourceId] ?? null),
+  };
+  return Buffer.from(JSON.stringify(cursor)).toString('base64url');
 }
 
 function requireLinearConnection(connection: IntegrationConnection): void {

@@ -1,6 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
+  matchesExpectedWorkflowStatus,
   WorkflowsStorage,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
@@ -261,8 +262,14 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         );
       }
 
+      const { expectedStatus, ...state } = opts;
+      if (!matchesExpectedWorkflowStatus(snapshot.status, expectedStatus)) {
+        await transaction.rollback();
+        return undefined;
+      }
+
       // Merge the new options with the existing snapshot
-      const updatedSnapshot = { ...snapshot, ...opts };
+      const updatedSnapshot = { ...snapshot, ...state };
 
       // Update the snapshot within the same transaction
       const updateRequest = new sql.Request(transaction);

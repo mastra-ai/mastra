@@ -100,14 +100,17 @@ export interface ProviderOAuthArgs {
 
 export interface StartProviderOAuthArgs extends ProviderOAuthArgs {
   mode?: string;
+  /** `'org'` shares the completed sign-in with the whole org (admin-only). */
+  scope?: 'user' | 'org';
 }
 
 export function useStartProviderOAuth() {
   const { client } = useApiConfig();
   return useMutation({
-    mutationFn: ({ provider, mode }: StartProviderOAuthArgs) =>
+    mutationFn: ({ provider, mode, scope }: StartProviderOAuthArgs) =>
       client.post<OAuthStartResponse>(`/web/config/providers/${encodeURIComponent(provider)}/oauth/start`, {
         ...(mode !== undefined ? { mode } : {}),
+        ...(scope !== undefined ? { scope } : {}),
       }),
   });
 }
@@ -164,12 +167,19 @@ export function useCancelProviderOAuth() {
   });
 }
 
+export interface SignOutProviderOAuthArgs extends ProviderOAuthArgs {
+  /** `'org'` removes the shared org sign-in (admin-only). */
+  scope?: 'user' | 'org';
+}
+
 export function useSignOutProviderOAuth() {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ provider }: ProviderOAuthArgs) =>
-      client.del<{ ok: true }>(`/web/config/providers/${encodeURIComponent(provider)}/oauth`),
+    mutationFn: ({ provider, scope }: SignOutProviderOAuthArgs) =>
+      client.del<{ ok: true }>(
+        `/web/config/providers/${encodeURIComponent(provider)}/oauth${scope ? `?scope=${scope}` : ''}`,
+      ),
     onSuccess: () => invalidateCredentialDependentQueries(queryClient),
   });
 }

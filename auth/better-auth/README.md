@@ -1,21 +1,23 @@
 # @mastra/auth-better-auth
 
-Better Auth integration for Mastra - a self-hosted, open-source authentication solution.
+`@mastra/auth-better-auth` connects a Better Auth instance to Mastra's server authentication layer. Use it when you want a self-hosted, TypeScript-first authentication system that you control instead of relying on a hosted identity provider.
 
 ## Installation
 
 ```bash
-npm install @mastra/auth-better-auth better-auth
+npm install @mastra/auth-better-auth
+npm install better-auth
 ```
 
 ## Usage
 
-```typescript
-import { betterAuth } from 'better-auth';
-import { MastraAuthBetterAuth } from '@mastra/auth-better-auth';
-import { Mastra } from '@mastra/core';
+Create a Better Auth instance with your database configuration, then register its Mastra adapter under `server.auth`.
 
-// Create your Better Auth instance
+```typescript
+import { MastraAuthBetterAuth } from '@mastra/auth-better-auth';
+import { Mastra } from '@mastra/core/mastra';
+import { betterAuth } from 'better-auth';
+
 const auth = betterAuth({
   database: {
     provider: 'postgresql',
@@ -26,82 +28,22 @@ const auth = betterAuth({
   },
 });
 
-// Create the Mastra auth provider
-const mastraAuth = new MastraAuthBetterAuth({
-  auth,
-});
-
-// Use with Mastra
-const mastra = new Mastra({
+export const mastra = new Mastra({
   server: {
-    auth: mastraAuth,
+    auth: new MastraAuthBetterAuth({ auth }),
   },
 });
 ```
 
-## Configuration Options
+## Documentation
 
-| Option          | Type                                  | Required | Description                                                  |
-| --------------- | ------------------------------------- | -------- | ------------------------------------------------------------ |
-| `auth`          | `Auth`                                | Yes      | Your Better Auth instance created via `betterAuth({ ... })`  |
-| `name`          | `string`                              | No       | Custom name for the auth provider (default: `'better-auth'`) |
-| `authorizeUser` | `(user, request) => Promise<boolean>` | No       | Custom authorization logic                                   |
-| `public`        | `string[]`                            | No       | Public routes that don't require authentication              |
-| `protected`     | `string[]`                            | No       | Protected routes that require authentication                 |
+- [Better Auth integration guide](https://mastra.ai/integrations/auth/better-auth)
+- [Better Auth provider reference](https://mastra.ai/reference/auth/better-auth)
 
-## Custom Authorization
+## Changelog
 
-You can provide custom authorization logic:
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/auth/better-auth/CHANGELOG.md) for version history and release notes.
 
-```typescript
-const mastraAuth = new MastraAuthBetterAuth({
-  auth,
-  async authorizeUser(user) {
-    // Only allow verified emails
-    return user?.user?.emailVerified === true;
-  },
-});
-```
+## Support
 
-## Role-Based Access Control
-
-```typescript
-const mastraAuth = new MastraAuthBetterAuth({
-  auth,
-  async authorizeUser(user) {
-    // Check for admin role (assuming you have a role field)
-    const userWithRole = user?.user as any;
-    return userWithRole?.role === 'admin';
-  },
-});
-```
-
-## Route Configuration
-
-```typescript
-const mastraAuth = new MastraAuthBetterAuth({
-  auth,
-  public: ['/health', '/api/status'],
-  protected: ['/api/*', '/admin/*'],
-});
-```
-
-## Why Better Auth?
-
-Better Auth is a self-hosted, open-source authentication framework that gives you:
-
-- **Full control** over your authentication system
-- **No vendor lock-in** - host it yourself
-- **Flexible** - works with various databases and providers
-- **TypeScript-first** - full type safety
-- **Plugin system** - extend with OAuth, 2FA, organizations, etc.
-
-## Resources
-
-- [Better Auth Documentation](https://better-auth.com)
-- [Mastra Documentation](https://mastra.ai/docs)
-- [GitHub Repository](https://github.com/mastra-ai/mastra)
-
-## License
-
-Apache-2.0
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

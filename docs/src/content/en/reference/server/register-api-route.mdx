@@ -1,6 +1,6 @@
 ---
 title: "Reference: registerApiRoute() | Server"
-description: "API reference for registerApiRoute() function used to define custom HTTP routes for the Mastra server."
+description: "The registerApiRoute() function creates custom HTTP routes that integrate with the Mastra server. Routes can include OpenAPI metadata to appear in the Swagger UI documentation."
 packages:
   - "@mastra/core"
 ---
@@ -23,11 +23,15 @@ import { registerApiRoute } from '@mastra/core/server'
 
 The URL path for the route. Supports path parameters using `:param` syntax.
 
-```typescript prettier:false
+```typescript oxfmt:false
 registerApiRoute("/items/:itemId", { ... })
 ```
 
 Custom route paths can't start with the server's configured `apiPrefix` (default: `/api`), as that prefix is reserved for built-in Mastra routes. If you set a custom `apiPrefix`, only that prefix is reserved. For example, with `apiPrefix: '/mastra/api'`, paths like `/api/my-endpoint` are allowed.
+
+:::warning
+The default auth configuration protects `/api/*` and treats `/api`, `/api/auth/*` as public. When you change `apiPrefix`, those defaults no longer match and built-in routes fall outside the protected pattern. Update `server.auth.protected` and `server.auth.public` to reference the new prefix, and update any client code (including `MastraClient` `apiPrefix`) that hits `/api/*`.
+:::
 
 ### options
 

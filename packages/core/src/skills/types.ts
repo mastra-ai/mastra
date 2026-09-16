@@ -5,6 +5,7 @@
  * or filesystem paths, without needing a full Workspace with filesystem/sandbox.
  */
 
+import type { TracingContext } from '../observability/types';
 import type { RequestContext } from '../request-context';
 import type { Skill, SkillMetadata, SkillFormat, WorkspaceSkills } from '../workspace/skills/types';
 
@@ -67,9 +68,14 @@ export type SkillInput = string | InlineSkill;
 
 /**
  * Context passed to a dynamic skills resolver.
+ *
+ * `tracingContext.currentSpan` is only set while skills resolve as part of an
+ * agent execution. Metadata reads such as `agent.listSkills()` run outside any
+ * span, so resolvers that create child spans must handle it being undefined.
  */
 export interface AgentSkillsContext<TRequestContext extends Record<string, any> | unknown = unknown> {
   requestContext: RequestContext<TRequestContext>;
+  tracingContext?: TracingContext;
 }
 
 /**

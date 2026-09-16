@@ -98,12 +98,42 @@ describe('WrappingAutocompleteList', () => {
       lines.forEach(row => expect(visibleWidth(row)).toBeLessThanOrEqual(30));
     });
 
-    it('shows the noMatch message when the filter eliminates every item', () => {
-      const list = new WrappingAutocompleteList([item('alpha'), item('beta')], 5, theme);
-      list.setFilter('zzz');
+    it('shows the noMatch message when there are no items', () => {
+      const list = new WrappingAutocompleteList([], 5, theme);
       const lines = list.render(40);
       expect(lines).toHaveLength(1);
       expect(lines[0]).toContain('[N]');
+    });
+
+    it('renders non-selected items on a single truncated row', () => {
+      const longDescription = 'word '.repeat(60).trim();
+      const list = new WrappingAutocompleteList(
+        [item('first', longDescription), item('second', longDescription)],
+        5,
+        passthrough,
+      );
+      list.setSelectedIndex(0);
+
+      const lines = list.render(96);
+
+      // Only the selected (first) item wraps; the second item is one row.
+      const secondItemRows = lines.filter(line => line.includes('second'));
+      expect(secondItemRows).toHaveLength(1);
+      expect(secondItemRows[0]).toContain('…');
+      lines.forEach(row => expect(visibleWidth(row)).toBeLessThanOrEqual(96));
+    });
+
+    it('keeps the total row count bounded with many long-description items', () => {
+      const longDescription = 'lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod '.repeat(9).trim();
+      const items = Array.from({ length: 8 }, (_, i) => item(`skill/skill-${i}`, longDescription));
+      const list = new WrappingAutocompleteList(items, 8, passthrough);
+
+      const lines = list.render(96);
+
+      // 7 single-row items + the selected item's wrapped rows. Before the
+      // compact-rendering change this rendered ~50+ rows.
+      expect(lines.length).toBeGreaterThanOrEqual(8);
+      expect(lines.length).toBeLessThanOrEqual(20);
     });
 
     it('emits a scroll indicator when items exceed maxVisible', () => {

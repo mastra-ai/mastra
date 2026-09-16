@@ -1,6 +1,6 @@
 import type { LanguageModelUsage, ProviderMetadata } from '@mastra/core/stream';
 import { describe, it, expect } from 'vitest';
-import { addUsageStats, extractUsageMetrics } from './usage';
+import { addUsageStats, extractOpenRouterCost, extractUsageMetrics } from './usage';
 
 describe('extractUsageMetrics', () => {
   describe('basic usage extraction', () => {
@@ -107,6 +107,57 @@ describe('extractUsageMetrics', () => {
       expect(result.inputDetails?.cacheRead).toBe(800);
       expect(result.inputDetails?.cacheWrite).toBe(200);
       expect(result.outputDetails?.text).toBe(50);
+    });
+
+    it('should preserve Anthropic cache creation TTL buckets', () => {
+      const usage: LanguageModelUsage = {
+        inputTokens: 100,
+        outputTokens: 50,
+      };
+
+      const providerMetadata: ProviderMetadata = {
+        anthropic: {
+          cacheCreation: {
+            ephemeral_5m_input_tokens: 125,
+            ephemeral_1h_input_tokens: 75,
+          },
+        },
+      };
+
+      const result = extractUsageMetrics(usage, providerMetadata);
+
+      expect(result.inputTokens).toBe(300);
+      expect(result.inputDetails?.text).toBe(100);
+      expect(result.inputDetails?.cacheWrite).toBe(200);
+      expect(result.inputDetails?.cacheWrite5m).toBe(125);
+      expect(result.inputDetails?.cacheWrite1h).toBe(75);
+    });
+
+    it('should prefer aggregated Anthropic cache creation TTL buckets', () => {
+      const usage: LanguageModelUsage = {
+        inputTokens: 300,
+        outputTokens: 50,
+        cacheCreationInputTokens: 200,
+        cacheCreationInputTokens5m: 120,
+        cacheCreationInputTokens1h: 80,
+      };
+
+      const providerMetadata: ProviderMetadata = {
+        anthropic: {
+          cacheCreationInputTokens: 30,
+          cacheCreation: {
+            ephemeral_5m_input_tokens: 20,
+            ephemeral_1h_input_tokens: 10,
+          },
+        },
+      };
+
+      const result = extractUsageMetrics(usage, providerMetadata);
+
+      expect(result.inputTokens).toBe(300);
+      expect(result.inputDetails?.cacheWrite).toBe(200);
+      expect(result.inputDetails?.cacheWrite5m).toBe(120);
+      expect(result.inputDetails?.cacheWrite1h).toBe(80);
     });
 
     it('should handle Anthropic with only cache read tokens', () => {
@@ -524,6 +575,165 @@ describe('extractUsageMetrics', () => {
   });
 });
 
+describe('extractOpenRouterCost', () => {
+  it('returns undefined when providerMetadata has no openrouter usage', () => {
+    expect(extractOpenRouterCost(undefined)).toBeUndefined();
+    expect(extractOpenRouterCost({})).toBeUndefined();
+    expect(extractOpenRouterCost({ openrouter: {} })).toBeUndefined();
+  });
+
+  describe('without the isByok discriminator', () => {
+    // Published @openrouter/ai-sdk-provider versions drop `usage.is_byok` from providerMetadata,
+    // so only unambiguous cost shapes are used and everything else falls back to price inference.
+    it('uses usage.cost alone when the upstream breakdown equals it (non-BYOK)', () => {
+      const providerMetadata: ProviderMetadata = {
+        openrouter: { usage: { cost: 0.0000084, costDetails: { upstreamInferenceCost: 0.0000084 } } },
+      };
+      expect(extractOpenRouterCost(providerMetadata)).toEqual({
+        total: 0.0000084,
+        usedCost: true,
+        usedUpstreamCost: false,
+      });
+    });
+
+    it.each([
+      { name: 'costDetails is absent', usage: { cost: 0.000003 } },
+      {
+        name: 'upstreamInferenceCost is null',
+        usage: { cost: 0.000003, costDetails: { upstreamInferenceCost: null } },
+      },
+      { name: 'upstreamInferenceCost is zero', usage: { cost: 0.000003, costDetails: { upstreamInferenceCost: 0 } } },
+    ])('uses usage.cost alone when $name (non-BYOK)', ({ usage }) => {
+      const providerMetadata = { openrouter: { usage } } as ProviderMetadata;
+      expect(extractOpenRouterCost(providerMetadata)).toEqual({
+        total: 0.000003,
+        usedCost: true,
+        usedUpstreamCost: false,
+      });
+    });
+
+    it('treats a zero cost with a positive upstream cost as BYOK and uses the upstream charge', () => {
+      const providerMetadata: ProviderMetadata = {
+        openrouter: { usage: { cost: 0, costDetails: { upstreamInferenceCost: 0.00002615 } } },
+      };
+      expect(extractOpenRouterCost(providerMetadata)).toEqual({
+        total: 0.00002615,
+        usedCost: true,
+        usedUpstreamCost: true,
+      });
+    });
+
+    it('reports a free model as zero when both fields are zero', () => {
+      const providerMetadata: ProviderMetadata = {
+        openrouter: { usage: { cost: 0, costDetails: { upstreamInferenceCost: 0 } } },
+      };
+      expect(extractOpenRouterCost(providerMetadata)?.total).toBe(0);
+    });
+
+    it('returns undefined when a positive cost and a different positive upstream cost are ambiguous', () => {
+      // Could be a BYOK surcharge (sum to 19.95) or a non-BYOK breakdown (use 0.95); never guess.
+      const providerMetadata: ProviderMetadata = {
+        openrouter: { usage: { cost: 0.95, costDetails: { upstreamInferenceCost: 19 } } },
+      };
+      expect(extractOpenRouterCost(providerMetadata)).toBeUndefined();
+    });
+
+    it('returns undefined when only the upstream cost is present', () => {
+      const providerMetadata: ProviderMetadata = {
+        openrouter: { usage: { costDetails: { upstreamInferenceCost: 0.000003 } } },
+      };
+      expect(extractOpenRouterCost(providerMetadata)).toBeUndefined();
+    });
+
+    it('still rejects invalid values before inferring', () => {
+      const providerMetadata: ProviderMetadata = {
+        openrouter: { usage: { cost: 0, costDetails: { upstreamInferenceCost: -1 } } },
+      };
+      expect(extractOpenRouterCost(providerMetadata)).toBeUndefined();
+    });
+  });
+
+  it('uses usage.cost alone for a non-BYOK request, even when the upstream breakdown is present', () => {
+    const providerMetadata: ProviderMetadata = {
+      openrouter: {
+        usage: { cost: 0.000003, isByok: false, costDetails: { upstreamInferenceCost: 0.000003 } },
+      },
+    };
+    expect(extractOpenRouterCost(providerMetadata)).toEqual({
+      total: 0.000003,
+      usedCost: true,
+      usedUpstreamCost: false,
+    });
+  });
+
+  it('sums usage.cost and costDetails.upstreamInferenceCost for a BYOK request', () => {
+    // Matches OpenRouter's usage-accounting docs example: cost is the ~5% OpenRouter surcharge,
+    // upstreamInferenceCost is the separate charge billed to the upstream provider account.
+    const providerMetadata: ProviderMetadata = {
+      openrouter: { usage: { cost: 0.95, isByok: true, costDetails: { upstreamInferenceCost: 19 } } },
+    };
+    expect(extractOpenRouterCost(providerMetadata)).toEqual({
+      total: 19.95,
+      usedCost: true,
+      usedUpstreamCost: true,
+    });
+  });
+
+  it('does not zero out the total when cost is 0 and the whole charge is in upstreamInferenceCost', () => {
+    // Regression case: nullish coalescing between cost and upstreamInferenceCost would return 0 here
+    // (0 is not nullish), silently dropping the real charge. Must be a sum, not a fallback chain.
+    const providerMetadata: ProviderMetadata = {
+      openrouter: { usage: { cost: 0, isByok: true, costDetails: { upstreamInferenceCost: 0.0000024 } } },
+    };
+    expect(extractOpenRouterCost(providerMetadata)).toEqual({
+      total: 0.0000024,
+      usedCost: true,
+      usedUpstreamCost: true,
+    });
+  });
+
+  it('uses usage.cost for a non-BYOK request when costDetails is absent', () => {
+    const providerMetadata: ProviderMetadata = { openrouter: { usage: { cost: 0.000003, isByok: false } } };
+    const result = extractOpenRouterCost(providerMetadata);
+    expect(result?.total).toBe(0.000003);
+    expect(result?.usedCost).toBe(true);
+    expect(result?.usedUpstreamCost).toBe(false);
+  });
+
+  it('can use an upstream-only BYOK cost', () => {
+    const providerMetadata: ProviderMetadata = {
+      openrouter: { usage: { isByok: true, costDetails: { upstreamInferenceCost: 0.000003 } } },
+    };
+    expect(extractOpenRouterCost(providerMetadata)).toEqual({
+      total: 0.000003,
+      usedCost: false,
+      usedUpstreamCost: true,
+    });
+  });
+
+  it('returns undefined when both cost and upstreamInferenceCost are absent', () => {
+    const providerMetadata: ProviderMetadata = { openrouter: { usage: { isByok: true } } };
+    expect(extractOpenRouterCost(providerMetadata)).toBeUndefined();
+  });
+
+  it('returns undefined when cost is negative', () => {
+    const providerMetadata: ProviderMetadata = { openrouter: { usage: { cost: -1, isByok: false } } };
+    expect(extractOpenRouterCost(providerMetadata)).toBeUndefined();
+  });
+
+  it('returns undefined when cost is not a finite number', () => {
+    const providerMetadata: ProviderMetadata = { openrouter: { usage: { cost: Number.NaN, isByok: false } } };
+    expect(extractOpenRouterCost(providerMetadata)).toBeUndefined();
+  });
+
+  it('returns undefined when upstreamInferenceCost is invalid, even if cost is valid', () => {
+    const providerMetadata: ProviderMetadata = {
+      openrouter: { usage: { cost: 0.5, isByok: true, costDetails: { upstreamInferenceCost: -1 } } },
+    };
+    expect(extractOpenRouterCost(providerMetadata)).toBeUndefined();
+  });
+});
+
 describe('addUsageStats', () => {
   it('returns a copy of b when accumulator is undefined', () => {
     const result = addUsageStats(undefined, { inputTokens: 10, outputTokens: 5 });
@@ -562,6 +772,15 @@ describe('addUsageStats', () => {
     );
     expect(result.inputDetails).toEqual({ text: 120, cacheRead: 10, cacheWrite: 8 });
     expect(result.outputDetails).toEqual({ text: 50, reasoning: 5, audio: 2 });
+  });
+
+  it('preserves aggregate and TTL buckets when rolling up mixed cache-write usage', () => {
+    const result = addUsageStats(
+      { inputDetails: { cacheWrite: 500, cacheWrite5m: 500 } },
+      { inputDetails: { cacheWrite: 1_000 } },
+    );
+
+    expect(result.inputDetails).toEqual({ cacheWrite: 1_500, cacheWrite5m: 500 });
   });
 
   it('preserves details from one side when the other has none', () => {

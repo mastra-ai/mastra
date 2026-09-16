@@ -1,29 +1,30 @@
 ---
-title: "Reference: dataset.deleteExperiment() | Datasets"
-description: "Documentation for the `dataset.deleteExperiment()` method, which deletes an experiment by ID."
+title: "Reference: deleteExperiment() | Datasets"
+description: "Use dataset.deleteExperiment() or DatasetsManager.deleteExperiment() to delete an experiment together with its results and observability traces."
 packages:
   - "@mastra/core"
 ---
 
-# dataset.deleteExperiment()
+# deleteExperiment()
 
-**Added in:** `@mastra/core@1.4.0`
+Deletes an experiment and its result records, then attempts to delete the observability traces produced by the experiment. Trace deletion cascades to spans and trace-linked signals. Unsupported observability storage leaves the traces in place and logs a warning.
 
-Deletes an experiment (run) by ID, including all associated results.
+Use `dataset.deleteExperiment()` when you have a `Dataset` instance. Use `mastra.datasets.deleteExperiment()` to delete by experiment ID without a dataset reference, including experiments orphaned by dataset deletion.
 
-## Usage example
+## Delete from a dataset
 
 ```typescript
 import { Mastra } from '@mastra/core'
 
 const mastra = new Mastra({/* storage config */})
-
 const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
-await dataset.deleteExperiment({ experimentId: 'exp-id' })
+await dataset.deleteExperiment({ experimentId: 'experiment-id' })
 ```
 
-## Parameters
+The experiment must belong to the dataset. A missing experiment or an experiment associated with another dataset throws an error.
+
+### Parameters
 
 <PropertiesTable
   content={[
@@ -35,14 +36,59 @@ await dataset.deleteExperiment({ experimentId: 'exp-id' })
 ]}
 />
 
-## Returns
+Returns `Promise<void>`, which resolves when deletion completes.
+
+## Delete without a dataset reference
+
+```typescript
+import { Mastra } from '@mastra/core'
+
+const mastra = new Mastra({/* storage config */})
+
+await mastra.datasets.deleteExperiment({
+  experimentId: 'experiment-id',
+  organizationId: 'organization-id',
+  projectId: 'project-id',
+})
+```
+
+The manager method doesn't require the experiment to remain associated with a dataset. Use it to delete an orphaned experiment whose `datasetId` was cleared when its dataset was deleted.
+
+When `organizationId` or `projectId` is provided, deletion is scoped to those values. A tenancy mismatch is a silent no-op.
+
+### Parameters
 
 <PropertiesTable
   content={[
   {
-    name: 'result',
-    type: 'Promise<void>',
-    description: 'Resolves when the experiment and its results are deleted.',
+    name: 'experimentId',
+    type: 'string',
+    description: 'ID of the experiment to delete.',
+  },
+  {
+    name: 'organizationId',
+    type: 'string',
+    isOptional: true,
+    description: 'Organization ID used to scope the deletion.',
+  },
+  {
+    name: 'projectId',
+    type: 'string',
+    isOptional: true,
+    description: 'Project ID used to scope the deletion.',
   },
 ]}
 />
+
+Returns `Promise<void>`, which resolves when deletion completes or when a tenancy-scoped request doesn't match the experiment.
+
+## Trace deletion support
+
+Before deleting the result records, Mastra collects their trace IDs for the cascade. Storage without observability or trace deletion support leaves those traces in place, logs a warning, and still deletes the experiment with its result records.
+
+## Related
+
+- [Dataset class](/reference/datasets/dataset)
+- [DatasetsManager class](/reference/datasets/datasets-manager)
+- [Client SDK datasets API](/reference/client-js/datasets)
+- [Server routes](/reference/server/routes#delete-an-experiment)

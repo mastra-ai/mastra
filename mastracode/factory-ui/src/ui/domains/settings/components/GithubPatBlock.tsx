@@ -10,28 +10,20 @@ import {
   useSaveGithubPatMutation,
 } from '../../../../hooks/useGithubPat';
 import type { GithubPatKind } from '../../workspaces/services/github';
-import { SettingsCard } from './SettingsCard';
+import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { SettingsSubsection } from './SettingsSubsection';
 
-/**
- * Org-wide GitHub Personal Access Tokens used only for `gh` CLI auth inside
- * Factory sandboxes. GitHub App installation tokens 403 on the endpoints the
- * CLI needs ("Resource not accessible by integration"), so agents need PATs
- * there; git clone/push and API access keep using the app installation.
- *
- * Two tokens: the worker token every sandbox gets, and an optional reviewer
- * token used by review-board sessions so PR reviews come from a different
- * account. Without a reviewer token, review sessions use the worker token.
- */
+// GitHub App tokens cannot authorize the gh CLI endpoints; sandboxes use PATs.
 export function GithubPatBlock() {
   const statusQuery = useGithubPatStatusQuery();
 
   return (
     <SettingsSubsection
+      scope="org"
       title="GitHub CLI tokens"
       description="Classic PATs agents use for gh CLI commands in sandboxes. The token's account needs access to the linked repositories."
     >
-      <SettingsCard>
+      <SettingsContainer>
         <TokenRow
           kind="default"
           title="Worker token"
@@ -44,7 +36,7 @@ export function GithubPatBlock() {
           description="Used by review sessions so PR reviews come from a different account. Falls back to the worker token."
           configured={statusQuery.data?.reviewerConfigured === true}
         />
-      </SettingsCard>
+      </SettingsContainer>
     </SettingsSubsection>
   );
 }
@@ -83,13 +75,13 @@ function TokenRow({
 
   return (
     <div className="flex flex-col gap-2 px-4 py-3">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
         <div className="flex min-w-0 flex-col">
           <div className="flex items-center gap-2">
             <Txt variant="ui-md" className="text-icon5">
               {title}
             </Txt>
-            <Badge size="sm" variant={configured ? 'success' : 'default'}>
+            <Badge size="sm" variant={configured ? 'green' : 'neutral'}>
               {configured ? 'Configured' : 'Not set'}
             </Badge>
           </div>

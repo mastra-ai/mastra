@@ -5,6 +5,10 @@ export default defineConfig({
     name: 'unit:packages/memory',
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    typecheck: {
+      enabled: true,
+      include: ['type-tests/**/*.test-d.ts'],
+    },
     isolate: false,
     // smaller output to save token space when LLMs run tests
     reporters: 'dot',

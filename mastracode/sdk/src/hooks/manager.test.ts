@@ -273,3 +273,62 @@ describe('HookManager run_id propagation', () => {
     expect(endStdin.duration_ms).toBe(500);
   });
 });
+
+describe('HookManager session worktree identity', () => {
+  beforeEach(() => {
+    Object.values(mocks).forEach(mockFn => mockFn.mockReset());
+  });
+
+  function createWorktreeManager(hooksConfig: Record<string, unknown>) {
+    mocks.loadHooksConfig.mockReturnValue(hooksConfig);
+    mocks.runHooksForEvent.mockResolvedValue(createHookResult());
+    return new HookManager('/repos/main-worktrees/feature', 'session-wt', '.mastracode', undefined, {
+      path: '/repos/main-worktrees/feature',
+      branch: 'feature/my-branch',
+      mainRepoPath: '/repos/main',
+    });
+  }
+
+  it('describes the worktree on both session events, so a hook can provision on start and tear down on end', async () => {
+    const mgr = createWorktreeManager({
+      SessionStart: [{ type: 'command', command: 'worktree-up.sh' }],
+      SessionEnd: [{ type: 'command', command: 'worktree-down.sh' }],
+    });
+
+    await mgr.runSessionStart();
+    await mgr.runSessionEnd();
+
+    for (const [index, event] of ['SessionStart', 'SessionEnd'].entries()) {
+      const stdin = mocks.runHooksForEvent.mock.calls[index][1];
+      expect(stdin.hook_event_name).toBe(event);
+      expect(stdin.worktree_path).toBe('/repos/main-worktrees/feature');
+      expect(stdin.branch).toBe('feature/my-branch');
+      expect(stdin.main_repo_path).toBe('/repos/main');
+    }
+  });
+
+  it('omits worktree fields in a main checkout, so hooks can tell the two apart', async () => {
+    const mgr = createManager({ SessionStart: [{ type: 'command', command: 'echo test' }] });
+
+    await mgr.runSessionStart();
+
+    const stdin = mocks.runHooksForEvent.mock.calls[0][1];
+    expect(stdin.hook_event_name).toBe('SessionStart');
+    expect(stdin).not.toHaveProperty('worktree_path');
+    expect(stdin).not.toHaveProperty('branch');
+    expect(stdin).not.toHaveProperty('main_repo_path');
+  });
+
+  it('omits unresolved worktree details rather than sending empty values', async () => {
+    mocks.loadHooksConfig.mockReturnValue({ SessionEnd: [{ type: 'command', command: 'echo test' }] });
+    mocks.runHooksForEvent.mockResolvedValue(createHookResult());
+    const mgr = new HookManager('/wt', 'session-wt', '.mastracode', undefined, { path: '/wt' });
+
+    await mgr.runSessionEnd();
+
+    const stdin = mocks.runHooksForEvent.mock.calls[0][1];
+    expect(stdin.worktree_path).toBe('/wt');
+    expect(stdin).not.toHaveProperty('branch');
+    expect(stdin).not.toHaveProperty('main_repo_path');
+  });
+});

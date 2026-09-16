@@ -37,6 +37,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
@@ -90,6 +91,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
@@ -157,6 +159,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -201,6 +204,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -247,6 +251,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -276,6 +281,35 @@ jobs:
           MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
           MASTRA_E2E_REGISTRY_PORT: '4873'
 
+  e2e-mcp-compat:
+    name: E2E MCP compatibility
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    # Builds one package and runs PR-controlled scripts: no Turbo credentials needed here.
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          ref: ${{ inputs.head_sha }}
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build core
+        run: pnpm turbo --filter "@mastra/core" build
+
+      # Packs the built core and installs it into disposable consumers: published
+      # @mastra/mcp 1.x (the compatibility floor for the core MCP contract) and the
+      # core-native suspend/resume fixture.
+      - name: Test packed core against published MCP 1.x and the core-native fixture
+        run: pnpm --filter "@mastra/mcp" test:compat
+        env:
+          PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
+
   e2e-create-mastra:
     needs: publish-e2e-registry
     name: E2E create-mastra
@@ -291,6 +325,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -335,6 +370,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -378,6 +414,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -422,6 +459,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -468,6 +506,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -510,6 +549,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
 

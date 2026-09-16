@@ -3,6 +3,7 @@
  */
 
 import type { SlashCommandMetadata } from '@mastra/code-sdk/utils/slash-command-loader';
+import { isSubconsciousEnabled } from '../utils/experimental-features.js';
 
 export interface HelpTextOptions {
   /** Number of available controller modes (mode commands shown when > 1) */
@@ -33,14 +34,19 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/skills', description: 'List available skills' },
     { key: '/skill/<name>', description: 'Activate a skill' },
     { key: '/models', description: 'Switch model pack' },
+    { key: '/packs', description: 'Alias for /models' },
+    { key: '/model', description: 'Change the current mode model' },
     { key: '/custom-providers', description: 'Manage custom providers and models' },
     { key: '/subagents', description: 'Configure subagent models' },
     { key: '/permissions', description: 'Tool approval permissions' },
     { key: '/settings', description: 'Notifications, YOLO, thinking' },
     { key: '/memory', description: 'Configure Observational Memory (/om alias)' },
+    ...(isSubconsciousEnabled() ? [{ key: '/knowledge', description: 'Browse scoped Subconscious knowledge' }] : []),
     { key: '/review', description: 'Review a GitHub pull request' },
     { key: '/report-issue', description: 'Open or browse mastracode issues' },
     { key: '/cost', description: 'Token usage and costs' },
+    { key: '/context', description: 'Audit what is using the context window' },
+    { key: '/profile', description: 'Control process memory diagnostics (status/start/capture/stop)' },
     {
       key: '/prune',
       description: 'Prune old storage data — closes the TUI ("vacuum" reclaims disk, "keep-memory" keeps chats)',
@@ -49,7 +55,8 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/sandbox', description: 'Manage sandbox allowed paths' },
     { key: '/hooks', description: 'Show/reload configured hooks' },
     { key: '/mcp', description: 'Show/reload MCP connections' },
-    { key: '/login', description: 'Login with OAuth provider' },
+    { key: '/connect', description: 'Connect a provider account or API key' },
+    { key: '/login', description: 'Sign in with a provider account' },
     { key: '/logout', description: 'Logout from OAuth provider' },
     { key: '/setup', description: 'Run the setup wizard' },
     { key: '/browser', description: 'Configure browser automation' },
@@ -58,7 +65,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/theme', description: 'Switch color theme (auto/dark/light)' },
     { key: '/update', description: 'Check for and install updates' },
     { key: '/observability', description: 'Configure cloud observability' },
-    { key: '/github', description: 'Subscribe/sync GitHub PR signals' },
+    { key: '/github', description: 'Subscribe in review/working mode or sync GitHub PR signals' },
     { key: '/goal', description: 'Set/manage persistent goal (Ralph loop)' },
     { key: '/goal judge', description: 'Set the goal judge model and max attempts' },
   ];

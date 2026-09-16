@@ -13,32 +13,6 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
-/**
- * Convert Express request to Web API Request for accessing headers, cookies, etc.
- */
-function toWebRequest(req: Request): globalThis.Request {
-  const protocol = req.protocol || 'http';
-  const host = req.get('host') || 'localhost';
-  const url = `${protocol}://${host}${req.originalUrl || req.url}`;
-
-  const headers = new Headers();
-  for (const [key, value] of Object.entries(req.headers)) {
-    if (value) {
-      if (Array.isArray(value)) {
-        value.forEach(v => headers.append(key, v));
-      } else {
-        headers.set(key, value);
-      }
-    }
-  }
-
-  return new globalThis.Request(url, {
-    method: req.method,
-    headers,
-    // Note: body is not needed as it's already parsed
-  });
-}
-
 import { MASTRA_OPTIONS } from '../constants';
 import { MastraExceptionFilter } from '../filters/mastra-exception.filter';
 import { MastraRouteGuard } from '../guards/mastra-route.guard';
@@ -50,6 +24,7 @@ import { RequestContextService } from '../services/request-context.service';
 import { RouteHandlerService } from '../services/route-handler.service';
 import { parseMultipartFormData } from '../utils/parse-multipart';
 import { getMastraRoutePath } from '../utils/route-path';
+import { toWebRequest } from '../utils/to-web-request';
 
 /**
  * Main Mastra controller that handles all routes dynamically.

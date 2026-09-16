@@ -1,0 +1,12 @@
+{
+  "attachment": ["qwen3.6:27b"],
+  "temperature": [
+    "deepseek-v4-flash",
+    "glm-4.7-flash",
+    "gpt-oss:120b",
+    "llama3.3:70b",
+    "qwen3-coder:30b",
+    "qwen3.6:27b"
+  ],
+  "structuredOutput": ["deepseek-v4-flash", "gpt-oss:120b", "qwen3.6:27b"]
+}

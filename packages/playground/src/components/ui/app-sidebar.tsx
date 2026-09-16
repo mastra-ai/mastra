@@ -1,9 +1,13 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import type { NavLink } from '@mastra/playground-ui/components/MainSidebar';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Search, Wrench } from 'lucide-react';
+import { Ellipsis, Search, Wrench } from 'lucide-react';
+import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { useLocation } from 'react-router';
 import { useAgentBuilderSidebarVisibility } from '@/domains/agent-builder/hooks/use-agent-builder-sidebar-visibility';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
@@ -14,11 +18,15 @@ import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-
 import { isAuthenticated } from '@/domains/auth/types';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
+import { useFeedbackInboxCount } from '@/domains/feedback/hooks/use-feedback';
+import { useInboxDatasetReviewCount } from '@/domains/review/hooks/use-inbox-review-items';
 import { useNavigationCommand } from '@/lib/command';
 import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
+import { getIsLinkActive } from '@/lib/nav/get-is-link-active';
 import { bottomNav, mainNav } from '@/lib/nav/nav-items';
 import type { NavItem } from '@/lib/nav/nav-items';
+import { useFoldableNavItems } from '@/lib/nav/use-foldable-nav-items';
 
 declare global {
   interface Window {
@@ -32,11 +40,96 @@ function toSidebarLink(item: NavItem): NavLink {
   return { name: item.name, url: item.url, icon: <Icon /> };
 }
 
-function getIsLinkActive(item: NavItem, pathname: string): boolean {
-  // Exact match or sub-path match (with / boundary so sibling routes don't match by prefix)
-  const matches = (url: string) => pathname === url || pathname.startsWith(url + '/');
-  if (matches(item.url)) return true;
-  return item.activePaths?.some(matches) ?? false;
+interface SidebarNavItemProps {
+  item: NavItem;
+  /** Items in the same list, used for section-aware active matching. */
+  siblings: NavItem[];
+  onClick?: () => void;
+  children?: ReactNode;
+}
+
+function SidebarNavItem({ item, siblings, onClick, children }: SidebarNavItemProps) {
+  const { Link } = useLinkComponent();
+  const { state } = useMainSidebar();
+  const { pathname } = useLocation();
+
+  return (
+    <MainSidebar.NavLink
+      LinkComponent={Link}
+      state={state}
+      link={toSidebarLink(item)}
+      isActive={getIsLinkActive(item, pathname, siblings)}
+      onClick={onClick}
+    >
+      {children}
+    </MainSidebar.NavLink>
+  );
+}
+
+function MoreRow({ onClick }: { onClick: () => void }) {
+  const { state } = useMainSidebar();
+
+  return (
+    <MainSidebar.NavLink
+      state={state}
+      link={{ name: 'More', url: '#', icon: <Ellipsis /> }}
+      render={
+        <button type="button" onClick={onClick}>
+          <Ellipsis />
+          <MainSidebar.NavLabel state={state}>More</MainSidebar.NavLabel>
+        </button>
+      }
+    />
+  );
+}
+
+/** Mirrors the nav row box (h-7, px-3, size-4 icon + label with gap-2) so the list doesn't jump on resolve. */
+function NavSkeletonRow() {
+  const { state } = useMainSidebar();
+  const isCollapsed = state === 'collapsed';
+
+  return (
+    <li
+      aria-busy="true"
+      data-testid="nav-more-skeleton"
+      className={isCollapsed ? 'flex h-7 items-center justify-center' : 'flex h-7 items-center gap-2 px-3'}
+    >
+      <Skeleton className="size-4 shrink-0 rounded-sm" />
+      {!isCollapsed && <Skeleton className="h-3 w-20" />}
+    </li>
+  );
+}
+
+interface FoldableNavTailProps {
+  /** The foldable items of the section, already filtered for visibility. */
+  items: NavItem[];
+  siblings: NavItem[];
+}
+
+/**
+ * Tail of a nav section: promoted foldable rows first, then "More" — a flat placeholder that
+ * swaps itself for the remaining folded rows when clicked. While server data is resolving,
+ * the whole tail is a single skeleton row.
+ */
+function FoldableNavTail({ items, siblings }: FoldableNavTailProps) {
+  const { pathname } = useLocation();
+  const { isResolving, promoted, folded, markVisited } = useFoldableNavItems(items, pathname);
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
+
+  if (isResolving) return <NavSkeletonRow />;
+
+  return (
+    <>
+      {promoted.map(item => (
+        <SidebarNavItem key={item.name} item={item} siblings={siblings} onClick={() => markVisited(item.url)} />
+      ))}
+      {folded.length > 0 && !isMoreOpen && <MoreRow onClick={() => setIsMoreOpen(true)} />}
+      {isMoreOpen &&
+        folded.map(item => (
+          <SidebarNavItem key={item.name} item={item} siblings={siblings} onClick={() => markVisited(item.url)} />
+        ))}
+    </>
+  );
 }
 
 export function AppSidebar() {
@@ -52,6 +145,12 @@ export function AppSidebar() {
   const { data: authCapabilities } = useAuthCapabilities();
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
   const { hasPermission, hasAnyPermission, isLoading: isPermissionsLoading } = usePermissions();
+  const canReadInbox =
+    !isPermissionsLoading && hasRoutePermission(getPermissionForRoute('/inbox'), hasPermission, hasAnyPermission);
+  const feedbackInboxCountQuery = useFeedbackInboxCount({ enabled: canReadInbox });
+  const datasetReviewCountQuery = useInboxDatasetReviewCount({ enabled: canReadInbox });
+  const hasInboxItems =
+    (feedbackInboxCountQuery.data?.pagination?.total ?? 0) > 0 || (datasetReviewCountQuery.data ?? 0) > 0;
 
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
   const cmsOnlyLinks = new Set(['/prompts']);
@@ -90,7 +189,7 @@ export function AppSidebar() {
 
   return (
     <MainSidebar>
-      <div className="mb-2 pt-2">
+      <div className="mb-1.5 pt-2.5">
         {state === 'collapsed' ? (
           <div className="flex flex-col items-center gap-2">
             <div className="relative grid size-9 place-items-center">
@@ -109,10 +208,10 @@ export function AppSidebar() {
             {isUserAuthenticated && <AuthStatus />}
           </div>
         ) : isUserAuthenticated ? (
-          <span className="flex items-center justify-between pr-2 pl-3">
+          <span className="flex h-7 items-center justify-between pr-2 pl-3">
             <span className="flex min-w-0 flex-1 items-center gap-2">
               <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-              <span className="font-display truncate text-sm font-semibold tracking-tight whitespace-nowrap">
+              <span className="font-display text-ui-md truncate font-semibold tracking-tight whitespace-nowrap">
                 Mastra Studio
               </span>
               {!isMobile && <MainSidebar.Trigger />}
@@ -120,9 +219,9 @@ export function AppSidebar() {
             <AuthStatus />
           </span>
         ) : (
-          <span className="flex items-center gap-2 pr-2 pl-3">
+          <span className="flex h-7 items-center gap-2 pr-2 pl-3">
             <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-            <span className="font-display truncate text-sm font-semibold tracking-tight whitespace-nowrap">
+            <span className="font-display text-ui-md truncate font-semibold tracking-tight whitespace-nowrap">
               Mastra Studio
             </span>
             {!isMobile && <MainSidebar.Trigger />}
@@ -153,7 +252,7 @@ export function AppSidebar() {
                 {state !== 'collapsed' && (
                   <kbd
                     aria-hidden="true"
-                    className="border-border1 bg-surface4 text-neutral3 ml-auto rounded border px-1.5 py-0.5 font-mono text-[10px] leading-none"
+                    className="border-border1 bg-surface4 text-neutral3 text-ui-xs ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
                   >
                     {commandShortcutLabel}
                   </kbd>
@@ -197,15 +296,24 @@ export function AppSidebar() {
                 </MainSidebar.NavHeader>
               ) : null}
               <MainSidebar.NavList>
-                {filtered.map(item => (
-                  <MainSidebar.NavLink
-                    key={item.name}
-                    LinkComponent={Link}
-                    state={state}
-                    link={toSidebarLink(item)}
-                    isActive={getIsLinkActive(item, pathname)}
-                  />
-                ))}
+                {filtered
+                  .filter(item => !item.foldable)
+                  .map(item => (
+                    <SidebarNavItem key={item.name} item={item} siblings={filtered}>
+                      {item.url === '/inbox' && hasInboxItems && state !== 'collapsed' ? (
+                        <Badge
+                          variant="yellow"
+                          size="sm"
+                          indicator="dot"
+                          className="ml-auto"
+                          aria-label="Items need review"
+                        />
+                      ) : null}
+                    </SidebarNavItem>
+                  ))}
+                {filtered.some(item => item.foldable) && (
+                  <FoldableNavTail items={filtered.filter(item => item.foldable)} siblings={filtered} />
+                )}
               </MainSidebar.NavList>
             </MainSidebar.NavSection>
           );
@@ -228,7 +336,7 @@ export function AppSidebar() {
         )}
         {state !== 'collapsed' && (
           <>
-            <hr className="bg-border1 mx-6 my-2 h-px border-0" />
+            <hr className="bg-border1 mx-3 my-2 h-px border-0" />
             <MastraVersionFooter collapsed={false} />
           </>
         )}

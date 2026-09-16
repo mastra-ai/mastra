@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { RequestContext } from '../../request-context';
+import { createTool } from '../../tools';
 import { createWorkflow } from '../create';
 import { createStep } from '../workflow';
 
@@ -11,6 +12,52 @@ describe('Workflow requestContextSchema', () => {
   });
 
   describe('workflow-level validation', () => {
+    it('should validate input-form values forwarded by a transformed tool context', async () => {
+      const dateCodec = z.codec(z.string(), z.date(), {
+        decode: value => new Date(value),
+        encode: value => value.toISOString(),
+      });
+      const transformedSchema = z.object({ date: dateCodec });
+      let capturedDate: unknown;
+      const step = createStep({
+        id: 'nested-context-step',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ dateIsDate: z.boolean() }),
+        requestContextSchema: transformedSchema,
+        execute: async ({ requestContext }) => {
+          capturedDate = requestContext.get('date');
+          return { dateIsDate: capturedDate instanceof Date };
+        },
+      });
+      const workflow = createWorkflow({
+        id: 'nested-context-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ dateIsDate: z.boolean() }),
+        requestContextSchema: transformedSchema,
+      }).then(step);
+      workflow.commit();
+      const outerTool = createTool({
+        id: 'workflow-forwarding-tool',
+        description: 'Forwards context to a workflow',
+        requestContextSchema: transformedSchema,
+        execute: async (_, { requestContext }) => {
+          const run = await workflow.createRun();
+          return run.start({ inputData: { input: 'test' }, requestContext });
+        },
+      });
+      const requestContext = new RequestContext();
+      requestContext.set('date', '2026-08-17T00:00:00.000Z');
+
+      const result = await outerTool.execute!({}, { requestContext });
+
+      expect(result.status).toBe('success');
+      if (result.status === 'success') {
+        expect(result.result).toEqual({ dateIsDate: true });
+      }
+      expect(capturedDate).toBeInstanceOf(Date);
+      expect(requestContext.getRaw('date')).toBe('2026-08-17T00:00:00.000Z');
+    });
+
     it('should pass validation when requestContext matches schema', async () => {
       const step = createStep({
         id: 'test-step',

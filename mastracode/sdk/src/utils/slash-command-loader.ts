@@ -129,6 +129,8 @@ export async function scanCommandDirectory(
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
 
     for (const entry of entries) {
+      if (entry.name === 'node_modules') continue;
+
       const fullPath = path.join(dirPath, entry.name);
       const stats = entry.isSymbolicLink() ? await fs.stat(fullPath).catch(() => null) : entry;
       if (!stats) continue;

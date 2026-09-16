@@ -8,11 +8,11 @@ import type {
   StorageResolvedWorkspaceType,
   StorageListWorkspacesResolvedOutput,
   StorageWorkspaceSnapshotType,
-  StorageWorkspaceToolsConfig,
   StorageFilesystemConfig,
   StorageSandboxConfig,
 } from '@mastra/core/storage';
 
+import { toRuntimeWorkspaceToolsConfig, toStorageWorkspaceToolsConfig } from '../workspace-tools-config';
 import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
 
@@ -127,9 +127,8 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
       config.skills = snapshot.skills;
     }
 
-    // Workspace tool configuration maps directly
     if (snapshot.tools) {
-      config.tools = snapshot.tools;
+      config.tools = toRuntimeWorkspaceToolsConfig(snapshot.tools);
     }
 
     if (snapshot.autoSync !== undefined) {
@@ -182,11 +181,8 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
 
     const tools = workspace.getToolsConfig();
     if (tools) {
-      // Only serialize static boolean values — runtime functions can't be stored
-      const storageTools: StorageWorkspaceToolsConfig = {};
-      if (typeof tools.enabled === 'boolean') storageTools.enabled = tools.enabled;
-      if (typeof tools.requireApproval === 'boolean') storageTools.requireApproval = tools.requireApproval;
-      if (Object.keys(storageTools).length > 0) {
+      const storageTools = toStorageWorkspaceToolsConfig(tools);
+      if (storageTools) {
         snapshot.tools = storageTools;
       }
     }
@@ -274,7 +270,29 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
 
     return {
       create: input => store.create({ workspace: input }),
-      getByIdResolved: id => store.getByIdResolved(id),
+      getByIdResolved: async (id, options) => {
+        if (options?.versionId || options?.versionNumber !== undefined) {
+          const workspace = await store.getById(id);
+          if (!workspace) return null;
+
+          const version = options.versionId
+            ? await store.getVersion(options.versionId)
+            : await store.getVersionByNumber(id, options.versionNumber!);
+          if (!version || version.workspaceId !== id) return null;
+
+          const {
+            id: versionId,
+            workspaceId: _workspaceId,
+            versionNumber: _versionNumber,
+            changedFields: _changedFields,
+            changeMessage: _changeMessage,
+            createdAt: _createdAt,
+            ...snapshot
+          } = version;
+          return { ...workspace, ...snapshot, resolvedVersionId: versionId } as StorageResolvedWorkspaceType;
+        }
+        return store.getByIdResolved(id, options?.status ? { status: options.status } : undefined);
+      },
       update: input => store.update(input),
       delete: id => store.delete(id),
       list: args => store.list(args),

@@ -47,6 +47,7 @@ function getMessageIndexKey(messageId: string): string {
 }
 
 export class StoreMemoryUpstash extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   private client: Redis;
   #db: UpstashDB;
   constructor(config: UpstashDomainConfig) {
@@ -253,8 +254,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
@@ -272,7 +273,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     const now = new Date();
     const updatedThread = {
       ...thread,
-      title,
+      title: title ?? thread.title,
       metadata: {
         ...thread.metadata,
         ...metadata,
@@ -535,7 +536,17 @@ export class StoreMemoryUpstash extends MemoryStorage {
     });
   }
 
-  private async _getIncludedMessages(include: StorageListMessagesInput['include']): Promise<MastraDBMessage[]> {
+  /**
+   * Fetches the messages named by `include` together with their surrounding context.
+   *
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param resourceId - When set, drops any pinned or context message owned by another
+   * resource so an id from another resource returns nothing.
+   */
+  private async _getIncludedMessages(
+    include: StorageListMessagesInput['include'],
+    resourceId?: string,
+  ): Promise<MastraDBMessage[]> {
     if (!include?.length) return [];
 
     const messageIds = new Set<string>();
@@ -546,9 +557,29 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const itemThreadId = await this._getThreadIdForMessage(item.id);
       if (!itemThreadId) continue;
 
+      const itemThreadMessagesKey = getThreadMessagesKey(itemThreadId);
+
+      if (resourceId !== undefined) {
+        const threadMessageIds = (await this.client.zrange(itemThreadMessagesKey, 0, -1)) as string[];
+        const threadPipeline = this.client.pipeline();
+        threadMessageIds.forEach(id => threadPipeline.get(getMessageKey(itemThreadId, id)));
+        const threadMessages = (await threadPipeline.exec())
+          .filter((message): message is MastraDBMessage => message !== null)
+          .filter(message => message.resourceId === resourceId);
+        const targetIndex = threadMessages.findIndex(message => message.id === item.id);
+        if (targetIndex === -1) continue;
+
+        const start = Math.max(0, targetIndex - (item.withPreviousMessages ?? 0));
+        const end = Math.min(threadMessages.length, targetIndex + (item.withNextMessages ?? 0) + 1);
+        for (const message of threadMessages.slice(start, end)) {
+          messageIds.add(message.id);
+          messageIdToThreadIds[message.id] = itemThreadId;
+        }
+        continue;
+      }
+
       messageIds.add(item.id);
       messageIdToThreadIds[item.id] = itemThreadId;
-      const itemThreadMessagesKey = getThreadMessagesKey(itemThreadId);
 
       // Get the rank of this message in the sorted set
       const rank = await this.client.zrank(itemThreadMessagesKey, item.id);
@@ -582,7 +613,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
       pipeline.get(getMessageKey(tId, id as string));
     });
     const results = await pipeline.exec();
-    return results.filter(result => result !== null) as MastraDBMessage[];
+    const includedMessages = results.filter(result => result !== null) as MastraDBMessage[];
+    return resourceId ? includedMessages.filter(message => message.resourceId === resourceId) : includedMessages;
   }
 
   private parseStoredMessage(storedMessage: MastraDBMessage & { _index?: number }): MastraDBMessage {
@@ -719,7 +751,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // Get included messages with context if specified
       let includedMessages: MastraDBMessage[] = [];
       if (include && include.length > 0) {
-        const included = (await this._getIncludedMessages(include)) as MastraDBMessage[];
+        const included = (await this._getIncludedMessages(include, resourceId)) as MastraDBMessage[];
         includedMessages = included.map(this.parseStoredMessage);
       }
 

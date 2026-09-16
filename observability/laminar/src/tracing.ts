@@ -301,10 +301,11 @@ export class LaminarExporter extends BaseExporter {
       isRemote: false,
     };
 
-    const parentSpanContext = span.parentSpanId
+    const exportedParentSpanId = span.parentSpanId ?? span.externalParentSpanId;
+    const parentSpanContext = exportedParentSpanId
       ? {
           traceId,
-          spanId: normalizeSpanId(span.parentSpanId),
+          spanId: normalizeSpanId(exportedParentSpanId),
           traceFlags: TraceFlags.SAMPLED,
           isRemote: false,
         }

@@ -1,6 +1,6 @@
 ---
 title: "Reference: MastraServer | Server"
-description: "API reference for the MastraServer abstract class used to create server adapters."
+description: "The MastraServer abstract class is the base for all server adapters. Extend this class to create adapters for frameworks other than Hono or Express."
 packages:
   - "@mastra/core"
   - "@mastra/server"
@@ -32,7 +32,7 @@ MastraServer<TApp, TRequest, TResponse>
 
 ## Constructor
 
-```typescript prettier:false
+```typescript oxfmt:false
 constructor(options: MastraServerOptions<TApp>)
 ```
 
@@ -114,7 +114,7 @@ These methods must be implemented by adapters:
 
 Attach Mastra context to every request.
 
-```typescript prettier:false
+```typescript oxfmt:false
 abstract registerContextMiddleware(): void
 ```
 
@@ -129,7 +129,7 @@ abstract registerContextMiddleware(): void
 
 Run the adapter auth hook during initialization. Official adapters may implement this as a no-op when auth is enforced per-route.
 
-```typescript prettier:false
+```typescript oxfmt:false
 abstract registerAuthMiddleware(): void
 ```
 
@@ -137,7 +137,7 @@ abstract registerAuthMiddleware(): void
 
 Register a single route with the framework.
 
-```typescript prettier:false
+```typescript oxfmt:false
 abstract registerRoute(
   app: TApp,
   route: ServerRoute,
@@ -149,7 +149,7 @@ abstract registerRoute(
 
 Extract parameters from the request.
 
-```typescript prettier:false
+```typescript oxfmt:false
 abstract getParams(
   route: ServerRoute,
   request: TRequest
@@ -164,7 +164,7 @@ abstract getParams(
 
 Send response based on route type.
 
-```typescript prettier:false
+```typescript oxfmt:false
 abstract sendResponse(
   route: ServerRoute,
   response: TResponse,
@@ -176,7 +176,7 @@ abstract sendResponse(
 
 Handle streaming responses.
 
-```typescript prettier:false
+```typescript oxfmt:false
 abstract stream(
   route: ServerRoute,
   response: TResponse,
@@ -190,7 +190,7 @@ abstract stream(
 
 Initialize the server by registering all middleware and routes.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async init(): Promise<void>
 ```
 
@@ -204,7 +204,7 @@ Calls in order:
 
 Register all Mastra routes.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async registerRoutes(): Promise<void>
 ```
 
@@ -212,7 +212,7 @@ async registerRoutes(): Promise<void>
 
 Get the framework app instance.
 
-```typescript prettier:false
+```typescript oxfmt:false
 getApp<T = TApp>(): T
 ```
 
@@ -220,7 +220,7 @@ getApp<T = TApp>(): T
 
 Validate path parameters with the route's Zod schema.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async parsePathParams(
   route: ServerRoute,
   params: Record<string, string>
@@ -231,7 +231,7 @@ async parsePathParams(
 
 Validate query parameters with the route's Zod schema.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async parseQueryParams(
   route: ServerRoute,
   params: Record<string, string>
@@ -242,7 +242,7 @@ async parseQueryParams(
 
 Validate request body with the route's Zod schema.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async parseBody(
   route: ServerRoute,
   body: unknown
@@ -253,7 +253,7 @@ async parseBody(
 
 Register an endpoint that serves the OpenAPI specification.
 
-```typescript prettier:false
+```typescript oxfmt:false
 async registerOpenAPIRoute(
   app: TApp,
   config: OpenAPIConfig,
@@ -267,7 +267,7 @@ async registerOpenAPIRoute(
 
 Merge request context from multiple sources (query params and body).
 
-```typescript prettier:false
+```typescript oxfmt:false
 protected mergeRequestContext(options: {
   paramsRequestContext?: Record<string, any>;
   bodyRequestContext?: Record<string, any>;

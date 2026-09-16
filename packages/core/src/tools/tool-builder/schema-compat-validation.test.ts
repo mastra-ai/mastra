@@ -685,4 +685,38 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       received: { category: 'book', price: 25, label: 'blue' },
     });
   });
+
+  describe('strict: false opts out of strict-mode schema rewriting', () => {
+    const openaiModelConfig = {
+      provider: 'openai',
+      modelId: 'gpt-4o',
+      specificationVersion: 'v4' as const,
+      supportsStructuredOutputs: true,
+    } as const;
+
+    const requiredKeysFor = (strict?: boolean) => {
+      const tool = createTool({
+        id: 'partial-update-tool',
+        description: 'Accepts partial updates',
+        inputSchema: z.object({
+          name: z.string().optional(),
+          city: z.string().optional(),
+        }),
+        ...(strict === undefined ? {} : { strict }),
+        execute: async () => ({ ok: true }),
+      });
+
+      const coreTool = buildCoreTool(tool, 'partialUpdateTool', openaiModelConfig);
+      const jsonSchema = (coreTool.parameters as any).jsonSchema ?? coreTool.parameters;
+      return (jsonSchema.required as string[] | undefined) ?? [];
+    };
+
+    it('promotes optional properties to required by default on OpenAI strict mode', () => {
+      expect(requiredKeysFor(undefined)).toEqual(expect.arrayContaining(['name', 'city']));
+    });
+
+    it('keeps optional properties optional when the tool sets strict: false', () => {
+      expect(requiredKeysFor(false)).toEqual([]);
+    });
+  });
 });

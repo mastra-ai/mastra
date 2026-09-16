@@ -679,6 +679,78 @@ describe('PIIDetector', () => {
       consoleWarnSpy.mockRestore();
     });
 
+    it.each(['processInput', 'processOutputResult'] as const)(
+      'should propagate the processor tripwire from %s when strict model detection fails',
+      async method => {
+        const model = new MockLanguageModelV1({
+          defaultObjectGenerationMode: 'json',
+          doGenerate: async () => {
+            throw new Error('provider failure');
+          },
+        });
+        const detector = new PIIDetector({ model, detectionTypes: ['name'], errorStrategy: 'strict' });
+        const tripwire = new TripWire('strict PII failure');
+        const abort = vi.fn(() => {
+          throw tripwire;
+        });
+
+        await expect(
+          detector[method]({
+            messages: [
+              createTestMessage('Alice lives nearby', method === 'processOutputResult' ? 'assistant' : 'user'),
+            ],
+            abort: abort as any,
+          }),
+        ).rejects.toBe(tripwire);
+        expect(abort).toHaveBeenCalledWith('PII detection failed because the internal model call failed');
+      },
+    );
+
+    it('should propagate the processor tripwire when legacy detection returns no object', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model, detectionTypes: ['name'], strategy: 'block', errorStrategy: 'strict' });
+      vi.spyOn((detector as any).detectionAgent, 'generateLegacy').mockResolvedValue({ object: undefined });
+      const tripwire = new TripWire('strict PII failure');
+      const abort = vi.fn(() => {
+        throw tripwire;
+      });
+
+      await expect(
+        detector.processInput({ messages: [createTestMessage('Alice lives nearby')], abort: abort as any }),
+      ).rejects.toBe(tripwire);
+      expect(abort).toHaveBeenCalledWith('PII detection failed because the internal model call failed');
+    });
+
+    it('should not emit buffered text when strict streaming model detection fails', async () => {
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          throw new Error('provider failure');
+        },
+      });
+      const detector = new PIIDetector({
+        model,
+        detectionTypes: ['name'],
+        errorStrategy: 'strict',
+        bufferSize: 1,
+      });
+      const tripwire = new TripWire('strict PII failure');
+      const abort = vi.fn(() => {
+        throw tripwire;
+      });
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Alice lives nearby.', id: 'text-1' },
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+      };
+
+      await expect(
+        detector.processOutputStream({ part, streamParts: [part], state: {}, abort: abort as any }),
+      ).rejects.toBe(tripwire);
+      expect(abort).toHaveBeenCalledWith('PII detection failed because the internal model call failed');
+    });
+
     it('should handle empty message array', async () => {
       const model = setupMockModel(createMockPIIResult());
       const detector = new PIIDetector({
@@ -2016,6 +2088,105 @@ describe('PIIDetector', () => {
         expect.any(Error),
       );
 
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('onDetection callback', () => {
+    it('should report clean results with strategyApplied "none"', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const events: any[] = [];
+      const detector = new PIIDetector({ model, onDetection: e => void events.push(e) });
+
+      await detector.processInput({ messages: [createTestMessage('Hello world')], abort: vi.fn() as any });
+
+      expect(events).toHaveLength(1);
+      expect(events[0].input).toBe('Hello world');
+      expect(events[0].flagged).toBe(false);
+      expect(events[0].strategyApplied).toBe('none');
+      expect(events[0].detectionResult.categories).toBeNull();
+    });
+
+    it('should report flagged results with the configured strategy', async () => {
+      const detections: PIIDetection[] = [
+        { type: 'email', value: 'test@example.com', confidence: 0.9, start: 0, end: 16, redacted_value: null },
+      ];
+      const model = setupMockModel(createMockPIIResult(['email'], detections, '***@***.com'));
+      const events: any[] = [];
+      const detector = new PIIDetector({ model, strategy: 'redact', onDetection: e => void events.push(e) });
+
+      await detector.processInput({ messages: [createTestMessage('test@example.com')], abort: vi.fn() as any });
+
+      expect(events).toHaveLength(1);
+      expect(events[0].flagged).toBe(true);
+      expect(events[0].strategyApplied).toBe('redact');
+      expect(events[0].detectionResult.detections).toEqual(detections);
+    });
+
+    it('should fire before aborting under the block strategy', async () => {
+      const model = setupMockModel(
+        createMockPIIResult(
+          ['email'],
+          [{ type: 'email', value: 'test@example.com', confidence: 0.9, start: 0, end: 16 }],
+        ),
+      );
+      const events: any[] = [];
+      const detector = new PIIDetector({ model, strategy: 'block', onDetection: e => void events.push(e) });
+      const abort = vi.fn().mockImplementation((reason?: string) => {
+        throw new TripWire(reason ?? 'aborted');
+      }) as any;
+
+      await expect(detector.processInput({ messages: [createTestMessage('test@example.com')], abort })).rejects.toThrow(
+        TripWire,
+      );
+
+      expect(events).toHaveLength(1);
+      expect(events[0].strategyApplied).toBe('block');
+    });
+
+    it('should report regex detections found during streaming', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const events: any[] = [];
+      const detector = new PIIDetector({
+        model,
+        detectionTypes: REGEX_ONLY_TYPES,
+        onDetection: e => void events.push(e),
+      });
+
+      await detector.processOutputStream({
+        part: {
+          type: 'text-delta' as const,
+          payload: { id: 'test-id', text: 'Reach me at test@example.com' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+
+      expect(events).toHaveLength(1);
+      expect(events[0].flagged).toBe(true);
+      expect(events[0].detectionResult.detections?.[0].type).toBe('email');
+    });
+
+    it('should not let callback errors break processing', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const detector = new PIIDetector({
+        model,
+        onDetection: () => {
+          throw new Error('boom');
+        },
+      });
+
+      const result = await detector.processInput({
+        messages: [createTestMessage('Hello world')],
+        abort: vi.fn() as any,
+      });
+
+      expect(result).toHaveLength(1);
+      expect(consoleSpy).toHaveBeenCalledWith('[PIIDetector] onDetection callback failed:', expect.any(Error));
       consoleSpy.mockRestore();
     });
   });

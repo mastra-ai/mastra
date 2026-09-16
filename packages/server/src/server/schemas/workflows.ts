@@ -61,6 +61,12 @@ const serializedStepFlowEntrySchema = z.object({
     'foreach',
     'workflow',
   ]),
+  // Identity/display fields shared by declarative and control-flow entries.
+  // This schema documents responses (OpenAPI/generated clients); it is not
+  // parsed at runtime, so per-type fields beyond these stay untyped.
+  id: z.string().optional(),
+  description: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**
@@ -79,7 +85,7 @@ export const workflowInfoSchema = z.object({
   stateSchema: z.string().optional(),
   options: z.object({}).optional(),
   isProcessorWorkflow: z.boolean().optional(),
-  origin: z.enum(['code', 'stored']).optional(),
+  origin: z.enum(['code', 'dynamic']).optional(),
 });
 
 /**
@@ -120,6 +126,13 @@ export const listWorkflowRunsQuerySchema = createCombinedPaginationSchema().exte
   resourceId: z.string().optional(),
   status: workflowRunStatusSchema.optional(),
 });
+
+export const workflowRunCountsEntrySchema = z.object({
+  running: z.number(),
+  suspended: z.number(),
+});
+
+export const workflowRunCountsResponseSchema = z.record(z.string(), workflowRunCountsEntrySchema);
 
 /**
  * Base schema for workflow execution with input data and tracing

@@ -1,0 +1,33 @@
+---
+extends: existence
+message: "AI depletion metaphor: '%s'. Say what ran out, failed, or slowed, and name the limit. Disable this rule for prose about engines or nutrition."
+level: error
+nonword: true
+ignorecase: true
+# Failure and slowdown described as a body or an engine giving out: a
+# loop "exhausts its budget," a retry "starves" the writer "of" slots,
+# a job "stalls on" a lock, a query "degrades on" large inputs. The
+# plain sentence says what ran out, what waited, and on which limit. A
+# documentation-corpus census (2026-09) listed each among the verbs no
+# rule read.
+#
+# Each token gates on the complement that makes the verb figurative:
+# the budget object, the "of" complement, and the "on" that names the
+# obstacle. Every one measures zero across the seven pre-LLM corpora,
+# so the family costs nothing on reference or argument prose. The
+# noun "starvation" and the scheduler's "stall" stay out, since the
+# tokens read the verb. Prose about engines, where a motor literally
+# stalls, or about nutrition disables the rule.
+tokens:
+  # --- Exhausting a budget ("the loop exhausts its budget," "exhausted
+  # the retry budget").
+  - "\\bexhaust(?:s|ed|ing)? (?:its|their|the|a|an|this|that) (?:[a-z]+ )?budget\\b"
+
+  # --- Starving a thing of a resource ("starves the writer of slots,"
+  # "starving readers of updates").
+  - "\\bstarv(?:e|es|ed|ing) (?:(?:the|a|an|its|their|this|that|each|every) )?[a-z]+ of\\b"
+
+  # --- Stalling and degrading on an obstacle ("the job stalls on the
+  # lock," "the query degrades on large inputs").
+  - "\\bstall(?:s|ed|ing)? on\\b"
+  - "\\bdegrad(?:e|es|ed|ing) on\\b"

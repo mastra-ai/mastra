@@ -17,6 +17,7 @@ import type { JSONSchema7 } from '@mastra/schema-compat';
 import { applyCompatLayer, GoogleSchemaCompatLayer } from '@mastra/schema-compat';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
+import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { COPILOT_HEADERS, fetchCopilotModels, getGitHubCopilotBaseUrl } from '../auth/providers/github-copilot.js';
 import type { CopilotModelEntry, GitHubCopilotCredentials } from '../auth/providers/github-copilot.js';
 import { AuthStorage } from '../auth/storage.js';
@@ -123,13 +124,13 @@ export function buildGitHubCopilotOAuthFetch(
 
     const cred = storage.get(COPILOT_PROVIDER_ID);
     if (!cred || cred.type !== 'oauth') {
-      throw new Error('Not logged in to GitHub Copilot. Run /login first.');
+      throw new ProviderAuthRequiredError('Not logged in to GitHub Copilot.');
     }
 
     // getApiKey() refreshes the Copilot bearer if it has expired.
     const accessToken = await storage.getApiKey(COPILOT_PROVIDER_ID);
     if (!accessToken) {
-      throw new Error('Failed to refresh GitHub Copilot token. Please /login again.');
+      throw new ProviderAuthRequiredError('Failed to refresh the GitHub Copilot token.');
     }
     storage.reload();
 

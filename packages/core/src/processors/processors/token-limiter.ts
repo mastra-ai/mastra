@@ -1,9 +1,12 @@
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
-import { estimateTokenCount, sliceByTokens } from 'tokenx';
+import { estimateTokenCount } from 'tokenx';
 import type { MastraDBMessage } from '../../agent/message-list';
+import { parseDataUri, resolveFilePartMediaTypeAndData } from '../../agent/message-list/prompt/image-utils';
 import { TripWire } from '../../agent/trip-wire';
+import { groupLinkedToolMessages } from '../../memory/load-message-history';
 import type { ChunkType } from '../../stream';
-import type { ProcessInputStepArgs, ProcessOutputStreamArgs, Processor } from '../index';
+import { sliceByTokensSafe } from '../../utils/slice-by-tokens';
+import type { ProcessInputArgs, ProcessInputStepArgs, ProcessOutputStreamArgs, Processor } from '../index';
 
 /**
  * Configuration options for TokenLimiter processor
@@ -28,7 +31,13 @@ export interface TokenLimiterOptions {
    * - 'part': Only count tokens in the current part
    */
   countMode?: 'cumulative' | 'part';
-  trimMode?: 'best-fit' | 'contiguous';
+  trimMode?: 'best-fit' | 'contiguous' | 'memory-only';
+  /** In memory-only mode, free this many tokens below the limit (default 25%). */
+  atMaxRemoveTokens?: number;
+  /** Share memory's token estimator and per-part estimate cache. */
+  tokenCounter?: { countMessage(message: MastraDBMessage): number | Promise<number> };
+  /** Persist a memory cursor after trimming. */
+  onMemoryTrim?: (messages: MastraDBMessage[], requestContext?: ProcessInputArgs['requestContext']) => Promise<void>;
 }
 
 /**
@@ -45,13 +54,66 @@ type TokenLimiterTripWireMetadata = {
   messageCount?: number;
 };
 
+/**
+ * Flat estimate for an image payload. Providers bill images at a near-flat
+ * per-image cost, so the encoded size is a poor predictor of the real cost.
+ */
+const TOKENS_PER_IMAGE = 765;
+
+/** Estimate used when a media payload's decoded size cannot be determined. */
+const TOKENS_PER_MEDIA_FALLBACK = 258;
+
+/** Rough bytes-per-token ratio for non-image media, which is usually text-like once decoded. */
+const BYTES_PER_TOKEN = 4;
+
+type MediaPayload = { data: string; mediaType?: string; mimeType?: string };
+
+/**
+ * Detects the `{ data, mediaType | mimeType }` shape that tools return for images
+ * and file attachments, so the payload is estimated rather than tokenized as text.
+ */
+function isMediaPayload(value: unknown): value is MediaPayload {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.data !== 'string') return false;
+  return typeof candidate.mediaType === 'string' || typeof candidate.mimeType === 'string';
+}
+
+/**
+ * Estimate the token cost of a media payload without tokenizing its encoded bytes.
+ * A base64 image is tens of thousands of characters but costs a small, near-flat
+ * number of tokens, so stringifying it would inflate the count by an order of magnitude.
+ */
+function estimateMediaTokens(data: unknown, mediaType?: string): number {
+  if (mediaType?.startsWith('image/')) return TOKENS_PER_IMAGE;
+
+  let byteLength: number | undefined;
+
+  if (typeof data === 'string') {
+    const { isDataUri, base64Content } = parseDataUri(data);
+    // Remote URLs and provider file ids carry no locally knowable size.
+    if (isDataUri || !/^[a-z][a-z0-9+.-]*:/i.test(data)) {
+      byteLength = Math.floor((base64Content.length * 3) / 4);
+    }
+  } else if (data instanceof Uint8Array) {
+    byteLength = data.byteLength;
+  }
+
+  if (byteLength === undefined) return TOKENS_PER_MEDIA_FALLBACK;
+
+  return Math.max(1, Math.floor(byteLength / BYTES_PER_TOKEN));
+}
+
 export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLimiterTripWireMetadata> {
   public readonly id = 'token-limiter';
   public readonly name = 'Token Limiter';
   private maxTokens: number;
   private strategy: 'truncate' | 'abort';
   private countMode: 'cumulative' | 'part';
-  private trimMode: 'best-fit' | 'contiguous';
+  private trimMode: 'best-fit' | 'contiguous' | 'memory-only';
+  private atMaxRemoveTokens = 0;
+  private tokenCounter?: TokenLimiterOptions['tokenCounter'];
+  private onMemoryTrim?: TokenLimiterOptions['onMemoryTrim'];
 
   // Token counting constants for input processing
   private static readonly TOKENS_PER_MESSAGE = 3.8;
@@ -78,7 +140,67 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
       this.strategy = options.strategy || 'truncate';
       this.countMode = options.countMode || 'cumulative';
       this.trimMode = options.trimMode || 'best-fit';
+      this.atMaxRemoveTokens = options.atMaxRemoveTokens ?? this.maxTokens * 0.25;
+      this.tokenCounter = options.tokenCounter;
+      this.onMemoryTrim = options.onMemoryTrim;
+      if (
+        this.trimMode === 'memory-only' &&
+        (!Number.isFinite(this.maxTokens) ||
+          this.maxTokens < 0 ||
+          !Number.isFinite(this.atMaxRemoveTokens) ||
+          this.atMaxRemoveTokens < 0 ||
+          this.atMaxRemoveTokens > this.maxTokens)
+      ) {
+        throw new Error('Memory token limits must be finite, non-negative, and atMaxRemoveTokens cannot exceed limit');
+      }
     }
+  }
+
+  async processInput(args: ProcessInputArgs) {
+    if (this.trimMode === 'memory-only') await this.trimMemory(args.messageList, args.requestContext);
+    return args.messageList;
+  }
+
+  private async trimMemory(
+    messageList: ProcessInputStepArgs['messageList'],
+    requestContext?: ProcessInputArgs['requestContext'],
+  ): Promise<void> {
+    if (!messageList) return;
+    const sources = messageList.makeMessageSourceChecker();
+    const removableIds = new Set(
+      messageList.get.remembered
+        .db()
+        .filter(
+          message =>
+            message.role !== 'system' &&
+            !sources.input.has(message.id) &&
+            !sources.output.has(message.id) &&
+            !sources.context.has(message.id),
+        )
+        .map(message => message.id),
+    );
+    const candidateGroups = groupLinkedToolMessages(
+      messageList.get.all.db().sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
+    ).filter(group => group.every(message => removableIds.has(message.id)));
+    const counts = new Map<string, number>();
+    let total = TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
+    for (const message of messageList.getAllSystemMessages()) total += await this.countCoreSystemMessageTokens(message);
+    for (const message of messageList.get.all.db()) {
+      const tokens = await this.countMessage(message);
+      counts.set(message.id, tokens);
+      total += tokens;
+    }
+    if (total <= this.maxTokens) return;
+    const removed: MastraDBMessage[] = [];
+    const target = this.maxTokens - this.atMaxRemoveTokens;
+    for (const group of candidateGroups) {
+      if (total <= target) break;
+      removed.push(...group);
+      for (const message of group) total -= counts.get(message.id) ?? 0;
+    }
+    if (!removed.length) return;
+    await this.onMemoryTrim?.(removed, requestContext);
+    messageList.removeByIds(removed.map(message => message.id));
   }
 
   private countTokens(text: string): number {
@@ -96,6 +218,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   async processInputStep(args: ProcessInputStepArgs): Promise<void> {
     const { messageList } = args;
 
+    if (this.trimMode === 'memory-only') return this.trimMemory(messageList, args.requestContext);
     if (!messageList) return;
 
     const messages = messageList.get.all.db();
@@ -189,12 +312,19 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     return this.countTokens(tokenString) + TokenLimiterProcessor.TOKENS_PER_MESSAGE;
   }
 
+  /** Count one persisted message with the same estimator used by input limiting. */
+  public async countMessage(message: MastraDBMessage): Promise<number> {
+    return this.tokenCounter ? this.tokenCounter.countMessage(message) : this.countInputMessageTokens(message);
+  }
+
   /**
    * Count tokens for an input message, including overhead for message structure
    */
   private async countInputMessageTokens(message: MastraDBMessage): Promise<number> {
     let tokenString = message.role;
     let overhead = 0;
+    // Media is estimated rather than tokenized, so it is accumulated separately.
+    let mediaTokens = 0;
 
     // Handle content based on MastraMessageV2 structure
     let toolResultCount = 0; // Track tool results that will become separate messages
@@ -234,12 +364,31 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
               if (invocation.result !== undefined) {
                 if (typeof invocation.result === 'string') {
                   tokenString += invocation.result;
+                } else if (isMediaPayload(invocation.result)) {
+                  const { data, ...rest } = invocation.result;
+                  mediaTokens += estimateMediaTokens(data, invocation.result.mediaType ?? invocation.result.mimeType);
+                  tokenString += JSON.stringify(rest);
+                  overhead -= 12;
+                } else if (
+                  Array.isArray(invocation.result) &&
+                  invocation.result.length > 0 &&
+                  invocation.result.every(isMediaPayload)
+                ) {
+                  for (const entry of invocation.result as MediaPayload[]) {
+                    const { data, ...rest } = entry;
+                    mediaTokens += estimateMediaTokens(data, entry.mediaType ?? entry.mimeType);
+                    tokenString += JSON.stringify(rest);
+                  }
+                  overhead -= 12;
                 } else {
                   tokenString += JSON.stringify(invocation.result);
                   overhead -= 12;
                 }
               }
             }
+          } else if (part.type === 'file') {
+            const { data, mediaType } = resolveFilePartMediaTypeAndData(part);
+            mediaTokens += estimateMediaTokens(data, mediaType);
           } else {
             tokenString += JSON.stringify(part);
           }
@@ -257,13 +406,13 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     }
 
     const tokenCount = this.countTokens(tokenString);
-    const total = tokenCount + overhead;
+    const total = tokenCount + overhead + mediaTokens;
     return total;
   }
 
   async processOutputStream(args: ProcessOutputStreamArgs<TokenLimiterTripWireMetadata>): Promise<ChunkType | null> {
-    // Always process output streams (this is the main/original functionality)
     const { part, state, abort, writer } = args;
+    if (this.trimMode === 'memory-only') return part;
     const limit = this.maxTokens;
 
     // Chunks that don't carry generated output pass through untouched: counting
@@ -341,7 +490,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     messages: MastraDBMessage[];
     abort: (reason?: string) => never;
   }): Promise<MastraDBMessage[]> {
-    // Always process output results (this is the main/original functionality)
+    if (this.trimMode === 'memory-only') return args.messages;
     const { messages, abort } = args;
     const limit = this.maxTokens;
 
@@ -368,7 +517,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
             } else {
               // Truncate the text to fit within the remaining token limit
               const remainingTokens = Math.max(0, limit - cumulativeTokens);
-              const truncatedText = remainingTokens > 0 ? sliceByTokens(textContent, 0, remainingTokens) : '';
+              const truncatedText = remainingTokens > 0 ? sliceByTokensSafe(textContent, 0, remainingTokens) : '';
               cumulativeTokens += this.countTokens(truncatedText);
 
               return {

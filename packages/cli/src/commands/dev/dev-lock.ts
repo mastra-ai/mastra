@@ -6,7 +6,7 @@ import pc from 'picocolors';
 
 const LOCK_FILENAME = 'dev.lock';
 
-interface LockData {
+export interface LockData {
   pid: number;
   host?: string;
   port?: number;
@@ -137,6 +137,26 @@ export async function updateDevLock(dotMastraPath: string, host: string, port: n
     await writeFile(lockPath, JSON.stringify(data), 'utf-8');
   } catch {
     // Best-effort; if the lockfile can't be updated, don't block dev startup.
+  }
+}
+
+/**
+ * Read-only check for a live dev server in `dotMastraPath`, without side
+ * effects: unlike `acquireDevLock()`, this never removes a stale lockfile
+ * (removing it is `mastra dev`'s job when it next starts, not a caller that
+ * merely wants to know whether it's safe to touch the directory).
+ *
+ * Returns the lock data if a dev server currently owns it and is still
+ * alive, `null` if there's no lock or the pid it names is no longer running.
+ */
+export async function readLiveDevLock(dotMastraPath: string): Promise<LockData | null> {
+  const lockPath = getLockPath(dotMastraPath);
+  try {
+    const contents = await readFile(lockPath, 'utf-8');
+    const lock = parseLockContents(contents);
+    return lock && isProcessRunning(lock.pid) ? lock : null;
+  } catch {
+    return null;
   }
 }
 

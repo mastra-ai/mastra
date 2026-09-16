@@ -443,21 +443,19 @@ class ArrayFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
           : [];
       const filteredElements: Partial<OUTPUT>[] = [];
 
-      // Filter out incomplete elements (like empty objects {})
       for (let i = 0; i < rawElements.length; i++) {
         const element = rawElements[i];
 
-        // Skip the last element if it's incomplete (unless this is the final parse)
         if (i === rawElements.length - 1 && parseState !== 'successful-parse') {
-          // Only include the last element if it has meaningful content
+          // The last element may still be streaming. Partial objects are emitted
+          // once they have content; primitives (e.g. a truncated string or number)
+          // are withheld until the parse completes.
           if (element && typeof element === 'object' && Object.keys(element).length > 0) {
             filteredElements.push(element as Partial<OUTPUT>);
           }
-        } else {
-          // Include all non-last elements that have content
-          if (element && typeof element === 'object' && Object.keys(element).length > 0) {
-            filteredElements.push(element as Partial<OUTPUT>);
-          }
+        } else if (element !== undefined) {
+          // Non-last elements are complete: include them regardless of type
+          filteredElements.push(element as Partial<OUTPUT>);
         }
       }
 
@@ -488,15 +486,21 @@ class ArrayFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
     return { shouldEmit: false };
   }
 
-  async validateAndTransformFinal(_finalValue: string): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
-    const resultValue = this.textPreviousFilteredArray;
-
-    if (!resultValue) {
+  async validateAndTransformFinal(finalRawValue: string): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
+    if (!finalRawValue) {
       return {
         success: false,
         error: new Error('No object generated: could not parse the response.'),
       };
     }
+
+    // Validate the elements from the final text rather than the streaming-filtered
+    // array so nothing withheld during partial parsing is lost at the end.
+    const { value } = await parsePartialJson(this.preprocessText(finalRawValue));
+    const resultValue =
+      value && typeof value === 'object' && 'elements' in value && Array.isArray(value.elements)
+        ? value.elements
+        : this.textPreviousFilteredArray;
 
     return this.validateValue(resultValue);
   }
@@ -734,6 +738,7 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
         runId: currentRunId ?? '',
         type: 'object-result',
         object: structuredOutput.fallbackValue as OUTPUT,
+        metadata: { fallback: true },
       });
     } else {
       controller.enqueue({
@@ -758,7 +763,14 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
 export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: StandardSchemaWithJSON<OUTPUT>) {
   let previousArrayLength = 0;
   let hasStartedArray = false;
-  let chunkCount = 0;
+  // The first array chunk is held back instead of being emitted immediately.
+  // A single object chunk may already contain the complete array (coarse or
+  // batched provider deltas), in which case it should be emitted as one closed
+  // JSON string. But the same first chunk can also be the first slice of a
+  // longer incremental sequence, so we can only decide once the next chunk
+  // arrives or the stream ends. Emitting it closed too early produced invalid
+  // JSON like a closed array followed by more elements (see #18758).
+  let pendingFirstArrayChunk: unknown[] | undefined;
   const outputSchema = getTransformedSchema(schema);
 
   return new TransformStream<ChunkType<OUTPUT>, string>({
@@ -768,24 +780,21 @@ export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: Sta
       }
 
       if (outputSchema?.outputFormat === 'array' && Array.isArray(chunk.object)) {
-        chunkCount++;
-
-        // If this is the first chunk, decide between complete vs incremental streaming
-        if (chunkCount === 1) {
-          // If the first chunk already has multiple elements or is complete,
-          // emit as single JSON string
-          if (chunk.object.length > 0) {
-            controller.enqueue(JSON.stringify(chunk.object));
-            previousArrayLength = chunk.object.length;
-            hasStartedArray = true;
-            return;
-          }
-        }
-
-        // Incremental streaming mode (multiple chunks)
-        if (!hasStartedArray) {
+        if (pendingFirstArrayChunk !== undefined) {
+          // A second chunk arrived, so the buffered chunk was only the first
+          // slice. Switch to incremental mode and replay the buffered elements.
           controller.enqueue('[');
           hasStartedArray = true;
+          for (let i = 0; i < pendingFirstArrayChunk.length; i++) {
+            const elementJson = JSON.stringify(pendingFirstArrayChunk[i]);
+            controller.enqueue(i > 0 ? ',' + elementJson : elementJson);
+          }
+          previousArrayLength = pendingFirstArrayChunk.length;
+          pendingFirstArrayChunk = undefined;
+        } else if (!hasStartedArray) {
+          // First chunk -- buffer it and wait to see whether the stream ends here.
+          pendingFirstArrayChunk = chunk.object;
+          return;
         }
 
         // Emit new elements that were added
@@ -804,8 +813,18 @@ export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: Sta
       }
     },
     flush(controller) {
-      // Close the array when the stream ends (only for incremental streaming)
-      if (hasStartedArray && outputSchema?.outputFormat === 'array' && chunkCount > 1) {
+      if (outputSchema?.outputFormat !== 'array') {
+        return;
+      }
+      if (pendingFirstArrayChunk !== undefined) {
+        // The stream ended after a single array chunk: it was the complete
+        // array, so emit it as one closed JSON string. An empty single chunk
+        // still needs a well-formed '[]'.
+        const firstChunk = pendingFirstArrayChunk;
+        pendingFirstArrayChunk = undefined;
+        controller.enqueue(firstChunk.length > 0 ? JSON.stringify(firstChunk) : '[]');
+      } else if (hasStartedArray) {
+        // Close the incrementally-streamed array.
         controller.enqueue(']');
       }
     },

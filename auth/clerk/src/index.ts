@@ -4,10 +4,12 @@ import type {
   ISSOProvider,
   ISessionProvider,
   IUserProvider,
+  MastraAuthRequest,
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
 } from '@internal/auth';
+import { getRequestHeader } from '@internal/auth';
 import type { EEUser } from '@internal/auth/ee';
 import type { MastraAuthProviderOptions } from '@internal/auth/provider';
 import { MastraAuthProvider } from '@internal/auth/provider';
@@ -223,6 +225,18 @@ interface MastraAuthClerkOptions extends MastraAuthProviderOptions<ClerkUser> {
    */
   scopes?: string[];
   /**
+   * Restrict login to members of a single Clerk organization, identified by its ID.
+   * When set, users who are not members of this organization are denied access.
+   * Falls back to the CLERK_ORGANIZATION_ID env var.
+   */
+  organizationId?: string;
+  /**
+   * Restrict login to members of a single Clerk organization, identified by its slug.
+   * When set, users who are not members of this organization are denied access.
+   * Falls back to the CLERK_ORGANIZATION_SLUG env var.
+   */
+  organizationSlug?: string;
+  /**
    * Session configuration for SSO cookie management.
    */
   session?: MastraAuthClerkSessionOptions;
@@ -274,6 +288,11 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> implements IU
   private secureCookies: boolean;
   private ssoEnabled: boolean;
 
+  // Single-organization restriction (optional)
+  private organizationId: string | null;
+  private organizationSlug: string | null;
+  private orgRestricted: boolean;
+
   constructor(options?: MastraAuthClerkOptions) {
     super({ name: options?.name ?? 'clerk' });
 
@@ -313,6 +332,19 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> implements IU
     this.cookiePassword = cookiePassword;
     this.secureCookies = options?.session?.secureCookies ?? process.env.NODE_ENV === 'production';
 
+    // Single-organization restriction (optional)
+    this.organizationId = options?.organizationId ?? process.env.CLERK_ORGANIZATION_ID ?? null;
+    this.organizationSlug = options?.organizationSlug ?? process.env.CLERK_ORGANIZATION_SLUG ?? null;
+    if (this.organizationId && this.organizationSlug) {
+      // Both selectors set (e.g. an option paired with a stale env var) could
+      // resolve to two different organizations and grant access to both,
+      // contradicting the single-organization guarantee. Require exactly one.
+      throw new Error(
+        'Configure only one of organizationId (CLERK_ORGANIZATION_ID) or organizationSlug (CLERK_ORGANIZATION_SLUG) to restrict login to a single Clerk organization',
+      );
+    }
+    this.orgRestricted = !!(this.organizationId || this.organizationSlug);
+
     // SSO is enabled when OAuth credentials are configured
     this.ssoEnabled = !!(oauthClientId && oauthClientSecret);
 
@@ -342,15 +374,12 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> implements IU
   // MastraAuthProvider Implementation
   // ============================================================================
 
-  async authenticateToken(
-    token: string,
-    request?: Request | { header(name: string): string | undefined },
-  ): Promise<ClerkUser | null> {
+  async authenticateToken(token: string, request?: MastraAuthRequest): Promise<ClerkUser | null> {
     // When SSO is enabled, try the encrypted session cookie first (like Okta pattern).
     // The auth middleware may call this with an empty token for browser requests
     // that only carry a session cookie.
     if (this.ssoEnabled && request) {
-      const sessionUser = await this.getUserFromSessionCookie(request as Request);
+      const sessionUser = await this.getUserFromSessionCookie(request);
       if (sessionUser) return sessionUser as unknown as ClerkUser;
     }
 
@@ -369,7 +398,60 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> implements IU
 
   async authorizeUser(user: ClerkUser) {
     // Session cookie users have `id`, JWT users have `sub`
-    return !!(user.sub || (user as unknown as EEUser).id);
+    const userId = user.sub || (user as unknown as EEUser).id;
+    if (!userId) return false;
+
+    if (this.orgRestricted) {
+      return this.isUserInOrganization(userId, user);
+    }
+
+    return true;
+  }
+
+  /**
+   * Check whether a user belongs to the configured single organization.
+   *
+   * Fast path: if the token/claims already carry `org_id`/`org_slug` for an
+   * org-scoped session, match against them without an API call. Otherwise fall
+   * back to listing the user's organization memberships via the Clerk API.
+   *
+   * Fails closed: if membership cannot be determined (e.g. API error), access
+   * is denied.
+   */
+  protected async isUserInOrganization(userId: string, claims?: ClerkUser): Promise<boolean> {
+    const claimOrgId = (claims as Record<string, unknown> | undefined)?.org_id as string | undefined;
+    const claimOrgSlug = (claims as Record<string, unknown> | undefined)?.org_slug as string | undefined;
+
+    if (
+      (this.organizationId && claimOrgId === this.organizationId) ||
+      (this.organizationSlug && claimOrgSlug === this.organizationSlug)
+    ) {
+      return true;
+    }
+
+    const matches = (membership: { organization?: { id?: string; slug?: string } }) =>
+      (this.organizationId && membership.organization?.id === this.organizationId) ||
+      (this.organizationSlug && membership.organization?.slug === this.organizationSlug);
+
+    // The Clerk API paginates memberships (default page size 10), so a user in
+    // more organizations than one page could be falsely denied. Walk every page
+    // until a match is found or the full list is exhausted.
+    const limit = 100;
+    try {
+      for (let offset = 0; ; offset += limit) {
+        const memberships = await this.clerk.users.getOrganizationMembershipList({ userId, limit, offset });
+        const list = (memberships as { data?: Array<{ organization?: { id?: string; slug?: string } }> })?.data ?? [];
+        if (list.some(matches)) return true;
+
+        const totalCount = (memberships as { totalCount?: number })?.totalCount;
+        const fetched = offset + list.length;
+        if (list.length < limit || (typeof totalCount === 'number' && fetched >= totalCount)) {
+          return false;
+        }
+      }
+    } catch {
+      return false;
+    }
   }
 
   // ============================================================================
@@ -482,14 +564,8 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> implements IU
   /**
    * Extract user from the encrypted SSO session cookie.
    */
-  private async getUserFromSessionCookie(
-    request: Request | { header(name: string): string | undefined },
-  ): Promise<EEUser | null> {
-    // Handle both standard Request and HonoRequest (.header() vs .headers.get())
-    const cookie =
-      'header' in request && typeof (request as any).header === 'function'
-        ? (request as any).header('cookie')
-        : (request as Request).headers?.get('cookie');
+  private async getUserFromSessionCookie(request: MastraAuthRequest): Promise<EEUser | null> {
+    const cookie = getRequestHeader(request, 'cookie');
     if (!cookie) return null;
 
     const match = cookie.match(new RegExp(`(?:^|;\\s*)${escapeRegex(this.cookieName)}=([^;]+)`));
@@ -623,6 +699,11 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> implements IU
         }
       } catch {
         // Use the user info we already have
+      }
+
+      // Enforce single-organization restriction (fails closed)
+      if (self.orgRestricted && !(await self.isUserInOrganization(user.id))) {
+        throw new Error('User is not a member of the required organization');
       }
 
       // Create encrypted session cookie

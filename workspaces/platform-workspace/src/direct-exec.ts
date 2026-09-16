@@ -47,7 +47,7 @@ export interface DirectExecWebSocket {
  */
 export type DirectExecWebSocketFactory = (endpoint: string, subprotocols: string[]) => DirectExecWebSocket;
 
-/** Lease payload returned by `POST /v1/projects/:projectId/sandbox/:sandboxId/exec-lease`. */
+/** Lease payload returned by `POST /v1/:provider/projects/:projectId/sandbox/:sandboxId/exec-lease`. */
 export interface ExecLease {
   jwt: string;
   wsEndpoint: string;

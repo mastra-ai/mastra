@@ -7,10 +7,11 @@
  */
 import { EntityType } from '@internal/core/storage';
 
+import type { MessageListInput } from '../../agent/message-list/types';
 import type { MastraError } from '../../error';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
-import type { LanguageModelUsage, ProviderMetadata, StepStartPayload } from '../../stream/types';
+import type { LanguageModelUsage, ProviderMetadata, StepStartPayload, StepTripwireData } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
 import type {
   CustomSamplerOptions,
@@ -106,6 +107,20 @@ export enum SpanType {
   GRAPH_ACTION = 'graph_action',
   /** Inline data mapping between pipeline stages (e.g. a tool's `toModelOutput` transform) */
   MAPPING = 'mapping',
+  /** Dynamic agent skills resolver run */
+  /**
+   * @deprecated Use {@link SpanType.SKILL_ACTION} with `operation: 'resolve'`.
+   * No longer emitted; retained so existing exporters and stored traces keep
+   * resolving the value.
+   */
+  SKILL_RESOLUTION = 'skill_resolution',
+  /** Any skill lifecycle operation: resolve, inject, activate, search, read */
+  SKILL_ACTION = 'skill_action',
+  /**
+   * An agent state signal emitted onto the model context (point-in-time event,
+   * not a duration).
+   */
+  AGENT_SIGNAL = 'agent_signal',
 }
 
 export { EntityType };
@@ -193,6 +208,10 @@ export interface InputTokenDetails {
   cacheRead?: number;
   /** Tokens written to cache (cache creation - Anthropic only) */
   cacheWrite?: number;
+  /** Tokens written to Anthropic's 5-minute ephemeral cache */
+  cacheWrite5m?: number;
+  /** Tokens written to Anthropic's 1-hour ephemeral cache */
+  cacheWrite1h?: number;
   /** Audio input tokens */
   audio?: number;
   /** Image input tokens (includes PDF pages) */
@@ -431,6 +450,8 @@ export interface ProviderToolCallAttributes extends AIBaseAttributes {
  * MCP Tool Call attributes
  */
 export interface MCPToolCallAttributes extends AIBaseAttributes {
+  /** Tool category, e.g. 'tool', 'function' */
+  toolType?: string;
   /** MCP server identifier */
   mcpServer: string;
   /** MCP server version */
@@ -454,13 +475,86 @@ export interface MappingAttributes extends AIBaseAttributes {
 }
 
 /**
- * Processor attributes
+ * Skill resolution attributes.
+ *
+ * Emitted from two places, distinguished by `phase`:
+ *  - `'resolver'` — a dynamic agent skills resolver run (`skills` configured as
+ *    a function), spanning the resolver call itself.
+ *  - `'injection'` — the skills processor injecting the catalog into the system
+ *    message. This fires for static skills too, so a misconfigured skills path
+ *    surfaces as `skillCount: 0` instead of producing no skill span at all.
+ *
+ * Extends `ProcessorPipelineAttributes` because the injection phase is emitted
+ * by a processor and must still carry the runner's pipeline facts.
  */
-export interface ProcessorRunAttributes extends AIBaseAttributes {
+/** @deprecated Use {@link SkillActionAttributes}. */
+export interface SkillResolutionAttributes extends AIBaseAttributes, ProcessorPipelineAttributes {
+  /** Agent whose skills resolver ran */
+  agentId?: string;
+  /** Number of skills resolved (resolver) or advertised to the model (injection) */
+  skillCount?: number;
+  /** Which half of skill resolution this span covers */
+  phase?: 'resolver' | 'injection';
+  /** Format the catalog was rendered in (injection only) */
+  skillFormat?: string;
+}
+
+/**
+ * Skill action attributes — one span type for the whole skill lifecycle,
+ * discriminated by `operation`, mirroring how `WORKSPACE_ACTION` covers
+ * filesystem/sandbox/search under one type.
+ *
+ * The agent-internal half:
+ *  - `'resolve'` — a dynamic skills resolver run (`skills` configured as a function).
+ *  - `'inject'`  — the skills processor advertising the catalog in the system
+ *    message. Emitted for static skills too, so a skills path that resolves to
+ *    nothing surfaces as `skillCount: 0` rather than producing no span at all.
+ *
+ * The model-initiated half, emitted by the skill tools:
+ *  - `'activate'` | `'search'` | `'read'`
+ *
+ * Extends `ProcessorPipelineAttributes` because the `inject` operation is
+ * emitted by a processor and must still carry the runner's pipeline facts.
+ */
+export interface SkillActionAttributes extends AIBaseAttributes, ProcessorPipelineAttributes {
+  /** Which skill lifecycle operation this span covers */
+  operation: 'resolve' | 'inject' | 'activate' | 'search' | 'read';
+  /** Agent the skills belong to */
+  agentId?: string;
+  /** Number of skills resolved (resolve) or advertised to the model (inject) */
+  skillCount?: number;
+  /** Format the catalog was rendered in (inject only) */
+  skillFormat?: string;
+  /** Skill the operation targeted (activate / read) */
+  skillName?: string;
+  /** Whether the operation succeeded */
+  success?: boolean;
+}
+
+/**
+ * Attributes recorded for every processor the processor runner executes,
+ * independent of the span type that processor declares.
+ *
+ * A processor may opt out of the default `PROCESSOR_RUN` span type (see
+ * `Processor.spanType`) so its span is labelled with the Mastra subsystem it
+ * belongs to — e.g. the skills processor emits `SKILL_ACTION` rather than
+ * an anonymous processor span. The runner still records the pipeline facts
+ * below on that span, so retyping never loses the mutation log or the
+ * processor's position in the chain. Any attributes interface reachable from a
+ * declared `spanType` must therefore extend this.
+ */
+export interface ProcessorPipelineAttributes {
   /** Processor executor type (workflow or legacy) */
   processorExecutor?: 'workflow' | 'legacy';
   /** Processor index in the agent */
   processorIndex?: number;
+  /**
+   * Milliseconds spent inside `processOutputStream`, summed across every
+   * chunk of the stream. Only set on output stream processor spans. The
+   * span's own duration covers the whole stream, model latency included, so
+   * this is what separates a slow processor from a slow model.
+   */
+  hookDurationMs?: number;
   /** MessageList mutations performed by this processor */
   messageListMutations?: Array<{
     type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
@@ -483,6 +577,33 @@ export interface ProcessorRunAttributes extends AIBaseAttributes {
 }
 
 /**
+ * Processor attributes — the default span type for a processor that does not
+ * declare one of its own.
+ */
+export interface ProcessorRunAttributes extends AIBaseAttributes, ProcessorPipelineAttributes {}
+
+/**
+ * Agent signal attributes — one emission on a processor's state-signal lane.
+ *
+ * Recorded as an **event** span: a signal is a point-in-time fact about what
+ * entered the model's context, not a unit of work with a duration. The work of
+ * computing it is already timed by the enclosing processor span.
+ *
+ * Emitted only when a signal is actually produced. A step where the lane
+ * computed no change records nothing, so an unchanged turn stays silent.
+ */
+export interface AgentSignalAttributes extends AIBaseAttributes {
+  /** State lane this signal belongs to (`stateId`), e.g. 'tasks', 'goal', 'browser' */
+  stateId?: string;
+  /** Whether this emission replaced the state or carried only the change since the last snapshot */
+  mode?: 'snapshot' | 'delta';
+  /** Tag the signal is wrapped in for the model, e.g. 'current-task-list' */
+  tagName?: string;
+  /** Processor that produced the signal */
+  processorId?: string;
+}
+
+/**
  * Workflow Run attributes
  */
 export interface WorkflowRunAttributes extends AIBaseAttributes {
@@ -496,6 +617,10 @@ export interface WorkflowRunAttributes extends AIBaseAttributes {
 export interface WorkflowStepAttributes extends AIBaseAttributes {
   /** Step status */
   status?: WorkflowStepStatus;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -508,6 +633,12 @@ export interface WorkflowConditionalAttributes extends AIBaseAttributes {
   truthyIndexes?: number[];
   /** Which steps will be executed */
   selectedSteps?: string[];
+  /** Authored graph entry id for this control-flow operation */
+  entryId?: string;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -528,6 +659,12 @@ export interface WorkflowParallelAttributes extends AIBaseAttributes {
   branchCount: number;
   /** Step IDs being executed in parallel */
   parallelSteps?: string[];
+  /** Authored graph entry id for this control-flow operation */
+  entryId?: string;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -542,6 +679,12 @@ export interface WorkflowLoopAttributes extends AIBaseAttributes {
   totalIterations?: number;
   /** Number of steps to run concurrently in foreach loop */
   concurrency?: number;
+  /** Authored graph entry id for this control-flow operation */
+  entryId?: string;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -554,6 +697,12 @@ export interface WorkflowSleepAttributes extends AIBaseAttributes {
   untilDate?: Date;
   /** Sleep type */
   sleepType?: 'fixed' | 'dynamic';
+  /** Authored graph entry id for this sleep operation */
+  entryId?: string;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -573,14 +722,26 @@ export interface WorkflowWaitEventAttributes extends AIBaseAttributes {
 /**
  * Memory operation attributes
  */
-export interface MemoryOperationAttributes extends AIBaseAttributes {
-  operationType?: 'recall' | 'save' | 'delete' | 'update';
+export interface MemoryOperationAttributes extends AIBaseAttributes, ProcessorPipelineAttributes {
+  /**
+   * Which memory operation this span covers.
+   *
+   * `observe` and `reflect` are the observational-memory model passes; the rest
+   * are the read/write operations on stored memory.
+   */
+  operationType?: 'recall' | 'save' | 'delete' | 'update' | 'observe' | 'reflect';
   messageCount?: number;
   embeddingTokens?: number;
   semanticRecallEnabled?: boolean;
   vectorResultCount?: number;
   workingMemoryEnabled?: boolean;
   lastMessages?: number | false;
+  /** Tokens fed to the observational-memory pass (observe / reflect) */
+  inputTokens?: number;
+  /** Model the observational-memory pass selected, or '(dynamic-model)' when resolved per call */
+  selectedModel?: string;
+  /** Whether an `observe` pass ran across multiple threads */
+  multiThread?: boolean;
 }
 
 /**
@@ -588,13 +749,13 @@ export interface MemoryOperationAttributes extends AIBaseAttributes {
  * Operation-specific inputs/outputs are recorded via span input/output,
  * not as attributes.
  */
-export interface WorkspaceActionAttributes extends AIBaseAttributes {
+export interface WorkspaceActionAttributes extends AIBaseAttributes, ProcessorPipelineAttributes {
   /** Workspace identifier */
   workspaceId?: string;
   /** Human-readable workspace name */
   workspaceName?: string;
   /** Action category */
-  category: 'filesystem' | 'sandbox' | 'search' | 'skill' | 'mount';
+  category: 'filesystem' | 'sandbox' | 'search' | 'skill' | 'mount' | 'computer';
   /** Sandbox provider name (e.g. 'e2b', 'docker', 'local') */
   sandboxProvider?: string;
   /** Filesystem provider name (e.g. 'local', 'agentfs', 's3') */
@@ -761,12 +922,198 @@ export interface SpanTypeMap {
   [SpanType.RAG_ACTION]: RagActionAttributes;
   [SpanType.GRAPH_ACTION]: GraphActionAttributes;
   [SpanType.MAPPING]: MappingAttributes;
+  [SpanType.SKILL_RESOLUTION]: SkillResolutionAttributes;
+  [SpanType.SKILL_ACTION]: SkillActionAttributes;
+  [SpanType.AGENT_SIGNAL]: AgentSignalAttributes;
 }
 
 /**
  * Union type for cases that need to handle any span type
  */
 export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
+
+// ============================================================================
+// Span Input & Output Payloads
+// ============================================================================
+
+/**
+ * Output recorded on `AGENT_RUN`, `MODEL_GENERATION` and `MODEL_STEP` spans
+ * when the run stops before the span's own result exists: a durable run
+ * suspended, or the caller aborted.
+ */
+export interface InterruptedSpanOutput {
+  status: 'suspended' | 'aborted';
+  /** Why the run stopped */
+  reason?: string;
+  /** Tool that suspended the run */
+  toolName?: string;
+  /** Tool call that suspended the run */
+  toolCallId?: string;
+}
+
+/**
+ * Input recorded on a resumed `AGENT_RUN` span: the resume data the caller
+ * passed, plus the suspended tool's identity when it is known.
+ */
+export interface AgentRunResumeInput {
+  /** Resume data, kept nested when it names a different tool than the suspended one */
+  resumeData?: unknown;
+  /** Tool the run resumes into */
+  toolName?: string;
+  /** Tool call the run resumes into */
+  toolCallId?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Input recorded on `AGENT_RUN` spans: the messages the caller passed for a
+ * fresh run, or the resume data for a resumed run.
+ */
+export type AgentRunInput = MessageListInput | { messages: MessageListInput } | AgentRunResumeInput;
+
+/** Output recorded on an `AGENT_RUN` span when the run finishes. */
+export interface AgentRunResult {
+  /** Final response text */
+  text?: string;
+  /** Final structured output */
+  object?: unknown;
+  /** Generated files */
+  files?: unknown[];
+  /** Tripwire that aborted the run */
+  tripwire?: StepTripwireData;
+}
+
+/** Output recorded on `AGENT_RUN` spans. */
+export type AgentRunOutput = AgentRunResult | InterruptedSpanOutput;
+
+/**
+ * Input recorded on `MODEL_GENERATION` spans.
+ *
+ * Mastra's own loop records the normalized model messages, system messages
+ * first. SDK agents (`@mastra/claude`, `@mastra/openai`, ...) record the raw
+ * messages the caller passed, so `messages` keeps the full `MessageListInput`
+ * shape rather than a single message format.
+ */
+export interface ModelGenerationInput {
+  /** Messages sent to the model */
+  messages: MessageListInput;
+  /** Output schema, when structured output was requested */
+  schema?: unknown;
+}
+
+/**
+ * Output recorded on a `MODEL_GENERATION` span when the generation finishes.
+ * Every field is optional: a durable run records only `text`.
+ */
+export interface ModelGenerationResult {
+  /** Generated text */
+  text?: string;
+  /** Generated structured output */
+  object?: unknown;
+  /** Reasoning details */
+  reasoning?: unknown;
+  /** Reasoning as plain text */
+  reasoningText?: string;
+  /** Generated files */
+  files?: unknown[];
+  /** Sources the model cited */
+  sources?: unknown[];
+  /** Tool calls the model requested */
+  toolCalls?: unknown[];
+  /** Provider warnings */
+  warnings?: unknown[];
+}
+
+/** Output recorded on `MODEL_GENERATION` spans. */
+export type ModelGenerationOutput = ModelGenerationResult | InterruptedSpanOutput;
+
+/** One message in the shallow conversation preview a model step records. */
+export interface ModelStepMessage {
+  /** Message role (e.g., 'system', 'user', 'assistant', 'tool') */
+  role: string;
+  /** Message text, with non-text parts summarized */
+  content: string;
+}
+
+/**
+ * Input recorded on `MODEL_STEP` and `MODEL_INFERENCE` spans: a shallow
+ * preview of what the step sent to the model. A normalized message list when
+ * the step carries messages; otherwise a summary of the request body, or the
+ * raw request when it cannot be summarized.
+ */
+export type ModelStepInput = ModelStepMessage[] | Record<string, unknown> | string;
+
+/**
+ * Output recorded on `MODEL_STEP` and `MODEL_INFERENCE` spans when the step
+ * finishes: the step result without `usage`, which lives on the attributes.
+ */
+export interface ModelStepResult {
+  /** Text generated in this step */
+  text?: string;
+  /** Tool calls the model requested in this step */
+  toolCalls?: unknown[];
+  /** Accumulated step results, when the loop reports them */
+  steps?: unknown[];
+  /** Structured output generated in this step */
+  object?: unknown;
+}
+
+/** Output recorded on `MODEL_STEP` spans. `MODEL_INFERENCE` spans record a `ModelStepResult` only. */
+export type ModelStepOutput = ModelStepResult | InterruptedSpanOutput;
+
+/**
+ * Span types whose `input` Mastra writes itself with a fixed shape. Every
+ * other span type keeps `any`, as before: tool arguments, workflow data and
+ * the like are caller-defined, `MODEL_CHUNK` multiplexes several chunk shapes
+ * on one span type, and `GENERIC` is the escape hatch for custom spans.
+ */
+export interface SpanInputMap {
+  [SpanType.AGENT_RUN]: AgentRunInput;
+  [SpanType.MODEL_GENERATION]: ModelGenerationInput;
+  [SpanType.MODEL_STEP]: ModelStepInput;
+  [SpanType.MODEL_INFERENCE]: ModelStepInput;
+}
+
+/** Span types whose `output` Mastra writes itself with a fixed shape. Same rules as `SpanInputMap`. */
+export interface SpanOutputMap {
+  [SpanType.AGENT_RUN]: AgentRunOutput;
+  [SpanType.MODEL_GENERATION]: ModelGenerationOutput;
+  [SpanType.MODEL_STEP]: ModelStepOutput;
+  [SpanType.MODEL_INFERENCE]: ModelStepResult;
+}
+
+/** `input` payload of a span: the mapped shape when `SpanInputMap` lists the type, otherwise `any`. */
+export type SpanInput<TType extends SpanType> = TType extends keyof SpanInputMap ? SpanInputMap[TType] : any;
+
+/** `output` payload of a span: the mapped shape when `SpanOutputMap` lists the type, otherwise `any`. */
+export type SpanOutput<TType extends SpanType> = TType extends keyof SpanOutputMap ? SpanOutputMap[TType] : any;
+
+/**
+ * Span types a processor may declare via `Processor.spanType`.
+ *
+ * Restricted to those whose attributes extend `ProcessorPipelineAttributes`,
+ * so the runner can always record `processorIndex`, `messageListMutations` and
+ * `tripwireAbort` on the span regardless of which type the processor picked.
+ * Adding a domain span type to this set is therefore a matter of mixing
+ * `ProcessorPipelineAttributes` into its attributes interface.
+ */
+export type ProcessorSpanType = Exclude<
+  {
+    [K in keyof SpanTypeMap]: SpanTypeMap[K] extends ProcessorPipelineAttributes ? K : never;
+  }[keyof SpanTypeMap],
+  // `ProcessorPipelineAttributes` is all-optional, so the check above is
+  // structural rather than nominal: a span type satisfies it by not
+  // conflicting with it, not by mixing it in. Two types pass that way and are
+  // excluded explicitly.
+  //
+  // `AGENT_RUN`, because a processor labelling its span as the agent run that
+  // contains it would reparent the trace's own root.
+  //
+  // `SKILL_RESOLUTION`, because it is deprecated and no longer emitted; it
+  // stays in `SpanTypeMap` so stored traces keep resolving, but nothing new
+  // should declare it. Declare `SKILL_ACTION` with `operation: 'resolve'`.
+  SpanType.AGENT_RUN | SpanType.SKILL_RESOLUTION
+>;
 
 // ============================================================================
 // Span Interfaces
@@ -814,9 +1161,9 @@ interface BaseSpan<TType extends SpanType> {
   /** Labels used to categorize and filter traces. Only valid on root spans. */
   tags?: string[];
   /** Input passed at the start of the span */
-  input?: any;
+  input?: SpanInput<TType>;
   /** Output generated at the end of the span */
-  output?: any;
+  output?: SpanOutput<TType>;
   /** Error information if span failed */
   errorInfo?: SpanErrorInfo;
   /** Snapshot of the RequestContext */
@@ -844,6 +1191,9 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
   /** End the span */
   end(options?: EndSpanOptions<TType>): void;
 
+  /** End the span and any descendant spans that are still open, applying `options` to each */
+  endTree(options?: EndSpanOptions<TType>): void;
+
   /** Record an error for the span, optionally end the span as well */
   error(options: ErrorSpanOptions<TType>): void;
 
@@ -865,6 +1215,16 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
 
   /** Get the closest parent spanId that isn't an internal span */
   getParentSpanId(includeInternalSpans?: boolean): string | undefined;
+
+  /**
+   * Optional hook returning the spanId observability signals (logs, metrics,
+   * scores) should reference: the span's own id when it reaches exporters,
+   * otherwise the nearest exportable ancestor's id, or undefined when none
+   * exists. Covers exclusions known when the span is created (internal spans,
+   * `excludeSpanTypes`); a `spanFilter` or a span output processor can still
+   * drop a span at export time, since those only run once the span has ended.
+   */
+  getExportedSpanId?(): string | undefined;
 
   /** Find the closest parent span of a specific type by walking up the parent chain */
   findParent<T extends SpanType>(spanType: T): Span<T> | undefined;
@@ -979,8 +1339,10 @@ export interface AIModelGenerationSpan extends Span<SpanType.MODEL_GENERATION> {
  * - RecordedSpan: span data loaded from storage with annotation methods
  */
 export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
-  /** Parent span id reference (undefined for root spans) */
+  /** Parent span id reference — a span Mastra created within this trace (undefined for root spans) */
   parentSpanId?: string;
+  /** Parent from an external tracing system (ambient OTel / dd-trace) that Mastra did not create; carried for external correlation, not Mastra's own parentage */
+  externalParentSpanId?: string;
   /** `TRUE` if the span is the root span of a trace */
   isRootSpan: boolean;
   /**
@@ -1004,6 +1366,8 @@ export interface EndGenerationOptions extends EndSpanOptions<SpanType.MODEL_GENE
   usage?: LanguageModelUsage;
   /** Provider-specific metadata for extracting cache tokens */
   providerMetadata?: ProviderMetadata;
+  /** Provider metadata for every completed model step, when the caller has it available. */
+  stepProviderMetadata?: readonly (ProviderMetadata | undefined)[];
 }
 
 /**
@@ -1206,9 +1570,9 @@ interface CreateBaseOptions<TType extends SpanType> {
  */
 export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
   /** Input data */
-  input?: any;
+  input?: SpanInput<TType>;
   /** Output data (for event spans) */
-  output?: any;
+  output?: SpanOutput<TType>;
   /** Labels used to categorize and filter traces. Only valid on root spans. */
   tags?: string[];
   /** Parent span */
@@ -1227,9 +1591,18 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
   spanId?: string;
   /**
    * Parent span ID to use for this span (1-16 hexadecimal characters).
+   * Must reference a Mastra span within this trace (a rebuilt span's parent,
+   * or the suspended span a resumed run links back to).
    * Only used for root spans without a parent.
    */
   parentSpanId?: string;
+  /**
+   * Parent span ID from an external tracing system (1-16 hexadecimal characters),
+   * such as an ambient OpenTelemetry span Mastra did not create. Exported to
+   * external tracing exporters for correlation; not part of Mastra's own parentage.
+   * Only used for root spans without a parent.
+   */
+  externalParentSpanId?: string;
   /**
    * Start time for this span.
    * Used when rebuilding a span from cached data, or when a span is created
@@ -1257,7 +1630,7 @@ export interface StartSpanOptions<TType extends SpanType> extends CreateSpanOpti
  */
 export interface ChildSpanOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
   /** Input data */
-  input?: any;
+  input?: SpanInput<TType>;
   /**
    * Start time for this span.
    * Used when a span is created after the work it represents began
@@ -1272,7 +1645,7 @@ export interface ChildSpanOptions<TType extends SpanType> extends CreateBaseOpti
  */
 export interface ChildEventOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
   /** Output data */
-  output?: any;
+  output?: SpanOutput<TType>;
 }
 
 interface UpdateBaseOptions<TType extends SpanType> {
@@ -1285,7 +1658,14 @@ interface UpdateBaseOptions<TType extends SpanType> {
 /** Options for ending a span, with optional final attributes and output. */
 export interface EndSpanOptions<TType extends SpanType> extends UpdateBaseOptions<TType> {
   /** Output data */
-  output?: any;
+  output?: SpanOutput<TType>;
+  /**
+   * Also close any descendant spans still open, without applying these
+   * options to them. Use at terminal points (error, abort, suspension) where
+   * nothing below this span may keep running. Unlike `endTree()`, options
+   * apply to this span only.
+   */
+  endTree?: boolean;
 }
 
 /** Options for updating a span's attributes, input, or output mid-flight. */
@@ -1293,9 +1673,9 @@ export interface UpdateSpanOptions<TType extends SpanType> extends UpdateBaseOpt
   /** Span name override */
   name?: string;
   /** Input data */
-  input?: any;
+  input?: SpanInput<TType>;
   /** Output data */
-  output?: any;
+  output?: SpanOutput<TType>;
 }
 
 /** Options for recording an error on a span. */
@@ -1304,6 +1684,12 @@ export interface ErrorSpanOptions<TType extends SpanType> extends UpdateBaseOpti
   error: MastraError | Error;
   /** End the span when true */
   endSpan?: boolean;
+  /**
+   * Also close any descendant spans still open, without recording the error
+   * on them. Implies ending this span. Use at terminal points where nothing
+   * below this span may keep running.
+   */
+  endTree?: boolean;
 }
 
 /** Options for retrieving an existing span or creating a new one from a tracing context. */
@@ -1313,7 +1699,7 @@ export interface GetOrCreateSpanOptions<TType extends SpanType> {
   entityType?: EntityType;
   entityId?: string;
   entityName?: string;
-  input?: any;
+  input?: SpanInput<TType>;
   attributes?: SpanTypeMap[TType];
   metadata?: Record<string, any>;
   tracingPolicy?: TracingPolicy;
@@ -1321,6 +1707,11 @@ export interface GetOrCreateSpanOptions<TType extends SpanType> {
   tracingContext?: TracingContext;
   requestContext?: RequestContext;
   mastra?: Mastra;
+  /**
+   * Span id of the suspended span a resumed run links back to. It is a Mastra
+   * span within the trace, so it becomes the new root span's parent.
+   */
+  resumedFromSpanId?: string;
 }
 
 /**
@@ -1399,7 +1790,9 @@ export interface TracingOptions {
   traceId?: string;
   /**
    * Parent span ID to use for this execution (1-16 hexadecimal characters).
-   * If provided, the root span will be created as a child of this span.
+   * Intended for correlating with an external tracing system (e.g. an
+   * OpenTelemetry span in the calling service): the id is exported for
+   * external tracing but is not treated as a parent within Mastra storage.
    */
   parentSpanId?: string;
   /**
@@ -1424,7 +1817,14 @@ export interface TracingOptions {
 export interface SpanIds {
   traceId: string;
   spanId: string;
+  /** Parent that is a Mastra span (one this bridge created within the trace). */
   parentSpanId?: string;
+  /**
+   * Parent that belongs to the external tracing system (e.g. an ambient
+   * OpenTelemetry or dd-trace span) that Mastra did not create.
+   * Bridges set exactly one of `parentSpanId` / `externalParentSpanId`.
+   */
+  externalParentSpanId?: string;
 }
 
 /**
@@ -1472,7 +1872,14 @@ export type TracingEvent =
 export interface SpanOutputProcessor {
   /** Processor name */
   name: string;
-  /** Process span before export */
+  /**
+   * Process span before export.
+   *
+   * Mutate the span you receive and return the same instance, or return
+   * `undefined` to drop it. Do not return a copy: `exportSpan` and `isValid`
+   * are instance members of the live span, so a copy cannot be exported and
+   * is dropped with a logged processor error.
+   */
   process(span?: AnySpan): AnySpan | undefined;
   /** Shutdown processor */
   shutdown(): Promise<void>;

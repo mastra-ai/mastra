@@ -5,7 +5,7 @@ import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { ModelPackInfo } from '../../../../../api/types';
 import { ModelPacksSection } from '../ModelPacksSection';
 
@@ -13,15 +13,17 @@ const PACKS_URL = `${TEST_BASE_URL}/web/config/model-packs`;
 const activateUrl = (id: string) => `${PACKS_URL}/${encodeURIComponent(id)}/activate`;
 const itemUrl = (id: string) => `${PACKS_URL}/${encodeURIComponent(id)}`;
 
-const RESOURCE_ID = 'res-1';
-
 const models: AgentControllerAvailableModel[] = [
   { id: 'openai/gpt-x', provider: 'openai' } as AgentControllerAvailableModel,
   { id: 'anthropic/claude-x', provider: 'anthropic' } as AgentControllerAvailableModel,
 ];
 
-function packsResponse(packs: ModelPackInfo[], activePackId: string | null = null) {
-  return HttpResponse.json({ packs, activePackId });
+function packsResponse(
+  packs: ModelPackInfo[],
+  activePackId: string | null = null,
+  sessionPackId: string | null = null,
+) {
+  return HttpResponse.json({ packs, activePackId, sessionPackId });
 }
 
 /** Open a searchable combobox and pick an option (Base UI selects on pointer events). */
@@ -32,6 +34,15 @@ async function pickOption(user: ReturnType<typeof userEvent.setup>, trigger: HTM
   fireEvent.click(option, { detail: 1 });
   // Wait for the popup to close so the next interaction targets a settled DOM.
   await waitFor(() => expect(screen.queryByRole('option', { name })).not.toBeInTheDocument());
+}
+
+async function enterCustomModel(user: ReturnType<typeof userEvent.setup>, trigger: HTMLElement, modelId: string) {
+  await user.click(trigger);
+  await user.type(await screen.findByPlaceholderText('Search models…'), modelId);
+  const option = await screen.findByRole('option', { name: `Use “${modelId}”` });
+  fireEvent.pointerDown(option, { pointerType: 'mouse' });
+  fireEvent.click(option, { detail: 1 });
+  await waitFor(() => expect(screen.queryByRole('option', { name: `Use “${modelId}”` })).not.toBeInTheDocument());
 }
 
 async function rowFor(packName: string): Promise<HTMLLIElement> {
@@ -59,7 +70,7 @@ describe('ModelPacksSection', () => {
         }),
       );
 
-      renderWithProviders(<ModelPacksSection resourceId={RESOURCE_ID} models={models} />);
+      renderWithProviders(<ModelPacksSection models={models} />);
 
       expect(await screen.findByRole('status', { name: 'Loading model packs' })).toBeInTheDocument();
       expect(screen.queryByText(/Loading model packs/)).not.toBeInTheDocument();
@@ -73,36 +84,36 @@ describe('ModelPacksSection', () => {
     it('renders the available packs', async () => {
       server.use(http.get(PACKS_URL, () => packsResponse([builtinPack])));
 
-      renderWithProviders(<ModelPacksSection resourceId={RESOURCE_ID} models={models} />);
-
-      expect(await screen.findByText('Builtin Pack')).toBeInTheDocument();
-    });
-  });
-
-  describe('when there is no resourceId', () => {
-    it('still lists the catalog but disables Activate and shows the open-project hint', async () => {
-      let queryString: string | null = null;
-      server.use(
-        http.get(PACKS_URL, ({ request }) => {
-          queryString = new URL(request.url).search;
-          return packsResponse([builtinPack]);
-        }),
-      );
-
       renderWithProviders(<ModelPacksSection models={models} />);
 
       expect(await screen.findByText('Builtin Pack')).toBeInTheDocument();
-      expect(screen.getByText(/Open a factory to activate/)).toBeInTheDocument();
-      // No resourceId means the request is unscoped.
-      expect(queryString).toBe('');
-
-      const row = await rowFor('Builtin Pack');
-      expect(within(row).getByRole('button', { name: 'Activate' })).toBeDisabled();
+      expect(screen.queryByRole('button', { name: 'Use in this chat' })).not.toBeInTheDocument();
     });
   });
 
-  describe('when a pack is activated', () => {
-    it('POSTs the resourceId and session scope and refetches so the pack shows active', async () => {
+  describe('when setting the chat default', () => {
+    it('selects a default pack for future chats', async () => {
+      let activateBody: unknown;
+      server.use(
+        http.get(PACKS_URL, () => packsResponse([builtinPack])),
+        http.post(activateUrl('builtin'), async ({ request }) => {
+          activateBody = await request.json();
+          return HttpResponse.json({ ok: true, target: 'default', activePackId: 'builtin' });
+        }),
+      );
+
+      const user = userEvent.setup();
+      renderWithProviders(<ModelPacksSection models={models} />);
+
+      const row = await rowFor('Builtin Pack');
+      await user.click(within(row).getByRole('button', { name: 'Set default' }));
+
+      await waitFor(() => expect(activateBody).toEqual({ target: 'default' }));
+    });
+  });
+
+  describe('when a default pack is selected', () => {
+    it('updates the personal default without changing the current chat', async () => {
       const packs: ModelPackInfo[] = [builtinPack];
       let activateBody: unknown;
       server.use(
@@ -110,20 +121,37 @@ describe('ModelPacksSection', () => {
         http.post(activateUrl('builtin'), async ({ request }) => {
           activateBody = await request.json();
           packs[0] = { ...builtinPack, active: true };
-          return HttpResponse.json({ ok: true, activePackId: 'builtin' });
+          return HttpResponse.json({ ok: true, target: 'default', activePackId: 'builtin' });
         }),
       );
 
       const user = userEvent.setup();
-      renderWithProviders(<ModelPacksSection resourceId={RESOURCE_ID} scope="/tmp/worktree" models={models} />);
+      renderWithProviders(<ModelPacksSection models={models} />);
 
       const row = await rowFor('Builtin Pack');
-      await user.click(within(row).getByRole('button', { name: 'Activate' }));
+      await user.click(within(row).getByRole('button', { name: 'Set default' }));
 
-      // The session registers under (resourceId, scope), so activation must
-      // forward both or the server-side lookup misses.
-      await waitFor(() => expect(activateBody).toEqual({ resourceId: RESOURCE_ID, scope: '/tmp/worktree' }));
-      await waitFor(() => expect(within(row).getByText('Active')).toBeInTheDocument());
+      await waitFor(() => expect(activateBody).toEqual({ target: 'default' }));
+      await waitFor(() => expect(within(row).getByText('Default')).toBeInTheDocument());
+    });
+
+    it('clears the personal default', async () => {
+      let active = true;
+      server.use(
+        http.get(PACKS_URL, () => packsResponse([{ ...builtinPack, active }], active ? 'builtin' : null)),
+        http.delete(`${PACKS_URL}/active`, () => {
+          active = false;
+          return HttpResponse.json({ ok: true, activePackId: null });
+        }),
+      );
+
+      const user = userEvent.setup();
+      renderWithProviders(<ModelPacksSection models={models} />);
+
+      const row = await rowFor('Builtin Pack');
+      await user.click(within(row).getByRole('button', { name: 'Clear default' }));
+
+      await waitFor(() => expect(within(row).getByRole('button', { name: 'Set default' })).toBeInTheDocument());
     });
   });
 
@@ -148,7 +176,7 @@ describe('ModelPacksSection', () => {
       );
 
       const user = userEvent.setup();
-      renderWithProviders(<ModelPacksSection resourceId={RESOURCE_ID} models={models} />);
+      renderWithProviders(<ModelPacksSection models={models} />);
 
       await user.click(await screen.findByRole('button', { name: 'New pack' }));
       await user.type(screen.getByPlaceholderText('e.g. my-pack'), 'My Pack');
@@ -165,6 +193,38 @@ describe('ModelPacksSection', () => {
         }),
       );
       expect(await screen.findByText('My Pack')).toBeInTheDocument();
+    });
+
+    it('POSTs model IDs that are not in the available-model catalog', async () => {
+      let postBody: unknown;
+      server.use(
+        http.get(PACKS_URL, () => packsResponse([])),
+        http.post(PACKS_URL, async ({ request }) => {
+          postBody = await request.json();
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+
+      const user = userEvent.setup();
+      const { client } = renderWithProviders(<ModelPacksSection models={models} />);
+
+      await user.click(await screen.findByRole('button', { name: 'New pack' }));
+      await user.type(screen.getByPlaceholderText('e.g. my-pack'), 'Latest Models');
+      const selects = screen.getAllByRole('combobox');
+      await enterCustomModel(user, selects[0]!, 'openai/gpt-next');
+      await enterCustomModel(user, selects[1]!, 'anthropic/claude-next');
+      await enterCustomModel(user, selects[2]!, 'openai/gpt-next-mini');
+      await user.click(screen.getByRole('button', { name: 'Add' }));
+      await waitForMutationsIdle(client);
+
+      expect(postBody).toEqual({
+        name: 'Latest Models',
+        models: {
+          build: 'openai/gpt-next',
+          plan: 'anthropic/claude-next',
+          fast: 'openai/gpt-next-mini',
+        },
+      });
     });
   });
 
@@ -183,7 +243,7 @@ describe('ModelPacksSection', () => {
       );
 
       const user = userEvent.setup();
-      renderWithProviders(<ModelPacksSection resourceId={RESOURCE_ID} models={models} />);
+      renderWithProviders(<ModelPacksSection models={models} />);
 
       const row = await rowFor('My Pack');
       await user.click(within(row).getByRole('button', { name: 'Remove' }));

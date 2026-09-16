@@ -151,6 +151,99 @@ describe('Structured output with memory - assistant message in final position (#
     expect(lastMessage.role).toBe('user');
   });
 
+  it('guards Claude 5 assistant-role input without configured input processors or memory', async () => {
+    const capturedPrompts: any[] = [];
+    const mockModel = new MockLanguageModelV2({
+      provider: 'anthropic',
+      modelId: 'claude-opus-5',
+      doGenerate: async options => {
+        capturedPrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: JSON.stringify({ answer: 'done' }) }],
+          warnings: [],
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'claude-5-trailing-assistant-guard-test',
+      name: 'Claude 5 Trailing Assistant Guard Test',
+      instructions: 'Return a structured response.',
+      model: mockModel,
+    });
+
+    await agent.generate([{ role: 'assistant', content: 'Draft response' }], {
+      structuredOutput: { schema: z.object({ answer: z.string() }) },
+    });
+
+    const nonSystemMessages = capturedPrompts[0].filter((message: any) => message.role !== 'system');
+    expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'user' });
+  });
+
+  it('preserves assistant prefill for Claude 4.5', async () => {
+    const capturedPrompts: any[] = [];
+    const mockModel = new MockLanguageModelV2({
+      provider: 'anthropic',
+      modelId: 'claude-sonnet-4-5',
+      doGenerate: async options => {
+        capturedPrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: JSON.stringify({ answer: 'done' }) }],
+          warnings: [],
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'claude-4-5-assistant-prefill-test',
+      name: 'Claude 4.5 Assistant Prefill Test',
+      instructions: 'Return a structured response.',
+      model: mockModel,
+    });
+
+    await agent.generate([{ role: 'assistant', content: 'Draft response' }], {
+      structuredOutput: { schema: z.object({ answer: z.string() }) },
+    });
+
+    const nonSystemMessages = capturedPrompts[0].filter((message: any) => message.role !== 'system');
+    expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'assistant' });
+  });
+
+  it('does not guard non-Anthropic assistant-role input', async () => {
+    const capturedPrompts: any[] = [];
+    const mockModel = new MockLanguageModelV2({
+      provider: 'openai',
+      modelId: 'gpt-5',
+      doGenerate: async options => {
+        capturedPrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: JSON.stringify({ answer: 'done' }) }],
+          warnings: [],
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'non-anthropic-trailing-assistant-control-test',
+      name: 'Non-Anthropic Trailing Assistant Control Test',
+      instructions: 'Return a structured response.',
+      model: mockModel,
+    });
+
+    await agent.generate([{ role: 'assistant', content: 'Draft response' }], {
+      structuredOutput: { schema: z.object({ answer: z.string() }) },
+    });
+
+    const nonSystemMessages = capturedPrompts[0].filter((message: any) => message.role !== 'system');
+    expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'assistant' });
+  });
+
   it('should not send prompt ending with assistant message when using stream with assistant-role input, structuredOutput and memory', async () => {
     const threadId = randomUUID();
     const resourceId = 'user-12800-stream';
@@ -472,6 +565,89 @@ describe('Structured output memory inheritance', () => {
     expect(promptText).toContain('violet');
     expect(promptText).toContain('Lisbon');
     expect(promptText).toContain('Mochi');
+  });
+
+  it('keeps memory context but excludes rejected output when useAgent retries', async () => {
+    const threadId = randomUUID();
+    const resourceId = `structured-output-retry-memory-${randomUUID()}`;
+    const mockMemory = new MockMemory();
+    const mainModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: 'Seed response.' }],
+        warnings: [],
+      }),
+    });
+    const structuringPrompts: unknown[] = [];
+    const structuringModel = new MockLanguageModelV2({
+      doStream: async options => {
+        structuringPrompts.push(options.prompt);
+        const count = structuringPrompts.length === 1 ? 'invalid' : 4;
+        const text = JSON.stringify({ count });
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'structuring-text' },
+            { type: 'text-delta', id: 'structuring-text', delta: text },
+            { type: 'text-end', id: 'structuring-text' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'structured-output-use-agent-retry-boundary',
+      name: 'Structured output useAgent retry boundary',
+      instructions: 'Answer briefly.',
+      model: mainModel,
+      memory: mockMemory,
+    });
+
+    await mockMemory.createThread({ threadId, resourceId });
+    await agent.generate('Remember the project is Wren.', {
+      memory: { thread: threadId, resource: resourceId },
+    });
+    let requestCalls = 0;
+    (mainModel as any).doGenerate = async () => {
+      requestCalls++;
+      const text = requestCalls === 1 ? 'There are three files.' : 'There are four files.';
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text }],
+        warnings: [],
+      };
+    };
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+
+    const result = await agent.generate('Count the files.', {
+      maxProcessorRetries: 1,
+      memory: { thread: threadId, resource: resourceId },
+      requestContext,
+      structuredOutput: {
+        schema: z.object({ count: z.number() }),
+        model: structuringModel,
+        useAgent: true,
+      },
+    });
+
+    expect(result.object).toEqual({ count: 4 });
+    expect(structuringPrompts).toHaveLength(2);
+    const retryPrompt = JSON.stringify(structuringPrompts[1]);
+    expect(retryPrompt).toContain('Remember the project is Wren.');
+    expect(retryPrompt).toContain('There are four files.');
+    expect(retryPrompt).not.toContain('There are three files.');
   });
 
   it('does not leak the structuring agent readOnly memory config into the parent request context', async () => {

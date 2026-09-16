@@ -105,6 +105,14 @@ test.afterEach(async () => {
   await resetStorage();
 });
 
+/** Edit lives in the stored scorer's actions menu on the detail page. */
+async function openEditPage(page: Page) {
+  const menu = page.getByRole('button', { name: 'Scorer actions menu' });
+  await expect(menu).toBeVisible({ timeout: 10000 });
+  await menu.click();
+  await page.getByRole('menuitem', { name: 'Edit Scorer' }).click();
+}
+
 test.describe('CMS create scorer page', () => {
   test.describe('when the create page first loads', () => {
     test('displays page title and header correctly', async ({ page }) => {
@@ -231,10 +239,7 @@ test.describe('CMS create scorer page', () => {
 
       await expect(page).toHaveURL(/\/scorers\/[a-zA-Z0-9-]+/, { timeout: 15000 });
 
-      // Click the Edit button on the detail page
-      const editLink = page.getByRole('link', { name: 'Edit' });
-      await expect(editLink).toBeVisible({ timeout: 10000 });
-      await editLink.click();
+      await openEditPage(page);
 
       // Wait for the edit page to load
       await expect(page).toHaveURL(/\/cms\/scorers\/[a-zA-Z0-9-]+\/edit/, { timeout: 15000 });
@@ -279,10 +284,7 @@ test.describe('CMS create scorer page', () => {
 
       await expect(page).toHaveURL(/\/scorers\/[a-zA-Z0-9-]+/, { timeout: 15000 });
 
-      // Wait for Edit link to be visible before clicking
-      const editLink = page.getByRole('link', { name: 'Edit' });
-      await expect(editLink).toBeVisible({ timeout: 10000 });
-      await editLink.click();
+      await openEditPage(page);
 
       await expect(page).toHaveURL(/\/cms\/scorers\/[a-zA-Z0-9-]+\/edit/, { timeout: 15000 });
 
@@ -319,10 +321,7 @@ test.describe('CMS create scorer page', () => {
 
       await expect(page).toHaveURL(/\/scorers\/[a-zA-Z0-9-]+/, { timeout: 15000 });
 
-      // Navigate to edit page
-      const editLink = page.getByRole('link', { name: 'Edit' });
-      await expect(editLink).toBeVisible({ timeout: 10000 });
-      await editLink.click();
+      await openEditPage(page);
 
       await expect(page).toHaveURL(/\/cms\/scorers\/[a-zA-Z0-9-]+\/edit/, { timeout: 15000 });
 

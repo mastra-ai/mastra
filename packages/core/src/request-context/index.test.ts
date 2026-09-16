@@ -571,4 +571,28 @@ describe('RequestContext', () => {
       expect(ctx.serializeForSpan()).toEqual({});
     });
   });
+
+  describe('Issue #21286: open-map *Raw helpers', () => {
+    it('should read and write undeclared keys through getRaw/setRaw', () => {
+      const ctx = new RequestContext<{ tenantTier?: 'free' | 'pro' }>();
+      ctx.set('tenantTier', 'pro');
+      ctx.setRaw('session.cache', { hits: 0 });
+
+      expect(ctx.get('tenantTier')).toBe('pro');
+      expect(ctx.getRaw('session.cache')).toEqual({ hits: 0 });
+      expect([...ctx.keys()]).toEqual(['tenantTier', 'session.cache']);
+    });
+
+    it('should pass reserved middleware keys through a schema-typed context', () => {
+      const ctx = new RequestContext<{ verbose?: boolean }>();
+      ctx.set('verbose', true);
+      ctx.setRaw(MASTRA_AUTH_TOKEN_KEY, 'secret-token');
+
+      expect(ctx.hasRaw(MASTRA_AUTH_TOKEN_KEY)).toBe(true);
+      expect(ctx.getRaw(MASTRA_AUTH_TOKEN_KEY)).toBe('secret-token');
+      expect(ctx.deleteRaw(MASTRA_AUTH_TOKEN_KEY)).toBe(true);
+      expect(ctx.hasRaw(MASTRA_AUTH_TOKEN_KEY)).toBe(false);
+      expect(ctx.get('verbose')).toBe(true);
+    });
+  });
 });

@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
-import type { StorageDomains } from '@mastra/core/storage';
+import type { RetentionConfig, StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore, ObservabilityStorage as CoreObservabilityStorage } from '@mastra/core/storage';
 
 import { DuckDBConnection } from './db/index';
@@ -12,7 +12,21 @@ import type {
 const OBSERVABILITY_UPGRADE_MESSAGE =
   'DuckDB observability storage requires `@mastra/core` with observability storage support. Upgrade `@mastra/core` to use this store.';
 const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
-const DUCKDB_OBSERVABILITY_FEATURES = ['delta-polling'] as const;
+const DUCKDB_OBSERVABILITY_FEATURES = [
+  'metrics',
+  'logs',
+  'trace-query',
+  'trace-query-discovery',
+  'thread-query',
+] as const;
+const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
+  'metrics',
+  'logs',
+  'delta-polling',
+  'trace-query',
+  'trace-query-discovery',
+  'thread-query',
+] as const;
 
 function isObservabilityCompatibilityError(error: unknown): boolean {
   if (!(error instanceof Error)) {
@@ -117,12 +131,12 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
 
   getFeatures(): ReturnType<ObservabilityStoreImpl['getFeatures']> {
     // Deliberately mirrored here so the lazy facade can advertise DuckDB's
-    // static delta polling feature before the delegate is instantiated.
+    // static observability features before the delegate is instantiated.
     if (!coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE)) {
-      return undefined;
+      return DUCKDB_OBSERVABILITY_FEATURES;
     }
 
-    return DUCKDB_OBSERVABILITY_FEATURES;
+    return DUCKDB_OBSERVABILITY_DELTA_FEATURES;
   }
 
   async init(...args: Parameters<ObservabilityStoreImpl['init']>): ReturnType<ObservabilityStoreImpl['init']> {
@@ -139,6 +153,11 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['migrateSpans']> {
     const delegate = await this.requireDelegate();
     return delegate.migrateSpans(...args);
+  }
+
+  async prune(...args: Parameters<ObservabilityStoreImpl['prune']>): ReturnType<ObservabilityStoreImpl['prune']> {
+    const delegate = await this.requireDelegate();
+    return delegate.prune(...args);
   }
 
   async dangerouslyClearAll(
@@ -200,6 +219,34 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['listTraces']> {
     const delegate = await this.requireDelegate();
     return delegate.listTraces(...args);
+  }
+
+  async queryTraces(
+    ...args: Parameters<ObservabilityStoreImpl['queryTraces']>
+  ): ReturnType<ObservabilityStoreImpl['queryTraces']> {
+    const delegate = await this.requireDelegate();
+    return delegate.queryTraces(...args);
+  }
+
+  async getTraceQueryObservedFields(
+    ...args: Parameters<ObservabilityStoreImpl['getTraceQueryObservedFields']>
+  ): ReturnType<ObservabilityStoreImpl['getTraceQueryObservedFields']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getTraceQueryObservedFields(...args);
+  }
+
+  async getTraceQueryValues(
+    ...args: Parameters<ObservabilityStoreImpl['getTraceQueryValues']>
+  ): ReturnType<ObservabilityStoreImpl['getTraceQueryValues']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getTraceQueryValues(...args);
+  }
+
+  async queryThreads(
+    ...args: Parameters<ObservabilityStoreImpl['queryThreads']>
+  ): ReturnType<ObservabilityStoreImpl['queryThreads']> {
+    const delegate = await this.requireDelegate();
+    return delegate.queryThreads(...args);
   }
 
   async listTracesLight(
@@ -361,6 +408,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.batchCreateScores(...args);
   }
 
+  async deleteScores(
+    ...args: Parameters<ObservabilityStoreImpl['deleteScores']>
+  ): ReturnType<ObservabilityStoreImpl['deleteScores']> {
+    const delegate = await this.requireDelegate();
+    return delegate.deleteScores(...args);
+  }
+
   async listScores(
     ...args: Parameters<ObservabilityStoreImpl['listScores']>
   ): ReturnType<ObservabilityStoreImpl['listScores']> {
@@ -417,11 +471,25 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.batchCreateFeedback(...args);
   }
 
+  async deleteFeedback(
+    ...args: Parameters<ObservabilityStoreImpl['deleteFeedback']>
+  ): ReturnType<ObservabilityStoreImpl['deleteFeedback']> {
+    const delegate = await this.requireDelegate();
+    return delegate.deleteFeedback(...args);
+  }
+
   async listFeedback(
     ...args: Parameters<ObservabilityStoreImpl['listFeedback']>
   ): ReturnType<ObservabilityStoreImpl['listFeedback']> {
     const delegate = await this.requireDelegate();
     return delegate.listFeedback(...args);
+  }
+
+  async updateFeedbackReviewStatus(
+    ...args: Parameters<ObservabilityStoreImpl['updateFeedbackReviewStatus']>
+  ): ReturnType<ObservabilityStoreImpl['updateFeedbackReviewStatus']> {
+    const delegate = await this.requireDelegate();
+    return delegate.updateFeedbackReviewStatus(...args);
   }
 
   async getFeedbackAggregate(
@@ -476,6 +544,11 @@ export interface DuckDBStoreConfig {
    * shared application server.
    */
   threads?: number;
+  /**
+   * Opt-in age-based retention policies. Only configured tables are pruned.
+   * Call `store.prune()` from your scheduler to apply them.
+   */
+  retention?: RetentionConfig;
 }
 
 /**
@@ -508,7 +581,7 @@ export class DuckDBStore extends MastraCompositeStore {
 
   constructor(config: DuckDBStoreConfig = {}) {
     const id = config.id ?? 'duckdb';
-    super({ id, name: 'DuckDBStore' });
+    super({ id, name: 'DuckDBStore', retention: config.retention });
 
     this.db = new DuckDBConnection({ path: config.path, memoryLimit: config.memoryLimit, threads: config.threads });
     this.observabilityStore = new ObservabilityStorageDuckDB({ db: this.db });

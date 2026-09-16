@@ -1,0 +1,24 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Send the next turn.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Next turn completed."
+      }
+    },
+    {
+      "match": {
+        "userMessage": "Steer while active.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Steer recovery follow-up completed."
+      }
+    }
+  ]
+}

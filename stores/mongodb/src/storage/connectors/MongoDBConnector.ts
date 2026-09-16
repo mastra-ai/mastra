@@ -88,6 +88,14 @@ export class MongoDBConnector {
     return db.collection(collectionName);
   }
 
+  async collectionExists(collectionName: string): Promise<boolean> {
+    if (this.#handler) {
+      return true;
+    }
+    const db = await this.getConnection();
+    return db.listCollections({ name: collectionName }).hasNext();
+  }
+
   /**
    * Returns true when the deployment supports multi-document transactions
    * (replica set or sharded cluster). Standalone servers and custom connector

@@ -18,39 +18,24 @@ export type {
 } from './resources/a2a';
 export { agentControllerMessageText, isKnownAgentControllerEvent } from './resources/agent-controller';
 export type {
-  AgentControllerInfo,
   MastraDBMessage,
   MastraMessageContentV2,
   MastraMessagePart,
   AgentControllerEvent,
   KnownAgentControllerEvent,
   OtherAgentControllerEvent,
-  CreateAgentControllerSessionResponse,
   AgentControllerRequestOptions,
   SubscribeAgentControllerSessionOptions,
   AgentControllerSubscription,
-  AgentControllerSessionState,
-  AgentControllerSessionSettings,
-  AgentControllerOMProgress,
-  AgentControllerModeInfo,
-  AgentControllerThreadInfo,
-  AgentControllerTaskSnapshot,
-  AgentControllerAvailableModel,
-  AgentControllerWorkspaceStatus,
-  AgentControllerGoalRecord,
-  SendNotificationInput,
-  SendNotificationResult,
   PlanResume,
-  PermissionPolicy,
-  PermissionRules,
-  ToolCategory,
 } from './resources/agent-controller';
 export { RequestContext } from '@mastra/core/request-context';
 // ObservabilityCollector type is available for power users but most
 // users interact via `observe` on the tool execution context.
 export type { ObservabilityCollector } from './observability/types';
+export type { QueryTraceThreadsInput, QueryTraceThreadsResult, QueryTracesInput } from './resources/observability';
 export type { UIMessageWithMetadata } from '@mastra/core/agent';
-export type { GetMetricTimeSeriesResponse } from '@mastra/core/storage';
+export type { GetMetricTimeSeriesResponse } from './types';
 export type {
   Body,
   Client,

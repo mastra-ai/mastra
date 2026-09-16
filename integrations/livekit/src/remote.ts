@@ -213,7 +213,11 @@ export function createRemoteAgentReplyGenerator(options: RemoteAgentReplyGenerat
       // The server schema requires a resource when memory is present; default it to the thread id,
       // matching the worker's own thread bootstrap.
       memory: ctx.memory
-        ? { thread: ctx.memory.thread, resource: ctx.memory.resource ?? ctx.memory.thread }
+        ? {
+            thread: ctx.memory.thread,
+            resource: ctx.memory.resource ?? ctx.memory.thread,
+            ...(ctx.memory.options ? { options: ctx.memory.options } : {}),
+          }
         : undefined,
       requestContext: serializeRequestContext(ctx.requestContext),
       ...extraBody,

@@ -23,7 +23,22 @@ import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { MessageList } from '../../message-list';
 import { createDurableAgent } from '../create-durable-agent';
+import { createDurableAgenticWorkflow } from './create-durable-agentic-workflow';
+
+function findDowhileCondition(steps: any[]): ((...args: any[]) => Promise<boolean>) | undefined {
+  for (const entry of steps ?? []) {
+    if (entry.type === 'loop' && entry.loopType === 'dowhile') return entry.condition;
+
+    const nestedSteps =
+      entry.type === 'step' && entry.step?.executionGraph ? entry.step.executionGraph.steps : entry.steps;
+    const condition = nestedSteps ? findDowhileCondition(nestedSteps) : undefined;
+    if (condition) return condition;
+  }
+
+  return undefined;
+}
 
 function createToolThenTextModel(toolName: string, toolArgs: object, finalText: string) {
   let callCount = 0;
@@ -74,7 +89,38 @@ describe('DurableAgent messageId rotation between iterations', () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await pubsub.close();
+  });
+
+  it('propagates message-list deserialize failures from the inter-iteration boundary', async () => {
+    const workflow = createDurableAgenticWorkflow({ maxSteps: 3 });
+    const condition = findDowhileCondition((workflow as any).executionGraph.steps);
+    expect(condition).toBeDefined();
+
+    const deserializeError = new Error('durable message-list state is unreadable');
+    vi.spyOn(MessageList.prototype, 'deserialize').mockImplementation(() => {
+      throw deserializeError;
+    });
+
+    const state = {
+      runId: 'run-deserialize-failure',
+      agentId: 'deserialize-failure-agent',
+      messageListState: { unreadable: true },
+      messageId: 'message-before-boundary',
+      options: { maxSteps: 3 },
+      iterationCount: 1,
+      accumulatedSteps: [],
+      accumulatedUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      lastStepResult: { isContinued: true },
+    };
+
+    await expect(
+      condition!({
+        inputData: state,
+        getInitData: () => ({ agentId: state.agentId, state: {} }),
+      }),
+    ).rejects.toBe(deserializeError);
   });
 
   it('invokes mastra.generateId() in the dowhile predicate when continuing to the next iteration', async () => {

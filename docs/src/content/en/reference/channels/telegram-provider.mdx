@@ -1,0 +1,379 @@
+---
+title: "Reference: TelegramProvider | Channel Providers"
+description: "TelegramProvider connects Mastra agents to Telegram bots with managed installations, webhook or polling delivery, command registration, and streaming replies."
+packages:
+  - "@mastra/telegram"
+---
+
+# TelegramProvider
+
+`TelegramProvider` connects Mastra agents to Telegram bots through the Bot API. Register it on `Mastra.channels` to manage bot installations, choose webhook or polling delivery, verify webhook secrets, register commands, and route Telegram conversations to agents.
+
+Use `TelegramProvider` when you want Mastra to own the bot lifecycle. For the lower-level path where you configure the Telegram adapter and webhook yourself, use [`createTelegramAdapter`](/integrations/channels/telegram) on the agent's `channels.adapters`.
+
+## Usage example
+
+Create a bot with [BotFather](https://t.me/botfather), set `TELEGRAM_BOT_TOKEN`, and register the provider with a public base URL for webhook delivery:
+
+```typescript title="src/mastra/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { Mastra } from '@mastra/core/mastra'
+import { TelegramProvider } from '@mastra/telegram'
+
+const supportAgent = new Agent({
+  id: 'support',
+  name: 'Support agent',
+  instructions: 'Help users with product questions.',
+  model: 'openai/gpt-5-mini',
+})
+
+const telegram = new TelegramProvider({
+  baseUrl: 'https://your-app.example.com',
+})
+
+export const mastra = new Mastra({
+  agents: { supportAgent },
+  channels: { telegram },
+})
+
+await telegram.connect('support', {
+  botToken: process.env.TELEGRAM_BOT_TOKEN,
+})
+```
+
+When `botToken` is omitted, `connect()` creates a pending installation and returns a BotFather deep link instead of activating the bot immediately.
+
+## Constructor parameters
+
+`TelegramProviderConfig` combines Telegram lifecycle options, adapter behavior, and a curated subset of [`ChannelConfig`](/reference/agents/channels) options forwarded to each connected agent. All fields are optional.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'baseUrl',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Public HTTPS base URL used to register per-bot webhooks. May be auto-detected from the Mastra server config. Required when the resolved mode is webhook.',
+  },
+  {
+    name: 'storage',
+    type: 'ChannelsStorage',
+    isOptional: true,
+    description:
+      "Storage for bot installations. Defaults to Mastra's channels storage when available, then falls back to in-memory storage for development and tests.",
+  },
+  {
+    name: 'apiBaseUrl',
+    type: 'string',
+    isOptional: true,
+    defaultValue: "'https://api.telegram.org'",
+    description: 'Telegram Bot API origin. Override it for a self-hosted Bot API server or test server.',
+  },
+  {
+    name: 'encryptionKey',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Passphrase used to encrypt bot and webhook secret tokens at rest with AES-256-GCM. Falls back to MASTRA_ENCRYPTION_KEY. Without a key, persistent storage saves the tokens as plaintext.',
+  },
+  {
+    name: 'mode',
+    type: "'auto' | 'webhook' | 'polling'",
+    isOptional: true,
+    defaultValue: "'auto'",
+    description:
+      "Update transport. 'auto' uses webhooks when a base URL is available and polling otherwise. Telegram doesn't allow webhooks and long polling for the same bot at the same time.",
+  },
+  {
+    name: 'allowedUpdates',
+    type: 'string[]',
+    isOptional: true,
+    description:
+      'Update types requested from Telegram in webhook mode. Defaults include messages, edited messages, channel posts, callback queries, and message reactions.',
+  },
+  {
+    name: 'longPolling',
+    type: "TelegramAdapterConfig['longPolling']",
+    isOptional: true,
+    description:
+      'Polling configuration such as timeout, limit, allowed updates, and retry delay. Ignored in webhook mode.',
+  },
+  {
+    name: 'commands',
+    type: 'TelegramCommand[]',
+    isOptional: true,
+    description:
+      'Default commands registered for each connected agent. Defaults to start, help, and settings. Per-agent connect options override this list.',
+  },
+  {
+    name: 'commandScope',
+    type: 'Record<string, unknown>',
+    isOptional: true,
+    description: "Telegram Bot API command scope passed to setMyCommands, such as { type: 'all_private_chats' }.",
+  },
+  {
+    name: 'streaming',
+    type: 'StreamingConfig',
+    isOptional: true,
+    defaultValue: 'true',
+    description:
+      'Streams generated text by posting and editing Telegram messages. The adapter handles the Telegram message length limit.',
+  },
+  {
+    name: 'typingStatus',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description: 'Keeps a Telegram typing indicator active while the agent generates a response.',
+  },
+  {
+    name: 'toolDisplay',
+    type: "ChannelAdapterConfig['toolDisplay']",
+    isOptional: true,
+    defaultValue: "'text'",
+    description:
+      "Controls tool-call rendering. Rich Slack-oriented display modes degrade to plain fallback text in Telegram, so the provider defaults to 'text'.",
+  },
+  {
+    name: 'tools',
+    type: "ChannelConfig['tools']",
+    isOptional: true,
+    defaultValue: 'true',
+    description: 'Controls whether channel reaction tools are exposed to the agent.',
+  },
+  {
+    name: 'waitUntil',
+    type: 'WaitUntilFn',
+    isOptional: true,
+    description: 'Keeps serverless invocations alive while agent streaming continues after the webhook response.',
+  },
+  {
+    name: 'resolveWaitUntil',
+    type: "ChannelConfig['resolveWaitUntil']",
+    isOptional: true,
+    description: "Resolves a platform waitUntil function from the webhook request's Hono context.",
+  },
+  {
+    name: 'handlers',
+    type: 'ChannelHandlers',
+    isOptional: true,
+    description: 'Overrides built-in direct message, mention, or subscribed-message handlers.',
+  },
+  {
+    name: 'inlineMedia',
+    type: "ChannelConfig['inlineMedia']",
+    isOptional: true,
+    description: 'Controls which Telegram media types are sent inline to the model.',
+  },
+  {
+    name: 'inlineLinks',
+    type: "ChannelConfig['inlineLinks']",
+    isOptional: true,
+    description: 'Controls whether URLs in message text are promoted to file parts.',
+  },
+  {
+    name: 'state',
+    type: "ChannelConfig['state']",
+    isOptional: true,
+    description: 'State adapter used for event deduplication, locking, and subscriptions.',
+  },
+  {
+    name: 'threadContext',
+    type: "ChannelConfig['threadContext']",
+    isOptional: true,
+    description: 'Controls fetching recent Telegram thread messages when an agent joins a conversation.',
+  },
+  {
+    name: 'chatOptions',
+    type: "ChannelConfig['chatOptions']",
+    isOptional: true,
+    description: 'Additional options passed to the Chat SDK.',
+  },
+  {
+    name: 'resolveResourceId',
+    type: "ChannelConfig['resolveResourceId']",
+    isOptional: true,
+    description: 'Resolves the memory resource ID before a channel thread is created.',
+  },
+  {
+    name: 'cors',
+    type: "ChannelAdapterConfig['cors']",
+    isOptional: true,
+    description: 'CORS configuration for the generated Telegram webhook route.',
+  },
+  {
+    name: 'formatError',
+    type: "ChannelAdapterConfig['formatError']",
+    isOptional: true,
+    description: 'Overrides how errors are rendered in Telegram messages.',
+  },
+  {
+    name: 'logger',
+    type: "TelegramAdapterConfig['logger']",
+    isOptional: true,
+    description: 'Logger passed to the underlying Telegram adapter.',
+  },
+  {
+    name: 'onInstall',
+    type: '(installation: TelegramInstallation) => void | Promise<void>',
+    isOptional: true,
+    description: 'Called after an agent successfully connects a bot and its installation is persisted.',
+  },
+]}
+/>
+
+## Methods
+
+### Installation lifecycle
+
+#### `connect(agentId, options)`
+
+Connects an agent to a Telegram bot. The provider validates a BotFather token with `getMe`, prepares the selected delivery mode and commands, then stores the installation before activating the adapter.
+
+```typescript
+const result = await telegram.connect('support', {
+  botToken: process.env.TELEGRAM_BOT_TOKEN,
+  name: 'Support bot',
+  commands: [
+    { command: 'help', description: 'Show support options' },
+    { command: 'status', description: 'Check service status' },
+  ],
+})
+```
+
+`TelegramConnectOptions` fields:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'botToken',
+    type: 'string',
+    isOptional: true,
+    description:
+      'BotFather token. When provided, the connection completes immediately. When omitted, connect() returns a BotFather deep link and a pending installation ID.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    isOptional: true,
+    description: "Display name for the bot. Defaults to the bot's Telegram username or first name.",
+  },
+  {
+    name: 'commands',
+    type: 'TelegramCommand[]',
+    isOptional: true,
+    description: "Commands registered for this agent. Overrides the provider's default commands.",
+  },
+]}
+/>
+
+Returns: `Promise<ChannelConnectResult>`
+
+#### `disconnect(agentId)`
+
+Stops the active transport and removes its stored installation. In webhook mode, it also removes the Telegram webhook.
+
+```typescript
+await telegram.disconnect('support')
+```
+
+Returns: `Promise<void>`
+
+#### `listInstallations()`
+
+Lists active and pending Telegram installations without exposing bot or webhook secret tokens.
+
+```typescript
+const installations = await telegram.listInstallations()
+```
+
+Returns: `Promise<ChannelInstallationInfo[]>`
+
+#### `getInstallation(agentId)`
+
+Returns the full installation for an agent, including sensitive bot and webhook tokens, or `null` when no installation exists.
+
+```typescript
+const installation = await telegram.getInstallation('support')
+```
+
+Returns: `Promise<TelegramInstallation | null>`
+
+### Configuration and status
+
+#### `configure(credentials)`
+
+Updates the Bot API origin or webhook base URL at runtime. Passing `null` is a no-op because Telegram credentials belong to individual bot installations.
+
+```typescript
+await telegram.configure({
+  baseUrl: 'https://new-app.example.com',
+  apiBaseUrl: 'https://api.telegram.org',
+})
+```
+
+Returns: `Promise<void>`
+
+#### `initialize()`
+
+Restores active installations from storage and rebuilds their Telegram adapters before reconnecting the registered agents. Mastra calls this during startup.
+
+```typescript
+await telegram.initialize()
+```
+
+Returns: `Promise<void>`
+
+#### `isConfigured()`
+
+Returns whether at least one active Telegram installation exists.
+
+```typescript
+const configured = telegram.isConfigured()
+```
+
+#### `getInfo()`
+
+Returns channel discovery metadata for the Editor UI, including connection status and the `botToken` and `name` connect-option schema.
+
+```typescript
+const info = telegram.getInfo()
+```
+
+Returns: `ChannelPlatformInfo`
+
+#### `getAdapter(installationId)`
+
+Returns the live `TelegramAdapter` for an active installation.
+
+```typescript
+const adapter = telegram.getAdapter(installationId)
+```
+
+Returns: `TelegramAdapter | undefined`
+
+#### `getRoutes()`
+
+Returns the provider's unauthenticated `POST /telegram/events/:webhookId` route. Mastra registers this route automatically.
+
+```typescript
+const routes = telegram.getRoutes()
+```
+
+Returns: `ApiRoute[]`
+
+## Delivery modes
+
+- **`webhook`** registers a per-bot webhook under `/telegram/events/:webhookId` and verifies the `X-Telegram-Bot-Api-Secret-Token` header.
+- **`polling`** removes any existing webhook before starting Telegram's `getUpdates` loop.
+- **`auto`** selects webhooks when a public base URL is available and polling otherwise.
+
+In production, use persistent channels storage and set `encryptionKey` or `MASTRA_ENCRYPTION_KEY`, because the in-memory fallback doesn't preserve installations across restarts.
+
+## Related
+
+- [ChannelProvider](/reference/channels/channel-provider): the interface `TelegramProvider` implements
+- [Telegram adapter integration](/integrations/channels/telegram): the lower-level `createTelegramAdapter` path
+- [Channels](/docs/channels): channel concepts and agent configuration
+- [Channels reference](/reference/agents/channels): the `channels` config on the `Agent` constructor

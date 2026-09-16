@@ -2,8 +2,14 @@ import { skipToken, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { fetchLinearStatus, listLinearIssues, listLinearProjects } from '../ui/domains/factory/services/linear';
-import { INTAKE_POLL_MS } from './useFactoryData';
+import {
+  fetchLinearStatus,
+  getLinearIssue,
+  listLinearIssues,
+  listLinearProjects,
+  listLinearTeams,
+} from '../ui/domains/factory/services/linear';
+import { DETAIL_STALE_MS, INTAKE_POLL_MS } from './useFactoryData';
 
 /**
  * Linear feature/connection status through the shared React Query cache. The
@@ -42,12 +48,38 @@ export function useLinearIssuesQuery(githubProjectId: string | undefined) {
   });
 }
 
+export function useLinearIssueDetail(
+  factoryProjectId: string | undefined,
+  identifier: string | undefined,
+  issueId: string | undefined,
+) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.linearIssue(factoryProjectId, identifier, issueId),
+    queryFn:
+      factoryProjectId !== undefined && identifier !== undefined
+        ? () => getLinearIssue(baseUrl, factoryProjectId, identifier, issueId)
+        : skipToken,
+    staleTime: DETAIL_STALE_MS,
+  });
+}
+
 /** The connected workspace's projects (Settings intake-source picker). */
 export function useLinearProjectsQuery(enabled: boolean) {
   const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.linearProjects(),
     queryFn: () => listLinearProjects(baseUrl),
+    enabled,
+  });
+}
+
+/** The connected workspace's teams (Settings intake-source picker). */
+export function useLinearTeamsQuery(enabled: boolean) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.linearTeams(),
+    queryFn: () => listLinearTeams(baseUrl),
     enabled,
   });
 }

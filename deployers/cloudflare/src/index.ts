@@ -266,11 +266,21 @@ export default { createRequire };
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: (string | string[])[],
     bundlerOptions: BundlerOptions,
+    additionalEntries: Record<string, string>,
+    toolProjectRoot: string,
   ) {
-    const inputOptions = await super.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo, toolsPaths, {
-      ...bundlerOptions,
-      enableEsmShim: false,
-    });
+    const inputOptions = await super.getBundlerOptions(
+      serverFile,
+      mastraEntryFile,
+      analyzedBundleInfo,
+      toolsPaths,
+      {
+        ...bundlerOptions,
+        enableEsmShim: false,
+      },
+      additionalEntries,
+      toolProjectRoot,
+    );
 
     const hasPostgresStore = (await this.deps.checkDependencies(['@mastra/pg'])) === `ok`;
 

@@ -57,6 +57,7 @@ const DeleteSkillDialog = ({ open, onOpenChange, skillName, isPending, onConfirm
           Cancel
         </AlertDialog.Cancel>
         <Button
+          icon={<Trash2 />}
           variant="primary"
           data-testid="skill-builder-delete-skill-confirm"
           disabled={isPending}
@@ -91,8 +92,8 @@ export const DeleteSkillPanelButton = ({ skillId, skillName, disabled = false }:
         disabled={disabled || isPending}
         className="w-full"
         data-testid="skill-builder-delete-skill"
+        icon={<Trash2 />}
       >
-        <Trash2 />
         <span>Delete skill</span>
       </Button>
       <DeleteSkillDialog

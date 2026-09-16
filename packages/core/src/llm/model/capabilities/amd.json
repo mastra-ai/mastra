@@ -1,0 +1,18 @@
+{
+  "attachment": ["DeepSeek-V4-Flash-Vision-Exp", "DeepSeek-V4.1-Flash", "Qwen3.8-Flash-Next"],
+  "temperature": [
+    "DeepSeek-V4-Flash",
+    "DeepSeek-V4-Flash-Vision-Exp",
+    "DeepSeek-V4.1-Flash",
+    "MiniCPM5-2B",
+    "Qwen3.8-27B",
+    "Qwen3.8-Flash-Next"
+  ],
+  "structuredOutput": [
+    "DeepSeek-V4-Flash",
+    "DeepSeek-V4-Flash-Vision-Exp",
+    "DeepSeek-V4.1-Flash",
+    "Qwen3.8-27B",
+    "Qwen3.8-Flash-Next"
+  ]
+}
