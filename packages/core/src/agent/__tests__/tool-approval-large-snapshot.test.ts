@@ -134,7 +134,9 @@ describe('approveToolCall with a slow-to-persist (large) suspend snapshot (#2241
 
   it('resumes a genuinely-suspended run even when the parent snapshot write outlasts the old 2s deadline', async () => {
     const storage = new InMemoryStore();
-    await delayAgenticLoopSuspendWrite(storage, 4000);
+    // Must exceed main's combined wait budget (2s in #loadAgenticLoopSnapshotOrThrow +
+    // 2s in the old validator poll), otherwise the old code passes by accident.
+    await delayAgenticLoopSuspendWrite(storage, 6000);
     const { agent } = createSetup(storage);
 
     const { runId, toolCallId } = await streamToApproval(agent);

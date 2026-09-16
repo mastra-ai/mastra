@@ -282,6 +282,8 @@ interface StandaloneDurableWrapper {
  * `approveToolCall()` cannot hang forever.
  */
 const RESUME_SUSPEND_DURABILITY_TIMEOUT_MS = 30_000;
+/** Upper bound for the exponential poll backoff inside that wait. */
+const RESUME_SUSPEND_DURABILITY_MAX_POLL_INTERVAL_MS = 500;
 
 const createSubAgentInputSchema = ({ withResultRefs = false }: { withResultRefs?: boolean } = {}) =>
   z.object({
@@ -7200,6 +7202,7 @@ export class Agent<
     };
 
     const deadline = Date.now() + RESUME_SUSPEND_DURABILITY_TIMEOUT_MS;
+    let pollIntervalMs: number = RESUME_SNAPSHOT_POLL_INTERVAL_MS;
     while (Date.now() < deadline) {
       const parentSnapshot = await loadFirstSnapshot(parentWorkflowNames);
       if (parentSnapshot && isTargetSuspended(parentSnapshot)) {
@@ -7210,17 +7213,15 @@ export class Agent<
 
       const nestedSnapshot = await loadFirstSnapshot(nestedWorkflowNames);
 
-      const parentSuspendedIds = suspendedToolCallIds(parentSnapshot);
-      const nestedSuspendedIds = suspendedToolCallIds(nestedSnapshot);
-      const targetSuspendedNested = nestedSuspendedIds.includes(toolCallId);
-      const otherSuspended =
-        !targetSuspendedNested && [...parentSuspendedIds, ...nestedSuspendedIds].some(id => id !== toolCallId);
+      const targetSuspendedNested = suspendedToolCallIds(nestedSnapshot).includes(toolCallId);
       const runLive = [parentSnapshot, nestedSnapshot].some(s => !!s && RESUME_SNAPSHOT_WAIT_STATUSES.has(s.status));
 
       // The nested row already carries the target suspension, or a row is still
       // progressing toward it: keep waiting for the parent to become durable.
+      // Back off so a slow write does not turn into thousands of snapshot reads.
       if (targetSuspendedNested || runLive) {
-        await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_INTERVAL_MS));
+        await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+        pollIntervalMs = Math.min(pollIntervalMs * 2, RESUME_SUSPEND_DURABILITY_MAX_POLL_INTERVAL_MS);
         continue;
       }
 
