@@ -810,9 +810,12 @@ describe('eager tool dispatch — discarded model attempt', () => {
     });
 
     await drain(
-      await agent.stream('go', { maxSteps: 1, eagerToolExecution } as Record<string, unknown> as never),
+      await agent.stream('go', { maxSteps: 3, eagerToolExecution } as Record<string, unknown> as never),
     ).catch(() => {});
     await new Promise(resolve => setTimeout(resolve, 150));
+    // Pins that the retry actually happened, so the assertions below cannot pass because
+    // the run died early for some unrelated reason.
+    expect(attempt).toBe(2);
     return events;
   }
 
