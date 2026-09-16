@@ -21,9 +21,11 @@ import { useValueStep } from './use-value-step';
 import { getFieldSuggestions } from './use-value-suggestions';
 import { Button } from '@/ds/components/Button/Button';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
+import { Kbd } from '@/ds/components/Kbd/kbd';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
+import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
 
 export const segmentClass = cn(
@@ -442,6 +444,7 @@ type ValueInputProps = {
 /** Suggestion list + multi-select footer, shared by every value input. */
 function ValueOptions({ step, onCancel }: ValueInputProps) {
   const chip = useChip();
+  const modEnterLabel = useIsApplePlatform() ? '⌘↵' : 'Ctrl ↵';
   return (
     <>
       {step.hasSuggestions && (
@@ -463,6 +466,7 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
           </Button>
           <Button size="xs" variant="primary" onClick={() => step.commitSelection() || step.commitFreeText()}>
             Done
+            <Kbd size="xs">{modEnterLabel}</Kbd>
           </Button>
         </div>
       )}

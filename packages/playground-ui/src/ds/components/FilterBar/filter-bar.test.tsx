@@ -132,7 +132,7 @@ describe('FilterBar', () => {
       key('ArrowDown');
       key('Enter');
 
-      const apply = (await screen.findByRole('button', { name: 'Apply' })) as HTMLButtonElement;
+      const apply = (await screen.findByRole('button', { name: /^Apply/ })) as HTMLButtonElement;
       expect(apply.disabled).toBe(true);
       type('abc-123');
       expect(apply.disabled).toBe(false);
@@ -156,7 +156,7 @@ describe('FilterBar', () => {
       key('Enter');
 
       expect(input.inputMode).toBe('decimal');
-      const apply = (await screen.findByRole('button', { name: 'Apply' })) as HTMLButtonElement;
+      const apply = (await screen.findByRole('button', { name: /^Apply/ })) as HTMLButtonElement;
       type('abc');
       expect(apply.disabled).toBe(true);
       key('Enter');
@@ -184,7 +184,7 @@ describe('FilterBar', () => {
 
       await screen.findByRole('option', { name: 'True' });
       expect(screen.getByRole('option', { name: 'False' })).toBeTruthy();
-      expect(screen.queryByRole('button', { name: 'Apply' })).toBeNull();
+      expect(screen.queryByRole('button', { name: /^Apply/ })).toBeNull();
 
       type('fal');
       await screen.findByRole('option', { name: 'False' });

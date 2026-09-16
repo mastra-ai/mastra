@@ -9,11 +9,13 @@ import type { FilterBarField, FilterBarOperator, FilterBarOption, FilterBarValue
 import { useValueStep } from './use-value-step';
 import { Button } from '@/ds/components/Button/Button';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
+import { Kbd } from '@/ds/components/Kbd/kbd';
 import { Txt } from '@/ds/components/Txt';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { unstyledFormElementStyle } from '@/ds/primitives/form-element';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
+import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
 
 type Step = 'field' | 'operator' | 'value';
@@ -52,6 +54,7 @@ export function FilterBarInput({
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState<Draft>(INITIAL_DRAFT);
   const [highlighted, setHighlighted] = useState<Item | null>(null);
+  const modEnterLabel = useIsApplePlatform() ? '⌘↵' : 'Ctrl ↵';
 
   const field = draft.fieldId ? ctx.getField(draft.fieldId) : undefined;
   const operator = draft.operatorId ? ctx.getOperator(draft.operatorId) : undefined;
@@ -283,7 +286,7 @@ export function FilterBarInput({
               {draft.step === 'value' && !valueStep.hasSuggestions && (
                 <div className="flex items-center justify-between gap-2 py-1 pr-1 pl-[.9em]">
                   <Txt variant="ui-sm" className="text-neutral3">
-                    Type a value, then press Enter
+                    Type a value
                   </Txt>
                   <Button
                     size="xs"
@@ -293,6 +296,7 @@ export function FilterBarInput({
                     onClick={() => valueStep.commitFreeText()}
                   >
                     Apply
+                    <Kbd size="xs">↵</Kbd>
                   </Button>
                 </div>
               )}
@@ -305,6 +309,7 @@ export function FilterBarInput({
                     onClick={() => valueStep.commitSelection() || valueStep.commitFreeText()}
                   >
                     Done
+                    <Kbd size="xs">{modEnterLabel}</Kbd>
                   </Button>
                 </div>
               )}
