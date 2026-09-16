@@ -20,7 +20,7 @@ import type { BoardStageId } from '../stages';
  * behind it, and the candidates left once anything already on the board is
  * dropped.
  *
- * Work Intake gates GitHub issues per account; the Review pull-request feed is
+ * Work Intake gates GitHub issues org-wide; the Review pull-request feed is
  * always enabled. Any board (Work included) only gets a Linear feed from the
  * sources explicitly routed to it, offered on the board's initial phase.
  */

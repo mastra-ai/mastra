@@ -2033,6 +2033,24 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /observability/threads/query": {
+    "method": "POST",
+    "path": "/observability/threads/query",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "page",
+      "traces",
+      "where"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "threads",
+      "paginationProperty": "page"
+    }
+  },
   "GET /observability/metrics": {
     "method": "GET",
     "path": "/observability/metrics",

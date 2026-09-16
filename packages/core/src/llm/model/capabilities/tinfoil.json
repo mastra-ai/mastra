@@ -1,7 +1,7 @@
 {
-  "attachment": ["gemma4-31b", "glm-5-3-flash", "kimi-k3"],
+  "attachment": ["deepseek-v4-1-flash", "gemma4-31b", "glm-5-3-flash", "kimi-k3"],
   "temperature": [
-    "deepseek-v4-flash",
+    "deepseek-v4-1-flash",
     "gemma4-31b",
     "glm-5-3-flash",
     "gpt-oss-120b",
@@ -9,7 +9,7 @@
     "llama3-3-70b"
   ],
   "structuredOutput": [
-    "deepseek-v4-flash",
+    "deepseek-v4-1-flash",
     "gemma4-31b",
     "glm-5-3-flash",
     "gpt-oss-120b",

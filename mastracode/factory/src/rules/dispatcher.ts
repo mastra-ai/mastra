@@ -13,12 +13,13 @@ import {
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { recordSessionRunStart } from '../session/run-audit.js';
-import { resolvePromptInvocation, resolveSkillInvocation } from '../skills/service.js';
+import { resolvePromptInvocation, resolveSkillInvocation, resolveSkillResumeInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
 import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
+import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemClaimConflictError } from '../storage/domains/work-items/base.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryDispatchFailureCode,
@@ -26,8 +27,8 @@ import type {
   FactoryRunBindingRecord,
   WorkItemRow,
   WorkItemsStorage,
+  UpsertWorkItemResult,
 } from '../storage/domains/work-items/base.js';
-import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/base.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
@@ -837,11 +838,17 @@ export class FactoryDecisionDispatcher {
                 resourceId: binding.resourceId,
                 prompt: decision.prompt,
               })
-            : await resolveSkillInvocation(this.#controller, {
-                resourceId: binding.resourceId,
-                name: decision.skillName,
-                arguments: decision.arguments,
-              });
+            : decision.resume === true
+              ? await resolveSkillResumeInvocation(this.#controller, {
+                  resourceId: binding.resourceId,
+                  name: decision.skillName,
+                  arguments: decision.arguments,
+                })
+              : await resolveSkillInvocation(this.#controller, {
+                  resourceId: binding.resourceId,
+                  name: decision.skillName,
+                  arguments: decision.arguments,
+                });
         await this.#switchThread(session, binding);
         const deliveryId =
           record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
@@ -1055,21 +1062,40 @@ export class FactoryDecisionDispatcher {
         decision,
       })) ??
       null;
-    let result = await this.#storage.upsert({
-      orgId: record.orgId,
-      userId: 'factory-rule-dispatcher',
-      factoryProjectId: record.factoryProjectId,
-      input: {
-        externalSource: externalSourceForDecision(decision),
-        parentWorkItemId,
-        title: decision.title,
-        board: decision.board,
-        stages: [initialPhase],
-        sessions: {},
-        metadata: { ...decision.metadata, [FACTORY_RULE_MATERIALIZATION_KEY]: record.idempotencyKey },
-      },
-      reuseMode: 'preserve',
-    });
+    let result: UpsertWorkItemResult;
+    try {
+      result = await this.#storage.upsert({
+        orgId: record.orgId,
+        userId: 'factory-rule-dispatcher',
+        factoryProjectId: record.factoryProjectId,
+        input: {
+          externalSource: externalSourceForDecision(decision),
+          ...(decision.claimKey ? { claimKey: decision.claimKey } : {}),
+          parentWorkItemId,
+          title: decision.title,
+          board: decision.board,
+          stages: [initialPhase],
+          sessions: {},
+          metadata: { ...decision.metadata, [FACTORY_RULE_MATERIALIZATION_KEY]: record.idempotencyKey },
+        },
+        reuseMode: 'preserve',
+      });
+    } catch (error) {
+      // Another Factory project in the org holds the live card for this record.
+      // The decision is spent, not failed: retrying would only be refused again.
+      if (error instanceof WorkItemClaimConflictError) return;
+      throw error;
+    }
+    if (!result.created && decision.claimKey && !result.item.claimKey) {
+      // A card filed before claims existed adopts the claim now; a refusal means
+      // another project already owns the record, and this card stays as it is.
+      const claimed = await this.#storage.claimWorkItem({
+        orgId: record.orgId,
+        id: result.item.id,
+        claimKey: decision.claimKey,
+      });
+      if (claimed) result = { ...result, item: claimed };
+    }
     const itemBoard = boardForWorkItem(result.item);
     if (itemBoard !== decision.board) {
       throw new Error(`The work item belongs to board "${itemBoard}", not "${decision.board}".`);
@@ -1207,7 +1233,15 @@ export class FactoryDecisionDispatcher {
     if (!record.workItemId) return false;
     const bindings = await this.#storage.listRunBindings(record.orgId, record.factoryProjectId, record.workItemId);
     const own = bindings.filter(candidate => candidate.role === role);
+    // An active seat for this role still runs — a terminal card can legitimately
+    // hold one (e.g. a close-out skill dispatched on `done`).
     if (own.some(candidate => candidate.status === 'active')) return false;
+    // With no active seat left, a card that has already reached a terminal stage
+    // can never mint one for this role again, and its bindings are being revoked
+    // out from under the run by terminal-stage cleanup. Treat the decision as
+    // superseded so it stops retrying to MAX_ATTEMPTS as `session_unavailable`.
+    const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId }).catch(() => null);
+    if (item && workItemPhaseSemantics(this.#boards, item)?.kind === 'terminal') return true;
     return own.some(
       revoked =>
         revoked.revokedAt !== null &&

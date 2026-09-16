@@ -25,7 +25,11 @@ export function PageHeaderRoot({
 
   return (
     <header
-      className={cn('relative grid w-full grid-cols-[auto_minmax(0,1fr)_auto] gap-x-3 gap-y-1', className)}
+      className={cn(
+        'relative grid w-full grid-cols-[[title]_auto_[meta]_minmax(0,1fr)_[action]_auto_[end]] gap-x-3 gap-y-1',
+        'has-[>[data-slot=page-header-icon]]:grid-cols-[[icon]_auto_[title]_auto_[meta]_minmax(0,1fr)_[action]_auto_[end]]',
+        className,
+      )}
       {...props}
     >
       {useLegacyApi ? (

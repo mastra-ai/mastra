@@ -64,7 +64,9 @@ function reviewPullRequest(context: FactoryStageRuleContext) {
     role: 'review',
     skillName,
     arguments: `${sourceRef(context.item)}\n\n${checkoutHint(context.item)}`,
-    ...(supersedes ? { cancelInFlight: true } : {}),
+    // Same-stage re-entry: the skill is already live in the card's session, so
+    // continue it with a compact kickoff instead of re-pasting the whole skill.
+    ...(supersedes ? { cancelInFlight: true, resume: true } : {}),
   } as const;
 }
 

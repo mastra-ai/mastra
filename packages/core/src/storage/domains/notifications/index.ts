@@ -22,4 +22,5 @@ export type {
   NotificationSummary,
   SendNotificationSignalInput,
   UpdateNotificationInput,
+  UpdateNotificationsStatusInput,
 } from '../../../notifications/types';

@@ -127,6 +127,13 @@ Returns: [`InngestAgent`](#inngestagent-interface)
     isOptional: true,
     description: 'Mastra instance for observability. Set automatically when the agent is registered with Mastra.',
   },
+  {
+    name: 'shouldPersistSnapshot',
+    type: '(params: { stepResults, workflowStatus }) => boolean',
+    isOptional: true,
+    description:
+      "Accepted for API symmetry with `createDurableAgent`, but ignored: Inngest's step memoization and replay own durability, so InngestAgent always persists `suspended` snapshots only (for human-in-the-loop resume). A warning is logged if set.",
+  },
 ]}
 />
 
