@@ -697,6 +697,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   pluginManager?.setRuntime({
     getController: () => pluginRuntimeController,
     getActiveSession: () => activeSession,
+    getSharedStorage: () => ({ storage, storageBackend: storageResult.backend, vector }),
   });
   const loadedPlugins = pluginManager ? await pluginManager.reload() : [];
   const pluginTools = pluginManager?.getPluginTools() ?? {};
