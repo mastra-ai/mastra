@@ -380,6 +380,68 @@ export class MemoryDSQL extends MemoryStorage {
     return thread;
   }
 
+  async advanceMemoryTokenBoundary({
+    id,
+    resourceId,
+    candidate,
+  }: {
+    id: string;
+    resourceId?: string;
+    candidate: {
+      createdAt: string;
+      messageIds: string[];
+      maxTokens: number;
+      atMaxRemoveTokens: number;
+    };
+  }) {
+    const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    const { result } = await withRetry(
+      () =>
+        this.#db.client.tx(async t => {
+          const params: unknown[] = [id];
+          const resourceFilter = resourceId === undefined ? '' : ` AND "resourceId" = $2`;
+          if (resourceId !== undefined) params.push(resourceId);
+          const row = await t.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
+            `SELECT * FROM ${threadTableName} WHERE id = $1${resourceFilter}`,
+            params,
+          );
+          if (!row) return { supported: true, thread: null, boundary: undefined };
+
+          const metadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata ?? {});
+          const previous = this.getMemoryTokenBoundary({ metadata });
+          const boundary = this.mergeMemoryTokenBoundaries(previous, candidate);
+          const thread: StorageThreadType = {
+            id: row.id,
+            resourceId: row.resourceId,
+            title: row.title,
+            metadata,
+            createdAt: row.createdAtZ || row.createdAt,
+            updatedAt: row.updatedAtZ || row.updatedAt,
+          };
+
+          if (boundary !== previous) {
+            const now = new Date().toISOString();
+            thread.metadata = { ...metadata, memoryTokenLimiter: boundary };
+            thread.updatedAt = new Date(now);
+            await t.none(
+              `UPDATE ${threadTableName} SET metadata = $1, "updatedAt" = $2::timestamp, "updatedAtZ" = $3::timestamptz WHERE id = $4`,
+              [JSON.stringify(thread.metadata), now, now, id],
+            );
+          }
+
+          return { supported: true, thread, boundary };
+        }),
+      {
+        onRetry: (error, attempt, delay) => {
+          this.logger?.warn?.(
+            `advanceMemoryTokenBoundary retry ${attempt} for ${id} after ${delay}ms: ${error.message}`,
+          );
+        },
+      },
+    );
+    return result;
+  }
+
   async updateThread({
     id,
     title,

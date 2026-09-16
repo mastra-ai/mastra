@@ -3,6 +3,7 @@ import {
   createConfigValidationTests,
   createClientAcceptanceTests,
   createDomainDirectTests,
+  createMemoryTokenBoundaryConformanceTest,
 } from '@internal/storage-test-utils';
 import { TABLE_MESSAGES } from '@mastra/core/storage';
 import dotenv from 'dotenv';
@@ -49,6 +50,16 @@ if (!deploymentUrl || !adminKey) {
   });
 
   createTestSuite(store, { listScoresBySpan: false });
+
+  createMemoryTokenBoundaryConformanceTest({
+    createStores: async () => {
+      const first = new MemoryConvex({ client: createTestClient() });
+      const second = new MemoryConvex({ client: createTestClient() });
+      await first.init();
+      await second.init();
+      return { first, second, cleanup: () => first.dangerouslyClearAll() };
+    },
+  });
 
   // Pre-configured client acceptance tests
   createClientAcceptanceTests({

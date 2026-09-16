@@ -5,6 +5,7 @@ import {
   createDomainDirectTests,
   createStoreIndexTests,
   createDomainIndexTests,
+  createMemoryTokenBoundaryConformanceTest,
 } from '@internal/storage-test-utils';
 import { Mastra } from '@mastra/core/mastra';
 import { TABLE_THREADS } from '@mastra/core/storage';
@@ -30,6 +31,24 @@ createTestSuite(new PostgresStore({ ...TEST_CONFIG, schemaName: 'my_schema' }));
 const createTestPool = () => {
   return new Pool({ connectionString });
 };
+
+createMemoryTokenBoundaryConformanceTest({
+  createStores: async () => {
+    const firstPool = createTestPool();
+    const secondPool = createTestPool();
+    const first = new MemoryPG({ pool: firstPool });
+    const second = new MemoryPG({ pool: secondPool });
+    await first.init();
+    await second.init();
+    return {
+      first,
+      second,
+      cleanup: async () => {
+        await Promise.all([firstPool.end(), secondPool.end()]);
+      },
+    };
+  },
+});
 
 describe('read/write pools', () => {
   it('falls back to the writer pool when readPool is omitted', async () => {

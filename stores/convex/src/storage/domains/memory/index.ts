@@ -244,6 +244,33 @@ export class MemoryConvex extends MemoryStorage {
     return thread;
   }
 
+  async advanceMemoryTokenBoundary({
+    id,
+    resourceId,
+    candidate,
+  }: {
+    id: string;
+    resourceId?: string;
+    candidate: {
+      createdAt: string;
+      messageIds: string[];
+      maxTokens: number;
+      atMaxRemoveTokens: number;
+    };
+  }) {
+    const result = await this.#db.advanceMemoryTokenBoundary({
+      id,
+      resourceId,
+      candidate,
+      updatedAt: new Date(),
+    });
+    return {
+      supported: true,
+      thread: result.thread ? parseStoredThread(result.thread) : null,
+      boundary: result.boundary,
+    };
+  }
+
   async updateThread({
     id,
     title,

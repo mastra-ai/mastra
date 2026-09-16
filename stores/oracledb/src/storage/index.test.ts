@@ -4,6 +4,7 @@ import {
   createClientAcceptanceTests,
   createConfigValidationTests,
   createDomainDirectTests,
+  createMemoryTokenBoundaryConformanceTest,
 } from '../../../_test-utils/src';
 import { createAgentsTests } from '../../../_test-utils/src/domains/agents';
 import { createMemoryTest } from '../../../_test-utils/src/domains/memory';
@@ -57,6 +58,15 @@ describeIntegration('OracleStore shared storage suite', () => {
 
   createWorkflowsTests({ storage: store });
   createMemoryTest({ storage: store });
+  createMemoryTokenBoundaryConformanceTest({
+    createStores: async () => {
+      const first = new MemoryOracle({ poolManager, skipDefaultIndexes: true });
+      const second = new MemoryOracle({ poolManager, skipDefaultIndexes: true });
+      await first.init();
+      await second.init();
+      return { first, second };
+    },
+  });
   createScoresTest({ storage: store, capabilities: { listScoresBySpan: true, toolMocks: false } });
   createObservabilityTests({ storage: store });
   createAgentsTests({ storage: store });

@@ -5,6 +5,7 @@ import {
   createDomainDirectTests,
   createStoreIndexTests,
   createDomainIndexTests,
+  createMemoryTokenBoundaryConformanceTest,
 } from '@internal/storage-test-utils';
 import { TABLE_THREADS } from '@mastra/core/storage';
 import sql from 'mssql';
@@ -53,6 +54,24 @@ vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 console.log('Not running MSSQL tests in CI. You can enable them if you want to test them locally.');
 if (process.env.ENABLE_TESTS === 'true') {
   createTestSuite(new MSSQLStore(TEST_CONFIG), { deterministicScorePagination: true });
+
+  createMemoryTokenBoundaryConformanceTest({
+    createStores: async () => {
+      const firstPool = createTestPool();
+      const secondPool = createTestPool();
+      const first = new MemoryMSSQL({ pool: firstPool });
+      const second = new MemoryMSSQL({ pool: secondPool });
+      await first.init();
+      await second.init();
+      return {
+        first,
+        second,
+        cleanup: async () => {
+          await Promise.all([firstPool.close(), secondPool.close()]);
+        },
+      };
+    },
+  });
 
   // Pre-configured client (pool) acceptance tests
   createClientAcceptanceTests({

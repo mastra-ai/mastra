@@ -221,6 +221,21 @@ export class D1DB extends MastraBase {
     }
   }
 
+  async executeUpdate({ sql, params = [] }: SqlQueryOptions): Promise<number> {
+    const formattedParams = this.formatSqlParams(params);
+    if (this.binding) {
+      const statement = this.binding.prepare(sql);
+      const result =
+        formattedParams.length > 0 ? await statement.bind(...formattedParams).run() : await statement.run();
+      return result.meta.changes;
+    }
+    if (this.client) {
+      const response = await this.client.query({ sql, params: formattedParams });
+      return response.result.reduce((changes, result) => changes + Number((result as any).meta?.changes ?? 0), 0);
+    }
+    throw new Error('Neither binding nor client is configured');
+  }
+
   /**
    * Gets the set of column names that actually exist in the database table.
    * Results are cached; the cache is invalidated when alterTable() adds new columns.

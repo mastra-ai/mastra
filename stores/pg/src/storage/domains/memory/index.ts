@@ -777,6 +777,56 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
+  async advanceMemoryTokenBoundary({
+    id,
+    resourceId,
+    candidate,
+  }: {
+    id: string;
+    resourceId?: string;
+    candidate: {
+      createdAt: string;
+      messageIds: string[];
+      maxTokens: number;
+      atMaxRemoveTokens: number;
+    };
+  }) {
+    const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    return this.#db.client.tx(async t => {
+      const params: unknown[] = [id];
+      const resourceFilter = resourceId === undefined ? '' : ` AND "resourceId" = $2`;
+      if (resourceId !== undefined) params.push(resourceId);
+      const row = await t.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
+        `SELECT * FROM ${tableName} WHERE id = $1${resourceFilter} FOR UPDATE`,
+        params,
+      );
+      if (!row) return { supported: true, thread: null, boundary: undefined };
+
+      const metadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata ?? {});
+      const previous = this.getMemoryTokenBoundary({ metadata });
+      const boundary = this.mergeMemoryTokenBoundaries(previous, candidate);
+      const thread: StorageThreadType = {
+        id: row.id,
+        resourceId: row.resourceId,
+        title: row.title,
+        metadata,
+        createdAt: row.createdAtZ || row.createdAt,
+        updatedAt: row.updatedAtZ || row.updatedAt,
+      };
+
+      if (boundary !== previous) {
+        thread.metadata = { ...metadata, memoryTokenLimiter: boundary };
+        thread.updatedAt = new Date();
+        await t.none(`UPDATE ${tableName} SET metadata = $1, "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id = $2`, [
+          JSON.stringify(thread.metadata),
+          id,
+        ]);
+      }
+
+      return { supported: true, thread, boundary };
+    });
+  }
+
   async updateThread({
     id,
     title,

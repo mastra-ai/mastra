@@ -342,6 +342,65 @@ export class MemorySpanner extends MemoryStorage {
     }
   }
 
+  async advanceMemoryTokenBoundary({
+    id,
+    resourceId,
+    candidate,
+  }: {
+    id: string;
+    resourceId?: string;
+    candidate: {
+      createdAt: string;
+      messageIds: string[];
+      maxTokens: number;
+      atMaxRemoveTokens: number;
+    };
+  }) {
+    const tableThreads = quoteIdent(TABLE_THREADS, 'table name');
+    return this.db.runWithAbortRetry(() =>
+      this.database.runTransactionAsync(async tx => {
+        try {
+          const params: Record<string, unknown> = { id };
+          const resourceFilter =
+            resourceId === undefined ? '' : ` AND ${quoteIdent('resourceId', 'column name')} = @resourceId`;
+          if (resourceId !== undefined) params.resourceId = resourceId;
+          const [rows] = await tx.run({
+            sql: `SELECT * FROM ${tableThreads} WHERE id = @id${resourceFilter} LIMIT 1`,
+            params,
+            json: true,
+          });
+          const row = (rows as Array<Record<string, any>>)[0];
+          if (!row) {
+            await tx.commit();
+            return { supported: true, thread: null, boundary: undefined };
+          }
+
+          const thread = this.formatThreadRow(row);
+          const previous = this.getMemoryTokenBoundary(thread);
+          const boundary = this.mergeMemoryTokenBoundaries(previous, candidate);
+          if (boundary !== previous) {
+            thread.metadata = { ...(thread.metadata ?? {}), memoryTokenLimiter: boundary };
+            thread.updatedAt = new Date();
+            await this.db.update({
+              tableName: TABLE_THREADS,
+              keys: { id },
+              data: { metadata: thread.metadata, updatedAt: thread.updatedAt },
+              transaction: tx,
+            });
+          }
+
+          await tx.commit();
+          return { supported: true, thread, boundary };
+        } catch (error) {
+          await tx.rollback().catch(rollbackError => {
+            throw new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+          });
+          throw error;
+        }
+      }),
+    );
+  }
+
   /** Updates a thread's title and merges the metadata payload. */
   async updateThread({
     id,
