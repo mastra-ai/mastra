@@ -2103,6 +2103,19 @@ describe('Agent Routes Authorization', () => {
       ).toBe(false);
     });
 
+    it.each([undefined, false, true])(
+      'requires a nonempty abort thread ID with clearPendingSignals=%s',
+      clearPendingSignals => {
+        for (const threadId of [undefined, '', null, 123]) {
+          expect(abortAgentThreadBodySchema.safeParse({ threadId, clearPendingSignals }).success).toBe(false);
+        }
+        expect(abortAgentThreadBodySchema.parse({ threadId: 'thread-123', clearPendingSignals })).toEqual({
+          threadId: 'thread-123',
+          clearPendingSignals,
+        });
+      },
+    );
+
     it('should accept subscribe, abort, and tool approval bodies', () => {
       const body = {
         resourceId: 'resource-123',
