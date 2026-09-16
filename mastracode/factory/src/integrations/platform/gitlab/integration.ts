@@ -3,6 +3,7 @@ import { GitLabApiClient, GitLabApiError } from '../../gitlab/api.js';
 import { gitlabConnection, GitLabIntegrationBase } from '../../gitlab/integration.js';
 import type { GitLabStatusConnection } from '../../gitlab/integration.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.js';
+import type { PlatformApiClientConfig } from '../api-client.js';
 
 interface PlatformIntegrationConnection {
   id: string;
@@ -21,20 +22,26 @@ interface PlatformGitLabContext {
 
 const GITLAB_INTEGRATION_IDS = new Set(['gitlab', 'gitlab-group', 'gitlab-group-token']);
 
+export interface PlatformGitLabIntegrationConfig {
+  clientConfig?: PlatformApiClientConfig;
+  connectionId?: string;
+}
+
 export class PlatformGitLabIntegration extends GitLabIntegrationBase {
   readonly #client: PlatformApiClient;
+  readonly #connectionId: string;
   readonly #endpointHost: string;
 
-  constructor(config: { client?: PlatformApiClient; endpointHost?: string } = {}) {
+  constructor(config: PlatformGitLabIntegrationConfig = {}) {
     super();
-    if (config.client) {
-      this.#client = config.client;
-      this.#endpointHost = config.endpointHost ?? 'configured-client';
-      return;
+    const connectionId = config.connectionId?.trim() || process.env.MASTRA_GITLAB_CONNECTION_ID?.trim();
+    if (!connectionId) {
+      throw new Error('PlatformGitLabIntegration: missing required MASTRA_GITLAB_CONNECTION_ID.');
     }
-    const platformConfig = platformApiClientConfigFromEnv();
-    this.#client = new PlatformApiClient(platformConfig);
-    this.#endpointHost = new URL(platformConfig.baseUrl).host;
+    const clientConfig = config.clientConfig ?? platformApiClientConfigFromEnv();
+    this.#client = new PlatformApiClient(clientConfig);
+    this.#connectionId = connectionId;
+    this.#endpointHost = new URL(clientConfig.baseUrl).host;
   }
 
   async listConnections(): Promise<PlatformIntegrationConnection[]> {
@@ -42,7 +49,9 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
       'GET',
       '/v2/connections',
     );
-    return result.connections.filter(connection => GITLAB_INTEGRATION_IDS.has(connection.integrationId));
+    return result.connections.filter(
+      connection => connection.id === this.#connectionId && GITLAB_INTEGRATION_IDS.has(connection.integrationId),
+    );
   }
 
   override async statusConnections(): Promise<GitLabStatusConnection[]> {
@@ -68,7 +77,13 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
   }
 
   diagnostics(): Record<string, unknown> {
-    return { configured: true, mode: 'platform', endpointHost: this.#endpointHost, webhookConfigured: false };
+    return {
+      configured: true,
+      mode: 'platform',
+      endpointHost: this.#endpointHost,
+      connectionConfigured: true,
+      webhookConfigured: false,
+    };
   }
 
   async #activeConnections(): Promise<PlatformIntegrationConnection[]> {

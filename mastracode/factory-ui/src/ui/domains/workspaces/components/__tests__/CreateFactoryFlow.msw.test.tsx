@@ -262,6 +262,7 @@ describe('Create Factory wizard', () => {
     seedDraft('model-provider');
     const { intakeConfigs } = stubModelStepEndpoints(calls, {
       github: { enabled: true, sourceIds: ['octo/hello'] },
+      gitlab: { enabled: false, sourceIds: null },
     });
     const user = userEvent.setup();
 
@@ -462,6 +463,7 @@ describe('Create Factory wizard', () => {
     expect(intakeConfigs).toEqual([
       {
         github: { enabled: true, sourceIds: ['octo/hello'] },
+        gitlab: { enabled: false, sourceIds: null },
         linear: { enabled: false, sourceIds: null },
         jira: { enabled: false, sourceIds: null },
         incidentio: { enabled: false, sourceIds: null },
@@ -508,12 +510,14 @@ describe('Create Factory wizard', () => {
     expect(intakeConfigs).toEqual([
       {
         github: { enabled: true, sourceIds: ['octo/hello'] },
+        gitlab: { enabled: false, sourceIds: null },
         linear: { enabled: false, sourceIds: null },
         jira: { enabled: false, sourceIds: null },
         incidentio: { enabled: false, sourceIds: null },
       },
       {
         github: { enabled: true, sourceIds: ['octo/hello'] },
+        gitlab: { enabled: false, sourceIds: null },
         linear: { enabled: false, sourceIds: null },
         jira: { enabled: true, sourceIds: ['jira-source-1'] },
         incidentio: { enabled: false, sourceIds: null },

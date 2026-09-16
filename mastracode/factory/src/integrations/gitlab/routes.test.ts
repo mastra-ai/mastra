@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
 import type { TestAuthUser } from '../../routes/test-utils.js';
-import { PlatformApiClient } from '../platform/api-client.js';
 import { PlatformGitLabIntegration } from '../platform/gitlab/integration.js';
 import { GitLabApiError } from './api.js';
 import { GitLabIntegration } from './integration.js';
@@ -39,10 +38,10 @@ describe('GitLab UI routes', () => {
 
   it('reports platform connections including reauthorization state', async () => {
     const gitlab = new PlatformGitLabIntegration({
-      client: new PlatformApiClient({ baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' }),
+      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      connectionId: 'a1b_old',
     });
     vi.spyOn(gitlab, 'listConnections').mockResolvedValue([
-      { id: 'a1b_acme', integrationId: 'gitlab', status: 'active', accountLabel: 'acme' },
       { id: 'a1b_old', integrationId: 'gitlab', status: 'needs_reauth', accountLabel: 'old' },
     ]);
 
@@ -50,10 +49,10 @@ describe('GitLab UI routes', () => {
 
     expect(await response.json()).toMatchObject({
       enabled: true,
-      configured: true,
-      accounts: ['acme'],
+      configured: false,
+      accounts: [],
       reauthRequired: true,
-      reason: 'ready',
+      reason: 'not_connected',
     });
   });
 

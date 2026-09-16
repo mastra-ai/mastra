@@ -71,6 +71,7 @@ describe('useLinkRepositoryMutation', () => {
     const saved = stubIntakeConfig({
       github: { enabled: true, sourceIds: null },
       linear: { enabled: false, sourceIds: null },
+      gitlab: { enabled: false, sourceIds: null },
       jira: { enabled: false, sourceIds: null },
       incidentio: { enabled: false, sourceIds: null },
     });
@@ -89,6 +90,7 @@ describe('useLinkRepositoryMutation', () => {
       {
         github: { enabled: true, sourceIds: ['octo/hello'] },
         linear: { enabled: false, sourceIds: null },
+        gitlab: { enabled: false, sourceIds: null },
         jira: { enabled: false, sourceIds: null },
         incidentio: { enabled: false, sourceIds: null },
       },
@@ -101,6 +103,7 @@ describe('useLinkRepositoryMutation', () => {
     const saved = stubIntakeConfig({
       github: { enabled: false, sourceIds: ['octo/other'] },
       linear: { enabled: false, sourceIds: null },
+      gitlab: { enabled: false, sourceIds: null },
       jira: { enabled: false, sourceIds: null },
       incidentio: { enabled: false, sourceIds: null },
     });
@@ -115,6 +118,7 @@ describe('useLinkRepositoryMutation', () => {
       {
         github: { enabled: true, sourceIds: ['octo/other', 'octo/hello'] },
         linear: { enabled: false, sourceIds: null },
+        gitlab: { enabled: false, sourceIds: null },
         jira: { enabled: false, sourceIds: null },
         incidentio: { enabled: false, sourceIds: null },
       },
@@ -126,6 +130,7 @@ describe('useLinkRepositoryMutation', () => {
     const saved = stubIntakeConfig({
       github: { enabled: true, sourceIds: ['octo/hello'] },
       linear: { enabled: false, sourceIds: null },
+      gitlab: { enabled: false, sourceIds: null },
       jira: { enabled: false, sourceIds: null },
       incidentio: { enabled: false, sourceIds: null },
     });

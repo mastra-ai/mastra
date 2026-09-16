@@ -68,7 +68,7 @@ describe('buildGitLabAgentTools', () => {
     const tools = await buildGitLabAgentTools({ gitlab, requestContext: requestContextFor(projectId) });
 
     await expect((tools.gitlab_get_issue!.execute as any)({ issue: 'mastra/platform#42' })).resolves.toEqual({
-      error: 'GitLab rejected the configured access token. Check the GitLab token.',
+      error: 'GitLab rejected the configured personal access token. Check the token and its scopes.',
     });
   });
 });
