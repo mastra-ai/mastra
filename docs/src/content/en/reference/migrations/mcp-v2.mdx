@@ -177,7 +177,7 @@ On a legacy-negotiated connection the shared verbs work (`tools/list`, `tools/ca
   });
 ```
 
-Persisted credentials changed shape too: tokens are stored per authorization-server `issuer` (the SDK's `tokens(ctx)`/`saveTokens(tokens, ctx)` context) and the provider persists OAuth discovery state so the authorization code is only exchanged with the server that issued the redirect. Custom `OAuthStorage` backends keep the same key-value contract, but a storage namespace must not be shared between providers. `createOAuthCallbackServer` now also returns the RFC 9207 `iss` parameter; pass it to the code exchange so the SDK can reject an issuer mismatch.
+Persisted credentials changed shape too: tokens are stored per authorization-server `issuer` (the SDK's `tokens(ctx)`/`saveTokens(tokens, ctx)` context) and the provider persists OAuth discovery state so the authorization code is only exchanged with the server that issued the redirect. Custom `OAuthStorage` backends keep the same key-value contract, but a storage namespace must not be shared between providers. `createOAuthCallbackServer` now also returns the RFC 9207 `iss` parameter. Pass it to the code exchange so the SDK can reject an issuer mismatch.
 
 ### `startHTTP` options
 
@@ -255,7 +255,7 @@ Servers keep the static `logging` capability required by the specification but r
 
 ### `resources/subscribe` and `resources/unsubscribe`
 
-Legacy `resources/subscribe` is removed from both sides; `resources.subscribe` now uses `subscriptions/listen`.
+Legacy `resources/subscribe` is removed from both sides. `resources.subscribe` now uses `subscriptions/listen`.
 
 ### Dynamic client registration
 
