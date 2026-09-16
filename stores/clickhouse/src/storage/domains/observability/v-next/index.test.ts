@@ -15,7 +15,12 @@ import { createClient } from '@clickhouse/client';
 import { createObservabilityVNextTests } from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
-import { parseTraceQueryRequest, planTraceQuery, TraceQueryExecutionError } from '@mastra/core/storage';
+import {
+  parseTraceQueryRequest,
+  planTraceQuery,
+  TraceQueryExecutionError,
+  TraceQueryResourceLimitError,
+} from '@mastra/core/storage';
 import type { ObservabilityStorage } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -145,14 +150,38 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
     try {
       await expect(
-        runWithClickHouseTraceQueryTimeout(client, 10, {
-          query: 'SELECT sleep(0.1)',
-          query_params: {},
-        }),
+        runWithClickHouseTraceQueryTimeout(
+          client,
+          { timeoutMs: 10 },
+          {
+            query: 'SELECT sleep(0.1)',
+            query_params: {},
+          },
+        ),
       ).rejects.toBeInstanceOf(TraceQueryExecutionError);
 
       const result = await client.query({ query: 'SELECT 1 AS value', format: 'JSONEachRow' });
       expect(await result.json<{ value: number }>()).toEqual([{ value: 1 }]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('reports discovery memory exhaustion without returning partial rows', async () => {
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+
+    try {
+      await expect(
+        runWithClickHouseTraceQueryTimeout(
+          client,
+          { timeoutMs: 5_000, memoryLimitBytes: 1 },
+          { query: 'SELECT number, count() FROM numbers(1000000) GROUP BY number', query_params: {} },
+        ),
+      ).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
     } finally {
       await client.close();
     }
@@ -254,7 +283,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         if (expectPrimaryKey) expect(explain).toContain('PrimaryKey');
 
         const queryId = `trace-query-perf-${randomUUID()}`;
-        await runWithClickHouseTraceQueryTimeout(client, 15_000, compiled, queryId);
+        await runWithClickHouseTraceQueryTimeout(client, { timeoutMs: 15_000 }, compiled, queryId);
         await client.command({ query: 'SYSTEM FLUSH LOGS' });
         const logResult = await client.query({
           query: `SELECT read_rows AS readRows, read_bytes AS readBytes

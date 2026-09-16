@@ -8,6 +8,7 @@ import {
   planTraceQuery,
   planTraceQueryObservedFields,
   TraceQueryExecutionError,
+  TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
 import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
@@ -19,6 +20,7 @@ import {
   compileClickHouseTraceQueryObservedFields,
   queryThreads,
   queryTraces,
+  runWithClickHouseTraceQueryTimeout,
 } from './trace-query';
 import { ObservabilityStorageClickhouseVNext } from '.';
 
@@ -41,6 +43,78 @@ describe('ClickHouse advanced trace query', () => {
           traceQueryTimeoutMs: 0,
         }),
     ).toThrow('traceQueryTimeoutMs must be an integer between');
+  });
+
+  it('rejects invalid discovery execution budget configuration at construction', () => {
+    expect(
+      () =>
+        new ObservabilityStorageClickhouseVNext({
+          client: {} as ClickHouseClient,
+          traceQueryDiscoveryTimeoutMs: 0,
+        }),
+    ).toThrow('traceQueryTimeoutMs must be an integer between');
+    expect(
+      () =>
+        new ObservabilityStorageClickhouseVNext({
+          client: {} as ClickHouseClient,
+          traceQueryDiscoveryMemoryLimitBytes: 0,
+        }),
+    ).toThrow('traceQueryDiscoveryMemoryLimitBytes must be a positive safe integer');
+  });
+
+  it('uses conservative discovery defaults and falls back to the configured trace-query timeout', async () => {
+    const query = vi.fn().mockResolvedValue({ json: async () => [] });
+    const client = { query } as unknown as ClickHouseClient;
+    const discoveryPlan = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+
+    const defaultStorage = new ObservabilityStorageClickhouseVNext({ client });
+    await defaultStorage.getTraceQueryObservedFields(discoveryPlan);
+    expect(query).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clickhouse_settings: expect.objectContaining({
+          max_execution_time: 5,
+          max_memory_usage: String(256 * 1024 * 1024),
+        }),
+      }),
+    );
+
+    const fallbackStorage = new ObservabilityStorageClickhouseVNext({ client, traceQueryTimeoutMs: 2_500 });
+    await fallbackStorage.getTraceQueryObservedFields(discoveryPlan);
+    expect(query).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clickhouse_settings: expect.objectContaining({
+          max_execution_time: 2.5,
+          max_memory_usage: String(256 * 1024 * 1024),
+        }),
+      }),
+    );
+  });
+
+  it('applies discovery execution budgets and normalizes memory exhaustion', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ json: async () => [] })
+      .mockRejectedValueOnce({ code: '241', type: 'MEMORY_LIMIT_EXCEEDED' });
+    const client = { query } as unknown as ClickHouseClient;
+    const compiled = { query: 'SELECT 1', query_params: {} };
+
+    await expect(
+      runWithClickHouseTraceQueryTimeout(client, { timeoutMs: 5_000, memoryLimitBytes: 256 * 1024 * 1024 }, compiled),
+    ).resolves.toEqual([]);
+    expect(query).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clickhouse_settings: expect.objectContaining({
+          max_execution_time: 5,
+          max_memory_usage: String(256 * 1024 * 1024),
+        }),
+      }),
+    );
+
+    await expect(
+      runWithClickHouseTraceQueryTimeout(client, { timeoutMs: 5_000, memoryLimitBytes: 1 }, compiled),
+    ).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
   });
 
   it('decodes each observed metadata value from the expanded JSON entry', () => {

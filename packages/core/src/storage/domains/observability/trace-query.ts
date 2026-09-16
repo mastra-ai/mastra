@@ -640,6 +640,15 @@ export class TraceQueryExecutionError extends Error {
   }
 }
 
+export class TraceQueryResourceLimitError extends Error {
+  readonly code = 'TRACE_QUERY_RESOURCE_LIMIT';
+
+  constructor() {
+    super('The trace query exceeded its resource limit');
+    this.name = 'TraceQueryResourceLimitError';
+  }
+}
+
 export function resolveTraceQueryTimeoutMs(timeoutMs = TRACE_QUERY_DEFAULT_TIMEOUT_MS): number {
   if (
     !Number.isFinite(timeoutMs) ||
