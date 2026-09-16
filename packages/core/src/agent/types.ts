@@ -443,6 +443,8 @@ export interface AgentThreadSubscription<OUTPUT = unknown> {
   activeRunId: () => string | null;
   /** @internal */
   __getCurrentRunRequestContext?: () => RequestContext | undefined;
+  /** @internal */
+  __isCurrentToolGatePending?: (toolCallId: string) => Promise<boolean>;
   abort: () => boolean;
   unsubscribe: () => void;
 }

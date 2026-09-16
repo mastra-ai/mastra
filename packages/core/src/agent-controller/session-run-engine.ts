@@ -1316,23 +1316,6 @@ export class SessionRunEngine {
     }
   }
 
-  /** Retained transports replay finished runs to late subscribers; a tool gate whose run is gone is history, not a request. */
-  private async toolGateRunIsGone(chunk: StreamChunk, agent: Agent): Promise<boolean> {
-    if (chunk.type !== 'tool-call-approval' && chunk.type !== 'tool-call-suspended') {
-      return false;
-    }
-    const threadId = this.#session.thread.getId();
-    if (threadId === null) {
-      return false;
-    }
-    const runToResume = await agent.findThreadRunToResume({
-      threadId,
-      resourceId: this.#session.identity.getResourceId(),
-      toolCallId: getString(getPayload(chunk).toolCallId),
-    });
-    return runToResume === undefined;
-  }
-
   private async handleSubscribedStreamError(error: unknown): Promise<void> {
     if (error instanceof Error && error.name === 'AbortError') {
       await this.#session.finishAgentRun('aborted');
@@ -1376,10 +1359,14 @@ export class SessionRunEngine {
         }
 
         try {
-          if (await this.toolGateRunIsGone(chunk, agent)) {
-            continue;
-          }
-          const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext, agent);
+          const isToolGate = chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended';
+          const isRetiredToolGate =
+            isToolGate &&
+            subscription.__isCurrentToolGatePending &&
+            !(await subscription.__isCurrentToolGatePending(getString(getPayload(chunk).toolCallId) ?? ''));
+          const streamResult = isRetiredToolGate
+            ? this.finishStreamState(currentRun)
+            : await this.processStreamChunk(currentRun, chunk, requestContext, agent);
           if (
             streamResult ||
             chunk.type === 'finish' ||
@@ -1388,8 +1375,9 @@ export class SessionRunEngine {
             chunk.type === 'tool-call-suspended'
           ) {
             const suspended =
-              chunk.type === 'tool-call-suspended' ||
-              (streamResult ?? this.finishStreamState(currentRun)).suspended ||
+              (!isRetiredToolGate &&
+                (chunk.type === 'tool-call-suspended' ||
+                  (streamResult ?? this.finishStreamState(currentRun)).suspended)) ||
               undefined;
             const aborted = chunk.type === 'abort';
             // A non-success terminal finish reason (e.g. a `claude-fable-5`
