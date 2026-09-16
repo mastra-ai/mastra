@@ -2,7 +2,7 @@ import type { Agent } from '@mastra/core/agent';
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 import { connect } from '../connect.js';
-import { PROVIDERS, type ProviderRegistration } from '../registry.js';
+import { PROVIDERS, type ProviderRegistration, type ProxyProviderRegistration } from '../registry.js';
 
 // Test-only seam: the shipped barrel exports a readonly view; tests mutate the
 // underlying array to install fixture providers.
@@ -12,12 +12,12 @@ const TOKEN = 'fake-test-token';
 
 const fakeTools = { linear_fake_tool: { id: 'linear_fake_tool' } } as never;
 
-function installProvider(overrides?: Partial<ProviderRegistration>): {
-  registration: ProviderRegistration;
+function installProvider(overrides?: Partial<ProxyProviderRegistration>): {
+  registration: ProxyProviderRegistration;
   createTools: ReturnType<typeof vi.fn>;
 } {
   const createTools = vi.fn().mockReturnValue(fakeTools);
-  const registration: ProviderRegistration = {
+  const registration: ProxyProviderRegistration = {
     integrationId: 'linear',
     envVar: 'MASTRA_LINEAR_CONNECTION_ID',
     createTools,
@@ -38,6 +38,14 @@ function makeConnection(overrides?: Record<string, unknown>) {
     accountLabel: 'Acme',
     ...overrides,
   };
+}
+
+function platformFetch(connectionResponse: Response) {
+  return vi.fn<typeof fetch>().mockImplementation(async input => {
+    const path = new URL(String(input)).pathname;
+    if (path === '/v2/integrations') return Response.json({ integrations: [] });
+    return connectionResponse.clone();
+  });
 }
 
 let warnSpy: ReturnType<typeof vi.spyOn>;
@@ -69,20 +77,20 @@ describe('connect', () => {
     );
   });
 
-  it('throws invalid_options for unknown provider in integrations override', () => {
+  it('throws invalid_options for a malformed provider id in integrations override', () => {
     installProvider();
     expect(() =>
       connect({
         projectId: 'proj_1',
         client: { accessToken: TOKEN },
-        integrations: { does_not_exist: { disabled: true } },
+        integrations: { 'does.not.exist': { disabled: true } },
       }),
     ).toThrow(expect.objectContaining({ code: 'invalid_options' }));
   });
 
   it('falls back to MASTRA_PROJECT_ID', async () => {
     installProvider();
-    const fetchMock = vi.fn().mockResolvedValue(Response.json({ connections: [] }));
+    const fetchMock = platformFetch(Response.json({ connections: [] }));
     vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
     await connect({
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
@@ -93,7 +101,7 @@ describe('connect', () => {
 
   it('resolves the toolset for the sole active connection', async () => {
     const { createTools } = installProvider();
-    const fetchMock = vi.fn().mockResolvedValue(Response.json({ connections: [makeConnection()] }));
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
     const tools = await connect({
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
@@ -112,7 +120,7 @@ describe('connect', () => {
       envVar: 'MASTRA_NOTION_CONNECTION_ID',
       createTools: vi.fn().mockReturnValue(duplicateTools),
     });
-    const fetchMock = vi.fn().mockResolvedValue(
+    const fetchMock = platformFetch(
       Response.json({
         connections: [makeConnection(), makeConnection({ id: 'c_not1', integrationId: 'notion' })],
       }),
@@ -131,7 +139,7 @@ describe('connect', () => {
 
   it('silently skips providers without project connections', async () => {
     installProvider();
-    const fetchMock = vi.fn().mockResolvedValue(Response.json({ connections: [] }));
+    const fetchMock = platformFetch(Response.json({ connections: [] }));
     const tools = connect({
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
@@ -145,9 +153,9 @@ describe('connect', () => {
 
   it('skips a directed connection that needs re-auth', async () => {
     installProvider();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(Response.json({ connections: [makeConnection({ id: 'c_stale', status: 'needs_reauth' })] }));
+    const fetchMock = platformFetch(
+      Response.json({ connections: [makeConnection({ id: 'c_stale', status: 'needs_reauth' })] }),
+    );
     const tools = await connect({
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
@@ -160,7 +168,7 @@ describe('connect', () => {
   it('skips a directed connection id that is not attached to the project', async () => {
     installProvider();
     vi.stubEnv('MASTRA_LINEAR_CONNECTION_ID', 'c_absent');
-    const fetchMock = vi.fn().mockResolvedValue(Response.json({ connections: [makeConnection()] }));
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
     const tools = await connect({
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
@@ -173,9 +181,7 @@ describe('connect', () => {
 
   it('skips a directed connection in a non-active state', async () => {
     installProvider();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(Response.json({ connections: [makeConnection({ id: 'c_err', status: 'error' })] }));
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection({ id: 'c_err', status: 'error' })] }));
     const tools = await connect({
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
@@ -187,7 +193,7 @@ describe('connect', () => {
 
   it('skips when multiple active connections exist without a pin', async () => {
     installProvider();
-    const fetchMock = vi.fn().mockResolvedValue(
+    const fetchMock = platformFetch(
       Response.json({
         connections: [makeConnection({ id: 'c1' }), makeConnection({ id: 'c2' })],
       }),
@@ -202,7 +208,7 @@ describe('connect', () => {
 
   it('uses the pinned connection id from integrations override', async () => {
     const { createTools } = installProvider();
-    const fetchMock = vi.fn().mockResolvedValue(
+    const fetchMock = platformFetch(
       Response.json({
         connections: [makeConnection({ id: 'c1' }), makeConnection({ id: 'c2' })],
       }),
@@ -218,7 +224,7 @@ describe('connect', () => {
   it('uses the env-var fallback when no pin is given', async () => {
     const { createTools } = installProvider();
     vi.stubEnv('MASTRA_LINEAR_CONNECTION_ID', 'c_env');
-    const fetchMock = vi.fn().mockResolvedValue(
+    const fetchMock = platformFetch(
       Response.json({
         connections: [makeConnection({ id: 'c_env' }), makeConnection({ id: 'c_other' })],
       }),
@@ -232,7 +238,7 @@ describe('connect', () => {
 
   it('respects disabled: true and does not include the provider', async () => {
     const { createTools } = installProvider();
-    const fetchMock = vi.fn().mockResolvedValue(Response.json({ connections: [makeConnection()] }));
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
     const tools = await connect({
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
@@ -258,7 +264,7 @@ describe('connect', () => {
       envVar: 'MASTRA_NOTION_CONNECTION_ID',
       createTools: notionCreate,
     });
-    const fetchMock = vi.fn().mockResolvedValue(
+    const fetchMock = platformFetch(
       Response.json({
         connections: [makeConnection(), makeConnection({ id: 'c_not', integrationId: 'notion' })],
       }),

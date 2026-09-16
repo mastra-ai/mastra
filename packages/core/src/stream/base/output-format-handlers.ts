@@ -443,21 +443,19 @@ class ArrayFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
           : [];
       const filteredElements: Partial<OUTPUT>[] = [];
 
-      // Filter out incomplete elements (like empty objects {})
       for (let i = 0; i < rawElements.length; i++) {
         const element = rawElements[i];
 
-        // Skip the last element if it's incomplete (unless this is the final parse)
         if (i === rawElements.length - 1 && parseState !== 'successful-parse') {
-          // Only include the last element if it has meaningful content
+          // The last element may still be streaming. Partial objects are emitted
+          // once they have content; primitives (e.g. a truncated string or number)
+          // are withheld until the parse completes.
           if (element && typeof element === 'object' && Object.keys(element).length > 0) {
             filteredElements.push(element as Partial<OUTPUT>);
           }
-        } else {
-          // Include all non-last elements that have content
-          if (element && typeof element === 'object' && Object.keys(element).length > 0) {
-            filteredElements.push(element as Partial<OUTPUT>);
-          }
+        } else if (element !== undefined) {
+          // Non-last elements are complete: include them regardless of type
+          filteredElements.push(element as Partial<OUTPUT>);
         }
       }
 
@@ -488,15 +486,21 @@ class ArrayFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
     return { shouldEmit: false };
   }
 
-  async validateAndTransformFinal(_finalValue: string): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
-    const resultValue = this.textPreviousFilteredArray;
-
-    if (!resultValue) {
+  async validateAndTransformFinal(finalRawValue: string): Promise<ValidateAndTransformFinalResult<OUTPUT>> {
+    if (!finalRawValue) {
       return {
         success: false,
         error: new Error('No object generated: could not parse the response.'),
       };
     }
+
+    // Validate the elements from the final text rather than the streaming-filtered
+    // array so nothing withheld during partial parsing is lost at the end.
+    const { value } = await parsePartialJson(this.preprocessText(finalRawValue));
+    const resultValue =
+      value && typeof value === 'object' && 'elements' in value && Array.isArray(value.elements)
+        ? value.elements
+        : this.textPreviousFilteredArray;
 
     return this.validateValue(resultValue);
   }

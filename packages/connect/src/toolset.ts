@@ -57,7 +57,7 @@ export function defineProxyTool<TIn, TOut>(context: ProxyToolContext, config: Pr
     execute: async input => {
       const connectionId = resolveConnectionId(context.envVar, context.options?.connectionId);
       const client = resolveClient(context.options?.client);
-      const { data: raw } = await proxyRequest(client, connectionId, config.request(input));
+      const raw = await proxyRequest(client, connectionId, config.request(input));
       return config.transform(raw, input);
     },
   });

@@ -993,6 +993,13 @@ export class Memory extends MastraMemory {
     return savedThread;
   }
 
+  /**
+   * Update a thread's title or metadata.
+   *
+   * Unlike `session.thread.rename()`, this does not pin the title, so
+   * Observational Memory may still replace it with an extracted title. To
+   * protect a manual rename, set `metadata.titlePinned` to `true`.
+   */
   async updateThread({
     id,
     title,

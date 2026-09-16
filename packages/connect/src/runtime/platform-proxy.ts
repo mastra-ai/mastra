@@ -13,7 +13,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 
 import {
   getConnectionContext,
-  proxyRequest,
+  proxyRequestWithResponse,
   resolveClient,
   type ConnectClientOptions,
   type ConnectionContext,
@@ -166,7 +166,7 @@ async function callProxy<T>(
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
-      const { data, status } = await proxyRequest(client, resolvedConnectionId, {
+      const response = await proxyRequestWithResponse(client, resolvedConnectionId, {
         method,
         path: config.endpoint,
         query: config.params,
@@ -174,10 +174,7 @@ async function callProxy<T>(
         baseUrlOverride: config.baseUrlOverride,
         body: config.data,
       });
-      // Relay the provider status: templates branch on it for async flows
-      // (for example Snowflake's 202 + statement-handle polling). Headers are
-      // not exposed by the platform proxy; keep the shape with a stub.
-      return { data: data as T, status, headers: {} };
+      return { ...response, data: response.data as T };
     } catch (error) {
       lastError = error;
       // Only retry on network-ish failures. MastraConnectError with

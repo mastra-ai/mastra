@@ -142,6 +142,7 @@ export const useDatasetMutations = () => {
     mutationFn: (experimentId: string) => client.deleteExperiment(experimentId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['experiments'] });
+      void queryClient.invalidateQueries({ queryKey: ['agent-experiments'] });
       void queryClient.invalidateQueries({ queryKey: ['dataset-experiments'] });
       void queryClient.invalidateQueries({ queryKey: ['dataset-experiment'] });
       void queryClient.invalidateQueries({ queryKey: ['dataset-experiment-results'] });

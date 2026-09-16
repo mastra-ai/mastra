@@ -140,6 +140,39 @@ async function throwPlatformError(response: Response, context: string): Promise<
   );
 }
 
+/** Builds a locked MCP transport that can only call one Platform connection endpoint. */
+export function platformMcpTransport(client: ResolvedClient, connectionId: string) {
+  const url = new URL(`${client.baseUrl}/v2/connections/${encodeURIComponent(connectionId)}/mcp`);
+  return {
+    url,
+    allowedHosts: [url.host],
+    fetch: async (input: string | URL, init?: RequestInit): Promise<Response> => {
+      const requested = new URL(String(input));
+      if (requested.href !== url.href) {
+        throw new MastraConnectError(
+          'invalid_options',
+          `MCP transport refused an unexpected Platform URL for connection ${connectionId}.`,
+        );
+      }
+      const headers = new Headers(client.headers);
+      new Headers(init?.headers).forEach((value, name) => headers.set(name, value));
+      // The platform token always wins over transport-provided headers. Platform
+      // strips it before Nango injects the provider credential upstream.
+      headers.set('authorization', `Bearer ${client.accessToken}`);
+      try {
+        return await client.fetch(url, { ...init, headers, redirect: 'manual' });
+      } catch (error) {
+        if (error instanceof Error && error.message.includes(client.accessToken)) {
+          const redacted = new Error(redact(error.message, client.accessToken));
+          redacted.name = error.name;
+          throw redacted;
+        }
+        throw error;
+      }
+    },
+  };
+}
+
 // —— response schemas (mirroring the platform's http-schemas) ——
 
 export const connectionSchema = z.object({
@@ -159,6 +192,19 @@ export type ProjectConnection = z.infer<typeof connectionSchema>;
 
 const connectionListSchema = z.object({
   connections: z.array(connectionSchema),
+});
+
+export const integrationCatalogEntrySchema = z.object({
+  id: z.string(),
+  capabilities: z.object({
+    mcp: z.boolean().optional(),
+  }),
+});
+
+export type IntegrationCatalogEntry = z.infer<typeof integrationCatalogEntrySchema>;
+
+const integrationCatalogResponseSchema = z.object({
+  integrations: z.array(integrationCatalogEntrySchema),
 });
 
 export const credentialSchema = z.discriminatedUnion('type', [
@@ -192,6 +238,18 @@ export async function listProjectConnections(client: ResolvedClient, projectId: 
     );
   }
   return parsed.data.connections;
+}
+
+export async function listIntegrations(client: ResolvedClient): Promise<IntegrationCatalogEntry[]> {
+  const response = await platformFetch(client, '/v2/integrations');
+  if (!response.ok) {
+    await throwPlatformError(response, 'listing integrations');
+  }
+  const parsed = integrationCatalogResponseSchema.safeParse(await parsePlatformJson(response, 'listing integrations'));
+  if (!parsed.success) {
+    throw new MastraConnectError('platform_error', 'Platform returned an unexpected integration catalog shape.');
+  }
+  return parsed.data.integrations;
 }
 
 export async function getConnectionContext(client: ResolvedClient, connectionId: string): Promise<ConnectionContext> {
@@ -298,21 +356,26 @@ function assertValidBaseUrlOverride(baseUrlOverride: string): void {
   }
 }
 
-export interface ProxyRequestResult {
+export interface ProxyResponse {
   data: unknown;
-  /**
-   * The provider status relayed by the platform proxy. Templates branch on
-   * it for async flows (for example Snowflake's 202 + statement-handle
-   * polling), so it must not be collapsed to a stub value.
-   */
   status: number;
+  headers: Record<string, string>;
 }
 
 export async function proxyRequest(
   client: ResolvedClient,
   connectionId: string,
   options: ProxyRequestOptions,
-): Promise<ProxyRequestResult> {
+): Promise<unknown> {
+  return (await proxyRequestWithResponse(client, connectionId, options)).data;
+}
+
+/** Preserves HTTP metadata for tools with status-dependent provider contracts. */
+export async function proxyRequestWithResponse(
+  client: ResolvedClient,
+  connectionId: string,
+  options: ProxyRequestOptions,
+): Promise<ProxyResponse> {
   const cleanPath = options.path.replace(/^\/+/, '');
   if (hasDotSegment(cleanPath)) {
     throw new MastraConnectError(
@@ -387,12 +450,13 @@ export async function proxyRequest(
     );
   }
 
-  if (response.status === 204) return { data: null, status: response.status };
+  const metadata = { status: response.status, headers: Object.fromEntries(response.headers.entries()) };
+  if (response.status === 204) return { ...metadata, data: null };
   const text = await response.text();
-  if (!text) return { data: null, status: response.status };
+  if (!text) return { ...metadata, data: null };
   try {
-    return { data: JSON.parse(text), status: response.status };
+    return { ...metadata, data: JSON.parse(text) };
   } catch {
-    return { data: text, status: response.status };
+    return { ...metadata, data: text };
   }
 }
