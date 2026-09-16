@@ -88,7 +88,8 @@ export function TimelineNameCol({
         {/* Searchable: the span name is what the timeline search matches on. When the match
             is in the span's payload instead, the whole name is painted in the indirect color
             so the row explains its own presence. */}
-        <span className="flex min-w-0 flex-col">
+        {/* Duration stacks under the name on narrow layouts and moves inline at the end of the row from lg. */}
+        <span className="flex min-w-0 flex-1 flex-col lg:flex-row lg:items-center lg:justify-between lg:gap-2">
           <span
             data-highlight={span.matchedInPayloadOnly ? undefined : ''}
             data-highlight-indirect={span.matchedInPayloadOnly ? '' : undefined}
@@ -97,7 +98,7 @@ export function TimelineNameCol({
           >
             {span.name}
           </span>
-          {meta && <span className="text-ui-xs text-neutral3">{meta}</span>}
+          {meta && <span className="text-ui-xs text-neutral3 shrink-0 lg:tabular-nums">{meta}</span>}
         </span>
       </button>
 
