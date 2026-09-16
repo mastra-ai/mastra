@@ -8,13 +8,12 @@ import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 export function WorkflowSuspendedOverlay() {
   const { result, workflow, runId, isStreamingWorkflow } = useContext(WorkflowRunContext);
   const { canExecute, isLoading: isLoadingPermissions } = usePermissions();
-  const suspendedSteps = useSuspendedSteps(result, runId ?? '');
+  const suspendedSteps = useSuspendedSteps(result, runId);
   const onResume = useResumeWorkflow();
 
-  const canResume = result?.status === 'suspended' && !isStreamingWorkflow && workflow && suspendedSteps.length > 0;
-  if (!canResume || isLoadingPermissions || !canExecute('workflows')) {
-    return null;
-  }
+  const waitsForHumanInput = result?.status === 'suspended' && suspendedSteps.length > 0 && !isStreamingWorkflow;
+  const mayResume = !isLoadingPermissions && canExecute('workflows');
+  if (!workflow || !waitsForHumanInput || !mayResume) return null;
 
   return (
     <div

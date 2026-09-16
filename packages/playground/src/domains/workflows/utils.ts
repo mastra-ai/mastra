@@ -1,7 +1,7 @@
 import type { GetWorkflowRunByIdResponse } from '@mastra/client-js';
 import type { WorkflowRunState, WorkflowStateStepResult } from '@mastra/core/workflows';
 
-import type { WorkflowRunStreamResult } from './context/workflow-run-context';
+import type { WorkflowRunSnapshot, WorkflowRunStreamResult } from './context/workflow-run-context';
 
 type RecordedRun = WorkflowRunState | GetWorkflowRunByIdResponse;
 type RecordedStep = WorkflowRunState['context'][string] | WorkflowStateStepResult;
@@ -88,8 +88,43 @@ export function convertWorkflowRunStateToStreamResult(run: RecordedRun): Workflo
   return { input, steps, status: run.status, ...readRunOutcome(run, steps) };
 }
 
+// Object.fromEntries keeps a "__proto__" step id as an own key; index assignment would hit the setter.
+function mergeStepResults(liveSteps: WorkflowRunStreamResult['steps'], storedSteps: WorkflowRunStreamResult['steps']) {
+  const mergedLiveSteps = Object.entries(liveSteps).map(
+    ([stepId, liveStep]) => [stepId, { ...storedSteps[stepId], ...liveStep }] as const,
+  );
+  return { ...storedSteps, ...Object.fromEntries(mergedLiveSteps) };
+}
+
+export function resolveWorkflowRunResult(
+  liveResult: WorkflowRunStreamResult | null,
+  storedResult: WorkflowRunStreamResult | null,
+) {
+  if (!liveResult?.status) return storedResult ?? liveResult;
+  if (!storedResult) return liveResult;
+  return {
+    ...liveResult,
+    input: liveResult.input ?? storedResult.input,
+    steps: mergeStepResults(liveResult.steps, storedResult.steps),
+  };
+}
+
+function readInitialState(runSnapshot: WorkflowRunSnapshot) {
+  return isPersistedRunState(runSnapshot) ? runSnapshot.value : runSnapshot.initialState;
+}
+
+export function readStoredPayload(runSnapshot: WorkflowRunSnapshot, storedInput: WorkflowRunStreamResult['input']) {
+  const initialState = readInitialState(runSnapshot);
+  const hasInitialState = initialState && Object.keys(initialState).length > 0;
+  return hasInitialState ? { initialState, inputData: storedInput } : storedInput;
+}
+
 export function isWorkflowRunFinished(status?: string) {
   return FINISHED_RUN_STATUSES.includes(status ?? '');
+}
+
+export function isIdleRunStatus(status: WorkflowRunStreamResult['status'] | undefined) {
+  return status === 'paused' || status === 'suspended';
 }
 
 export function getRunTimestamp(value: Date | string | number | undefined): number | undefined {
