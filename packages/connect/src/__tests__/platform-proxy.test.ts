@@ -77,6 +77,49 @@ describe('createPlatformProxy request context binding', () => {
     await expect(proxy.getMetadata()).resolves.toEqual({ region: 'us-east-1' });
     expect(fetchMock).toHaveBeenCalledOnce();
   });
+
+  it('merges updateMetadata writes into an overlay shared across bound copies', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(Response.json({ connection_config: {}, metadata: null })));
+    const base = createPlatformProxy({
+      connectionId: 'conn-1',
+      client: { accessToken: 'token', baseUrl: 'https://example.test', fetch: fetchMock },
+    });
+
+    const firstCall = base.withRequestContext(new RequestContext());
+    await expect(firstCall.getMetadata()).resolves.toEqual({});
+    await firstCall.updateMetadata({ cloudId: 'cloud-1', baseUrl: 'https://site.atlassian.net' });
+    await expect(firstCall.getMetadata()).resolves.toEqual({
+      cloudId: 'cloud-1',
+      baseUrl: 'https://site.atlassian.net',
+    });
+
+    // A later request-bound copy of the same toolset proxy sees the cache.
+    const secondCall = base.withRequestContext(new RequestContext());
+    await expect(secondCall.getMetadata()).resolves.toEqual({
+      cloudId: 'cloud-1',
+      baseUrl: 'https://site.atlassian.net',
+    });
+    // The overlay never writes back to the platform: only connection-context
+    // GETs went over the wire.
+    for (const call of fetchMock.mock.calls) {
+      expect(call[1]?.method ?? 'GET').toBe('GET');
+    }
+  });
+
+  it('layers overlay values over platform metadata without dropping existing keys', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(Response.json({ connection_config: {}, metadata: { region: 'us-east-1' } }));
+    const proxy = createPlatformProxy({
+      connectionId: 'conn-1',
+      client: { accessToken: 'token', baseUrl: 'https://example.test', fetch: fetchMock },
+    }).withRequestContext(new RequestContext());
+
+    await proxy.updateMetadata({ cloudId: 'cloud-1' });
+    await expect(proxy.getMetadata()).resolves.toEqual({ region: 'us-east-1', cloudId: 'cloud-1' });
+  });
 });
 
 describe('callProxy retry policy', () => {
