@@ -6,7 +6,7 @@ import type {
 } from '@mastra/core/storage';
 import { describe, expect, expectTypeOf, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
-import type { QueryTraceThreadsResult } from './observability';
+import type { QueryTraceThreadsResult, QueryTracesInput } from './observability';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -485,6 +485,14 @@ describe('Observability Methods', () => {
   });
 
   describe('queryTraces()', () => {
+    it('should reject mixed pagination modes at the type boundary', () => {
+      expectTypeOf<{
+        timeRange: { from: string; to: string };
+        page: { limit: number };
+        pagination: { page: number; perPage: number };
+      }>().not.toMatchTypeOf<QueryTracesInput>();
+    });
+
     it('should post the advanced query body unchanged with trace result types', async () => {
       mockSuccessfulResponse();
       const request = {

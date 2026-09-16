@@ -445,6 +445,22 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query).toContain("CAST(NULL, 'Nullable(String)') AS metadata");
     expect(compiled.query).toContain("CAST(NULL, 'Nullable(String)') AS input");
     expect(compiled.query).toContain('1 AS __metadata');
+
+    const candidatesProjection = /candidates AS \(\n\s*SELECT ([\s\S]*?)\n\s*FROM root_scope r/.exec(
+      compiled.query,
+    )?.[1];
+    const metadataProjection = /UNION ALL\nSELECT\n([\s\S]*?)\nFROM page_total/.exec(compiled.query)?.[1];
+    expect(candidatesProjection).toBeDefined();
+    expect(metadataProjection).toBeDefined();
+    const aliases = (projection: string | undefined) =>
+      Array.from(projection?.matchAll(/\bAS\s+([A-Za-z_][A-Za-z0-9_]*)/g) ?? [], match => match[1]);
+    expect(aliases(metadataProjection)).toEqual([
+      ...aliases(candidatesProjection),
+      '__row_position',
+      'total',
+      '__metadata',
+    ]);
+
     expect(compiled.query_params).toMatchObject({ trace_query_3: 25, trace_query_4: 50 });
     expect(compiled.sharedSnapshot).toBe(true);
   });

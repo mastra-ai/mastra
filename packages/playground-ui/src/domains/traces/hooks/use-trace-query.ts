@@ -11,7 +11,7 @@ type TraceQueryResponse = Awaited<ReturnType<MastraClient['queryTraces']>>;
 type TraceQueryCursorResponse = Extract<TraceQueryResponse, { page: { next: string | null } }>;
 type TraceQueryTrace = TraceQueryResponse['traces'][number];
 
-export type TraceQueryArgs = Omit<QueryTracesInput, 'page'>;
+export type TraceQueryArgs = Omit<QueryTracesInput, 'page' | 'pagination'>;
 
 export interface UseTraceQueryArgs {
   query: TraceQueryArgs | undefined;

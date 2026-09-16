@@ -454,7 +454,7 @@ SELECT
   CAST(NULL, 'Nullable(String)') AS environment,
   '' AS status,
   0 AS __row_position,
-  page_total.total,
+  page_total.total AS total,
   1 AS __metadata
 FROM page_total
 ORDER BY __metadata ASC, __row_position ASC`,
