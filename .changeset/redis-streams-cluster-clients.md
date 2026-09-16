@@ -17,4 +17,4 @@ const pubsub = new RedisStreamsPubSub({
 });
 ```
 
-Also fixed a cold-start race in the shared writer connection. node-redis flips `isOpen` to `true` synchronously inside `connect()`, before the socket is ready (standalone) or slot discovery completes (cluster). Concurrent first-use callers - for example many `subscribe()` calls at boot - could pass the `isOpen` check while the initial connect was still in flight; on a Cluster client that crashed in slot lookup (`Cannot read properties of undefined (reading 'master')`). All cold callers now await the same in-flight `connect()`. node-redis's automatic mid-life reconnect is unaffected.
+Also fixed a cold-start race in the shared writer connection: concurrent first-use operations (for example many `subscribe()` calls at boot) now wait for the same initial `connect()` instead of issuing commands before it finishes, which could crash Cluster clients during slot lookup. Automatic mid-life reconnect is unchanged.

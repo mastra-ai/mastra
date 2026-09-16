@@ -36,7 +36,7 @@ const pubsub = new RedisStreamsPubSub({
 });
 ```
 
-To build the client yourself (TLS, Sentinel, credential providers), pass an unconnected `client` instead; readers are created from it with `client.duplicate()` and the pubsub owns its lifecycle.
+To build the client yourself (TLS, credential providers), pass an unconnected `client` instead; readers are created from it with `client.duplicate()` and the pubsub owns its lifecycle.
 
 ## Documentation
 
