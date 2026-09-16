@@ -512,10 +512,7 @@ export const environmentRoute = registerApiRoute('/environment', {
     const sourcePinnedUnicornMagicVersion = '0.2.0';
 
     beforeAll(async () => {
-      const packageJsonPaths = [
-        join(fixturePath, 'package.json'),
-        join(fixturePath, 'apps', 'custom', 'package.json'),
-      ];
+      const packageJsonPaths = [join(fixturePath, 'package.json'), join(fixturePath, 'apps', 'custom', 'package.json')];
       const originalPackageJsons = await Promise.all(packageJsonPaths.map(path => readFile(path, 'utf-8')));
       const sourceLockfilePath = join(fixturePath, 'pnpm-lock.yaml');
       const sourceLockfile = await readFile(sourceLockfilePath, 'utf-8');
