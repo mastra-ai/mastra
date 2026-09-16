@@ -40,7 +40,7 @@ describe('ClickHouse advanced trace query', () => {
       () =>
         new ObservabilityStorageClickhouseVNext({
           client: {} as ClickHouseClient,
-          traceQueryTimeoutMs: 0,
+          traceQuery: { timeoutMs: 0 },
         }),
     ).toThrow('traceQueryTimeoutMs must be an integer between');
   });
@@ -50,19 +50,19 @@ describe('ClickHouse advanced trace query', () => {
       () =>
         new ObservabilityStorageClickhouseVNext({
           client: {} as ClickHouseClient,
-          traceQueryDiscoveryTimeoutMs: 0,
+          traceQuery: { discovery: { timeoutMs: 0 } },
         }),
     ).toThrow('traceQueryTimeoutMs must be an integer between');
     expect(
       () =>
         new ObservabilityStorageClickhouseVNext({
           client: {} as ClickHouseClient,
-          traceQueryDiscoveryMemoryLimitBytes: 0,
+          traceQuery: { discovery: { memoryLimitBytes: 0 } },
         }),
-    ).toThrow('traceQueryDiscoveryMemoryLimitBytes must be a positive safe integer');
+    ).toThrow('traceQuery.discovery.memoryLimitBytes must be a positive safe integer');
   });
 
-  it('uses conservative discovery defaults and falls back to the configured trace-query timeout', async () => {
+  it('uses conservative discovery defaults and supports nested and legacy configuration', async () => {
     const query = vi.fn().mockResolvedValue({ json: async () => [] });
     const client = { query } as unknown as ClickHouseClient;
     const discoveryPlan = planTraceQueryObservedFields(
@@ -80,8 +80,31 @@ describe('ClickHouse advanced trace query', () => {
       }),
     );
 
-    const fallbackStorage = new ObservabilityStorageClickhouseVNext({ client, traceQueryTimeoutMs: 2_500 });
-    await fallbackStorage.getTraceQueryObservedFields(discoveryPlan);
+    const configuredStorage = new ObservabilityStorageClickhouseVNext({
+      client,
+      traceQuery: {
+        timeoutMs: 3_000,
+        discovery: { timeoutMs: 1_000, memoryLimitBytes: 128 * 1024 * 1024 },
+      },
+    });
+    await configuredStorage.queryTraces(plan());
+    expect(query).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clickhouse_settings: expect.objectContaining({ max_execution_time: 3 }),
+      }),
+    );
+    await configuredStorage.getTraceQueryObservedFields(discoveryPlan);
+    expect(query).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clickhouse_settings: expect.objectContaining({
+          max_execution_time: 1,
+          max_memory_usage: String(128 * 1024 * 1024),
+        }),
+      }),
+    );
+
+    const legacyStorage = new ObservabilityStorageClickhouseVNext({ client, traceQueryTimeoutMs: 2_500 });
+    await legacyStorage.getTraceQueryObservedFields(discoveryPlan);
     expect(query).toHaveBeenLastCalledWith(
       expect.objectContaining({
         clickhouse_settings: expect.objectContaining({

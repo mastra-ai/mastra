@@ -133,18 +133,30 @@ export { recordDeletionRequest } from './deletion-requests';
 export type { DeletionRequestRow, RecordDeletionRequestArgs } from './deletion-requests';
 export type { RetentionConfig } from './ddl';
 
-/** Extended config for v-next observability, adding per-signal retention. */
-export type VNextObservabilityConfig = ClickhouseDomainConfig & {
-  retention?: RetentionConfig;
+export interface TraceQueryConfig {
   /** Maximum execution time for one advanced trace query. Default 15 seconds. */
-  traceQueryTimeoutMs?: number;
-  /** Maximum execution time for one trace-query discovery request. Default 5 seconds. */
-  traceQueryDiscoveryTimeoutMs?: number;
-  /** Maximum memory for one trace-query discovery request. Default 256 MiB. */
-  traceQueryDiscoveryMemoryLimitBytes?: number;
-  /** @internal Test-only override for the ClickHouse delta cursor strategy. */
-  deltaCursorStrategy?: ClickHouseDeltaCursorStrategy;
-};
+  timeoutMs?: number;
+  discovery?: {
+    /** Maximum execution time for one trace-query discovery request. Default 5 seconds. */
+    timeoutMs?: number;
+    /** Maximum memory for one trace-query discovery request. Default 256 MiB. */
+    memoryLimitBytes?: number;
+  };
+}
+
+export interface VNextObservabilityOptions {
+  retention?: RetentionConfig;
+  traceQuery?: TraceQueryConfig;
+}
+
+/** Extended config for v-next observability. */
+export type VNextObservabilityConfig = ClickhouseDomainConfig &
+  VNextObservabilityOptions & {
+    /** @deprecated Use `traceQuery.timeoutMs` instead. */
+    traceQueryTimeoutMs?: number;
+    /** @internal Test-only override for the ClickHouse delta cursor strategy. */
+    deltaCursorStrategy?: ClickHouseDeltaCursorStrategy;
+  };
 import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
 import * as logsOps from './logs';
@@ -469,7 +481,7 @@ function resolveTraceQueryDiscoveryMemoryLimitBytes(
   memoryLimitBytes = TRACE_QUERY_DISCOVERY_DEFAULT_MEMORY_LIMIT_BYTES,
 ): number {
   if (!Number.isSafeInteger(memoryLimitBytes) || memoryLimitBytes <= 0) {
-    throw new RangeError('traceQueryDiscoveryMemoryLimitBytes must be a positive safe integer');
+    throw new RangeError('traceQuery.discovery.memoryLimitBytes must be a positive safe integer');
   }
   return memoryLimitBytes;
 }
@@ -490,12 +502,17 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     this.#replication = replication;
     this.#retention = config.retention;
     this.#deltaCursorStrategyOverride = config.deltaCursorStrategy;
-    this.#traceQueryTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(config.traceQueryTimeoutMs);
+    this.#traceQueryTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(
+      config.traceQuery?.timeoutMs ?? config.traceQueryTimeoutMs,
+    );
     this.#traceQueryDiscoveryLimits = {
       timeoutMs: coreStorage.resolveTraceQueryTimeoutMs(
-        config.traceQueryDiscoveryTimeoutMs ?? config.traceQueryTimeoutMs ?? TRACE_QUERY_DISCOVERY_DEFAULT_TIMEOUT_MS,
+        config.traceQuery?.discovery?.timeoutMs ??
+          config.traceQuery?.timeoutMs ??
+          config.traceQueryTimeoutMs ??
+          TRACE_QUERY_DISCOVERY_DEFAULT_TIMEOUT_MS,
       ),
-      memoryLimitBytes: resolveTraceQueryDiscoveryMemoryLimitBytes(config.traceQueryDiscoveryMemoryLimitBytes),
+      memoryLimitBytes: resolveTraceQueryDiscoveryMemoryLimitBytes(config.traceQuery?.discovery?.memoryLimitBytes),
     };
   }
 
