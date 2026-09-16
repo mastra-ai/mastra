@@ -1280,10 +1280,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       const scopeCtx: RunScopeContext = { mastra, runId, _internal };
       if (eagerCoordinator) {
         writeScoped(scopeCtx, EAGER_TOOL_EXECUTION_KEY, 'eagerToolExecutionCoordinator', eagerCoordinator);
-        // A caller abort stops further eager dispatch. Executions already in flight
-        // observe the same signal through the tool execution options. Registered once
-        // for the whole run rather than per iteration, so long loops do not pile up
-        // listeners on the same signal.
+        // A caller abort stops further eager dispatch permanently. Executions already in
+        // flight observe it through the signal the coordinator hands each of them, which
+        // the tool call step fuses with the run's own. Registered once for the whole run
+        // rather than per iteration, so long loops do not pile up listeners.
         if (!eagerAbortListenerRegistered) {
           eagerAbortListenerRegistered = true;
           options?.abortSignal?.addEventListener('abort', () => eagerCoordinator.stop({ permanent: true }), {
