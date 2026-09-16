@@ -10,8 +10,21 @@ import {
   resolveToolResultValue,
   truncateStringByTokens,
 } from '../processors/observational-memory/tool-result-helpers';
+import {
+  recallObservations,
+  type ObservationRecallInput,
+  type ObservationRecallMemory,
+  type ObservationRecallStore,
+} from './observation-recall';
 
 export type RecallDetail = 'low' | 'high';
+export type {
+  ObservationRecallArchive,
+  ObservationRecallGroup,
+  ObservationRecallInput,
+  ObservationRecallResult,
+  ObservationRecallSource,
+} from './observation-recall';
 
 function getMessageParts(msg: MastraDBMessage): any[] {
   if (typeof msg.content === 'string') return [];
@@ -45,10 +58,12 @@ type RecallSearchResult = {
   observedAt?: Date;
 };
 
-type RecallMemory = {
-  getMemoryStore: () => Promise<{
-    listMessagesById: (args: { messageIds: string[] }) => Promise<{ messages: MastraDBMessage[] }>;
-  }>;
+type RecallMemory = Omit<ObservationRecallMemory, 'getMemoryStore' | 'getThreadById' | 'searchMessages'> & {
+  getMemoryStore: () => Promise<
+    ObservationRecallStore & {
+      listMessagesById: (args: { messageIds: string[] }) => Promise<{ messages: MastraDBMessage[] }>;
+    }
+  >;
   recall: (args: {
     threadId: string;
     resourceId?: string;
@@ -1217,17 +1232,30 @@ export async function recallThreadFromStart({
 
 export const recallTool = (
   _memoryConfig?: MemoryConfigInternal,
-  options?: { retrievalScope?: 'thread' | 'resource'; searchEnabled?: boolean },
+  options?: {
+    retrievalScope?: 'thread' | 'resource';
+    searchEnabled?: boolean;
+    observationsEnabled?: boolean;
+  },
 ) => {
   const retrievalScope = options?.retrievalScope ?? 'thread';
   const isResourceScope = retrievalScope === 'resource';
   const searchEnabled = options?.searchEnabled ?? true;
+  const observationsEnabled = options?.observationsEnabled ?? false;
+  const observationDescription = observationsEnabled
+    ? ' Use mode="observations" to retrieve retired observation text and raw-message source pointers.'
+    : '';
 
   const description = isResourceScope
-    ? `Browse conversation history. Use mode="threads" to list all threads for the current user. Use mode="messages" (default) to browse messages in the current thread or pass threadId to browse another thread in the active resource. When mode="messages" has no cursor or threadId, it defaults to the current thread and says so at the top of the result. If you pass only a cursor, it must belong to the current thread.${searchEnabled ? ' Use mode="search" to find messages by content across all threads.' : ''}`
-    : `Browse conversation history in the current thread. Use mode="messages" (default) to page through messages near a cursor.${searchEnabled ? ' Use mode="search" to find messages by content in this thread.' : ''} Use mode="threads" to get the current thread's ID and title.`;
+    ? `Browse conversation history. Use mode="threads" to list all threads for the current user. Use mode="messages" (default) to browse messages in the current thread or pass threadId to browse another thread in the active resource. When mode="messages" has no cursor or threadId, it defaults to the current thread and says so at the top of the result. If you pass only a cursor, it must belong to the current thread.${searchEnabled ? ' Use mode="search" to find messages by content across all threads.' : ''}${observationDescription}`
+    : `Browse conversation history in the current thread. Use mode="messages" (default) to page through messages near a cursor.${searchEnabled ? ' Use mode="search" to find messages by content in this thread.' : ''} Use mode="threads" to get the current thread's ID and title.${observationDescription}`;
 
-  const modeEnum = searchEnabled ? ['messages', 'threads', 'search'] : ['messages', 'threads'];
+  const modeEnum = [
+    'messages',
+    'threads',
+    ...(searchEnabled ? ['search'] : []),
+    ...(observationsEnabled ? ['observations'] : []),
+  ];
 
   return createTool({
     id: 'recall',
@@ -1241,30 +1269,20 @@ export const recallTool = (
               mode: {
                 type: 'string',
                 enum: modeEnum,
-                description: `What to retrieve. "messages" (default) pages through message history. "threads" lists all threads for the current user.${searchEnabled ? ' "search" finds messages by semantic similarity across all threads.' : ''}`,
+                description: `What to retrieve. "messages" (default) pages through message history. "threads" lists all threads for the current user.${searchEnabled ? ' "search" finds messages by semantic similarity across all threads.' : ''}${observationsEnabled ? ' "observations" retrieves retired observation groups.' : ''}`,
               },
               threadId: {
                 type: 'string',
                 minLength: 1,
                 description:
-                  'Browse a different thread, or "current" for the active thread. Use mode="threads" first to discover thread IDs.',
-              },
-              before: {
-                type: 'string',
-                description:
-                  'For mode="threads": only show threads created before this date. ISO 8601 or natural date string (e.g. "2026-03-15", "2026-03-10T00:00:00Z").',
-              },
-              after: {
-                type: 'string',
-                description:
-                  'For mode="threads": only show threads created after this date. ISO 8601 or natural date string (e.g. "2026-03-01", "2026-03-10T00:00:00Z").',
+                  'Browse or filter to a different thread, or "current" for the active thread. Use mode="threads" first to discover thread IDs.',
               },
             }
           : {
               mode: {
                 type: 'string',
                 enum: modeEnum,
-                description: `What to retrieve. "messages" (default) pages through message history. "threads" returns info about the current thread.${searchEnabled ? ' "search" finds messages by semantic similarity in this thread.' : ''}`,
+                description: `What to retrieve. "messages" (default) pages through message history. "threads" returns info about the current thread.${searchEnabled ? ' "search" finds messages by semantic similarity in this thread.' : ''}${observationsEnabled ? ' "observations" retrieves retired observation groups.' : ''}`,
               },
             }),
         ...(searchEnabled
@@ -1272,7 +1290,42 @@ export const recallTool = (
               query: {
                 type: 'string',
                 minLength: 1,
-                description: 'Search query for mode="search". Finds messages semantically similar to this text.',
+                description:
+                  'Semantic search query for mode="search" or mode="observations". Observation search resolves at most 20 indexed group hits to authorized archives.',
+              },
+            }
+          : {}),
+        ...(observationsEnabled
+          ? {
+              archiveId: {
+                type: 'string',
+                minLength: 1,
+                description: 'Stable archive ID for direct mode="observations" lookup.',
+              },
+              groupId: {
+                type: 'string',
+                minLength: 1,
+                description: 'Observation group within archiveId. Required for exact continuation with charOffset.',
+              },
+              text: {
+                type: 'string',
+                minLength: 1,
+                description:
+                  'NFKC-normalized, case-insensitive substring filter for mode="observations". All group filters must match the same visible group.',
+              },
+            }
+          : {}),
+        ...(isResourceScope || observationsEnabled
+          ? {
+              before: {
+                type: 'string',
+                description:
+                  'Date filter. For threads, filters creation time. For search and observations, filters observed dates. Observation bounds are inclusive.',
+              },
+              after: {
+                type: 'string',
+                description:
+                  'Date filter. For threads, filters creation time. For search and observations, filters observed dates. Observation bounds are inclusive.',
               },
             }
           : {}),
@@ -1280,13 +1333,13 @@ export const recallTool = (
           type: 'string',
           minLength: 1,
           description:
-            'A message ID to use as the pagination cursor. For mode="messages", omit both cursor and threadId to browse the current thread. If only cursor is provided, it must belong to the current thread. Extract it from the start or end of an observation group range.',
+            'Pagination cursor. For mode="messages", use a message ID. For mode="observations", pass the opaque nextCursor returned by the previous observation page.',
         },
         anchor: {
           type: 'string',
           enum: ['start', 'end'],
           description:
-            'For mode="messages" without a cursor, page from the start (oldest-first) or end (newest-first) of the thread. Defaults to "start".',
+            'For mode="messages" without a cursor, page from the start (oldest-first) or end (newest-first). Defaults to "start". Observation archives are always newest-first.',
         },
         page: {
           type: 'integer',
@@ -1328,7 +1381,7 @@ export const recallTool = (
           type: 'integer',
           minimum: 0,
           description:
-            'Continue reading a truncated single part from this position. Pass the exact nextCharOffset value returned by a previous call; do not compute it yourself. Only applies with cursor and partIndex in mode="messages".',
+            'Continue reading from the exact nextCharOffset returned previously. For messages, requires cursor and partIndex. For observations, requires archiveId and groupId and counts JavaScript UTF-16 code units.',
         },
       },
     } satisfies JSONSchema7,
@@ -1348,8 +1401,11 @@ export const recallTool = (
         charOffset,
         before,
         after,
+        archiveId,
+        groupId,
+        text,
       } = inputData as {
-        mode?: 'messages' | 'threads' | 'search';
+        mode?: 'messages' | 'threads' | 'search' | 'observations';
         query?: string;
         cursor?: string;
         threadId?: string;
@@ -1363,6 +1419,9 @@ export const recallTool = (
         charOffset?: number;
         before?: string;
         after?: string;
+        archiveId?: string;
+        groupId?: string;
+        text?: string;
       };
       const memory = (context as any)?.memory as RecallMemory | undefined;
       const currentThreadId = context?.agent?.threadId;
@@ -1375,6 +1434,38 @@ export const recallTool = (
 
       if (explicitThreadId === 'current' && !currentThreadId) {
         throw new Error('Could not resolve current thread.');
+      }
+
+      if (mode === 'observations') {
+        if (!observationsEnabled) {
+          return {
+            observations:
+              'Observation archives are not configured. Enable them with `observationalMemory.observation.archive`.',
+            groupIds: [],
+            charOffset: 0,
+            truncated: false,
+            archives: [],
+            count: 0,
+          };
+        }
+        return recallObservations({
+          memory,
+          retrievalScope,
+          currentThreadId,
+          resourceId,
+          searchEnabled,
+          abortSignal: (context as any)?.abortSignal,
+          archiveId,
+          groupId,
+          cursor,
+          limit,
+          threadId: explicitThreadId,
+          before,
+          after,
+          text,
+          query,
+          charOffset,
+        } satisfies Omit<ObservationRecallInput, 'mode'> & Parameters<typeof recallObservations>[0]);
       }
 
       // Search mode

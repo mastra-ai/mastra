@@ -108,6 +108,13 @@ export type {
   SummarizeConversationResult,
   SummarizeModel,
 } from './processors/observational-memory/summarize';
+export type {
+  ObservationRecallArchive,
+  ObservationRecallGroup,
+  ObservationRecallInput,
+  ObservationRecallResult,
+  ObservationRecallSource,
+} from './tools/observation-recall';
 
 /**
  * Normalize a `boolean | object` observational memory config.
@@ -2144,8 +2151,9 @@ ${workingMemory}`;
       onIndexObservations,
       hooks: omConfig.hooks,
       observation: omConfig.observation
-        ? {
+        ? ({
             model: omConfig.observation.model,
+            archive: omConfig.observation.archive,
             messageTokens: omConfig.observation.messageTokens,
             modelSettings: omConfig.observation.modelSettings,
             maxTokensPerBatch: omConfig.observation.maxTokensPerBatch,
@@ -2160,7 +2168,7 @@ ${workingMemory}`;
             observeAttachments: omConfig.observation.observeAttachments,
             continuationHints: omConfig.observation.continuationHints,
             extract: omConfig.observation.extract,
-          }
+          } as ObservationalMemoryConfig['observation'])
         : undefined,
       reflection: omConfig.reflection
         ? {
@@ -2175,7 +2183,7 @@ ${workingMemory}`;
             extract: omConfig.reflection.extract,
           }
         : undefined,
-    });
+    } as ObservationalMemoryConfig);
   }
 
   public defaultWorkingMemoryTemplate = `
@@ -2786,6 +2794,7 @@ Notes:
       tools.recall = recallTool(mergedConfig, {
         retrievalScope,
         searchEnabled: this.hasRetrievalSearch(omConfig?.retrieval),
+        observationsEnabled: archiveEnabled,
       });
     }
     if (

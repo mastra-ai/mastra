@@ -4,6 +4,7 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { Memory } from '../index';
+import { recallObservations } from './observation-recall';
 import {
   listThreadsForResource,
   recallMessages,
@@ -3279,6 +3280,277 @@ describe('om-tools', () => {
       const schema = getInputJSONSchema(recall);
       expect(schema.properties.mode.enum).toEqual(['messages', 'threads', 'search']);
       expect(recall.description).toContain('mode="search"');
+    });
+  });
+
+  describe('observation recall', () => {
+    const resourceId = 'resource-archive';
+    const threadId = 'thread-archive';
+    const getObservationInputJSONSchema = (tool: ReturnType<typeof recallTool>) =>
+      standardSchemaToJSONSchema(tool.inputSchema as any) as {
+        properties: Record<string, { enum?: string[]; description?: string }>;
+      };
+
+    function createArchive({
+      archiveId = 'archive-1',
+      groupId = 'group-1',
+      text = 'Retired observation text',
+      sourceThreadId = threadId,
+      messageRange = 'msg-1:msg-2',
+      sourceUnavailable = false,
+    }: {
+      archiveId?: string;
+      groupId?: string;
+      text?: string;
+      sourceThreadId?: string;
+      messageRange?: string;
+      sourceUnavailable?: boolean;
+    } = {}) {
+      const group = {
+        groupId,
+        summary: `Summary for ${groupId}`,
+        searchText: `summary for ${groupId} ${text}`.normalize('NFKC').toLowerCase(),
+        sourceThreadId,
+        messageRange,
+        sourceUnavailable,
+        observedAt: { from: new Date('2026-01-01T00:00:00.000Z'), to: new Date('2026-01-02T00:00:00.000Z') },
+        tokenCount: 10,
+        textStart: 0,
+        textEnd: text.length,
+      };
+      const archive = {
+        archiveId,
+        recordId: `record-${archiveId}`,
+        scope: 'resource' as const,
+        threadId: null,
+        resourceId,
+        archivedAt: new Date('2026-01-03T00:00:00.000Z'),
+        generationCount: 1,
+        observationTokenCount: 10,
+        groups: [group],
+      };
+      return { archive, group, text };
+    }
+
+    function createMemoryFixture(fixture = createArchive()) {
+      const listObservationArchives = vi.fn().mockResolvedValue({
+        archives: [fixture.archive],
+        nextCursor: 'opaque-next',
+      });
+      const getObservationArchive = vi.fn().mockImplementation(async ({ archiveId, groupId }) => {
+        if (archiveId !== fixture.archive.archiveId) return null;
+        const groups = groupId
+          ? fixture.archive.groups.filter(group => group.groupId === groupId)
+          : fixture.archive.groups;
+        if (groups.length === 0) return null;
+        return { archive: { ...fixture.archive, groups }, observations: fixture.text };
+      });
+      const getObservationArchivesByGroupIds = vi.fn().mockResolvedValue({
+        matches: [{ archive: fixture.archive, groupIds: [fixture.group.groupId] }],
+      });
+      const memory = {
+        getMemoryStore: async () => ({
+          listObservationArchives,
+          getObservationArchive,
+          getObservationArchivesByGroupIds,
+        }),
+        getThreadById: async ({ threadId: requestedThreadId }: { threadId: string }) => ({
+          id: requestedThreadId,
+          resourceId,
+          title: 'Archive thread',
+          createdAt: new Date('2026-01-01'),
+          updatedAt: new Date('2026-01-02'),
+        }),
+      };
+      return { memory, listObservationArchives, getObservationArchive, getObservationArchivesByGroupIds };
+    }
+
+    it('advertises observation mode only when archive mode is enabled', () => {
+      const archiveMemory = new Memory({
+        storage: new InMemoryStore(),
+        options: { observationalMemory: { observation: { archive: {} } } },
+      });
+      const archiveRecall = archiveMemory.listTools().recall;
+      const archiveSchema = getObservationInputJSONSchema(archiveRecall);
+      expect(archiveSchema.properties.mode.enum).toEqual(['messages', 'threads', 'observations']);
+      expect(archiveSchema.properties).toHaveProperty('archiveId');
+      expect(archiveRecall.description).toContain('mode="observations"');
+
+      const ordinaryRecall = recallTool(undefined, {
+        retrievalScope: 'thread',
+        searchEnabled: false,
+        observationsEnabled: false,
+      });
+      const ordinarySchema = getObservationInputJSONSchema(ordinaryRecall);
+      expect(ordinarySchema.properties.mode.enum).toEqual(['messages', 'threads']);
+      expect(ordinarySchema.properties).not.toHaveProperty('archiveId');
+    });
+
+    it('browses archives newest-first through bounded storage queries and returns retired text first', async () => {
+      const fixture = createArchive();
+      const { memory, listObservationArchives } = createMemoryFixture(fixture);
+      const tool = recallTool(undefined, { retrievalScope: 'resource', observationsEnabled: true });
+
+      const result = await tool.execute?.(
+        {
+          mode: 'observations',
+          limit: 7,
+          after: '2026-01-01T00:00:00.000Z',
+          before: '2026-01-02T00:00:00.000Z',
+          text: 'RETired',
+          threadId,
+        },
+        { memory, agent: { threadId, resourceId } } as any,
+      );
+
+      expect(listObservationArchives).toHaveBeenCalledWith({
+        scope: 'resource',
+        resourceId,
+        filterThreadId: threadId,
+        limit: 7,
+        cursor: undefined,
+        from: new Date('2026-01-01T00:00:00.000Z'),
+        to: new Date('2026-01-02T00:00:00.000Z'),
+        text: 'RETired',
+      });
+      expect(result).toMatchObject({
+        observations: fixture.text,
+        archiveId: fixture.archive.archiveId,
+        groupId: fixture.group.groupId,
+        groupIds: [fixture.group.groupId],
+        nextCursor: 'opaque-next',
+        count: 1,
+        source: {
+          messageRange: 'msg-1:msg-2',
+          messageCursorStart: 'msg-1',
+          messageCursorEnd: 'msg-2',
+          sourceUnavailable: false,
+        },
+      });
+      expect(Object.keys(result as object)[0]).toBe('observations');
+
+      await tool.execute?.({ mode: 'observations', cursor: 'opaque-next' }, {
+        memory,
+        agent: { threadId, resourceId },
+      } as any);
+      expect(listObservationArchives).toHaveBeenLastCalledWith(
+        expect.objectContaining({ cursor: 'opaque-next', limit: 20 }),
+      );
+    });
+
+    it('resolves archive and group IDs directly and reconstructs UTF-16 chunks exactly', async () => {
+      const text = `${'word '.repeat(3_000)}😀done`;
+      const fixture = createArchive({ text });
+      const { memory } = createMemoryFixture(fixture);
+      const tool = recallTool(undefined, { retrievalScope: 'thread', observationsEnabled: true });
+      const context = { memory, agent: { threadId, resourceId } } as any;
+
+      const chunks: string[] = [];
+      let charOffset: number | undefined;
+      do {
+        const result = (await tool.execute?.(
+          {
+            mode: 'observations',
+            archiveId: fixture.archive.archiveId,
+            groupId: fixture.group.groupId,
+            charOffset,
+          },
+          context,
+        )) as any;
+        chunks.push(result.observations);
+        charOffset = result.nextCharOffset;
+      } while (charOffset !== undefined);
+
+      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.join('')).toBe(text);
+
+      await expect(
+        recallObservations({
+          memory: memory as any,
+          retrievalScope: 'thread',
+          currentThreadId: threadId,
+          resourceId,
+          searchEnabled: false,
+          archiveId: fixture.archive.archiveId,
+          groupId: fixture.group.groupId,
+          charOffset: text.indexOf('😀') + 1,
+        }),
+      ).rejects.toThrow('surrogate pair');
+    });
+
+    it('returns explicit unavailable provenance for legacy groups', async () => {
+      const fixture = createArchive({ messageRange: '', sourceUnavailable: true });
+      const { memory } = createMemoryFixture(fixture);
+      const tool = recallTool(undefined, { retrievalScope: 'thread', observationsEnabled: true });
+
+      const result = await tool.execute?.(
+        { mode: 'observations', archiveId: fixture.archive.archiveId, groupId: fixture.group.groupId },
+        { memory, agent: { threadId, resourceId } } as any,
+      );
+
+      expect(result).toMatchObject({ source: { sourceUnavailable: true } });
+      expect((result as any).source).not.toHaveProperty('messageCursorStart');
+    });
+
+    it('maps at most 20 semantic group hits through scope-safe archive lookup', async () => {
+      const fixture = createArchive();
+      const { memory, getObservationArchivesByGroupIds, listObservationArchives } = createMemoryFixture(fixture);
+      const searchMessages = vi.fn().mockResolvedValue({
+        results: Array.from({ length: 25 }, (_, index) => ({
+          threadId,
+          score: 1 - index / 100,
+          groupId: index === 0 ? fixture.group.groupId : `group-${index + 1}`,
+        })),
+      });
+      (memory as any).searchMessages = searchMessages;
+      const tool = recallTool(undefined, {
+        retrievalScope: 'resource',
+        observationsEnabled: true,
+        searchEnabled: true,
+      });
+
+      const result = await tool.execute?.({ mode: 'observations', query: 'deployment decision', threadId }, {
+        memory,
+        agent: { threadId, resourceId },
+      } as any);
+
+      expect(searchMessages).toHaveBeenCalledWith(
+        expect.objectContaining({ query: 'deployment decision', resourceId, topK: 20, filter: { threadId } }),
+      );
+      expect(getObservationArchivesByGroupIds).toHaveBeenCalledWith({
+        scope: 'resource',
+        resourceId,
+        filterThreadId: threadId,
+        groupIds: expect.arrayContaining([fixture.group.groupId, 'group-20']),
+      });
+      expect(getObservationArchivesByGroupIds.mock.calls[0]![0].groupIds).toHaveLength(20);
+      expect(listObservationArchives).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ observations: fixture.text, count: 1 });
+    });
+
+    it('rejects cross-resource thread projection and honors aborts', async () => {
+      const fixture = createArchive();
+      const { memory, listObservationArchives } = createMemoryFixture(fixture);
+      (memory as any).getThreadById = async () => ({ id: 'foreign-thread', resourceId: 'foreign-resource' });
+      const tool = recallTool(undefined, { retrievalScope: 'resource', observationsEnabled: true });
+
+      await expect(
+        tool.execute?.({ mode: 'observations', threadId: 'foreign-thread' }, {
+          memory,
+          agent: { threadId, resourceId },
+        } as any),
+      ).rejects.toThrow('Thread does not belong to the active resource');
+      expect(listObservationArchives).not.toHaveBeenCalled();
+
+      const controller = new AbortController();
+      controller.abort();
+      await expect(
+        tool.execute?.({ mode: 'observations' }, {
+          memory,
+          agent: { threadId, resourceId },
+          abortSignal: controller.signal,
+        } as any),
+      ).rejects.toMatchObject({ name: 'AbortError' });
     });
   });
 });
