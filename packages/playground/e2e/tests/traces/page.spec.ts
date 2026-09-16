@@ -27,7 +27,7 @@ test.describe('Traces page', () => {
       await page.goto('/traces');
 
       // We check that the page has loaded and the traces tools are visible
-      await expect(page.getByRole('button', { name: 'Last 7 days' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Value: Last 7 days' })).toBeVisible();
     });
   });
 

@@ -59,6 +59,8 @@ export type FilterBarField = {
   suggestions?: FilterBarOption[] | FilterBarSuggestionsResolver;
   /** When true, the value must come from suggestions (no free text). */
   strict?: boolean;
+  /** Never offered in the input's field step; existing chips for it still render with the field label. */
+  hidden?: boolean;
 };
 
 export type FilterBarItem = {

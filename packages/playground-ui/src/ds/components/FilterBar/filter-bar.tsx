@@ -1,3 +1,4 @@
+import { ListFilterIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { FilterBarChip } from './filter-bar-chip';
 import { FilterBarClear } from './filter-bar-clear';
@@ -26,10 +27,10 @@ function FilterBarSurface({ className, children }: { className?: string; childre
       aria-label={ctx.ariaLabel}
       data-slot="filter-bar"
       className={cn(
-        // Same surface/hover/focus recipe as InputGroup (wrapper whose focus lives on the nested input),
-        // Concentric corners: chips are 24px pills (12px radius) inset by p-1 (4px), so the
-        // surface radius is 12 + 4 = 16px (rounded-2xl). Keep padding uniform for this to hold.
-        'flex min-h-form-md w-full flex-wrap items-center gap-1 rounded-2xl border border-border1 bg-surface-overlay-soft p-1',
+        // Same surface/hover/focus recipe as InputGroup (wrapper whose focus lives on the nested input).
+        // Single-line height matches a md control (28px): 24px chips/input + 1px padding + 1px
+        // border. Uniform p-px keeps chips concentric; rounded-2xl clamps to a pill on one line.
+        'flex min-h-form-md w-full flex-wrap items-center gap-px rounded-2xl border border-border1 bg-surface-overlay-soft p-px pr-2',
         'cursor-text transition-all duration-normal ease-out-custom',
         'hover:bg-surface-overlay-strong',
         inputHoverBorderWithin,
@@ -39,6 +40,7 @@ function FilterBarSurface({ className, children }: { className?: string; childre
       )}
       onClick={ctx.focusInput}
     >
+      <ListFilterIcon aria-hidden className="text-neutral3 mr-1 ml-2.5 size-3.5 shrink-0" />
       {children}
       <VisuallyHidden aria-live="polite">{ctx.announcement}</VisuallyHidden>
     </div>

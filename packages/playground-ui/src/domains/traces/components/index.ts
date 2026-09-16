@@ -16,7 +16,6 @@ export { SpanTimingHoverCard } from './span-timing-hover-card';
 export { SpanTypeLegend } from './span-type-legend';
 export { TraceSpanTree, type TraceSpanTreeProps } from './trace-span-tree';
 export { TraceSpanTimeline, type TraceSpanTimelineProps } from './trace-span-timeline';
-export { TracesToolbar } from './traces-toolbar';
 export {
   TraceDataPanelView,
   type TraceDataPanelViewProps,

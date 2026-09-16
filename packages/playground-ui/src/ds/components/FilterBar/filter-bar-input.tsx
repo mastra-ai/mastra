@@ -59,6 +59,7 @@ export function FilterBarInput({
   const field = draft.fieldId ? ctx.getField(draft.fieldId) : undefined;
   const operator = draft.operatorId ? ctx.getOperator(draft.operatorId) : undefined;
   const fieldOperators = useMemo(() => (field ? ctx.getFieldOperators(field) : []), [ctx, field]);
+  const visibleFields = useMemo(() => ctx.fields.filter(f => !f.hidden), [ctx.fields]);
 
   const reset = useCallback(() => {
     setDraft(INITIAL_DRAFT);
@@ -79,22 +80,30 @@ export function FilterBarInput({
     [ctx, reset],
   );
 
-  const selectField = useCallback((next: FilterBarField) => {
-    setDraft({ step: 'operator', fieldId: next.id });
-    setQuery('');
-  }, []);
-
   const selectOperator = useCallback(
-    (next: FilterBarOperator) => {
-      if (!draft.fieldId) return;
+    (fieldId: string, next: FilterBarOperator) => {
       if (next.arity === 'none') {
-        commit(draft.fieldId, next.id, '');
+        commit(fieldId, next.id, '');
         return;
       }
-      setDraft({ step: 'value', fieldId: draft.fieldId, operatorId: next.id });
+      setDraft({ step: 'value', fieldId, operatorId: next.id });
       setQuery('');
     },
-    [draft.fieldId, commit],
+    [commit],
+  );
+
+  const selectField = useCallback(
+    (next: FilterBarField) => {
+      // A single allowed operator is implied: skip straight to the value step.
+      const [only, ...rest] = ctx.getFieldOperators(next);
+      if (only && rest.length === 0) {
+        selectOperator(next.id, only);
+        return;
+      }
+      setDraft({ step: 'operator', fieldId: next.id });
+      setQuery('');
+    },
+    [ctx, selectOperator],
   );
 
   const valueStep = useValueStep({
@@ -108,16 +117,19 @@ export function FilterBarInput({
   });
 
   const stepBack = useCallback(() => {
-    if (draft.step === 'value') setDraft({ step: 'operator', fieldId: draft.fieldId });
-    else if (draft.step === 'operator') setDraft(INITIAL_DRAFT);
+    if (draft.step === 'value') {
+      // Back to the field step when the operator was implied (single operator).
+      const skipOperator = field ? fieldOperators.length === 1 : false;
+      setDraft(skipOperator ? INITIAL_DRAFT : { step: 'operator', fieldId: draft.fieldId });
+    } else if (draft.step === 'operator') setDraft(INITIAL_DRAFT);
     else setOpen(false);
     setQuery('');
-  }, [draft]);
+  }, [draft, field, fieldOperators]);
 
   // Selection is routed per step and never kept by Base UI (`value` stays null).
   const handleSelect = (item: Item) => {
     if (draft.step === 'field') selectField(item as FilterBarField);
-    else if (draft.step === 'operator') selectOperator(item as FilterBarOperator);
+    else if (draft.step === 'operator' && draft.fieldId) selectOperator(draft.fieldId, item as FilterBarOperator);
     else valueStep.handleSelect(item as FilterBarOption);
   };
 
@@ -168,7 +180,7 @@ export function FilterBarInput({
   };
 
   const items: readonly Item[] =
-    draft.step === 'field' ? ctx.fields : draft.step === 'operator' ? fieldOperators : valueStep.options;
+    draft.step === 'field' ? visibleFields : draft.step === 'operator' ? fieldOperators : valueStep.options;
 
   const inputPlaceholder =
     draft.step === 'field'
@@ -183,7 +195,7 @@ export function FilterBarInput({
 
   return (
     <>
-      <FilterBarDraftChip field={field} operator={operator} />
+      <FilterBarDraftChip field={field} operator={fieldOperators.length === 1 ? undefined : operator} />
       <ComboboxPrimitive.Root<Item>
         items={items}
         itemToStringLabel={getItemLabel}

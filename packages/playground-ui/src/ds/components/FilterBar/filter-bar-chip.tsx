@@ -33,7 +33,7 @@ export const segmentClass = cn(
   'first:rounded-l-full last:rounded-r-full',
 );
 
-const editableSegmentClass = cn(
+export const editableSegmentClass = cn(
   segmentClass,
   'cursor-pointer transition-colors hover:bg-neutral6/5 hover:text-neutral6',
   'focus-visible:bg-neutral6/10 focus-visible:text-neutral6 data-[popup-open]:bg-neutral6/10 data-[popup-open]:text-neutral6',
@@ -54,6 +54,8 @@ type ChipContext = {
   openSegment: FilterBarSegment | null;
   setOpenSegment: (segment: FilterBarSegment | null) => void;
   readOnly: boolean;
+  /** The field allows a single operator, so the operator segment is not shown. */
+  operatorImplied: boolean;
 };
 
 const ChipContext = createContext<ChipContext | null>(null);
@@ -67,6 +69,8 @@ export type FilterBarChipProps = {
   item: FilterBarItem;
   /** Locked chip: plain labels, no editors, no remove button. */
   readOnly?: boolean;
+  /** `false` keeps the chip editable but drops the remove button and ignores Backspace/Delete. */
+  removable?: boolean;
   className?: string;
   /** Custom segment composition; defaults to Field · Operator · Value · Remove. */
   children?: ReactNode;
@@ -76,7 +80,7 @@ function isInsidePopup(target: EventTarget | null) {
   return target instanceof Element && Boolean(target.closest('[data-slot="filter-bar-editor"]'));
 }
 
-export function FilterBarChip({ item, readOnly = false, className, children }: FilterBarChipProps) {
+export function FilterBarChip({ item, readOnly = false, removable = true, className, children }: FilterBarChipProps) {
   const ctx = useFilterBarContext();
   const [openSegment, setOpenSegment] = useState<FilterBarSegment | null>(null);
   const field = ctx.getField(item.fieldId);
@@ -84,7 +88,12 @@ export function FilterBarChip({ item, readOnly = false, className, children }: F
   const index = ctx.items.findIndex(i => i.id === item.id);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const label = [field?.label ?? item.fieldId, operator?.label ?? item.operatorId, formatValue(item.value, field)]
+  const operatorImplied = field ? ctx.getFieldOperators(field).length === 1 : false;
+  const label = [
+    field?.label ?? item.fieldId,
+    operatorImplied ? '' : (operator?.label ?? item.operatorId),
+    formatValue(item.value, field),
+  ]
     .filter(Boolean)
     .join(' ');
 
@@ -111,6 +120,7 @@ export function FilterBarChip({ item, readOnly = false, className, children }: F
         }
         case 'Delete':
         case 'Backspace':
+          if (!removable) return;
           event.preventDefault();
           ctx.removeItem(item.id);
           ctx.focusAfterRemove(index);
@@ -118,19 +128,19 @@ export function FilterBarChip({ item, readOnly = false, className, children }: F
         default:
       }
     },
-    [readOnly, ctx, index, item.id],
+    [readOnly, removable, ctx, index, item.id],
   );
 
   const chipValue = useMemo<ChipContext>(
-    () => ({ item, index, field, operator, openSegment, setOpenSegment, readOnly }),
-    [item, index, field, operator, openSegment, readOnly],
+    () => ({ item, index, field, operator, openSegment, setOpenSegment, readOnly, operatorImplied }),
+    [item, index, field, operator, openSegment, readOnly, operatorImplied],
   );
   const content = children ?? (
     <>
       <FilterBarChipField />
       <FilterBarChipOperator />
       <FilterBarChipValue />
-      <FilterBarChipRemove />
+      {removable && <FilterBarChipRemove />}
     </>
   );
   return (
@@ -142,7 +152,7 @@ export function FilterBarChip({ item, readOnly = false, className, children }: F
         data-slot="filter-bar-chip"
         data-readonly={readOnly || undefined}
         className={cn(
-          'flex h-form-sm max-w-full items-stretch divide-x divide-border1 rounded-full border border-border1 bg-surface3 text-neutral5',
+          'flex h-form-sm max-w-full items-stretch divide-x divide-border1 rounded-full border border-border1 bg-surface4 text-neutral5',
           className,
         )}
         onKeyDown={handleKeyDown}
@@ -529,6 +539,8 @@ export function FilterBarChipField() {
 }
 
 export function FilterBarChipOperator() {
+  const chip = useChip();
+  if (chip.operatorImplied) return null;
   return <OperatorEditor />;
 }
 
