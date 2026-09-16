@@ -878,7 +878,7 @@ Because hooks receive `threadId` and `resourceId`, you can also use them to upda
 
 ### Filter skill results
 
-Agent skills are injected into the agent as tools (`skill`, `skill_search`, `skill_read`). Their results contain the skill's full instructions or file contents, so without a filter the Observer re-observes that text every time a skill is used. `skillResultFilter()` is a ready-made `beforeObservation` hook that drops results from those tools and leaves everything else in place, including the skill tool calls themselves.
+Agent skills are injected into the agent as tools (`skill`, `skill_search`, `skill_read`). Their results contain the skill's full instructions or file contents, so without a filter the Observer re-observes that text every time a skill is used. `skillResultFilter()` is a ready-made `beforeObservation` hook that replaces those results with a placeholder and leaves everything else in place. The tool call survives, so the Observer still records which skill was used and what it was called with.
 
 ```typescript
 import { Memory } from '@mastra/memory'
@@ -896,14 +896,14 @@ const memory = new Memory({
 })
 ```
 
-Pass `toolNames` to drop results from a different set of tools. Because a hook is a function over the messages, it composes with your own filtering by chaining the outputs:
+Pass `toolNames` to redact results from a different set of tools. Because a hook is a function over the messages, it composes with your own filtering by chaining the outputs. Await each chained filter so an async one isn't discarded:
 
 ```typescript oxfmt:false
 const dropSkillResults = skillResultFilter()
 
 hooks: {
-  beforeObservation: input => {
-    const messages = dropSkillResults(input)?.messages ?? input.messages
+  beforeObservation: async input => {
+    const messages = (await dropSkillResults(input))?.messages ?? input.messages
     return { messages: messages.filter(m => m.role !== 'signal') }
   },
 }

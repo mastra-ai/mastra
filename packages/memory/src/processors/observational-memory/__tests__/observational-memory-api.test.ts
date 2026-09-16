@@ -11,6 +11,7 @@
  */
 
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import { createObservabilityContext } from '@mastra/core/observability';
@@ -74,6 +75,61 @@ function createWorkingMemoryStateSignal(id: string, createdAt = new Date()): Mas
       },
     },
   };
+}
+
+/**
+ * Build an assistant message that activates a skill the way the pipeline
+ * persists it: the call streams in first, the result then merges into it, so a
+ * single terminal `state: 'result'` part carries the tool name and arguments.
+ * Returning it through `MessageList` keeps the fixture honest instead of
+ * hand-writing a call part + result part pair that never reaches storage.
+ */
+function createPersistedSkillMessage(
+  id: string,
+  threadId: string,
+  result = 'SECRET_SKILL_INSTRUCTIONS',
+): MastraDBMessage {
+  const messageList = new MessageList();
+  const createdAt = new Date();
+  messageList.add(
+    {
+      ...createTestMessage('', 'assistant', id, createdAt),
+      threadId,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'skill-call', toolName: 'skill', args: { name: 'pdf' } },
+          },
+        ],
+      } as MastraMessageContentV2,
+    },
+    'response',
+  );
+  messageList.add(
+    {
+      ...createTestMessage('', 'assistant', id, createdAt),
+      threadId,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'skill-call',
+              toolName: 'skill',
+              args: { name: 'pdf' },
+              result,
+            },
+          },
+        ],
+      } as MastraMessageContentV2,
+    },
+    'response',
+  );
+  return messageList.get.all.db()[0]!;
 }
 
 /** Generate N messages with padding to exceed token thresholds. */
@@ -849,29 +905,17 @@ name: Tyler
       const prompts = capturePrompts(observerModel);
       const transformOm = createOM(storage, { observerModel, hooks: { beforeObservation: skillResultFilter() } });
       const messages = createBulkMessages(10, threadId);
-      const skillMessage: MastraDBMessage = {
-        ...createTestMessage('', 'assistant', `${threadId}-skill`),
-        threadId,
-        content: {
-          format: 2,
-          parts: [
-            {
-              type: 'tool-invocation',
-              toolInvocation: { state: 'call', toolCallId: 'skill-call', toolName: 'skill', args: { name: 'pdf' } },
-            },
-            {
-              type: 'tool-invocation',
-              toolInvocation: {
-                state: 'result',
-                toolCallId: 'skill-call',
-                toolName: 'skill',
-                args: { name: 'pdf' },
-                result: 'SECRET_SKILL_INSTRUCTIONS',
-              },
-            },
-          ],
-        } as MastraMessageContentV2,
-      };
+      // Build the skill message the way the pipeline persists it: the call
+      // streams first, the result then merges into it, leaving a single
+      // terminal `state: 'result'` part carrying the arguments. A hand-written
+      // call part + result part pair never reaches persistence, and the
+      // Observer reads the `Tool Call` line off the terminal part.
+      const skillMessage = createPersistedSkillMessage(`${threadId}-skill`, threadId);
+      // Guard the fixture itself: if the call and result did not collapse, the
+      // test would pass without exercising the shape production persists.
+      const skillParts = skillMessage.content.parts as Array<{ toolInvocation?: { state?: string } }>;
+      expect(skillParts).toHaveLength(1);
+      expect(skillParts[0]!.toolInvocation?.state).toBe('result');
       messages.push(skillMessage);
 
       await transformOm.observe({ threadId, resourceId: 'res-1', messages });

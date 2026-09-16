@@ -4,7 +4,7 @@
 
 Added `skillResultFilter`, a ready-made `beforeObservation` hook that keeps Agent Skills results out of Observational Memory.
 
-The built-in skill tools (`skill`, `skill_search`, `skill_read`) return a skill's instructions or file contents as their result. Without a filter, the Observer re-observes that text every time a skill is used. `skillResultFilter()` drops those results before the Observer runs and leaves the skill tool calls and every other message intact.
+The built-in skill tools (`skill`, `skill_search`, `skill_read`) return a skill's instructions or file contents as their result. Without a filter, the Observer re-observes that text every time a skill is used. `skillResultFilter()` replaces those results with a placeholder before the Observer runs. The tool call is kept, so the Observer still records which skill was used and what it was called with.
 
 ```ts
 import { Memory } from '@mastra/memory';
@@ -22,4 +22,4 @@ const memory = new Memory({
 });
 ```
 
-Pass `toolNames` to filter a different set of tools. Related to [#24152](https://github.com/mastra-ai/mastra/issues/24152).
+Pass `toolNames` to redact a different set of tools. Related to [#24152](https://github.com/mastra-ai/mastra/issues/24152).
