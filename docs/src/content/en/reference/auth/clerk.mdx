@@ -29,7 +29,7 @@ export const mastra = new Mastra({
 
 ## Restricting login to a single organization
 
-Set `organizationId` or `organizationSlug` to only allow members of a specific Clerk organization to sign in. Non-members are rejected during authorization. Configure only one of the two — setting both throws at startup so login cannot be granted to two different organizations.
+Set `organizationId` or `organizationSlug` to only allow members of a specific Clerk organization to sign in. Non-members are rejected during authorization. Configure only one of the two. Setting both throws at startup, so login can't be granted to two different organizations.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
