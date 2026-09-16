@@ -472,7 +472,8 @@ export class SessionRunEngine {
     const consume = async (): Promise<void> => {
       for await (const chunk of response.fullStream) {
         if (bailed) return;
-        result = await this.processStreamChunk(state, chunk, requestContext);
+        result = await this.processStreamChunk(state, chunk, requestContext, undefined, () => !bailed);
+        if (bailed) return;
         if (chunk.type === 'error') {
           error = true;
         }
@@ -541,6 +542,7 @@ export class SessionRunEngine {
     chunk: StreamChunk,
     requestContext: RequestContext,
     agent: Agent = this.#machinery.getAgent(),
+    isCurrent: () => boolean = () => true,
   ): Promise<{ message: MastraDBMessage; suspended?: boolean } | undefined> {
     if ('runId' in chunk && chunk.runId) {
       this.#session.run.setRunId({ runId: chunk.runId });
@@ -766,6 +768,7 @@ export class SessionRunEngine {
         this.#session.emit({ type: 'tool_approval_required', toolCallId, toolName, args: toolArgs });
 
         const approval = await approvalPromise;
+        if (!isCurrent()) return;
         this.#session.approval.clearToolName();
 
         // `session.abort()` releases a parked gate as a decline and defers the
@@ -790,6 +793,7 @@ export class SessionRunEngine {
           });
         }
 
+        if (!isCurrent()) return;
         if (deferredAbort) {
           // The denial chunk the agent emits for this decline can never reach
           // us: we are blocking the consumer loop that would read it, and the
@@ -1287,11 +1291,21 @@ export class SessionRunEngine {
     suspended,
     error,
     aborted,
+    subscription,
   }: {
     suspended?: boolean;
     error?: boolean;
     aborted?: boolean;
+    subscription: AgentThreadSubscription<StreamChunk>;
   }): Promise<void> {
+    const operationId = this.#session.run.getOperationId();
+    const threadId = this.#session.thread.getId();
+    const resourceId = this.#session.identity.getResourceId();
+    const isCurrent = () =>
+      this.#session.run.getOperationId() === operationId &&
+      this.#session.thread.getId() === threadId &&
+      this.#session.identity.getResourceId() === resourceId &&
+      (!this.#session.stream.isOpen() || this.#session.stream.isCurrent({ subscription }));
     const reason = error
       ? 'error'
       : suspended
@@ -1299,7 +1313,8 @@ export class SessionRunEngine {
         : aborted || this.#session.run.isAbortRequested()
           ? 'aborted'
           : 'complete';
-    await this.#session.finishAgentRun(reason);
+    await this.#session.finishAgentRun(reason, isCurrent);
+    if (!isCurrent()) return;
     this.#session.run.reset();
   }
 
@@ -1316,17 +1331,19 @@ export class SessionRunEngine {
     }
   }
 
-  private async handleSubscribedStreamError(error: unknown): Promise<void> {
-    if (error instanceof Error && error.name === 'AbortError') {
-      await this.#session.finishAgentRun('aborted');
-    } else {
+  private async handleSubscribedStreamError(
+    error: unknown,
+    subscription: AgentThreadSubscription<StreamChunk>,
+  ): Promise<void> {
+    if (!this.#session.stream.isCurrent({ subscription })) return;
+    const aborted = error instanceof Error && error.name === 'AbortError';
+    if (!aborted) {
       const streamError = getErrorFromUnknown(error);
       this.#session.emit({ type: 'error', error: streamError });
       this.retractFailedRunSuspensions({ runId: this.#session.run.getRunId(), reason: streamError.message });
-      await this.#session.finishAgentRun('error');
     }
     this.#session.stream.detach();
-    this.#session.run.reset();
+    await this.finishSubscribedStreamRun({ error: !aborted, aborted, subscription });
   }
 
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk>): Promise<void> {
@@ -1355,6 +1372,7 @@ export class SessionRunEngine {
           this.#session.run.setRunId({ runId });
           this.#session.run.setTraceId({ traceId: null });
           requestContext = await this.#machinery.buildRequestContext(subscription.__getCurrentRunRequestContext?.());
+          if (bailed || !this.#session.stream.isCurrent({ subscription })) return;
           this.#session.emit({ type: 'agent_start' });
         }
 
@@ -1363,7 +1381,9 @@ export class SessionRunEngine {
         }
 
         try {
-          const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext, agent);
+          const isCurrent = () => !bailed && this.#session.stream.isCurrent({ subscription });
+          const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext, agent, isCurrent);
+          if (!isCurrent()) return;
           if (
             streamResult ||
             chunk.type === 'finish' ||
@@ -1390,12 +1410,13 @@ export class SessionRunEngine {
               isError = true;
               this.#session.emit({ type: 'error', error: new Error(currentRun.terminalError) });
             }
+            currentRun = undefined;
             await this.finishSubscribedStreamRun({
               suspended,
               error: isError,
               aborted,
+              subscription,
             });
-            currentRun = undefined;
             if (aborted) {
               // The thread subscription remains live across runs. Ignore any
               // trailing chunks from the aborted run while continuing to drain
@@ -1404,8 +1425,9 @@ export class SessionRunEngine {
             }
           }
         } catch (error) {
-          await this.handleSubscribedStreamError(error);
+          if (bailed || !this.#session.stream.isCurrent({ subscription })) return;
           currentRun = undefined;
+          await this.handleSubscribedStreamError(error, subscription);
         }
       }
     };
@@ -1422,22 +1444,18 @@ export class SessionRunEngine {
         bailGuard.abort();
       }
 
-      // Graceful stream close without explicit terminal chunk.
-      if (currentRun && this.#session.stream.isCurrent({ subscription })) {
+      const ownsSubscription = this.#session.stream.isCurrent({ subscription });
+      // Release the expired stream before terminal hooks can start another run.
+      if ((bailed || abortedRunId) && ownsSubscription) this.#session.stream.detach();
+      if (currentRun && ownsSubscription) {
         const streamResult = this.finishStreamState(currentRun);
-        await this.finishSubscribedStreamRun({ suspended: streamResult.suspended });
         currentRun = undefined;
-      }
-
-      // A closed or hung subscription cannot observe later runs. Detach it so
-      // the next message creates a fresh consumer. A persistent subscription
-      // stays attached after an abort and continues draining later signals.
-      if ((bailed || abortedRunId) && this.#session.stream.isCurrent({ subscription })) {
-        this.#session.stream.detach();
+        await this.finishSubscribedStreamRun({ suspended: streamResult.suspended, subscription });
       }
     } catch (error) {
       if (this.#session.stream.isCurrent({ subscription })) {
-        await this.handleSubscribedStreamError(error);
+        currentRun = undefined;
+        await this.handleSubscribedStreamError(error, subscription);
       }
     }
   }

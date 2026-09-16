@@ -55,6 +55,83 @@ describe('SessionRunEngine — abort deadline', () => {
     vi.useRealTimers();
   });
 
+  it.each(['finish', 'iterator-error', 'chunk-error'] as const)(
+    'finalizes once when %s end hooks outlast the abort deadline',
+    async ending => {
+      vi.useFakeTimers();
+      const { engine, events, session } = createHarness();
+      let releaseEnd!: () => void;
+      const heldEnd = new Promise<void>(resolve => {
+        releaseEnd = resolve;
+      });
+      const beforeEnd = vi.fn(async () => {
+        await heldEnd;
+      });
+      session.onBeforeAgentEnd(beforeEnd);
+      const subscription = {
+        stream: (async function* () {
+          yield chunk({ type: 'text-start', payload: { id: 't1' } });
+          if (ending === 'iterator-error') throw new Error('iterator failure');
+          yield chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } } });
+        })(),
+        activeRunId: () => 'run-1',
+        abort: () => true,
+        unsubscribe: vi.fn(),
+      };
+      const processChunk = vi.spyOn(engine, 'processStreamChunk');
+      if (ending === 'chunk-error') {
+        processChunk.mockImplementation(async (_state, nextChunk) => {
+          if (nextChunk.type === 'finish') throw new Error('chunk failure');
+        });
+      }
+      session.stream.attach({ subscription, key: 'thread-1' });
+      const processed = engine.processSubscribedThreadStream(subscription);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(beforeEnd).toHaveBeenCalledTimes(1);
+      session.abortRun();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(beforeEnd).toHaveBeenCalledTimes(1);
+      expect(events.filter(event => event.type === 'agent_end')).toHaveLength(0);
+      releaseEnd();
+      await processed;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(beforeEnd).toHaveBeenCalledTimes(1);
+      expect(events.filter(event => event.type === 'agent_end')).toHaveLength(1);
+      expect(session.run.isRunning()).toBe(false);
+      processChunk.mockRestore();
+      session.stream.detach();
+    },
+  );
+
+  it('does not finalize or drain into another thread after a pending end hook', async () => {
+    vi.useFakeTimers();
+    const { engine, events, session } = createHarness();
+    let releaseEnd!: () => void;
+    session.onBeforeAgentEnd(
+      () =>
+        new Promise<void>(resolve => {
+          releaseEnd = resolve;
+        }),
+    );
+    const subscription = {
+      stream: (async function* () {
+        yield chunk({ type: 'text-start', payload: { id: 't1' } });
+        yield chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } } });
+      })(),
+      activeRunId: () => 'run-1',
+      abort: () => true,
+      unsubscribe: vi.fn(),
+    };
+    session.stream.attach({ subscription, key: 'thread-1' });
+    const processed = engine.processSubscribedThreadStream(subscription);
+    await vi.advanceTimersByTimeAsync(0);
+    session.thread.set({ threadId: 'thread-2' });
+    releaseEnd();
+    await processed;
+    expect(events.filter(event => event.type === 'agent_end')).toHaveLength(0);
+    session.stream.detach();
+  });
+
   it('Given a stream hung mid-run, When the run is aborted, Then it still finalizes as aborted after the grace period', async () => {
     vi.useFakeTimers();
     const { engine, events, session } = createHarness();
