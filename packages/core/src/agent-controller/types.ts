@@ -793,6 +793,8 @@ export type AgentControllerEvent =
   | {
       type: 'message_update';
       id: string;
+      /** Originating run for assistant text deltas, when known and matched. */
+      runId?: string;
       event:
         | { type: 'text-delta'; delta: string }
         | { type: 'reasoning-delta'; index: number; delta: string }

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import { createSignal } from '../agent/signals';
 import type { AgentThreadEvent } from '../agent/types';
+import { MockMemory } from '../memory/mock';
 import { MASTRA_MESSAGE_AUTHOR_KEY, RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
@@ -30,9 +31,10 @@ function createTextStreamModel(responseText: string) {
   });
 }
 
-function createGatedAgent(prompts: unknown[], releases: Array<() => void>) {
+function createGatedAgent(prompts: unknown[], releases: Array<() => void>, memory?: MockMemory) {
   let callCount = 0;
   return new Agent({
+    memory,
     id: 'gated-agent',
     name: 'gated-agent',
     instructions: 'You are a test agent.',
@@ -103,6 +105,301 @@ async function createController(
 }
 
 describe('AgentController signal messages', () => {
+  it.each(['before', 'during', 'after'] as const)(
+    'keeps one rich input when its transcript arrives %s delivery',
+    async timing => {
+      const storage = new InMemoryStore();
+      const prompts: unknown[] = [];
+      const releases: Array<() => void> = [];
+      const { session } = await createController(
+        storage,
+        createGatedAgent(prompts, releases, new MockMemory({ storage })),
+      );
+      await session.thread.create({ id: 'voice-thread' });
+      const events: AgentControllerEvent[] = [];
+      const unsubscribe = session.subscribe(event => events.push(event));
+      const record = () =>
+        session.recordMessage({ id: 'spoken-1', role: 'user', content: 'Read this.', createdAt: new Date(1000) });
+      try {
+        const recording = timing === 'before' ? record() : undefined;
+        const input = {
+          id: 'spoken-1',
+          content: 'Read this.',
+          files: [{ data: 'attachment text', mediaType: 'text/plain', filename: 'notes.txt' }],
+        };
+        const receipt = session.sendMessageWithReceipt(input);
+        expect(session.sendMessageWithReceipt(input)).toBe(receipt);
+        if (timing === 'during') await record();
+        await recording;
+        await receipt.accepted;
+        await waitFor(() => prompts.length === 1);
+        releases.splice(0).forEach(release => release());
+        await waitFor(() => events.some(event => event.type === 'agent_end'));
+        if (timing === 'after') await record();
+        const memory = await storage.getStore('memory');
+        const { messages } = await memory!.listMessagesById({ messageIds: ['spoken-1'] });
+        expect(messages).toHaveLength(1);
+        expect(messages[0]?.role).toBe('signal');
+        expect(JSON.stringify(messages[0]?.content.parts)).toContain('attachment text');
+        expect(JSON.stringify(prompts[0]).match(/Read this\./g)).toHaveLength(1);
+        expect(JSON.stringify(prompts[0])).toContain('attachment text');
+        expect(prompts).toHaveLength(1);
+        expect(session.sendMessageWithReceipt(input)).toBe(receipt);
+        const resumed = await createController(
+          storage,
+          createGatedAgent(prompts, releases, new MockMemory({ storage })),
+        );
+        await resumed.session.thread.switch({ threadId: 'voice-thread' });
+        await resumed.session.recordMessage({ id: 'spoken-1', role: 'user', content: 'Read this.' });
+        await expect(resumed.session.sendMessageWithReceipt(input).accepted).rejects.toThrow('already been delivered');
+        expect(prompts).toHaveLength(1);
+        expect(
+          JSON.stringify((await memory!.listMessagesById({ messageIds: ['spoken-1'] })).messages[0]?.content.parts),
+        ).toContain('attachment text');
+      } finally {
+        releases.splice(0).forEach(release => release());
+        session.abort();
+        unsubscribe();
+      }
+    },
+  );
+
+  it('records nondelegated turns without running and retains separate identities for repeated words', async () => {
+    const storage = new InMemoryStore();
+    const model = createTextStreamModel('Hello');
+    const stream = vi.spyOn(model, 'doStream');
+    const { session } = await createController(
+      storage,
+      new Agent({
+        id: 'record-agent',
+        name: 'Recorder',
+        instructions: 'Respond.',
+        model,
+        memory: new MockMemory({ storage }),
+      }),
+    );
+    const createdAt = new Date(1000);
+    await session.recordMessage({ id: 'first', role: 'user', content: 'Hello', createdAt });
+    await session.recordMessage({ id: 'second', role: 'user', content: 'Hello', createdAt });
+    await session.recordMessage({ id: 'answer', role: 'assistant', content: 'Welcome', createdAt });
+    const messages = await session.thread.listActiveMessages();
+    expect(messages.map(message => message.id)).toEqual(['first', 'second', 'answer']);
+    expect(messages[0]?.createdAt).toEqual(createdAt);
+    expect(stream).not.toHaveBeenCalled();
+    await expect(session.recordMessage({ id: 'answer', role: 'user', content: 'Welcome' })).rejects.toThrow(
+      'conflicts',
+    );
+    await expect(session.sendMessageWithReceipt({ id: 'answer', content: 'Welcome' }).accepted).rejects.toThrow(
+      'another role',
+    );
+    await session.thread.create({ id: 'another-thread' });
+    await expect(session.recordMessage({ id: 'first', role: 'user', content: 'Hello' })).rejects.toThrow(
+      'another conversation',
+    );
+    await expect(session.sendMessageWithReceipt({ id: 'first', content: 'Hello' }).accepted).rejects.toThrow(
+      'another conversation',
+    );
+  });
+
+  it('allows retry after rejected delivery and rejects reuse with changed content', async () => {
+    const storage = new InMemoryStore();
+    const { session } = await createController(storage, createGatedAgent([], [], new MockMemory({ storage })));
+    await session.thread.create({ id: 'retry-thread' });
+    const failure = new Error('Rejected before delivery');
+    const send = vi
+      .spyOn(session, 'sendSignal')
+      .mockImplementationOnce(() => ({
+        id: 'retry-1',
+        type: 'user',
+        accepted: Promise.reject(failure),
+      }))
+      .mockImplementationOnce(() => ({
+        id: 'retry-1',
+        type: 'user',
+        accepted: Promise.resolve({ accepted: true, action: 'wake', runId: 'retry-run' }),
+      }));
+    const failed = session.sendMessageWithReceipt({ id: 'retry-1', content: 'Hello', untilIdle: { maxIdleMs: 50 } });
+    const lateTranscript = session.recordMessage({ id: 'retry-1', role: 'user', content: 'Hello' });
+    await expect(failed.accepted).rejects.toBe(failure);
+    expect(send).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ id: 'retry-1', type: 'user' }),
+      expect.objectContaining({ requireDelivery: true, untilIdle: { maxIdleMs: 50 } }),
+    );
+    await lateTranscript;
+    expect((await session.thread.listActiveMessages()).filter(message => message.id === 'retry-1')).toHaveLength(1);
+    await expect(session.sendMessageWithReceipt({ id: 'retry-1', content: 'Hello' }).accepted).resolves.toMatchObject({
+      runId: 'retry-run',
+    });
+    expect(() => session.sendMessageWithReceipt({ id: 'retry-1', content: 'Different' })).toThrow('conflicts');
+    expect(send).toHaveBeenCalledTimes(2);
+    send.mockRestore();
+  });
+
+  it('fails closed when identified delivery cannot preserve history in shared memory', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const send = vi.spyOn(session, 'sendSignal');
+    await expect(session.sendMessageWithReceipt({ id: 'no-memory', content: 'Hello' }).accepted).rejects.toThrow(
+      'share memory storage',
+    );
+    expect(send).not.toHaveBeenCalled();
+    await session.recordMessage({ id: 'no-memory', role: 'user', content: 'Hello' });
+    expect((await session.thread.listActiveMessages()).some(message => message.id === 'no-memory')).toBe(true);
+  });
+
+  it('delivers identical words again when the caller provides a new input identity', async () => {
+    const storage = new InMemoryStore();
+    const model = createTextStreamModel('Hello');
+    const stream = vi.spyOn(model, 'doStream');
+    const { session } = await createController(
+      storage,
+      new Agent({
+        id: 'repeat-agent',
+        name: 'Repeater',
+        instructions: 'Respond.',
+        model,
+        memory: new MockMemory({ storage }),
+      }),
+    );
+    const events: AgentControllerEvent[] = [];
+    const unsubscribe = session.subscribe(event => events.push(event));
+    try {
+      for (const id of ['repeat-1', 'repeat-2']) {
+        await session.sendMessageWithReceipt({ id, content: 'Hello again' }).accepted;
+        await waitFor(() => events.filter(event => event.type === 'agent_end').length === (id === 'repeat-1' ? 1 : 2));
+      }
+      expect(stream).toHaveBeenCalledTimes(2);
+      const memory = await storage.getStore('memory');
+      expect((await memory!.listMessagesById({ messageIds: ['repeat-1', 'repeat-2'] })).messages).toHaveLength(2);
+    } finally {
+      session.abort();
+      unsubscribe();
+    }
+  });
+
+  it('releases bounded live receipts only after a durable signal protects them from replay', async () => {
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+    const { session } = await createController(storage, createGatedAgent([], [], memory));
+    const send = vi.spyOn(session, 'sendSignal').mockImplementation(input => {
+      if ('content' in input) throw new Error('Expected an identified native signal');
+      const signal = createSignal(input);
+      const accepted = memory
+        .saveMessages({
+          messages: [
+            signal.toDBMessage({
+              threadId: session.thread.getId()!,
+              resourceId: session.identity.getResourceId(),
+            }),
+          ],
+        })
+        .then(() => ({ accepted: true as const, action: 'wake' as const, runId: 'bounded-run' }));
+      return { id: signal.id, type: 'user', accepted };
+    });
+    try {
+      for (let index = 0; index < 1025; index++) {
+        await session.sendMessageWithReceipt({ id: `bounded-${index}`, content: 'Hello' }).accepted;
+      }
+      await expect(session.sendMessageWithReceipt({ id: 'bounded-0', content: 'Hello' }).accepted).rejects.toThrow(
+        'already been delivered',
+      );
+      expect(send).toHaveBeenCalledTimes(1025);
+      await session.recordMessage({ id: 'bounded-0', role: 'user', content: 'Late transcript' });
+      const store = await storage.getStore('memory');
+      expect((await store!.listMessagesById({ messageIds: ['bounded-0'] })).messages[0]?.role).toBe('signal');
+    } finally {
+      send.mockRestore();
+    }
+  });
+
+  it('returns an exact file-bearing receipt before the run ends and sends only once', async () => {
+    const prompts: unknown[] = [];
+    const releases: Array<() => void> = [];
+    const { session } = await createController(new InMemoryStore(), createGatedAgent(prompts, releases));
+    const events: AgentControllerEvent[] = [];
+    const unsubscribe = session.subscribe(event => events.push(event));
+    const send = vi.spyOn(session, 'sendSignal');
+    try {
+      const receipt = session.sendMessageWithReceipt({
+        content: 'Read these files.',
+        files: [
+          { data: 'data:text/plain;base64,aGVsbG8=', mediaType: 'text/plain', filename: 'notes.txt' },
+          { data: '{invalid JSON is still document text}', mediaType: 'application/json', filename: 'data.json' },
+          { data: 'data:application/pdf;base64,JVBERg==', mediaType: 'application/pdf', filename: 'file.pdf' },
+        ],
+      });
+      const accepted = await receipt.accepted;
+      expect(accepted).toMatchObject({ accepted: true, action: 'wake', runId: expect.any(String) });
+      await waitFor(() => events.some(event => event.type === 'message_update' && event.event.type === 'text-delta'));
+      expect(events).toContainEqual({
+        type: 'message_update',
+        runId: accepted.runId,
+        id: expect.any(String),
+        event: { type: 'text-delta', delta: 'response 1' },
+      });
+      expect(events.some(event => event.type === 'agent_end')).toBe(false);
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: [
+            { type: 'text', text: 'Read these files.' },
+            { type: 'text', text: '[File: notes.txt]\n```\nhello\n```' },
+            { type: 'text', text: '[File: data.json]\n```\n{invalid JSON is still document text}\n```' },
+            {
+              type: 'file',
+              data: 'data:application/pdf;base64,JVBERg==',
+              mediaType: 'application/pdf',
+              filename: 'file.pdf',
+            },
+          ],
+        }),
+        { requireDelivery: true },
+      );
+      expect(prompts).toHaveLength(1);
+      releases.splice(0).forEach(release => release());
+      await waitFor(() => events.some(event => event.type === 'agent_end'));
+    } finally {
+      releases.splice(0).forEach(release => release());
+      session.abort();
+      send.mockRestore();
+      unsubscribe();
+    }
+  });
+
+  it.each(['text/plain', 'application/json'])(
+    'does not deliver invalid %s file data when conversion fails',
+    async mediaType => {
+      const { session } = await createController(new InMemoryStore());
+      const send = vi.spyOn(session, 'sendSignal');
+      try {
+        expect(() =>
+          session.sendMessageWithReceipt({ content: 'Read.', files: [{ data: null as unknown as string, mediaType }] }),
+        ).toThrow();
+        expect(send).not.toHaveBeenCalled();
+      } finally {
+        send.mockRestore();
+      }
+    },
+  );
+
+  it('passes the exact delivery rejection through without retrying', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const failure = new Error('Stream setup refused.');
+    const accepted = Promise.reject(failure);
+    const send = vi.spyOn(session, 'sendSignal').mockReturnValue({ id: 'signal-1', type: 'user', accepted });
+    try {
+      const receipt = session.sendMessageWithReceipt({
+        content: 'Read.',
+        files: [{ data: '{}', mediaType: 'application/json' }],
+      });
+      expect(receipt.accepted).toBe(accepted);
+      await expect(receipt.accepted).rejects.toBe(failure);
+      expect(send).toHaveBeenCalledTimes(1);
+    } finally {
+      send.mockRestore();
+    }
+  });
+
   it('converts sendMessage files into fenced text and preserved binary file parts', async () => {
     const { session } = await createController(new InMemoryStore());
     const createMessageInput = (
@@ -375,6 +672,7 @@ describe('AgentController signal messages', () => {
       type: 'message_update',
       id: assistantStarts[0]!.message.id,
       event: { type: 'text-delta', delta: 'Hello' },
+      runId: expect.any(String),
     });
     expect(session.getCurrentRunId()).toBeNull();
   });
@@ -1236,6 +1534,7 @@ describe('AgentController signal messages', () => {
       type: 'message_update',
       id: assistantStart!.message.id,
       event: { type: 'text-delta', delta: 'Hello' },
+      runId: expect.any(String),
     });
     expect(events).toContainEqual({ type: 'message_end', id: signalStart!.message.id });
     expect(events).toContainEqual({ type: 'message_end', id: assistantStart!.message.id });

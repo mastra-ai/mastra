@@ -28,6 +28,7 @@ import type { TracingContext, TracingOptions } from '../observability';
 import type { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
+import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { StorageListMessagesOutput } from '../storage/types';
 import type { SubmitPlanResumeData } from '../tools/builtin/submit-plan';
 import { safeStringify } from '../utils';
@@ -270,6 +271,8 @@ export interface ThreadDataStore {
  * capabilities it is allowed to use, nothing more.
  */
 export interface SessionMachinery {
+  /** Native controller storage used for recorded conversation turns. */
+  getMessageStorage?(): Promise<MemoryStorage>;
   /** Resolve the agent that should answer for the session's current mode/model. */
   getAgent(): Agent;
   /** Get the ephemeral state associated with an active or suspended run. */
@@ -2881,6 +2884,132 @@ export class SessionBus {
 }
 
 export class Session<TState = unknown> {
+  readonly #messageWrites = new Map<string, Promise<unknown>>();
+  readonly #messageDeliveries = new Map<
+    string,
+    {
+      threadId: string;
+      resourceId: string;
+      fingerprint: string;
+      receipt: ReturnType<Session['sendSignal']>;
+      settled: boolean;
+    }
+  >();
+
+  private serializeMessage<T>(id: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.#messageWrites.get(id) ?? Promise.resolve();
+    const pending = previous.catch(() => undefined).then(operation);
+    this.#messageWrites.set(id, pending);
+    void pending
+      .finally(() => {
+        if (this.#messageWrites.get(id) === pending) this.#messageWrites.delete(id);
+      })
+      .catch(() => undefined);
+    return pending;
+  }
+
+  private assertMessageScope(threadId: string, resourceId: string) {
+    if (this.thread.getId() !== threadId || this.identity.getResourceId() !== resourceId) {
+      throw new Error('Message scope changed before delivery');
+    }
+  }
+
+  private async messageStorage(id: string, threadId: string, resourceId: string) {
+    if (!id.trim()) throw new Error('Message id must not be empty');
+    this.assertMessageScope(threadId, resourceId);
+    const storage = await this.machinery.getMessageStorage?.();
+    if (!storage) throw new Error('Recording messages requires controller storage');
+    const thread = await storage.getThreadById({ threadId });
+    if (thread && thread.resourceId !== resourceId) throw new Error('Message thread belongs to another resource');
+    this.assertMessageScope(threadId, resourceId);
+    if (!thread) await this.thread.create({ id: threadId });
+    const { messages } = await storage.listMessagesById({ messageIds: [id] });
+    const existing = messages[0];
+    if (existing && (existing.threadId !== threadId || existing.resourceId !== resourceId)) {
+      throw new Error('Message id belongs to another conversation');
+    }
+    this.assertMessageScope(threadId, resourceId);
+    return { storage, existing };
+  }
+
+  /**
+   * Record a completed external conversation turn without starting a run.
+   * Reuse its id with sendMessageWithReceipt to deliver that same user input.
+   * A late transcript cannot replace a delivered signal or its attachments.
+   */
+  async recordMessage({
+    id,
+    role,
+    content,
+    createdAt = new Date(),
+  }: {
+    id: string;
+    role: 'user' | 'assistant';
+    content: string;
+    createdAt?: Date;
+  }): Promise<void> {
+    if (
+      !id.trim() ||
+      !content.trim() ||
+      !['user', 'assistant'].includes(role) ||
+      !Number.isFinite(createdAt.getTime())
+    ) {
+      throw new Error('Invalid recorded message');
+    }
+    if (!this.thread.getId()) await this.thread.create();
+    const threadId = this.thread.getId()!;
+    const resourceId = this.identity.getResourceId();
+    const delivery = this.#messageDeliveries.get(id);
+    await this.serializeMessage(id, async () => {
+      if (delivery) {
+        if (role !== 'user' || delivery.threadId !== threadId || delivery.resourceId !== resourceId) {
+          throw new Error('Message identity conflicts with a delivered user input');
+        }
+        try {
+          const accepted = await delivery.receipt.accepted;
+          if (accepted.action === 'wake' || accepted.action === 'deliver') return;
+        } catch {
+          // A rejected handoff does not discard the original spoken turn.
+        }
+      }
+      const { storage, existing } = await this.messageStorage(id, threadId, resourceId);
+      if (existing) {
+        const signal = existing.content.metadata?.signal as { type?: string } | undefined;
+        if (role === 'user' && existing.role === 'signal' && signal?.type === 'user') return;
+        if (
+          existing.role !== role ||
+          JSON.stringify(existing.content.parts) !== JSON.stringify([{ type: 'text', text: content }])
+        ) {
+          throw new Error('Message id conflicts with an existing turn');
+        }
+        return;
+      }
+      await storage.saveMessages({
+        messages: [
+          {
+            id,
+            role,
+            threadId,
+            resourceId,
+            createdAt,
+            type: 'text',
+            content: { format: 2, parts: [{ type: 'text', text: content }] },
+          },
+        ],
+      });
+      const thread = await storage.getThreadById({ threadId });
+      if (
+        role === 'user' &&
+        thread &&
+        !thread.title?.trim() &&
+        this.thread.getId() === threadId &&
+        this.identity.getResourceId() === resourceId
+      ) {
+        await this.thread.rename({ title: content.length > 80 ? `${content.slice(0, 80)}…` : content });
+      }
+    });
+  }
+
   /** This session's event bus. Constructed first so every subsystem can route its events here. */
   readonly #bus = new SessionBus();
   /** Process-local hooks that must finish before the session exposes a terminal agent event. */
@@ -3731,6 +3860,115 @@ export class Session<TState = unknown> {
       threadId,
       ifIdle: { streamOptions: streamOptions as any },
     };
+  }
+
+  /**
+   * Send a user message with native file conversion and return its exact
+   * delivery receipt without waiting for completion. Subscribe before sending
+   * to observe early output. Conversion can throw before delivery; routing or
+   * stream setup failures reject the accepted promise.
+   */
+  sendMessageWithReceipt({
+    id,
+    content,
+    files,
+    tracingContext,
+    tracingOptions,
+    requestContext,
+    untilIdle,
+  }: {
+    id?: string;
+    content: string;
+    files?: Array<{ data: string; mediaType: string; filename?: string }>;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+    requestContext?: RequestContext;
+    untilIdle?: boolean | { maxIdleMs?: number };
+  }): ReturnType<Session['sendSignal']> {
+    if (id !== undefined) {
+      if (!id.trim()) throw new Error('Message id must not be empty');
+      const contents = this.createMessageInput({ content, files });
+      const threadId = this.thread.getId();
+      if (!threadId) throw new Error('Bind a thread before delivering an identified message');
+      const resourceId = this.identity.getResourceId();
+      const fingerprint = JSON.stringify(contents);
+      const previous = this.#messageDeliveries.get(id);
+      if (previous) {
+        if (
+          previous.threadId !== threadId ||
+          previous.resourceId !== resourceId ||
+          previous.fingerprint !== fingerprint
+        ) {
+          throw new Error('Message id conflicts with an earlier delivery');
+        }
+        return previous.receipt;
+      }
+      // Keep live receipts bounded. Evicted deliveries remain protected by their
+      // persisted signal: an uncertain replay is refused, never run again.
+      const oldest =
+        this.#messageDeliveries.size >= 1024
+          ? [...this.#messageDeliveries].find(([, value]) => value.settled)
+          : undefined;
+      if (this.#messageDeliveries.size >= 1024 && (!oldest || this.#messageDeliveries.size > 1024)) {
+        throw new Error('Too many pending message deliveries');
+      }
+      const accepted = this.serializeMessage(id, async () => {
+        const { storage, existing } = await this.messageStorage(id, threadId, resourceId);
+        const memory = await this.machinery.getAgent().getMemory({ requestContext });
+        if (!memory || (await memory.storage.getStore('memory')) !== storage) {
+          throw new Error('Identified delivery requires the agent and controller to share memory storage');
+        }
+        if (oldest) {
+          const { messages } = await storage.listMessagesById({ messageIds: [oldest[0]] });
+          const persisted = messages[0];
+          if (
+            persisted?.role !== 'signal' ||
+            persisted.threadId !== oldest[1].threadId ||
+            persisted.resourceId !== oldest[1].resourceId
+          ) {
+            throw new Error('Cannot release a delivery receipt before its signal is persisted');
+          }
+          if (this.#messageDeliveries.get(oldest[0]) === oldest[1]) this.#messageDeliveries.delete(oldest[0]);
+        }
+        if (existing && existing.role !== 'user') {
+          throw new Error('Message id has already been delivered or belongs to another role');
+        }
+        this.assertMessageScope(threadId, resourceId);
+        return this.sendSignal(
+          { id, type: 'user', contents, createdAt: existing?.createdAt },
+          {
+            requireDelivery: true,
+            tracingContext,
+            tracingOptions,
+            requestContext,
+            untilIdle,
+          },
+        ).accepted;
+      });
+      const receipt: ReturnType<Session['sendSignal']> = { id, type: 'user', accepted };
+      const entry = { threadId, resourceId, fingerprint, receipt, settled: false };
+      this.#messageDeliveries.set(id, entry);
+      void accepted.then(
+        result => {
+          if (result.action === 'wake' || result.action === 'deliver') entry.settled = true;
+          else if (this.#messageDeliveries.get(id) === entry) this.#messageDeliveries.delete(id);
+        },
+        () => {
+          if (this.#messageDeliveries.get(id) === entry) this.#messageDeliveries.delete(id);
+        },
+      );
+      return receipt;
+    }
+    return this.sendSignal(
+      {
+        content: this.createMessageInput({ content, files }),
+        tracingContext,
+        tracingOptions,
+        requestContext,
+        untilIdle,
+      },
+      { requireDelivery: true },
+    );
   }
 
   /**

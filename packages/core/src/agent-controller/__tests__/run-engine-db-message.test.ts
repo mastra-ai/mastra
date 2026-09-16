@@ -46,7 +46,7 @@ function createHarness() {
   return { engine: new SessionRunEngine(session, machinery), events };
 }
 
-function chunk(value: StreamChunk): StreamChunk {
+function chunk(value: StreamChunk & { runId?: string | null }): StreamChunk {
   return value;
 }
 
@@ -58,6 +58,56 @@ function assistantStarts(events: AgentControllerEvent[]) {
 }
 
 describe('SessionRunEngine compact message lifecycle', () => {
+  it('correlates early assistant text with its run without exposing reasoning as text', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState('run-1');
+    const ctx = new RequestContext();
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'step-start', runId: 'run-1', payload: { messageId: 'answer-1' } }),
+      ctx,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'reasoning-start', runId: 'run-1', payload: { id: 'r1' } }),
+      ctx,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'reasoning-delta', runId: 'run-1', payload: { id: 'r1', text: 'private thought' } }),
+      ctx,
+    );
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', runId: 'run-1', payload: { id: 't1' } }), ctx);
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'text-delta', runId: 'run-1', payload: { id: 't1', text: 'Hello' } }),
+      ctx,
+    );
+    expect(events.filter(event => event.type === 'message_update' && event.event.type === 'text-delta')).toEqual([
+      { type: 'message_update', runId: 'run-1', id: 'answer-1', event: { type: 'text-delta', delta: 'Hello' } },
+    ]);
+    expect(events.some(event => event.type === 'agent_end')).toBe(false);
+  });
+
+  it.each([null, 'run-1'])('omits text run correlation for unknown or mismatched identity %s', async runId => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState(runId);
+    const ctx = new RequestContext();
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
+    await engine.processStreamChunk(
+      state,
+      chunk({
+        type: 'text-delta',
+        ...(runId ? { runId: 'other-run' } : {}),
+        payload: { id: 't1', text: 'Still display' },
+      }),
+      ctx,
+    );
+    const text = events.find(event => event.type === 'message_update' && event.event.type === 'text-delta');
+    expect(text).toBeDefined();
+    expect(text).not.toHaveProperty('runId');
+  });
+
   it('emits one start, ordered text deltas, and one end when assistant text completes', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();

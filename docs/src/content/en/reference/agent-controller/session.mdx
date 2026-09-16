@@ -152,7 +152,44 @@ unsubscribe()
 
 Returns: `() => void`
 
+Assistant text updates have the shape `{ type: 'message_update', id, runId?, event: { type: 'text-delta', delta } }`. When known and matched to the stream, `runId` identifies the run that produced this text. Subscribe before sending and match that ID to the delivery receipt. Early text can arrive before acceptance resolves. Reasoning and tool data use different event variants; filter for `event.type === 'text-delta'` when forwarding answer text. Generated text doesn't establish speech playback or successful tool execution.
+
 ### Messages and run control
+
+#### `recordMessage({ id, role, content, createdAt? })`
+
+Record a completed external conversation turn without starting an agent run. `role` must be `user` or `assistant`, and `content` must contain text. `createdAt` defaults to the current time. The session creates a thread if needed and requires controller message storage.
+
+```typescript
+await session.recordMessage({ id: 'spoken-1', role: 'user', content: 'Read this file.' })
+const delivery = session.sendMessageWithReceipt({
+  id: 'spoken-1',
+  content: 'Read this file.',
+  files: [{ data: 'Document text', mediaType: 'text/plain', filename: 'notes.txt' }],
+})
+await delivery.accepted
+```
+
+Returns: `Promise<void>`. Recording the same turn again is safe. Conflicting content or roles and IDs belonging to another conversation are rejected. A late user transcript preserves an already delivered user signal and its attachments.
+
+#### `sendMessageWithReceipt({ id?, content, files?, requestContext?, tracingContext?, tracingOptions?, untilIdle? })`
+
+Send a user message using the same file conversion as `sendMessage`, and return an immediate `{ id, type, accepted }` handle. Text and JSON files become fenced text; binary files remain file parts. JSON content is document text and isn't parsed.
+
+```typescript
+const delivery = session.sendMessageWithReceipt({
+  content: 'Summarize the notes.',
+  files: [{ data: 'Meeting notes', mediaType: 'text/plain', filename: 'notes.txt' }],
+})
+const accepted = await delivery.accepted
+console.log(delivery.id, accepted.runId, accepted.action)
+```
+
+The `accepted` promise uses `sendSignal` with `requireDelivery: true` and resolves to `{ accepted: true, runId?, action? }` after the actual routing decision. Check its action and run ID when the caller requires active delivery. Acceptance isn't completion; observe session events for the result.
+
+File conversion may throw before sending. Routing and stream setup failures reject `accepted`. The method doesn't retry. Existing `sendMessage` behavior is unchanged.
+
+An optional `id` links delivery to a previously recorded user turn. Identified delivery requires a bound thread and shared agent/controller memory storage. Repeating the same live input returns its existing receipt; changed content or files are rejected. Rejected delivery may be retried. Live receipts are bounded, and after eviction or session recreation, a persisted signal rejects uncertain replay rather than starting another run. Calls without an ID retain their existing behavior.
 
 #### `sendMessage({ content, files?, requestContext? })`
 

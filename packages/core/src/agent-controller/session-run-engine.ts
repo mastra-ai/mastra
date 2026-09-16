@@ -219,6 +219,8 @@ async function abortDeadline(run: Session['run'], guard: AbortSignal, graceMs: n
 }
 
 type StreamState = {
+  /** Stable stream identity, independent of later session run changes. */
+  runId?: string | null;
   currentMessage: MastraDBMessage;
   lastFinishedMessage?: MastraDBMessage;
   messageStarted: boolean;
@@ -373,8 +375,9 @@ export class SessionRunEngine {
     state.completedToolPrelude = false;
   }
 
-  createStreamState(): StreamState {
+  createStreamState(runId: string | null = this.#session.run.getRunId()): StreamState {
     return {
+      runId,
       currentMessage: this.createEmptyAssistantMessage(),
       messageStarted: false,
       isSuspended: false,
@@ -542,6 +545,8 @@ export class SessionRunEngine {
     requestContext: RequestContext,
     agent: Agent = this.#machinery.getAgent(),
   ): Promise<{ message: MastraDBMessage; suspended?: boolean } | undefined> {
+    const chunkRunId = 'runId' in chunk ? chunk.runId : undefined;
+    state.runId ??= chunkRunId ?? this.#session.run.getRunId();
     if ('runId' in chunk && chunk.runId) {
       this.#session.run.setRunId({ runId: chunk.runId });
     }
@@ -577,6 +582,7 @@ export class SessionRunEngine {
           type: 'message_update',
           id: state.currentMessage.id,
           event: { type: 'text-delta', delta: chunk.payload.text },
+          ...(state.runId && (!chunkRunId || chunkRunId === state.runId) ? { runId: state.runId } : {}),
         });
       } else if (chunk.type === 'reasoning-delta' && folded.part.type === 'reasoning') {
         if (!state.announcedReasoningSpans.delete(chunk.payload.id) && folded.created) {
@@ -1345,7 +1351,7 @@ export class SessionRunEngine {
 
         if (!currentRun) {
           const runId = ('runId' in chunk ? chunk.runId : undefined) ?? subscription.activeRunId();
-          currentRun = this.createStreamState();
+          currentRun = this.createStreamState(runId ?? null);
           this.#session.run.nextOperation();
           this.#session.run.ensureAbortController();
           this.#session.run.setRunId({ runId });
