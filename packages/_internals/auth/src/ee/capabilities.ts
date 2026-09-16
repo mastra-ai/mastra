@@ -155,7 +155,7 @@ function getRequestIp(request: Request): string | undefined {
   return request.headers.get('x-real-ip') ?? undefined;
 }
 
-function captureLicenseCheck({
+async function captureLicenseCheck({
   request,
   user,
   hasLicense,
@@ -171,12 +171,12 @@ function captureLicenseCheck({
   isCloud: boolean;
   isSimple: boolean;
   capabilities?: CapabilityFlags;
-}): void {
-  const license = getSafeLicenseSummary();
+}): Promise<void> {
+  const license = await getSafeLicenseSummary();
 
   try {
     const ip = getRequestIp(request);
-    captureEEEvent('ee_license_check', user?.id || license.anonymousId || getEETelemetryFallbackDistinctId(), {
+    captureEEEvent('ee_license_check', user?.id || license.anonymousId || (await getEETelemetryFallbackDistinctId()), {
       license_valid: hasLicense,
       license_hash: license.licenseHash,
       is_dev_environment: isDev,
@@ -328,7 +328,7 @@ export async function buildCapabilities(
 
   // If no user, return public response only
   if (!user) {
-    captureLicenseCheck({ request, user, hasLicense, isDev, isCloud, isSimple });
+    await captureLicenseCheck({ request, user, hasLicense, isDev, isCloud, isSimple });
     return { enabled: true, login };
   }
 
@@ -356,10 +356,10 @@ export async function buildCapabilities(
       const roles = await rbacProvider.getRoles(user);
       const permissions = await rbacProvider.getPermissions(user);
       access = { roles, permissions };
-      const license = getSafeLicenseSummary();
+      const license = await getSafeLicenseSummary();
       try {
         const ip = getRequestIp(request);
-        captureEEEvent('ee_feature_used', user.id || license.anonymousId || getEETelemetryFallbackDistinctId(), {
+        captureEEEvent('ee_feature_used', user.id || license.anonymousId || (await getEETelemetryFallbackDistinctId()), {
           feature: 'rbac',
           user_id: user.id,
           organization_membership_id: user.metadata?.['organizationMembershipId'],
@@ -414,7 +414,7 @@ export async function buildCapabilities(
     }
   }
 
-  captureLicenseCheck({ request, user, hasLicense, isDev, isCloud, isSimple, capabilities });
+  await captureLicenseCheck({ request, user, hasLicense, isDev, isCloud, isSimple, capabilities });
 
   return {
     enabled: true,

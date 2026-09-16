@@ -4,8 +4,6 @@
  * Stores session data in signed cookies. No server-side storage required.
  */
 
-import { createHmac } from 'node:crypto';
-
 import type { Session, ISessionProvider } from '..';
 
 function escapeRegExp(str: string): string {
@@ -106,15 +104,15 @@ export class CookieSessionProvider implements ISessionProvider {
     return null;
   }
 
-  getSessionIdFromRequest(request: Request): string | null {
-    const session = this.getSessionFromCookie(request);
+  async getSessionIdFromRequest(request: Request): Promise<string | null> {
+    const session = await this.getSessionFromCookie(request);
     return session?.id ?? null;
   }
 
   /**
    * Get full session from cookie.
    */
-  getSessionFromCookie(request: Request): Session | null {
+  async getSessionFromCookie(request: Request): Promise<Session | null> {
     const cookieHeader = request.headers.get('cookie');
     if (!cookieHeader) return null;
 
@@ -123,7 +121,7 @@ export class CookieSessionProvider implements ISessionProvider {
     if (!match?.[1]) return null;
 
     try {
-      const decoded = this.decodeAndVerify(match[1]);
+      const decoded = await this.decodeAndVerify(match[1]);
       if (!decoded) return null;
 
       // Check expiration
@@ -143,7 +141,7 @@ export class CookieSessionProvider implements ISessionProvider {
     }
   }
 
-  getSessionHeaders(session: Session): Record<string, string> {
+  async getSessionHeaders(session: Session): Promise<Record<string, string>> {
     const data: CookieSessionData = {
       id: session.id,
       userId: session.userId,
@@ -152,7 +150,7 @@ export class CookieSessionProvider implements ISessionProvider {
       metadata: session.metadata,
     };
 
-    const encoded = this.signAndEncode(data);
+    const encoded = await this.signAndEncode(data);
     const maxAge = Math.floor((session.expiresAt.getTime() - Date.now()) / 1000);
 
     let cookie = `${this.cookieName}=${encoded}; HttpOnly; SameSite=Lax; Path=${this.cookiePath}; Max-Age=${maxAge}`;
@@ -181,9 +179,9 @@ export class CookieSessionProvider implements ISessionProvider {
   /**
    * Sign and encode session data.
    */
-  private signAndEncode(data: CookieSessionData): string {
+  private async signAndEncode(data: CookieSessionData): Promise<string> {
     const json = JSON.stringify(data);
-    const signature = this.sign(json);
+    const signature = await this.sign(json);
     const payload = `${this.base64Encode(json)}.${signature}`;
     return encodeURIComponent(payload);
   }
@@ -191,7 +189,7 @@ export class CookieSessionProvider implements ISessionProvider {
   /**
    * Decode and verify session cookie.
    */
-  private decodeAndVerify(cookie: string): CookieSessionData | null {
+  private async decodeAndVerify(cookie: string): Promise<CookieSessionData | null> {
     try {
       const decoded = decodeURIComponent(cookie);
       const [data, signature] = decoded.split('.');
@@ -199,14 +197,21 @@ export class CookieSessionProvider implements ISessionProvider {
       if (!data || !signature) return null;
 
       const json = this.base64Decode(data);
-      const expectedSignature = this.sign(json);
-
-      // Constant-time comparison
-      if (!this.secureCompare(signature, expectedSignature)) {
-        return null;
-      }
-
-      return JSON.parse(json);
+      const key = await globalThis.crypto.subtle.importKey(
+        'raw',
+        new TextEncoder().encode(this.secret).buffer as ArrayBuffer,
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['verify'],
+      );
+      return (await globalThis.crypto.subtle.verify(
+        'HMAC',
+        key,
+        Buffer.from(signature, 'base64url'),
+        new TextEncoder().encode(json).buffer as ArrayBuffer,
+      ))
+        ? JSON.parse(json)
+        : null;
     } catch {
       return null;
     }
@@ -215,8 +220,20 @@ export class CookieSessionProvider implements ISessionProvider {
   /**
    * Create HMAC-SHA256 signature.
    */
-  private sign(data: string): string {
-    return createHmac('sha256', this.secret).update(data).digest('base64url');
+  private async sign(data: string): Promise<string> {
+    const key = await globalThis.crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(this.secret).buffer as ArrayBuffer,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign'],
+    );
+    const signature = await globalThis.crypto.subtle.sign(
+      'HMAC',
+      key,
+      new TextEncoder().encode(data).buffer as ArrayBuffer,
+    );
+    return Buffer.from(signature).toString('base64url');
   }
 
   /**
@@ -252,17 +269,4 @@ export class CookieSessionProvider implements ISessionProvider {
     return new TextDecoder().decode(bytes);
   }
 
-  /**
-   * Constant-time string comparison.
-   */
-  private secureCompare(a: string, b: string): boolean {
-    if (a.length !== b.length) return false;
-
-    let result = 0;
-    for (let i = 0; i < a.length; i++) {
-      result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-    }
-
-    return result === 0;
-  }
 }

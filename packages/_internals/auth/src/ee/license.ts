@@ -459,10 +459,10 @@ export function getLicenseInfo(): LicenseInfo | null {
   return validateLicense();
 }
 
-export function getSafeLicenseSummary(): SafeLicenseSummary {
+export async function getSafeLicenseSummary(): Promise<SafeLicenseSummary> {
   const key = getLicenseKey();
   const info = validateLicense(key);
-  const licenseHash = key ? hashTelemetryValue(key) : undefined;
+  const licenseHash = key ? await hashTelemetryValue(key) : undefined;
 
   return {
     valid: info.valid,

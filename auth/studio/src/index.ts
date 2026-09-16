@@ -380,12 +380,12 @@ export class MastraAuthStudio
     }
   }
 
-  getSessionIdFromRequest(request: Request): string | null {
+  async getSessionIdFromRequest(request: Request): Promise<string | null> {
     const cookieHeader = request.headers.get('Cookie');
     return parseCookie(cookieHeader, COOKIE_NAME);
   }
 
-  getSessionHeaders(session: Session): Record<string, string> {
+  async getSessionHeaders(session: Session): Promise<Record<string, string>> {
     const parts = [`${COOKIE_NAME}=${session.id}`, 'HttpOnly', 'SameSite=Lax', 'Path=/', 'Max-Age=86400'];
     if (this.useProductionCookies && this.cookieDomain) {
       parts.push('Secure');

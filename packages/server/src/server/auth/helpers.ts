@@ -397,7 +397,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     // This handles expired access tokens without requiring client-side refresh logic.
     if (!user && supportsSessionRefresh(authConfig) && rawRequest instanceof Request) {
       try {
-        const sessionId = authConfig.getSessionIdFromRequest(rawRequest);
+        const sessionId = await authConfig.getSessionIdFromRequest(rawRequest);
         if (sessionId) {
           const newSession = await authConfig.refreshSession(sessionId);
           if (newSession) {
@@ -405,7 +405,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
             // We create a synthetic request with the new session cookie so
             // authenticateToken (which reads cookies from the request) picks up
             // the refreshed session instead of the expired one.
-            refreshHeaders = authConfig.getSessionHeaders(newSession);
+            refreshHeaders = await authConfig.getSessionHeaders(newSession);
             const refreshedCookie = Object.entries(refreshHeaders)
               .filter(([k]) => k.toLowerCase() === 'set-cookie')
               .map(([, v]) => v.split(';')[0]) // Extract name=value before attributes

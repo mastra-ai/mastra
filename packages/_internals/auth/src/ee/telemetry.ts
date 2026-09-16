@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import os from 'node:os';
 
 export type EEEventName = 'ee_license_check' | 'ee_feature_used';
@@ -7,16 +6,16 @@ export function isEETelemetryEnabled(): boolean {
   return process.env['MASTRA_TELEMETRY_DISABLED'] !== '1';
 }
 
-export function hashTelemetryValue(value: string): string {
-  return createHash('sha256').update(value).digest('hex');
+export async function hashTelemetryValue(value: string): Promise<string> {
+  return Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))).toString('hex');
 }
 
-function getHashedHostname(): string {
-  return hashTelemetryValue(os.hostname() || 'unknown-host').slice(0, 16);
+async function getHashedHostname(): Promise<string> {
+  return (await hashTelemetryValue(os.hostname() || 'unknown-host')).slice(0, 16);
 }
 
-export function getEETelemetryFallbackDistinctId(): string {
-  return `mastra-${getHashedHostname()}`;
+export async function getEETelemetryFallbackDistinctId(): Promise<string> {
+  return `mastra-${await getHashedHostname()}`;
 }
 
 type EETelemetryBridge = {

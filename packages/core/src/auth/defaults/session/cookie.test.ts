@@ -22,6 +22,26 @@ describe('CookieSessionProvider', () => {
     });
   });
 
+  describe('pre-migration compatibility', () => {
+    it('accepts the frozen Node HMAC/base64url cookie vector', async () => {
+      const vectorProvider = new CookieSessionProvider({ secret: '12345678901234567890123456789012' });
+      const cookie =
+        'eyJpZCI6IjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMCIsInVzZXJJZCI6InVzZXItMTIzIiwiZXhwaXJlc0F0Ijo0MTAyNDQ0ODAwMDAwLCJjcmVhdGVkQXQiOjE3MDAwMDAwMDAwMDAsIm1ldGFkYXRhIjp7InJvbGUiOiJhZG1pbiJ9fQ==.x5p6P6CUS48bl4DUiLBFKFgQKDMpfv6srNsELchhk0c';
+
+      await expect(
+        vectorProvider.getSessionFromCookie(
+          new Request('http://localhost', { headers: { cookie: `mastra_session=${encodeURIComponent(cookie)}` } }),
+        ),
+      ).resolves.toMatchObject({
+        id: '00000000-0000-4000-8000-000000000000',
+        userId: 'user-123',
+        expiresAt: new Date(4102444800000),
+        createdAt: new Date(1700000000000),
+        metadata: { role: 'admin' },
+      });
+    });
+  });
+
   describe('session creation', () => {
     it('should create a session with valid fields', async () => {
       const session = await provider.createSession('user-123');
@@ -51,7 +71,7 @@ describe('CookieSessionProvider', () => {
   describe('cookie signing and verification', () => {
     it('should create signed cookies that can be verified', async () => {
       const session = await provider.createSession('user-123');
-      const headers = provider.getSessionHeaders(session);
+      const headers = await provider.getSessionHeaders(session);
       const cookieValue = headers['Set-Cookie'];
 
       // Extract the cookie value
@@ -63,7 +83,7 @@ describe('CookieSessionProvider', () => {
         headers: { cookie: `mastra_session=${match![1]}` },
       });
 
-      const retrievedSession = provider.getSessionFromCookie(request);
+      const retrievedSession = await provider.getSessionFromCookie(request);
       expect(retrievedSession).not.toBeNull();
       expect(retrievedSession!.id).toBe(session.id);
       expect(retrievedSession!.userId).toBe(session.userId);
@@ -71,7 +91,7 @@ describe('CookieSessionProvider', () => {
 
     it('should reject tampered cookie data', async () => {
       const session = await provider.createSession('user-123');
-      const headers = provider.getSessionHeaders(session);
+      const headers = await provider.getSessionHeaders(session);
       const cookieValue = headers['Set-Cookie'];
 
       // Extract the cookie value
@@ -91,13 +111,13 @@ describe('CookieSessionProvider', () => {
         headers: { cookie: `mastra_session=${tamperedCookie}` },
       });
 
-      const retrievedSession = provider.getSessionFromCookie(request);
+      const retrievedSession = await provider.getSessionFromCookie(request);
       expect(retrievedSession).toBeNull();
     });
 
     it('should reject tampered signatures', async () => {
       const session = await provider.createSession('user-123');
-      const headers = provider.getSessionHeaders(session);
+      const headers = await provider.getSessionHeaders(session);
       const cookieValue = headers['Set-Cookie'];
 
       // Extract the cookie value
@@ -112,13 +132,13 @@ describe('CookieSessionProvider', () => {
         headers: { cookie: `mastra_session=${tamperedCookie}` },
       });
 
-      const retrievedSession = provider.getSessionFromCookie(request);
+      const retrievedSession = await provider.getSessionFromCookie(request);
       expect(retrievedSession).toBeNull();
     });
 
     it('should reject cookies with missing signature', async () => {
       const session = await provider.createSession('user-123');
-      const headers = provider.getSessionHeaders(session);
+      const headers = await provider.getSessionHeaders(session);
       const cookieValue = headers['Set-Cookie'];
 
       // Extract the cookie value and remove the signature
@@ -131,8 +151,33 @@ describe('CookieSessionProvider', () => {
         headers: { cookie: `mastra_session=${cookieWithoutSignature}` },
       });
 
-      const retrievedSession = provider.getSessionFromCookie(request);
+      const retrievedSession = await provider.getSessionFromCookie(request);
       expect(retrievedSession).toBeNull();
+    });
+
+    it('rejects wrong-key, malformed, and length-mismatched signatures', async () => {
+      const session = await provider.createSession('user-123');
+      const cookie = (await provider.getSessionHeaders(session))['Set-Cookie'].match(/mastra_session=([^;]+)/)![1];
+      const wrongKeyProvider = new CookieSessionProvider({ secret: 'different-secret-that-is-long-enough-32-chars' });
+
+      await expect(
+        wrongKeyProvider.getSessionFromCookie(
+          new Request('http://localhost', { headers: { cookie: `mastra_session=${cookie}` } }),
+        ),
+      ).resolves.toBeNull();
+      await expect(
+        provider.getSessionFromCookie(
+          new Request('http://localhost', { headers: { cookie: 'mastra_session=%E0%A4%A' } }),
+        ),
+      ).resolves.toBeNull();
+
+      const [data] = decodeURIComponent(cookie).split('.');
+      const shortSignature = encodeURIComponent(`${data}.AA`);
+      await expect(
+        provider.getSessionFromCookie(
+          new Request('http://localhost', { headers: { cookie: `mastra_session=${shortSignature}` } }),
+        ),
+      ).resolves.toBeNull();
     });
   });
 
@@ -145,7 +190,7 @@ describe('CookieSessionProvider', () => {
       });
 
       const session = await shortLivedProvider.createSession('user-123');
-      const headers = shortLivedProvider.getSessionHeaders(session);
+      const headers = await shortLivedProvider.getSessionHeaders(session);
       const cookieValue = headers['Set-Cookie'];
 
       // Wait for expiration
@@ -156,7 +201,7 @@ describe('CookieSessionProvider', () => {
         headers: { cookie: `mastra_session=${match![1]}` },
       });
 
-      const retrievedSession = shortLivedProvider.getSessionFromCookie(request);
+      const retrievedSession = await shortLivedProvider.getSessionFromCookie(request);
       expect(retrievedSession).toBeNull();
     });
   });
@@ -166,8 +211,8 @@ describe('CookieSessionProvider', () => {
       const session1 = await provider.createSession('user-123');
       const session2 = await provider.createSession('user-456');
 
-      const headers1 = provider.getSessionHeaders(session1);
-      const headers2 = provider.getSessionHeaders(session2);
+      const headers1 = await provider.getSessionHeaders(session1);
+      const headers2 = await provider.getSessionHeaders(session2);
 
       // Extract signatures
       const match1 = headers1['Set-Cookie'].match(/mastra_session=([^;]+)/);
@@ -194,8 +239,8 @@ describe('CookieSessionProvider', () => {
         expiresAt: new Date('2024-01-08T00:00:00Z'),
       };
 
-      const headers1 = provider1.getSessionHeaders(session);
-      const headers2 = provider2.getSessionHeaders(session);
+      const headers1 = await provider1.getSessionHeaders(session);
+      const headers2 = await provider2.getSessionHeaders(session);
 
       const match1 = headers1['Set-Cookie'].match(/mastra_session=([^;]+)/);
       const match2 = headers2['Set-Cookie'].match(/mastra_session=([^;]+)/);
@@ -217,7 +262,7 @@ describe('CookieSessionProvider', () => {
 
       for (let i = 0; i < iterations; i++) {
         const session = await provider.createSession(`user-${i}`);
-        const headers = provider.getSessionHeaders(session);
+        const headers = await provider.getSessionHeaders(session);
         const match = headers['Set-Cookie'].match(/mastra_session=([^;]+)/);
         const cookie = decodeURIComponent(match![1]);
         const sig = cookie.split('.')[1];
@@ -236,7 +281,7 @@ describe('CookieSessionProvider', () => {
 
       for (let i = 0; i < 10; i++) {
         const session = await provider.createSession(`user-${i}`);
-        const headers = provider.getSessionHeaders(session);
+        const headers = await provider.getSessionHeaders(session);
         const match = headers['Set-Cookie'].match(/mastra_session=([^;]+)/);
         const cookie = decodeURIComponent(match![1]);
         const sig = cookie.split('.')[1];
@@ -253,7 +298,7 @@ describe('CookieSessionProvider', () => {
   describe('cookie headers', () => {
     it('should include HttpOnly and SameSite flags', async () => {
       const session = await provider.createSession('user-123');
-      const headers = provider.getSessionHeaders(session);
+      const headers = await provider.getSessionHeaders(session);
       const cookie = headers['Set-Cookie'];
 
       expect(cookie).toContain('HttpOnly');

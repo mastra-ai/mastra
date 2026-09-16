@@ -59,12 +59,12 @@ export interface CallbackOptions {
  * @param options - Login URL options
  * @returns URL to redirect to and cookies to set
  */
-export function getLoginUrl(options: LoginUrlOptions): LoginUrlResult {
+export async function getLoginUrl(options: LoginUrlOptions): Promise<LoginUrlResult> {
   const { projectId, cloudBaseUrl, callbackUrl, returnTo, requestOrigin, isProduction } = options;
 
   // Generate PKCE verifier and challenge
   const verifier = generateCodeVerifier();
-  const challenge = computeCodeChallenge(verifier);
+  const challenge = await computeCodeChallenge(verifier);
 
   // Generate CSRF token for state
   const csrf = generateState();

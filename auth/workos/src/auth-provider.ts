@@ -734,7 +734,7 @@ export class MastraAuthWorkos
   /**
    * Extract session ID from a request.
    */
-  getSessionIdFromRequest(_request: Request): string | null {
+  async getSessionIdFromRequest(_request: Request): Promise<string | null> {
     // With AuthKit, we don't expose the session ID directly
     // The session is managed via encrypted cookies
     return null;
@@ -743,7 +743,7 @@ export class MastraAuthWorkos
   /**
    * Get response headers to set the session cookie.
    */
-  getSessionHeaders(session: Session): Record<string, string> {
+  async getSessionHeaders(session: Session): Promise<Record<string, string>> {
     // AuthKit handles cookie setting via saveSession()
     // Check for _sessionCookie from handleCallback
     const sessionCookie = (session as any)._sessionCookie;

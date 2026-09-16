@@ -108,7 +108,7 @@ export async function requireFGA(options: RequireFGAOptions): Promise<void> {
   }
 
   const fgaContext = mergeFGAContext({ context, requestContext, metadata });
-  const license = getSafeLicenseSummary();
+  const license = await getSafeLicenseSummary();
 
   if (isActorSignal(actor)) {
     const tenantOrganizationId = fgaContext?.requestContext?.get('organizationId');
@@ -136,7 +136,7 @@ export async function requireFGA(options: RequireFGAOptions): Promise<void> {
     }
 
     try {
-      captureEEEvent('ee_feature_used', license.anonymousId || getEETelemetryFallbackDistinctId(), {
+      captureEEEvent('ee_feature_used', license.anonymousId || (await getEETelemetryFallbackDistinctId()), {
         feature: 'fga',
         actor_kind: 'system',
         actor_authorized_by: providerEnforced ? 'provider' : 'bypass',
@@ -166,7 +166,7 @@ export async function requireFGA(options: RequireFGAOptions): Promise<void> {
   );
 
   try {
-    captureEEEvent('ee_feature_used', user?.id || license.anonymousId || getEETelemetryFallbackDistinctId(), {
+    captureEEEvent('ee_feature_used', user?.id || license.anonymousId || (await getEETelemetryFallbackDistinctId()), {
       feature: 'fga',
       actor_kind: 'user',
       resource_type: resource.type,

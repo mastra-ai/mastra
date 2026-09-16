@@ -256,7 +256,7 @@ describe('MastraCloudAuthProvider', () => {
     let mockGetLoginUrl: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
-      mockGetLoginUrl = vi.fn().mockReturnValue({
+      mockGetLoginUrl = vi.fn().mockResolvedValue({
         url: 'https://auth.example.com/login',
         cookies: ['mastra_pkce=123'],
       });
@@ -264,37 +264,37 @@ describe('MastraCloudAuthProvider', () => {
       provider['client'].getLoginUrl = mockGetLoginUrl;
     });
 
-    it('returns the URL and stores cookies to be retrieved later', () => {
-      const url = provider.getLoginUrl('http://localhost:3000/callback', 'state-123');
+    it('returns the URL and stores cookies to be retrieved later', async () => {
+      const url = await provider.getLoginUrl('http://localhost:3000/callback', 'state-123');
       expect(url).toBe('https://auth.example.com/login');
 
       const cookies = provider.getLoginCookies('http://localhost:3000/callback', 'state-123');
       expect(cookies).toEqual(['mastra_pkce=123']);
     });
 
-    it('clears cookies after they are retrieved once', () => {
-      provider.getLoginUrl('http://localhost:3000/callback', 'state-123');
+    it('clears cookies after they are retrieved once', async () => {
+      await provider.getLoginUrl('http://localhost:3000/callback', 'state-123');
       provider.getLoginCookies('http://localhost:3000/callback', 'state-123');
 
       const cookiesSecondTime = provider.getLoginCookies('http://localhost:3000/callback', 'state-123');
       expect(cookiesSecondTime).toBeUndefined();
     });
 
-    it('handles concurrent requests safely without cross-wiring PKCE verifiers (race condition fix)', () => {
+    it('handles concurrent requests safely without cross-wiring PKCE verifiers (race condition fix)', async () => {
       mockGetLoginUrl
-        .mockReturnValueOnce({
+        .mockResolvedValueOnce({
           url: 'https://auth.example.com/login?req=A',
           cookies: ['mastra_pkce=user_A_verifier'],
         })
-        .mockReturnValueOnce({
+        .mockResolvedValueOnce({
           url: 'https://auth.example.com/login?req=B',
           cookies: ['mastra_pkce=user_B_verifier'],
         });
 
       // User A initiates login
-      const urlA = provider.getLoginUrl('http://localhost:3000/callback', 'state-A');
+      const urlA = await provider.getLoginUrl('http://localhost:3000/callback', 'state-A');
       // User B initiates login concurrently, before User A retrieves cookies
-      const urlB = provider.getLoginUrl('http://localhost:3000/callback', 'state-B');
+      const urlB = await provider.getLoginUrl('http://localhost:3000/callback', 'state-B');
 
       expect(urlA).toContain('req=A');
       expect(urlB).toContain('req=B');
@@ -407,19 +407,19 @@ describe('MastraCloudAuthProvider', () => {
   // ---------- getSessionIdFromRequest ----------
 
   describe('getSessionIdFromRequest', () => {
-    it('extracts token from mastra_cloud_session cookie', () => {
+    it('extracts token from mastra_cloud_session cookie', async () => {
       const req = makeRequest({ cookie: 'other=x; mastra_cloud_session=my-token; foo=bar' });
-      expect(provider.getSessionIdFromRequest(req)).toBe('my-token');
+      await expect(provider.getSessionIdFromRequest(req)).resolves.toBe('my-token');
     });
 
-    it('returns null when cookie is missing', () => {
+    it('returns null when cookie is missing', async () => {
       const req = makeRequest({ cookie: 'other_cookie=value' });
-      expect(provider.getSessionIdFromRequest(req)).toBeNull();
+      await expect(provider.getSessionIdFromRequest(req)).resolves.toBeNull();
     });
 
-    it('returns null when no cookie header', () => {
+    it('returns null when no cookie header', async () => {
       const req = makeRequest();
-      expect(provider.getSessionIdFromRequest(req)).toBeNull();
+      await expect(provider.getSessionIdFromRequest(req)).resolves.toBeNull();
     });
   });
 

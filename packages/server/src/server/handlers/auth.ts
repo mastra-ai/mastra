@@ -513,7 +513,7 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
           expiresAt: result.tokens.expiresAt,
           organizationId: (user as any).organizationId,
         });
-        const sessionHeaders = auth.getSessionHeaders(session);
+        const sessionHeaders = await auth.getSessionHeaders(session);
         for (const [key, value] of Object.entries(sessionHeaders)) {
           headers.append(key, value);
         }
@@ -558,7 +558,7 @@ export const POST_LOGOUT_ROUTE = createPublicRoute({
 
       // Get session ID and destroy it
       if (implementsInterface<ISessionProvider>(auth, 'getSessionIdFromRequest')) {
-        const sessionId = auth.getSessionIdFromRequest(request);
+        const sessionId = await auth.getSessionIdFromRequest(request);
         if (sessionId && implementsInterface<ISessionProvider>(auth, 'destroySession')) {
           await auth.destroySession(sessionId);
         }
@@ -622,7 +622,7 @@ export const POST_REFRESH_ROUTE = createPublicRoute({
       }
 
       // Get session ID from request
-      const sessionId = auth.getSessionIdFromRequest(request);
+      const sessionId = await auth.getSessionIdFromRequest(request);
       if (!sessionId) {
         throw new HTTPException(401, { message: 'No session' });
       }
@@ -636,7 +636,7 @@ export const POST_REFRESH_ROUTE = createPublicRoute({
       // Build response with new session headers
       const headers = new Headers({ 'Content-Type': 'application/json' });
       if (implementsInterface<ISessionProvider>(auth, 'getSessionHeaders')) {
-        const sessionHeaders = auth.getSessionHeaders(newSession);
+        const sessionHeaders = await auth.getSessionHeaders(newSession);
         for (const [key, value] of Object.entries(sessionHeaders)) {
           headers.append(key, value);
         }
