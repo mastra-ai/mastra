@@ -241,6 +241,47 @@ describe('concrete MCP schema generation', () => {
     check(first.source);
   });
 
+  it('preserves base types for runtime-only validation constraints without emitting their text', async () => {
+    const result = await generateToolTypes(
+      catalog({
+        type: 'object',
+        minProperties: 1,
+        maxProperties: 4,
+        properties: {
+          text: { type: 'string', format: 'SECRET */ injected', pattern: 'SECRET', minLength: 1, maxLength: 20 },
+          number: {
+            type: 'number',
+            minimum: 0,
+            maximum: 10,
+            exclusiveMinimum: -1,
+            exclusiveMaximum: 11,
+            multipleOf: 0.5,
+          },
+          array: { type: 'array', items: { type: 'string' }, uniqueItems: true },
+        },
+        required: ['text', 'number', 'array'],
+        additionalProperties: false,
+      }),
+    );
+    expect(result.warnings).toEqual([]);
+    expect(result.source).not.toMatch(/SECRET|injected/);
+    check(
+      result.source,
+      assertions +
+        `
+      type Text = Assert<Equal<Input['text'],string>>;
+      type Number = Assert<Equal<Input['number'],number>>;
+      type Array = Assert<Equal<Input['array'],string[]>>;
+    `,
+    );
+  });
+
+  it('warns and widens modern tuples rather than silently dropping prefixItems', async () => {
+    const result = await generateToolTypes(catalog({ type: 'array', prefixItems: [{ type: 'string' }], items: false }));
+    expect(result.warnings).toHaveLength(1);
+    check(result.source, assertions + 'type Tuple = Assert<Equal<Input,unknown>>;');
+  });
+
   it('widens only unsupported portions, never trusting custom TypeScript', async () => {
     const result = await generateToolTypes(
       catalog({

@@ -173,7 +173,7 @@ The existing instance cache still applies. Constructing a client with the same e
 
 Generation lists tool definitions without calling tools. It fails on discovery errors, missing authentication, timeouts, invalid schemas, output collisions, or outputs that overwrite supplied input files. It prepares all sources before replacing files and disconnects selected clients on success or failure. Discovery, conversion, and preflight failures preserve existing outputs. Each replacement is atomic, but multiple replacements aren't one transaction. A filesystem failure during replacement can leave earlier files updated.
 
-Tools without output schemas use `unknown`. Unsupported schema portions also widen to `unknown`, with a warning. External schema references aren't fetched. Malformed schemas and unresolved local references fail generation.
+Tools without output schemas use `unknown`. Constraints such as string formats, length limits, and numeric bounds retain their base TypeScript types and remain runtime validation rules. Unsupported schema portions, including conditional schemas and `prefixItems` tuples, widen to `unknown` with a warning. External schema references aren't fetched. Malformed schemas and unresolved local references fail generation.
 
 Regenerate when schemas change, with permissions equivalent to your application. Generated contracts are optional snapshots. Dynamic discovery and runtime validation remain authoritative.
 
