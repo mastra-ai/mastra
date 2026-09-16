@@ -1,5 +1,4 @@
 ---
-'mastra': patch
 '@mastra/mcp': patch
 ---
 
