@@ -1,6 +1,8 @@
 import type { IOType } from 'node:child_process';
 import type { RequestContext } from '@mastra/core/di';
+import type { Tool } from '@mastra/core/tools';
 import type {
+  CallToolResult,
   SSEClientTransportOptions,
   StreamableHTTPClientTransportOptions,
   ClientCapabilities,
@@ -11,6 +13,49 @@ import type {
   ToolAnnotations,
   jsonSchemaValidator,
 } from '@modelcontextprotocol/client';
+
+/** Published tool input and structured-output snapshot for each configured server. */
+export type MCPServerMap = Record<string, { tools: Record<string, { input: unknown; output: unknown }> }>;
+
+type MCPClientTool<Input, Output> = Omit<Tool<Input, Output | CallToolResult, any, any>, 'execute'> & {
+  execute?: (
+    input: Input,
+    context?: Parameters<NonNullable<Tool<Input, Output | CallToolResult, any, any>['execute']>>[1],
+  ) => ReturnType<NonNullable<Tool<Input, Output | CallToolResult, any, any>['execute']>>;
+};
+
+/** Flat discovery remains partial because servers and tools may be unavailable. */
+export type MCPClientTools<TServers extends { [Server in keyof TServers]: MCPServerMap[string] }> =
+  string extends keyof TServers
+    ? Record<string, Tool<any, any, any, any>>
+    : Partial<{
+        [
+          Entry in {
+            [Server in keyof TServers & string]: {
+              [Name in keyof TServers[Server]['tools'] & string]: {
+                key: `${Server}_${Name}`;
+                tool: MCPClientTool<
+                  TServers[Server]['tools'][Name]['input'],
+                  TServers[Server]['tools'][Name]['output']
+                >;
+              };
+            }[keyof TServers[Server]['tools'] & string];
+          }[keyof TServers & string] as Entry['key']
+        ]: Entry['tool'];
+      }>;
+
+/** Grouped discovery preserves raw tool names and potentially absent servers. */
+export type MCPClientToolsets<TServers extends { [Server in keyof TServers]: MCPServerMap[string] }> =
+  string extends keyof TServers
+    ? Record<string, Record<string, Tool<any, any, any, any>>>
+    : {
+        [Server in keyof TServers]?: {
+          [Name in keyof TServers[Server]['tools']]?: MCPClientTool<
+            TServers[Server]['tools'][Name]['input'],
+            TServers[Server]['tools'][Name]['output']
+          >;
+        };
+      };
 
 // FetchLike is used internally when wrapping MastraFetchLike for transport compatibility
 export type { FetchLike } from '@modelcontextprotocol/client';

@@ -51,6 +51,50 @@ constructor({
 ]}
 />
 
+### Typed client contracts
+
+Pass an explicit server-map type to `MCPClient<TServers>` to check configured server names, discovered tool names, and direct-call arguments. `MCPClientOptions<TServers>` accepts the same map. All declared servers are required. Use `Pick<TServers, 'weather'>` to configure a subset. Without a type argument, discovery keeps its existing broad types.
+
+The map describes each server's `tools`, with `input` and `output` types for each tool. This example assumes a running weather server at `WEATHER_MCP_URL`:
+
+```typescript
+import { MCPClient } from '@mastra/mcp'
+
+interface MCPServers {
+  weather: {
+    tools: {
+      get_weather: {
+        input: { location: string }
+        output: { temperature: number; conditions: string }
+      }
+    }
+  }
+}
+
+const mcp = new MCPClient<MCPServers>({
+  servers: { weather: { url: new URL(process.env.WEATHER_MCP_URL!) } },
+})
+
+try {
+  const tools = await mcp.listTools()
+  const weather = tools.weather_get_weather
+  if (weather?.execute) {
+    const result = await weather.execute({ location: 'Paris' })
+    if (result && 'temperature' in result && typeof result.temperature === 'number') {
+      console.log(result.temperature)
+    }
+  }
+} finally {
+  await mcp.disconnect()
+}
+```
+
+`listTools()` and `listToolsWithErrors().tools` expose exact `server_tool` keys. `listToolsets()` and `listToolsetsWithErrors().toolsets` expose server keys containing raw tool names. Both forms are partial: a server or tool can be absent. Check availability before calling a tool. Error maps, error details, and optional discovery durations keep their existing types.
+
+Execution can return the structured output, a protocol result envelope, a validation error, or `undefined`. Check the shape and property types before reading success fields. Protocol envelopes can have additional properties. Set `output: unknown` for tools without an output schema.
+
+These contracts describe a schema snapshot. Live servers can differ from that snapshot. Update them when server schemas change, using equivalent permissions. Extra live tools remain available at runtime but aren't included in the snapshot's known keys. Runtime discovery, validation, and execution are unchanged.
+
 ### `MastraMCPServerDefinition`
 
 Each server in the `servers` map is configured using the `MastraMCPServerDefinition` type. The transport type is detected based on the provided parameters:

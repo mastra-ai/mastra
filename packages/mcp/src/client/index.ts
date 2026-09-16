@@ -12,6 +12,9 @@ export type {
   ToolAnnotations,
   SerializableMCPToolDefinition,
   SerializableMCPToolCatalog,
+  MCPServerMap,
+  MCPClientTools,
+  MCPClientToolsets,
 } from './types';
 export * from './client';
 export * from './configuration';
