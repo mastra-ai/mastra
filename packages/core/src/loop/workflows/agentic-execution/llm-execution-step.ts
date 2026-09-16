@@ -220,6 +220,13 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
     providerMetadata?: Record<string, unknown>;
     providerExecuted?: boolean;
   }) => void;
+  /**
+   * Called the moment the model's terminal chunk is accepted, before any further await.
+   * Closing eager dispatch after this function returns instead would leave a window in
+   * which an execution settling frees its permit and promotes a queued call, which then
+   * runs alongside whatever the foreach picks up under a limit that counted neither.
+   */
+  onModelFinished?: () => void;
 };
 
 /**
@@ -554,6 +561,7 @@ async function processOutputStream<OUTPUT = undefined>({
   pendingProviderToolCallsByToolCallId,
   modelSpanTracker,
   onCompleteToolCall,
+  onModelFinished,
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
@@ -888,6 +896,7 @@ async function processOutputStream<OUTPUT = undefined>({
       }
 
       case 'finish': {
+        onModelFinished?.();
         runState.setState({
           providerOptions: chunk.payload.metadata?.providerMetadata ?? chunk.payload.providerMetadata,
           stepResult: {
@@ -1957,6 +1966,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
             pendingProviderToolCallsByToolCallId,
             modelSpanTracker,
+            // Synchronous with the terminal chunk, so no execution can settle and promote
+            // a queued sibling between the model stopping and dispatch closing.
+            onModelFinished: () => eagerCoordinator?.stop(),
             onCompleteToolCall:
               eagerCoordinator && eagerToolCallStep
                 ? toolCall => {
@@ -2013,19 +2025,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           });
           toolResultTripwireFromStream = streamToolResultTripwire;
 
-          // The model stream is over, so no further call can become eligible. Stop the
-          // The model has stopped producing, so there is nothing left to be early for.
-          // Dispatch closes here unconditionally, whether the turn ended well or badly.
+          // Backstop for the paths that never reach a terminal chunk at all: a tripwire,
+          // or a stream that ends without finishing. `onModelFinished` has normally closed
+          // dispatch already, and stopping twice is harmless.
           //
-          // Doing this only on unsafe terminations left a real hole: on an ordinary
-          // tool-calls finish the coordinator stayed open, so a queued eager call could
-          // still be started later by an earlier one settling, at the same time as the
-          // foreach was running an ineligible call it had picked up itself. Two separate
-          // counters, one limit, and the limit loses. Closing at finish drops queued work
-          // back to the foreach, which is about to run anyway and accounts for it properly.
-          //
-          // Executions already running are left alone and still adopted, so a real side
-          // effect is never left unrecorded.
+          // Queued work dropped here falls back to the foreach, which is about to run it
+          // and accounts for it against the same limit. Work already running is left alone
+          // and still adopted, so a real side effect is never left unrecorded.
           eagerCoordinator?.stop();
 
           if (toolResultTripwireFromStream) {
