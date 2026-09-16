@@ -276,7 +276,7 @@ const response = await testAgent.generate('Summarize this ticket.', {
 })
 ```
 
-The response is still validated against `schema` — only the injected text changes. Because the model no longer sees the full schema, adherence depends on how explicitly your instructions describe the expected fields; keep the field list complete. Without `instructions`, the generated schema instructions are used as before, and with native structured output (no injection) the field has no effect.
+The response is still validated against `schema`. Only the injected text changes. Because the model no longer sees the full schema, adherence depends on how explicitly your instructions describe the expected fields. Keep the field list complete. Without `instructions`, the generated schema instructions are used as before, and with native structured output (no injection) the field has no effect.
 
 ### Use a separate structuring model
 
