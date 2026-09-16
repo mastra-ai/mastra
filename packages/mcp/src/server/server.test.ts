@@ -317,9 +317,30 @@ describe('MCPServer', () => {
             outputSchema: z.object({ ok: z.boolean() }),
             execute: async () => ({ ok: 'nope' }) as unknown as { ok: boolean },
           }),
+          plain: {
+            name: 'plain',
+            description: 'A `{ parameters, execute }` tool object without createTool',
+            parameters: z.object({ input: z.string() }),
+            execute: async (args: { input: string }) => ({ plain: args.input }),
+          },
         },
       });
       served = await serveHTTP(server);
+    });
+
+    it('serves `{ parameters, execute }` tool objects alongside createTool tools', async () => {
+      const client = await connectModern(served.url);
+      try {
+        const listed = (await client.listTools()).tools.find(t => t.name === 'plain');
+        expect(listed?.inputSchema).toMatchObject({ type: 'object', properties: { input: { type: 'string' } } });
+        const result = await client.callTool({ name: 'plain', arguments: { input: 'hi' } });
+        expect(result.isError).toBeFalsy();
+        expect(textOf(result)).toBe(JSON.stringify({ plain: 'hi' }));
+        const invalid = await client.callTool({ name: 'plain', arguments: {} });
+        expect(invalid.isError).toBe(true);
+      } finally {
+        await client.close();
+      }
     });
 
     afterAll(async () => {

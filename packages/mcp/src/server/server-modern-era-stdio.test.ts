@@ -22,9 +22,9 @@ describe('MCPServer over stdio (2026-07-28)', () => {
     client = undefined;
   });
 
-  it('serves discovery, subscriptions, per-request logs and native input rounds to a modern client', async () => {
+  it('serves discovery, subscriptions, per-request logs and native input rounds to a 2026-07-28 client', async () => {
     client = new Client(
-      { name: 'modern-stdio-client', version: '1.0.0' },
+      { name: 'v2-stdio-client', version: '1.0.0' },
       { versionNegotiation: { mode: { pin: '2026-07-28' } }, capabilities: { elicitation: { form: {} } } },
     );
     client.setRequestHandler('elicitation/create', async () => ({ action: 'accept', content: { name: 'Ada' } }));

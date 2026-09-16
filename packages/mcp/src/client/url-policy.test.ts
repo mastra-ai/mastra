@@ -369,7 +369,7 @@ function closeServer(httpServer: HttpServer): Promise<void> {
 }
 
 /**
- * Modern-only Streamable HTTP MCP server. `intercept` runs first for every request;
+ * 2026-07-28-only Streamable HTTP MCP server. `intercept` runs first for every request;
  * returning true means the interceptor handled the response.
  */
 async function startStreamableServer(

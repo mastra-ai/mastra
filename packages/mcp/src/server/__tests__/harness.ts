@@ -145,7 +145,7 @@ export async function rawRequest(
     headers: response.headers,
     text,
     json: () => {
-      // Modern responses may arrive as a single-event SSE stream.
+      // Responses may arrive as a single-event SSE stream.
       const data = text.startsWith('event:') || text.startsWith('data:') ? text.match(/^data: (.*)$/m)?.[1] : text;
       return JSON.parse(data ?? text);
     },

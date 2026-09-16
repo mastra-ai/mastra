@@ -15,10 +15,10 @@ export const legacyServer: McpServerInfo = {
   transports: ['streamable-http', 'sse'],
 };
 
-/** An MCP v2 server: modern Streamable HTTP only. */
-export const modernServer: McpServerInfo = {
-  id: 'modern',
-  name: 'Modern Server',
+/** An MCP v2 server: Streamable HTTP only. */
+export const v2Server: McpServerInfo = {
+  id: 'v2',
+  name: 'V2 Server',
   version_detail: versionDetail,
   transports: ['streamable-http'],
 };

@@ -65,7 +65,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
       </MainContentContent>
     );
 
-  // Modern (v2) servers speak Streamable HTTP only; the SSE endpoint exists for legacy servers.
+  // MCP v2 servers speak Streamable HTTP only; the SSE endpoint exists for 1.x servers.
   const hasSse = server.transports.includes('sse');
   const commandLineConfig = `npx -y mcp-remote ${hasSse ? sseUrl : httpStreamUrl}`;
 
@@ -86,7 +86,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
         <Txt className="text-neutral3 pb-4">
           {hasSse
             ? 'This MCP server can be accessed through multiple transport methods. Choose the one that best fits your use case.'
-            : 'This MCP server speaks the modern Streamable HTTP transport (protocol 2026-07-28).'}
+            : 'This MCP server speaks Streamable HTTP only (protocol 2026-07-28).'}
         </Txt>
 
         <div className="flex flex-col gap-4">

@@ -29,7 +29,7 @@ export interface MCPTransportTestConfig {
  * Tests MCP protocol transport endpoints using MCPClient:
  * - HTTP Transport (POST /api/mcp/:serverId/mcp)
  * - Legacy SSE routes (GET /api/mcp/:serverId/sse, POST /api/mcp/:serverId/messages)
- *   are only served for MCP 1.x servers; modern MCPServer instances answer 404.
+ *   are only served for MCP 1.x servers; MCP 2.x instances answer 404.
  *
  * These tests require a real HTTP server because MCPClient drives the
  * self-contained 2026-07-28 request lifecycle over real Streamable HTTP.
@@ -408,8 +408,8 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
         });
       });
 
-      describe('Modern-only servers (MCPClient)', () => {
-        it('does not serve the legacy SSE transport for a modern MCPServer', async () => {
+      describe('MCP 2.x servers (MCPClient)', () => {
+        it('does not serve the legacy SSE transport for a 2.x MCPServer', async () => {
           const res = await fetch(`http://localhost:${port}/api/mcp/${mcpServer1.id}/sse`);
           expect(res.status).toBe(404);
 

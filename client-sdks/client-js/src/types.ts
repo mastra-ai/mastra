@@ -944,7 +944,7 @@ export type McpServerTransport = 'streamable-http' | 'sse';
 
 /** MCP server registry entry plus the transports served under `/mcp/:serverId`. */
 export interface McpServerInfo extends ServerInfo {
-  /** Modern (v2) servers speak Streamable HTTP only; legacy servers also serve SSE. */
+  /** MCP v2 servers speak Streamable HTTP only; 1.x servers also serve SSE. */
   transports: McpServerTransport[];
 }
 

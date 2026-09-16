@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installs packed @mastra/core, @mastra/mcp and @mastra/server into a clean consumer
-# with strict peers (no overrides, no source aliases) and runs the modern-only proof.
+# with strict peers (no overrides, no source aliases) and runs the v2 proof.
 set -euo pipefail
 core=$(realpath "${1:?Pass a packed core tarball}")
 mcp=$(realpath "${2:?Pass a packed mcp tarball}")

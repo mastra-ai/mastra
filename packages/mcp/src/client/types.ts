@@ -202,7 +202,7 @@ export type BaseServerOptions = {
   /**
    * Whether to opt into per-request server logs (default: true).
    *
-   * Modern servers only emit `notifications/message` for requests that carry the
+   * 2026-07-28 servers only emit `notifications/message` for requests that carry the
    * `io.modelcontextprotocol/logLevel` metadata key; this option attaches it to every
    * request and forwards delivered messages to `logger`.
    */

@@ -147,7 +147,7 @@ describe('InternalMastraMCPClient - server instructions', () => {
   });
 });
 
-type ModernTestServer = {
+type TestServer = {
   httpServer: HttpServer;
   mcpServer: McpServer;
   baseUrl: URL;
@@ -163,15 +163,15 @@ function listen(httpServer: HttpServer): Promise<URL> {
 }
 
 /**
- * Serves an SDK `McpServer` over the modern-only (2026-07-28) Streamable HTTP handler.
+ * Serves an SDK `McpServer` over the 2026-07-28-only Streamable HTTP handler.
  * Legacy peers are rejected outright; every request is self-contained.
  */
-function serveModern(httpServer: HttpServer, mcpServer: McpServer): void {
+function serveV2(httpServer: HttpServer, mcpServer: McpServer): void {
   const handler = toNodeHandler(createMcpHandler(() => mcpServer.server, { legacy: 'reject' }));
   httpServer.on('request', (req, res) => handler(req, res));
 }
 
-async function setupTestServer(): Promise<ModernTestServer> {
+async function setupTestServer(): Promise<TestServer> {
   const httpServer: HttpServer = createServer();
   const mcpServer = new McpServer(
     { name: 'test-http-server', version: '1.0.0' },
@@ -223,7 +223,7 @@ async function setupTestServer(): Promise<ModernTestServer> {
     };
   });
 
-  serveModern(httpServer, mcpServer);
+  serveV2(httpServer, mcpServer);
   const baseUrl = await listen(httpServer);
 
   return { httpServer, mcpServer, baseUrl };
@@ -2619,7 +2619,7 @@ describe('InternalMastraMCPClient - transport cleanup on close (issue #16693)', 
 });
 
 describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', () => {
-  // Modern-only server behind a flaky front door. While `failing` is true every
+  // 2026-07-28-only server behind a flaky front door. While `failing` is true every
   // request gets a 404 — like a load balancer with no healthy backend during a
   // redeploy.
   let httpServer: HttpServer;

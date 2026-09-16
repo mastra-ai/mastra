@@ -1,6 +1,5 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { logger } from '../logger';
 import { fromPackageRoot, getMatchingPaths } from '../utils';
@@ -280,8 +279,8 @@ export const migrationInputSchema = z.object({
 
 export type MigrationInput = z.infer<typeof migrationInputSchema>;
 
-export const migrationTool = createTool({
-  id: 'mastraMigration',
+export const migrationTool = {
+  name: 'mastraMigration',
   description: `[🌐 REMOTE] Get migration guidance for Mastra version upgrades and breaking changes.
 
 This tool works like a file browser - navigate through directories to find migration guides:
@@ -313,8 +312,8 @@ This tool works like a file browser - navigate through directories to find migra
 5. Search: \`{ queryKeywords: ["RuntimeContext"] }\`
 
 **Tip:** Paths ending with \`/\` list directory contents. Paths without \`/\` fetch the migration guide.`,
-  inputSchema: migrationInputSchema,
-  execute: async args => {
+  parameters: migrationInputSchema,
+  execute: async (args: MigrationInput) => {
     void logger.debug('Executing mastraMigration tool', { args });
     try {
       // Priority 1: Keyword search
@@ -371,4 +370,4 @@ This tool works like a file browser - navigate through directories to find migra
       throw error;
     }
   },
-});
+};

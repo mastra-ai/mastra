@@ -34,8 +34,6 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:^",
-    "@modelcontextprotocol/server": "2.0.0",
-    "jsdom": "^26.1.0",
     "local-pkg": "^1.1.2",
     "zod": "catalog:"
   },

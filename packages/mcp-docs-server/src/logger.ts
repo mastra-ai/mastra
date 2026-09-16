@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { LoggingLevel } from '@modelcontextprotocol/server';
+import type { MCPLoggingLevel as LoggingLevel } from '@mastra/core/tools';
 
 // Simplified log levels matching MCP client (debug, info, warn, error, none)
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'none';

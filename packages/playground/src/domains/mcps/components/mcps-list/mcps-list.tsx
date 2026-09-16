@@ -25,7 +25,7 @@ function McpServerRow({ server, rowProps }: { server: McpServer; rowProps?: Reco
   const { paths, Link } = useLinkComponent();
   const client = useMastraClient();
   const baseUrl = client.options.baseUrl;
-  // Modern (v2) servers only serve Streamable HTTP; legacy servers are listed by their SSE endpoint.
+  // MCP v2 servers only serve Streamable HTTP; 1.x servers are listed by their SSE endpoint.
   const transportPath = server.transports.includes('sse') ? 'sse' : 'mcp';
   const serverUrl = baseUrl ? `${baseUrl}/api/mcp/${server.id}/${transportPath}` : '';
 

@@ -729,8 +729,8 @@ describe('MCP Registry Handlers', () => {
 
   describe('MCP v2 servers', () => {
     const v2Info: ServerInfo = {
-      id: 'modern',
-      name: 'Modern Server',
+      id: 'v2',
+      name: 'V2 Server',
       version_detail: { version: '2.0.0', release_date: '2026-07-28T00:00:00Z', is_latest: true },
     };
 
@@ -739,16 +739,16 @@ describe('MCP Registry Handlers', () => {
 
     beforeEach(() => {
       v2Server = {
-        id: 'modern',
-        name: 'Modern Server',
+        id: 'v2',
+        name: 'V2 Server',
         mcpVersion: 2,
         getServerInfo: vi.fn(() => v2Info),
         getServerDetail: vi.fn(() => ({ ...v2Info, packages: [], remotes: [] })),
       };
       v2Mastra = {
-        listMCPServers: vi.fn(() => ({ modern: v2Server as MCPServerBase, server1: mockMCPServer as MCPServerBase })),
+        listMCPServers: vi.fn(() => ({ v2: v2Server as MCPServerBase, server1: mockMCPServer as MCPServerBase })),
         getMCPServerById: vi.fn((id: string) => {
-          if (id === 'modern') return v2Server as MCPServerBase;
+          if (id === 'v2') return v2Server as MCPServerBase;
           if (id === 'server1') return mockMCPServer as MCPServerBase;
           return undefined;
         }),
@@ -767,7 +767,7 @@ describe('MCP Registry Handlers', () => {
     it('reports Streamable HTTP as the only transport on the v2 detail', async () => {
       const result = await GET_MCP_SERVER_DETAIL_ROUTE.handler({
         ...createTestServerContext({ mastra: v2Mastra }),
-        id: 'modern',
+        id: 'v2',
       });
 
       expect(result.transports).toEqual(['streamable-http']);
@@ -776,12 +776,12 @@ describe('MCP Registry Handlers', () => {
     it('routes v2 servers to the Streamable HTTP transport but never to SSE', async () => {
       const http = await MCP_HTTP_TRANSPORT_ROUTE.handler({
         ...createTestServerContext({ mastra: v2Mastra }),
-        serverId: 'modern',
+        serverId: 'v2',
       });
-      expect(http).toEqual({ server: v2Server, httpPath: '/mcp/modern/mcp' });
+      expect(http).toEqual({ server: v2Server, httpPath: '/mcp/v2/mcp' });
 
       await expect(
-        MCP_SSE_TRANSPORT_ROUTE.handler({ ...createTestServerContext({ mastra: v2Mastra }), serverId: 'modern' }),
+        MCP_SSE_TRANSPORT_ROUTE.handler({ ...createTestServerContext({ mastra: v2Mastra }), serverId: 'v2' }),
       ).rejects.toMatchObject({ status: 404 });
 
       const legacySse = await MCP_SSE_TRANSPORT_ROUTE.handler({

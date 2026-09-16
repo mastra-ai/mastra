@@ -7,9 +7,9 @@ import { authDisabled, echoTool } from './fixtures/mcp-servers';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
-const TOOL_URL = `${TEST_BASE_URL}/api/mcp/modern/tools/echo`;
+const TOOL_URL = `${TEST_BASE_URL}/api/mcp/v2/tools/echo`;
 
-const renderPanel = () => renderWithProviders(<MCPToolPanel serverId="modern" toolId="echo" />);
+const renderPanel = () => renderWithProviders(<MCPToolPanel serverId="v2" toolId="echo" />);
 
 const useBaseHandlers = () => {
   server.use(

@@ -44,7 +44,7 @@ await assert.rejects(
 );
 pass('2.x server registers on the shared base; executeTool distinguishes suspension from completion');
 
-// --- HTTP: self-contained modern requests, observed on the wire ---
+// --- HTTP: self-contained 2026-07-28 requests, observed on the wire ---
 const seen: Array<{ method: string; headers: IncomingMessage['headers']; body: string }> = [];
 const responseHeaders: string[][] = [];
 const httpServer = createServer(async (req, res) => {
@@ -67,7 +67,7 @@ const address = httpServer.address();
 assert.ok(address && typeof address !== 'string');
 const url = new URL(`http://127.0.0.1:${address.port}/mcp`);
 
-const modern = new Client(
+const v2 = new Client(
   { name: 'independent-sdk-client', version: '1.0.0' },
   {
     versionNegotiation: { mode: { pin: '2026-07-28' } },
@@ -76,22 +76,22 @@ const modern = new Client(
   },
 );
 const logs: Array<{ level: string; data: unknown }> = [];
-modern.setNotificationHandler('notifications/message', async n => {
+v2.setNotificationHandler('notifications/message', async n => {
   logs.push({ level: n.params.level, data: n.params.data });
 });
-await modern.connect(new StreamableHTTPClientTransport(url));
-assert.deepEqual(modern.getDiscoverResult()?.supportedVersions, ['2026-07-28']);
-const capabilities = modern.getServerCapabilities() ?? {};
+await v2.connect(new StreamableHTTPClientTransport(url));
+assert.deepEqual(v2.getDiscoverResult()?.supportedVersions, ['2026-07-28']);
+const capabilities = v2.getServerCapabilities() ?? {};
 assert.ok(capabilities.tools && capabilities.logging);
 assert.equal((capabilities as Record<string, unknown>).roots, undefined);
 assert.equal((capabilities as Record<string, unknown>).sampling, undefined);
 assert.ok(seen.every(r => !('mcp-session-id' in r.headers)));
 assert.ok(seen.every(r => !r.body.includes('"method":"initialize"')));
-pass('modern discovery: 2026-07-28 only, no initialize, no session header, no roots/sampling');
+pass('discovery: 2026-07-28 only, no initialize, no session header, no roots/sampling');
 
-const tools = await modern.listTools();
+const tools = await v2.listTools();
 assert.deepEqual(tools.tools.map(t => t.name).sort(), ['bookDelivery', 'echo']);
-const echoed = await modern.callTool({ name: 'echo', arguments: { message: 'hi' } });
+const echoed = await v2.callTool({ name: 'echo', arguments: { message: 'hi' } });
 assert.deepEqual(echoed.structuredContent, {
   echoed: 'hi',
   protocolVersion: '2026-07-28',
@@ -105,7 +105,7 @@ pass('ordinary createTool executes with a 2026-07-28 context whose deprecated me
 // `allowInputRequired`, so `input_required` comes back typed instead of auto-fulfilled.
 const callToolOrInputRequired = withInputRequired(specTypeSchemas.CallToolResult);
 const round = (args: Record<string, unknown>, continuation?: Record<string, unknown>, meta?: Record<string, unknown>) =>
-  modern.request(
+  v2.request(
     {
       method: 'tools/call',
       params: { name: 'bookDelivery', arguments: args, ...continuation, ...(meta ? { _meta: meta } : {}) },
@@ -191,8 +191,8 @@ for (const method of ['GET', 'DELETE']) {
 pass('ping, logging/setLevel and legacy resource subscriptions are rejected; no SSE GET stream');
 
 // Legacy peers fail explicitly; nothing downgrades.
-const legacyModern = new Client({ name: 'legacy-mode', version: '1.0.0' });
-await assert.rejects(legacyModern.connect(new StreamableHTTPClientTransport(url)), error => error instanceof SdkError);
+const legacyMode = new Client({ name: 'legacy-mode', version: '1.0.0' });
+await assert.rejects(legacyMode.connect(new StreamableHTTPClientTransport(url)), error => error instanceof SdkError);
 const legacySdk = new LegacyClient({ name: 'sdk-1.x', version: '1.0.0' });
 await assert.rejects(legacySdk.connect(new LegacyHttpTransport(url)));
 assert.ok(
@@ -223,12 +223,12 @@ assert.ok(!('elicitation' in mcp) && !('sessionIds' in mcp));
 await mcp.disconnect();
 pass('@mastra/mcp client answers input rounds end to end');
 
-await modern.close();
+await v2.close();
 await server.close();
 httpServer.closeAllConnections();
 httpServer.close();
 
-// --- stdio: modern discovery, legacy client rejected ---
+// --- stdio: 2026-07-28 discovery, legacy client rejected ---
 const stdioTransport = () =>
   new StdioClientTransport({ command: process.execPath, args: ['dist/stdio-server.js'], stderr: 'pipe' });
 const stdioClient = new Client(
@@ -246,6 +246,6 @@ await stdioClient.close();
 const legacyStdio = new Client({ name: 'legacy-stdio', version: '1.0.0' });
 await assert.rejects(legacyStdio.connect(stdioTransport()));
 await legacyStdio.close().catch(() => {});
-pass('stdio: modern discovery and auto-fulfilled input rounds; legacy stdio client rejected');
+pass('stdio: 2026-07-28 discovery and auto-fulfilled input rounds; legacy stdio client rejected');
 
 console.log('PACKED MCP V2 CONSUMER PASS');

@@ -100,7 +100,7 @@ type DatadogTracerLike = {
 };
 
 /**
- * Modern Streamable HTTP has no standalone GET stream; the only long-lived request is
+ * 2026-07-28 Streamable HTTP has no standalone GET stream; the only long-lived request is
  * the `subscriptions/listen` POST, whose response stays open for the life of the
  * subscription and must not hold the caller's active Datadog span open with it.
  */
