@@ -259,7 +259,8 @@ describe('CloudflareSandbox', () => {
       endpoint: 'https://acct.r2.cloudflarestorage.com',
       accessKeyId: 'AK',
       secretAccessKey: 'SK',
-      prefix: 'tenant-1',
+      // S3Filesystem emits the prefix with a trailing slash and no leading slash.
+      prefix: 'tenant-1/',
       readOnly: false,
     };
 
@@ -277,7 +278,7 @@ describe('CloudflareSandbox', () => {
           mountPath: '/workspace/data',
           options: {
             endpoint: 'https://acct.r2.cloudflarestorage.com',
-            prefix: 'tenant-1',
+            prefix: '/tenant-1',
             readOnly: false,
             credentials: { accessKeyId: 'AK', secretAccessKey: 'SK' },
           },
@@ -285,6 +286,31 @@ describe('CloudflareSandbox', () => {
       ]);
       expect(sandbox.mounts.get('/workspace/data')?.state).toBe('mounted');
       expect(sandbox.getInstructions()).toContain('/workspace/data');
+    });
+
+    it('derives the regional AWS endpoint when the filesystem only has a region', async () => {
+      const bridge = createFakeBridge({ apiToken: 'secret' });
+      const sandbox = createSandbox(bridge, { id: 'mount-aws' });
+      await sandbox._start();
+
+      const result = await sandbox.mount(
+        fakeFilesystem({ type: 's3', bucket: 'b', region: 'eu-west-1', accessKeyId: 'AK', secretAccessKey: 'SK' }),
+        '/workspace/aws',
+      );
+
+      expect(result.success).toBe(true);
+      expect(bridge.mounts.at(-1)).toMatchObject({ options: { endpoint: 'https://s3.eu-west-1.amazonaws.com' } });
+    });
+
+    it('fails without contacting the bridge when neither endpoint nor region is available', async () => {
+      const bridge = createFakeBridge({ apiToken: 'secret' });
+      const sandbox = createSandbox(bridge, { id: 'mount-noep' });
+      await sandbox._start();
+
+      const result = await sandbox.mount(fakeFilesystem({ type: 's3', bucket: 'b', region: 'auto' }), '/workspace/x');
+
+      expect(result).toMatchObject({ success: false, error: expect.stringContaining('endpoint') });
+      expect(bridge.mounts).toEqual([]);
     });
 
     it('unmount removes the bridge mount and the tracked entry', async () => {
