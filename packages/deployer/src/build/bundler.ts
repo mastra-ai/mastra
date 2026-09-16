@@ -86,7 +86,11 @@ export async function getInputOptions(
     externalsPreset?: boolean;
   },
 ): Promise<InputOptions> {
-  const nodeResolvePlugin = nodeResolve(getNodeResolveOptions(platform));
+  const nodeResolvePlugin = nodeResolve({
+    ...getNodeResolveOptions(platform),
+    rootDir: projectRoot,
+    modulePaths: workspaceRoot ? [join(workspaceRoot, 'node_modules')] : [],
+  });
 
   const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies.keys());
   const externals = externalsPreset ? [] : Array.from(externalsCopy);
@@ -125,7 +129,7 @@ export async function getInputOptions(
         },
       } satisfies Plugin,
       mastraInternalAliasPlugin(entryFile),
-      tsConfigPaths(),
+      tsConfigPaths({ cwd: workspaceRoot || projectRoot }),
       mastraToolsAliasPlugin(),
       esbuild({
         platform,
