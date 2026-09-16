@@ -929,6 +929,11 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
         const regexResult = this.detectPIILocal(carryover);
         const redacted = regexResult.redacted_content ?? carryover;
         if (this.hasLLMOnlyTypes) {
+          if (!state._piiFirstPayloadId) {
+            state._piiFirstPayloadId = carryoverPart.payload.id;
+            state._piiFirstRunId = carryoverPart.runId;
+          }
+          state._piiBuffer = (state._piiBuffer || '') + redacted;
           const flushed = await this.flushLLMBuffer(state, abort, observabilityContext, requestContext);
           if (flushed) {
             this.deferNonTextPart(state, part, writer);
@@ -958,22 +963,16 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
     const hasNewPII = detections.some(detection => detection.end > previousLength);
     if (hasNewPII) await this.emitDetection(combined, regexResult, true);
 
-    if (this.hasLLMOnlyTypes) {
+    if (this.hasLLMOnlyTypes && /[.!?]\s*$/.test(combined)) {
       const carryoverPart = (state._piiRegexTailPart as typeof textPart | undefined) ?? textPart;
       if (!state._piiFirstPayloadId) {
         state._piiFirstPayloadId = carryoverPart.payload.id;
         state._piiFirstRunId = carryoverPart.runId;
       }
-      const buffered: string = state._piiBuffer || '';
-      const stablePrefix = previousLength > 0 ? buffered.slice(0, -previousLength) : buffered;
-      state._piiBuffer = stablePrefix + (regexResult.redacted_content ?? combined);
-
-      if (state._piiBuffer.length >= this.bufferSize || /[.!?]\s*$/.test(combined)) {
-        state._piiRegexTail = undefined;
-        state._piiRegexTailPart = undefined;
-        return this.flushLLMBuffer(state, abort, observabilityContext, requestContext);
-      }
-      return null;
+      state._piiBuffer = (state._piiBuffer || '') + (regexResult.redacted_content ?? combined);
+      state._piiRegexTail = undefined;
+      state._piiRegexTailPart = undefined;
+      return this.flushLLMBuffer(state, abort, observabilityContext, requestContext);
     }
 
     if (combined.length <= PIIDetector.REGEX_CARRYOVER_SIZE) return null;
@@ -992,6 +991,19 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
     if (!emitted) return null;
 
     state._piiRegexTailPart = textPart;
+    if (this.hasLLMOnlyTypes) {
+      const carryoverPart = (state._piiRegexTailPart as typeof textPart | undefined) ?? textPart;
+      if (!state._piiFirstPayloadId) {
+        state._piiFirstPayloadId = carryoverPart.payload.id;
+        state._piiFirstRunId = carryoverPart.runId;
+      }
+      state._piiBuffer = (state._piiBuffer || '') + emitted;
+      if (state._piiBuffer.length >= this.bufferSize || /[.!?]\s*$/.test(emitted)) {
+        return this.flushLLMBuffer(state, abort, observabilityContext, requestContext);
+      }
+      return null;
+    }
+
     return { ...textPart, payload: { ...textPart.payload, text: emitted } };
   }
 

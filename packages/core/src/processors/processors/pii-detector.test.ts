@@ -1778,11 +1778,11 @@ describe('PIIDetector', () => {
       const detector = new PIIDetector({ model, detectionTypes: ['email', 'name'], bufferSize: 50 });
       const state: Record<string, any> = {};
 
-      // Send chunks totaling ~60 chars — should trigger flush with bufferSize=50
+      // Exceed the 128-character regex carryover plus the 50-character LLM buffer.
       await detector.processOutputStream({
         part: {
           type: 'text-delta',
-          payload: { id: 'text-0', text: 'This is some text that is longer than fifty chars okay' },
+          payload: { id: 'text-0', text: 'a'.repeat(190) },
           runId: 'test-run-id',
           from: ChunkFrom.AGENT,
         },
@@ -2116,6 +2116,131 @@ describe('PIIDetector', () => {
       ]);
     });
 
+    it('emits stable prefixes exactly once across the bounded carryover', async () => {
+      const detector = new PIIDetector({
+        model: new MockLanguageModelV1(),
+        strategy: 'redact',
+        redactionMethod: 'placeholder',
+        detectionTypes: ['email'],
+      });
+      const state: Record<string, any> = {};
+      const prefix = 'a'.repeat(140);
+      const emitted: string[] = [];
+
+      for (const [id, text] of [
+        ['first', `${prefix} secret@`],
+        ['second', 'example.com trailing'],
+      ]) {
+        const result = await detector.processOutputStream({
+          part: { type: 'text-delta', payload: { id, text }, runId: id, from: ChunkFrom.AGENT },
+          streamParts: [],
+          state,
+          abort: vi.fn() as any,
+        });
+        if (result?.type === 'text-delta') emitted.push(result.payload.text);
+      }
+
+      const flushed = await detector.processOutputStream({
+        part: { type: 'step-finish' as any, payload: {}, runId: 'finish', from: ChunkFrom.AGENT },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+      if (flushed?.type === 'text-delta') emitted.push(flushed.payload.text);
+
+      expect(emitted.join('')).toBe(`${prefix} [EMAIL] trailing`);
+    });
+
+    it('preserves regex carryover and replacement lengths across mixed-mode flushes', async () => {
+      let llmCallCount = 0;
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          llmCallCount++;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: JSON.stringify(createMockPIIResult()),
+          };
+        },
+      });
+      const detector = new PIIDetector({
+        model,
+        strategy: 'redact',
+        redactionMethod: 'placeholder',
+        detectionTypes: ['email', 'ip-address', 'name'],
+        bufferSize: 5,
+      });
+      const state: Record<string, any> = {};
+      const emitted: string[] = [];
+
+      for (const [id, text] of [
+        ['first', `${'x'.repeat(128)} ip 1.1.1.1 secret@`],
+        ['second', 'example.com'],
+      ]) {
+        const result = await detector.processOutputStream({
+          part: { type: 'text-delta', payload: { id, text }, runId: id, from: ChunkFrom.AGENT },
+          streamParts: [],
+          state,
+          abort: vi.fn() as any,
+        });
+        if (result?.type === 'text-delta') emitted.push(result.payload.text);
+      }
+
+      const flushed = await detector.processOutputStream({
+        part: { type: 'step-finish' as any, payload: {}, runId: 'finish', from: ChunkFrom.AGENT },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+      if (flushed?.type === 'text-delta') emitted.push(flushed.payload.text);
+
+      expect(llmCallCount).toBeGreaterThanOrEqual(2);
+      expect(emitted.join('')).toBe(`${'x'.repeat(128)} ip [IP-ADDRESS] [EMAIL]`);
+    });
+
+    it('keeps text queued behind direct-call non-text parts', async () => {
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: JSON.stringify(createMockPIIResult()),
+        }),
+      });
+      const detector = new PIIDetector({ model, strategy: 'redact', detectionTypes: ['email', 'name'] });
+      const state: Record<string, any> = {};
+      const finishOne = { type: 'step-finish' as any, payload: { step: 1 }, runId: 'one', from: ChunkFrom.AGENT };
+      const finishTwo = { type: 'step-finish' as any, payload: { step: 2 }, runId: 'two', from: ChunkFrom.AGENT };
+
+      await detector.processOutputStream({
+        part: { type: 'text-delta', payload: { id: 'a', text: 'first' }, runId: 'a', from: ChunkFrom.AGENT },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+      await detector.processOutputStream({ part: finishOne, streamParts: [], state, abort: vi.fn() as any });
+      expect(
+        await detector.processOutputStream({
+          part: { type: 'text-delta', payload: { id: 'b', text: 'second' }, runId: 'b', from: ChunkFrom.AGENT },
+          streamParts: [],
+          state,
+          abort: vi.fn() as any,
+        }),
+      ).toEqual(finishOne);
+      const flushed = await detector.processOutputStream({
+        part: finishTwo,
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+
+      expect(flushed).toMatchObject({ type: 'text-delta', payload: { text: 'second' } });
+      expect(state._piiPendingNonText).toEqual([finishTwo]);
+    });
+
     it('should drain queued non-text parts in FIFO order', async () => {
       let _llmCallCount = 0;
       const model = new MockLanguageModelV1({
@@ -2215,9 +2340,10 @@ describe('PIIDetector', () => {
         abort: vi.fn() as any,
       });
 
-      // Should NOT have flushed (100 < 200 default)
+      // Should NOT have flushed; the bounded regex suffix remains raw until it is safe to redact.
       expect(llmCallCount).toBe(0);
-      expect(state._piiBuffer).toBe('A'.repeat(100));
+      expect(state._piiBuffer).toBeUndefined();
+      expect(state._piiRegexTail).toBe('A'.repeat(100));
     });
   });
 
