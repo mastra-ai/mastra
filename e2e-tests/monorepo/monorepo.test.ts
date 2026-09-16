@@ -961,7 +961,12 @@ export const mastra = new Mastra({
         try {
           await writeFile(mastraConfigPath, originalMastraConfig.replace(/externals:\s*\[[^\]]*\]/, 'externals: true'));
 
-          await runBuild(isolatedFixturePath);
+          const buildResult = await execa(pkgManager, ['build'], {
+            cwd: join(isolatedFixturePath, 'apps', 'custom'),
+            reject: false,
+            env: process.env,
+          });
+          expect(buildResult.exitCode).toBe(0);
 
           const bundledEntry = await readFile(
             join(isolatedFixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs'),
@@ -1023,6 +1028,7 @@ export const mastra = new Mastra({
     );
   });
 
+  it(
   describe.sequential('Studio control route authentication', () => {
     it(
       'keeps Studio control routes public during development when server auth is configured',
