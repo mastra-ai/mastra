@@ -225,6 +225,7 @@ export class CloudflareSandbox extends MastraSandbox {
 
   async executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult> {
     const sandboxId = this.requireSandboxId();
+    await this.remountIfSlept(sandboxId);
 
     const startedAt = Date.now();
     const timeout = options?.timeout ?? this.commandTimeout;
@@ -323,6 +324,7 @@ export class CloudflareSandbox extends MastraSandbox {
   async writeFiles(files: SandboxFileInput[]): Promise<void> {
     assertModesUnsupported(files, 'Cloudflare');
     const sandboxId = this.requireSandboxId();
+    await this.remountIfSlept(sandboxId);
     // The bridge writes one file per request.
     for (const file of files) {
       await this.client.writeFile(sandboxId, resolveWorkspacePath(file.path), file.content);
@@ -333,6 +335,7 @@ export class CloudflareSandbox extends MastraSandbox {
   /** Reads a single file under /workspace, returning its raw bytes. */
   async readFile(path: string): Promise<Uint8Array> {
     const sandboxId = this.requireSandboxId();
+    await this.remountIfSlept(sandboxId);
     const bytes = await this.client.readFile(sandboxId, resolveWorkspacePath(path));
     this.lastUsedAt = new Date();
     return bytes;
@@ -341,6 +344,7 @@ export class CloudflareSandbox extends MastraSandbox {
   /** Archives /workspace, returning raw tar bytes that can later restore it via hydrateWorkspace. */
   async persistWorkspace(options?: CloudflarePersistWorkspaceOptions): Promise<Uint8Array> {
     const sandboxId = this.requireSandboxId();
+    await this.remountIfSlept(sandboxId);
     const archive = await this.client.persistWorkspace(sandboxId, options);
     this.lastUsedAt = new Date();
     return archive;
@@ -349,6 +353,7 @@ export class CloudflareSandbox extends MastraSandbox {
   /** Restores /workspace from a raw tar payload produced by persistWorkspace. */
   async hydrateWorkspace(tar: Uint8Array): Promise<void> {
     const sandboxId = this.requireSandboxId();
+    await this.remountIfSlept(sandboxId);
     await this.client.hydrateWorkspace(sandboxId, tar);
     this.lastUsedAt = new Date();
   }
@@ -371,9 +376,9 @@ export class CloudflareSandbox extends MastraSandbox {
   /**
    * Mounts an S3-compatible bucket (R2, S3, MinIO, ...) at `mountPath` through
    * the bridge's mount route. Called by MountManager for each Workspace `mounts`
-   * entry after start(); the Cloudflare Sandbox re-establishes the mount itself
-   * when a slept container boots, so mounted paths are the durable part of the
-   * filesystem.
+   * entry after start(). The Cloudflare Sandbox SDK drops its mounts when the
+   * container stops (`sleepAfter`), so {@link remountIfSlept} re-applies every
+   * mounted entry before the next bridge call boots a fresh container.
    */
   async mount(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult> {
     validateMountPath(mountPath);
@@ -405,6 +410,68 @@ export class CloudflareSandbox extends MastraSandbox {
     return { success: true, mountPath };
   }
 
+  /**
+   * The SDK clears its mount table in `onStop`, so a container that went to sleep
+   * comes back with bare directories where the buckets used to be. The bridge's
+   * `running` flag does not flip until the DO next touches the container, so the
+   * only trustworthy signal is the container itself: probe every mounted path and
+   * re-mount the ones that are no longer mountpoints before running the caller's
+   * work. Otherwise a write would land on the ephemeral disk and vanish on the
+   * next sleep.
+   */
+  private async remountIfSlept(sandboxId: string): Promise<void> {
+    const mounted = [...this.mounts.entries].filter(([, entry]) => entry.state === 'mounted');
+    if (mounted.length === 0) return;
+
+    // Concurrent callers share one probe so the bridge never sees the same path
+    // mounted twice on one container.
+    this.remountInFlight ??= (async () => {
+      try {
+        const missing = await this.findUnmountedPaths(
+          sandboxId,
+          mounted.map(([path]) => path),
+        );
+        for (const mountPath of missing) {
+          const entry = this.mounts.get(mountPath);
+          if (!entry) continue;
+          const config = entry.config ?? entry.filesystem.getMountConfig?.();
+          const translated = config ? toMountRequest(config, mountPath) : { error: 'missing mount config' };
+          if ('error' in translated) {
+            this.mounts.set(mountPath, { ...entry, state: 'error', error: translated.error });
+            continue;
+          }
+          try {
+            await this.client.mountBucket(sandboxId, translated.request);
+          } catch (cause) {
+            const error = cause instanceof Error ? cause.message : String(cause);
+            this.mounts.set(mountPath, { ...entry, state: 'error', error });
+            this.logger?.error(`Cloudflare sandbox ${sandboxId} failed to re-mount ${mountPath} after sleep: ${error}`);
+          }
+        }
+      } finally {
+        this.remountInFlight = undefined;
+      }
+    })();
+    await this.remountInFlight;
+  }
+
+  /** One exec that prints each path in `paths` that is not currently a mountpoint. */
+  private async findUnmountedPaths(sandboxId: string, paths: string[]): Promise<string[]> {
+    const script = 'for p in "$@"; do mountpoint -q "$p" || printf \'%s\\n\' "$p"; done';
+    let stdout = '';
+    await this.client.exec(
+      sandboxId,
+      { argv: ['sh', '-c', script, 'mastra-mount-probe', ...paths], timeoutMs: 30_000 },
+      {
+        onEvent: event => {
+          if (event.type === 'stdout') stdout += new TextDecoder().decode(event.data);
+          else if (event.type === 'error') throw new Error(event.message);
+        },
+      },
+    );
+    return stdout.split('\n').filter(Boolean);
+  }
+
   /** Unmounts a bucket previously mounted with {@link mount}. */
   async unmount(mountPath: string): Promise<void> {
     validateMountPath(mountPath);
@@ -424,6 +491,8 @@ export class CloudflareSandbox extends MastraSandbox {
       ? this.instructions({ defaultInstructions })
       : (this.instructions ?? defaultInstructions);
   }
+
+  private remountInFlight?: Promise<void>;
 
   private requireSandboxId(): string {
     if (!this.sandboxId) throw new Error(`Cloudflare Sandbox ${this.id} has not been started`);

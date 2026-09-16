@@ -91,7 +91,7 @@ const source = new TextDecoder().decode(bytes)
 
 Cloudflare stops an idle container after `sleepAfter` (10 minutes by default). The next command starts a fresh container, so anything written under `/workspace` is gone. Treat `/workspace` as scratch space, and put files that must survive on a mounted bucket.
 
-Mount an S3-compatible bucket such as Cloudflare R2 through the Workspace `mounts` option. The sandbox mounts it on `start()`, and the Cloudflare Sandbox re-establishes the mount when a slept container wakes.
+Mount an S3-compatible bucket such as Cloudflare R2 through the Workspace `mounts` option. The sandbox mounts it on `start()`. The Cloudflare Sandbox SDK forgets its mounts when the container stops, so before each command or file operation the sandbox checks that every mounted path is still a mountpoint and re-mounts any that a fresh container lost. This costs one short probe command per call while mounts are configured.
 
 ```typescript
 import { Workspace } from '@mastra/core/workspace'

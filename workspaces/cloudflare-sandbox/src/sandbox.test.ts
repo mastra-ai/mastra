@@ -4,7 +4,7 @@ import { SandboxUnsupportedFeatureError, Workspace } from '@mastra/core/workspac
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { CloudflareSandbox } from './sandbox';
-import { createFakeBridge, type FakeBridge } from './testing/fake-bridge';
+import { createFakeBridge, isMountProbe, type FakeBridge } from './testing/fake-bridge';
 
 const BASE_URL = 'https://bridge.example.com';
 
@@ -311,6 +311,84 @@ describe('CloudflareSandbox', () => {
 
       expect(result).toMatchObject({ success: false, error: expect.stringContaining('endpoint') });
       expect(bridge.mounts).toEqual([]);
+    });
+
+    it('re-mounts before the first bridge call after the container slept', async () => {
+      const bridge = createFakeBridge({ apiToken: 'secret' });
+      const sandbox = createSandbox(bridge, { id: 'wake' });
+      await sandbox._start();
+      await sandbox.mount(fakeFilesystem(r2Config), '/workspace/data');
+      expect(bridge.mounts).toHaveLength(1);
+
+      // Still mounted: a command probes but does not re-mount.
+      await sandbox.executeCommand('echo', ['hi']);
+      expect(bridge.mounts).toHaveLength(1);
+
+      bridge.sleep();
+
+      // Each entry point re-establishes the mount before doing its own work.
+      await sandbox.writeFiles([{ path: 'data/a.txt', content: 'x' }]);
+      expect(bridge.mounts).toHaveLength(2);
+      expect(bridge.mounts[1]).toMatchObject({ mountPath: '/workspace/data' });
+      expect(sandbox.mounts.get('/workspace/data')?.state).toBe('mounted');
+
+      // Mounted again, so subsequent calls only probe.
+      await sandbox.readFile('data/a.txt').catch(() => {});
+      await sandbox.executeCommand('echo', ['hi']);
+      expect(bridge.mounts).toHaveLength(2);
+
+      bridge.sleep();
+      await sandbox.executeCommand('echo', ['hi']);
+      expect(bridge.mounts).toHaveLength(3);
+      // The probe runs before the user's command on the new container.
+      const last = bridge.execs.slice(-2);
+      expect(isMountProbe(last[0]!)).toBe(true);
+      expect(last[1]!.argv).toContain('echo');
+    });
+
+    it('does not probe when nothing is mounted', async () => {
+      const bridge = createFakeBridge({ apiToken: 'secret' });
+      const sandbox = createSandbox(bridge, { id: 'no-mounts' });
+      await sandbox._start();
+      await sandbox.executeCommand('echo', ['hi']);
+      expect(bridge.execs.filter(isMountProbe)).toHaveLength(0);
+    });
+
+    it('shares one re-mount pass between concurrent callers after sleep', async () => {
+      const bridge = createFakeBridge({ apiToken: 'secret' });
+      const sandbox = createSandbox(bridge, { id: 'wake-concurrent' });
+      await sandbox._start();
+      await sandbox.mount(fakeFilesystem(r2Config), '/workspace/data');
+      bridge.sleep();
+
+      await Promise.all([
+        sandbox.executeCommand('echo', ['a']),
+        sandbox.executeCommand('echo', ['b']),
+        sandbox.writeFiles([{ path: 'data/c.txt', content: 'c' }]),
+      ]);
+      expect(bridge.mounts).toHaveLength(2);
+    });
+
+    it('marks the entry as error when the re-mount fails, without failing the command', async () => {
+      const bridge = createFakeBridge({ apiToken: 'secret' });
+      let failMounts = false;
+      const fetchImpl: typeof fetch = async (input, init) => {
+        if (failMounts && String(input).endsWith('/mount'))
+          return new Response('mount failed: s3fs died', { status: 500 });
+        return bridge.fetch(input, init);
+      };
+      const sandbox = createSandbox(bridge, { id: 'wake-fail', fetch: fetchImpl });
+      await sandbox._start();
+      await sandbox.mount(fakeFilesystem(r2Config), '/workspace/data');
+      bridge.sleep();
+      failMounts = true;
+
+      const result = await sandbox.executeCommand('echo', ['hi']);
+      expect(result.success).toBe(true);
+      expect(sandbox.mounts.get('/workspace/data')).toMatchObject({
+        state: 'error',
+        error: expect.stringContaining('s3fs died'),
+      });
     });
 
     it('unmount removes the bridge mount and the tracked entry', async () => {

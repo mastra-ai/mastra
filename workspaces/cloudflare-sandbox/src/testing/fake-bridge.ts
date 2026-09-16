@@ -43,6 +43,10 @@ export interface FakeBridge {
   mounts: unknown[];
   /** Bodies received by `POST /unmount`. */
   unmounts: unknown[];
+  /** Mount paths the (fake) container currently has mounted. */
+  mountpoints: Set<string>;
+  /** Simulates `sleepAfter`: the SDK forgets its mounts when the container stops. */
+  sleep(): void;
   /** Live session ids created via `POST /session`. */
   sessions: Set<string>;
   /** Overrides the default `echo`-only behaviour. */
@@ -55,6 +59,11 @@ function sse(event: string, data: string): string {
 
 function toBase64(value: string): string {
   return Buffer.from(value, 'utf8').toString('base64');
+}
+
+/** The provider's pre-command `mountpoint` probe: `sh -c <script> mastra-mount-probe <paths...>`. */
+export function isMountProbe(request: FakeExecRequest): boolean {
+  return request.argv[0] === 'sh' && request.argv[3] === 'mastra-mount-probe';
 }
 
 function defaultExec(request: FakeExecRequest): FakeExecResult {
@@ -83,7 +92,11 @@ export function createFakeBridge(options: { apiToken?: string; baseUrl?: string 
     hydrations: [],
     mounts: [],
     unmounts: [],
+    mountpoints: new Set(),
     sessions: new Set(),
+    sleep() {
+      bridge.mountpoints.clear();
+    },
     fetch: (async (input: Parameters<typeof globalThis.fetch>[0], init: RequestInit = {}) => {
       const url = String(input);
       const method = (init.method ?? 'GET').toUpperCase();
@@ -151,13 +164,17 @@ export function createFakeBridge(options: { apiToken?: string; baseUrl?: string 
 
       const mount = /^\/v1\/sandbox\/([^/]+)\/mount$/.exec(path);
       if (method === 'POST' && mount) {
-        bridge.mounts.push(JSON.parse(bodyText ?? '{}'));
+        const body = JSON.parse(bodyText ?? '{}') as { mountPath?: string };
+        bridge.mounts.push(body);
+        if (body.mountPath) bridge.mountpoints.add(body.mountPath);
         return Response.json({ ok: true });
       }
 
       const unmount = /^\/v1\/sandbox\/([^/]+)\/unmount$/.exec(path);
       if (method === 'POST' && unmount) {
-        bridge.unmounts.push(JSON.parse(bodyText ?? '{}'));
+        const body = JSON.parse(bodyText ?? '{}') as { mountPath?: string };
+        bridge.unmounts.push(body);
+        if (body.mountPath) bridge.mountpoints.delete(body.mountPath);
         return Response.json({ ok: true });
       }
 
@@ -179,7 +196,16 @@ export function createFakeBridge(options: { apiToken?: string; baseUrl?: string 
       if (method === 'POST' && exec) {
         const request = JSON.parse(bodyText ?? '{}') as FakeExecRequest;
         bridge.execs.push(request);
-        const result = (bridge.onExec ?? defaultExec)(request);
+        const result = isMountProbe(request)
+          ? {
+              stdout: request.argv
+                .slice(4)
+                .filter(p => !bridge.mountpoints.has(p))
+                .map(p => `${p}\n`)
+                .join(''),
+              exitCode: 0,
+            }
+          : (bridge.onExec ?? defaultExec)(request);
 
         let stream = '';
         const stdout = result.stdout ?? '';
