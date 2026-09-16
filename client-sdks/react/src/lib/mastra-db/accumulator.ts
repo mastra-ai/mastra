@@ -920,10 +920,10 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
                 toolName: chunk.payload.toolName,
                 toolCallId: chunk.payload.toolCallId,
                 args: chunk.payload.args,
-              } as MastraToolInvocation,
+              },
               title: chunk.payload.title ?? prev.title,
               providerMetadata: chunk.payload.providerMetadata ?? prev.providerMetadata,
-            } as MastraMessagePart;
+            };
             return replaceAt(result, messageIndex, withParts(targetMessage, parts));
           }
         }

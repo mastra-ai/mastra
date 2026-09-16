@@ -128,7 +128,7 @@ const toolCallChunk = (
     type: 'tool-call',
     runId: RUN_ID,
     from: 'AGENT',
-    payload: { toolCallId, toolName, args, ...(title ? { title } : {}) },
+    payload: { toolCallId, toolName, args, title },
   }) as unknown as ChunkType;
 
 const toolCallInputStreamingStartChunk = (toolCallId: string, toolName: string, title?: string): ChunkType =>
@@ -136,7 +136,7 @@ const toolCallInputStreamingStartChunk = (toolCallId: string, toolName: string, 
     type: 'tool-call-input-streaming-start',
     runId: RUN_ID,
     from: 'AGENT',
-    payload: { toolCallId, toolName, ...(title ? { title } : {}) },
+    payload: { toolCallId, toolName, title },
   }) as unknown as ChunkType;
 
 const toolCallDeltaChunk = (toolCallId: string, argsTextDelta: string): ChunkType =>

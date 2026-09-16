@@ -1429,7 +1429,7 @@ export class InternalMastraMCPClient extends MastraBase {
         const outputValidator = rawOutputSchema ? toStandardSchema(rawOutputSchema) : undefined;
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
-          ...(title ? { title } : {}),
+          title,
           description: tool.description || '',
           inputSchema: this.convertInputSchema(tool.inputSchema),
           outputSchema: this.convertOutputSchema(tool.outputSchema),

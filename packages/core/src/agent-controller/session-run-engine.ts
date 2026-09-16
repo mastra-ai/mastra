@@ -628,7 +628,7 @@ export class SessionRunEngine {
         const toolCallId = getString(payload.toolCallId) ?? '';
         const toolName = getString(payload.toolName) ?? '';
         const title = getString(payload.title);
-        this.#session.emit({ type: 'tool_input_start', toolCallId, toolName, ...(title ? { title } : {}) });
+        this.#session.emit({ type: 'tool_input_start', toolCallId, toolName, title });
         break;
       }
 
@@ -670,7 +670,7 @@ export class SessionRunEngine {
             toolName,
             args,
           },
-          ...(title ? { title } : {}),
+          title,
         });
         state.toolPartById.set(toolCallId, toolIndex);
         this.emitMessagePart(state, toolIndex);
@@ -679,7 +679,7 @@ export class SessionRunEngine {
           toolCallId,
           toolName,
           args,
-          ...(title ? { title } : {}),
+          title,
         });
         break;
       }

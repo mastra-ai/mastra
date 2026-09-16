@@ -112,7 +112,7 @@ describe('tool display title', () => {
     });
     const untitledPart = toolParts.find(part => part.toolInvocation.toolName === 'untitled');
     expect(untitledPart).toBeDefined();
-    expect(untitledPart).not.toHaveProperty('title');
+    expect(untitledPart?.title).toBeUndefined();
 
     const providerTools = model.doStreamCalls[0]?.tools ?? [];
     expect(providerTools).toHaveLength(2);

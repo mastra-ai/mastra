@@ -1095,7 +1095,6 @@ export function createDurableToolCallStep() {
                     const bgRunId = chunk.payload.runId;
                     // Emit tool-call chunk so UIs can render the invocation inline
                     if (bgRunId !== runId || (bgRunId === runId && resumeData)) {
-                      const toolTitle = getToolTitle(tool);
                       void emitChunkEvent(pubsub, bgRunId, {
                         type: 'tool-call',
                         runId: bgRunId,
@@ -1104,7 +1103,7 @@ export function createDurableToolCallStep() {
                           toolCallId: chunk.payload.toolCallId,
                           toolName: chunk.payload.toolName,
                           args: cleanedArgs,
-                          ...(toolTitle ? { title: toolTitle } : {}),
+                          title: getToolTitle(tool),
                         },
                       });
                     }
