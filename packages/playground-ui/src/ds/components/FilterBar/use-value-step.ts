@@ -32,7 +32,8 @@ export function useValueStep({ field, operator, query, enabled, initialValue, on
   }, [enabled]);
 
   const suggestions = useValueSuggestions({ field, operatorId: operator?.id ?? '', query, enabled });
-  const allowFreeText = !field?.strict;
+  const allowFreeText = !field?.strict && field?.type !== 'boolean';
+  const isNumber = field?.type === 'number';
 
   const toggle = useCallback((value: string) => {
     setSelected(current => (current.includes(value) ? current.filter(v => v !== value) : [...current, value]));
@@ -52,16 +53,21 @@ export function useValueStep({ field, operator, query, enabled, initialValue, on
     return true;
   }, [selected, onCommit]);
 
+  const canCommitFreeText = useCallback(
+    (text: string) => allowFreeText && text.length > 0 && (!isNumber || Number.isFinite(Number(text))),
+    [allowFreeText, isNumber],
+  );
+
   const commitFreeText = useCallback(() => {
     const text = query.trim();
-    if (!allowFreeText || text.length === 0) return false;
+    if (!canCommitFreeText(text)) return false;
     if (isMany) {
       onCommit(selected.includes(text) ? selected : [...selected, text]);
     } else {
       onCommit(text);
     }
     return true;
-  }, [allowFreeText, query, isMany, selected, onCommit]);
+  }, [canCommitFreeText, query, isMany, selected, onCommit]);
 
   /**
    * Enter handling that Base UI does not cover: Ctrl/Meta+Enter commits a
@@ -93,6 +99,10 @@ export function useValueStep({ field, operator, query, enabled, initialValue, on
     error: suggestions.error,
     hasSuggestions: suggestions.hasSuggestions,
     allowFreeText,
+    /** True when the current query can be committed as free text (non-empty, numeric when the field is a number). */
+    canCommitQuery: canCommitFreeText(query.trim()),
+    /** `inputMode` hint for the value input. */
+    inputMode: isNumber ? ('decimal' as const) : undefined,
     handleSelect,
     handleKeyDown,
     commitSelection,

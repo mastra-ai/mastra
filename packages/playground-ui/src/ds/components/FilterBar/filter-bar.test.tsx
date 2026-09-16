@@ -46,6 +46,8 @@ const FIELDS: FilterBarField[] = [
     strict: true,
     suggestions: [{ value: 'prod' }, { value: 'staging' }],
   },
+  { id: 'duration', label: 'Duration', type: 'number', operators: ['gt'] },
+  { id: 'hasError', label: 'Has error', type: 'boolean', operators: ['is'] },
 ];
 
 function Harness({
@@ -139,6 +141,55 @@ describe('FilterBar', () => {
       const [items] = onChange.mock.calls[0] as [FilterBarItem[]];
       expect(items[0]).toMatchObject({ fieldId: 'traceId', operatorId: 'contains', value: 'abc-123' });
       expect(getChips()).toHaveLength(1);
+    });
+
+    it('rejects non-numeric free text on a number field', async () => {
+      const onChange = vi.fn();
+      render(<Harness onChange={onChange} />);
+
+      const input = getInput();
+      input.focus();
+      type('duration');
+      await screen.findByRole('option', { name: 'Duration' });
+      key('Enter');
+      await screen.findByRole('option', { name: '>' });
+      key('Enter');
+
+      expect(input.inputMode).toBe('decimal');
+      const apply = (await screen.findByRole('button', { name: 'Apply' })) as HTMLButtonElement;
+      type('abc');
+      expect(apply.disabled).toBe(true);
+      key('Enter');
+      expect(onChange).not.toHaveBeenCalled();
+
+      type('1500');
+      expect(apply.disabled).toBe(false);
+      key('Enter');
+      const [items] = onChange.mock.calls[0] as [FilterBarItem[]];
+      expect(items[0]).toMatchObject({ fieldId: 'duration', operatorId: 'gt', value: '1500' });
+    });
+
+    it('offers strict True/False suggestions on a boolean field', async () => {
+      const onChange = vi.fn();
+      render(<Harness onChange={onChange} />);
+
+      const input = getInput();
+      input.focus();
+      type('has error');
+      await screen.findByRole('option', { name: 'Has error' });
+      key('Enter');
+      await screen.findByRole('option', { name: 'is' });
+      key('Enter');
+
+      await screen.findByRole('option', { name: 'True' });
+      expect(screen.getByRole('option', { name: 'False' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Apply' })).toBeNull();
+
+      type('fal');
+      await screen.findByRole('option', { name: 'False' });
+      key('Enter');
+      const [items] = onChange.mock.calls[0] as [FilterBarItem[]];
+      expect(items[0]).toMatchObject({ fieldId: 'hasError', operatorId: 'is', value: 'false' });
     });
 
     it('moves the highlight with the arrow keys and mirrors it in aria-activedescendant', async () => {

@@ -24,10 +24,18 @@ export type FilterBarSuggestionsResolver = (
   ctx: FilterBarSuggestionsContext,
 ) => FilterBarOption[] | Promise<FilterBarOption[]>;
 
+/**
+ * Value kind of a field. Defaults to `text`.
+ * - `number`: free text must parse as a finite number; the input gets a decimal keyboard.
+ * - `boolean`: strict `true` / `false` suggestions are provided unless the field supplies its own.
+ */
+export type FilterBarFieldType = 'text' | 'number' | 'boolean';
+
 export type FilterBarField = {
   id: string;
   label: string;
   icon?: ReactNode;
+  type?: FilterBarFieldType;
   /** Operator ids allowed for this field. Defaults to every root operator. */
   operators?: string[];
   /**

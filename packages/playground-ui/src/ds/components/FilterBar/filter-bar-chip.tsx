@@ -3,7 +3,7 @@ import type { BaseUIEvent } from '@base-ui/react/types';
 import { LockIcon, PencilIcon, SearchIcon, XIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
-import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
+import type { ComponentProps, KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { emptyValueFor, useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionList } from './filter-bar-option-list';
 import { matchesQueryFilter } from './match-query';
@@ -164,6 +164,7 @@ type SegmentComboboxProps<T> = {
   placeholder: string;
   /** Leading icon of the popup input. Defaults to a search glass; free-text editing uses a pencil. */
   icon?: LucideIcon;
+  inputMode?: ComponentProps<'input'>['inputMode'];
   children: ReactNode;
 };
 
@@ -186,6 +187,7 @@ function SegmentCombobox<T>({
   onInputKeyDown,
   placeholder,
   icon: Icon = SearchIcon,
+  inputMode,
   children,
 }: SegmentComboboxProps<T>) {
   const ctx = useFilterBarContext();
@@ -256,6 +258,7 @@ function SegmentCombobox<T>({
               <ComboboxPrimitive.Input
                 className={comboboxStyles.searchInput}
                 placeholder={placeholder}
+                inputMode={inputMode}
                 onKeyDown={event => onInputKeyDown?.(event, highlighted)}
               />
             </div>
@@ -385,7 +388,9 @@ function ValueEditor() {
     ? step.allowFreeText
       ? 'Search or type a value…'
       : 'Search values…'
-    : 'Type a value…';
+    : chip.field?.type === 'number'
+      ? 'Type a number…'
+      : 'Type a value…';
 
   return (
     <SegmentCombobox<FilterBarOption>
@@ -408,6 +413,7 @@ function ValueEditor() {
       }}
       placeholder={placeholder}
       icon={step.hasSuggestions ? SearchIcon : PencilIcon}
+      inputMode={step.inputMode}
     >
       {step.hasSuggestions && (
         <FilterBarOptionList<FilterBarOption>

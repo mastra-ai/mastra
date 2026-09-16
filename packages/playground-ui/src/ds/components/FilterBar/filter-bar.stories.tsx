@@ -32,7 +32,8 @@ const FIELDS: FilterBarField[] = [
   },
   { id: 'traceId', label: 'Trace ID', operators: ['is', 'contains', 'starts-with'] },
   { id: 'runId', label: 'Run ID', operators: ['is', 'contains'] },
-  { id: 'duration', label: 'Duration (ms)', operators: ['gt', 'gte', 'lt', 'lte'] },
+  { id: 'duration', label: 'Duration (ms)', type: 'number', operators: ['gt', 'gte', 'lt', 'lte'] },
+  { id: 'hasError', label: 'Has error', type: 'boolean', operators: ['is'] },
 ];
 
 const meta: Meta = {

@@ -4,6 +4,11 @@ import type { FilterBarField, FilterBarOption } from './types';
 
 const DEBOUNCE_MS = 150;
 
+const BOOLEAN_OPTIONS: FilterBarOption[] = [
+  { value: 'true', label: 'True' },
+  { value: 'false', label: 'False' },
+];
+
 export type UseValueSuggestionsOptions = {
   field: FilterBarField | undefined;
   operatorId: string;
@@ -31,7 +36,7 @@ export function useValueSuggestions({
   query,
   enabled,
 }: UseValueSuggestionsOptions): UseValueSuggestionsResult {
-  const suggestions = field?.suggestions;
+  const suggestions = field?.suggestions ?? (field?.type === 'boolean' ? BOOLEAN_OPTIONS : undefined);
   const resolver = typeof suggestions === 'function' ? suggestions : undefined;
   const staticOptions = Array.isArray(suggestions) ? suggestions : undefined;
 

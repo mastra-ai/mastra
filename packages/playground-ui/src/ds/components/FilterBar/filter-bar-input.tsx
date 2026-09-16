@@ -174,7 +174,9 @@ export function FilterBarInput({
         ? 'Operator…'
         : valueStep.hasSuggestions && valueStep.allowFreeText
           ? 'Search or type a value…'
-          : 'Value…';
+          : field?.type === 'number'
+            ? 'Number…'
+            : 'Value…';
 
   return (
     <>
@@ -227,6 +229,7 @@ export function FilterBarInput({
           spellCheck={false}
           data-slot="filter-bar-input"
           data-step={draft.step}
+          inputMode={draft.step === 'value' ? valueStep.inputMode : undefined}
           placeholder={inputPlaceholder}
           className={cn(
             // Naked control inside the styled FilterBar surface — same baseline as the DS Input `unstyled` variant.
@@ -285,7 +288,7 @@ export function FilterBarInput({
                   <Button
                     size="xs"
                     variant="default"
-                    disabled={query.trim().length === 0}
+                    disabled={!valueStep.canCommitQuery}
                     onMouseDown={e => e.preventDefault()}
                     onClick={() => valueStep.commitFreeText()}
                   >
