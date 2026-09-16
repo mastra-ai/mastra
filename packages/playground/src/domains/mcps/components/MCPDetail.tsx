@@ -1,5 +1,4 @@
-import type { McpToolInfo } from '@mastra/client-js';
-import type { ServerInfo } from '@mastra/core/mcp';
+import type { McpServerInfo, McpToolInfo } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import {
@@ -21,7 +20,7 @@ import { useLinkComponent } from '@/lib/framework';
 
 export interface MCPDetailProps {
   isLoading: boolean;
-  server?: ServerInfo;
+  server?: McpServerInfo;
 }
 
 declare global {
@@ -66,7 +65,9 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
       </MainContentContent>
     );
 
-  const commandLineConfig = `npx -y mcp-remote ${sseUrl}`;
+  // MCP v2 servers speak Streamable HTTP only; the SSE endpoint exists for 1.x servers.
+  const hasSse = server.transports.includes('sse');
+  const commandLineConfig = `npx -y mcp-remote ${hasSse ? sseUrl : httpStreamUrl}`;
 
   return (
     <MainContentContent isDivided={true}>
@@ -83,8 +84,9 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
         </div>
 
         <Txt className="text-neutral3 pb-4">
-          This MCP server can be accessed through multiple transport methods. Choose the one that best fits your use
-          case.
+          {hasSse
+            ? 'This MCP server can be accessed through multiple transport methods. Choose the one that best fits your use case.'
+            : 'This MCP server speaks Streamable HTTP only (protocol 2026-07-28).'}
         </Txt>
 
         <div className="flex flex-col gap-4">
@@ -104,21 +106,23 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
             </div>
           </div>
 
-          {/* SSE */}
-          <div className="border-border1 bg-surface3 rounded-lg border p-4">
-            <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">SSE</span>}>
-              Server-Sent Events
-            </Badge>
+          {/* SSE (legacy servers only) */}
+          {hasSse && (
+            <div className="border-border1 bg-surface3 rounded-lg border p-4">
+              <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">SSE</span>}>
+                Server-Sent Events
+              </Badge>
 
-            <Txt className="text-neutral3 pt-1 pb-2">Use for real-time communication via SSE.</Txt>
+              <Txt className="text-neutral3 pt-1 pb-2">Use for real-time communication via SSE.</Txt>
 
-            <div className="flex items-start gap-2">
-              <Txt className="bg-surface4 rounded-lg px-2 py-1">{sseUrl}</Txt>
-              <div className="pt-1">
-                <CopyButton tooltip="Copy SSE URL" content={sseUrl} />
+              <div className="flex items-start gap-2">
+                <Txt className="bg-surface4 rounded-lg px-2 py-1">{sseUrl}</Txt>
+                <div className="pt-1">
+                  <CopyButton tooltip="Copy SSE URL" content={sseUrl} />
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Command Line */}
           <div className="border-border1 bg-surface3 rounded-lg border p-4">
@@ -143,7 +147,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
   );
 };
 
-const McpToolList = ({ server }: { server: ServerInfo }) => {
+const McpToolList = ({ server }: { server: McpServerInfo }) => {
   const { data: tools = {}, isLoading } = useMCPServerTools(server);
 
   if (isLoading) return null;
