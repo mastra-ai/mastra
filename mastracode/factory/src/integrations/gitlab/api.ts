@@ -4,6 +4,8 @@ export const GITLAB_PROJECTS_PAGE_SIZE = 100;
 export const GITLAB_ISSUES_PAGE_SIZE = 30;
 export const GITLAB_NOTES_PAGE_SIZE = 100;
 export const GITLAB_MIN_ACCESS_LEVEL = 20;
+export const GITLAB_MERGE_REQUESTS_PAGE_SIZE = 30;
+export const GITLAB_DISCUSSIONS_PAGE_SIZE = 100;
 
 export type GitLabApiErrorCode = 'gitlab_auth_failed' | 'gitlab_request_failed';
 
@@ -28,6 +30,7 @@ export interface GitLabProject {
 }
 
 export interface GitLabUser {
+  id?: number;
   name?: string | null;
   username: string;
 }
@@ -55,7 +58,84 @@ export interface GitLabNote {
   body: string;
   author?: GitLabUser | null;
   created_at: string;
+  updated_at?: string;
   system?: boolean;
+}
+
+export interface GitLabDiffRefs {
+  base_sha: string;
+  start_sha: string;
+  head_sha: string;
+}
+
+export interface GitLabMergeRequest {
+  id: number;
+  iid: number;
+  project_id: number;
+  title: string;
+  description?: string | null;
+  state: 'opened' | 'closed' | 'merged' | 'locked';
+  web_url: string;
+  author?: GitLabUser | null;
+  assignees?: GitLabUser[];
+  reviewers?: GitLabUser[];
+  labels?: string[];
+  source_branch: string;
+  target_branch: string;
+  sha: string;
+  merge_commit_sha?: string | null;
+  squash_commit_sha?: string | null;
+  diff_refs?: GitLabDiffRefs | null;
+  merge_status?: string;
+  detailed_merge_status?: string;
+  draft?: boolean;
+  work_in_progress?: boolean;
+  merged_at?: string | null;
+  user_notes_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GitLabMergeResult extends GitLabMergeRequest {
+  message?: string;
+}
+
+export interface GitLabDiscussionPosition {
+  position_type: 'text';
+  base_sha: string;
+  start_sha: string;
+  head_sha: string;
+  old_path: string;
+  new_path: string;
+  old_line?: number | null;
+  new_line?: number | null;
+}
+
+export interface GitLabDiscussionNote extends GitLabNote {
+  position?: GitLabDiscussionPosition | null;
+  resolvable?: boolean;
+  resolved?: boolean;
+}
+
+export interface GitLabDiscussion {
+  id: string;
+  individual_note?: boolean;
+  notes: GitLabDiscussionNote[];
+}
+
+export interface GitLabMergeRequestApprovals {
+  approved: boolean;
+  approvals_required?: number;
+  approvals_left?: number;
+  approved_by?: Array<{ user: GitLabUser }>;
+}
+
+export interface GitLabMember {
+  id: number;
+  username: string;
+  name?: string | null;
+  state?: string;
+  access_level?: number;
 }
 
 export interface GitLabApiClientConfig {
@@ -157,8 +237,276 @@ export class GitLabApiClient {
     });
   }
 
+  async listMergeRequests(
+    projectId: string,
+    options: { page?: number; state?: 'opened' | 'closed' | 'merged' | 'all' } = {},
+  ): Promise<GitLabMergeRequest[]> {
+    return this.#request<GitLabMergeRequest[]>(
+      'GET',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests`,
+      {
+        query: {
+          state: options.state ?? 'opened',
+          order_by: 'updated_at',
+          sort: 'desc',
+          page: options.page ?? 1,
+          per_page: GITLAB_MERGE_REQUESTS_PAGE_SIZE,
+        },
+      },
+    );
+  }
+
+  async getMergeRequest(projectId: string, mergeRequestIid: number): Promise<GitLabMergeRequest> {
+    return this.#request<GitLabMergeRequest>(
+      'GET',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}`,
+    );
+  }
+
+  async createMergeRequest(
+    projectId: string,
+    input: {
+      sourceBranch: string;
+      targetBranch: string;
+      title: string;
+      description?: string;
+      removeSourceBranch?: boolean;
+      squash?: boolean;
+    },
+  ): Promise<GitLabMergeRequest> {
+    return this.#request<GitLabMergeRequest>(
+      'POST',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests`,
+      {
+        body: {
+          source_branch: input.sourceBranch,
+          target_branch: input.targetBranch,
+          title: input.title,
+          description: input.description,
+          remove_source_branch: input.removeSourceBranch,
+          squash: input.squash,
+        },
+      },
+    );
+  }
+
+  async updateMergeRequest(
+    projectId: string,
+    mergeRequestIid: number,
+    input: {
+      title?: string;
+      description?: string;
+      targetBranch?: string;
+      stateEvent?: 'close' | 'reopen';
+      removeSourceBranch?: boolean;
+      squash?: boolean;
+      reviewerIds?: number[];
+    },
+  ): Promise<GitLabMergeRequest> {
+    return this.#request<GitLabMergeRequest>(
+      'PUT',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}`,
+      {
+        body: {
+          title: input.title,
+          description: input.description,
+          target_branch: input.targetBranch,
+          state_event: input.stateEvent,
+          remove_source_branch: input.removeSourceBranch,
+          squash: input.squash,
+          reviewer_ids: input.reviewerIds,
+        },
+      },
+    );
+  }
+
+  async mergeMergeRequest(
+    projectId: string,
+    mergeRequestIid: number,
+    options: {
+      squash?: boolean;
+      mergeCommitMessage?: string;
+      squashCommitMessage?: string;
+      shouldRemoveSourceBranch?: boolean;
+    } = {},
+  ): Promise<GitLabMergeResult> {
+    return this.#request<GitLabMergeResult>(
+      'PUT',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}/merge`,
+      {
+        body: {
+          squash: options.squash,
+          merge_commit_message: options.mergeCommitMessage,
+          squash_commit_message: options.squashCommitMessage,
+          should_remove_source_branch: options.shouldRemoveSourceBranch,
+        },
+      },
+    );
+  }
+
+  async listMergeRequestNotes(
+    projectId: string,
+    mergeRequestIid: number,
+    options: { page?: number } = {},
+  ): Promise<GitLabNote[]> {
+    return this.#request<GitLabNote[]>(
+      'GET',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}/notes`,
+      {
+        query: {
+          order_by: 'created_at',
+          sort: 'asc',
+          page: options.page ?? 1,
+          per_page: GITLAB_NOTES_PAGE_SIZE,
+        },
+      },
+    );
+  }
+
+  async createMergeRequestNote(projectId: string, mergeRequestIid: number, body: string): Promise<GitLabNote> {
+    return this.#request<GitLabNote>(
+      'POST',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}/notes`,
+      { body: { body } },
+    );
+  }
+
+  async updateMergeRequestNote(
+    projectId: string,
+    mergeRequestIid: number,
+    noteId: number,
+    body: string,
+  ): Promise<GitLabNote> {
+    return this.#request<GitLabNote>(
+      'PUT',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}/notes/${noteId}`,
+      { body: { body } },
+    );
+  }
+
+  async deleteMergeRequestNote(projectId: string, mergeRequestIid: number, noteId: number): Promise<void> {
+    await this.#request<void>(
+      'DELETE',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}/notes/${noteId}`,
+    );
+  }
+
+  async listMergeRequestDiscussions(
+    projectId: string,
+    mergeRequestIid: number,
+    options: { page?: number } = {},
+  ): Promise<GitLabDiscussion[]> {
+    return this.#request<GitLabDiscussion[]>(
+      'GET',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}/discussions`,
+      { query: { page: options.page ?? 1, per_page: GITLAB_DISCUSSIONS_PAGE_SIZE } },
+    );
+  }
+
+  async createMergeRequestDiscussion(
+    projectId: string,
+    mergeRequestIid: number,
+    input: { body: string; position?: GitLabDiscussionPosition },
+  ): Promise<GitLabDiscussion> {
+    return this.#request<GitLabDiscussion>(
+      'POST',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}/discussions`,
+      { body: input },
+    );
+  }
+
+  async addMergeRequestDiscussionNote(
+    projectId: string,
+    mergeRequestIid: number,
+    discussionId: string,
+    body: string,
+  ): Promise<GitLabDiscussionNote> {
+    return this.#request<GitLabDiscussionNote>(
+      'POST',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}/discussions/${encodeURIComponent(discussionId)}/notes`,
+      { body: { body } },
+    );
+  }
+
+  async updateMergeRequestDiscussionNote(
+    projectId: string,
+    mergeRequestIid: number,
+    discussionId: string,
+    noteId: number,
+    body: string,
+  ): Promise<GitLabDiscussionNote> {
+    return this.#request<GitLabDiscussionNote>(
+      'PUT',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}/discussions/${encodeURIComponent(discussionId)}/notes/${noteId}`,
+      { body: { body } },
+    );
+  }
+
+  async deleteMergeRequestDiscussionNote(
+    projectId: string,
+    mergeRequestIid: number,
+    discussionId: string,
+    noteId: number,
+  ): Promise<void> {
+    await this.#request<void>(
+      'DELETE',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}/discussions/${encodeURIComponent(discussionId)}/notes/${noteId}`,
+    );
+  }
+
+  async getMergeRequestApprovals(projectId: string, mergeRequestIid: number): Promise<GitLabMergeRequestApprovals> {
+    return this.#request<GitLabMergeRequestApprovals>(
+      'GET',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}/approvals`,
+    );
+  }
+
+  async approveMergeRequest(projectId: string, mergeRequestIid: number, sha?: string): Promise<GitLabMergeRequest> {
+    return this.#request<GitLabMergeRequest>(
+      'POST',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}/approve`,
+      sha ? { body: { sha } } : undefined,
+    );
+  }
+
+  async unapproveMergeRequest(projectId: string, mergeRequestIid: number): Promise<GitLabMergeRequest> {
+    return this.#request<GitLabMergeRequest>(
+      'POST',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}/unapprove`,
+    );
+  }
+
+  async setMergeRequestReviewers(
+    projectId: string,
+    mergeRequestIid: number,
+    reviewerIds: number[],
+  ): Promise<GitLabMergeRequest> {
+    return this.#request<GitLabMergeRequest>(
+      'PUT',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/merge_requests/${mergeRequestIid}`,
+      { body: { reviewer_ids: reviewerIds } },
+    );
+  }
+
+  async listProjectMembers(
+    projectId: string,
+    options: { query?: string; page?: number } = {},
+  ): Promise<GitLabMember[]> {
+    return this.#request<GitLabMember[]>(
+      'GET',
+      `/api/v4/projects/${encodeURIComponent(projectId)}/members/all`,
+      {
+        query: {
+          query: options.query,
+          page: options.page ?? 1,
+          per_page: GITLAB_DISCUSSIONS_PAGE_SIZE,
+        },
+      },
+    );
+  }
+
   async #request<T>(
-    method: 'GET' | 'POST' | 'PUT',
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     path: string,
     options: { query?: Record<string, string | number | undefined>; body?: unknown } = {},
   ): Promise<T> {
