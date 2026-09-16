@@ -26,7 +26,8 @@ describe('shipped provider registry', () => {
     for (const provider of PROVIDERS) {
       expect(provider.integrationId).toMatch(/^[a-z0-9][a-z0-9-]*$/);
       expect(provider.envVar).toMatch(/^MASTRA_[A-Z0-9_]+_CONNECTION_ID$/);
-      expect(typeof provider.createTools).toBe('function');
+      expect(provider.transport).not.toBe('mcp');
+      if (provider.transport !== 'mcp') expect(typeof provider.createTools).toBe('function');
     }
   });
 });

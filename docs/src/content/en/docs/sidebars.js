@@ -677,6 +677,14 @@ const sidebars = {
               id: 'guides/streaming',
               label: 'Streaming',
             },
+            {
+              type: 'doc',
+              id: 'guides/build-an-eval-loop',
+              label: 'Build an eval loop',
+              customProps: {
+                tags: ['new'],
+              },
+            },
           ],
         },
       ],
