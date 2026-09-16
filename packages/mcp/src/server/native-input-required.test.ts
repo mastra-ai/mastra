@@ -1,3 +1,4 @@
+import type http from 'node:http';
 import { createTool } from '@mastra/core/tools';
 import { LOG_LEVEL_META_KEY } from '@modelcontextprotocol/client';
 import type { Client } from '@modelcontextprotocol/client';
@@ -378,6 +379,69 @@ describe('input_required continuation through suspend/resume', () => {
       await clientA.close();
       await clientB.close();
     }
+  });
+
+  describe('users sharing one OAuth client', () => {
+    // Every request presents the same clientId; only the bearer token differs.
+    const sharedClientAuth = (req: http.IncomingMessage): AuthInfo => ({
+      token: String(req.headers['x-test-user'] ?? 'user-a'),
+      clientId: 'shared-client',
+      scopes: [],
+    });
+
+    async function expectUserIsolation(served: ServedHTTP, journalOf: Journal) {
+      const userA = await connectClient(served.url, manual, { 'x-test-user': 'user-a' });
+      const userB = await connectClient(served.url, manual, { 'x-test-user': 'user-b' });
+      try {
+        const first = asRound(await callRound(userA, 'bookDelivery', { opKey: 'op-shared' }));
+        await expect(
+          callRound(
+            userB,
+            'bookDelivery',
+            { opKey: 'op-shared' },
+            { answer: accept({ address: 'x' }), requestState: first.requestState },
+          ),
+        ).rejects.toMatchObject({ code: -32602, message: 'requestState was issued to a different caller' });
+        const own = asRound(
+          await callRound(
+            userA,
+            'bookDelivery',
+            { opKey: 'op-shared' },
+            { answer: accept({ address: 'x' }), requestState: first.requestState },
+          ),
+        );
+        expect(messageOf(own)).toBe('Confirm booking?');
+        expect(journalOf.writes).toBe(0);
+      } finally {
+        await userA.close();
+        await userB.close();
+      }
+    }
+
+    it('binds the continuation to the mapped user', async () => {
+      const otherJournal = newJournal();
+      const other = await serveHTTP(
+        makeServer(otherJournal, {
+          mapAuthInfoToUser: ({ authInfo }) => ({ id: (authInfo as AuthInfo).token }),
+        }),
+        { auth: sharedClientAuth },
+      );
+      try {
+        await expectUserIsolation(other, otherJournal);
+      } finally {
+        await other.close();
+      }
+    });
+
+    it('binds the continuation to the bearer token when no subject or user is known', async () => {
+      const otherJournal = newJournal();
+      const other = await serveHTTP(makeServer(otherJournal), { auth: sharedClientAuth });
+      try {
+        await expectUserIsolation(other, otherJournal);
+      } finally {
+        await other.close();
+      }
+    });
   });
 
   it('continues a round on a different server instance sharing the key', async () => {

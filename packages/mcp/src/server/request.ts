@@ -63,12 +63,21 @@ export async function toRequestContext(
   return requestContext;
 }
 
-/** The identity a continuation is bound to; a different caller cannot resume it. */
-export function principalOf(ctx: ServerContext): string {
+/**
+ * The identity a continuation is bound to; a different caller cannot resume it.
+ * Prefers the token subject, then the id of the user `mapAuthInfoToUser` produced,
+ * and otherwise the bearer token itself, so two users sharing one OAuth client
+ * never share a principal. A token refreshed mid-round therefore starts over.
+ */
+export function principalOf(ctx: ServerContext, requestContext: RequestContext): string {
   const authInfo = ctx.http?.authInfo;
   if (!authInfo) return 'anonymous';
   const subject = authInfo.extra?.sub ?? authInfo.extra?.subject;
-  return `${authInfo.clientId}:${typeof subject === 'string' ? subject : ''}`;
+  if (typeof subject === 'string' && subject) return `${authInfo.clientId}:sub:${subject}`;
+  const user = requestContext.get('user');
+  const userId = user && typeof user === 'object' ? (user as { id?: unknown }).id : undefined;
+  if (typeof userId === 'string' && userId) return `${authInfo.clientId}:user:${userId}`;
+  return `${authInfo.clientId}:token:${createHash('sha256').update(authInfo.token).digest('base64url')}`;
 }
 
 export function hashArguments(value: unknown): string {
@@ -119,6 +128,7 @@ export interface ContinuationRound {
  */
 export function readContinuation(
   ctx: ServerContext,
+  requestContext: RequestContext,
   expected: Pick<ContinuationEnvelope, 'method' | 'name' | 'argsHash'>,
 ): ContinuationRound | undefined {
   const envelope = ctx.mcpReq.requestState<ContinuationEnvelope>();
@@ -135,7 +145,7 @@ export function readContinuation(
       `requestState does not belong to ${expected.method} "${expected.name}" with these arguments`,
     );
   }
-  if (envelope.principal !== principalOf(ctx)) {
+  if (envelope.principal !== principalOf(ctx, requestContext)) {
     throw new ProtocolError(ProtocolErrorCode.InvalidParams, 'requestState was issued to a different caller');
   }
   const answer = inputResponse(ctx.mcpReq.inputResponses, INPUT_KEY);

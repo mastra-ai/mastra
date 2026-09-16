@@ -497,7 +497,11 @@ export class MCPServer extends MCPServerBase {
   }
 
   /** Answers a suspended round: one keyed form derived from the handler's `resumeSchema`. */
-  private async inputRequired(ctx: ServerContext, suspension: Suspension): Promise<InputRequiredResult> {
+  private async inputRequired(
+    ctx: ServerContext,
+    requestContext: RequestContext,
+    suspension: Suspension,
+  ): Promise<InputRequiredResult> {
     const payload = suspension.suspendPayload as { message?: unknown } | undefined;
     const message =
       typeof payload?.message === 'string'
@@ -519,7 +523,7 @@ export class MCPServer extends MCPServerBase {
         argsHash,
         round,
         suspendPayload,
-        principal: principalOf(ctx),
+        principal: principalOf(ctx, requestContext),
         iat: Math.floor(Date.now() / 1000),
       }),
     });
@@ -538,7 +542,8 @@ export class MCPServer extends MCPServerBase {
     argsHash: string;
   }> {
     const argsHash = hashArguments(args);
-    const continuation = readContinuation(ctx, { method, name, argsHash });
+    const requestContext = await toRequestContext(ctx, this.mapAuthInfoToUser);
+    const continuation = readContinuation(ctx, requestContext, { method, name, argsHash });
     if (continuation?.outcome === 'accept' && resumeSchema) {
       const validation = await resumeSchema['~standard'].validate(continuation.resumeData);
       if (validation.issues) {
@@ -552,7 +557,7 @@ export class MCPServer extends MCPServerBase {
     let suspension: { payload: unknown } | undefined;
     const request: MCPServerRequest = {
       extra: toToolExecutionContext(ctx, this.name).extra,
-      requestContext: await toRequestContext(ctx, this.mapAuthInfoToUser),
+      requestContext,
       suspend: async payload => void (suspension = { payload }),
       resumeData: continuation?.resumeData,
       suspendPayload: continuation?.suspendPayload,
@@ -576,8 +581,8 @@ export class MCPServer extends MCPServerBase {
       }
       const args = request.params.arguments ?? {};
       const argsHash = hashArguments(args);
-      const continuation = readContinuation(ctx, { method: 'tools/call', name, argsHash });
       const requestContext = await toRequestContext(ctx, this.mapAuthInfoToUser);
+      const continuation = readContinuation(ctx, requestContext, { method: 'tools/call', name, argsHash });
       const mcp = toToolExecutionContext(ctx, this.name);
       const span = getOrCreateSpan({
         type: SpanType.TOOL_CALL,
@@ -608,7 +613,7 @@ export class MCPServer extends MCPServerBase {
         if (execution.status === 'suspended') {
           span?.end({ attributes: { success: true } });
           this.logger.debug(`Tool '${name}' requires client input.`);
-          return this.inputRequired(ctx, {
+          return this.inputRequired(ctx, requestContext, {
             method: 'tools/call',
             name,
             argsHash,
@@ -742,7 +747,7 @@ export class MCPServer extends MCPServerBase {
       const result = await options.getResourceContent({ uri, ...serverRequest });
       const suspension = suspended();
       if (suspension) {
-        return this.inputRequired(ctx, {
+        return this.inputRequired(ctx, serverRequest.requestContext, {
           method: 'resources/read',
           name: uri,
           argsHash,
@@ -820,7 +825,7 @@ export class MCPServer extends MCPServerBase {
       const messages = await options.getPromptMessages!({ name, args, ...serverRequest });
       const suspension = suspended();
       if (suspension) {
-        return this.inputRequired(ctx, {
+        return this.inputRequired(ctx, serverRequest.requestContext, {
           method: 'prompts/get',
           name,
           argsHash,
