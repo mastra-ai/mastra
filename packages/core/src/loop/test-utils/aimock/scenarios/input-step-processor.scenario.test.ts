@@ -197,4 +197,75 @@ describeForAllEngines('AIMock loop scenario: input step processor (per-step)', e
     expect(stepsByCall[1][0].types).toEqual(expect.arrayContaining(['tool-call', 'tool-result']));
     expect(stepsByCall[1][0].toolCallNames).toEqual(['lookup']);
   });
+
+  it('processInputStep sees populated content/toolResults when the previous step makes multiple tool calls', async () => {
+    const lookupTool = createTool({
+      id: 'lookup',
+      description: 'Look up a value.',
+      inputSchema: z.object({ key: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ({ key }) => ({ value: `VALUE_FOR_${key}` }),
+    });
+    const echoTool = createTool({
+      id: 'echo',
+      description: 'Echo a value.',
+      inputSchema: z.object({ text: z.string() }),
+      outputSchema: z.object({ echoed: z.string() }),
+      execute: async ({ text }) => ({ echoed: text }),
+    });
+
+    const stepsByCall: Array<Array<{ types: string[]; toolResultNames: string[] }>> = [];
+
+    const inputStepProcessor = {
+      id: 'multi-tool-step-tracker',
+      async processInputStep({ steps, messages }: { steps: any[]; messages: Array<{ role: string }> }) {
+        stepsByCall.push(
+          (steps || []).map(step => ({
+            types: (step.content || []).map((part: any) => part.type),
+            toolResultNames: (step.toolResults || []).map((result: any) => result.toolName ?? result.payload?.toolName),
+          })),
+        );
+        return messages;
+      },
+    };
+
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Look up alpha and echo beta.',
+      tools: { lookup: lookupTool, echo: echoTool },
+      stopWhen: stepCountIs(5),
+      inputProcessors: [inputStepProcessor],
+      fixtures: llm => {
+        // Turn 1: emit TWO tool calls in a single step.
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [
+              { id: 'call_lookup', name: 'lookup', arguments: { key: 'alpha' } },
+              { id: 'call_echo', name: 'echo', arguments: { text: 'beta' } },
+            ],
+          },
+        );
+        // Turn 2: final text.
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done.' });
+      },
+    });
+
+    expect(stepsByCall).toHaveLength(2);
+    expect(stepsByCall[0]).toEqual([]);
+
+    if (engine === 'durable') {
+      // See note in the previous test: durable keeps completed steps on the
+      // workflow state and does not forward them to processInputStep.
+      return;
+    }
+
+    // The completed multi-tool step must expose BOTH tool results, not just the
+    // first one — the regression class this issue reports.
+    expect(stepsByCall[1]).toHaveLength(1);
+    const toolResultParts = stepsByCall[1][0].types.filter(type => type === 'tool-result');
+    expect(toolResultParts).toHaveLength(2);
+    expect(stepsByCall[1][0].toolResultNames.sort()).toEqual(['echo', 'lookup']);
+  });
 });

@@ -1363,6 +1363,131 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       expect(firstCallStep.toolResults.length).toBe(contentToolResults.length);
       expect(firstCallStep.toolResults[0].toolName).toBe('test-tool');
     });
+
+    it('should populate toolResults when the last step makes multiple tool calls', async () => {
+      const messageList = createMessageListWithUserMessage();
+      const stopWhenSteps: any[][] = [];
+
+      let responseCount = 0;
+      const result = await loopFn({
+        methodType: 'stream',
+        runId,
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockLanguageModelV2({
+              doStream: async () => {
+                switch (responseCount++) {
+                  case 0:
+                    return {
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'id-0',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(0),
+                        },
+                        {
+                          type: 'tool-call',
+                          toolCallId: 'call-1',
+                          toolName: 'tool-a',
+                          input: '{"value":"first"}',
+                        },
+                        {
+                          type: 'finish',
+                          finishReason: 'tool-calls',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  case 1:
+                    // Last acting step emits TWO tool calls in a single response
+                    return {
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'id-1',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(0),
+                        },
+                        {
+                          type: 'tool-call',
+                          toolCallId: 'call-2',
+                          toolName: 'tool-a',
+                          input: '{"value":"second"}',
+                        },
+                        {
+                          type: 'tool-call',
+                          toolCallId: 'call-3',
+                          toolName: 'tool-b',
+                          input: '{"value":"third"}',
+                        },
+                        {
+                          type: 'finish',
+                          finishReason: 'tool-calls',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  case 2:
+                    return {
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'id-2',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(0),
+                        },
+                        { type: 'text-start', id: 'text-1' },
+                        { type: 'text-delta', id: 'text-1', delta: 'Done.' },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  default:
+                    throw new Error(`Unexpected response count: ${responseCount}`);
+                }
+              },
+            }),
+          },
+        ],
+        tools: {
+          'tool-a': {
+            inputSchema: z.object({ value: z.string() }),
+            execute: async ({ value }: { value: string }) => ({ a: value }),
+          },
+          'tool-b': {
+            inputSchema: z.object({ value: z.string() }),
+            execute: async ({ value }: { value: string }) => ({ b: value }),
+          },
+        },
+        messageList,
+        stopWhen: ({ steps }: { steps: any[] }) => {
+          stopWhenSteps.push([...steps]);
+          return false;
+        },
+        ...defaultSettings(),
+      });
+
+      await result.consumeStream();
+
+      expect(stopWhenSteps.length).toBeGreaterThanOrEqual(1);
+
+      // The last captured stopWhen invocation carries the multi-tool-call step as its
+      // final entry. That step must expose both tool results in content and toolResults.
+      const lastInvocation = stopWhenSteps[stopWhenSteps.length - 1]!;
+      const multiToolStep = lastInvocation[lastInvocation.length - 1]!;
+      const contentToolResults = multiToolStep.content.filter((p: any) => p.type === 'tool-result');
+      expect(contentToolResults.length).toBe(2);
+      expect(multiToolStep.toolResults.length).toBe(2);
+      const toolNames = multiToolStep.toolResults.map((tr: any) => tr.toolName).sort();
+      expect(toolNames).toEqual(['tool-a', 'tool-b']);
+    });
   });
 
   describe('message part ordering should match stream order', () => {

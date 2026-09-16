@@ -153,8 +153,23 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       );
 
       // Only include new content in this step (content added since the previous iteration)
-      const currentContent = allContent.slice(previousContentLength);
+      const slicedContent = allContent.slice(previousContentLength);
       previousContentLength = allContent.length;
+
+      // The sliced snapshot above is captured at step-finish time and can miss
+      // this step's tool results (or, when a step makes multiple tool calls, be
+      // advanced past its content entirely), leaving `content`/`toolResults`
+      // empty while `toolCalls` — sourced from `output` below — stays populated.
+      // Re-extract this step's content from the now-complete messageList, the
+      // same primitive the execution step and input-step processors rely on
+      // (`modelContent` is 1-indexed, so the current step is
+      // `accumulatedSteps.length + 1`). Guard on a non-empty result so durable
+      // agents (fresh MessageList per step, which can re-extract empty) keep the
+      // sliced content.
+      const refreshedContent = messageList.get.response.aiV5.modelContent(
+        accumulatedSteps.length + 1,
+      ) as StepResult<Tools>['content'];
+      const currentContent = refreshedContent.length > 0 ? refreshedContent : slicedContent;
 
       const toolResultParts = currentContent.filter(part => part.type === 'tool-result');
 
