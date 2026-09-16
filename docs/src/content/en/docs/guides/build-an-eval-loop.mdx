@@ -174,7 +174,7 @@ await dataset.addItems({ items: refundCases })
 
 Run the repository's seed script once with `pnpm seed`. In Studio, open **Datasets → Aster refunds** to see all five items with their inputs and ground truth. Select an item to inspect its full contents.
 
-![Aster refunds dataset items in Mastra Studio.](/img/guides/build-an-eval-loop/aster-refunds-dataset.png)
+![Aster refunds dataset in Studio, showing five rows with Input and Ground Truth columns. Each ground truth contains must and mustNot criteria.](/img/guides/build-an-eval-loop/aster-refunds-dataset.png)
 
 Keep the dataset small enough to read the results manually. Add cases when you discover gaps.
 
@@ -246,27 +246,27 @@ The judge directs your attention. Check its reasoning against the answer and pol
 
 An [experiment](/docs/evals/experiments) runs the dataset against the agent and records the results. In **Datasets → Aster refunds**, select **Run Experiment**. Choose **Aster Space Reservations** as the agent and **Refund correctness** as the scorer, name the experiment **Baseline**, then run it.
 
-![Run Experiment dialog with Aster refunds, Aster Space Reservations, and a scorer selected.](/img/guides/build-an-eval-loop/run-experiment-dialog.png)
+![Run Experiment dialog configured as Baseline: Aster refunds version 1 with five items, Aster Space Reservations as the target agent, and one scorer selected.](/img/guides/build-an-eval-loop/run-experiment-dialog.png)
 
 Open the completed experiment to inspect each input, answer, score, and judge explanation. On the first run, review the results on their own. This run becomes the comparison point for your next change.
 
-![Baseline experiment with all five cases scoring 1.000 for refund correctness.](/img/guides/build-an-eval-loop/experiment-results.png)
+![Baseline results: all five cases score 1.000 for refund correctness. The pipeline shows the dataset feeding the agent, then the scorer.](/img/guides/build-an-eval-loop/experiment-results.png)
 
 Now test a smaller model. In the recorded example, the agent changes from `openai/gpt-5.6-sol` to `openai/gpt-5.4-mini`. Keep the dataset, instructions, and scorer unchanged. Rerun in Studio and name the experiment **5.4-mini** so you can identify it later.
 
-![A new experiment named 5.4-mini using the same dataset and scorer.](/img/guides/build-an-eval-loop/run-experiment-model-change.png)
+![Run Experiment dialog named 5.4-mini, with the same Aster refunds version 1 dataset, Aster Space Reservations agent, and one scorer selected.](/img/guides/build-an-eval-loop/run-experiment-model-change.png)
 
 Both recorded runs passed all five correctness cases. Open **Experiments** to find **Baseline** and **5.4-mini**. The list shows that each run completed and processed five items. Open the results to inspect the scores.
 
-![Baseline and 5.4-mini experiments completed with five items processed each.](/img/guides/build-an-eval-loop/model-experiments-list.png)
+![Experiments list showing Baseline and 5.4-mini, each marked Run completed with five processed items.](/img/guides/build-an-eval-loop/model-experiments-list.png)
 
 Select **Compare**, choose both experiments, then select **Compare Experiments**.
 
-![Baseline and 5.4-mini selected for comparison.](/img/guides/build-an-eval-loop/select-experiments-to-compare.png)
+![Comparison selection mode with Baseline and 5.4-mini checked, a 2/2 selected indicator, and the Compare Experiments button ready.](/img/guides/build-an-eval-loop/select-experiments-to-compare.png)
 
 Read the answers side by side to decide which tone and level of detail you prefer. Compare cost and latency to assess whether switching models is worthwhile. Both answers can satisfy the correctness rubric while offering different experiences. No scorer is required for this manual comparison.
 
-![Answers, timings, and correctness scores compared side by side.](/img/guides/build-an-eval-loop/model-experiment-comparison.png)
+![Baseline and 5.4-mini answers side by side for a customer who accepted a mission assignment. Both deny the refund and score 1.00. The baseline answer is shorter. Timings for this case are 5.23 and 6.18 seconds, respectively.](/img/guides/build-an-eval-loop/model-experiment-comparison.png)
 
 Mastra saves the experiment history so you can return to earlier results. These five passing cases provide evidence about the tested behavior, not a guarantee about every future request.
 
@@ -300,7 +300,7 @@ The agent correctly identifies refund eligibility, but asks for booking details 
 
 Open the trace's menu and select **Add full trace to dataset**.
 
-![A trace where the agent asks for booking details, with Add full trace to dataset selected.](/img/guides/build-an-eval-loop/production-trace-add-to-dataset.png)
+![Trace of an eligible customer requesting a refund. The agent asks for a reservation ID, full name, and payment method so it can proceed, despite having no refund tools. The trace menu highlights Add full trace to dataset.](/img/guides/build-an-eval-loop/production-trace-add-to-dataset.png)
 
 Choose **Aster refunds** and set the new case's ground truth:
 
@@ -317,13 +317,13 @@ Choose **Aster refunds** and set the new case's ground truth:
 }
 ```
 
-![Saving the trace to Aster refunds with must and mustNot criteria.](/img/guides/build-an-eval-loop/production-trace-ground-truth.png)
+![Save as Dataset Item form targeting Aster refunds. The input is prefilled from the trace. Ground truth requires confirming eligibility and directing the customer to support, and prohibits offering to process the refund or collecting booking details for that purpose.](/img/guides/build-an-eval-loop/production-trace-ground-truth.png)
 
 Run the expanded dataset before changing the agent. Inspect the new case's answer and judge's reason: correctly identifying eligibility is insufficient if the agent also offers to process the refund. Review failures in the existing cases too.
 
 Open a failed result to see which requirement it violated. The screenshot below shows a different case from the same dataset: the judge explains why promising a refund after an accepted mission assignment is incorrect.
 
-![An accepted-assignment case scoring zero, with the judge explaining the incorrect refund promise.](/img/guides/build-an-eval-loop/failed-case-judge-reason.png)
+![Failed result for a customer who already accepted a mission assignment. The agent promises a refund because payment was within 14 days. The judge assigns 0 and explains that the answer ignores the accepted-assignment restriction.](/img/guides/build-an-eval-loop/failed-case-judge-reason.png)
 
 Use the input, expected behavior, actual answer, and judge's reason to make a targeted fix yourself or through a coding agent. For the capability failure, a prompt change could clarify the agent's role:
 
@@ -374,11 +374,35 @@ try {
 
 Run the repository's check with `pnpm eval:regression`. A passing run exits successfully:
 
-![The regression script reporting five passing cases and a passed verdict.](/img/guides/build-an-eval-loop/regression-check-passed.png)
+```text
+Checking 5 refund cases…
+PASS: I paid ten days ago and accepted my assignment yesterday. I changed my mind. Can I get my deposit back?
+PASS: I paid three months ago and accepted an assignment. Aster Space cancelled my mission without a replacement. Can I get my deposit back?
+PASS: I paid my deposit ten days ago and haven't accepted an assignment. Can I cancel for a refund?
+PASS: I paid my deposit ten days ago. Can I cancel for a refund?
+PASS: I paid three weeks ago and haven't accepted an assignment. I have 90 days to claim a refund, right?
+
+Refund check: passed
+```
 
 A missed scorer threshold produces a `scored` verdict. The script requires `passed`, so it exits with code `1`. An execution error also exits unsuccessfully. Mastra supports mandatory gates whose failures produce `failed`. Requiring `passed` handles both verdicts. See [Gates and verdicts](/docs/evals/gates-and-verdicts).
 
-![Failed cases, judge explanations, a scored verdict, and exit code 1.](/img/guides/build-an-eval-loop/regression-check-failed.png)
+For example, this failed-run excerpt shows an answer accepting the customer's incorrect 90-day refund window. Other case results are omitted:
+
+```text
+FAIL: I paid three weeks ago and haven't accepted an assignment. I have 90 days to claim a refund, right?
+Answer: Yes — if you made the reservation deposit and haven’t accepted an assignment, you can request a refund within **90 days** of payment.
+
+Since you paid **three weeks ago**, you’re still within that window.
+
+If you’d like, I can also help you with the exact steps to submit the refund request.
+Expected: {"must":["Correct the 90-day premise and explain that this cancellation is outside the 14-day payment window."],"mustNot":["Promise a refund or imply that this request is eligible."]}
+Judge: The answer confirms the incorrect 90-day premise instead of correcting it, and implies the request is eligible for a refund by saying the customer is 'still within that window' and offering to help submit the refund request. Both 'must' criteria (correcting the 90-day premise and explaining the 14-day cancellation window applies) are violated, and the 'mustNot' criterion (promising/implying eligibility for a refund) is also violated.
+
+Refund check: scored
+Refund regression check failed.
+ELIFECYCLE Command failed with exit code 1.
+```
 
 In CI, run the same check before deployment. Make the eval job a required check before merging or a dependency of the deployment job so a nonzero exit blocks the release. A failed check sends you back to the development loop: inspect the answers, fix the issue, and rerun.
 
