@@ -205,7 +205,37 @@ describe('MastraAuthClerk', () => {
 
       const auth = new MastraAuthClerk({ ...mockOptions, organizationId: 'org_allowed' });
       expect(await auth.authorizeUser({ sub: 'user123' })).toBe(true);
-      expect(mockClerkClient.users.getOrganizationMembershipList).toHaveBeenCalledWith({ userId: 'user123' });
+      expect(mockClerkClient.users.getOrganizationMembershipList).toHaveBeenCalledWith({
+        userId: 'user123',
+        limit: 100,
+        offset: 0,
+      });
+    });
+
+    it('paginates membership lookup to find a match beyond the first page', async () => {
+      const page1 = Array.from({ length: 100 }, (_, i) => ({ organization: { id: `org_${i}`, slug: `slug_${i}` } }));
+      mockClerkClient.users.getOrganizationMembershipList
+        .mockResolvedValueOnce({ data: page1, totalCount: 101 })
+        .mockResolvedValueOnce({ data: [{ organization: { id: 'org_allowed', slug: 'allowed' } }], totalCount: 101 });
+
+      const auth = new MastraAuthClerk({ ...mockOptions, organizationId: 'org_allowed' });
+      expect(await auth.authorizeUser({ sub: 'user123' })).toBe(true);
+      expect(mockClerkClient.users.getOrganizationMembershipList).toHaveBeenNthCalledWith(1, {
+        userId: 'user123',
+        limit: 100,
+        offset: 0,
+      });
+      expect(mockClerkClient.users.getOrganizationMembershipList).toHaveBeenNthCalledWith(2, {
+        userId: 'user123',
+        limit: 100,
+        offset: 100,
+      });
+    });
+
+    it('throws when both organizationId and organizationSlug are configured', () => {
+      expect(
+        () => new MastraAuthClerk({ ...mockOptions, organizationId: 'org_allowed', organizationSlug: 'allowed' }),
+      ).toThrow(/only one of organizationId/);
     });
 
     it('denies users who are not members of the configured organization', async () => {
@@ -619,6 +649,42 @@ describe('MastraAuthClerk', () => {
       expect(result.cookies[0]).toContain('clerk_session=');
       expect(result.cookies[0]).toContain('HttpOnly');
       expect(result.cookies[0]).toContain('SameSite=Lax');
+    });
+
+    it('denies the callback when the user is not a member of the configured organization', async () => {
+      const auth = new MastraAuthClerk({ ...mockSSOOptions, organizationId: 'org_allowed' }) as any;
+
+      const loginUrl = await auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'org-state');
+      const signedState = new URL(loginUrl).searchParams.get('state')!;
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          access_token: 'access-token-123',
+          id_token: 'id-token-123',
+          expires_in: 3600,
+          token_type: 'bearer',
+        }),
+      });
+
+      (verifyJwks as any).mockResolvedValue({ sub: 'user_123', email: 'test@example.com', name: 'Test User' });
+
+      mockClerkClient.users.getUser.mockResolvedValue({
+        id: 'user_123',
+        emailAddresses: [{ emailAddress: 'test@example.com' }],
+        firstName: 'Test',
+        lastName: 'User',
+      });
+
+      // User belongs to a different organization
+      mockClerkClient.users.getOrganizationMembershipList.mockResolvedValue({
+        data: [{ organization: { id: 'org_other', slug: 'other' } }],
+        totalCount: 1,
+      });
+
+      await expect(auth.handleCallback('auth-code-123', signedState)).rejects.toThrow(
+        'User is not a member of the required organization',
+      );
     });
 
     it('should fall back to userinfo endpoint when no id_token', async () => {

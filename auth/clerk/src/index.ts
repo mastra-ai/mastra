@@ -335,6 +335,14 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> implements IU
     // Single-organization restriction (optional)
     this.organizationId = options?.organizationId ?? process.env.CLERK_ORGANIZATION_ID ?? null;
     this.organizationSlug = options?.organizationSlug ?? process.env.CLERK_ORGANIZATION_SLUG ?? null;
+    if (this.organizationId && this.organizationSlug) {
+      // Both selectors set (e.g. an option paired with a stale env var) could
+      // resolve to two different organizations and grant access to both,
+      // contradicting the single-organization guarantee. Require exactly one.
+      throw new Error(
+        'Configure only one of organizationId (CLERK_ORGANIZATION_ID) or organizationSlug (CLERK_ORGANIZATION_SLUG) to restrict login to a single Clerk organization',
+      );
+    }
     this.orgRestricted = !!(this.organizationId || this.organizationSlug);
 
     // SSO is enabled when OAuth credentials are configured
@@ -421,14 +429,26 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> implements IU
       return true;
     }
 
+    const matches = (membership: { organization?: { id?: string; slug?: string } }) =>
+      (this.organizationId && membership.organization?.id === this.organizationId) ||
+      (this.organizationSlug && membership.organization?.slug === this.organizationSlug);
+
+    // The Clerk API paginates memberships (default page size 10), so a user in
+    // more organizations than one page could be falsely denied. Walk every page
+    // until a match is found or the full list is exhausted.
+    const limit = 100;
     try {
-      const memberships = await this.clerk.users.getOrganizationMembershipList({ userId });
-      const list = (memberships as { data?: Array<{ organization?: { id?: string; slug?: string } }> })?.data ?? [];
-      return list.some(
-        membership =>
-          (this.organizationId && membership.organization?.id === this.organizationId) ||
-          (this.organizationSlug && membership.organization?.slug === this.organizationSlug),
-      );
+      for (let offset = 0; ; offset += limit) {
+        const memberships = await this.clerk.users.getOrganizationMembershipList({ userId, limit, offset });
+        const list = (memberships as { data?: Array<{ organization?: { id?: string; slug?: string } }> })?.data ?? [];
+        if (list.some(matches)) return true;
+
+        const totalCount = (memberships as { totalCount?: number })?.totalCount;
+        const fetched = offset + list.length;
+        if (list.length < limit || (typeof totalCount === 'number' && fetched >= totalCount)) {
+          return false;
+        }
+      }
     } catch {
       return false;
     }
