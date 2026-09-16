@@ -87,9 +87,14 @@ export class FilesystemDB {
       mkdirSync(parentDir, { recursive: true });
     }
 
-    writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
-    renameSync(tmpPath, filePath);
-    this.cache.set(filename, data as Record<string, unknown>);
+    try {
+      writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
+      renameSync(tmpPath, filePath);
+      this.cache.set(filename, data as Record<string, unknown>);
+    } catch (error) {
+      this.cache.delete(filename);
+      throw error;
+    }
   }
 
   /**

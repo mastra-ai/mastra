@@ -444,7 +444,9 @@ describe('FilesystemStore', () => {
       expect(await skills.getVersion('failed-v3')).toBeNull();
       expect((await skills.getByIdResolved('publication-rollback'))?.description).toBe('Published');
 
-      const freshSkills = new FilesystemSkillsStorage({ db });
+      const freshDb = new FilesystemDB(dir);
+      await freshDb.init();
+      const freshSkills = new FilesystemSkillsStorage({ db: freshDb });
       await freshSkills.init();
       expect((await freshSkills.getByIdResolved('publication-rollback'))?.description).toBe('Published');
 
