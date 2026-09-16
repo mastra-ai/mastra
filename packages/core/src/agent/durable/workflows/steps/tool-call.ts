@@ -20,6 +20,7 @@ import { stopGoalActivity } from '../../../goal';
 import type { MessageList } from '../../../message-list';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
+import { resolveSuspendedToolRunId } from '../../../utils';
 import { DurableStepIds } from '../../constants';
 import { globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
@@ -811,6 +812,17 @@ export function createDurableToolCallStep() {
       const cleanedArgs = { ...args };
       if ('_background' in cleanedArgs) {
         delete (cleanedArgs as any)._background;
+      }
+
+      // The model authors the optional `suspendedToolRunId` arg, and some models emit
+      // sentinel strings like "null" for it. Drop sentinels so the back-fill below can
+      // restore the framework-persisted id from the suspend payload (#23739). The
+      // suspendData-side value is framework-written and stays unfiltered.
+      const resolvedArgsSuspendedToolRunId = resolveSuspendedToolRunId(cleanedArgs.suspendedToolRunId);
+      if (resolvedArgsSuspendedToolRunId === undefined) {
+        delete cleanedArgs.suspendedToolRunId;
+      } else {
+        cleanedArgs.suspendedToolRunId = resolvedArgsSuspendedToolRunId;
       }
 
       // When resuming a delegated sub-agent/workflow tool, recover the inner

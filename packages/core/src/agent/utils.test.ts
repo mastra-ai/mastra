@@ -7,6 +7,7 @@ import {
   tryStreamWithJsonFallback,
   isSupportedLanguageModel,
   resolveThreadIdFromArgs,
+  resolveSuspendedToolRunId,
 } from './utils';
 
 function makeAgent(generate: ReturnType<typeof vi.fn>): Agent {
@@ -269,6 +270,45 @@ describe('agent/utils', () => {
       expect(isSupportedLanguageModel({ specificationVersion: 'v5' } as any)).toBe(false);
       expect(isSupportedLanguageModel({} as any)).toBe(false);
     });
+  });
+
+  describe('resolveSuspendedToolRunId', () => {
+    it.each(['null', 'NULL', 'Null', 'undefined', 'UNDEFINED', 'none', 'None', 'nil', 'NIL'])(
+      'treats the sentinel string %j as absent',
+      value => {
+        expect(resolveSuspendedToolRunId(value)).toBeUndefined();
+      },
+    );
+
+    it.each([' null ', '\tnull\n', '  undefined', 'none  '])(
+      'treats the whitespace-padded sentinel %j as absent',
+      value => {
+        expect(resolveSuspendedToolRunId(value)).toBeUndefined();
+      },
+    );
+
+    it.each(['', '   ', '\n\t'])('treats the empty/whitespace-only string %j as absent', value => {
+      expect(resolveSuspendedToolRunId(value)).toBeUndefined();
+    });
+
+    it.each([null, undefined, 0, 42, false, true, {}, ['run-id'], Symbol('run-id')])(
+      'treats the non-string value %s as absent',
+      value => {
+        expect(resolveSuspendedToolRunId(value)).toBeUndefined();
+      },
+    );
+
+    it('passes through a UUID run id unchanged', () => {
+      const uuid = 'b7f5b9a0-1c2d-4e3f-8a9b-0c1d2e3f4a5b';
+      expect(resolveSuspendedToolRunId(uuid)).toBe(uuid);
+    });
+
+    it.each(['call_abc123', 'toolu_01XyZ', 'my-custom-run-id', 'nullable-run', 'nonexistent'])(
+      'passes through the non-sentinel run id %j unchanged',
+      value => {
+        expect(resolveSuspendedToolRunId(value)).toBe(value);
+      },
+    );
   });
 
   describe('resolveThreadIdFromArgs', () => {

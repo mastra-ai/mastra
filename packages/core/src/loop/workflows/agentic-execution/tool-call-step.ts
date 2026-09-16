@@ -4,6 +4,7 @@ import { z } from 'zod/v4';
 import { normalizeModelOutput } from '../../../agent/durable/workflows/steps/normalize-model-output';
 import { stopGoalActivity } from '../../../agent/goal';
 import { resolveDeclineReason } from '../../../agent/tool-approval';
+import { resolveSuspendedToolRunId } from '../../../agent/utils';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
@@ -863,7 +864,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           // metadata / data parts remain as a fallback for page-refresh resumes where the
           // workflow snapshot is unavailable.
           let suspendedToolRunId = (suspendData as any)?.suspendedToolRunId || '';
-          const shouldUsePartsFallback = !isResumeToolCall || !args.suspendedToolRunId;
+          // The model authors the optional `suspendedToolRunId` schema field, and some models
+          // emit sentinel strings like "null" for it (#23739). Resolve it into a local — without
+          // mutating the model-authored args, which are persisted and echoed back verbatim in
+          // auto-resume prompts — so junk doesn't suppress the parts fallback below. Junk that
+          // survives in args when the lookups find nothing is harmless: every execute-side
+          // consumer (workflow/agent delegation seams) sanitizes the field independently.
+          const modelSuppliedSuspendedToolRunId = resolveSuspendedToolRunId(args?.suspendedToolRunId);
+          const shouldUsePartsFallback = !isResumeToolCall || !modelSuppliedSuspendedToolRunId;
           const messages = messageList.get.all.db();
           const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
           for (const message of assistantMessages) {
