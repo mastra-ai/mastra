@@ -928,7 +928,7 @@ export class AgentThreadStreamRuntime {
     const state = this.#getState(this.#getPubSub(pubsub));
     const key = this.#threadKey(options.resourceId, options.threadId);
     const owner = state.claimedThreadOwners.get(key);
-    if (!owner?.peer || owner.agent.id !== agent.id) return false;
+    if (!owner?.peer || owner.agent !== agent) return false;
 
     const peer = owner.peer;
     if (Object.hasOwn(options.peer, 'label')) peer.label = options.peer.label;
