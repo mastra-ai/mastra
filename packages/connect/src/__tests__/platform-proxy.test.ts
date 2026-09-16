@@ -30,6 +30,8 @@ describe('createPlatformProxy request context binding', () => {
     const bound = createPlatformProxy({ connectionId: 'conn-1' }).withRequestContext(new RequestContext());
     expect(typeof bound.get).toBe('function');
     expect(typeof bound.post).toBe('function');
+    expect(typeof bound.getConnection).toBe('function');
+    expect(typeof bound.getMetadata).toBe('function');
     expect(typeof bound.log).toBe('function');
     expect(bound.ActionError).toBeDefined();
   });
@@ -41,6 +43,39 @@ describe('createPlatformProxy request context binding', () => {
     proxy.log('request failed', { authorization: 'Bearer secret-token', apiKey: 'secret-key' });
 
     expect(logSpy).not.toHaveBeenCalled();
+  });
+
+  it('forwards template baseUrlOverride values to the platform proxy request', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    const proxy = createPlatformProxy({
+      connectionId: 'conn-1',
+      client: { accessToken: 'token', baseUrl: 'https://example.test', fetch: fetchMock },
+    });
+
+    await proxy.get({ endpoint: '/items', baseUrlOverride: 'https://caller-controlled.example' });
+
+    expect(fetchMock.mock.calls[0]![0]).toBe('https://example.test/v2/connections/conn-1/proxy/items');
+    expect(fetchMock.mock.calls[0]![1].headers['base-url-override']).toBe('https://caller-controlled.example');
+  });
+
+  it('fetches connection context once per bound execution and returns metadata', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        connection_config: { projectUrl: 'https://project.supabase.co' },
+        metadata: { region: 'us-east-1' },
+      }),
+    );
+    const proxy = createPlatformProxy({
+      connectionId: 'conn-1',
+      client: { accessToken: 'token', baseUrl: 'https://example.test', fetch: fetchMock },
+    }).withRequestContext(new RequestContext());
+
+    await expect(proxy.getConnection()).resolves.toEqual({
+      connection_config: { projectUrl: 'https://project.supabase.co' },
+      metadata: { region: 'us-east-1' },
+    });
+    await expect(proxy.getMetadata()).resolves.toEqual({ region: 'us-east-1' });
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });
 
@@ -56,14 +91,31 @@ describe('callProxy retry policy', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('never retries a POST even when the template asks for retries', async () => {
+  it('retries a POST that carries an Idempotency-Key header', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('socket hang up'))
+      .mockResolvedValueOnce(Response.json({ id: 'sent' }));
+    const proxy = makeProxy(fetchMock);
+    const response = await proxy.post({
+      endpoint: 'emails',
+      data: { a: 1 },
+      headers: { 'Idempotency-Key': 'send-once' },
+      retries: 3,
+    });
+    expect(response.data).toEqual({ id: 'sent' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(new Headers(fetchMock.mock.calls[1]![1].headers).get('idempotency-key')).toBe('send-once');
+  });
+
+  it('never retries a POST without an idempotency key even when the template asks for retries', async () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error('socket hang up'));
     const proxy = makeProxy(fetchMock);
     await expect(proxy.post({ endpoint: 'items', data: { a: 1 }, retries: 3 })).rejects.toThrow('socket hang up');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('never retries a PATCH even when the template asks for retries', async () => {
+  it('never retries a PATCH without an idempotency key even when the template asks for retries', async () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error('socket hang up'));
     const proxy = makeProxy(fetchMock);
     await expect(proxy.patch({ endpoint: 'items/1', data: { a: 1 }, retries: 3 })).rejects.toThrow('socket hang up');

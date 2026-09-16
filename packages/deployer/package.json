@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.67.0",
+  "version": "1.68.0-alpha.1",
   "description": "",
   "type": "module",
   "files": [
@@ -108,10 +108,11 @@
     "@sindresorhus/slugify": "^2.2.1",
     "empathic": "^2.0.0",
     "esbuild": "^0.28.0",
+    "find-up-simple": "^1.0.1",
     "find-workspaces": "^0.3.1",
     "fs-extra": "^11.3.5",
     "gray-matter": "^4.0.3",
-    "hono": "^4.12.8",
+    "hono": "^4.13.7",
     "local-pkg": "^1.1.2",
     "resolve.exports": "^2.0.3",
     "rollup": "^4.61.1",
@@ -119,7 +120,7 @@
     "strip-json-comments": "^5.0.3",
     "tinyglobby": "^0.2.17",
     "typescript-paths": "^1.5.2",
-    "ws": "^8.21.0",
+    "ws": "^8.21.3",
     "yaml": "^2.9.0"
   },
   "devDependencies": {

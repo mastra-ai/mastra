@@ -10,6 +10,9 @@ import type { MastraMemory } from '../memory/memory';
 import { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream/types';
 import type { DynamicArgument } from '../types';
+import type { A2AProtocolCompat, A2AStreamEventData } from './compat/types';
+import { v0_3Compat } from './compat/v0_3';
+import { v1Compat } from './compat/v1';
 import { MastraA2AError } from './error';
 import type {
   A2AAgentCardVerificationContext,
@@ -71,7 +74,6 @@ type StreamConsumptionResult = {
   };
 };
 
-type A2AStreamEventData = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
 type A2AAgentFullStreamChunkBase =
   | { type: 'start'; payload: { id: string } }
   | { type: 'text-start'; payload: { id: string } }
@@ -197,7 +199,10 @@ function splitNextEvent(buffer: string): { eventBlock?: string; rest: string } {
   };
 }
 
-function parseEventBlock(eventBlock: string): { done: true } | { event?: A2AStreamEventData } {
+function parseEventBlock(
+  eventBlock: string,
+  compat: A2AProtocolCompat,
+): { done: true } | { event?: A2AStreamEventData } {
   const trimmedBlock = eventBlock.trim();
 
   if (!trimmedBlock) {
@@ -212,21 +217,18 @@ function parseEventBlock(eventBlock: string): { done: true } | { event?: A2AStre
     return { done: true };
   }
 
-  let parsed: JSONRPCResponse<A2AStreamEventData> | A2AStreamEventData;
+  let parsed: JSONRPCResponse<unknown> | unknown;
 
   try {
-    parsed = JSON.parse(payload) as JSONRPCResponse<A2AStreamEventData> | A2AStreamEventData;
+    parsed = JSON.parse(payload);
   } catch {
     return {};
   }
 
   throwIfA2AErrorResponse(parsed);
 
-  if ('result' in parsed && parsed.result) {
-    return { event: parsed.result };
-  }
-
-  return { event: parsed as A2AStreamEventData };
+  const result = typeof parsed === 'object' && parsed !== null && 'result' in parsed ? parsed.result : parsed;
+  return { event: compat.decodeStreamResult(result) };
 }
 
 function extractTextParts(parts: { kind: string; text?: string }[] | undefined): string {
@@ -516,6 +518,7 @@ export class A2AAgent implements SubAgent {
   readonly name: string;
 
   readonly #url: string;
+  readonly #compat: A2AProtocolCompat;
   readonly #description: string;
   readonly #headers: Record<string, string>;
   readonly #fetch: FetchLike;
@@ -534,6 +537,7 @@ export class A2AAgent implements SubAgent {
 
   constructor(options: A2AAgentOptions) {
     this.#url = options.url.replace(/\/$/, '');
+    this.#compat = options.protocolVersion === '1.0' ? v1Compat : v0_3Compat;
     this.#description = options.description ?? `Remote A2A agent at ${this.#url}`;
     this.#headers = options.headers ?? {};
     this.#fetch = options.fetch ?? fetch;
@@ -746,7 +750,8 @@ export class A2AAgent implements SubAgent {
       signal: this.#abortSignal,
     });
 
-    const card = (await response.json()) as AgentCard;
+    const cardJson = await response.json();
+    const card = this.#compat.decodeAgentCard(cardJson);
     const fetchedAt = new Date();
 
     if (this.#verifyAgentCard) {
@@ -790,22 +795,13 @@ export class A2AAgent implements SubAgent {
       body: {
         jsonrpc: '2.0',
         id: randomUUID(),
-        method: 'message/send',
-        params: {
-          message: {
-            role: 'user',
-            kind: 'message',
-            messageId: randomUUID(),
-            parts: [{ kind: 'text', text: prompt }, ...(data ? [{ kind: 'data' as const, data }] : [])],
-            ...(contextId ? { contextId } : {}),
-            ...(taskId ? { taskId } : {}),
-          },
-        },
+        method: this.#compat.methods.sendMessage,
+        params: this.#compat.createSendMessageParams({ prompt, data, contextId, taskId }),
       } satisfies JSONRPCRequestBody,
     });
 
     const json = await response.json();
-    return unwrapA2AResult(json);
+    return this.#compat.decodeSendMessageResult(unwrapA2AResult(json));
   }
 
   async #sendAndResolve({
@@ -874,19 +870,13 @@ export class A2AAgent implements SubAgent {
       body: {
         jsonrpc: '2.0',
         id: randomUUID(),
-        method: 'tasks/get',
-        params: { id: taskId },
+        method: this.#compat.methods.getTask,
+        params: this.#compat.createGetTaskParams(taskId),
       } satisfies JSONRPCRequestBody,
     });
 
     const json = await response.json();
-    const result = unwrapA2AResult(json);
-
-    if (!isTask(result)) {
-      throw MastraA2AError.invalidAgentResponse('Remote A2A agent returned a non-task response for tasks/get.');
-    }
-
-    return result;
+    return this.#compat.decodeGetTaskResult(unwrapA2AResult(json));
   }
 
   async #resolveTaskToGenerateResult({
@@ -1031,24 +1021,15 @@ export class A2AAgent implements SubAgent {
       body: {
         jsonrpc: '2.0',
         id: randomUUID(),
-        method: 'message/stream',
-        params: {
-          message: {
-            role: 'user',
-            kind: 'message',
-            messageId: randomUUID(),
-            parts: [{ kind: 'text', text: prompt }, ...(data ? [{ kind: 'data' as const, data }] : [])],
-            ...(contextId ? { contextId } : {}),
-            ...(taskId ? { taskId } : {}),
-          },
-        },
+        method: this.#compat.methods.streamMessage,
+        params: this.#compat.createSendMessageParams({ prompt, data, contextId, taskId }),
       } satisfies JSONRPCRequestBody,
     });
 
     return this.#consumeA2AStream({
       bootstrap,
       runId,
-      stream: await requireResponseBody(response, 'message/stream'),
+      stream: await requireResponseBody(response, this.#compat.methods.streamMessage),
       threadId,
       resourceId,
       emitStart,
@@ -1079,8 +1060,8 @@ export class A2AAgent implements SubAgent {
       body: {
         jsonrpc: '2.0',
         id: randomUUID(),
-        method: 'tasks/resubscribe',
-        params: { id: taskId },
+        method: this.#compat.methods.resubscribeTask,
+        params: this.#compat.createResubscribeParams(taskId),
       } satisfies JSONRPCRequestBody,
     });
 
@@ -1088,7 +1069,7 @@ export class A2AAgent implements SubAgent {
       bootstrap,
       runId,
       initialTask,
-      stream: await requireResponseBody(response, 'tasks/resubscribe'),
+      stream: await requireResponseBody(response, this.#compat.methods.resubscribeTask),
       threadId,
       resourceId,
       // Resubscribing continues an existing run; `start` is only emitted for fresh runs,
@@ -1230,7 +1211,7 @@ export class A2AAgent implements SubAgent {
 
       let next = splitNextEvent(buffer);
       while (next.eventBlock !== undefined) {
-        const parsed = parseEventBlock(next.eventBlock);
+        const parsed = parseEventBlock(next.eventBlock, this.#compat);
         if ('done' in parsed && parsed.done) {
           receivedDone = true;
           buffer = next.rest;
@@ -1369,7 +1350,7 @@ export class A2AAgent implements SubAgent {
 
       let next = splitNextEvent(buffer);
       while (next.eventBlock !== undefined) {
-        const parsed = parseEventBlock(next.eventBlock);
+        const parsed = parseEventBlock(next.eventBlock, this.#compat);
         if ('done' in parsed && parsed.done) {
           break;
         }
@@ -1400,24 +1381,34 @@ export class A2AAgent implements SubAgent {
               textBuffer = messageText;
             }
           } else if (event.kind === 'artifact-update') {
-            task = task
-              ? {
-                  ...task,
-                  artifacts: [
-                    ...(task.artifacts ?? []).filter(artifact => artifact.artifactId !== event.artifact.artifactId),
-                    event.artifact,
-                  ],
-                }
-              : task;
+            if (task) {
+              const artifacts = task.artifacts ?? [];
+              const existingArtifact = artifacts.find(artifact => artifact.artifactId === event.artifact.artifactId);
+              const updatedArtifact =
+                event.append && existingArtifact
+                  ? {
+                      ...existingArtifact,
+                      ...event.artifact,
+                      parts: [...existingArtifact.parts, ...event.artifact.parts],
+                    }
+                  : event.artifact;
+
+              task = {
+                ...task,
+                artifacts: existingArtifact
+                  ? artifacts.map(artifact =>
+                      artifact.artifactId === event.artifact.artifactId ? updatedArtifact : artifact,
+                    )
+                  : [...artifacts, updatedArtifact],
+              };
+            }
 
             const artifactText = event.artifact.parts
               ?.flatMap(part =>
                 part.kind === 'text' && 'text' in part && typeof part.text === 'string' ? [part.text] : [],
               )
               .join('');
-            if (artifactText) {
-              textBuffer += artifactText;
-            }
+            textBuffer = task ? extractTaskArtifactText(task) : textBuffer + (artifactText ?? '');
           } else if (event.kind === 'status-update') {
             task = task
               ? {
@@ -1551,21 +1542,24 @@ export class A2AAgent implements SubAgent {
     let attempts = 0;
     let lastError: unknown;
 
-    const finalHeaders = {
+    const finalHeaders = new Headers({
       accept: stream ? 'text/event-stream' : 'application/json',
       ...this.#headers,
       ...headers,
-    };
+    });
+    for (const [name, value] of Object.entries(this.#compat.headers)) {
+      finalHeaders.set(name, value);
+    }
+    if (body) {
+      finalHeaders.set('content-type', 'application/json');
+    }
 
     while (attempts <= this.#retries) {
       try {
         const requestSignal = this.#resolveRequestSignal(signal);
         const response = await this.#fetch(url, {
           method,
-          headers: {
-            ...finalHeaders,
-            ...(body ? { 'content-type': 'application/json' } : {}),
-          },
+          headers: finalHeaders,
           body: body ? JSON.stringify(body) : undefined,
           credentials: credentials ?? this.#credentials,
           signal: requestSignal,

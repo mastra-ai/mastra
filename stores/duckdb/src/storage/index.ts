@@ -12,12 +12,19 @@ import type {
 const OBSERVABILITY_UPGRADE_MESSAGE =
   'DuckDB observability storage requires `@mastra/core` with observability storage support. Upgrade `@mastra/core` to use this store.';
 const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
-const DUCKDB_OBSERVABILITY_FEATURES = ['metrics', 'logs', 'trace-query', 'thread-query'] as const;
+const DUCKDB_OBSERVABILITY_FEATURES = [
+  'metrics',
+  'logs',
+  'trace-query',
+  'trace-query-discovery',
+  'thread-query',
+] as const;
 const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'metrics',
   'logs',
   'delta-polling',
   'trace-query',
+  'trace-query-discovery',
   'thread-query',
 ] as const;
 
@@ -214,6 +221,20 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['queryTraces']> {
     const delegate = await this.requireDelegate();
     return delegate.queryTraces(...args);
+  }
+
+  async getTraceQueryObservedFields(
+    ...args: Parameters<ObservabilityStoreImpl['getTraceQueryObservedFields']>
+  ): ReturnType<ObservabilityStoreImpl['getTraceQueryObservedFields']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getTraceQueryObservedFields(...args);
+  }
+
+  async getTraceQueryValues(
+    ...args: Parameters<ObservabilityStoreImpl['getTraceQueryValues']>
+  ): ReturnType<ObservabilityStoreImpl['getTraceQueryValues']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getTraceQueryValues(...args);
   }
 
   async queryThreads(
