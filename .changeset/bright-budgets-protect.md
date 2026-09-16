@@ -5,11 +5,18 @@
 Added discovery-specific ClickHouse timeout and memory budgets with stable resource-limit errors.
 
 ```ts
-const observability = new ObservabilityStorageClickhouseVNext({
+const store = new ClickhouseStoreVNext({
+  id: 'clickhouse-storage',
   url: 'http://localhost:8123',
   username: 'default',
   password: 'password',
-  traceQueryDiscoveryTimeoutMs: 5_000,
-  traceQueryDiscoveryMemoryLimitBytes: 256 * 1024 * 1024,
+  observability: {
+    traceQuery: {
+      discovery: {
+        timeoutMs: 5_000,
+        memoryLimitBytes: 256 * 1024 * 1024,
+      },
+    },
+  },
 })
 ```

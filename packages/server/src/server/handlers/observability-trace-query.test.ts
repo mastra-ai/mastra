@@ -72,6 +72,12 @@ describe('QUERY_TRACES', () => {
         {
           traceId: 'trace-a',
           rootSpanId: 'root-a',
+          name: 'Agent run',
+          entityId: null,
+          parentSpanId: null,
+          createdAt: '2026-08-20T10:00:00.000Z',
+          metadata: null,
+          inputPreview: null,
           threadId: 'thread-1',
           resourceId: 'resource-1',
           startedAt: '2026-08-20T10:00:00.000Z',
@@ -94,7 +100,7 @@ describe('QUERY_TRACES', () => {
 
     expect(response).toMatchObject({ traces: [{ traceId: 'trace-a' }] });
     if (!('traces' in response)) throw new Error('Expected trace results');
-    expect(Object.keys(response.traces[0]!)).toHaveLength(10);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(16);
     expect(response.traces[0]).not.toHaveProperty('scores');
     expect(getStore).toHaveBeenCalledWith('observability');
     expect(observabilityStore.queryTraces).toHaveBeenCalledWith(

@@ -6095,6 +6095,7 @@ export const API_ROUTE_METADATA = {
       "prompt",
       "providerOptions",
       "requestContext",
+      "resourceId",
       "signalType",
       "status",
       "tagName",

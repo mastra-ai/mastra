@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import type { ReasoningPart } from '@mastra/react';
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { ReasoningPartRenderer } from '../reasoning-part-renderer';
+
+afterEach(cleanup);
 
 describe('ReasoningPartRenderer', () => {
   it('renders the reasoning body from part.reasoning', () => {
@@ -15,9 +17,6 @@ describe('ReasoningPartRenderer', () => {
   });
 
   it('prefers a part.text field when present', () => {
-    // Some persisted/streamed reasoning parts carry `text` rather than
-    // `reasoning`; the renderer reads `text` first. `ReasoningPart` only types
-    // `reasoning`, so attach `text` via an intersection for this fixture.
     const part: ReasoningPart & { text: string } = {
       type: 'reasoning',
       reasoning: 'unused fallback',
@@ -45,8 +44,7 @@ describe('ReasoningPartRenderer', () => {
     const { container } = render(<ReasoningPartRenderer part={part} />);
 
     expect(container.textContent).toContain('Reasoning...');
-    // It is the streaming line, not the collapsible panel.
-    expect(container.querySelector('pre')).toBeNull();
+    expect(screen.queryByRole('button', { name: /reasoning/ })).toBeNull();
   });
 
   it('renders the collapsible panel once streaming reasoning has text', () => {
@@ -59,7 +57,7 @@ describe('ReasoningPartRenderer', () => {
     const { container } = render(<ReasoningPartRenderer part={part} />);
 
     expect(container.textContent).toContain('partial thought');
-    expect(container.querySelector('pre')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Hide reasoning' })).toBeTruthy();
     expect(container.textContent).not.toContain('Reasoning...');
   });
 
@@ -69,5 +67,18 @@ describe('ReasoningPartRenderer', () => {
     render(<ReasoningPartRenderer part={part} />);
 
     expect(screen.getByText('Reasoning was redacted by the provider.')).not.toBeNull();
+  });
+
+  it('replaces the waiting indicator with text and keeps it after streaming finishes', () => {
+    const part: ReasoningPart = { type: 'reasoning', reasoning: '', state: 'streaming' };
+    const { rerender } = render(<ReasoningPartRenderer part={part} />);
+    expect(screen.getByText('Reasoning...')).toBeTruthy();
+
+    rerender(<ReasoningPartRenderer part={{ ...part, reasoning: 'A partial thought' }} />);
+    expect(screen.queryByText('Reasoning...')).toBeNull();
+    expect(screen.getByText('A partial thought')).toBeTruthy();
+
+    rerender(<ReasoningPartRenderer part={{ ...part, reasoning: 'A complete thought', state: 'done' }} />);
+    expect(screen.getByText('A complete thought')).toBeTruthy();
   });
 });
