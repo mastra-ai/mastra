@@ -18,9 +18,16 @@ describe('standalone template compatibility', () => {
       git('init', '--quiet');
       expect(resolveSourceRevision(directory)).toBe('unversioned');
       git(
-        '-c', 'user.name=Template Test',
-        '-c', 'user.email=test@example.invalid',
-        'commit', '--quiet', '--allow-empty', '--no-gpg-sign', '-m', 'Test provenance',
+        '-c',
+        'user.name=Template Test',
+        '-c',
+        'user.email=test@example.invalid',
+        'commit',
+        '--quiet',
+        '--allow-empty',
+        '--no-gpg-sign',
+        '-m',
+        'Test provenance',
       );
       expect(resolveSourceRevision(directory)).toBe(git('rev-parse', 'HEAD'));
     } finally {

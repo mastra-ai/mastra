@@ -23,7 +23,7 @@ Configuration is read once by the app loader and validated with Zod. Domain, rep
 | `LIBSQL_DOMAIN_URL`                               | `file:./data/kyc.db`      | Operational LibSQL file URL                                                       |
 | `LIBSQL_MASTRA_URL`                               | `file:./data/mastra.db`   | Mastra storage file URL                                                           |
 | `DUCKDB_URL`                                      | `./data/analytics.duckdb` | DuckDB file path                                                                  |
-| `STUDIO_PORT`                                     | `4112`                    | Studio port when using `npm run dev` or `npm run dev:studio`                       |
+| `STUDIO_PORT`                                     | `4112`                    | Studio port when using `npm run dev` or `npm run dev:studio`                      |
 | `DEV_PORTAL_PORT`                                 | `5173`                    | Portal port for the combined development command                                  |
 | `STUDIO_DATA_ROOT`                                | `./data/studio`           | Studio storage root; set to `./data` to share workflow runs with the API          |
 | `STUDIO_ANALYTICS_PATH`                           | isolated automatically    | Studio DuckDB path; defaults below a `studio` subdirectory when storage is shared |
@@ -61,7 +61,7 @@ Configuration is read once by the app loader and validated with Zod. Domain, rep
 | `PROVISIONING_PROVIDER`                           | `simulated`               | Simulated account selection                                                       |
 | `RISK_POLICY_PROVIDER`                            | profile-dependent         | Deterministic risk-policy selection                                               |
 | `RISK_ASSESSMENT_PROVIDER`                        | `rule-based`              | Offline or structured narrative provider                                          |
-| `RISK_ASSESSMENT_MODEL`                           | `openai-gpt-5.6-luna`                 | Structured narrative model descriptor                                             |
+| `RISK_ASSESSMENT_MODEL`                           | `openai-gpt-5.6-luna`     | Structured narrative model descriptor                                             |
 | `PROVIDER_TIMEOUT_MS`                             | `10000`                   | Caller timeout budget                                                             |
 | `PROVIDER_MAX_ATTEMPTS`                           | `3`                       | Bounded later workflow attempts                                                   |
 | `PROVIDER_RETRY_BASE_DELAY_MS`                    | `100`                     | Bounded later retry base delay                                                    |
