@@ -181,8 +181,9 @@ export class ToolCallFilter implements Processor {
 
   /**
    * Compact model-facing text for each excluded tool result, used when
-   * `preserveModelOutput` is enabled. The prompt's `output` already reflects
-   * `providerMetadata.mastra.modelOutput` when the tool defines `toModelOutput`.
+   * `preserveModelOutput` is enabled. Only an own, non-nullish
+   * `providerOptions.mastra.modelOutput` value proves the prompt output came from
+   * the tool's `toModelOutput` mapping.
    */
   private getReplacementTexts(prompt: LanguageModelV2Prompt, excludedToolCallIds: Set<string>): Map<string, string> {
     const texts = new Map<string, string>();
@@ -196,6 +197,10 @@ export class ToolCallFilter implements Processor {
       for (const part of message.content as PromptPart[]) {
         if (part.type !== 'tool-result') continue;
         if (!excludedToolCallIds.has(part.toolCallId)) continue;
+        const mastraMetadata = part.providerOptions?.mastra;
+        if (!mastraMetadata || !Object.hasOwn(mastraMetadata, 'modelOutput') || mastraMetadata.modelOutput == null) {
+          continue;
+        }
 
         const text = this.modelOutputToText((part as ToolResultPart).output);
         if (text) {

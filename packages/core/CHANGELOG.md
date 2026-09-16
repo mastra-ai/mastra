@@ -1,5 +1,119 @@
 # @mastra/core
 
+## 1.68.0-alpha.1
+
+### Minor Changes
+
+- Make the workspace grep text-extension whitelist extensible. Added `.sas`, `.log`, and `.jsonl` to the built-in text extensions and MIME type map so they are searchable by default. Added an optional `textExtensions` option to `MastraFilesystemOptions` (exposed via `filesystem.isTextFile()`) so consumers can register additional text extensions. When an explicit file path is grepped but its extension isn't recognized as text, the grep summary now reports it as skipped so "no matches" is distinguishable from "never searched". ([#24003](https://github.com/mastra-ai/mastra/pull/24003))
+
+  ```ts
+  import { LocalFilesystem } from '@mastra/core/workspace';
+
+  // Register extra extensions as searchable text files
+  const filesystem = new LocalFilesystem({
+    basePath: process.cwd(),
+    textExtensions: ['.sasx', '.myext'],
+  });
+
+  filesystem.isTextFile('report.sasx'); // true
+  ```
+
+- Added an `api` option to custom OpenAI-compatible model configs so a custom `url` can target the OpenAI Responses API. Set `api: "responses"` alongside `url` to reach `/v1/responses` (for example to combine function tools with reasoning models on gateways that require it); it defaults to `"chat"`, so existing configurations are unchanged. ([#24029](https://github.com/mastra-ai/mastra/pull/24029))
+
+  ```typescript
+  const agent = new Agent({
+    id: 'my-agent',
+    name: 'My Agent',
+    instructions: 'You are a helpful assistant',
+    model: {
+      id: 'custom/my-model',
+      url: 'https://your-endpoint.com/v1',
+      api: 'responses',
+    },
+  });
+  ```
+
+- Add a `messageHistory` memory option for token-budgeted conversation history. `messageHistory: { maxTokens, atMaxRemoveTokens? }` counts the complete prompt against the token budget and drops the oldest remembered messages in chunks. It never removes the current turn's input, responses, context, or system messages. During agent runs, a per-thread boundary is advanced and persisted so trimmed history stays out of subsequent turns without deleting stored messages. ([#23238](https://github.com/mastra-ai/mastra/pull/23238))
+
+  When `messageHistory` is set without an explicit `lastMessages`, the default 10-message cap is dropped so the token budget alone defines the window. `lastMessages` remains supported and can be combined with `messageHistory`, but counting messages is a poor proxy for context size and `lastMessages` is now soft-deprecated in favour of `messageHistory`.
+
+  ```ts
+  import { Memory } from '@mastra/memory';
+
+  const memory = new Memory({
+    options: {
+      messageHistory: { maxTokens: 8_000, atMaxRemoveTokens: 2_000 },
+    },
+  });
+  ```
+
+- Added canonical trace-query field descriptors and bounded discovery contracts for queryable fields and values. ([#24057](https://github.com/mastra-ai/mastra/pull/24057))
+
+  ```ts
+  import {
+    getTraceQueryCanonicalFieldDescriptors,
+    parseGetTraceQueryValuesArgs,
+    planTraceQueryValues,
+  } from '@mastra/core/storage';
+
+  const fields = getTraceQueryCanonicalFieldDescriptors('spans');
+  const values = await storage.getTraceQueryValues(
+    planTraceQueryValues(
+      parseGetTraceQueryValuesArgs({
+        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-08-02T00:00:00Z' },
+        predicateScope: 'spans',
+        path: 'model',
+      }),
+    ),
+  );
+  ```
+
+### Patch Changes
+
+- Fix `agent.generate()` / `.stream()` reporting a caller `abortSignal` cancellation as a processor tripwire. When a run is aborted and no processor triggered a tripwire, the result now reports `finishReason: 'aborted'` and leaves `tripwire` undefined, instead of synthesizing a generic `{ reason: 'Processor tripwire triggered' }`. Genuine processor tripwires are unaffected. ([#24008](https://github.com/mastra-ai/mastra/pull/24008))
+
+- Fixed query-parser, static-site generation, parseBody, and XSS security issues by updating hono to 4.13.7. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
+- Fix `EventedAgent.executeWorkflow()` emitting a run's terminal error from an un-awaited `.catch`, which could surface as an `unhandledRejection` during shutdown. Both terminal-error emission sites now route through `emitErrorInBackground()`, so a publish failure (e.g. pubsub/storage closed while the run finishes) is logged as a warning instead of crashing the process — matching the `DurableAgent` behavior fixed in #23168. ([#24083](https://github.com/mastra-ai/mastra/pull/24083))
+
+- Surface filesystem read failures in the workspace `grep` tool instead of silently reporting them as a complete "0 matches" search. ([#24053](https://github.com/mastra-ai/mastra/pull/24053))
+
+  - **Partial-search reporting.** When a directory cannot be listed or a file cannot be read, those failures are now counted and appended to the result summary (`N paths skipped: read error`) so a partial search is distinguishable from a genuinely empty one.
+  - **Missing targets.** If the target path does not exist (`ENOENT`, or `ENOTDIR` when a path component is a file), the summary reports `target path not found: nothing searched` rather than a plain "0 matches".
+  - **Strict mode.** A new construction-time `strict` option makes any such read failure throw instead of being skipped, for callers that want to fail fast.
+  - **`.gitignore` handling.** `loadGitignore` now only swallows a genuinely-absent `.gitignore` (`ENOENT`) and rethrows permission/IO errors, which previously changed the search scope silently.
+
+  Enable strict mode when constructing the workspace tools to fail fast when any part of the target cannot be read:
+
+  ```ts
+  import { createWorkspaceTools, WORKSPACE_TOOLS } from '@mastra/core/workspace';
+
+  const tools = await createWorkspaceTools(workspace, undefined, { grep: { strict: true } });
+  // Throws instead of reporting a partial result when a path cannot be read.
+  const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'needle' }, { workspace });
+  ```
+
+- Fixed structured output with a top-level array of primitives (e.g. `z.array(z.string())` or `z.array(z.number())`) silently resolving `response.object` to an empty array. Array elements that are strings, numbers, booleans or null are now returned from `generate()`, `stream().object` and `objectStream`, and the final result is validated against what the model actually returned. Fixes #23980. ([#24055](https://github.com/mastra-ai/mastra/pull/24055))
+
+- Fixed a WebSocket denial-of-service advisory by updating ws to 8.21.3. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
+- Improved file-based storage performance by removing a redundant filesystem stat call for every directory entry when listing domain and skill files, and by skipping the ISO date check for strings that can't be dates. As part of this change, file listings no longer follow symbolic links, so a symlink pointing at a stored file or directory is no longer included in results. Fixes #23752 ([#24056](https://github.com/mastra-ai/mastra/pull/24056))
+
+- Fixed a chat-library security advisory by updating chat to 4.37.0. Agent and factory chat APIs are unchanged. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
+- Fixed `mastra_workspace_read_file` never returning media parts with strict-schema providers (e.g. OpenAI, Vercel AI Gateway). Media surfacing is now decided from the file's mime type and tool config instead of the absence of the optional `encoding` argument, so configured media within `maxMediaBytes` is returned as a native file/image part regardless of the model-supplied `encoding`. ([#24082](https://github.com/mastra-ai/mastra/pull/24082))
+
+- Fix `stableStringify` dropping own `__proto__` keys, which collapsed distinct values onto one cache key (affecting message dedup in `CacheKeyGenerator.fromDBParts` and the agent response cache). ([#24081](https://github.com/mastra-ai/mastra/pull/24081))
+
+- Fix `ToolCallFilter` with `preserveModelOutput` retaining raw fallback tool results in the model prompt. Filtered results now preserve only explicitly produced compact model output, while raw tool arguments and results remain excluded. Fixes #22630. ([#23962](https://github.com/mastra-ai/mastra/pull/23962))
+
+- Fixed sub-agent failures being reported to the supervisor as an empty successful result when using `stream()`. A sub-agent whose model call fails (for example an invalid API key) now produces an error tool result in both `generate()` and `stream()`, with a generic error message by default. The underlying cause remains available to the completion hook and diagnostics rather than being included in the supervisor's tool-result text. `onDelegationComplete` receives `success: false` with the error, and calling `bail()` from that hook on a failed delegation now stops the supervisor loop as expected. Partial streamed child messages and available result metadata remain available to the completion hook. Failed invocations retain child-thread references so Studio can restore the partial transcript after reload. Background failures follow the configured retry policy, with completion hooks invoked per attempt. A failure hook's `resultText` replaces the error text seen by the supervisor without recovering the failed delegation or discarding its original error. ([#23420](https://github.com/mastra-ai/mastra/pull/23420))
+
+- Fixed workflow experiments skipping a suspended branch with resume data when an earlier suspended branch has none. The dataset experiment auto-resume loop now scans all suspended branches and resumes the first one with matching `resumeSteps`/`resumeData`, instead of stopping at the first suspended branch. ([#24041](https://github.com/mastra-ai/mastra/pull/24041))
+
+- Updated dependencies [[`fef227a`](https://github.com/mastra-ai/mastra/commit/fef227a8b7cb0ad7f68087e26d1fd2051054a61a)]:
+  - @mastra/schema-compat@1.3.11-alpha.0
+
 ## 1.68.0-alpha.0
 
 ### Minor Changes
