@@ -227,6 +227,51 @@ describe('SessionRunEngine compact message lifecycle', () => {
     ]);
   });
 
+  it('carries the tool title on tool_input_start, tool_start and the message part', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const context = new RequestContext();
+
+    await engine.processStreamChunk(
+      state,
+      chunk({
+        type: 'tool-call-input-streaming-start',
+        payload: { toolCallId: 'tool-1', toolName: 'search', title: 'Search the web' },
+      }),
+      context,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({
+        type: 'tool-call',
+        payload: { toolCallId: 'tool-1', toolName: 'search', args: { q: 'mastra' }, title: 'Search the web' },
+      }),
+      context,
+    );
+
+    expect(events).toContainEqual({
+      type: 'tool_input_start',
+      toolCallId: 'tool-1',
+      toolName: 'search',
+      title: 'Search the web',
+    });
+    expect(events).toContainEqual({
+      type: 'tool_start',
+      toolCallId: 'tool-1',
+      toolName: 'search',
+      args: { q: 'mastra' },
+      title: 'Search the web',
+    });
+    expect(assistantStarts(events)).toHaveLength(1);
+    expect(assistantStarts(events)[0]?.message.content.parts).toEqual([
+      {
+        type: 'tool-invocation',
+        title: 'Search the web',
+        toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'search', args: { q: 'mastra' } },
+      },
+    ]);
+  });
+
   it('streams tool-only assistant message part updates', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();

@@ -52,6 +52,13 @@ The first `execute` parameter is the validated value from `inputSchema`. Destruc
     isOptional: false,
   },
   {
+    name: 'title',
+    type: 'string',
+    description:
+      'A human-readable display name for the tool. It is not sent to the model. Chat UIs use it to label tool calls, and MCP clients receive it as the tool `title`.',
+    isOptional: true,
+  },
+  {
     name: 'description',
     type: 'string',
     description: 'A description of what the tool does. This is used by the agent to decide when to use the tool.',

@@ -1154,6 +1154,7 @@ export class CoreToolBuilder extends MastraBase {
     return {
       ...definition,
       id: 'id' in this.originalTool ? this.originalTool.id : undefined,
+      title: 'title' in this.originalTool ? this.originalTool.title : undefined,
       parameters: processedInputSchema ?? z.object({}),
       outputSchema: processedOutputSchema,
       strict: 'strict' in this.originalTool ? this.originalTool.strict : undefined,

@@ -627,7 +627,8 @@ export class SessionRunEngine {
         const payload = getPayload(chunk);
         const toolCallId = getString(payload.toolCallId) ?? '';
         const toolName = getString(payload.toolName) ?? '';
-        this.#session.emit({ type: 'tool_input_start', toolCallId, toolName });
+        const title = getString(payload.title);
+        this.#session.emit({ type: 'tool_input_start', toolCallId, toolName, ...(title ? { title } : {}) });
         break;
       }
 
@@ -659,6 +660,7 @@ export class SessionRunEngine {
         const toolCallId = getString(toolCall.toolCallId) ?? '';
         const toolName = getString(toolCall.toolName) ?? '';
         const args = getDisplayTransform(chunk.metadata, 'input-available', toolCall.args);
+        const title = getString(toolCall.title);
         const toolIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({
           type: 'tool-invocation',
@@ -668,6 +670,7 @@ export class SessionRunEngine {
             toolName,
             args,
           },
+          ...(title ? { title } : {}),
         });
         state.toolPartById.set(toolCallId, toolIndex);
         this.emitMessagePart(state, toolIndex);
@@ -676,6 +679,7 @@ export class SessionRunEngine {
           toolCallId,
           toolName,
           args,
+          ...(title ? { title } : {}),
         });
         break;
       }

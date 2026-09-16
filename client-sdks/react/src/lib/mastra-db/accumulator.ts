@@ -894,6 +894,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       };
       const newPart: MastraToolInvocationPart = {
         ...makeToolInvocationPart(invocation),
+        title: chunk.payload.title,
         providerMetadata: chunk.payload.providerMetadata,
       };
 
@@ -920,6 +921,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
                 toolCallId: chunk.payload.toolCallId,
                 args: chunk.payload.args,
               } as MastraToolInvocation,
+              title: chunk.payload.title ?? prev.title,
               providerMetadata: chunk.payload.providerMetadata ?? prev.providerMetadata,
             } as MastraMessagePart;
             return replaceAt(result, messageIndex, withParts(targetMessage, parts));
@@ -948,6 +950,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       };
       const newPart: MastraToolInvocationPart & { argsText?: string } = {
         ...makeToolInvocationPart(invocation),
+        title: chunk.payload.title,
         argsText: '',
       };
 

@@ -13,6 +13,7 @@ import { ProcessorRunner } from '../../../../processors/runner';
 import type { ChunkType } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
 import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
+import { getToolTitle } from '../../../../tools/tool-title';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
 import { createStep } from '../../../../workflows/workflow';
@@ -1094,6 +1095,7 @@ export function createDurableToolCallStep() {
                     const bgRunId = chunk.payload.runId;
                     // Emit tool-call chunk so UIs can render the invocation inline
                     if (bgRunId !== runId || (bgRunId === runId && resumeData)) {
+                      const toolTitle = getToolTitle(tool);
                       void emitChunkEvent(pubsub, bgRunId, {
                         type: 'tool-call',
                         runId: bgRunId,
@@ -1102,6 +1104,7 @@ export function createDurableToolCallStep() {
                           toolCallId: chunk.payload.toolCallId,
                           toolName: chunk.payload.toolName,
                           args: cleanedArgs,
+                          ...(toolTitle ? { title: toolTitle } : {}),
                         },
                       });
                     }

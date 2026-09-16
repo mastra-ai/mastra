@@ -253,6 +253,8 @@ Per the MCP specification: **clients MUST consider tool annotations to be untrus
 
 The same annotations are also exposed on the tools returned by `listTools()` and `listToolsets()` under `tool.mcp.annotations`, so you can inspect them when wiring tools into an agent.
 
+Each tool also carries `tool.title`, set from the server's tool `title` and falling back to `annotations.title`. This matches the MCP display-name precedence: `title`, then `annotations.title`, then the tool name.
+
 ## Server instructions
 
 When an MCP server advertises instructions during initialization, `MCPClient` stores them for that server. Forwarding those instructions into an agent's system prompt is **opt-in**: set `forwardInstructions: true` on a server to have agents that use its tools (via `listTools()` or `listToolsets()`) receive its instructions automatically.
@@ -393,7 +395,7 @@ When called without options, the method omits only `durations`; `toolsets`, `err
 
 Returns every server's tools as plain, serializable definitions, grouped by server name and keyed by the server's own tool name (without the `serverName_toolName` namespacing that `listTools()` applies).
 
-Unlike `listTools()`, the result contains no functions or references to a live client, so it can be passed through `JSON.stringify` and cached in Redis or a database, as well as a build artifact. Each definition holds the data from the MCP `tools/list` response (name, description, input schema, output schema, annotations, and `_meta`), plus the server name, version, and instructions captured at discovery time.
+Unlike `listTools()`, the result contains no functions or references to a live client, so it can be passed through `JSON.stringify` and cached in Redis or a database, as well as a build artifact. Each definition holds the data from the MCP `tools/list` response (name, title, description, input schema, output schema, annotations, and `_meta`), plus the server name, version, and instructions captured at discovery time.
 
 ```typescript
 const definitions = await mcp.listToolDefinitions()

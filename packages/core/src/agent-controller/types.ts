@@ -799,7 +799,7 @@ export type AgentControllerEvent =
         | { type: 'part'; index: number; part: MastraMessagePart };
     }
   | { type: 'message_end'; id: string }
-  | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
+  | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown; title?: string }
   | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }
   | {
       type: 'tool_suspended';
@@ -826,7 +826,7 @@ export type AgentControllerEvent =
       denied?: boolean;
       providerMetadata?: Record<string, unknown>;
     }
-  | { type: 'tool_input_start'; toolCallId: string; toolName: string }
+  | { type: 'tool_input_start'; toolCallId: string; toolName: string; title?: string }
   | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: unknown; toolName?: string }
   | { type: 'tool_input_end'; toolCallId: string }
   | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }

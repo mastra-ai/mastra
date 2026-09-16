@@ -647,6 +647,7 @@ export type ReorderModelListParams = {
 
 export interface GetToolResponse {
   id: string;
+  title?: string;
   description: string;
   inputSchema: string;
   outputSchema: string;

@@ -557,6 +557,8 @@ export type InternalMastraMCPClientOptions = {
 export type SerializableMCPToolDefinition = {
   /** Tool name as advertised by the server, without any server namespace prefix. */
   name: string;
+  /** Human readable display name from the server, if it supplied one. */
+  title?: string;
   /** Human readable description from the server, if it supplied one. */
   description?: string;
   /** Raw JSON Schema for the tool's arguments, exactly as sent by the server. */

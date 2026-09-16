@@ -1428,6 +1428,7 @@ export class MessageList {
       ...(originalPart.providerExecuted !== undefined && inputPartWithMeta.providerExecuted === undefined
         ? { providerExecuted: originalPart.providerExecuted }
         : {}),
+      ...(part.title !== undefined && inputPart.title === undefined ? { title: part.title } : {}),
       ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
     };
 
