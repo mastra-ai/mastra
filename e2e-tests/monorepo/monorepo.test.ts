@@ -963,6 +963,12 @@ export const mastra = new Mastra({
 
           await runBuild(isolatedFixturePath);
 
+          const bundledEntry = await readFile(
+            join(isolatedFixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs'),
+            'utf-8',
+          );
+          expect(bundledEntry).not.toContain('@inner/subpath-only/value');
+
           proc = execaNode('index.mjs', {
             cwd: join(isolatedFixturePath, 'apps', 'custom', '.mastra', 'output'),
             cancelSignal: controller.signal,
