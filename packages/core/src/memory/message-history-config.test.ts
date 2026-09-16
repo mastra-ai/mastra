@@ -251,6 +251,47 @@ describe('token-based memory history', () => {
     expect(listMessages.mock.calls.every(([input]) => input.perPage === 3 && input.includeTotal === false)).toBe(true);
   });
 
+  it('keeps token overflow inside the explicit count window', async () => {
+    const store = (await new InMemoryStore().getStore('memory'))!;
+    const storedMessages = Array.from({ length: 4 }, (_, index) => message(`message-${index}`, index));
+    await store.saveMessages({ messages: storedMessages });
+
+    const result = await loadMessageHistory({
+      storage: store,
+      threadId: 'thread',
+      resourceId: 'resource',
+      maxMessages: 3,
+      maxTokens: 240,
+      atMaxRemoveTokens: 90,
+      tokenCounter: { countMessage: () => 40 },
+      includeOverflow: true,
+    });
+
+    expect(result.messages.map(item => item.id)).toEqual(['message-1', 'message-2', 'message-3']);
+    expect(result.overflow).toEqual([]);
+  });
+
+  it('exposes token overflow from within the count window without exposing count overflow', async () => {
+    const store = (await new InMemoryStore().getStore('memory'))!;
+    const storedMessages = Array.from({ length: 4 }, (_, index) => message(`message-${index}`, index));
+    await store.saveMessages({ messages: storedMessages });
+
+    const result = await loadMessageHistory({
+      storage: store,
+      threadId: 'thread',
+      resourceId: 'resource',
+      maxMessages: 3,
+      maxTokens: 100,
+      atMaxRemoveTokens: 40,
+      tokenCounter: { countMessage: () => 40 },
+      includeOverflow: true,
+    });
+
+    expect(result.messages.map(item => item.id)).toEqual(['message-3']);
+    expect(result.overflow.map(item => item.id)).toEqual(['message-1', 'message-2']);
+    expect([...result.overflow, ...result.messages].map(item => item.id)).not.toContain('message-0');
+  });
+
   it('loads every retained message across boundary-timestamp pages', async () => {
     const store = (await new InMemoryStore().getStore('memory'))!;
     const removed = message('removed');
@@ -297,11 +338,15 @@ describe('token-based memory history', () => {
       threadId: 'thread',
       resourceId: 'resource',
       maxMessages: 1,
+      maxTokens: 100,
+      atMaxRemoveTokens: 0,
       tokenCounter: { countMessage: () => 1 },
+      includeOverflow: true,
       pageSize: 1,
     });
 
     expect(result.messages).toEqual([]);
+    expect(result.overflow).toEqual([]);
   });
 
   it('persists trimming through real storage and does not reintroduce removed history next turn', async () => {
