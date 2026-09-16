@@ -40,7 +40,7 @@ export const Reasoning = ({ text, redacted, streaming }: ReasoningProps) => {
         <Badge icon={<BrainIcon />}>{isCollapsed ? 'Show' : 'Hide'} reasoning</Badge>
       </Button>
 
-      <div id={contentId} hidden={isCollapsed} className="min-w-0 border-l-2 border-border1 pl-2.5 italic [&_p]:my-0.5">
+      <div id={contentId} hidden={isCollapsed} className="border-border1 min-w-0 border-l-2 pl-2.5 italic [&_p]:my-0.5">
         {!isCollapsed && (
           <MarkdownRenderer className="text-icon3 text-ui-sm" streaming={streaming && !redacted}>
             {body}
