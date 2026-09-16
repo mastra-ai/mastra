@@ -144,6 +144,7 @@ import type { AnyWorkflow } from '../workflows/workflow';
 import { createStep, createStepFromProcessor, isProcessor } from '../workflows/workflow';
 import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
+import { ThreadStateFileReadTracker } from '../workspace/filesystem/thread-state-read-tracker';
 import { createSkillTools } from '../workspace/skills';
 import type { SkillFormat } from '../workspace/skills';
 import type { Skill, SkillMetadata, WorkspaceSkills } from '../workspace/skills/types';
@@ -238,7 +239,12 @@ import type {
   ModelWithRetries,
   ZodSchema,
 } from './types';
-import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
+import {
+  isSupportedLanguageModel,
+  resolveSuspendedToolRunId,
+  resolveThreadIdFromArgs,
+  supportedLanguageModelSpecifications,
+} from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
 
@@ -4002,9 +4008,18 @@ export class Agent<
       return convertedWorkspaceTools;
     }
 
+    // Read-before-write records persist per thread in the `threadState`
+    // storage domain (alongside task lists and goal objectives), so they
+    // survive suspend/resume, later turns, and process restarts. Without
+    // thread identity or storage, tracking falls back to per-run.
+    const threadStateStore = threadId ? await this.#mastra?.getStorage()?.getStore('threadState') : undefined;
     const workspaceTools = await createWorkspaceTools(workspace, {
       requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
       workspace,
+      readTracker:
+        threadStateStore && threadId
+          ? new ThreadStateFileReadTracker({ threadId, store: threadStateStore, logger: this.logger })
+          : undefined,
     });
 
     if (Object.keys(workspaceTools).length > 0) {
@@ -5394,7 +5409,10 @@ export class Agent<
                 resourceId,
               });
 
-              const suspendedToolRunId = (inputData as any).suspendedToolRunId;
+              // The model authors this schema field, and some models emit sentinel strings like
+              // "null" for it on fresh calls. Normalize at the trust boundary so junk never
+              // reaches the resume gate below or resumeStream/resumeGenerate (#23739).
+              const suspendedToolRunId = resolveSuspendedToolRunId((inputData as any).suspendedToolRunId);
 
               const { resumeData, suspend } = context?.agent ?? {};
 
@@ -6119,14 +6137,25 @@ export class Agent<
           execute: async (inputData, context) => {
             const invocationActor = getInvocationActor(context);
             const savedMastraMemory = requestContext.get('MastraMemory');
+            let runIdToUse: string | undefined;
             try {
-              const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
+              const {
+                initialState,
+                inputData: workflowInputData,
+                suspendedToolRunId: rawSuspendedToolRunId,
+              } = inputData as any;
+              const { resumeData, suspend } = context?.agent ?? {};
+              // The model authors this schema field, and some models emit sentinel strings like
+              // "null" for it on fresh calls. Normalize at the trust boundary (#23739).
+              const suspendedToolRunId = resolveSuspendedToolRunId(rawSuspendedToolRunId);
               // Use a unique runId for each workflow tool call to prevent parallel calls
               // from sharing the same cached Run instance (see #13473).
               // For resume cases, suspendedToolRunId is injected into inputData by
               // tool-call-step (from metadata stored during suspension).
-              // For fresh calls: generate a new unique runId.
-              const runIdToUse = suspendedToolRunId || randomUUID();
+              // A supplied id is only trusted alongside resumeData: on fresh calls any
+              // echoed id — model-authored or hook-pinned — is replaced with a unique id,
+              // otherwise two independent calls collide on one cached Run (#23739).
+              runIdToUse = resumeData && suspendedToolRunId ? suspendedToolRunId : randomUUID();
               this.logger.debug('Executing workflow as tool', {
                 agent: this.name,
                 workflow: workflowName,
@@ -6138,7 +6167,6 @@ export class Agent<
               });
 
               const run = await workflow.createRun({ runId: runIdToUse, resourceId });
-              const { resumeData, suspend } = context?.agent ?? {};
 
               let result: WorkflowResult<any, any, any, any> | undefined = undefined;
 
@@ -6264,7 +6292,7 @@ export class Agent<
                   category: ErrorCategory.USER,
                   details: {
                     agentName: this.name,
-                    runId: (inputData as any).suspendedToolRunId || runId || '',
+                    runId: runIdToUse || runId || '',
                     threadId: threadId || '',
                     resourceId: resourceId || '',
                   },
@@ -9006,7 +9034,10 @@ export class Agent<
     } catch (error) {
       // Release the thread reservation taken by waitForCrossAgentThreadRun so
       // a failed setup does not block subsequent runs on this thread.
-      agentThreadStreamRuntime.releaseThreadRunReservation(mergedOptions.runId, threadStreamPubSub);
+      agentThreadStreamRuntime.releaseThreadRunReservation(mergedOptions.runId, threadStreamPubSub, {
+        agent: this,
+        streamOptions: preparedOptions,
+      });
       throw error;
     }
   }

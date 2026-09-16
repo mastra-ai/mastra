@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { InMemoryFileReadTracker } from './file-read-tracker';
+import { deriveReadScope, InMemoryFileReadTracker } from './file-read-tracker';
 
 describe('InMemoryFileReadTracker', () => {
   let tracker: InMemoryFileReadTracker;
@@ -108,6 +108,52 @@ describe('InMemoryFileReadTracker', () => {
     });
   });
 
+  describe('filesystem scope', () => {
+    const scopeA = 'local:/base/a';
+    const scopeB = 'local:/base/b';
+
+    it('should store the recorded scope on the read record', () => {
+      const modifiedAt = new Date('2024-01-15T10:00:00Z');
+      tracker.recordRead('/test/file.txt', modifiedAt, scopeA);
+
+      expect(tracker.getReadRecord('/test/file.txt')?.scope).toBe(scopeA);
+    });
+
+    it('should pass when the scope matches the recorded scope', () => {
+      const modifiedAt = new Date('2024-01-15T10:00:00Z');
+      tracker.recordRead('/test/file.txt', modifiedAt, scopeA);
+
+      const result = tracker.needsReRead('/test/file.txt', modifiedAt, scopeA);
+      expect(result.needsReRead).toBe(false);
+    });
+
+    it('should require re-read when the scope differs from the recorded scope', () => {
+      const modifiedAt = new Date('2024-01-15T10:00:00Z');
+      tracker.recordRead('/test/file.txt', modifiedAt, scopeA);
+
+      const result = tracker.needsReRead('/test/file.txt', modifiedAt, scopeB);
+      expect(result.needsReRead).toBe(true);
+      expect(result.reason).toContain('different filesystem');
+    });
+
+    it('should fail closed when a record without scope is checked against a scope', () => {
+      const modifiedAt = new Date('2024-01-15T10:00:00Z');
+      tracker.recordRead('/test/file.txt', modifiedAt);
+
+      const result = tracker.needsReRead('/test/file.txt', modifiedAt, scopeA);
+      expect(result.needsReRead).toBe(true);
+      expect(result.reason).toContain('different filesystem');
+    });
+
+    it('should match when neither record nor check carry a scope', () => {
+      const modifiedAt = new Date('2024-01-15T10:00:00Z');
+      tracker.recordRead('/test/file.txt', modifiedAt);
+
+      const result = tracker.needsReRead('/test/file.txt', modifiedAt);
+      expect(result.needsReRead).toBe(false);
+    });
+  });
+
   describe('path normalization', () => {
     it('should normalize duplicate slashes', () => {
       const modifiedAt = new Date();
@@ -131,5 +177,28 @@ describe('InMemoryFileReadTracker', () => {
 
       expect(tracker.getReadRecord('/')).toBeDefined();
     });
+  });
+});
+
+describe('deriveReadScope', () => {
+  it('should combine provider and basePath when basePath is set', () => {
+    expect(deriveReadScope({ provider: 'local', basePath: '/projects/app' })).toBe('local:/projects/app');
+  });
+
+  it('should fall back to the bare provider when basePath is missing', () => {
+    expect(deriveReadScope({ provider: 'composite' })).toBe('composite');
+    expect(deriveReadScope({ provider: 'memory', basePath: undefined })).toBe('memory');
+  });
+
+  it('should derive different scopes for different base paths on the same provider', () => {
+    const a = deriveReadScope({ provider: 'local', basePath: '/base/a' });
+    const b = deriveReadScope({ provider: 'local', basePath: '/base/b' });
+    expect(a).not.toBe(b);
+  });
+
+  it('should derive identical scopes for identical configurations', () => {
+    const a = deriveReadScope({ provider: 'local', basePath: '/same/path' });
+    const b = deriveReadScope({ provider: 'local', basePath: '/same/path' });
+    expect(a).toBe(b);
   });
 });

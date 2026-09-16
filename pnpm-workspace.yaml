@@ -470,6 +470,10 @@ allowBuilds:
   edgedriver: false
   esbuild: false
   geckodriver: false
+  # Blocked so every `pnpm install` doesn't download the ~100MB Inngest Go binary.
+  # Inngest tests resolve the CLI via workflows/inngest/src/__tests__/inngest-cli.ts
+  # and fail with install instructions if it's absent; install it explicitly with
+  # `pnpm --filter @mastra/inngest setup:inngest-cli` (or brew install inngest/tap/inngest).
   inngest-cli: false
   koffi: false
   msgpackr-extract: false
