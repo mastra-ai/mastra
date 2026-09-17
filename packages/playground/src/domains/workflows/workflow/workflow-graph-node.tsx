@@ -96,7 +96,6 @@ const WorkflowStepCard = ({
           tripwire={isTripwire ? step?.tripwire : undefined}
           mapConfig={mapConfig}
           onShowNestedGraph={stepGraph ? () => showNestedGraph({ label, fullStep: fullLabel, stepGraph }) : undefined}
-          status={displayStatus}
           stepKey={stepKey}
           stepsFlow={stepsFlow}
         />
@@ -116,10 +115,7 @@ const WorkflowConditionNodeCard = ({
   const conditions = data.conditions ?? [];
   const previousStepId =
     data.previousStepId && (parentWorkflowName ? `${parentWorkflowName}.${data.previousStepId}` : data.previousStepId);
-  const nextStepId =
-    data.nextStepId && (parentWorkflowName ? `${parentWorkflowName}.${data.nextStepId}` : data.nextStepId);
   const previousStep = previousStepId ? steps[previousStepId] : undefined;
-  const nextStep = nextStepId ? steps[nextStepId] : undefined;
   const { displayStatus: previousDisplayStatus, isTripwire } = getDisplayStatus(previousStep);
 
   return (
@@ -131,7 +127,6 @@ const WorkflowConditionNodeCard = ({
           stepName={data.nextStepId ?? data.label}
           mapConfig={data.mapConfig}
           tripwire={isTripwire ? previousStep?.tripwire : undefined}
-          status={nextStep ? previousDisplayStatus : undefined}
         />
       }
     />
