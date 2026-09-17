@@ -128,7 +128,14 @@ export const PriceRange: Story = {
             ${value[0]} – ${value[1]}
           </span>
         </div>
-        <Slider aria-label="Price range" value={value} min={0} max={1000} step={10} onValueChange={setValue} />
+        <Slider
+          getAriaLabel={index => (index === 0 ? 'Minimum price' : 'Maximum price')}
+          value={value}
+          min={0}
+          max={1000}
+          step={10}
+          onValueChange={setValue}
+        />
       </div>
     );
   },
