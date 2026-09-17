@@ -3,6 +3,7 @@ import { createPool } from 'mysql2/promise';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { MemoryMySQL } from './domains/memory';
+import { StoreOperationsMySQL } from './domains/operations';
 import { MySQLStore } from './index';
 import type { MySQLStoreConfig } from './index';
 
@@ -36,8 +37,14 @@ createMemoryTokenBoundaryConformanceTest({
   createStores: async () => {
     const firstPool = createPool(TEST_CONFIG);
     const secondPool = createPool(TEST_CONFIG);
-    const first = new MemoryMySQL({ pool: firstPool, database: TEST_CONFIG.database });
-    const second = new MemoryMySQL({ pool: secondPool, database: TEST_CONFIG.database });
+    const first = new MemoryMySQL({
+      pool: firstPool,
+      operations: new StoreOperationsMySQL({ pool: firstPool, database: TEST_CONFIG.database }),
+    });
+    const second = new MemoryMySQL({
+      pool: secondPool,
+      operations: new StoreOperationsMySQL({ pool: secondPool, database: TEST_CONFIG.database }),
+    });
     await first.init();
     await second.init();
     return {
