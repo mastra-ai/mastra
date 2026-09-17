@@ -90,7 +90,7 @@ function FeedbackSummary({ feedback, onMarkReviewed, isMarkingReviewed }: Feedba
 
   return (
     <section aria-label="Feedback" className="border-border1 flex max-h-[33vh] shrink-0 flex-col border-b">
-      <DataPanel.Header className="items-start">
+      <DataPanel.Header>
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex items-center gap-2">
             <DataPanel.Heading>Feedback</DataPanel.Heading>

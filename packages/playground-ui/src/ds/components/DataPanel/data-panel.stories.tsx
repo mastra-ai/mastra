@@ -145,7 +145,7 @@ const StackedDemo = () => {
           </DataPanel.Heading>
           <DataPanel.CloseButton onClick={() => setOuterOpen(false)} />
         </DataPanel.Header>
-        <DataPanel.Content className="flex flex-col gap-3">
+        <DataPanel.Content>
           <p className="text-ui-sm text-neutral3">
             Escape, backdrop click or the close button dismiss this panel. Open a nested panel to stack a second one on
             top.
@@ -200,7 +200,7 @@ const SiblingsWithDepthDemo = () => {
           </DataPanel.Heading>
           <DataPanel.CloseButton onClick={closeResult} />
         </DataPanel.Header>
-        <DataPanel.Content className="flex flex-col gap-3">
+        <DataPanel.Content>
           <p className="text-ui-sm text-neutral3">
             The score panel is a <b>sibling</b> drawer (not nested in the DOM) rendered after this one with a higher{' '}
             <code>depth</code>, so it is narrower and this panel peeks out on the left.

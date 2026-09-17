@@ -34,7 +34,7 @@ export interface DataPanelProps {
   className?: string;
 }
 
-const DEPTH_WIDTH = { 1: 'w-md', 2: 'w-sm', 3: 'w-xs' } as const;
+const DEPTH_WIDTH = { 1: 'w-xl', 2: 'w-lg', 3: 'w-md' } as const;
 const SIZE_WIDTH = { half: 'w-1/2', wide: 'w-4/5', full: 'w-full' } as const;
 const SIZE_PERCENT = { half: '50%', wide: '80%', full: '100%' } as const;
 // Each extra depth level trims a stacked non-`md` panel so the parent peeks out beneath it.
@@ -64,7 +64,8 @@ export function DataPanelRoot({
       swipeDirection="right"
     >
       <DrawerPrimitive.Portal>
-        <DrawerPrimitive.Backdrop className="drawer-backdrop bg-overlay fixed inset-0 z-50" />
+        {/* Lighter than the shared `--overlay`: a side panel should keep the page beneath readable. */}
+        <DrawerPrimitive.Backdrop className="drawer-backdrop bg-overlay/50 fixed inset-0 z-50" />
         <DrawerPrimitive.Viewport className="fixed inset-0 z-50">
           <DrawerPrimitive.Popup
             data-slot="data-panel-popup"

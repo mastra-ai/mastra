@@ -16,7 +16,7 @@ export function DataPanelNextPrevNav({
   onNext,
   previousLabel = 'Previous',
   nextLabel = 'Next',
-  variant,
+  variant = 'ghost',
 }: DataPanelNextPrevNavProps) {
   return (
     <ButtonsGroup spacing="close">

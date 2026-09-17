@@ -70,7 +70,7 @@ export function DatasetItemPanel({ item, itemId, fallback, onClose, ...bodyProps
             <DataPanel.Heading>
               Item <b>#{itemId}</b>
             </DataPanel.Heading>
-            <DataPanel.CloseButton onClick={onClose} tooltip="Close detail panel" className="ml-auto shrink-0" />
+            <DataPanel.CloseButton onClick={onClose} tooltip="Close detail panel" />
           </DataPanel.Header>
           {fallback}
         </>
@@ -295,6 +295,7 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
                 as={Link}
                 href={`/datasets/${datasetId}/items/${item.id}/versions?version=${item.datasetVersion}`}
                 size="md"
+                variant="ghost"
                 tooltip="Go to item versions history"
                 aria-label="Go to item versions history"
               >
@@ -303,7 +304,7 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
 
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button size="md" aria-label="Actions menu">
+                  <Button size="md" variant="ghost" aria-label="Actions menu">
                     <EllipsisVerticalIcon />
                   </Button>
                 </DropdownMenu.Trigger>

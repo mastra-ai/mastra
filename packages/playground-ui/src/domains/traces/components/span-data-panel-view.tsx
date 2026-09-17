@@ -80,9 +80,9 @@ export function SpanDataPanelView({
   return (
     <section className={cn('flex min-h-0 flex-1 flex-col overflow-hidden', className)}>
       {/* Two-line header (heading + summary); neighbouring panel headers use min-h-16 to stay level. */}
-      <DataPanel.Header className="min-h-16 py-2">
+      <DataPanel.Header>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <DataPanel.Heading className="items-center whitespace-nowrap">
+          <DataPanel.Heading>
             Span
             <TraceIdButton id={spanId} />
           </DataPanel.Heading>
@@ -90,13 +90,12 @@ export function SpanDataPanelView({
         </div>
         <ButtonsGroup className="ml-auto shrink-0 self-start">
           <DataPanel.NextPrevNav
-            variant="ghost"
             onPrevious={onPrevious}
             onNext={onNext}
             previousLabel="Previous span"
             nextLabel="Next span"
           />
-          <DataPanel.CloseButton variant="ghost" onClick={onClose} />
+          <DataPanel.CloseButton onClick={onClose} />
         </ButtonsGroup>
       </DataPanel.Header>
 

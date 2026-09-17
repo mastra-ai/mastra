@@ -13,7 +13,7 @@ export function DataPanelCloseButton({
   onClick,
   tooltip = 'Close panel',
   className,
-  variant,
+  variant = 'ghost',
 }: DataPanelCloseButtonProps) {
   return (
     <Button

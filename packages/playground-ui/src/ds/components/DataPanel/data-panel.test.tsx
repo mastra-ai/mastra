@@ -48,10 +48,10 @@ describe('DataPanel', () => {
       const wide = screen.getByRole('dialog', { name: 'Wide', hidden: true });
       const full = screen.getByRole('dialog', { name: 'Full', hidden: true });
       expect(wide.className).toContain('w-4/5');
-      expect(wide.className).not.toContain('w-sm');
+      expect(wide.className).not.toContain('w-lg');
       expect(wide.getAttribute('data-depth')).toBe('2');
       expect(full.className).toContain('w-full');
-      expect(full.className).not.toContain('w-xs');
+      expect(full.className).not.toContain('w-md');
       // Deeper same-size panels are trimmed so the parent peeks out beneath.
       expect(wide.style.width).toBe('calc(80% - 1.5rem)');
       expect(full.style.width).toBe('calc(100% - 3rem)');
