@@ -2,7 +2,6 @@ import type { FilePart } from '@mastra/react/ui';
 import type { ToolCallGroupStep } from '@/ds/components/ai/tool-call';
 
 export type ChatFile = FilePart & { filename: string };
-export type ChatPresentation = 'studio' | 'factory';
 export type Phase =
   | 'complete'
   | 'streaming'
@@ -83,7 +82,7 @@ export const plan = `1. Keep file previews next to the draft.
 2. Send text and attachments together.
 3. Verify keyboard, streaming, and narrow layouts.`;
 
-export function createInitialTurns(scenario: Scenario, presentation: ChatPresentation): Turn[] {
+export function createInitialTurns(scenario: Scenario): Turn[] {
   if (scenario === 'empty') return [];
   const phase = scenario === 'long' ? 'complete' : scenario;
   let initialText = '';
@@ -93,7 +92,7 @@ export function createInitialTurns(scenario: Scenario, presentation: ChatPresent
   const review: Turn = {
     id: 'review',
     prompt: 'Review the chat composer using these notes and the attached layout. Show your plan before making changes.',
-    files: presentation === 'factory' ? reviewFiles.filter(file => file.mimeType.startsWith('image/')) : reviewFiles,
+    files: reviewFiles,
     phase,
     text: initialText,
     answer: phase === 'question' ? undefined : 'Keyboard access',

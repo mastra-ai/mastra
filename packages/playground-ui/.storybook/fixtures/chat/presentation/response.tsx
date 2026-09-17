@@ -1,6 +1,6 @@
 import type { TextPart } from '@mastra/react/ui';
 import { plan, reviewCommand, reviewTools } from '../data';
-import type { ChatPresentation, Phase, Turn } from '../data';
+import type { Phase, Turn } from '../data';
 import { ConversationApproval } from './approval';
 import { ConversationNotification } from './events';
 import { ReviewTool } from './tool';
@@ -26,11 +26,10 @@ import { Message, MessageActions, MessageCopyButton, MessageTimestamp } from '@/
 
 interface ConversationResponseProps {
   turn: Turn;
-  presentation: ChatPresentation;
   transitionTurn: (id: string, from: Phase, to: Phase, answer?: string) => void;
 }
 
-export function ConversationResponse({ turn, presentation, transitionTurn }: ConversationResponseProps) {
+export function ConversationResponse({ turn, transitionTurn }: ConversationResponseProps) {
   const writtenParts = [{ type: 'text', text: turn.text }] satisfies TextPart[];
   const shownParts = useRevealedParts(writtenParts, turn.phase === 'streaming');
   const shownPart = shownParts[0];
@@ -45,9 +44,9 @@ export function ConversationResponse({ turn, presentation, transitionTurn }: Con
       footer={
         turn.text &&
         turn.phase !== 'streaming' && (
-          <MessageActions visibility={presentation === 'studio' ? 'always' : 'hover'}>
+          <MessageActions visibility="hover">
             <MessageCopyButton text={turn.text} />
-            {presentation === 'factory' && <MessageTimestamp value="2026-09-17T12:24:00Z" />}
+            <MessageTimestamp value="2026-09-17T12:24:00Z" />
           </MessageActions>
         )
       }
@@ -62,14 +61,9 @@ export function ConversationResponse({ turn, presentation, transitionTurn }: Con
                   'I’ll compare the existing composer with the notes, check the keyboard behavior, and propose a small change.',
               }}
             />
-            <ToolCallGroup
-              steps={reviewTools}
-              leading={
-                presentation === 'factory' ? <ToolCallTime at={Date.parse('2026-09-17T12:24:00Z')} /> : undefined
-              }
-            >
+            <ToolCallGroup steps={reviewTools} leading={<ToolCallTime at={Date.parse('2026-09-17T12:24:00Z')} />}>
               {reviewTools.map(tool => (
-                <ReviewTool presentation={presentation} key={tool.toolName} {...tool} />
+                <ReviewTool key={tool.toolName} {...tool} />
               ))}
             </ToolCallGroup>
             <Plan>
@@ -102,27 +96,17 @@ export function ConversationResponse({ turn, presentation, transitionTurn }: Con
               }
             />
             {turn.phase !== 'question' && (
-              <ConversationApproval
-                presentation={presentation}
-                phase={turn.phase}
-                onApprove={approveEdit}
-                onDecline={declineEdit}
-              />
+              <ConversationApproval phase={turn.phase} onApprove={approveEdit} onDecline={declineEdit} />
             )}
           </>
         )}
         {showSettledCommand && (
-          <ReviewTool
-            presentation={presentation}
-            {...reviewCommand}
-            output={turn.phase === 'complete' ? '6 tests passed.' : undefined}
-          />
+          <ReviewTool {...reviewCommand} output={turn.phase === 'complete' ? '6 tests passed.' : undefined} />
         )}
-        {turn.phase === 'streaming' && <ReviewTool presentation={presentation} {...reviewCommand} status="running" />}
+        {turn.phase === 'streaming' && <ReviewTool {...reviewCommand} status="running" />}
         {turn.phase === 'tool-error' && (
           <>
             <ReviewTool
-              presentation={presentation}
               {...reviewCommand}
               status="error"
               output="Keyboard test failed: expected focus to return to the composer."
@@ -157,7 +141,7 @@ export function ConversationResponse({ turn, presentation, transitionTurn }: Con
         {shownText && (
           <MessageText text={shownText} metadata={undefined} streaming={turn.phase === 'streaming' || isRevealing} />
         )}
-        {turn.phase === 'complete' && turn.review && <ConversationNotification presentation={presentation} />}
+        {turn.phase === 'complete' && turn.review && <ConversationNotification />}
       </div>
     </Message>
   );

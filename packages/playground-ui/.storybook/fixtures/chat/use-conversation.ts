@@ -1,13 +1,9 @@
 import { useEffect, useState } from 'react';
 import { createInitialTurns, reply } from './data';
-import type { ChatFile, ChatPresentation, Phase, Scenario } from './data';
+import type { ChatFile, Phase, Scenario } from './data';
 
-export function useStoryConversation(
-  scenario: Scenario,
-  presentation: ChatPresentation,
-  canSendWhileStreaming: boolean,
-) {
-  const [turns, setTurns] = useState(() => createInitialTurns(scenario, presentation));
+export function useStoryConversation(scenario: Scenario) {
+  const [turns, setTurns] = useState(() => createInitialTurns(scenario));
   const [playback, setPlayback] = useState(scenario !== 'streaming');
   const activeTurn = turns.at(-1);
   const activeId = activeTurn?.id;
@@ -38,13 +34,10 @@ export function useStoryConversation(
   }
 
   function sendMessage(prompt: string, files: ChatFile[]) {
-    if ((busy && !(phase === 'streaming' && canSendWhileStreaming)) || (!prompt.trim() && files.length === 0)) return;
+    if (busy || (!prompt.trim() && files.length === 0)) return;
     setPlayback(true);
     const messageId = crypto.randomUUID();
-    setTurns(current => {
-      const settled = current.map(turn => (turn.phase === 'streaming' ? { ...turn, phase: 'stopped' as const } : turn));
-      return [...settled, { id: messageId, prompt: prompt.trim(), files, phase: 'streaming', text: '' }];
-    });
+    setTurns(current => [...current, { id: messageId, prompt: prompt.trim(), files, phase: 'streaming', text: '' }]);
   }
 
   return { turns, phase, busy, sendMessage, transitionTurn };

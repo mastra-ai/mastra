@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import type { ChatPresentation } from '../data';
 import {
   ToolCall,
   ToolCallContent,
@@ -15,7 +14,6 @@ import type { ToolCallStatus } from '@/ds/components/ai/tool-call';
 
 interface ReviewToolProps {
   toolName: string;
-  presentation: ChatPresentation;
   args: unknown;
   status?: ToolCallStatus;
   output?: string;
@@ -23,26 +21,18 @@ interface ReviewToolProps {
   defaultOpen?: boolean;
 }
 
-export function ReviewTool({
-  toolName,
-  presentation,
-  args,
-  status = 'idle',
-  output,
-  children,
-  defaultOpen,
-}: ReviewToolProps) {
+export function ReviewTool({ toolName, args, status = 'idle', output, children, defaultOpen }: ReviewToolProps) {
   const toolPresentation = presentTool(toolName, args);
   return (
     <ToolCall status={status} defaultOpen={defaultOpen} aria-label={`Tool: ${toolName}`}>
       <ToolCallTrigger>
         <ToolCallPresentedHeader
           {...toolPresentation}
-          leading={presentation === 'factory' ? <ToolCallTime at={Date.parse('2026-09-17T12:24:00Z')} /> : undefined}
+          leading={<ToolCallTime at={Date.parse('2026-09-17T12:24:00Z')} />}
         />
       </ToolCallTrigger>
       <ToolCallContent>
-        {presentation === 'factory' && toolPresentation.command ? (
+        {toolPresentation.command ? (
           <ToolCallCommand command={toolPresentation.command} />
         ) : (
           <ToolCallArguments toolName={toolName} args={args} />

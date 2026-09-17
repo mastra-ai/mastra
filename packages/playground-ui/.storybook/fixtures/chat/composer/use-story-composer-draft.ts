@@ -90,14 +90,6 @@ export function useStoryComposerDraft({
     }
   }
 
-  function addUrl(url: string) {
-    const filename = url.split('/').at(-1) || 'Attachment';
-    setFiles(current => [
-      ...current,
-      { id: crypto.randomUUID(), filename, part: { type: 'file', filename, mimeType: 'text/plain', data: url } },
-    ]);
-  }
-
   return {
     text,
     setText,
@@ -107,7 +99,6 @@ export function useStoryComposerDraft({
     sentCount,
     addFiles,
     removeFile,
-    addUrl,
     fileInput,
     messageInput,
     submitMessage,

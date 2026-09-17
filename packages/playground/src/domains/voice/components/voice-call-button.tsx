@@ -1,15 +1,13 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Loader2, Phone, PhoneOff } from 'lucide-react';
 
-import type { VoiceCallControls, VoiceCallStatus } from '../types';
-export interface VoiceCallButtonViewProps {
-  status: VoiceCallStatus;
-  available: boolean;
-  onStart: () => void;
-  onStop: () => void;
+import type { VoiceCallControls } from '../types';
+export interface VoiceCallButtonProps {
+  voiceCall: VoiceCallControls;
 }
 
-export function VoiceCallButtonView({ status, available, onStart, onStop }: VoiceCallButtonViewProps) {
+export function VoiceCallButton({ voiceCall }: VoiceCallButtonProps) {
+  const { status, isLiveKitAvailable: available, start: onStart, stop: onStop } = voiceCall;
   if (status === 'idle')
     return (
       <Button
@@ -53,16 +51,3 @@ export function VoiceCallButtonView({ status, available, onStart, onStop }: Voic
     </Button>
   );
 }
-
-export interface VoiceCallButtonProps {
-  voiceCall: VoiceCallControls;
-}
-
-export const VoiceCallButton = ({ voiceCall }: VoiceCallButtonProps) => (
-  <VoiceCallButtonView
-    status={voiceCall.status}
-    available={voiceCall.isLiveKitAvailable}
-    onStart={voiceCall.start}
-    onStop={voiceCall.stop}
-  />
-);

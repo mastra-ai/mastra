@@ -1,5 +1,5 @@
 import { cn } from '@mastra/playground-ui/utils/cn';
-import type { VoiceCallControls, VoiceCallStatus, VoiceAgentState, VoiceCaptionSegment } from '../types';
+import type { VoiceCallControls, VoiceAgentState, VoiceCaptionSegment } from '../types';
 
 const AGENT_STATE_LABELS: Record<VoiceAgentState, string> = {
   initializing: 'Connecting…',
@@ -8,12 +8,6 @@ const AGENT_STATE_LABELS: Record<VoiceAgentState, string> = {
   speaking: 'Speaking…',
 };
 
-export interface VoiceCallPanelViewProps {
-  status: VoiceCallStatus;
-  agentState: VoiceAgentState;
-  captions: VoiceCaptionSegment[];
-}
-
 const lastSegmentByRole = (segments: VoiceCaptionSegment[], role: 'user' | 'agent') => {
   for (let i = segments.length - 1; i >= 0; i--) {
     if (segments[i]?.role === role) return segments[i];
@@ -21,7 +15,12 @@ const lastSegmentByRole = (segments: VoiceCaptionSegment[], role: 'user' | 'agen
   return undefined;
 };
 
-export const VoiceCallPanelView = ({ status, agentState, captions }: VoiceCallPanelViewProps) => {
+export interface VoiceCallPanelProps {
+  voiceCall: VoiceCallControls;
+}
+
+export const VoiceCallPanel = ({ voiceCall }: VoiceCallPanelProps) => {
+  const { status, agentState, captions } = voiceCall;
   if (status === 'idle') return null;
 
   const lastUserCaption = lastSegmentByRole(captions, 'user');
@@ -57,11 +56,3 @@ export const VoiceCallPanelView = ({ status, agentState, captions }: VoiceCallPa
     </div>
   );
 };
-
-export interface VoiceCallPanelProps {
-  voiceCall: VoiceCallControls;
-}
-
-export const VoiceCallPanel = ({ voiceCall }: VoiceCallPanelProps) => (
-  <VoiceCallPanelView status={voiceCall.status} agentState={voiceCall.agentState} captions={voiceCall.captions} />
-);

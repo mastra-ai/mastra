@@ -131,9 +131,13 @@ describe('ComposerModelSettings', () => {
     await openPopover();
 
     expect(screen.getByRole('radio', { name: 'Stream' }).getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByRole('radio', { name: 'Stream subscription (default)' }).getAttribute('aria-disabled')).toBe(
-      'true',
-    );
+    const subscription = screen.getByRole('radio', { name: 'Stream subscription (default)' });
+    expect(subscription.hasAttribute('data-disabled')).toBe(true);
+    await act(async () => {
+      fireEvent.click(subscription);
+    });
+    expect(subscription.getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByRole('radio', { name: 'Stream' }).getAttribute('aria-checked')).toBe('true');
   });
 
   it('persists advanced fields without resetting the selected chat method', async () => {

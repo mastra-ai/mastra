@@ -1,7 +1,7 @@
 import { MessageSquare, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import type { ChatPresentation, Scenario, ChatFile, Phase } from './data';
+import type { Scenario, ChatFile, Phase } from './data';
 import { ConversationContext } from './presentation/events';
 import { ConversationResponse } from './presentation/response';
 import { useStoryConversation } from './use-conversation';
@@ -27,23 +27,11 @@ export interface StoryComposerControls {
 
 interface ChatConversationProps {
   scenario: Scenario;
-  presentation: ChatPresentation;
-  canInterject?: boolean;
   children: (controls: StoryComposerControls) => ReactNode;
 }
 
-function Conversation({
-  scenario,
-  presentation,
-  canInterject = false,
-  children,
-  onReset,
-}: ChatConversationProps & { onReset: () => void }) {
-  const { turns, phase, busy, sendMessage, transitionTurn } = useStoryConversation(
-    scenario,
-    presentation,
-    canInterject,
-  );
+function Conversation({ scenario, children, onReset }: ChatConversationProps & { onReset: () => void }) {
+  const { turns, phase, busy, sendMessage, transitionTurn } = useStoryConversation(scenario);
   const activeTurn = turns.at(-1);
   function stopResponse() {
     if (activeTurn) transitionTurn(activeTurn.id, 'streaming', 'stopped');
@@ -57,7 +45,7 @@ function Conversation({
         <ChatShell.Bar>
           <ChatShell.Column className="flex-row items-center justify-between gap-3 py-3">
             <Txt as="h1" variant="header-xs">
-              {presentation === 'factory' ? 'Factory' : 'Studio'} · Composer review
+              Chat component composition
             </Txt>
             <Button size="sm" variant="ghost" onClick={onReset}>
               <RotateCcw />
@@ -92,7 +80,7 @@ function Conversation({
                         footer={
                           <MessageActions>
                             {turn.prompt && <MessageCopyButton text={turn.prompt} />}
-                            {presentation === 'factory' && <MessageTimestamp value="2026-09-17T12:00:00Z" />}
+                            <MessageTimestamp value="2026-09-17T12:00:00Z" />
                           </MessageActions>
                         }
                       >
@@ -105,8 +93,8 @@ function Conversation({
                       </Message>
                     </MessageScrollerItem>
                     <MessageScrollerItem messageId={`${turn.id}-reply`} className="flex min-w-0 flex-col gap-3">
-                      {turn.review && <ConversationContext presentation={presentation} />}
-                      <ConversationResponse turn={turn} presentation={presentation} transitionTurn={transitionTurn} />
+                      {turn.review && <ConversationContext />}
+                      <ConversationResponse turn={turn} transitionTurn={transitionTurn} />
                     </MessageScrollerItem>
                   </ChatShell.Turn>
                 ))}
@@ -162,7 +150,7 @@ export function ChatConversation(props: ChatConversationProps) {
   return (
     <Conversation
       {...props}
-      key={`${props.scenario}-${props.presentation}-${revision}`}
+      key={`${props.scenario}-${revision}`}
       onReset={() => setRevision(current => current + 1)}
     />
   );

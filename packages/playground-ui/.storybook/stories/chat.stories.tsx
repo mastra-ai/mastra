@@ -1,60 +1,21 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-
-import { FactoryChatConversation } from '../../../../mastracode/factory-ui/.storybook/fixtures/chat/conversation';
-import { StudioChatConversation } from '../../../playground/.storybook/fixtures/chat/conversation';
-import type { ComposerTone } from '../../src/ds/components/Composer';
-import type { ChatPresentation, Scenario } from '../fixtures/chat/data';
-import type { ModelControlState } from '../fixtures/model-picker/models';
+import { ComposerWithModelMenu, ConversationComposer } from '../fixtures/chat/composer';
+import { ChatConversation } from '../fixtures/chat/conversation';
+import type { Scenario } from '../fixtures/chat/data';
+import { SegmentedPicker } from '../fixtures/model-picker/segmented-picker';
 
 interface ChatStoryArgs {
   scenario: Scenario;
-  presentation: ChatPresentation;
-  tone: ComposerTone;
-  factorySession: 'work-item' | 'personal';
-  modelState: ModelControlState;
-  canSendWhileStreaming: boolean;
 }
 
 const meta = {
   title: 'AI/Chat',
-  render: ({ scenario, presentation, tone, factorySession, modelState, canSendWhileStreaming }) =>
-    presentation === 'factory' ? (
-      <FactoryChatConversation
-        scenario={scenario}
-        tone={tone}
-        personal={factorySession === 'personal'}
-        modelState={modelState}
-      />
-    ) : (
-      <StudioChatConversation
-        scenario={scenario}
-        modelState={modelState}
-        canSendWhileStreaming={canSendWhileStreaming}
-      />
-    ),
-  args: {
-    scenario: 'complete',
-    presentation: 'studio',
-    tone: 'green',
-    factorySession: 'work-item',
-    modelState: 'ready',
-    canSendWhileStreaming: false,
-  },
+  render: ({ scenario }) => (
+    <ChatConversation scenario={scenario}>{controls => <ComposerWithModelMenu {...controls} />}</ChatConversation>
+  ),
+  args: { scenario: 'complete' },
   argTypes: {
-    presentation: { control: 'inline-radio', options: ['studio', 'factory'] },
-    tone: {
-      if: { arg: 'presentation', eq: 'factory' },
-      control: 'select',
-      options: ['green', 'purple', 'orange', 'default'],
-    },
-    factorySession: {
-      if: { arg: 'presentation', eq: 'factory' },
-      control: 'inline-radio',
-      options: ['work-item', 'personal'],
-    },
-    modelState: { control: 'select', options: ['ready', 'loading', 'unconfigured', 'locked'] },
-    canSendWhileStreaming: { if: { arg: 'presentation', eq: 'studio' }, control: 'boolean' },
     scenario: {
       control: 'select',
       options: [
@@ -76,12 +37,11 @@ const meta = {
     docs: {
       description: {
         component:
-          'A design workbench composing playground-ui primitives with application-owned presentation. The Controls below select story presets, not a published chat component API. Choose the presentation and scenario in Controls. Both include the production Message envelope, attachments, reasoning, grouped tools, edits, plan, question, approvals, tasks, timeline and composer. Studio shows signal cards and notification metadata; Factory shows lane-change notifications, phase signals, skill activation, reminders, time gaps and GitHub links. Factory tool rows include timestamps and command lines; Studio keeps argument data. Approvals use the corresponding inline or standalone presentation. Sending, stopping, retrying, answering and approving run locally against deterministic fixtures. The composer uses each application’s production action row. Factory mounts its production model picker and mode selector with local context data. Studio reuses its model-picker layout, model settings, attachment menu, execution controls, warnings and voice presentation. Catalogs and playback remain fixtures. Factory personal sessions also expose modes and model packs. Selection and voice state are local fixtures; no model request, microphone capture, audio connection or settings navigation is performed. Dataset actions, browser sessions, request-context/tracing controls and Factory runtime status indicators are not yet included; see the coverage document beside this story. Component stories cover additional states. Streaming snapshots stay running for design review; sending a message or approving an edit plays incoming chunks. Reset restores the selected scenario.',
+          'A complete conversation composed only from Playground UI: ChatShell, messages and attachments, reasoning, grouped tools, edits, plan, questions, approvals, activity rows, tasks, timeline and composer. The composer includes shared mode and model controls. The segmented-picker example supplies different controls to the same action area. These are component compositions, not replicas of Studio or Factory. Drafts, selection, file reading and reply playback are local story fixtures; no application contexts, voice, settings, permissions, requests or persistence are loaded. Sending, stopping, retrying, answering and approving are interactive. Streaming snapshots stay running for design review; sending or approving plays incoming chunks. Reset restores the selected conversation scenario. Individual component stories cover their additional variants and states.',
       },
     },
   },
 } satisfies Meta<ChatStoryArgs>;
-
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -108,15 +68,18 @@ export const Conversation: Story = {
     await expect(await canvas.findByText('6 tests passed.')).toBeVisible();
   },
 };
-export const Studio: Story = {};
-export const Factory: Story = { args: { presentation: 'factory' } };
-export const FactoryAwaitingApproval: Story = { args: { presentation: 'factory', scenario: 'approval' } };
-export const FactoryStreaming: Story = {
-  args: { presentation: 'factory', scenario: 'streaming' },
-  play: verifyStreamingCommand,
+export const WithSegmentedPicker: Story = {
+  render: ({ scenario }) => (
+    <ChatConversation scenario={scenario}>
+      {controls => (
+        <ConversationComposer {...controls} appearance="round">
+          <SegmentedPicker />
+        </ConversationComposer>
+      )}
+    </ChatConversation>
+  ),
 };
-export const FactoryLongConversation: Story = { args: { presentation: 'factory', scenario: 'long' } };
-export const FactoryLight: Story = { args: { presentation: 'factory' }, globals: { backgrounds: { value: 'light' } } };
+export const Light: Story = { globals: { backgrounds: { value: 'light' } } };
 export const Empty: Story = { args: { scenario: 'empty' } };
 export const Streaming: Story = { args: { scenario: 'streaming' }, play: verifyStreamingCommand };
 export const Stopped: Story = { args: { scenario: 'stopped' } };
@@ -141,15 +104,11 @@ export const ToolFailed: Story = {
     await expect(canvas.getByRole('group', { name: 'Tool: execute_command' })).toHaveAttribute('aria-busy', 'false');
   },
 };
-export const FactoryToolFailed: Story = {
-  ...ToolFailed,
-  args: { presentation: 'factory', scenario: 'tool-error' },
-};
 export const Error: Story = { args: { scenario: 'error' } };
 export const LongConversation: Story = { args: { scenario: 'long' } };
 
 export const SlashCommands: Story = {
-  args: { scenario: 'empty', presentation: 'factory' },
+  args: { scenario: 'empty' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const input = canvas.getByRole('textbox', { name: 'Message' });
@@ -165,8 +124,8 @@ export const SlashCommands: Story = {
     await expect(input).toHaveValue('');
     await expect(input).toHaveFocus();
     await expect(canvas.getByRole('region', { name: 'Turn 1' })).toHaveTextContent('/review attachments');
-    await expect(canvas.getByRole('button', { name: 'Abort' })).toBeVisible();
-    await userEvent.click(canvas.getByRole('button', { name: 'Abort' }));
+    await expect(canvas.getByRole('button', { name: 'Stop response' })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Stop response' }));
     await expect(input).toHaveFocus();
   },
 };
@@ -193,7 +152,7 @@ export const DeclineEdit: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Decline edit_file' }));
     await waitFor(() => expect(canvas.getByText(/The edit was declined/)).toBeVisible());
-    await expect(canvas.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('button', { name: 'Stop response' })).not.toBeInTheDocument();
   },
 };
 
@@ -219,7 +178,7 @@ export const SendAttachmentsAndStop: Story = {
     await waitFor(() =>
       expect(canvas.getByRole('region', { name: 'Turn 1' })).toHaveTextContent(/The composer now keeps attachments/),
     );
-    await userEvent.click(await canvas.findByRole('button', { name: 'Cancel' }));
+    await userEvent.click(await canvas.findByRole('button', { name: 'Stop response' }));
     await expect(input).toHaveFocus();
     await expect(canvas.getByRole('status')).toHaveTextContent('Response stopped');
     await userEvent.type(input, 'Continue.{enter}');
@@ -243,18 +202,18 @@ export const RetryResponse: Story = {
   },
 };
 
-export const FactoryEventsAndApproval: Story = {
-  args: { presentation: 'factory', scenario: 'approval' },
+export const EventsAndApproval: Story = {
+  args: { scenario: 'approval' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const notification = within(canvas.getByRole('group', { name: 'Notification: factory' }));
+    const notification = within(canvas.getByRole('group', { name: 'Notification: board' }));
     const trigger = notification.getByRole('button');
     trigger.focus();
     await userEvent.keyboard('{Enter}');
     await expect(trigger).toHaveAttribute('aria-expanded', 'true');
     await userEvent.keyboard('{Enter}');
     await expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    const skill = within(canvas.getByRole('group', { name: 'Skill: factory-build' }));
+    const skill = within(canvas.getByRole('group', { name: 'Skill: implementation-review' }));
     await userEvent.click(skill.getByRole('button'));
     await expect(await skill.findByText('Implement the approved plan.')).toBeVisible();
     const approval = within(canvas.getByRole('group', { name: 'Tool approval for edit_file' }));
@@ -271,53 +230,12 @@ export const FactoryEventsAndApproval: Story = {
   },
 };
 
-export const StudioModelLocked: Story = { args: { modelState: 'locked' } };
-export const StudioProviderUnconfigured: Story = { args: { modelState: 'unconfigured' } };
-export const StudioInterjection: Story = { args: { scenario: 'streaming', canSendWhileStreaming: true } };
-export const FactoryPersonalSession: Story = {
-  args: { presentation: 'factory', factorySession: 'personal', scenario: 'empty' },
-};
-export const FactoryModelLoading: Story = { args: { presentation: 'factory', modelState: 'loading' } };
-export const FactoryModelUnconfigured: Story = { args: { presentation: 'factory', modelState: 'unconfigured' } };
-
-export const StudioModelSelection: Story = {
-  play: async ({ canvasElement }) => {
-    const page = within(canvasElement.ownerDocument.body);
-    await userEvent.click(page.getByRole('combobox', { name: 'Provider' }));
-    await userEvent.click(await page.findByRole('option', { name: 'Connected Anthropic' }));
-    await userEvent.click(await page.findByRole('option', { name: 'claude-sonnet-4-5' }));
-    await expect(page.getByRole('combobox', { name: 'Model' })).toHaveTextContent('claude-sonnet-4-5');
-    await userEvent.click(page.getByRole('button', { name: 'Model settings' }));
-    await userEvent.click(await page.findByRole('radio', { name: 'Generate' }));
-    await userEvent.click(page.getByRole('button', { name: 'Advanced Settings' }));
-    const dialog = within(await page.findByRole('dialog', { name: 'Advanced model settings' }));
-    await userEvent.type(dialog.getByRole('spinbutton', { name: 'Max Tokens' }), '2048');
-    await expect(dialog.getByRole('spinbutton', { name: 'Max Tokens' })).toHaveValue(2048);
-  },
-};
-
-export const FactoryModelSelection: Story = {
-  args: { presentation: 'factory', factorySession: 'personal', scenario: 'empty' },
+export const ModelSelection: Story = {
+  args: { scenario: 'empty' },
   play: async ({ canvasElement }) => {
     const page = within(canvasElement.ownerDocument.body);
     await userEvent.click(page.getByRole('button', { name: 'Session model, GPT-4.1' }));
-    await userEvent.click(await page.findByRole('option', { name: 'Model pack Review' }));
+    await userEvent.click(await page.findByRole('option', { name: 'Claude Sonnet 4.5' }));
     await expect(page.getByRole('button', { name: 'Session model, Claude Sonnet 4.5' })).toBeVisible();
-    await userEvent.click(page.getByRole('button', { name: 'Session model, Claude Sonnet 4.5' }));
-    await userEvent.click(await page.findByRole('option', { name: 'Reset to default pack' }));
-    await expect(page.getByRole('button', { name: 'Session model, GPT-4.1' })).toBeVisible();
-  },
-};
-
-export const StudioVoiceControls: Story = {
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'Start voice call' }));
-    await expect(canvas.getByTestId('voice-call-panel')).toHaveTextContent('Listening…');
-    await userEvent.click(canvas.getByRole('button', { name: 'End voice call' }));
-    await expect(canvas.queryByTestId('voice-call-panel')).not.toBeInTheDocument();
-    await userEvent.click(canvas.getByRole('button', { name: 'Start dictation' }));
-    await userEvent.click(canvas.getByRole('button', { name: 'Stop dictation' }));
-    await expect(canvas.getByRole('textbox', { name: 'Message' })).toHaveValue('Review the composer keyboard access.');
   },
 };
