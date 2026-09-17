@@ -2537,6 +2537,55 @@ describe('MDocument', () => {
       });
     });
 
+    it('should keep leading and trailing whitespace when stripWhitespace is false', async () => {
+      const text = '  hello world  ';
+      const doc = MDocument.fromText(text, { meta: 'data' });
+
+      await doc.chunk({
+        strategy: 'token',
+        maxSize: 100,
+        overlap: 0,
+        stripWhitespace: false,
+      });
+
+      const chunks = doc.getText();
+
+      expect(chunks).toEqual([text]);
+    });
+
+    it('should rejoin to the original text with stripWhitespace: false and no overlap', async () => {
+      const text = '  alpha beta\n\tgamma delta  ';
+      const doc = MDocument.fromText(text, { meta: 'data' });
+
+      await doc.chunk({
+        strategy: 'token',
+        maxSize: 2,
+        overlap: 0,
+        stripWhitespace: false,
+      });
+
+      const chunks = doc.getText();
+
+      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.join('')).toBe(text);
+    });
+
+    it('should strip whitespace by default', async () => {
+      const text = '  alpha beta\n\tgamma delta  ';
+      const doc = MDocument.fromText(text, { meta: 'data' });
+
+      await doc.chunk({
+        strategy: 'token',
+        maxSize: 2,
+        overlap: 0,
+      });
+
+      const chunks = doc.getText();
+
+      expect(chunks.every(chunk => chunk === chunk.trim())).toBe(true);
+      expect(chunks.join('')).not.toBe(text);
+    });
+
     describe('Error cases', () => {
       it('should throw error for invalid chunk maxSize and overlap', async () => {
         const text = '  This has whitespace   ';

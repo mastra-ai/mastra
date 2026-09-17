@@ -7,7 +7,7 @@ description: "Browse Charm Hyper model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/hyper.svg" alt="Charm Hyper logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Charm Hyper
 
-Access 34 Charm Hyper models through Mastra's model router. Authentication is handled automatically using the `HYPER_API_KEY` environment variable.
+Access 23 Charm Hyper models through Mastra's model router. Authentication is handled automatically using the `HYPER_API_KEY` environment variable.
 
 Learn more in the [Charm Hyper documentation](https://hyper.charm.land).
 
@@ -102,8 +102,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 32768,
-    "inputCost": 0.32664,
-    "outputCost": 1.30656
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "hyper/gemma-4-26b-a4b-it",
@@ -116,30 +116,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 25600,
     "inputCost": 0.098,
     "outputCost": 0.334
-  },
-  {
-    "model": "hyper/glm-5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 202752,
-    "maxOutput": 20275,
-    "inputCost": 0.93,
-    "outputCost": 2.878
-  },
-  {
-    "model": "hyper/glm-5.1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 202750,
-    "maxOutput": 3276,
-    "inputCost": 1.358,
-    "outputCost": 4.268
   },
   {
     "model": "hyper/glm-5.2",
@@ -214,30 +190,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.5
   },
   {
-    "model": "hyper/kimi-k2.5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 26214,
-    "inputCost": 0.5584,
-    "outputCost": 2.935
-  },
-  {
-    "model": "hyper/kimi-k2.6",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262000,
-    "maxOutput": 26214,
-    "inputCost": 1.03436,
-    "outputCost": 4.3552
-  },
-  {
     "model": "hyper/kimi-k2.7-code",
     "imageInput": true,
     "audioInput": false,
@@ -262,30 +214,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 16.332
   },
   {
-    "model": "hyper/llama-3.3-70b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 12800,
-    "inputCost": 0.6066,
-    "outputCost": 1.0386
-  },
-  {
-    "model": "hyper/llama-4-maverick-17b-128e-instruct-fp8",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 430000,
-    "maxOutput": 43000,
-    "inputCost": 0.25188,
-    "outputCost": 0.82563
-  },
-  {
     "model": "hyper/minimax-m2.7",
     "imageInput": false,
     "audioInput": false,
@@ -308,66 +236,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 512000,
     "inputCost": 0.32664,
     "outputCost": 1.30656
-  },
-  {
-    "model": "hyper/qwen3-coder-480b-a35b-instruct-int4-mixed-ar",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 106000,
-    "maxOutput": 10600,
-    "inputCost": 0.445,
-    "outputCost": 2.145
-  },
-  {
-    "model": "hyper/qwen3-next-80b-a3b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 26214,
-    "inputCost": 0.1175,
-    "outputCost": 1.136
-  },
-  {
-    "model": "hyper/qwen3.6-flash",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 64000,
-    "inputCost": 1,
-    "outputCost": 4
-  },
-  {
-    "model": "hyper/qwen3.6-max",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 64000,
-    "inputCost": 2,
-    "outputCost": 12
-  },
-  {
-    "model": "hyper/qwen3.6-plus",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 64000,
-    "inputCost": 2,
-    "outputCost": 6
   },
   {
     "model": "hyper/qwen3.7-flash",
