@@ -128,14 +128,14 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
     <div className="flex flex-col gap-4">
       <ToolExecutor
         beforeContent={
-          appHtml && <MCPToolApp html={appHtml} toolName={tool.name ?? tool.id} executeTool={executeTool} />
+          appHtml && <MCPToolApp html={appHtml} toolName={tool.name} executeTool={executeTool} />
         }
         executionResult={result}
         isExecutingTool={isExecuting}
         zodInputSchema={zodInputSchema}
         handleExecuteTool={handleExecuteTool}
         toolDescription={tool.description || ''}
-        toolId={tool.id}
+        toolId={tool.name}
         entityKey={`mcp:${serverId}:${tool.id}`}
       />
     </div>

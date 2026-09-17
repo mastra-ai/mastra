@@ -1,5 +1,6 @@
 import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getFeedbackRefetchInterval } from '../utils/feedback-refetch-interval';
 
 const FEEDBACK_PER_PAGE = 20;
 
@@ -27,6 +28,7 @@ export function useFeedback({ reviewStatus }: { reviewStatus?: FeedbackReviewSta
   };
 }
 
+/** Polls the pending-review total while enabled, stopping on permanent storage errors. */
 export function useFeedbackInboxCount({ enabled }: { enabled: boolean }) {
   const client = useMastraClient();
 
@@ -39,7 +41,7 @@ export function useFeedbackInboxCount({ enabled }: { enabled: boolean }) {
         orderBy: { field: 'timestamp', direction: 'DESC' },
       }),
     enabled,
-    refetchInterval: 3000,
+    refetchInterval: getFeedbackRefetchInterval,
   });
 }
 

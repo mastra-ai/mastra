@@ -69,6 +69,12 @@ function snapshotRequestContextEntries(
     // Never persist the framework-managed bearer token in durable workflow
     // input; a resumed authenticated request supplies its own fresh token.
     if (key === MASTRA_AUTH_TOKEN_KEY) continue;
+    // The merged version overrides (Mastra defaults < requestContext <
+    // call-site) are framework state written during prep (step 3). Persisting
+    // the merged value would freeze the preparing process's defaults over the
+    // executing worker's. The caller's own versions entry is re-added at the
+    // call site.
+    if (key === MASTRA_VERSIONS_KEY) continue;
     // Serialize each entry exactly once with a bounded pass: a shared-reference
     // graph would otherwise make JSON.stringify expand exponentially and wedge
     // the event loop on every durable step, and reading the value twice (probe
@@ -258,13 +264,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // 2. Get request context
   const requestContext = providedRequestContext ?? new RequestContext();
 
-  // 2a. Snapshot caller-provided RequestContext entries *before* preparation
-  // mutates the context (version overrides at step 3, MastraMemory at step 4).
-  // The persisted `customContext` should reflect only what the caller passed in,
-  // not internal-key state added during prep.
-  const requestContextEntriesSnapshot = snapshotRequestContextEntries(requestContext);
-
-  // 2b. Merge the wrapped agent's defaultOptions under the per-request options,
+  // 2a. Merge the wrapped agent's defaultOptions under the per-request options,
   // mirroring the non-durable Agent.stream()/generate() paths. Without this the
   // agent's configured defaults (maxSteps, providerOptions, etc.) are silently
   // dropped and durable runs fall back to DurableAgentDefaults.MAX_STEPS.
@@ -498,6 +498,25 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     }
   }
 
+  // Snapshot the request context AFTER input processors have run so their
+  // writes reach the durable run (#23904) — cross-process engines rebuild the
+  // context from these entries via restoreRequestContext, so anything missing
+  // here is silently dropped on the worker. Framework-internal prep state
+  // (memory keys, auth token, merged versions) is excluded by key inside
+  // snapshotRequestContextEntries; the versions entry is pinned back to the
+  // caller's own value (captured at step 3, before the merge) so persisted
+  // input still reflects only caller intent.
+  let requestContextEntriesSnapshot = snapshotRequestContextEntries(requestContext);
+  if (requestVersions !== undefined) {
+    const requestVersionsJson = boundedStringify(requestVersions);
+    if (requestVersionsJson !== undefined) {
+      requestContextEntriesSnapshot = {
+        ...requestContextEntriesSnapshot,
+        [MASTRA_VERSIONS_KEY]: JSON.parse(requestVersionsJson),
+      };
+    }
+  }
+
   // Resolve background task configuration before converting tools so eligible
   // tools expose the per-call `_background` override in their input schemas.
   const backgroundTasksConfig = typedAgent.getBackgroundTasksConfig?.();
@@ -586,6 +605,13 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     if (so.schema) {
       serializedStructuredOutput = {
         jsonPromptInjection: so.jsonPromptInjection,
+        // `instructions` means two different things depending on `model`: structuring-agent
+        // instructions when a separate structuring pass runs, injected prompt text when it
+        // does not. The durable path has no structuring pass (`structuringModelConfig` is
+        // never populated, so `llm-execution.ts` always takes the direct branch), so carrying
+        // the field when `model` is set would inject structuring-agent prose as the model's
+        // only output guidance. Withhold it there and let the generated schema instruction stand.
+        instructions: so.model ? undefined : so.instructions,
         useAgent: so.useAgent,
       };
       // Convert Zod schema to JSON Schema if possible

@@ -26,6 +26,8 @@ export interface NavItem {
   activePaths?: string[];
   /** When true, the item stays in the registry (so breadcrumbs/routes can resolve it) but is hidden from the sidebar and command palette. */
   hidden?: boolean;
+  /** When true, the sidebar folds the item under "More" unless it was visited recently or the server reports it is in use. */
+  foldable?: boolean;
 }
 
 export interface NavSection {
@@ -92,24 +94,28 @@ export const mainNav: NavSection[] = [
         url: '/processors',
         Icon: ProcessorIcon,
         isOnMastraPlatform: false,
+        foldable: true,
       },
       {
         name: 'MCP Servers',
         url: '/mcps',
         Icon: McpServerIcon,
         isOnMastraPlatform: true,
+        foldable: true,
       },
       {
         name: 'Tools',
         url: '/tools',
         Icon: ToolsIcon,
         isOnMastraPlatform: true,
+        foldable: true,
       },
       {
         name: 'Workspaces',
         url: '/workspaces',
         Icon: WorkspacesIcon,
         isOnMastraPlatform: true,
+        foldable: true,
       },
     ],
   },

@@ -5,6 +5,7 @@ import {
   planThreadQuery,
   planTraceQuery,
   TraceQueryExecutionError,
+  TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
 import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
@@ -429,7 +430,38 @@ describe('Postgres advanced trace query', () => {
       ],
       page: { next: expect.any(String) },
     });
-    expect(Object.keys(response.traces[0]!)).toHaveLength(10);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(16);
+    expect(response.traces[0]).toMatchObject({
+      name: 'Agent run',
+      entityId: 'agent-1',
+      parentSpanId: null,
+      createdAt: '2026-01-01T12:00:00.000Z',
+      metadata: { customer: { id: 'customer-1' }, count: 2 },
+      inputPreview: 'Help with my order',
+    });
+    expect(response.traces[0]).not.toHaveProperty('input');
+  });
+
+  it('returns null for absent optional root span details', async () => {
+    const row = {
+      ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
+      entityId: null,
+      metadata: null,
+      input: null,
+    };
+    const any = vi.fn().mockResolvedValue([row]);
+    const query = vi.fn();
+    const tx = vi.fn(async callback => callback({ query, any }));
+    const response = await queryTraces({ tx } as unknown as DbClient, 'public', plan(), 15_000);
+
+    expect(response.traces[0]).toMatchObject({
+      name: 'Agent run',
+      entityId: null,
+      parentSpanId: null,
+      metadata: null,
+      inputPreview: null,
+    });
+    expect(response.page.next).toBeNull();
   });
 
   it('reuses the transaction timeout and returns fixed thread identities with a next cursor', async () => {
@@ -459,6 +491,24 @@ describe('Postgres advanced trace query', () => {
     );
   });
 
+  it('normalizes PostgreSQL resource exhaustion without exposing driver details', async () => {
+    const tx = vi.fn().mockRejectedValue(Object.assign(new Error('out of memory: SELECT secret'), { code: '53200' }));
+
+    await expect(queryTraces({ tx } as unknown as DbClient, 'public', plan(), 15_000)).rejects.toEqual(
+      expect.objectContaining<Partial<TraceQueryResourceLimitError>>({
+        code: 'TRACE_QUERY_RESOURCE_LIMIT',
+        message: 'The trace query exceeded its resource limit',
+      }),
+    );
+  });
+
+  it('preserves resource-limit errors through the public vNext storage wrapper', async () => {
+    const tx = vi.fn().mockRejectedValue(Object.assign(new Error('out of memory: SELECT secret'), { code: '53200' }));
+    const storage = new ObservabilityStoragePostgresVNext({ client: { tx } as unknown as DbClient });
+
+    await expect(storage.queryTraces(plan())).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
+  });
+
   it('normalizes PostgreSQL statement timeouts without exposing driver details', async () => {
     const driverError = Object.assign(new Error('canceling statement due to statement timeout: SELECT secret'), {
       code: '57014',
@@ -483,6 +533,11 @@ function traceRow(traceId: string, startedAt: string) {
   return {
     traceId,
     rootSpanId: `root-${traceId}`,
+    name: 'Agent run',
+    entityId: 'agent-1',
+    parentSpanId: null,
+    metadata: { customer: { id: 'customer-1' }, count: 2 },
+    input: { messages: [{ role: 'user', content: 'Help with my order' }] },
     threadId: null,
     resourceId: null,
     startedAt: new Date(startedAt),

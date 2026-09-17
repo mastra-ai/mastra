@@ -70,7 +70,7 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
       isExecutingTool={isExecutingTool}
       zodInputSchema={zodInputSchema}
       handleExecuteTool={handleExecuteTool}
-      toolDescription={tool.description}
+      toolDescription={tool.description ?? ''}
       toolId={tool.id}
       requestContextSchema={tool.requestContextSchema}
       entityKey={`agent:${agentId}`}

@@ -24,7 +24,9 @@ function setup() {
       HttpResponse.json({ contents: [{ uri: 'ui://context', text: '<html><body>Context app</body></html>' }] }),
     ),
     http.post(`${BASE_URL}/api/mcp/server/tools/context-tool/execute`, async ({ request }) => {
-      requests(await request.json());
+      const encoded = new URL(request.url).searchParams.get('requestContext');
+      const body = await request.json();
+      requests({ ...body, requestContext: encoded ? JSON.parse(atob(encoded)) : {} });
       return HttpResponse.json({ content: [{ type: 'text', text: 'Executed' }] });
     }),
   );

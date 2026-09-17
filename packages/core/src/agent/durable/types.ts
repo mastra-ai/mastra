@@ -144,6 +144,8 @@ export interface SerializableStructuredOutput {
   schema?: JSONSchema7;
   /** Whether to use JSON prompt injection instead of native response format */
   jsonPromptInjection?: boolean | 'system' | 'inline' | 'auto';
+  /** Caller-supplied instructions (see `StructuredOutputOptionsBase.instructions`) */
+  instructions?: string;
   /** Whether to use the parent agent's model for structuring */
   useAgent?: boolean;
   /** Model config for a dedicated structuring model (if different from the main model) */

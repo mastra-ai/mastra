@@ -40,7 +40,6 @@ import AgentBuilderSkillsView from './pages/agent-builder/skills/view';
 import Agents from './pages/agents';
 import AgentSession from './pages/agents/agent/session';
 import AgentThread from './pages/agents/agent/thread';
-import AgentEvaluate from './pages/agents/agent-evaluate';
 import AgentPlayground from './pages/agents/agent-playground';
 import AgentTraces from './pages/agents/agent-traces';
 import CmsAgentAgentsPage from './pages/cms/agents/agents';
@@ -485,16 +484,7 @@ export const routes: RouteObject[] = [
           { path: 'threads/:threadId', element: <AgentThread /> },
           { path: 'overview', loader: legacyAgentSettingsLoader },
           { path: 'settings', loader: legacyAgentSettingsLoader },
-          ...(isExperimentalFeatures
-            ? [
-                { path: 'editor', element: <AgentPlayground /> },
-                { path: 'evaluate', element: <AgentEvaluate /> },
-                {
-                  path: 'review',
-                  loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/evaluate?tab=review`),
-                },
-              ]
-            : []),
+          ...(isExperimentalFeatures ? [{ path: 'editor', element: <AgentPlayground /> }] : []),
           { path: 'traces', element: <AgentTraces /> },
           {
             // Channels is configuration, not a tool tab: it now lives in the
