@@ -167,6 +167,94 @@ describe('runTraceImport', () => {
     }
   });
 
+  it('uses MASTRA_PLATFORM_ACCESS_TOKEN for interactive uploads', async () => {
+    vi.stubEnv('MASTRA_API_TOKEN', '');
+    vi.mocked(getToken).mockResolvedValue('interactive-session-token');
+    vi.mocked(getCurrentOrgId).mockResolvedValue('org');
+    vi.mocked(resolveProject).mockResolvedValue({
+      id: 'target-project',
+      name: 'Target project',
+      slug: 'target-project',
+      organizationId: 'org',
+    });
+
+    const stateRoot = await mkdtemp(join(tmpdir(), 'trace-import-action-'));
+    temporaryDirectories.push(stateRoot);
+    const createTarget = vi.fn(() => target());
+    const result = await runTraceImport(
+      { provider: 'langfuse', yes: true },
+      {
+        stateRoot,
+        now: () => NOW,
+        ui: ui(),
+        environment: { MASTRA_PLATFORM_ACCESS_TOKEN: 'platform-access-token' },
+        createProvider: () => provider(),
+        createTarget,
+      },
+    );
+
+    expect(result.status).toBe('complete');
+    expect(createTarget).toHaveBeenCalledWith({
+      accessToken: 'platform-access-token',
+      projectId: 'target-project',
+      projectName: 'Target project',
+    });
+  });
+
+  it('allows an interactive dry run without a Platform access token', async () => {
+    vi.stubEnv('MASTRA_API_TOKEN', '');
+    vi.mocked(getToken).mockResolvedValue('interactive-session-token');
+    vi.mocked(getCurrentOrgId).mockResolvedValue('org');
+    vi.mocked(resolveProject).mockResolvedValue({
+      id: 'target-project',
+      name: 'Target project',
+      slug: 'target-project',
+      organizationId: 'org',
+    });
+
+    const stateRoot = await mkdtemp(join(tmpdir(), 'trace-import-action-'));
+    temporaryDirectories.push(stateRoot);
+    const result = await runTraceImport(
+      { provider: 'langfuse', dryRun: true },
+      {
+        stateRoot,
+        now: () => NOW,
+        ui: ui(),
+        environment: {},
+        createProvider: () => provider(),
+      },
+    );
+
+    expect(result.status).toBe('dry-run');
+  });
+
+  it('requires a Platform access token before an interactive upload', async () => {
+    vi.stubEnv('MASTRA_API_TOKEN', '');
+    vi.mocked(getToken).mockResolvedValue('interactive-session-token');
+    vi.mocked(getCurrentOrgId).mockResolvedValue('org');
+    vi.mocked(resolveProject).mockResolvedValue({
+      id: 'target-project',
+      name: 'Target project',
+      slug: 'target-project',
+      organizationId: 'org',
+    });
+
+    const stateRoot = await mkdtemp(join(tmpdir(), 'trace-import-action-'));
+    temporaryDirectories.push(stateRoot);
+    await expect(
+      runTraceImport(
+        { provider: 'langfuse', yes: true },
+        {
+          stateRoot,
+          now: () => NOW,
+          ui: ui(),
+          environment: {},
+          createProvider: () => provider(),
+        },
+      ),
+    ).rejects.toThrow('MASTRA_PLATFORM_ACCESS_TOKEN is required');
+  });
+
   it('prepares a dry run without creating an upload target', async () => {
     const createTarget = vi.fn(() => target());
     const deps = await dependencies({ createTarget });
@@ -280,6 +368,7 @@ describe('runTraceImport', () => {
     vi.stubEnv('HOME', home);
     vi.stubEnv('USERPROFILE', home);
     vi.stubEnv('MASTRA_API_TOKEN', '');
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'token');
     vi.mocked(getToken).mockResolvedValue('token');
     vi.mocked(getCurrentOrgId).mockResolvedValue('org');
     vi.mocked(resolveProject).mockResolvedValue({

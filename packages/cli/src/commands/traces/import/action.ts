@@ -25,7 +25,7 @@ const DEFAULT_LANGFUSE_BASE_URL = 'https://cloud.langfuse.com';
 const DEFAULT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 interface PlatformDestination {
-  accessToken: string;
+  accessToken?: string;
   projectId: string;
   projectName: string;
 }
@@ -53,7 +53,7 @@ export interface TraceImportActionDependencies {
   now?: () => Date;
   stateRoot?: string;
   ui?: TraceImportUi;
-  resolveDestination?: (project: string | undefined) => Promise<PlatformDestination>;
+  resolveDestination?: (project: string | undefined, environment: NodeJS.ProcessEnv) => Promise<PlatformDestination>;
   createProvider?: (provider: string, environment: NodeJS.ProcessEnv) => TraceImportProvider;
   createTarget?: (destination: PlatformDestination) => PlatformTarget;
   verifyImport?: typeof verifyTraceImport;
@@ -79,7 +79,10 @@ function defaultUi(): TraceImportUi {
   };
 }
 
-async function defaultResolveDestination(project: string | undefined): Promise<PlatformDestination> {
+async function defaultResolveDestination(
+  project: string | undefined,
+  environment: NodeJS.ProcessEnv,
+): Promise<PlatformDestination> {
   const token = await getToken();
   const usesEnvironmentToken = Boolean(process.env.MASTRA_API_TOKEN);
   const orgId = usesEnvironmentToken ? process.env.MASTRA_ORG_ID : await getCurrentOrgId();
@@ -90,7 +93,24 @@ async function defaultResolveDestination(project: string | undefined): Promise<P
     throw new Error('No organization selected. Run: mastra auth orgs switch');
   }
   const resolved = await resolveProject(token, orgId, project);
-  return { accessToken: token, projectId: resolved.id, projectName: resolved.name };
+  const accessToken = usesEnvironmentToken ? token : environment.MASTRA_PLATFORM_ACCESS_TOKEN?.trim();
+  return {
+    ...(accessToken ? { accessToken } : {}),
+    projectId: resolved.id,
+    projectName: resolved.name,
+  };
+}
+
+function defaultCreateTarget(destination: PlatformDestination): PlatformTarget {
+  if (!destination.accessToken) {
+    throw new Error(
+      'MASTRA_PLATFORM_ACCESS_TOKEN is required to upload and verify traces when using an interactive Mastra login.',
+    );
+  }
+  return new MastraPlatformTraceTarget({
+    accessToken: destination.accessToken,
+    projectId: destination.projectId,
+  });
 }
 
 function requireEnvironment(environment: NodeJS.ProcessEnv, name: string): string {
@@ -255,18 +275,12 @@ export async function runTraceImport(
   const ui = dependencies.ui ?? defaultUi();
   const createProvider = dependencies.createProvider ?? defaultCreateProvider;
   const resolveDestination = dependencies.resolveDestination ?? defaultResolveDestination;
-  const createTarget =
-    dependencies.createTarget ??
-    (destination =>
-      new MastraPlatformTraceTarget({
-        accessToken: destination.accessToken,
-        projectId: destination.projectId,
-      }));
+  const createTarget = dependencies.createTarget ?? defaultCreateTarget;
   const verifyImport = dependencies.verifyImport ?? verifyTraceImport;
 
   ui.intro('Mastra trace import');
   ui.step('Resolving Mastra Platform project');
-  const destination = await resolveDestination(options.project);
+  const destination = await resolveDestination(options.project, environment);
   options.signal?.throwIfAborted();
 
   let state: { directory: string; manifest: TraceImportManifest };
