@@ -1555,6 +1555,13 @@ export class ProcessorRunner {
         continue;
       }
 
+      // The guard is attached speculatively whenever a processor could have swapped the
+      // model. Now that every user processor has run, `stepInput.model` is final: skip the
+      // guard before creating a span so a no-op never shows up in exported traces.
+      if (processorOrWorkflow instanceof TrailingAssistantGuard && !processorOrWorkflow.appliesTo(stepInput.model)) {
+        continue;
+      }
+
       const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
       };

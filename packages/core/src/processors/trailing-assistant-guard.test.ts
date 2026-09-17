@@ -39,6 +39,16 @@ describe('TrailingAssistantGuard', () => {
     expect(guard.name).toBe('Trailing Assistant Guard');
   });
 
+  it('appliesTo reports which final models the guard can act on', () => {
+    const guard = new TrailingAssistantGuard();
+
+    expect(guard.appliesTo({ provider: 'google', modelId: 'gemini-3.5-flash-lite' })).toBe(true);
+    expect(guard.appliesTo({ provider: 'anthropic.messages', modelId: 'claude-sonnet-4-6' })).toBe(true);
+    expect(guard.appliesTo({ provider: 'google', modelId: 'gemini-2.5-flash' })).toBe(false);
+    expect(guard.appliesTo({ provider: 'openai.chat', modelId: 'gpt-5' })).toBe(false);
+    expect(guard.appliesTo(undefined)).toBe(false);
+  });
+
   it('appends a user continuation message when native structured output follows an assistant message', () => {
     const guard = new TrailingAssistantGuard();
     const messages = [createMessage('user', 'question'), createMessage('assistant', 'draft response')];

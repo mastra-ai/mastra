@@ -15,8 +15,9 @@ const SETTLED_TOOL_STATES = new Set(['result', 'output-error']);
  * True when the model as configured rejects a prompt ending on a model turn
  * (Anthropic 4.6+ assistant prefill, Gemini 3+), or when any input processors are
  * configured, since a processor may swap `model` mid-step. In the latter case the
- * guard re-checks the provider against the final model it receives, so attaching
- * it is only ever a no-op cost.
+ * attach is speculative: the runner asks {@link TrailingAssistantGuard.appliesTo}
+ * against the final step model before running the guard, and skips it entirely
+ * (no processor span) when the provider does not need it.
  *
  * Used both where the `ProcessorRunner` is created for a step and where the
  * runner assembles its processor list, so an agent with no input processors
@@ -28,6 +29,15 @@ export function needsTrailingAssistantGuard(model: unknown, inputProcessors: rea
     isMaybeAnthropicWithoutAssistantPrefill(model) ||
     isMaybeGoogleWithoutTrailingModelTurn(model)
   );
+}
+
+/**
+ * Whether the guard can have any effect for `model`. Cheap provider/version
+ * check the runner uses to skip a speculatively attached guard without
+ * recording a processor span for it.
+ */
+export function trailingAssistantGuardAppliesTo(model: unknown): boolean {
+  return isMaybeGoogleWithoutTrailingModelTurn(model) || isMaybeAnthropicWithoutAssistantPrefill(model);
 }
 
 /**
@@ -77,6 +87,10 @@ export class TrailingAssistantGuard implements Processor<'trailing-assistant-gua
   readonly id = 'trailing-assistant-guard' as const;
   readonly name = 'Trailing Assistant Guard';
 
+  appliesTo(model: unknown): boolean {
+    return trailingAssistantGuardAppliesTo(model);
+  }
+
   processInputStep({
     messages,
     messageList,
@@ -87,9 +101,8 @@ export class TrailingAssistantGuard implements Processor<'trailing-assistant-gua
       structuredOutput?.schema && !structuredOutput?.model && !structuredOutput?.jsonPromptInjection,
     );
     const rejectsTrailingModelTurn = isMaybeGoogleWithoutTrailingModelTurn(model);
-    const rejectsStructuredOutputPrefill = rejectsTrailingModelTurn || isMaybeAnthropicWithoutAssistantPrefill(model);
 
-    if (!rejectsTrailingModelTurn && !(willUseResponseFormat && rejectsStructuredOutputPrefill)) return;
+    if (!rejectsTrailingModelTurn && !(willUseResponseFormat && this.appliesTo(model))) return;
 
     const lastMessage = messages[messages.length - 1];
     if (!lastMessage || !endsOnModelTurn(lastMessage, messageList?.dropsIncompleteToolCalls ?? true)) return;
