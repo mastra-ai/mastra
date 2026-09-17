@@ -17,6 +17,7 @@ export type { ServerRoutes, ServerRoute } from '../server-adapter/routes';
 // Modules with no conflicts (export * is safe)
 export * from './agent-builder';
 export * from './agent-versions';
+export * from './agent-version-labels';
 export * from './agents';
 export * from './auth';
 export * from './common';

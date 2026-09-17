@@ -291,6 +291,17 @@ describe('deriveAction', () => {
     });
   });
 
+  describe('version label publish action derivation', () => {
+    it('uses publish for custom-label create, move, and delete operations', () => {
+      expect(deriveAction('PUT', '/stored/agents/:agentId/labels/:label')).toBe('publish');
+      expect(deriveAction('DELETE', '/stored/agents/:agentId/labels/:label')).toBe('publish');
+    });
+
+    it('keeps label reads on stored-agents:read', () => {
+      expect(deriveAction('GET', '/stored/agents/:agentId/labels')).toBe('read');
+    });
+  });
+
   describe('case insensitivity', () => {
     it('should handle lowercase method', () => {
       expect(deriveAction('get', '/agents')).toBe('read');
@@ -379,6 +390,16 @@ describe('derivePermission', () => {
       );
       expect(derivePermission({ path: '/stored/scorers/:scorerId/versions/:versionId/restore', method: 'POST' })).toBe(
         'stored-scorers:publish',
+      );
+    });
+
+    it('should derive stored-agents permissions for version label management', () => {
+      expect(derivePermission({ path: '/stored/agents/:agentId/labels', method: 'GET' })).toBe('stored-agents:read');
+      expect(derivePermission({ path: '/stored/agents/:agentId/labels/:label', method: 'PUT' })).toBe(
+        'stored-agents:publish',
+      );
+      expect(derivePermission({ path: '/stored/agents/:agentId/labels/:label', method: 'DELETE' })).toBe(
+        'stored-agents:publish',
       );
     });
 

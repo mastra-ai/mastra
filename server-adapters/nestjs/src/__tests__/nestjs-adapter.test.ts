@@ -140,7 +140,8 @@ describe('NestJS Server Adapter', () => {
         try {
           data = JSON.parse(text);
         } catch {
-          data = { raw: text };
+          // Preserve non-JSON response bodies for the shared adapter contract.
+          data = text;
         }
       }
 

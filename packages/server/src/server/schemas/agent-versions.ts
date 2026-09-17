@@ -54,6 +54,16 @@ export const versionIdPathParams = z.object({
   versionId: z.string().describe('Unique identifier for the version (UUID)'),
 });
 
+/**
+ * Optional compare-and-swap precondition for moving the production pointer.
+ * The default keeps existing body-less activation requests valid.
+ */
+export const activateAgentVersionBodySchema = z
+  .object({
+    expectedActiveVersionId: z.string().min(1).nullable().optional(),
+  })
+  .default({});
+
 // ============================================================================
 // Response Schemas
 // ============================================================================
@@ -114,10 +124,14 @@ export const agentVersionSchema = z.object({
   createdAt: z.coerce.date().describe('When this version was created'),
 });
 
+export const agentVersionListItemSchema = agentVersionSchema.extend({
+  labels: z.array(z.string()).describe('Computed and custom labels that currently target this version'),
+});
+
 /**
  * Response for GET /stored/agents/:agentId/versions
  */
-export const listVersionsResponseSchema = createListVersionsResponseSchema(agentVersionSchema);
+export const listVersionsResponseSchema = createListVersionsResponseSchema(agentVersionListItemSchema);
 
 /**
  * Response for GET /stored/agents/:agentId/versions/:versionId

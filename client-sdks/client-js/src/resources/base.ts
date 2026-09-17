@@ -21,13 +21,14 @@ export class BaseResource {
     let lastError: Error | null = null;
     const {
       baseUrl,
-      retries = 3,
+      retries: configuredRetries = 3,
       backoffMs = 100,
       maxBackoffMs = 1000,
       headers = {},
       credentials,
       fetch: customFetch,
     } = this.options;
+    const { retries = configuredRetries, ...fetchOptions } = options;
     const fetchFn = customFetch || fetch;
 
     let delay = backoffMs;
@@ -37,7 +38,7 @@ export class BaseResource {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         const response = await fetchFn(`${baseUrl.replace(/\/$/, '')}${fullPath}`, {
-          ...options,
+          ...fetchOptions,
           headers: {
             ...(options.body &&
             !(options.body instanceof FormData) &&
@@ -53,7 +54,7 @@ export class BaseResource {
             // 'x-mastra-client-type': 'js',
           },
           signal: this.options.abortSignal,
-          credentials: options.credentials ?? credentials,
+          credentials: fetchOptions.credentials ?? credentials,
           body:
             options.body instanceof FormData ? options.body : options.body ? JSON.stringify(options.body) : undefined,
         });

@@ -1,6 +1,7 @@
 import type { Server } from 'node:http';
 import { Mastra } from '@mastra/core';
 import type { ServerRoute } from '@mastra/server/server-adapter';
+import { HTTPException } from '@mastra/server/server-adapter';
 import Koa from 'koa';
 import bodyParser from 'koa-bodyparser';
 import { describe, it, expect, afterEach } from 'vitest';
@@ -349,6 +350,39 @@ describe('Koa onError hook integration tests', () => {
   });
 
   describe('Error Handling via init()', () => {
+    it.each([
+      { status: 409 as const, body: '{"code":"VERSION_LABEL_CONFLICT"}', contentType: 'application/json' },
+      { status: 418 as const, body: 'custom text', contentType: 'text/custom' },
+    ])('preserves the exception status $status for a structured outer-middleware error', async testCase => {
+      const app = new Koa();
+      const emittedErrors: Error[] = [];
+      app.on('error', error => emittedErrors.push(error));
+      const adapter = new MastraServer({ app, mastra: new Mastra() });
+      await adapter.init();
+
+      // This middleware runs outside the route handler's own error boundary.
+      app.use(ctx => {
+        if (ctx.path === '/test/middleware-error') {
+          throw new HTTPException(testCase.status, {
+            res: new Response(testCase.body, {
+              headers: { 'Content-Type': testCase.contentType, 'X-Custom-Error': 'preserved' },
+            }),
+          });
+        }
+      });
+
+      server = app.listen(0);
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Failed to get server address');
+      const response = await fetch(`http://localhost:${address.port}/test/middleware-error`);
+
+      expect(response.status).toBe(testCase.status);
+      expect(response.headers.get('content-type')).toContain(testCase.contentType);
+      expect(response.headers.get('x-custom-error')).toBe('preserved');
+      expect(await response.text()).toBe(testCase.body);
+      expect(emittedErrors).toHaveLength(1);
+    });
+
     it('should handle errors through init() with onError configured', async () => {
       let onErrorCalled = false;
 

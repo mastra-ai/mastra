@@ -967,7 +967,10 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         });
 
         expect(response.status).toBe(404);
-        expect(response.data).toEqual({ error: 'Legacy fallback' });
+        // Ordinary error responses may include adapter metadata (for example
+        // NestJS's code, requestId, and timestamp); custom response bodies above
+        // must still be preserved exactly.
+        expect(response.data).toMatchObject({ error: 'Legacy fallback' });
         expect(custom.getHandlerCalls()).toBe(1);
       });
     });

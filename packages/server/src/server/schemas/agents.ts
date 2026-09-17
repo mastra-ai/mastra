@@ -5,6 +5,7 @@ import type {
   ToolsInput,
 } from '@mastra/core/agent';
 import type { CoreMessageV4 } from '@mastra/core/agent/message-list';
+import type { VersionSelector } from '@mastra/core/di';
 import type { ScoringSamplingConfig } from '@mastra/core/evals';
 import type { OutputType, SystemMessage } from '@mastra/core/llm';
 import type { ReasoningLevel } from '@mastra/core/loop';
@@ -125,23 +126,36 @@ export const agentIdPathParams = z.object({
   agentId: z.string().describe('Unique identifier for the agent'),
 });
 
+/** A single root-agent selector. Mutual exclusivity is enforced by the handler
+ * so conflicts receive the stable INVALID_VERSION_SELECTOR envelope. */
+export const agentVersionSelectorSchema = z
+  .object({
+    versionId: z.string().optional(),
+    label: z.string().optional(),
+    status: z.enum(['draft', 'published']).optional(),
+  })
+  .strict();
+
+const typedAgentVersionSelectorSchema = typedPermissive<VersionSelector>(agentVersionSelectorSchema);
+
+/** Canonical public version overrides shared by every agent execution surface. */
+export const agentVersionOverridesSchema = z.object({
+  self: typedAgentVersionSelectorSchema.optional(),
+  agents: z.record(z.string(), typedAgentVersionSelectorSchema).optional(),
+  defaultStatus: z.enum(['draft', 'published']).optional(),
+});
+
+/** Version overrides for execution surfaces whose target lives in the agent map. */
+export const agentDependencyVersionOverridesSchema = agentVersionOverridesSchema.omit({ self: true });
+
 /**
- * Query params for GET /agents/:agentId — controls which stored config version is used for overrides.
- * When `status` and `versionId` are both provided, `versionId` takes precedence.
- * - `status` — 'draft' (latest version) or 'published' (active published version, default).
- * - `versionId` — Resolve with a specific version ID.
+ * Query params for agent reads and executions. At most one selector may be
+ * supplied: immutable version ID, movable label, or publication status.
  */
 export const agentVersionQuerySchema = z.object({
-  status: z
-    .enum(['draft', 'published'])
-    .optional()
-    .describe(
-      'Which stored config version to resolve: draft (latest version) or published (active version, default). When both status and versionId are provided, versionId takes precedence.',
-    ),
-  versionId: z
-    .string()
-    .optional()
-    .describe('Specific version ID to resolve. Takes precedence over status when both are provided.'),
+  status: z.enum(['draft', 'published']).optional().describe('Resolve the latest draft or active published version.'),
+  versionId: z.string().optional().describe('Resolve a specific immutable version ID.'),
+  label: z.string().optional().describe('Resolve a computed or custom version label.'),
 });
 
 export const agentPlanQuerySchema = agentVersionQuerySchema.extend({
@@ -286,6 +300,8 @@ export const serializedAgentSchema = z.object({
   source: z.enum(['code', 'stored', 'fs']).optional(),
   status: z.enum(['draft', 'published', 'archived']).optional(),
   activeVersionId: z.string().optional(),
+  resolvedVersionId: z.string().optional(),
+  selectedVersionLabel: z.string().optional(),
   hasDraft: z.boolean().optional(),
   editor: agentEditorConfigSchema.optional(),
 });
@@ -392,18 +408,12 @@ export const agentExecutionBodySchema = z
     // Request Context (handler-specific field - merged with server's requestContext)
     requestContext: z.record(z.string(), z.unknown()).optional(),
 
-    // Version overrides for sub-agents (and future primitives)
-    versions: z
-      .object({
-        agents: z
-          .record(
-            z.string(),
-            z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
-          )
-          .optional(),
-        defaultStatus: z.enum(['draft', 'published']).optional(),
-      })
-      .optional(),
+    // Version overrides for the root agent, sub-agents, and future primitives
+    versions: agentVersionOverridesSchema.optional(),
+    // Opaque server-issued identity used only by SDK-managed client-tool recursion.
+    // Unlike a public version selector, this can preserve an explicitly
+    // unversioned/base root without making that state caller-forgeable.
+    versionContinuationToken: z.string().min(1).max(256).optional(),
 
     // Execution Control
     maxSteps: z.number().optional(),
@@ -500,6 +510,10 @@ export const executeToolBodySchema = executeToolDataBodySchema.extend({
   requestContext: z.record(z.string(), z.unknown()).optional(),
 });
 
+export const executeAgentToolBodySchema = executeToolBodySchema.extend({
+  versions: agentVersionOverridesSchema.optional(),
+});
+
 export const executeToolContextBodySchema = executeToolDataBodySchema.extend({
   requestContext: z.record(z.string(), z.unknown()).optional(),
 });
@@ -516,6 +530,7 @@ const toolCallActionBodySchema = z.object({
   runId: z.string(),
   model: z.string().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
+  versions: agentVersionOverridesSchema.optional(),
   toolCallId: z.string(),
   format: z.string().optional(),
 });
@@ -523,6 +538,7 @@ const networkToolCallActionBodySchema = z.object({
   runId: z.string(),
   model: z.string().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
+  versions: agentVersionOverridesSchema.optional(),
   format: z.string().optional(),
 });
 
@@ -636,17 +652,7 @@ export const resumeStreamBodySchema = agentExecutionBodySchema.omit({ messages: 
 export const recoverBodySchema = z.object({
   runId: z.string(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
-  versions: z
-    .object({
-      agents: z
-        .record(
-          z.string(),
-          z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
-        )
-        .optional(),
-      defaultStatus: z.enum(['draft', 'published']).optional(),
-    })
-    .optional(),
+  versions: agentVersionOverridesSchema.optional(),
 });
 
 // ============================================================================
@@ -782,6 +788,8 @@ export const subscribeAgentThreadBodySchema = z.object({
 export const abortAgentThreadBodySchema = subscribeAgentThreadBodySchema;
 
 export const sendToolApprovalBodySchema = z.object({
+  /** Source run whose immutable pins own a cross-process messages continuation. */
+  runId: z.string().min(1).optional(),
   resourceId: z.string(),
   threadId: z.string(),
   requestContext: z.record(z.string(), z.unknown()).optional(),

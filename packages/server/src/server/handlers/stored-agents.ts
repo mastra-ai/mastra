@@ -4,7 +4,7 @@ import type { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import {
   storedAgentIdPathParams,
-  statusQuerySchema,
+  storedAgentVersionQuerySchema,
   listStoredAgentsQuerySchema,
   createStoredAgentBodySchema,
   updateStoredAgentBodySchema,
@@ -40,6 +40,7 @@ import { validateAgentInstructionReferences } from './validate-agent-instruction
 import { validateMetadataAvatarUrl } from './validate-avatar';
 import { handleAutoVersioning } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
+import { createVersionLabelApiError, handleVersionLabelError } from './version-label-errors';
 
 /**
  * Resolve a `browser` field that may be a boolean shorthand from the UI.
@@ -492,15 +493,16 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
   path: '/stored/agents/:storedAgentId',
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
-  queryParamSchema: statusQuerySchema,
+  queryParamSchema: storedAgentVersionQuerySchema,
   responseSchema: getStoredAgentResponseSchema,
   summary: 'Get stored agent by ID',
   description:
-    'Returns a specific agent from storage by its unique identifier. Use ?status=draft to resolve with the latest (draft) version, or ?status=published (default) for the active published version.',
+    'Returns a stored agent resolved by one optional selector: status, immutable versionId, or version label.',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, requestContext, storedAgentId, status }) => {
+  handler: async ({ mastra, requestContext, storedAgentId, status, versionId, label }) => {
     try {
+      const notFoundMessage = `Stored agent with id ${storedAgentId} not found`;
       const storage = mastra.getStorage();
 
       if (!storage) {
@@ -512,22 +514,52 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
-      const agent = await agentsStore.getByIdResolved(storedAgentId, { status });
-
-      if (!agent) {
-        throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
+      const parent = await agentsStore.getById(storedAgentId);
+      if (!parent) {
+        throw createVersionLabelApiError('ENTITY_NOT_FOUND', notFoundMessage, { agentId: storedAgentId });
       }
-      assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
+      try {
+        assertStoredResourceScope(parent, await getStoredResourceScope(mastra, requestContext));
 
-      // Throws 404 if the caller isn't the owner, admin, `stored-agents:read[:<id>]`
-      // holder, and the record isn't public/legacy-unowned.
-      assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: agent });
+        // Throws 404 if the caller isn't the owner, admin, `stored-agents:read[:<id>]`
+        // holder, and the record isn't public/legacy-unowned.
+        assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: parent });
+      } catch (error) {
+        if (error instanceof HTTPException && error.status === 404) {
+          throw createVersionLabelApiError('ENTITY_NOT_FOUND', notFoundMessage, { agentId: storedAgentId });
+        }
+        throw error;
+      }
+
+      const supplied = [
+        status !== undefined ? 'status' : undefined,
+        versionId !== undefined ? 'versionId' : undefined,
+        label !== undefined ? 'label' : undefined,
+      ].filter((field): field is string => !!field);
+      if (supplied.length > 1) {
+        throw createVersionLabelApiError(
+          'INVALID_VERSION_SELECTOR',
+          'Provide at most one of versionId, label, or status',
+          { source: 'query', fields: supplied },
+        );
+      }
+      if (versionId !== undefined && versionId.length === 0) {
+        throw createVersionLabelApiError('INVALID_VERSION_SELECTOR', 'versionId must be a non-empty string', {
+          source: 'query',
+        });
+      }
+      const selector =
+        versionId !== undefined ? { versionId } : label !== undefined ? { label } : status ? { status } : undefined;
+      const agent = await agentsStore.getByIdResolved(storedAgentId, selector);
+      if (!agent) {
+        throw createVersionLabelApiError('ENTITY_NOT_FOUND', notFoundMessage, { agentId: storedAgentId });
+      }
 
       const authors = await prepareAuthorEnrichment(mastra, requestContext, [agent.authorId]);
       const withFavorite = await enrichOrStripFavorites(mastra, requestContext, 'agent', agent);
       return attachAuthor(withFavorite, authors);
     } catch (error) {
-      return handleError(error, 'Error getting stored agent');
+      return handleVersionLabelError(error, 'Error getting stored agent');
     }
   },
 });

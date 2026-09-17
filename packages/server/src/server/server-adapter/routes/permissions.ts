@@ -114,6 +114,13 @@ export function extractResource(path: string): string | null {
 export function deriveAction(method: string, path: string): string {
   const upperMethod = method.toUpperCase();
 
+  // Custom agent labels are release pointers. Creating, moving, or deleting
+  // one intentionally reuses publish authorization instead of ordinary stored
+  // agent write/delete authorization.
+  if ((upperMethod === 'PUT' || upperMethod === 'DELETE') && /^\/stored\/agents\/[^/]+\/labels\/[^/]+$/.test(path)) {
+    return 'publish';
+  }
+
   // For POST requests, check if it's a publish, execute, or write operation.
   // Publish takes precedence over execute since these suffixes are distinct
   // version-lifecycle operations on stored resources. Restrict publish-suffix
