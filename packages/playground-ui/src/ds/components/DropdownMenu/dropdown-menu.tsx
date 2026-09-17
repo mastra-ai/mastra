@@ -1,3 +1,4 @@
+import '../../../../new-theme.css';
 import { Menu as MenuPrimitive } from '@base-ui/react/menu';
 import type { MenuPopupProps, MenuPositionerProps } from '@base-ui/react/menu';
 import { CheckIcon, ChevronDown } from 'lucide-react';
@@ -21,6 +22,20 @@ import { resolveTriggerRender } from '@/ds/primitives/trigger-button';
 import type { TriggerButtonProps } from '@/ds/primitives/trigger-button';
 import { cn } from '@/lib/utils';
 
+const dropdownMenuPopupClass = cn(
+  menuPopupClass,
+  'new-theme border-border bg-popover text-foreground',
+  'motion-reduce:data-[open]:animate-none motion-reduce:data-[closed]:animate-none',
+);
+
+const dropdownMenuItemClass = cn(
+  menuItemClass,
+  'text-foreground hover:bg-foreground/5 hover:text-foreground active:bg-foreground/10',
+  'data-highlighted:bg-foreground/5 data-highlighted:text-foreground data-selected:text-foreground',
+);
+
+const dropdownMenuCheckClass = cn(menuItemCheckClass, 'text-foreground');
+
 const DropdownMenuRoot = MenuPrimitive.Root;
 
 const DropdownMenuGroup = MenuPrimitive.Group;
@@ -33,11 +48,6 @@ const DropdownMenuRadioGroup = MenuPrimitive.RadioGroup;
 
 export type DropdownMenuTriggerProps = Omit<MenuPrimitive.Trigger.Props, 'className'> & TriggerButtonProps;
 
-/**
- * The button that opens the menu. Renders a design-system `<Button>` by
- * default, so it takes Button's `variant` / `size` / `tooltip`. Pass `render`
- * to project the behavior onto your own element (then the look is yours).
- */
 const DropdownMenuTrigger = React.forwardRef<HTMLButtonElement, DropdownMenuTriggerProps>(
   ({ className, asChild, render, children, variant, size, tooltip, ...props }, ref) => {
     const resolved = resolveTriggerRender({ render, asChild, children, variant, size, tooltip, className });
@@ -60,8 +70,8 @@ const DropdownMenuSubTrigger = React.forwardRef<HTMLDivElement, DropdownMenuSubT
     <MenuPrimitive.SubmenuTrigger
       ref={ref}
       className={cn(
-        menuItemClass,
-        'data-[popup-open]:bg-neutral6/5 data-[popup-open]:text-neutral6',
+        dropdownMenuItemClass,
+        'data-[popup-open]:bg-foreground/5 data-[popup-open]:text-foreground',
         inset && menuItemInsetClass,
         className,
       )}
@@ -100,8 +110,7 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
     },
     ref,
   ) => {
-    // Default to the nearest SideDialog/Drawer popup so the submenu stays
-    // interactive inside a modal drawer.
+    // Modal drawers require the portal inside their popup to stay interactive.
     const resolvedContainer = usePortalContainer();
     const positionerProps: DropdownMenuContentPositionerProps = {
       align,
@@ -124,7 +133,7 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
           <MenuPrimitive.Popup
             ref={ref}
             data-slot="dropdown-menu-sub-content"
-            className={cn(menuPopupClass, className)}
+            className={cn(dropdownMenuPopupClass, className)}
             {...props}
           />
         </MenuPrimitive.Positioner>
@@ -162,8 +171,7 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
     },
     ref,
   ) => {
-    // Default to the nearest SideDialog/Drawer popup so the menu stays
-    // interactive inside a modal drawer; an explicit `container` still wins.
+    // Modal drawers require the portal inside their popup to stay interactive.
     const resolvedContainer = usePortalContainer(container);
     const positionerProps: DropdownMenuContentPositionerProps = {
       align,
@@ -186,7 +194,7 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
           <MenuPrimitive.Popup
             ref={ref}
             data-slot="dropdown-menu-content"
-            className={cn(menuPopupClass, size === 'sm' && 'rounded-md p-0.5', className)}
+            className={cn(dropdownMenuPopupClass, size === 'sm' && 'rounded-md p-0.5', className)}
             {...props}
           />
         </MenuPrimitive.Positioner>
@@ -215,7 +223,7 @@ const DropdownMenuItem = React.forwardRef<HTMLDivElement, DropdownMenuItemProps>
         onSelect?.(event);
       }}
       className={cn(
-        variant === 'destructive' ? menuItemDestructiveClass : menuItemClass,
+        variant === 'destructive' ? menuItemDestructiveClass : dropdownMenuItemClass,
         size === 'sm' && 'h-form-xs gap-2 rounded-sm py-1 text-ui-xs leading-none',
         inset && menuItemInsetClass,
         className,
@@ -228,9 +236,9 @@ DropdownMenuItem.displayName = 'DropdownMenuItem';
 
 const DropdownMenuCheckboxItem = React.forwardRef<HTMLDivElement, MenuPrimitive.CheckboxItem.Props>(
   ({ className, children, checked, ...props }, ref) => (
-    <MenuPrimitive.CheckboxItem ref={ref} className={cn(menuItemClass, className)} checked={checked} {...props}>
+    <MenuPrimitive.CheckboxItem ref={ref} className={cn(dropdownMenuItemClass, className)} checked={checked} {...props}>
       {children}
-      <MenuPrimitive.CheckboxItemIndicator className={menuItemCheckClass}>
+      <MenuPrimitive.CheckboxItemIndicator className={dropdownMenuCheckClass}>
         <CheckIcon />
       </MenuPrimitive.CheckboxItemIndicator>
     </MenuPrimitive.CheckboxItem>
@@ -240,9 +248,9 @@ DropdownMenuCheckboxItem.displayName = 'DropdownMenuCheckboxItem';
 
 const DropdownMenuRadioItem = React.forwardRef<HTMLDivElement, MenuPrimitive.RadioItem.Props>(
   ({ className, children, ...props }, ref) => (
-    <MenuPrimitive.RadioItem ref={ref} className={cn(menuItemClass, className)} {...props}>
+    <MenuPrimitive.RadioItem ref={ref} className={cn(dropdownMenuItemClass, className)} {...props}>
       {children}
-      <MenuPrimitive.RadioItemIndicator className={menuItemCheckClass}>
+      <MenuPrimitive.RadioItemIndicator className={dropdownMenuCheckClass}>
         <CheckIcon />
       </MenuPrimitive.RadioItemIndicator>
     </MenuPrimitive.RadioItem>
@@ -256,29 +264,27 @@ type DropdownMenuLabelProps = React.HTMLAttributes<HTMLDivElement> & {
 
 const DropdownMenuLabel = React.forwardRef<HTMLDivElement, DropdownMenuLabelProps>(
   ({ className, inset, ...props }, ref) => (
-    <div ref={ref} className={cn(menuLabelClass, inset && menuItemInsetClass, className)} {...props} />
+    <div
+      ref={ref}
+      className={cn(menuLabelClass, 'text-muted-foreground', inset && menuItemInsetClass, className)}
+      {...props}
+    />
   ),
 );
 DropdownMenuLabel.displayName = 'DropdownMenuLabel';
 
 const DropdownMenuSeparator = React.forwardRef<HTMLDivElement, MenuPrimitive.Separator.Props>(
   ({ className, ...props }, ref) => (
-    <MenuPrimitive.Separator ref={ref} className={cn(menuSeparatorClass, className)} {...props} />
+    <MenuPrimitive.Separator ref={ref} className={cn(menuSeparatorClass, 'bg-border', className)} {...props} />
   ),
 );
 DropdownMenuSeparator.displayName = 'DropdownMenuSeparator';
 
 const DropdownMenuShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
-  return <span className={cn(menuShortcutClass, className)} {...props} />;
+  return <span className={cn(menuShortcutClass, 'text-muted-foreground', className)} {...props} />;
 };
 DropdownMenuShortcut.displayName = 'DropdownMenuShortcut';
 
-/**
- *
- * Right now, these are the props mostly used for the menu
- * if we find out, consumers need more props, we can just extend it
- * with componentProps
- */
 function DropdownMenu({
   open,
   defaultOpen,
