@@ -1,6 +1,7 @@
 import { StdinBuffer } from '@earendil-works/pi-tui';
 import type { Terminal } from '@earendil-works/pi-tui';
 import type { MastraCodeConfig } from '@mastra/code-sdk';
+import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
 import type { Terminal as XtermTerminalType } from '@xterm/headless';
 import xterm from '@xterm/headless';
 
@@ -23,7 +24,7 @@ export type TerminalRunConfig = {
   env: Record<string, string | null>;
   cwd: string;
   context: McE2ePrepareContext;
-  readGlobalSettings: () => Record<string, unknown>;
+  readGlobalSettings: () => GlobalSettings;
 };
 
 const XtermTerminal = xterm.Terminal;

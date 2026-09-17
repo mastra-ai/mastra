@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmdirSync, rmSync, wr
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LLMock } from '@copilotkit/aimock';
+import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
 import { LibSQLStore } from '@mastra/libsql';
 import { afterAll, describe, it } from 'vitest';
 
@@ -75,16 +76,16 @@ function getAppDataDirForHome(homeDir: string): string {
   return join(homeDir, '.local', 'share', 'mastracode');
 }
 
-export function readGlobalSettings(appDataDir: string): Record<string, unknown> {
+export function readGlobalSettings(appDataDir: string): GlobalSettings {
   const configPath = join(appDataDir, 'config.json');
   const statePath = join(appDataDir, 'state.json');
   const legacyPath = join(appDataDir, 'settings.json');
   const config = existsSync(configPath)
-    ? (JSON.parse(readFileSync(configPath, 'utf8')) as Record<string, unknown>)
+    ? JSON.parse(readFileSync(configPath, 'utf8'))
     : existsSync(legacyPath)
-      ? (JSON.parse(readFileSync(legacyPath, 'utf8')) as Record<string, unknown>)
+      ? JSON.parse(readFileSync(legacyPath, 'utf8'))
       : {};
-  const state = existsSync(statePath) ? (JSON.parse(readFileSync(statePath, 'utf8')) as Record<string, unknown>) : {};
+  const state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')) : {};
   return { ...config, ...state };
 }
 

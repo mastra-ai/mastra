@@ -60,16 +60,12 @@ export const modelsPackActivationPersistenceScenario = {
     await runtime.waitForScreenText(/Switched to Models Pack E2E pack/i, terminal, 8_000);
 
     const settings = readGlobalSettings();
-    const models = settings.models as Record<string, unknown>;
-    const modeDefaults = models.modeDefaults as Record<string, unknown>;
-    const subagentModels = models.subagentModels as Record<string, unknown>;
     if (
-      models.activeModelPackId !== 'custom:Models Pack E2E' ||
-      modeDefaults.plan !== 'models-pack-e2e/plan-e2e' ||
-      modeDefaults.build !== 'models-pack-e2e/build-e2e' ||
-      modeDefaults.fast !== 'models-pack-e2e/fast-e2e' ||
-      Object.keys(subagentModels).length !== 0 ||
-      !Array.isArray(settings.customModelPacks) ||
+      settings.models.activeModelPackId !== 'custom:Models Pack E2E' ||
+      settings.models.modeDefaults.plan !== 'models-pack-e2e/plan-e2e' ||
+      settings.models.modeDefaults.build !== 'models-pack-e2e/build-e2e' ||
+      settings.models.modeDefaults.fast !== 'models-pack-e2e/fast-e2e' ||
+      Object.keys(settings.models.subagentModels).length !== 0 ||
       settings.customModelPacks.length !== 1
     ) {
       throw new Error('Expected the activated model pack in global settings');

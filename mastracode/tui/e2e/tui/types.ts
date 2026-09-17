@@ -1,4 +1,5 @@
 import type { Terminal } from '@earendil-works/pi-tui';
+import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
 
 import type { createMastraCode, MastraCodeConfig } from '../../src/index.js';
 import type { MastraTUIOptions } from '../../src/tui/index.js';
@@ -273,7 +274,7 @@ export type McE2eScenario = {
     terminal: McE2eTerminal;
     runtime: McE2eScenarioRuntime;
     dbPath: string;
-    readGlobalSettings: () => Record<string, unknown>;
+    readGlobalSettings: () => GlobalSettings;
   }) => Promise<void>;
   verifyAimockRequests?: (requests: unknown[]) => void;
 };

@@ -80,9 +80,7 @@ export const onboardingOmFollowsLoginScenario = {
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     const settings = readGlobalSettings();
-    const onboarding = settings.onboarding as Record<string, unknown>;
-    const models = settings.models as Record<string, unknown>;
-    if (onboarding.omPackId !== 'anthropic' || models.activeOmPackId !== 'anthropic') {
+    if (settings.onboarding.omPackId !== 'anthropic' || settings.models.activeOmPackId !== 'anthropic') {
       throw new Error('Expected onboarding and model settings to use the Anthropic pack');
     }
 
