@@ -126,10 +126,11 @@ export class AuthStorage {
    *    slot wins and its tokens are adopted onto the active entry.
    * 3. A registry with no active entry (hand-edited) self-heals to its first
    *    entry; malformed `accounts:` values are skipped, never fatal.
-   * 4. A registry whose legacy slot disappeared (`remove()` deletes only the
-   *    slot) self-heals by mirroring the active entry's tokens back into the
-   *    slot, so `isLoggedIn()`/`getOAuthCredential()` keep agreeing with
-   *    `listAccounts()`.
+   * 4. A registry whose legacy slot disappeared (partial write, an external
+   *    hand-edit) self-heals by mirroring the active entry's tokens back into
+   *    the slot, so `isLoggedIn()`/`getOAuthCredential()` keep agreeing with
+   *    `listAccounts()`. `remove()`/`logout()` clear the registry with the
+   *    slot, so they never leave the shape this heals.
    */
   private migrate(): void {
     let changed = false;
@@ -238,11 +239,18 @@ export class AuthStorage {
   }
 
   /**
-   * Remove credential for a provider.
+   * Remove credential for a provider, including its account registry.
+   * Clearing only the slot would leave the registry behind, and the next
+   * load's migration would heal the slot back from it — resurrecting the
+   * provider the caller just signed out.
    */
   remove(provider: string): void {
     this.reload();
     delete this.data[provider];
+    const prefix = this.accountPrefixFor(provider);
+    for (const key of Object.keys(this.data)) {
+      if (key.startsWith(prefix)) delete this.data[key];
+    }
     this.save();
   }
 
@@ -339,13 +347,7 @@ export class AuthStorage {
    * Logout from a provider: remove the legacy slot and every registered account.
    */
   logout(provider: string): void {
-    this.reload();
-    delete this.data[provider];
-    const prefix = this.accountPrefixFor(provider);
-    for (const key of Object.keys(this.data)) {
-      if (key.startsWith(prefix)) delete this.data[key];
-    }
-    this.save();
+    this.remove(provider);
   }
 
   // ---------------------------------------------------------------------------

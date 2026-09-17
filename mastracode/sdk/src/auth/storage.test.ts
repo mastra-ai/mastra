@@ -109,6 +109,30 @@ describe('AuthStorage multi-account registry', () => {
     expect(onDisk[PROVIDER]).toEqual({ type: 'oauth', refresh: 'r1', access: 'a1', expires: FUTURE });
   });
 
+  it('remove() clears the registry so a fresh load cannot resurrect the provider', () => {
+    const active = accountRecord('r1', 'a1', { active: true, label: 'Work' });
+    const inactive = accountRecord('r2', 'a2', { label: 'Personal' });
+    const { storage, authPath } = makeStorage({
+      [PROVIDER]: oauthCred('r1', 'a1'),
+      [`accounts:${active.id}`]: active,
+      [`accounts:${inactive.id}`]: inactive,
+    });
+
+    storage.remove(PROVIDER);
+
+    // The registry dies with the slot — nothing left for migration to heal from.
+    const onDisk = readAuthJson(authPath);
+    expect(Object.keys(onDisk).filter(k => k.startsWith(`accounts:${PROVIDER}:`))).toHaveLength(0);
+    expect(onDisk[PROVIDER]).toBeUndefined();
+
+    // A fresh process (provider fetch wrappers reload on every request) must
+    // see the provider fully signed out, not healed back in.
+    const reloaded = new AuthStorage(authPath);
+    expect(reloaded.isLoggedIn(PROVIDER)).toBe(false);
+    expect(reloaded.get(PROVIDER)).toBeUndefined();
+    expect(reloaded.listAccounts(PROVIDER)).toHaveLength(0);
+  });
+
   it('activates the first registry entry when both slot and active marker are missing', () => {
     const first = accountRecord('r1', 'a1');
     const second = accountRecord('r2', 'a2');
