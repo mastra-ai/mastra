@@ -139,9 +139,10 @@ const MASTRACODE_TRANSIENT_CONNECTION_RETRY_MAX_DELAY_MS = 30000;
 
 const TRANSIENT_CONNECTION_ERROR_CODES = new Set(['ECONNRESET', 'EPIPE']);
 const TRANSIENT_CONNECTION_MESSAGE_PATTERN = /econnreset|socket hang up|write epipe|other side closed/i;
-// 504 included so gateway timeouts exhaust the transient retry budget before
-// the account-rotation processor classifies them as a persistent outage (hop).
-const TRANSIENT_SERVER_ERROR_STATUSES = new Set([500, 502, 503, 504]);
+// Any 5xx is treated as transient so server errors exhaust the transient retry
+// budget before the account-rotation processor classifies them as a persistent
+// outage (hop). Must stay aligned with `classifyRotationError`'s 5xx check.
+const isTransientServerStatus = (status: number) => status >= 500 && status < 600;
 const TRANSIENT_SERVER_ERROR_MESSAGE_PATTERN = /internal server|server error|api may be experiencing issues/i;
 
 /**
@@ -179,8 +180,8 @@ function isTransientServerError(error: unknown): boolean {
 
   const errorObj = typeof error === 'object' ? (error as { status?: unknown; statusCode?: unknown }) : undefined;
   if (
-    (typeof errorObj?.status === 'number' && TRANSIENT_SERVER_ERROR_STATUSES.has(errorObj.status)) ||
-    (typeof errorObj?.statusCode === 'number' && TRANSIENT_SERVER_ERROR_STATUSES.has(errorObj.statusCode))
+    (typeof errorObj?.status === 'number' && isTransientServerStatus(errorObj.status)) ||
+    (typeof errorObj?.statusCode === 'number' && isTransientServerStatus(errorObj.statusCode))
   ) {
     return true;
   }
@@ -893,7 +894,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         hasSubagents: subagents.length > 0,
       });
     },
-    maxProcessorRetries: MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES,
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
     model: ctx => getDynamicModel(ctx, config?.settingsPath),

@@ -106,6 +106,13 @@ vi.mock('./auth/storage.js', () => ({
     }
     loadStoredApiKeysIntoEnv() {}
   },
+  getOAuthProviders: () => [
+    { id: 'anthropic' },
+    { id: 'openai-codex' },
+    { id: 'github-copilot' },
+    { id: 'kimi-for-coding' },
+    { id: 'xai' },
+  ],
 }));
 
 vi.mock('./hooks/index.js', () => ({ HookManager: class {} }));

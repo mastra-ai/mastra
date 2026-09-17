@@ -22,6 +22,7 @@
 import type { ProcessAPIErrorArgs, ProcessInputArgs, ProcessInputResult, Processor } from '@mastra/core/processors';
 
 import { ProviderAuthRequiredError, PROVIDER_AUTH_REQUIRED_ERROR } from './provider-auth-error.js';
+import { getOAuthProviders } from './storage.js';
 import type { CredentialStore } from './types.js';
 
 export const ACCOUNT_SWITCH_PART_TYPE = 'data-mastracode-account-switch';
@@ -53,7 +54,8 @@ export type RotationCredentialStore = CredentialStore & {
   forceRefreshActiveAccount?(providerId: string): Promise<string | undefined>;
 };
 
-const KNOWN_PROVIDER_IDS = new Set(['anthropic', 'openai-codex', 'github-copilot', 'kimi-for-coding', 'xai']);
+/** Rotatable providers = the OAuth provider registry; API-key-only providers never rotate. */
+const KNOWN_PROVIDER_IDS = new Set(getOAuthProviders().map(provider => provider.id));
 
 /** Hostname suffixes → provider ids, for `APICallError.url`. */
 const PROVIDER_HOST_PATTERNS: Array<[RegExp, string]> = [
@@ -266,13 +268,18 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   xai: 'xAI',
 };
 
-const REASON_TEXT: Record<string, string> = {
+const REASON_TEXT: Record<Exclude<AccountSwitchPartData['reason'], 'starting-on-account'>, string> = {
   'rate-limit': 'rate limit',
   'quota-exhausted': 'quota exhausted',
   'auth-failed': 'auth failed',
   'pool-exhausted': 'pool exhausted',
   'persistent-outage': 'persistent outage',
 };
+
+/** Validates untrusted `reason` values (e.g. persisted message parts). */
+export function isAccountSwitchReason(value: unknown): value is AccountSwitchPartData['reason'] {
+  return value === 'starting-on-account' || (typeof value === 'string' && value in REASON_TEXT);
+}
 
 /**
  * One-line transcript copy for a switch part. Shared by the live `info`
@@ -282,10 +289,10 @@ const REASON_TEXT: Record<string, string> = {
  */
 export function accountSwitchNoticeText(data: AccountSwitchPartData): string {
   const provider = PROVIDER_DISPLAY_NAMES[data.provider] ?? data.provider;
-  const reason = REASON_TEXT[data.reason] ?? data.reason;
   if (data.reason === 'starting-on-account' && data.to) {
     return `Starting on ${provider} account: ${data.to.label}`;
   }
+  const reason = data.reason === 'starting-on-account' ? data.reason : REASON_TEXT[data.reason];
   if (data.to === null) {
     return `All ${provider} accounts unavailable (${reason})`;
   }
@@ -363,8 +370,12 @@ export class AccountRotationProcessor implements Processor {
     // Q7 bucket 2: force one refresh of the active instance before rotating.
     // A 401 usually means a fresh-but-rejected token; the forced refresh
     // covers server-side clock skew and refresh-token races. Success retries
-    // the same account — no rotation, no part.
-    if (classification.kind === 'rotate' && classification.reason === 'auth-failed') {
+    // the same account — no rotation, no part. With no active account (e.g.
+    // `ProviderAuthRequiredError` from an empty registry) a refresh can never
+    // succeed, so skip it and fall through to the retry:false surface below,
+    // which rethrows the original auth error instead of a generic pool
+    // exhaustion message.
+    if (classification.kind === 'rotate' && classification.reason === 'auth-failed' && active) {
       const forced = getForcedRefreshInstances(state);
       const refreshKey = `${providerId}:${active?.id ?? 'active'}`;
       if (!forced.has(refreshKey) && typeof store.forceRefreshActiveAccount === 'function') {

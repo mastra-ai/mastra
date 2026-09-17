@@ -290,6 +290,29 @@ describe('AccountRotationProcessor.processAPIError', () => {
     expect(readAuthJson(seeded2.authPath)[PROVIDER]).toMatchObject({ access: 'token-a' });
   });
 
+  it('surfaces wrapper-thrown auth errors without a forced refresh when the registry has no accounts', async () => {
+    // `ProviderAuthRequiredError` from an empty registry (never logged in, or
+    // removed accounts): there is no token to refresh and no sibling to rotate
+    // to, so the original "not logged in" error must surface — not a generic
+    // pool-exhaustion message or a doomed refresh attempt.
+    const dir = mkdtempSync(join(tmpdir(), 'account-rotation-test-'));
+    tempDirs.push(dir);
+    const storage = new AuthStorage(join(dir, 'auth.json'));
+    const forceRefresh = vi.spyOn(storage, 'forceRefreshActiveAccount');
+    const processor = new AccountRotationProcessor({ credentialStore: storage, maxProcessorRetries: 22 });
+    const requestContext = {
+      get: (key: string) => (key === 'controller' ? { session: { modelId: 'anthropic/claude-fable-5' } } : undefined),
+    };
+    const args = makeArgs({
+      error: new ProviderAuthRequiredError('Not logged in to Anthropic.'),
+      requestContext,
+    });
+
+    expect(await processor.processAPIError(args as any)).toEqual({ retry: false });
+    expect(forceRefresh).not.toHaveBeenCalled();
+    expect(args.writer.custom).not.toHaveBeenCalled();
+  });
+
   it('does not rotate or emit a part once the shared retry budget is spent', async () => {
     // Core discards retry:true when processorRetryCount >= maxProcessorRetries
     // (llm-execution-step canRetryError); rotating anyway would record a

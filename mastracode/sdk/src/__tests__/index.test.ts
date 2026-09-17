@@ -301,6 +301,13 @@ vi.mock('../auth/storage.js', () => ({
     }
     loadStoredApiKeysIntoEnv() {}
   },
+  getOAuthProviders: () => [
+    { id: 'anthropic' },
+    { id: 'openai-codex' },
+    { id: 'github-copilot' },
+    { id: 'kimi-for-coding' },
+    { id: 'xai' },
+  ],
 }));
 
 vi.mock('../hooks/index.js', () => ({
@@ -1254,7 +1261,7 @@ describe('createMastraCode', () => {
     const agentConfig = agentConstructorMock.mock.calls
       .map(call => call[0] as { errorProcessors?: Array<{ id?: string }>; maxProcessorRetries?: number } | undefined)
       .find(config => config?.errorProcessors?.some(processor => processor.id === 'stream-error-retry-processor'));
-    expect(agentConfig?.maxProcessorRetries).toBe(10);
+    expect(agentConfig?.maxProcessorRetries).toBe(1024);
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
       'provider-history-compat',
       'stream-error-retry-processor',

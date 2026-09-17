@@ -1,4 +1,8 @@
-import type { AccountSwitchPartData } from '@mastra/code-sdk/auth/account-rotation-processor';
+import {
+  ACCOUNT_SWITCH_PART_TYPE,
+  isAccountSwitchReason,
+  type AccountSwitchPartData,
+} from '@mastra/code-sdk/auth/account-rotation-processor';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { mastraDBMessageToSignal } from '@mastra/core/signals';
 import type { CreatedAgentSignal } from '@mastra/core/signals';
@@ -74,12 +78,10 @@ const OM_EVENT_BY_TYPE: Record<string, OmRenderPart['event']> = {
   'data-om-thread-update': 'thread-title',
 };
 
-const ACCOUNT_SWITCH_PART_TYPE = 'data-mastracode-account-switch';
-
 function accountSwitchRenderPart(data: unknown): AccountSwitchRenderPart | null {
   if (!data || typeof data !== 'object') return null;
   const record = data as Record<string, unknown>;
-  if (typeof record.provider !== 'string' || typeof record.reason !== 'string') return null;
+  if (typeof record.provider !== 'string' || !isAccountSwitchReason(record.reason)) return null;
   const endpoint = (value: unknown): { id: string; label: string } | null => {
     if (!value || typeof value !== 'object') return null;
     const entry = value as Record<string, unknown>;
@@ -91,7 +93,7 @@ function accountSwitchRenderPart(data: unknown): AccountSwitchRenderPart | null 
     provider: record.provider,
     from: endpoint(record.from),
     to: endpoint(record.to),
-    reason: record.reason as AccountSwitchPartData['reason'],
+    reason: record.reason,
     at: typeof record.at === 'string' ? record.at : '',
   };
 }
