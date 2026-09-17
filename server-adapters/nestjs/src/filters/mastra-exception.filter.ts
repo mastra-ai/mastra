@@ -1,4 +1,5 @@
 import { formatZodError, isZodError } from '@mastra/server/handlers/error';
+import { getCustomHTTPExceptionResponse } from '@mastra/server/server-adapter';
 import { Catch, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import type { Request, Response } from 'express';
@@ -43,14 +44,10 @@ export class MastraExceptionFilter implements ExceptionFilter {
     // An HTTPException may carry a deliberately structured public response
     // (for example the stable version-label error envelope). Serve it
     // verbatim so typed error contracts survive the HTTP layer instead of
-    // being collapsed into the normalized `{ error: message }` format.
-    if (
-      exception &&
-      typeof exception === 'object' &&
-      'res' in exception &&
-      (exception as { res?: unknown }).res instanceof globalThis.Response
-    ) {
-      const structured = (exception as { res: globalThis.Response }).res;
+    // being collapsed into the normalized `{ error: message }` format. The
+    // exception's status takes precedence over the attached Response's status.
+    const structured = getCustomHTTPExceptionResponse(exception);
+    if (structured) {
       void structured.arrayBuffer().then(body => {
         response.status(structured.status);
         structured.headers.forEach((value, key) => response.setHeader(key, value));

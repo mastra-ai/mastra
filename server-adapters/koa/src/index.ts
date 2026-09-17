@@ -123,9 +123,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         // An HTTPException may carry a deliberately structured public response
         // (for example the stable version-label error envelope). Serve it
         // verbatim so typed error contracts survive the HTTP layer instead of
-        // being collapsed into `{ error: message }`.
-        if (err && typeof err === 'object' && 'res' in err && (err as { res?: unknown }).res instanceof Response) {
-          const structured = (err as { res: Response }).res;
+        // being collapsed into `{ error: message }`. The helper retains the
+        // exception's status even when the attached Response defaults to 200.
+        const structured = getCustomHTTPExceptionResponse(err);
+        if (structured) {
           ctx.status = structured.status;
           structured.headers.forEach((value, key) => ctx.set(key, value));
           ctx.body = Buffer.from(await structured.arrayBuffer());
