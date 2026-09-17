@@ -31,6 +31,7 @@ function useToolApproval(request: ToolApprovalRequest) {
     approveToolcallGenerate,
     declineToolcallGenerate,
     isRunning,
+    isContinuationBlocked,
     toolCallApprovals,
     approveNetworkToolcall,
     declineNetworkToolcall,
@@ -66,7 +67,12 @@ function useToolApproval(request: ToolApprovalRequest) {
 
   return {
     status,
-    actions: { onApprove: handleApprove, onDecline: handleDecline, disabled: isRunning, toolName },
+    actions: {
+      onApprove: handleApprove,
+      onDecline: handleDecline,
+      disabled: isRunning || isContinuationBlocked,
+      toolName,
+    },
   };
 }
 
