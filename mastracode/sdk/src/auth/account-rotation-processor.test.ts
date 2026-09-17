@@ -113,13 +113,29 @@ describe('classifyRotationError (locked Q7 taxonomy)', () => {
     expect(classifyRotationError(apiError(402))).toEqual({ kind: 'rotate', reason: 'quota-exhausted' });
   });
 
-  it('rotates on provider usage-limit wording regardless of status', () => {
+  it('rotates on provider usage-limit wording co-occurring with 400 or no status', () => {
     expect(
       classifyRotationError(apiError(400, { message: 'You have exceeded your usage limit for Claude Max' })),
     ).toEqual({ kind: 'rotate', reason: 'quota-exhausted' });
     expect(
       classifyRotationError(apiError(400, { message: 'Your weekly limit has been reached, try again later' })),
     ).toEqual({ kind: 'rotate', reason: 'quota-exhausted' });
+    expect(classifyRotationError(new Error('You have exceeded your usage limit for Claude Max'))).toEqual({
+      kind: 'rotate',
+      reason: 'quota-exhausted',
+    });
+  });
+
+  it('never rotates on quota wording riding a non-quota status or generic limit text', () => {
+    expect(
+      classifyRotationError(apiError(404, { message: 'You have exceeded your usage limit for Claude Max' })),
+    ).toEqual({ kind: 'never' });
+    expect(classifyRotationError(apiError(422, { message: 'request exceeds your payload limit' }))).toEqual({
+      kind: 'never',
+    });
+    expect(classifyRotationError(apiError(400, { message: 'You exceeded your request size limit' }))).toEqual({
+      kind: 'never',
+    });
   });
 
   it.each([

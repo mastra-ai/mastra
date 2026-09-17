@@ -71,10 +71,12 @@ const PROVIDER_HOST_PATTERNS: Array<[RegExp, string]> = [
 /**
  * Provider usage/quota-limit wording (locked Q7 bucket 1). Statuses 429/402
  * are matched before this; some providers deliver quota errors as plain 400s,
- * which only the message reveals.
+ * which only the message reveals. Deliberately restricted to unambiguous
+ * quota phrases — a generic "exceeded your … limit" can appear on non-quota
+ * client errors (request size, context length) that must never rotate.
  */
 const USAGE_LIMIT_MESSAGE_PATTERN =
-  /usage (?:limit|cap)|insufficient[_ ]quota|quota (?:exceeded|exhausted|reached)|exceeded (?:your )?current quota|insufficient (?:balance|credits?)|credits? exhausted|rate limit (?:exceeded|reached)|exceeded your [a-z ]*limit|weekly limit|monthly limit/i;
+  /usage (?:limit|cap)|insufficient[_ ]quota|quota (?:exceeded|exhausted|reached)|exceeded (?:your )?current quota|insufficient (?:balance|credits?)|credits? exhausted|rate limit (?:exceeded|reached)|weekly limit|monthly limit/i;
 
 const NETWORK_ERROR_CODES = new Set([
   'ECONNRESET',
@@ -189,8 +191,15 @@ export function classifyRotationError(error: unknown): RotationClassification {
   if (status === 401 || status === 403) return { kind: 'rotate', reason: 'auth-failed' };
   if (status !== undefined && status >= 500 && status < 600) return { kind: 'hop' };
 
-  if (USAGE_LIMIT_MESSAGE_PATTERN.test(collectErrorText(error))) {
-    return { kind: 'rotate', reason: 'quota-exhausted' };
+  // Quota wording only rotates when it co-occurs with a statusless or 400
+  // error — the shapes providers actually use for message-only quota
+  // failures. Any other status keeps its own classification above (401/403
+  // auth, 5xx outage hop, 404/422 never), so limit-ish text riding a
+  // non-quota client error can no longer burn the whole pool.
+  if (status === undefined || status === 400) {
+    if (USAGE_LIMIT_MESSAGE_PATTERN.test(collectErrorText(error))) {
+      return { kind: 'rotate', reason: 'quota-exhausted' };
+    }
   }
   if (isNetworkErrorLike(error)) return { kind: 'hop' };
 
