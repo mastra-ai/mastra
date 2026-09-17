@@ -1306,6 +1306,53 @@ describe('renderExistingMessages subagents', () => {
     expect(state.pendingSubagents.has('tool-background-plugin-1')).toBe(false);
   });
 
+  it.each([undefined, false, true])(
+    'replays cancelled ordinary tool text with background enabled %s',
+    async enabled => {
+      const state = createState();
+      state.options.backgroundToolsEnabled = enabled;
+      const message = assistantToolMessage('cancelled-tool-message', [
+        {
+          id: 'cancelled-call',
+          name: 'view',
+          args: {},
+          result: 'Background task started. Task ID: cancelled-task',
+          isError: false,
+        },
+      ]);
+      const cancellation = createSignal({
+        type: 'notification',
+        tagName: 'notification',
+        contents: 'view cancelled in background',
+        attributes: { source: 'background-work', status: 'cancelled' },
+        metadata: {
+          backgroundCompletion: {
+            eventId: 'background-task:cancelled-task:cancelled',
+            taskId: 'cancelled-task',
+            originRunId: 'cancelled-run',
+            originToolCallId: 'cancelled-call',
+            toolName: 'view',
+            status: 'cancelled',
+          },
+        },
+      }).toDBMessage();
+      state.session = {
+        ...state.session,
+        thread: { listActiveMessages: vi.fn().mockResolvedValue([message, cancellation]) },
+      } as unknown as TUIState['session'];
+      state.controller = { session: state.session } as unknown as TUIState['controller'];
+      await renderExistingMessages(state);
+      const rendered = state.chatContainer
+        .render(120)
+        .join('\n')
+        .replace(/\x1b\[[0-9;]*m/g, '');
+      expect(rendered).toContain('Background execution cancelled.');
+      expect(rendered).toContain('■ background · cancelled-task');
+      expect(rendered).not.toContain('Running in background');
+      expect(state.pendingTools.has('cancelled-call')).toBe(false);
+    },
+  );
+
   it('replays a cancelled background plugin subagent as terminal', async () => {
     const toolMessage = assistantToolMessage('assistant-plugin-background-cancelled', [
       {

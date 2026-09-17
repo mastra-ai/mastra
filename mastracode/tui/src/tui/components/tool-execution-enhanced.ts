@@ -258,6 +258,10 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     this.rebuild();
   }
 
+  getBackgroundTaskId(): string | undefined {
+    return this.backgroundTaskId;
+  }
+
   cancelBackground(): void {
     this.backgroundCancelled = true;
     this.isPartial = false;

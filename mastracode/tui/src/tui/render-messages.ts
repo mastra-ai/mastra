@@ -1126,6 +1126,10 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           }
 
           if (cancelledBackgroundToolCalls.has(part.toolCallId)) {
+            toolComponent.updateResult(
+              { content: [{ type: 'text', text: 'Background execution cancelled.' }], isError: true },
+              true,
+            );
             toolComponent.cancelBackground();
           } else if (isBackgroundPlaceholder) {
             state.pendingTools.set(part.toolCallId, toolComponent);
