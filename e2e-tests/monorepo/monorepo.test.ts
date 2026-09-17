@@ -9,6 +9,35 @@ import { execa, execaNode } from 'execa';
 
 const timeout = 5 * 60 * 1000;
 
+function getPnpmImporterDependencies(lockfile: string, importer: string): Map<string, string> {
+  const lines = lockfile.split(/\r?\n/);
+  const importerStart = lines.findIndex(line => line === `  ${importer}:`);
+  if (importerStart === -1) {
+    throw new Error(`Missing pnpm lockfile importer: ${importer}`);
+  }
+
+  const dependencies = new Map<string, string>();
+  let dependencyName: string | undefined;
+  for (let index = importerStart + 1; index < lines.length; index++) {
+    const line = lines[index]!;
+    if (/^  \S/.test(line)) break;
+
+    const dependencyMatch = /^      ([^\s].*):$/.exec(line);
+    if (dependencyMatch?.[1]) {
+      dependencyName = dependencyMatch[1].replace(/^['"]|['"]$/g, '');
+      continue;
+    }
+
+    const versionMatch = /^        version: (.+)$/.exec(line);
+    if (dependencyName && versionMatch?.[1]) {
+      dependencies.set(dependencyName, versionMatch[1].replace(/^['"]|['"]$/g, ''));
+      dependencyName = undefined;
+    }
+  }
+
+  return dependencies;
+}
+
 /**
  * Killing the `npm run dev` wrapper orphans the `mastra dev` grandchild, which
  * keeps running and holds `.mastra/dev.lock`. `mastra build` refuses to build
@@ -480,9 +509,39 @@ export const environmentRoute = registerApiRoute('/environment', {
     let proc: ReturnType<typeof execa> | undefined;
     const controller = new AbortController();
     const cancelSignal = controller.signal;
+    const sourcePinnedUnicornMagicVersion = '0.2.0';
 
     beforeAll(async () => {
-      await runBuild(fixturePath);
+      const packageJsonPaths = [join(fixturePath, 'package.json'), join(fixturePath, 'apps', 'custom', 'package.json')];
+      const originalPackageJsons = await Promise.all(packageJsonPaths.map(path => readFile(path, 'utf-8')));
+      const sourceLockfilePath = join(fixturePath, 'pnpm-lock.yaml');
+      const sourceLockfile = await readFile(sourceLockfilePath, 'utf-8');
+
+      try {
+        for (const [index, packageJsonPath] of packageJsonPaths.entries()) {
+          const packageJson = JSON.parse(originalPackageJsons[index]!);
+          packageJson.dependencies['unicorn-magic'] = '>=0.2.0';
+          await writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
+        }
+
+        const updatedSourceLockfile = sourceLockfile
+          .replace(
+            `      unicorn-magic:\n        specifier: 0.2.0\n        version: 0.2.0`,
+            `      unicorn-magic:\n        specifier: '>=0.2.0'\n        version: ${sourcePinnedUnicornMagicVersion}`,
+          )
+          .replace(
+            `      unicorn-magic:\n        specifier: 0.4.0\n        version: 0.4.0`,
+            `      unicorn-magic:\n        specifier: '>=0.2.0'\n        version: ${sourcePinnedUnicornMagicVersion}`,
+          );
+        if (updatedSourceLockfile === sourceLockfile) {
+          throw new Error('Failed to pin the source unicorn-magic resolution for lockfile reuse coverage');
+        }
+        await writeFile(sourceLockfilePath, updatedSourceLockfile);
+        await runBuild(fixturePath);
+      } finally {
+        await Promise.all(packageJsonPaths.map((path, index) => writeFile(path, originalPackageJsons[index]!)));
+        await writeFile(sourceLockfilePath, sourceLockfile);
+      }
 
       const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
       proc = execaNode('index.mjs', {
@@ -565,6 +624,24 @@ export const environmentRoute = registerApiRoute('/environment', {
           typescript: expect.any(String),
         }),
       );
+    });
+
+    it('should update the source pnpm lockfile while installing output dependencies', async () => {
+      const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      const outputFiles = await readdir(outputDir);
+      expect(outputFiles).toContain('pnpm-lock.yaml');
+      expect(outputFiles).not.toContain('package-lock.json');
+
+      const packageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
+      const sourceLockfile = await readFile(join(fixturePath, 'pnpm-lock.yaml'), 'utf-8');
+      const outputLockfile = await readFile(join(outputDir, 'pnpm-lock.yaml'), 'utf-8');
+      const sourceDependencies = getPnpmImporterDependencies(sourceLockfile, '.');
+      const outputDependencies = getPnpmImporterDependencies(outputLockfile, '.');
+
+      expect(packageJson.dependencies['unicorn-magic']).toBe('>=0.2.0');
+      expect(sourceDependencies.get('unicorn-magic')).toBe(sourcePinnedUnicornMagicVersion);
+      expect(outputDependencies.get('unicorn-magic')).toBe(sourcePinnedUnicornMagicVersion);
+      expect([...outputDependencies.keys()]).toEqual(expect.arrayContaining(Object.keys(packageJson.dependencies)));
     });
 
     it('should emit a worker runtime entry with a readiness endpoint', async () => {

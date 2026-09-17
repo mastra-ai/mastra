@@ -1,7 +1,6 @@
-import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, posix, relative } from 'node:path';
 import { MastraBundler } from '@mastra/core/bundler';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
@@ -402,47 +401,15 @@ export abstract class Bundler extends MastraBundler {
   ) {
     const deps = new DepsService(rootDir);
     deps.__setLogger(this.logger);
-
-    await deps.install({
+    const installOptions = {
       dir: join(outputDirectory, this.outputDir),
       pnpmOverrides,
       pnpmNodeLinker: this.pnpmNodeLinker,
-    });
-  }
+    };
 
-  /**
-   * Generate a package-lock.json for the output directory so that deploy targets
-   * can use `npm ci` instead of `npm install`, skipping version resolution entirely.
-   * This is a lockfile-only operation — no packages are downloaded.
-   *
-   * Temporarily moves node_modules out of the way because pnpm's symlink-based
-   * layout confuses npm's arborist, then restores it afterwards so that
-   * `mastra start` (or wrangler) can still resolve dependencies at runtime.
-   */
-  private async generateNpmLockfile(outputDir: string): Promise<void> {
-    const nodeModules = join(outputDir, 'node_modules');
-    const nodeModulesTmp = join(outputDir, 'node_modules.__tmp');
-    let movedNodeModules = false;
-    try {
-      // Move node_modules aside — pnpm's symlink layout confuses npm's arborist
-      if (await fsExtra.pathExists(nodeModules)) {
-        await fsExtra.move(nodeModules, nodeModulesTmp, { overwrite: true });
-        movedNodeModules = true;
-      }
-      execSync('npm install --package-lock-only --force', {
-        cwd: outputDir,
-        stdio: 'pipe',
-        timeout: 60_000,
-      });
-    } catch {
-      this.logger.warn('Failed to generate package-lock.json — deploy will fall back to npm install');
-    } finally {
-      // Restore node_modules so runtime resolution works
-      if (movedNodeModules) {
-        await rm(nodeModules, { recursive: true, force: true });
-        await fsExtra.move(nodeModulesTmp, nodeModules, { overwrite: true });
-      }
-    }
+    this.logger.info('Updating dependency lockfile and installing dependencies');
+    await deps.install(installOptions);
+    this.logger.info('Done updating dependency lockfile and installing dependencies');
   }
 
   protected async copyPublic(mastraDir: string, outputDirectory: string) {
@@ -822,19 +789,7 @@ export const tools = [${toolsExports.join(', ')}]`,
       if (shouldSkipInstall()) {
         this.logger.info('Skipping dependency installation (MASTRA_BUILD_SKIP_INSTALL set)');
       } else {
-        this.logger.info('Installing dependencies');
         await this.installDependencies(outputDirectory, projectRoot, transitiveWorkspaceDependencies.resolutions);
-        this.logger.info('Done installing dependencies');
-
-        if (Object.keys(transitiveWorkspaceDependencies.resolutions).length === 0) {
-          this.logger.info('Generating package-lock.json for deploy');
-          await this.generateNpmLockfile(join(outputDirectory, this.outputDir));
-          this.logger.info('Done generating package-lock.json');
-        } else {
-          this.logger.warn(
-            'Skipping package-lock.json generation because the output contains packed workspace dependencies',
-          );
-        }
       }
     } catch (error) {
       if (
