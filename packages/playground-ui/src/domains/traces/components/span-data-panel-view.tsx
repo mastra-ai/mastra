@@ -11,6 +11,9 @@ import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
+import { cn } from '@/lib/utils';
+
+const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto p-3';
 
 function buildDialogTitle(sectionTitle: string, icon: ReactNode, span: { spanId: string; traceId: string }) {
   return (
@@ -72,8 +75,10 @@ export function SpanDataPanelView({
   isAnchor,
   className,
 }: SpanDataPanelViewProps) {
+  // Not a DataPanel: this is the span column rendered inside `TraceDataPanelView`,
+  // which already provides the panel chrome.
   return (
-    <DataPanel className={className}>
+    <section className={cn('flex min-h-0 flex-1 flex-col overflow-hidden', className)}>
       {/* Two-line header (heading + summary); neighbouring panel headers use min-h-16 to stay level. */}
       <DataPanel.Header className="min-h-16 py-2">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -111,7 +116,7 @@ export function SpanDataPanelView({
           isAnchor={isAnchor}
         />
       )}
-    </DataPanel>
+    </section>
   );
 }
 
@@ -246,11 +251,11 @@ function SpanDataPanelContent({
 
   // No extra tab slots → render details directly without the Tabs/TabList wrapper.
   if (!feedbackTabSlot) {
-    return <DataPanel.Content>{detailsBody}</DataPanel.Content>;
+    return <div className={BODY_CLASS}>{detailsBody}</div>;
   }
 
   return (
-    <DataPanel.Content>
+    <div className={BODY_CLASS}>
       <Tabs defaultTab="details" value={activeTab} onValueChange={onTabChange}>
         <TabList variant="pill-ghost">
           <Tab value="details">Details</Tab>
@@ -260,6 +265,6 @@ function SpanDataPanelContent({
         <TabContent value="details">{detailsBody}</TabContent>
         <TabContent value="feedback">{feedbackTabSlot({ span, traceId, spanId })}</TabContent>
       </Tabs>
-    </DataPanel.Content>
+    </div>
   );
 }

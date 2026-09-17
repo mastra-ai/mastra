@@ -408,18 +408,16 @@ describe('Traces side panel Scores tab', () => {
   };
 
   describe('when the trace has scores', () => {
-    it('opens score details in the right-hand trace column and closes them independently', async () => {
+    it('opens score details in a sibling drawer above the trace and closes it independently', async () => {
       await openScoresTab(traceSpanScores);
       fireEvent.click(await screen.findByText('score-1'));
 
-      const heading = await screen.findByRole('heading', { name: /Score # score-1/i });
-      const columns = heading.closest('[data-trace-columns]');
-      expect(columns).not.toBeNull();
-      expect(columns?.lastElementChild?.contains(heading)).toBe(true);
-      const detailColumn = columns?.lastElementChild;
-      if (!(detailColumn instanceof HTMLElement)) throw new Error('Missing score detail column');
-      fireEvent.click(within(detailColumn).getByRole('button', { name: /close/i }));
-      await waitFor(() => expect(screen.queryByRole('heading', { name: /Score # score-1/i })).toBeNull());
+      const scoreDialog = await screen.findByRole('dialog', { name: 'Score score-1' });
+      expect(scoreDialog.getAttribute('data-depth')).toBe('2');
+      expect(screen.getByRole('dialog', { name: 'Trace details', hidden: true })).not.toBeNull();
+
+      fireEvent.click(within(scoreDialog).getByRole('button', { name: /close/i }));
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Score score-1' })).toBeNull());
       expect(screen.getByRole('tab', { name: /scores/i }).getAttribute('aria-selected')).toBe('true');
     });
 

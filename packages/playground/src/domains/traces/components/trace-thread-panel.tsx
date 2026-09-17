@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowLeftIcon } from 'lucide-react';
 
 import { ThreadViewByTrace } from '@/domains/traces/components/thread-view-by-trace';
@@ -11,13 +10,15 @@ export interface TraceThreadPanelProps {
   onBack: () => void;
   /** Close the whole side panel. */
   onClose: () => void;
+  /** Accessible drawer name; defaults to the thread id. */
+  title?: string;
   className?: string;
 }
 
-/** The trace side panel swapped for the full thread: every turn as traces, anchored on the URL's `traceId`. */
-export function TraceThreadPanel({ threadId, onBack, onClose, className }: TraceThreadPanelProps) {
+/** The trace drawer swapped for the full thread: every turn as traces, anchored on the URL's `traceId`. */
+export function TraceThreadPanel({ threadId, onBack, onClose, title, className }: TraceThreadPanelProps) {
   return (
-    <DataPanel className={cn('h-full min-h-0', className)}>
+    <DataPanel open onClose={onClose} title={title ?? `Thread ${threadId}`} size="full" className={className}>
       <DataPanel.Header>
         <Button size="md" variant="ghost" onClick={onBack} aria-label="Back to trace" tooltip="Back to trace">
           <ArrowLeftIcon />

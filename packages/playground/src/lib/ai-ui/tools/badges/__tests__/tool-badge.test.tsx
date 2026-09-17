@@ -100,7 +100,9 @@ describe('ToolBadge', () => {
 
 describe('ToolBadge edit body', () => {
   describe('when a successful edit returns a long result', () => {
-    it('keeps the full result alongside the file change', () => {
+    it('keeps the full result copyable alongside the file change', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.assign(navigator, { clipboard: { writeText } });
       const result = 'Updated successfully.\n'.repeat(100);
       renderWithProviders(
         <ToolBadge
@@ -118,15 +120,21 @@ describe('ToolBadge edit body', () => {
 
       expect(screen.getByRole('group', { name: 'File change' })).toBeTruthy();
       expect(screen.getByTestId('tool-result').textContent).toBe(result);
+      fireEvent.click(screen.getByRole('button', { name: 'Copy to clipboard' }));
+      await screen.findByRole('button', { name: 'Copied!' });
+      expect(writeText).toHaveBeenCalledExactlyOnceWith(result);
     });
   });
 
   describe('when a shell command includes additional arguments', () => {
-    it('keeps every argument available for inspection', () => {
+    it('keeps every argument available for inspection and copying', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.assign(navigator, { clipboard: { writeText } });
+      const args = { command: 'pnpm test', cwd: '/workspace', timeout: 30000 };
       renderWithProviders(
         <ToolBadge
           toolName="execute_command"
-          args={{ command: 'pnpm test', cwd: '/workspace', timeout: 30000 }}
+          args={args}
           result={undefined}
           toolOutput={[]}
           toolCallId="call-command"
@@ -139,6 +147,9 @@ describe('ToolBadge edit body', () => {
 
       expect(screen.getByTestId('tool-args').textContent).toContain('"cwd": "/workspace"');
       expect(screen.getByTestId('tool-args').textContent).toContain('"timeout": 30000');
+      fireEvent.click(screen.getByRole('button', { name: 'Copy to clipboard' }));
+      await screen.findByRole('button', { name: 'Copied!' });
+      expect(writeText).toHaveBeenCalledExactlyOnceWith(JSON.stringify(args, null, 2));
     });
   });
 
