@@ -6,15 +6,12 @@ import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/c
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { CloudUpload, Link } from 'lucide-react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useComposerAttachments } from './composer-attachments';
 
-/**
- * "+" composer action opening a popover to attach a file via public URL or
- * from the local file system.
- */
 export const AttachFilePopover = () => {
+  const urlInputId = useId();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState('');
   const { addFiles, addUrl } = useComposerAttachments();
@@ -30,10 +27,7 @@ export const AttachFilePopover = () => {
       input.remove();
     };
 
-    // Not every browser fires `cancel` for <input type=file>, which would orphan
-    // the element in the DOM. The window regains focus when the OS dialog closes
-    // either way, so use that as a fallback — deferred so a successful pick's
-    // `change` event runs (and reads `files`) before we remove the input.
+    // Defer cleanup so file change runs before the focus fallback for missing cancel events.
     const onWindowFocus = () => setTimeout(cleanup, 0);
 
     input.onchange = async () => {
@@ -57,9 +51,7 @@ export const AttachFilePopover = () => {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    // The popover is portaled out of the composer form in the DOM, but React
-    // still bubbles the submit event through the component tree; stop it so
-    // adding a URL doesn't also send the chat message.
+    // Portaled form submits still bubble through the composer in React.
     e.stopPropagation();
 
     const formData = new FormData(e.currentTarget);
@@ -71,7 +63,7 @@ export const AttachFilePopover = () => {
       await addUrl(url);
       setOpen(false);
     } catch {
-      // Keep the popover open so the user can correct the URL and retry.
+      // addUrl reports the error; keep the picker open for retry.
     }
   };
 
@@ -88,13 +80,13 @@ export const AttachFilePopover = () => {
         {error && <p role="alert">{error}</p>}
         <form onSubmit={handleSubmit} className="flex flex-row items-end gap-2">
           <div className="w-full space-y-1">
-            <Label htmlFor="url-attachment" className="text-neutral3 text-ui-md">
+            <Label htmlFor={urlInputId} className="text-neutral3 text-ui-md">
               Public URL
             </Label>
             <Input
               type="text"
               name="url-attachment"
-              id="url-attachment"
+              id={urlInputId}
               className="w-full"
               placeholder="https://placehold.co/600x400/png"
             />

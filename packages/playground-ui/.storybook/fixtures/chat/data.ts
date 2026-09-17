@@ -2,7 +2,15 @@ import type { FilePart } from '@mastra/react/ui';
 import type { ToolCallGroupStep } from '@/ds/components/ai/tool-call';
 
 export type ChatFile = FilePart & { filename: string };
-export type Phase = 'complete' | 'streaming' | 'stopped' | 'question' | 'approval' | 'declined' | 'error';
+export type Phase =
+  | 'complete'
+  | 'streaming'
+  | 'stopped'
+  | 'question'
+  | 'approval'
+  | 'declined'
+  | 'error'
+  | 'tool-error';
 export type Scenario = Phase | 'empty' | 'long';
 
 export interface Turn {
@@ -47,16 +55,22 @@ export const reviewTools = [
     toolName: 'read_file',
     args: { path: 'src/chat/composer.tsx' },
     status: 'idle',
+    hasResult: true,
     output: 'Enter currently adds a newline.',
   },
   {
     toolName: 'grep',
     args: { pattern: 'onKeyDown', path: 'src/chat' },
     status: 'idle',
+    hasResult: true,
     output: 'composer.tsx:42: onKeyDown',
   },
-  { toolName: 'execute_command', args: { command: 'pnpm test composer' }, status: 'idle', output: '6 tests passed.' },
 ] satisfies (ToolCallGroupStep & { output: string })[];
+
+export const reviewCommand = {
+  toolName: 'execute_command',
+  args: { command: 'pnpm test composer' },
+};
 
 export const editArgs = {
   path: 'src/chat/composer.tsx',
@@ -73,6 +87,7 @@ export function createInitialTurns(scenario: Scenario): Turn[] {
   const phase = scenario === 'long' ? 'complete' : scenario;
   let initialText = '';
   if (phase === 'complete') initialText = reply;
+  if (phase === 'streaming') initialText = reply.slice(0, 60);
   if (phase === 'stopped') initialText = reply.slice(0, 100);
   const review: Turn = {
     id: 'review',

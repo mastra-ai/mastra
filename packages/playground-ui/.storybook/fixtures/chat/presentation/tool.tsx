@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import {
   ToolCall,
   ToolCallContent,
+  ToolCallCommand,
+  ToolCallTime,
   ToolCallArguments,
   ToolCallOutput,
   ToolCallPresentedHeader,
@@ -20,15 +22,22 @@ interface ReviewToolProps {
 }
 
 export function ReviewTool({ toolName, args, status = 'idle', output, children, defaultOpen }: ReviewToolProps) {
-  const presentation = presentTool(toolName, args);
+  const toolPresentation = presentTool(toolName, args);
   return (
     <ToolCall status={status} defaultOpen={defaultOpen} aria-label={`Tool: ${toolName}`}>
       <ToolCallTrigger>
-        <ToolCallPresentedHeader {...presentation} />
+        <ToolCallPresentedHeader
+          {...toolPresentation}
+          leading={<ToolCallTime at={Date.parse('2026-09-17T12:24:00Z')} />}
+        />
       </ToolCallTrigger>
       <ToolCallContent>
-        <ToolCallArguments toolName={toolName} args={args} />
-        {output && <ToolCallOutput text={output} />}
+        {toolPresentation.command ? (
+          <ToolCallCommand command={toolPresentation.command} />
+        ) : (
+          <ToolCallArguments toolName={toolName} args={args} />
+        )}
+        {output && <ToolCallOutput text={output} error={status === 'error'} />}
         {children}
       </ToolCallContent>
     </ToolCall>

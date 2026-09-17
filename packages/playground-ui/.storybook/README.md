@@ -7,3 +7,5 @@ Run `pnpm --filter @mastra/playground-ui storybook` to explore Playground UI com
 Composer action stories cover the shared round and outline buttons, disabled states and send/stop composition. Applications supply their own callbacks and decide when each action is available.
 
 Model picker stories demonstrate combined menus, provider/model segments, model packs, loading, locked, unavailable and warning states using shared primitives and local catalogs. Provider discovery, credentials, policy, pack resolution and persisted selections stay in the applications.
+
+`AI/Chat` composes the shared primitives into a complete interactive conversation. It includes mode/model selection, attachments, grouped tools, plans, questions, approval, activity, tasks and the timeline. Its segmented-picker example swaps controls through composition. Local draft/file-reading and reply-playback fixtures make the UI usable for design review; they are not production controllers. See [chat coverage](stories/chat-coverage.md).
