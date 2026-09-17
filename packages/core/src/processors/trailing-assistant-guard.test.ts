@@ -148,6 +148,16 @@ describe('TrailingAssistantGuard', () => {
     });
   });
 
+  it('does not touch a trailing assistant message for providers that accept it, even under native structured output', () => {
+    const guard = new TrailingAssistantGuard();
+
+    const result = guard.processInputStep(
+      makeArgs({ model: { provider: 'openai.chat', modelId: 'gpt-5' } as ProcessInputStepArgs['model'] }),
+    );
+
+    expect(result).toBeUndefined();
+  });
+
   it('does not touch a trailing assistant message for Gemini 2.x without structured output', () => {
     const guard = new TrailingAssistantGuard();
 

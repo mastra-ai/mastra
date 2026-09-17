@@ -313,6 +313,51 @@ describe('Structured output with memory - assistant message in final position (#
     expect(nonSystemMessages.at(-1).content).toMatchObject([{ type: 'text', text: 'Continue.' }]);
   });
 
+  it('guards when an input processor swaps a non-Google model to Gemini 3 mid-step', async () => {
+    const capturedPrompts: any[] = [];
+    const makeModel = (provider: string, modelId: string) =>
+      new MockLanguageModelV2({
+        provider,
+        modelId,
+        doGenerate: async options => {
+          capturedPrompts.push({ modelId, prompt: options.prompt });
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text', text: 'done' }],
+            warnings: [],
+          };
+        },
+      });
+    const openai = makeModel('openai.chat', 'gpt-5');
+    const gemini3 = makeModel('google', 'gemini-3.5-flash-lite');
+    const agent = new Agent({
+      id: 'model-swap-trailing-assistant-guard-test',
+      name: 'Model Swap Trailing Assistant Guard Test',
+      instructions: 'Reply briefly.',
+      model: openai,
+      inputProcessors: [
+        {
+          id: 'swap-to-gemini',
+          name: 'Swap To Gemini',
+          processInputStep: () => ({ model: gemini3 }),
+        },
+      ],
+    });
+
+    await agent.generate([
+      { role: 'user', content: 'Give me a verdict.' },
+      { role: 'assistant', content: 'Draft response' },
+    ]);
+
+    expect(capturedPrompts).toHaveLength(1);
+    expect(capturedPrompts[0].modelId).toBe('gemini-3.5-flash-lite');
+    const nonSystemMessages = capturedPrompts[0].prompt.filter((message: any) => message.role !== 'system');
+    expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'user' });
+    expect(nonSystemMessages.at(-1).content).toMatchObject([{ type: 'text', text: 'Continue.' }]);
+  });
+
   it('does not inject a user turn into Gemini 3 agentic-loop steps that follow a tool result', async () => {
     const capturedPrompts: any[] = [];
     let call = 0;

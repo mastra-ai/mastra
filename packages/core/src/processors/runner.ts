@@ -1489,10 +1489,13 @@ export class ProcessorRunner {
     };
 
     // Append the trailing assistant guard when the resolved model rejects a prompt ending on an
-    // assistant turn (Anthropic 4.6+ assistant prefill, Gemini 3+ trailing model turn)
+    // assistant turn (Anthropic 4.6+ assistant prefill, Gemini 3+ trailing model turn). Input
+    // processors may swap `model` mid-step, so when any are configured the guard is attached
+    // regardless and re-checks the provider against the final model it receives.
     const processors =
       stepInput.model &&
-      (isMaybeAnthropicWithoutAssistantPrefill(stepInput.model) ||
+      (this.inputProcessors.length > 0 ||
+        isMaybeAnthropicWithoutAssistantPrefill(stepInput.model) ||
         isMaybeGoogleWithoutTrailingModelTurn(stepInput.model))
         ? [...this.inputProcessors, new TrailingAssistantGuard()]
         : this.inputProcessors;

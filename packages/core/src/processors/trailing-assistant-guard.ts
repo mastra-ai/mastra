@@ -1,8 +1,28 @@
 import { randomUUID } from 'node:crypto';
 
 import type { MastraDBMessage } from '../agent/message-list';
-import { isMaybeGoogleWithoutTrailingModelTurn } from './provider-history-compat';
+import {
+  isMaybeAnthropicWithoutAssistantPrefill,
+  isMaybeGoogleWithoutTrailingModelTurn,
+} from './provider-history-compat';
 import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from './index';
+
+/**
+ * Whether the prompt built from this message will end on a model turn.
+ *
+ * An assistant message whose last content part is a tool invocation is converted
+ * to an assistant tool-call turn followed by a tool-result turn (prompt conversion
+ * pairs still-pending calls with a placeholder result), so the prompt already ends
+ * on a non-model turn. Appending a user message there would inject a spurious turn
+ * into every agentic-loop step after a tool call. `step-start` parts are loop
+ * markers, not content, so they are skipped when finding the last content part.
+ */
+function endsOnModelTurn(message: MastraDBMessage): boolean {
+  if (message.role !== 'assistant') return false;
+
+  const lastContentPart = message.content.parts.findLast(part => part.type !== 'step-start');
+  return lastContentPart?.type !== 'tool-invocation';
+}
 
 /**
  * Guards against requests that would end on an assistant message for providers
@@ -22,23 +42,6 @@ import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from './
  * @see https://github.com/mastra-ai/mastra/issues/12800
  * @see https://github.com/mastra-ai/mastra/issues/23320
  */
-/**
- * Whether the prompt built from this message will end on a model turn.
- *
- * An assistant message whose last content part is a tool invocation is converted
- * to an assistant tool-call turn followed by a tool-result turn (prompt conversion
- * pairs still-pending calls with a placeholder result), so the prompt already ends
- * on a non-model turn. Appending a user message there would inject a spurious turn
- * into every agentic-loop step after a tool call. `step-start` parts are loop
- * markers, not content, so they are skipped when finding the last content part.
- */
-function endsOnModelTurn(message: MastraDBMessage): boolean {
-  if (message.role !== 'assistant') return false;
-
-  const lastContentPart = message.content.parts.findLast(part => part.type !== 'step-start');
-  return lastContentPart?.type !== 'tool-invocation';
-}
-
 export class TrailingAssistantGuard implements Processor<'trailing-assistant-guard'> {
   readonly id = 'trailing-assistant-guard' as const;
   readonly name = 'Trailing Assistant Guard';
@@ -48,8 +51,9 @@ export class TrailingAssistantGuard implements Processor<'trailing-assistant-gua
       structuredOutput?.schema && !structuredOutput?.model && !structuredOutput?.jsonPromptInjection,
     );
     const rejectsTrailingModelTurn = isMaybeGoogleWithoutTrailingModelTurn(model);
+    const rejectsStructuredOutputPrefill = rejectsTrailingModelTurn || isMaybeAnthropicWithoutAssistantPrefill(model);
 
-    if (!willUseResponseFormat && !rejectsTrailingModelTurn) return;
+    if (!rejectsTrailingModelTurn && !(willUseResponseFormat && rejectsStructuredOutputPrefill)) return;
 
     const lastMessage = messages[messages.length - 1];
     if (!lastMessage || !endsOnModelTurn(lastMessage)) return;
