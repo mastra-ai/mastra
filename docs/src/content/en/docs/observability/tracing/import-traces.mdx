@@ -21,6 +21,7 @@ Before starting an import, you need:
 
 - A Mastra Platform project.
 - Mastra Platform authentication through `mastra auth login`, or a `MASTRA_API_TOKEN` and `MASTRA_ORG_ID` for a headless environment.
+- `MASTRA_PLATFORM_ACCESS_TOKEN` for upload and read-back when using an interactive login. A dry run doesn't require this token.
 - Credentials for a supported source provider.
 - Enough local disk space to temporarily store the prepared traces.
 
@@ -33,6 +34,14 @@ npx mastra auth login
 npx mastra auth orgs switch
 ```
 
+Interactive login authorizes project discovery. Set the Platform access token used by the destination project before uploading or verifying traces:
+
+```bash title=".env"
+MASTRA_PLATFORM_ACCESS_TOKEN=<mastra-platform-access-token>
+```
+
+You can run `--dry-run` without this token because a dry run doesn't contact the collector or query API.
+
 Specify the destination with `--project`, or set `MASTRA_PROJECT_ID`. You can use a project name, slug, or ID with `--project`:
 
 ```bash
@@ -41,7 +50,7 @@ npx mastra traces import langfuse --project my-project --dry-run
 
 If `MASTRA_PROJECT_ID` is set, it takes precedence over `--project`. Without either value, the CLI uses the project linked in `.mastra-project.json`.
 
-For a headless environment, set the API token and organization ID. Set the project ID or pass `--project`:
+For a headless environment, set the API token and organization ID. The command uses `MASTRA_API_TOKEN` for project discovery, upload, and read-back. Set the project ID or pass `--project`:
 
 ```bash title=".env"
 MASTRA_API_TOKEN=<mastra-api-token>
@@ -58,10 +67,10 @@ LANGFUSE_PUBLIC_KEY=<langfuse-public-key>
 LANGFUSE_SECRET_KEY=<langfuse-secret-key>
 ```
 
-Langfuse Cloud defaults to `https://cloud.langfuse.com`. Set `LANGFUSE_BASE_URL` when the project uses another Langfuse Cloud region or a self-hosted instance:
+Langfuse Cloud defaults to the EU region at `https://cloud.langfuse.com`. Set `LANGFUSE_BASE_URL` to the [regional host](https://langfuse.com/security/data-regions) for US, Japan, or HIPAA Cloud, or to the origin of a self-hosted instance:
 
 ```bash title=".env"
-LANGFUSE_BASE_URL=https://your-langfuse-host.example.com
+LANGFUSE_BASE_URL=https://us.cloud.langfuse.com
 ```
 
 ## Preview the import
