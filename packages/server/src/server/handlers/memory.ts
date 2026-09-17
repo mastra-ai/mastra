@@ -82,6 +82,7 @@ import {
   authorizeMemoryThreadAccess,
   authorizeThreadBranchHistory,
   authorizeThreadBranchTree,
+  authorizeMemoryThreadForOMRead,
   createMemoryThreadIfAbsent,
   filterThreadsByBranchAccess,
   inspectVisibleMemoryThread,
@@ -622,14 +623,13 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
 
       if (memory) {
         if (effectiveThreadId) {
-          await inspectVisibleMemoryThread(memory, effectiveThreadId);
-          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-          if (!thread) throwThreadBranchNotFound();
-          await authorizeMemoryThreadAccess({
+          // Absent thread rows (e.g. /chat/new before the first message) must keep
+          // returning status; only real threads are authorized, pending stay hidden.
+          await authorizeMemoryThreadForOMRead({
             mastra,
             requestContext,
             memory,
-            thread,
+            threadId: effectiveThreadId,
             effectiveResourceId,
           });
         }
@@ -854,10 +854,7 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'resourceId is required for observational memory lookup' });
       }
       if (threadId) {
-        await inspectVisibleMemoryThread(memory, threadId);
-        const thread = await memory.getThreadById({ threadId });
-        if (!thread) throwThreadBranchNotFound();
-        await authorizeMemoryThreadAccess({ mastra, requestContext, memory, thread, effectiveResourceId });
+        await authorizeMemoryThreadForOMRead({ mastra, requestContext, memory, threadId, effectiveResourceId });
       } else {
         await authorizeResourceMemoryAccess({
           mastra,
@@ -975,10 +972,7 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'resourceId is required' });
       }
       if (threadId) {
-        await inspectVisibleMemoryThread(memory, threadId);
-        const thread = await memory.getThreadById({ threadId });
-        if (!thread) throwThreadBranchNotFound();
-        await authorizeMemoryThreadAccess({ mastra, requestContext, memory, thread, effectiveResourceId });
+        await authorizeMemoryThreadForOMRead({ mastra, requestContext, memory, threadId, effectiveResourceId });
       } else {
         await authorizeResourceMemoryAccess({
           mastra,
@@ -1406,9 +1400,11 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
       validateBody({ threadId: effectiveThreadId });
 
       // Gateway agents: working memory is not a local concept, but thread visibility and access still apply.
+      // Note: getGatewayClient() must stay behind the isGatewayAgentAsync gate — calling it earlier would
+      // cache a null client for the process when MASTRA_GATEWAY_API_KEY is absent.
       const gwAgent = await getAgentFromContext({ mastra, agentId, requestContext });
-      const gwClient = getGatewayClient();
-      if (gwAgent && (await isGatewayAgentAsync(gwAgent)) && gwClient) {
+      const gwClient = gwAgent && (await isGatewayAgentAsync(gwAgent)) ? getGatewayClient() : null;
+      if (gwAgent && gwClient) {
         const threadResult = await gwClient.getThread(effectiveThreadId!);
         if (!threadResult) throwThreadBranchNotFound();
         const gatewayThread = toLocalThread(threadResult.thread);
@@ -2518,9 +2514,11 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
       validateBody({ searchQuery, resourceId: effectiveResourceId });
 
       // Gateway agents: semantic search is unavailable, but an explicit thread must still be visible and authorized.
+      // Note: getGatewayClient() must stay behind the isGatewayAgentAsync gate — calling it earlier would
+      // cache a null client for the process when MASTRA_GATEWAY_API_KEY is absent.
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
-      const gatewayClient = getGatewayClient();
-      if (agent && (await isGatewayAgentAsync(agent)) && gatewayClient) {
+      const gatewayClient = agent && (await isGatewayAgentAsync(agent)) ? getGatewayClient() : null;
+      if (agent && gatewayClient) {
         if (effectiveThreadId) {
           const threadResult = await gatewayClient.getThread(effectiveThreadId);
           if (!threadResult) throwThreadBranchNotFound();
