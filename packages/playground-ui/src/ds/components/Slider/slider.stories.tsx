@@ -53,8 +53,8 @@ export const WithRange: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const minimum = canvas.getByRole('slider', { name: 'Minimum' });
-    const maximum = canvas.getByRole('slider', { name: 'Maximum' });
+    const minimum = await canvas.findByRole('slider', { name: 'Minimum' });
+    const maximum = await canvas.findByRole('slider', { name: 'Maximum' });
     minimum.focus();
     await userEvent.keyboard('{ArrowRight}');
     await expect(minimum).toHaveAttribute('aria-valuenow', '26');
