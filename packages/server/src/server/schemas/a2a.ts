@@ -144,6 +144,24 @@ export const deletePushNotificationConfigParamsSchema = taskIdParamsSchema.exten
   pushNotificationConfigId: z.string().describe('Push notification config id'),
 });
 
+const v1TaskPushNotificationConfigSchema = pushNotificationConfigSchema.extend({
+  taskId: z.string().describe('Task id'),
+  tenant: z.string().optional(),
+});
+
+const v1GetPushNotificationConfigParamsSchema = z.object({
+  tenant: z.string().optional(),
+  taskId: z.string(),
+  id: z.string(),
+});
+
+const v1ListPushNotificationConfigParamsSchema = z.object({
+  tenant: z.string().optional(),
+  taskId: z.string(),
+  pageSize: z.number().int().min(1).max(100).optional(),
+  pageToken: z.string().optional(),
+});
+
 // Legacy schema for backwards compatibility
 export const messageSendBodySchema = z.object({
   message: messageSchema,
@@ -206,23 +224,43 @@ export const agentExecutionBodySchema = z.discriminatedUnion('method', [
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.enum([a2aV1MethodMap.CreateTaskPushNotificationConfig, 'CreateTaskPushNotificationConfig']),
+    method: z.literal(a2aV1MethodMap.CreateTaskPushNotificationConfig),
     params: setPushNotificationConfigParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.enum([a2aV1MethodMap.GetTaskPushNotificationConfig, 'GetTaskPushNotificationConfig']),
+    method: z.literal('CreateTaskPushNotificationConfig'),
+    params: v1TaskPushNotificationConfigSchema,
+  }),
+  z.object({
+    ...requestBaseSchema,
+    method: z.literal(a2aV1MethodMap.GetTaskPushNotificationConfig),
     params: getPushNotificationConfigParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.enum([a2aV1MethodMap.ListTaskPushNotificationConfigs, 'ListTaskPushNotificationConfigs']),
+    method: z.literal('GetTaskPushNotificationConfig'),
+    params: v1GetPushNotificationConfigParamsSchema,
+  }),
+  z.object({
+    ...requestBaseSchema,
+    method: z.literal(a2aV1MethodMap.ListTaskPushNotificationConfigs),
     params: listPushNotificationConfigParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.enum([a2aV1MethodMap.DeleteTaskPushNotificationConfig, 'DeleteTaskPushNotificationConfig']),
+    method: z.literal('ListTaskPushNotificationConfigs'),
+    params: v1ListPushNotificationConfigParamsSchema,
+  }),
+  z.object({
+    ...requestBaseSchema,
+    method: z.literal(a2aV1MethodMap.DeleteTaskPushNotificationConfig),
     params: deletePushNotificationConfigParamsSchema,
+  }),
+  z.object({
+    ...requestBaseSchema,
+    method: z.literal('DeleteTaskPushNotificationConfig'),
+    params: v1GetPushNotificationConfigParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
