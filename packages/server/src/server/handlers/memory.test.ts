@@ -5,6 +5,7 @@ import { MockMemory, createThreadBranchError } from '@mastra/core/memory';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MASTRA_AUTH_MODE_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   GET_MEMORY_STATUS_ROUTE,
@@ -589,6 +590,41 @@ describe('Memory Handlers', () => {
       });
       expect(result).toEqual(createdThread);
       expect(spy).toHaveBeenCalledWith({ threadId: 'test-thread' });
+    });
+
+    it('returns a placeholder for a gateway thread before its first message', async () => {
+      vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'test-gateway-key');
+      vi.stubEnv('MASTRA_GATEWAY_URL', 'https://gateway.example.test');
+      const gatewayAgent = new Agent({
+        id: 'gateway-agent',
+        name: 'gateway-agent',
+        instructions: 'test-instructions',
+        model: 'mastra/openai/gpt-5-mini' as any,
+      });
+      const mastra = new Mastra({ logger: false, agents: { 'gateway-agent': gatewayAgent } });
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('', { status: 404 }));
+
+      try {
+        const result = await GET_THREAD_BY_ID_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          threadId: 'unsaved-thread',
+          resourceId: 'resource-1',
+          agentId: 'gateway-agent',
+        });
+
+        expect(result).toMatchObject({
+          id: 'unsaved-thread',
+          resourceId: 'resource-1',
+          title: '',
+          metadata: {},
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        });
+        expect(fetchMock).toHaveBeenCalledOnce();
+      } finally {
+        fetchMock.mockRestore();
+        vi.unstubAllEnvs();
+      }
     });
 
     it('should deny thread reads when FGA denies access', async () => {
@@ -1350,7 +1386,7 @@ describe('Memory Handlers', () => {
       expect(branchThread).not.toHaveBeenCalled();
     });
 
-    it('returns non-revealing not-found before writing when an ancestor is inaccessible', async () => {
+    it('returns non-revealing not-found before writing when studio FGA denies an ancestor', async () => {
       enableBranching();
       const branchThread = vi.mocked(mockMemory.branchThread);
       const getBranchHistory = vi
@@ -1362,8 +1398,9 @@ describe('Memory Handlers', () => {
           throw Object.assign(new Error('FGA denied'), { status: 403 });
         }
       });
-      vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+      vi.spyOn(mastra, 'getStudio').mockReturnValue({ fga: { require } } as any);
       const context = createTestContextWithReservedKeys({ mastra, resourceId: 'test-resource' });
+      context.requestContext.set(MASTRA_AUTH_MODE_KEY, 'studio');
       context.requestContext.set('user', { id: 'user-1' });
 
       let error: HTTPException | undefined;
@@ -1385,6 +1422,13 @@ describe('Memory Handlers', () => {
           message: 'Thread branch was not found or is not accessible.',
         },
       });
+      expect(require).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        expect.objectContaining({
+          resource: { type: 'thread', id: root.id },
+          permission: 'memory:write',
+        }),
+      );
       expect(getBranchHistory).not.toHaveBeenCalled();
       expect(branchThread).not.toHaveBeenCalled();
     });

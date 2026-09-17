@@ -1141,7 +1141,14 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
         if (gwClient) {
           const result = await gwClient.getThread(effectiveThreadId!);
           if (!result) {
-            throwThreadBranchNotFound();
+            return {
+              id: effectiveThreadId!,
+              resourceId: effectiveResourceId ?? '',
+              title: '',
+              metadata: {},
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
           }
           const thread = toLocalThread(result.thread);
           const gatewayThreadCount = await gwClient.listThreads({ resourceId: thread.resourceId, limit: 1, offset: 0 });
