@@ -65,7 +65,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
         )}
       </PopoverTrigger>
       <PopoverContent
-        className="backdrop-blur-4xl bg-surface4 w-auto max-w-66 p-0!"
+        className="backdrop-blur-4xl w-auto max-w-66 p-0!"
         align="start"
         data-testid="datepicker-calendar"
       >
