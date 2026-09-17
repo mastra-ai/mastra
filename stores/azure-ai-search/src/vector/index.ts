@@ -635,9 +635,12 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       doc[vectorFieldName] = vector;
     }
 
+    // `content` is derived from metadata, so whenever the metadata blob is
+    // (re)written the column must follow it; otherwise a merge would keep a
+    // stale value from the previous document.
     if (typeof metadata.content === 'string') {
       doc.content = metadata.content;
-    } else if (vector && writeMetadata) {
+    } else if (writeMetadata) {
       doc.content = '';
     }
 

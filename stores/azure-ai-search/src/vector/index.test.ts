@@ -481,8 +481,39 @@ describe('AzureAISearchVector Unit Tests', () => {
       });
 
       expect(mockSearchClientInstance.mergeDocuments).toHaveBeenCalledWith([
-        { id: 'doc1', metadata: JSON.stringify({ status: 'updated', category: 'docs' }), category: 'docs' },
+        {
+          id: 'doc1',
+          metadata: JSON.stringify({ status: 'updated', category: 'docs' }),
+          category: 'docs',
+          content: '',
+        },
       ]);
+    });
+
+    it('should clear the derived content column on a metadata-only update that omits content', async () => {
+      await azureVector.updateVector({
+        indexName: 'test-index',
+        id: 'doc1',
+        update: { metadata: { category: 'books' } },
+      });
+      const [batch] = mockSearchClientInstance.mergeDocuments.mock.calls[0];
+      expect(batch[0]).toEqual({
+        id: 'doc1',
+        content: '',
+        metadata: JSON.stringify({ category: 'books' }),
+        category: 'books',
+      });
+    });
+
+    it('should not touch content or metadata on a vector-only update', async () => {
+      await azureVector.updateVector({
+        indexName: 'test-index',
+        id: 'doc1',
+        update: { vector: Array.from({ length: 128 }, () => 0.1) },
+      });
+      const [batch] = mockSearchClientInstance.mergeDocuments.mock.calls[0];
+      expect(batch[0]).not.toHaveProperty('content');
+      expect(batch[0]).not.toHaveProperty('metadata');
     });
 
     it('should update vectors by filter', async () => {
@@ -500,8 +531,8 @@ describe('AzureAISearchVector Unit Tests', () => {
       });
 
       expect(mockSearchClientInstance.mergeDocuments).toHaveBeenCalledWith([
-        { id: 'doc1', metadata: JSON.stringify({ category: 'new' }), category: 'new' },
-        { id: 'doc2', metadata: JSON.stringify({ category: 'new' }), category: 'new' },
+        { id: 'doc1', metadata: JSON.stringify({ category: 'new' }), category: 'new', content: '' },
+        { id: 'doc2', metadata: JSON.stringify({ category: 'new' }), category: 'new', content: '' },
       ]);
     });
   });
