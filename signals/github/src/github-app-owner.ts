@@ -34,10 +34,7 @@ export class GithubAppOwnerResolver {
     this.#runGhApi = runGhApi;
   }
 
-  async getOwner(
-    botLogin: string,
-    isCurrentGeneration?: () => boolean,
-  ): Promise<GithubAppOwner | undefined> {
+  async getOwner(botLogin: string, isCurrentGeneration?: () => boolean): Promise<GithubAppOwner | undefined> {
     const appSlug = botLogin.replace(/\[bot\]$/i, '');
     if (!appSlug || (isCurrentGeneration && !isCurrentGeneration())) return undefined;
 
