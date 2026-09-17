@@ -105,7 +105,7 @@ async function createHarness(id: string) {
   const session = await controller.createSession({ id: `${id}-session`, ownerId: 'owner-1' });
   await session.thread.create();
 
-  return { session, events: [] as AgentControllerEvent[] };
+  return { controller, session, events: [] as AgentControllerEvent[] };
 }
 
 function waitForAgentEnd(session: any, events: AgentControllerEvent[]) {
@@ -205,5 +205,89 @@ describe('session.abort() during approval / suspension (#20592)', () => {
       state: 'output-denied',
       approval: { approved: false, reason: 'Aborted by the user' },
     });
+  });
+
+  it('Given an approval gate and a retained suspended tool, When abort() is called, Then both tool calls are denied before teardown', async () => {
+    const { controller, session, events } = await createHarness('abort-approval-and-suspension');
+
+    const ended = waitForAgentEnd(session, events);
+    let sawCombinedState = false;
+    const combinedStateReady = new Promise<void>((resolve, reject) => {
+      session.subscribe((event: AgentControllerEvent) => {
+        if (event.type !== 'tool_approval_required') return;
+
+        void (async () => {
+          try {
+            const currentMessage = session.displayState.get().currentMessage;
+            if (!currentMessage) throw new Error('Expected an active approval message');
+
+            // The controller can retain a persisted suspension from an earlier
+            // tool step while a later tool is awaiting approval.
+            const suspendedMessage = structuredClone(currentMessage);
+            suspendedMessage.id = `${currentMessage.id}-suspended`;
+            suspendedMessage.threadId = session.thread.requireId();
+            suspendedMessage.resourceId = session.identity.getResourceId();
+            suspendedMessage.content.parts = [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'call',
+                  toolCallId: 'call-2',
+                  toolName: 'confirmAccess',
+                  args: { resource: 'profile' },
+                },
+              },
+            ];
+            const memory = await session.machinery.getAgent().getMemory();
+            if (!memory) throw new Error('Expected memory for persisted suspension');
+            await memory.saveMessages({ messages: [suspendedMessage] });
+
+            session.suspensions.register({
+              toolCallId: 'call-2',
+              runId: 'retained-suspended-run',
+              toolName: 'confirmAccess',
+            });
+            sawCombinedState = session.approval.isArmed() && session.suspensions.hasPending();
+            session.abort();
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        })();
+      });
+    });
+
+    void session.sendMessage({ content: 'find dero' }).catch(() => {});
+    await combinedStateReady;
+    await ended;
+
+    expect(sawCombinedState).toBe(true);
+    expect(events.filter(event => event.type === 'error')).toEqual([]);
+    expect(events.some(event => event.type === 'tool_suspension_cancelled' && event.toolCallId === 'call-2')).toBe(
+      true,
+    );
+    expect(events.some(event => event.type === 'tool_end' && event.toolCallId === 'call-2' && event.denied)).toBe(true);
+
+    await vi.waitFor(async () => {
+      const messages = await session.thread.listMessages({ threadId: session.thread.requireId() });
+      const persistedToolParts = messages
+        .filter(message => message.role === 'assistant')
+        .flatMap(message => message.content.parts)
+        .filter(part => part.type === 'tool-invocation');
+      expect(
+        persistedToolParts
+          .map(part => ({ toolCallId: part.toolInvocation.toolCallId, state: part.toolInvocation.state }))
+          .sort((a, b) => a.toolCallId.localeCompare(b.toolCallId)),
+      ).toEqual([
+        { toolCallId: 'call-1', state: 'output-denied' },
+        { toolCallId: 'call-2', state: 'output-denied' },
+      ]);
+    });
+
+    const ds = session.displayState.get();
+    expect(ds.pendingApproval).toBeNull();
+    expect(ds.pendingSuspensions.size).toBe(0);
+    expect(ds.isRunning).toBe(false);
+    expect(controller.listActiveThreadRuns()).toHaveLength(0);
   });
 });

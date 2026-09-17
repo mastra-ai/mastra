@@ -3245,9 +3245,16 @@ export class Session<TState = unknown> {
     // active or suspended run". Defer both the stream abort and the abort
     // signal to the engine, which fires them once the decline has landed.
     const wasGated = this.approval.isArmed();
-    this.approval.cancel();
     if (wasGated) {
       this.run.requestAbort({ deferSignal: true });
+      if (suspendedToolCalls.length === 0) {
+        this.approval.cancel();
+        return;
+      }
+      void this.runEngine
+        .settleSuspendedToolCallsAsDenied(suspendedToolCalls)
+        .catch(error => this.emit({ type: 'error', error: getErrorFromUnknown(error) }))
+        .finally(() => this.approval.cancel());
       return;
     }
 
@@ -3326,9 +3333,10 @@ export class Session<TState = unknown> {
 
   /**
    * Respond to the parked tool-approval gate with the user's decision. A no-op
-   * when nothing is awaiting approval. "always_allow_category" grants the gated
-   * tool's category for the rest of the session (resolved via the injected
-   * {@link setCategoryResolver}) and then approves; "approve"/"decline" release
+   * when nothing is awaiting approval or the run is already aborting.
+   * "always_allow_category" grants the gated tool's category for the rest of
+   * the session (resolved via the injected {@link setCategoryResolver}) and then
+   * approves; "approve"/"decline" release
    * the run as-is.
    */
   respondToToolApproval({
@@ -3342,6 +3350,7 @@ export class Session<TState = unknown> {
     requestContext?: RequestContext;
     declineContext?: { reason?: string; message?: string };
   }): void {
+    if (this.run.isAbortRequested()) return;
     this.approval.respond({
       decision,
       toolCallId,
