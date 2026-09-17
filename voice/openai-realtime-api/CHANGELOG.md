@@ -1,5 +1,23 @@
 # @mastra/voice-openai-realtime
 
+## 0.14.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`5085475`](https://github.com/mastra-ai/mastra/commit/5085475c0da226e618eb3ee2676d347788c3fb00), [`6c781fd`](https://github.com/mastra-ai/mastra/commit/6c781fda62eb0b0b74d016f188ed0b2db5cfdceb)]:
+  - @mastra/schema-compat@1.3.11-alpha.1
+
+## 0.14.1-alpha.0
+
+### Patch Changes
+
+- Fixed a WebSocket denial-of-service advisory by updating ws to 8.21.3. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
+- Fix `createTool` tools registered on `OpenAIRealtimeVoice` receiving the wrong input shape. Tools with an `inputSchema` were invoked as `execute({ context: args }, ...)`, so their `execute` received `{ context: { ...args } }` instead of the arguments directly — every field read as `undefined`, and tools with a Zod `inputSchema` failed validation. The adapter now passes arguments as the first positional argument, matching `@mastra/core`'s `ToolExecuteFunction(inputData, context)` signature. ([#24090](https://github.com/mastra-ai/mastra/pull/24090))
+
+- Updated dependencies [[`fef227a`](https://github.com/mastra-ai/mastra/commit/fef227a8b7cb0ad7f68087e26d1fd2051054a61a)]:
+  - @mastra/schema-compat@1.3.11-alpha.0
+
 ## 0.14.0
 
 ### Minor Changes

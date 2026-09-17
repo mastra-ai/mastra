@@ -11,6 +11,12 @@ export {
 export { useTraceSearch, type UseTraceSearchResult } from './use-trace-search';
 export { useTraceSpans } from './use-trace-spans';
 export { useTraces } from './use-traces';
+export {
+  useTraceQuery,
+  type UseTraceQueryArgs,
+  type UseTraceQueryReturn,
+  type TraceQueryArgs,
+} from './use-trace-query';
 export { useTags } from './use-tags';
 export { useEntityNames } from './use-entity-names';
 export { useEnvironments } from './use-environments';

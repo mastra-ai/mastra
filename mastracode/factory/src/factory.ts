@@ -112,6 +112,7 @@ import type { WorkItemRow } from './storage/domains/work-items/base.js';
 import { FactorySupervisorHealthWorker } from './supervisor/health-worker.js';
 import { SUPERVISOR_INSTRUCTIONS } from './supervisor/instructions.js';
 import { createFactorySupervisorReadTools } from './supervisor/read-tools.js';
+import { messageWorkerSession } from './supervisor/session-messaging.js';
 import { hydrateSupervisorSession, parseSupervisorResourceId, resolveSupervisorScope } from './supervisor/session.js';
 import { createFactorySupervisorWriteTools } from './supervisor/write-tools.js';
 import { timedPhase } from './timing.js';
@@ -896,14 +897,14 @@ export class MastraFactory {
                                   ),
                               }
                             : {}),
-                          signalSession: async ({ sessionId, message }) => {
-                            const session = await prepared.base.controller.getSessionByResource(sessionId);
-                            if (!session) throw new Error('The worker session is not currently available.');
-                            await session.sendMessage({
-                              content: message,
+                          messageSession: ({ sessionId, message, delivery }) =>
+                            messageWorkerSession({
+                              controller: prepared.base.controller,
+                              sessionId,
+                              message,
+                              delivery,
                               ...(requestContext ? { requestContext } : {}),
-                            });
-                          },
+                            }),
                         }),
                       );
                     }
