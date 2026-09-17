@@ -2982,4 +2982,56 @@ describe('Agent.processStreamResponse client-tool synthetic chunks', () => {
     // Recursive call must still fire with the error result patched in.
     expect(mockRequest).toHaveBeenCalledTimes(2);
   });
+
+  it('does not produce an unhandled rejection when the consumer cancels the stream after the finish chunk (#24253)', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent-id');
+    const response = makeStreamingResponse([
+      { type: 'step-start', payload: { messageId: 'msg-1' } },
+      { type: 'text-delta', payload: { text: 'done' } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' } } },
+    ]);
+    const mockRequest = vi.fn().mockResolvedValue(response);
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    let outerController!: ReadableStreamDefaultController<Uint8Array>;
+    const outerStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        outerController = controller;
+      },
+    });
+
+    const unhandledRejections: unknown[] = [];
+    const onUnhandledRejection = (reason: unknown) => unhandledRejections.push(reason);
+    process.on('unhandledRejection', onUnhandledRejection);
+
+    try {
+      const processPromise = agent.processStreamResponse(
+        { messages: [{ role: 'user', content: 'hi' }] },
+        outerController,
+      );
+
+      // Mirrors normal consumer behavior: read until the `finish` chunk is
+      // seen, then cancel instead of draining the stream to completion.
+      const reader = outerStream.getReader();
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (decoder.decode(value, { stream: true }).includes('"type":"finish"')) {
+          await reader.cancel();
+          break;
+        }
+      }
+
+      await processPromise;
+      // The success-path close() runs in a detached background chain; flush
+      // the microtask/macrotask queue so it has a chance to run (and, pre-fix,
+      // to reject) before asserting.
+      await new Promise(resolve => setImmediate(resolve));
+    } finally {
+      process.off('unhandledRejection', onUnhandledRejection);
+    }
+
+    expect(unhandledRejections).toEqual([]);
+  });
 });

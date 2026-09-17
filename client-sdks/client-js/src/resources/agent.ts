@@ -2167,6 +2167,19 @@ export class Agent extends BaseResource {
       let messages: UIMessage[] = [];
       let streamRunId: string | undefined = processedParams.runId;
 
+      // The consumer can cancel the outer ReadableStream at any time (e.g. after
+      // reading the 'finish' chunk), which closes `controller` independently of
+      // this method. Every close() below must go through this guard so a
+      // consumer-initiated cancel doesn't throw an uncatchable ERR_INVALID_STATE
+      // from inside this detached background processing.
+      const safeClose = () => {
+        try {
+          controller.close();
+        } catch {
+          // Already closed (e.g. the consumer cancelled the stream)
+        }
+      };
+
       // Use tee() to split the stream into two branches
       const [streamForController, streamForProcessing] = response.body.tee();
       const decoder = new TextDecoder();
@@ -2205,11 +2218,7 @@ export class Agent extends BaseResource {
         )
         .catch(error => {
           console.error('Error piping to controller:', error);
-          try {
-            controller.close();
-          } catch {
-            // Already closed
-          }
+          safeClose();
         });
 
       // Process the other branch for chat response handling
@@ -2443,12 +2452,12 @@ export class Agent extends BaseResource {
               // Close the controller after all processing is complete
               // Wait for current pipe to finish before closing
               await pipePromise;
-              controller.close();
+              safeClose();
             }
           } else {
             // No tool calls - wait for pipe to complete then close the stream
             await pipePromise;
-            controller.close();
+            safeClose();
           }
         },
         onStreamChunk: chunk => {
@@ -2460,12 +2469,8 @@ export class Agent extends BaseResource {
       }).catch(async error => {
         console.error('Error processing stream response:', error);
         // On error, wait for pipe to complete then close the controller
-        try {
-          await pipePromise;
-          controller.close();
-        } catch {
-          // Already closed
-        }
+        await pipePromise;
+        safeClose();
       });
     } catch (error) {
       console.error('Error processing stream response:', error);
