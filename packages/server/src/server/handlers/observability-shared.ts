@@ -1,6 +1,7 @@
 import type { Mastra } from '@mastra/core';
 import { coreFeatures } from '@mastra/core/features';
 import type { MastraCompositeStore, ObservabilityStorage, ScoresStorage } from '@mastra/core/storage';
+import * as coreStorage from '@mastra/core/storage';
 import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import type { ServerRoute } from '../server-adapter/routes';
@@ -18,6 +19,19 @@ export const OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE =
 const OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE = 'trace-query';
 const OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE = 'trace-query-discovery';
 const OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE = 'thread-query';
+
+export function supportsTraceQueryDiscoveryCore() {
+  return (
+    coreStorage.getTraceQueryFieldsArgsSchema !== undefined &&
+    coreStorage.getTraceQueryFieldsResponseSchema !== undefined &&
+    coreStorage.getTraceQueryValuesArgsSchema !== undefined &&
+    coreStorage.getTraceQueryValuesResponseSchema !== undefined &&
+    typeof coreStorage.planTraceQueryObservedFields === 'function' &&
+    typeof coreStorage.planTraceQueryValues === 'function' &&
+    typeof coreStorage.getTraceQueryCanonicalFieldDescriptors === 'function' &&
+    typeof coreStorage.TraceQueryResourceLimitError === 'function'
+  );
+}
 
 export const OBSERVABILITY_LIST_ENDPOINTS = {
   traces: 'traces',

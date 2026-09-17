@@ -20,6 +20,7 @@ vi.mock('@mastra/core/storage', async importOriginal => {
 });
 
 const { GET_TRACE_QUERY_FIELDS, GET_TRACE_QUERY_VALUES } = await import('./observability-new-endpoints');
+const { supportsTraceQueryDiscoveryCore } = await import('./observability-shared');
 
 async function captureHttpException(call: Promise<unknown>) {
   try {
@@ -32,6 +33,10 @@ async function captureHttpException(call: Promise<unknown>) {
 }
 
 describe('trace-query discovery Core compatibility', () => {
+  it('reports discovery support as unavailable when the installed Core lacks discovery symbols', () => {
+    expect(supportsTraceQueryDiscoveryCore()).toBe(false);
+  });
+
   it.each([
     {
       name: 'field discovery',

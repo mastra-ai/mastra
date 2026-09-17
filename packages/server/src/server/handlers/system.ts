@@ -4,6 +4,7 @@ import type { MastraPackage } from '../schemas/system';
 import { apiSchemaManifestResponseSchema, systemPackagesResponseSchema } from '../schemas/system';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
+import { supportsTraceQueryDiscoveryCore } from './observability-shared';
 
 const SOURCE_PROVIDER_CAPABILITIES_TIMEOUT_MS = 3000;
 
@@ -174,7 +175,8 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
         ? {
             metrics: observabilityStorageFeatures.includes('metrics'),
             logs: observabilityStorageFeatures.includes('logs'),
-            traceQueryDiscovery: observabilityStorageFeatures.includes('trace-query-discovery'),
+            traceQueryDiscovery:
+              supportsTraceQueryDiscoveryCore() && observabilityStorageFeatures.includes('trace-query-discovery'),
           }
         : undefined;
       const observabilityRuntimeStrategy = observabilityStorage?.runtimeTracingStrategy;

@@ -543,7 +543,7 @@ PostgreSQL and ClickHouse stop advanced trace and thread queries after 15 second
 | `409` | The cursor doesn't match the query. |
 | `413` | The request body exceeds 256 KiB. |
 | `422` | The JSON is well formed, but the request is structurally or semantically invalid. The response includes stable issue codes and paths. Discovery validation uses `TRACE_QUERY_INVALID`. |
-| `501` | The configured observability store doesn't support the requested operation. Discovery returns `TRACE_QUERY_DISCOVERY_UNSUPPORTED` unless the store implements both field and value discovery. |
+| `501` | The installed Core or configured observability store doesn't support the requested operation. Discovery returns `TRACE_QUERY_DISCOVERY_UNSUPPORTED` unless Core provides the discovery contract and the store implements both field and value discovery. |
 | `503` | Discovery exceeded a backend memory or resource budget and returned `TRACE_QUERY_RESOURCE_LIMIT`. |
 | `504` | A PostgreSQL or ClickHouse query exceeded its configured database execution timeout. Discovery returns `TRACE_QUERY_EXECUTION_TIMEOUT`. |
 

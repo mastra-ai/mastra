@@ -87,6 +87,7 @@ import {
   getObservabilityStore,
   NEW_ROUTE_DEFS,
   OBSERVABILITY_LIST_ENDPOINTS,
+  supportsTraceQueryDiscoveryCore,
 } from './observability-shared';
 import type { RouteDetails } from './observability-shared';
 
@@ -236,19 +237,6 @@ function throwTraceQueryError(status: 400 | 409 | 413 | 422 | 501 | 503 | 504, b
       headers: { 'content-type': 'application/json' },
     }),
   });
-}
-
-function supportsTraceQueryDiscoveryCore() {
-  return (
-    coreStorage.getTraceQueryFieldsArgsSchema !== undefined &&
-    coreStorage.getTraceQueryFieldsResponseSchema !== undefined &&
-    coreStorage.getTraceQueryValuesArgsSchema !== undefined &&
-    coreStorage.getTraceQueryValuesResponseSchema !== undefined &&
-    typeof coreStorage.planTraceQueryObservedFields === 'function' &&
-    typeof coreStorage.planTraceQueryValues === 'function' &&
-    typeof coreStorage.getTraceQueryCanonicalFieldDescriptors === 'function' &&
-    typeof coreStorage.TraceQueryResourceLimitError === 'function'
-  );
 }
 
 const throwTraceQueryDiscoveryCoreUnsupported = () =>
@@ -419,7 +407,7 @@ for (const route of [GET_TRACE_QUERY_FIELDS, GET_TRACE_QUERY_VALUES]) {
     content: { 'application/json': { schema: traceQueryValidationResponseSchema } },
   };
   route.openapi.responses[501] = {
-    description: 'The configured observability store does not support trace-query discovery',
+    description: 'The installed Core or configured observability store does not support trace-query discovery',
     content: { 'application/json': { schema: traceQueryDiscoveryUnsupportedErrorSchema } },
   };
   route.openapi.responses[503] = {
