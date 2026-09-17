@@ -10,10 +10,14 @@ import { useWorkflowStepDetail } from '../../context/workflow-step-detail-contex
 import type { WorkflowDataSelection } from '../../context/workflow-step-detail-context';
 import { useWorkflowData, workflowDataKey } from './use-workflow-data';
 
+const DIRECTION_ICONS = { input: ArrowDownToLine, output: ArrowUpFromLine };
+const DIRECTION_LABELS = { input: 'Input', output: 'Output' };
+
 export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSelection }) {
   const { closeStepDetail } = useWorkflowStepDetail();
   const { result } = useContext(WorkflowRunContext);
   const { name, direction, value } = useWorkflowData(selection);
+  const DirectionIcon = DIRECTION_ICONS[direction];
   const closeRef = useRef<HTMLButtonElement>(null);
   const selectionKey = workflowDataKey(selection);
 
@@ -34,9 +38,8 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
     >
       <header className="border-border1/50 bg-surface2 flex shrink-0 items-start gap-3 border-b px-5 py-4">
         <div className="min-w-0 flex-1 space-y-2">
-          <Badge variant="neutral" emphasis="muted">
-            {direction === 'input' ? <ArrowDownToLine /> : <ArrowUpFromLine />}
-            {direction === 'input' ? 'Input' : 'Output'}
+          <Badge variant="neutral" emphasis="muted" icon={<DirectionIcon />}>
+            {DIRECTION_LABELS[direction]}
           </Badge>
           <Txt as="h2" variant="ui-sm" className="text-neutral6 font-medium break-words">
             {name}
