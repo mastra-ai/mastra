@@ -45,10 +45,11 @@ describe('API extraction inventory', () => {
     expect(report.owners.map(owner => owner.node.id)).toEqual(['Config.a', 'Config.b'])
   })
 
-  it('skips anonymous, undocumented-adjacent and described declarations', () => {
+  it('skips anonymous and described declarations, gating the same kinds as page validation', () => {
     const report = inventory([
       contract('Config', [
         declaration({ id: 'Config.__type', name: '__type' }),
+        declaration({ id: 'Config.shape', name: 'shape', kind: 'TypeLiteral' }),
         declaration({ id: 'Config.kind', name: 'kind', kind: 'EnumMember' }),
         declaration({
           id: 'Config.described',
@@ -62,7 +63,7 @@ describe('API extraction inventory', () => {
         }),
       ]),
     ])
-    expect(report.owners.map(owner => owner.node.id)).toEqual(['Config.blank'])
+    expect(report.owners.map(owner => owner.node.id)).toEqual(['Config.blank', 'Config.kind'])
   })
 
   it('collects type shapes and service-boundary references across nested operands', () => {

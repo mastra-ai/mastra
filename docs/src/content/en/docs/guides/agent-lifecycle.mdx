@@ -24,7 +24,7 @@ Preparation depends on runtime context and initial input processing:
 - [`RequestContext`](/docs/server/request-context) carries trusted runtime data, such as identity or tenant information, to dynamic configuration, processors, and tools, but its values aren't automatically included in the model prompt.
 - [`processInput`](/reference/processors/processor-interface#processinput) handles the initial messages before the loop begins, where it can transform those messages and establish state that later processor hooks and tools use.
 
-A run contains one or more loop iterations. It stops after the current iteration when the model returns a final answer. When the model requests a tool, Mastra processes the result and may begin another iteration unless a configured [`stopWhen`](/reference/agents/generate#parameters) or terminal condition ends the run after tool work. An iteration commonly coincides with one model step, but treat that pairing as implementation behavior rather than a stable contract.
+A run contains one or more loop iterations. It stops after the current iteration when the model returns a final answer. When the model requests a tool, Mastra processes the result and may begin another iteration unless a configured [`stopWhen`](/reference/agents/generate) or terminal condition ends the run after tool work. An iteration commonly coincides with one model step, but treat that pairing as implementation behavior rather than a stable contract.
 
 ## Lifecycle overview
 
@@ -147,7 +147,7 @@ After the model step and any requested tool work, Mastra decides whether the run
 The loop stops when a configured or terminal condition is reached. These conditions can include:
 
 - A final model response that doesn't request another tool.
-- A custom [`stopWhen`](/reference/agents/generate#parameters) condition evaluated against accumulated steps.
+- A custom [`stopWhen`](/reference/agents/generate) condition evaluated against accumulated steps.
 - The [`maxSteps`](/reference/agents/generate#using-maxsteps) limit.
 - Task-completion, goal, or [subagent](/docs/subagents) delegation outcomes.
 - A terminal provider finish reason, error, processor tripwire, or abort.
@@ -164,7 +164,7 @@ Finalization is separate from a model step. It operates on the result of the who
 
 ## Errors, retries, and aborts
 
-A provider API rejection can reach `processAPIError`. An error processor may change the request or messages and request another provider attempt. `processAPIError` retries and tripwire retries share the same [`maxProcessorRetries`](/reference/agents/generate#parameters) bound on the request. When error processors are configured and `maxProcessorRetries` is omitted, Mastra applies a default error-retry budget. Set `maxProcessorRetries` explicitly when you need a specific limit.
+A provider API rejection can reach `processAPIError`. An error processor may change the request or messages and request another provider attempt. `processAPIError` retries and tripwire retries share the same [`maxProcessorRetries`](/reference/agents/generate) bound on the request. When error processors are configured and `maxProcessorRetries` is omitted, Mastra applies a default error-retry budget. Set `maxProcessorRetries` explicitly when you need a specific limit.
 
 Calling [`abort()`](/reference/processors/processor-interface#aborting-and-tripwire-chunks) from an input or output processor raises a tripwire. Set `retry: true` to let an eligible input-step or output-step check replay the model step with feedback. `maxProcessorRetries` bounds replay attempts. A tripwire without a retry stops normal execution and is included in the result or stream.
 

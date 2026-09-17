@@ -3,6 +3,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { ApiContract, ApiDeclaration, ApiReference, ApiType } from '../../src/api-reference/model'
 import { parseContract } from '../../src/api-reference/schema'
+import { requiresDescription } from '../../src/api-reference/traversal'
 import { artifactDirectory, repositoryRoot } from './config'
 
 export function inventory(contracts: ApiContract[]) {
@@ -18,11 +19,7 @@ export function inventory(contracts: ApiContract[]) {
     for (const node of Object.values(contract.declarations)) {
       if (node.type) inspect(node.type)
       if (node.defaultType) inspect(node.defaultType)
-      if (
-        node.name.startsWith('__') ||
-        !['Property', 'Parameter', 'Method', 'Function', 'Interface', 'TypeAlias'].includes(node.kind)
-      )
-        continue
+      if (!requiresDescription(node)) continue
       if (node.comment?.summary.some(part => part.text.trim())) continue
       const key = node.source
         ? `${node.source.path}:${node.source.line}:${node.source.character}:${node.name}`

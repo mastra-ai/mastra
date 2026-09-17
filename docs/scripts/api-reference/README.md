@@ -65,6 +65,8 @@ Development without a verified revision shows unlinked source locations instead 
 
 The separate `api-reference-result.yml` reports the stable `api-reference` check on the validation run's head SHA. Its privileged job reads only GitHub run/job metadata: it does not check out pull-request code, download artifacts, restore caches, or receive repository secrets. Failed, cancelled or skipped validation is not reported as success. This reporter must exist on the default branch before its workflow-run trigger can be exercised; local tests do not establish live fork-origin check visibility.
 
+The reported check attests that the workflow defined in the validated revision completed its expected steps successfully; it does not attest to the workflow's own contents. A same-repository branch can edit `.github/workflows/api-reference.yml`, and a `pull_request` run of that branch executes the edited file. Treat `.github/workflows/api-reference*.yml` as protected paths under branch protection or `CODEOWNERS` if the check is used to gate promotion. Production promotion consumes the default branch, whose run uses the merged workflow, so the remaining exposure is the review of a merge that weakens the workflow itself.
+
 Run the repository-side preflight with explicit identifiers:
 
 ```sh

@@ -30,7 +30,7 @@ For a conceptual walkthrough of preparation, the agent loop, tool execution, and
 | Tool [`onOutput`](/reference/tools/create-tool#onoutput) | Once after successful local execution | Receives the tool output. |
 | `processToolResult` | Per local/client result, or when a deferred provider result arrives | Can inspect, redact, or abort before a raw tool result enters the message list. |
 | `processAPIError` | On eligible provider API errors | Can update request state and request another provider attempt. |
-| [`onIterationComplete`](/reference/agents/generate#parameters) | Once after each completed loop iteration | Observes the iteration result and can influence whether execution continues. |
+| [`onIterationComplete`](/reference/agents/generate) | Once after each completed loop iteration | Observes the iteration result and can influence whether execution continues. |
 | `processOutputResult` | Once at finalization | Post-processes the completed agent result before it's returned. |
 
 ## Interface definition
