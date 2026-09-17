@@ -14,7 +14,6 @@ export const useThreadInput = (
   draft?: ThreadDraft;
   updateDraft?: Dispatch<SetStateAction<ThreadDraft>>;
   draftStatus?: DraftStatus;
-  discardUnreadable?: () => Promise<void>;
 } => {
   const { getThreadInput, setThreadInputForThread, drafts } = use(ThreadInputContext);
   const setThreadInput = useCallback<ThreadInputSetter>(
@@ -28,6 +27,5 @@ export const useThreadInput = (
     draft: drafts?.get(threadId),
     updateDraft: drafts ? value => drafts.update(threadId, value) : undefined,
     draftStatus: drafts?.status,
-    discardUnreadable: drafts?.discardUnreadable,
   };
 };

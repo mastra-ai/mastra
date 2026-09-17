@@ -2,19 +2,13 @@
 import 'fake-indexeddb/auto';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { deleteDB, openDB } from 'idb';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createThreadDraftState as createState } from './thread-draft-state';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { clearDraftsOnLogout, createThreadDraftState } from './thread-draft-state';
 import { readThreadDraft, writeThreadDraft } from './thread-draft-storage';
 
-let createThreadDraftState = createState;
-beforeEach(async () => {
-  vi.resetModules();
-  createThreadDraftState = (await import('./thread-draft-state')).createThreadDraftState;
-});
-
 const unmounts: (() => void)[] = [];
-function mount(key = 'scope', threadId = 'thread') {
-  const state = createThreadDraftState({ key, threadId });
+function mount(key = 'scope') {
+  const state = createThreadDraftState(key);
   const unmount = state.subscribe(() => {});
   unmounts.push(unmount);
   return { state, unmount };
@@ -22,241 +16,235 @@ function mount(key = 'scope', threadId = 'thread') {
 const ready = async (state: ReturnType<typeof createThreadDraftState>) => {
   await vi.waitFor(() => expect(state.getSnapshot().status.restoring).toBe(false));
 };
-
+const saved = async (state: ReturnType<typeof createThreadDraftState>) => {
+  await vi.waitFor(() => expect(state.getSnapshot().status.saving).toBe(false));
+};
 afterEach(async () => {
   vi.restoreAllMocks();
   unmounts.splice(0).forEach(unmount => unmount());
   await readThreadDraft('__drain__');
   await deleteDB('mastra-composer-drafts');
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
-describe('complete draft lifecycle', () => {
-  it('keeps failed saves and their warning through a handoff and remount, then retries the latest draft', async () => {
-    const first = mount('new');
-    await ready(first.state);
-    first.state.updateDraft('thread', { text: 'Saved version', attachments: [] });
-    await readThreadDraft('__drain__');
-    first.state.updateDraft('thread', { text: 'x'.repeat(50_001), attachments: [] });
-    await vi.waitFor(() => expect(first.state.getSnapshot().status.error).toContain('50,000'));
-    await first.state.move('created');
-    first.unmount();
-    await Promise.resolve();
-    const second = mount('created');
-    await ready(second.state);
-    expect(second.state.getDraft('thread').text).toHaveLength(50_001);
-    expect(second.state.getSnapshot().status.error).toContain('50,000');
-    expect((await readThreadDraft('created')).text).toBe('');
-    second.state.updateDraft('thread', { text: 'Corrected latest draft', attachments: [] });
-    await vi.waitFor(() => expect(second.state.getSnapshot().status.saving).toBe(false));
-    expect(second.state.getSnapshot().status.error).toBeUndefined();
-    expect((await readThreadDraft('created')).text).toBe('Corrected latest draft');
-    expect((await readThreadDraft('new')).text).toBe('');
+describe('draft persistence lifecycle', () => {
+  describe('when typing pauses', () => {
+    it('updates memory immediately and saves after 300ms without edits', async () => {
+      const { state } = mount();
+      await ready(state);
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      state.updateDraft(previous => ({ ...previous, text: 'First' }));
+      await vi.advanceTimersByTimeAsync(200);
+      state.updateDraft(previous => ({ ...previous, text: 'Latest' }));
+      expect(state.getSnapshot().draft.text).toBe('Latest');
+      await vi.advanceTimersByTimeAsync(299);
+      expect((await readThreadDraft('scope')).text).toBe('');
+      await vi.advanceTimersByTimeAsync(1);
+      expect((await readThreadDraft('scope')).text).toBe('Latest');
+    });
   });
 
-  it('retains unsaved edits when navigating away and back in the same tab', async () => {
-    const first = mount();
-    await ready(first.state);
-    first.state.updateDraft('thread', { text: 'x'.repeat(50_001), attachments: [] });
-    await vi.waitFor(() => expect(first.state.getSnapshot().status.error).toContain('50,000'));
-    first.unmount();
-    await Promise.resolve();
-    const second = mount();
-    await ready(second.state);
-    expect(second.state.getDraft('thread').text).toHaveLength(50_001);
-    expect(second.state.getSnapshot().status.error).toContain('50,000');
-    second.state.updateDraft('thread', { text: '', attachments: [] });
-    await readThreadDraft('__drain__');
+  describe('when typing continues without pausing', () => {
+    it('saves once per second instead of postponing indefinitely', async () => {
+      const { state } = mount();
+      await ready(state);
+      const put = vi.spyOn(IDBObjectStore.prototype, 'put');
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      for (let index = 0; index < 10; index++) {
+        state.updateDraft(previous => ({ ...previous, text: `Edit ${index}` }));
+        await vi.advanceTimersByTimeAsync(100);
+      }
+      expect((await readThreadDraft('scope')).text).toBe('Edit 9');
+      expect(put).toHaveBeenCalledTimes(1);
+      state.updateDraft(previous => ({ ...previous, text: 'Final' }));
+      await vi.advanceTimersByTimeAsync(300);
+      expect((await readThreadDraft('scope')).text).toBe('Final');
+    });
   });
 
-  it('rejects stale writes and handoffs from another tab without losing either in-memory draft', async () => {
-    const first = mount('shared-new');
-    await ready(first.state);
-    vi.resetModules();
-    const otherTab = await import('./thread-draft-state');
-    const second = otherTab.createThreadDraftState({ key: 'shared-new', threadId: 'thread' });
-    unmounts.push(second.subscribe(() => {}));
-    await ready(second);
-    second.updateDraft('thread', { text: 'Tab B saved', attachments: [] });
-    await vi.waitFor(() => expect(second.getSnapshot().status.saving).toBe(false));
-    first.state.updateDraft('thread', { text: 'Tab A unsaved', attachments: [] });
-    await vi.waitFor(() => expect(first.state.getSnapshot().status.error).toContain('another tab'));
-    await first.state.move('created-a');
-    expect(first.state.getSnapshot().status.error).toContain('another tab');
-    expect((await readThreadDraft('shared-new')).text).toBe('Tab B saved');
-    expect((await readThreadDraft('created-a')).text).toBe('');
-    expect(first.state.getDraft('thread').text).toBe('Tab A unsaved');
-  });
-  it('reloads saved drafts from storage after leaving the conversation', async () => {
-    const first = mount();
-    await ready(first.state);
-    first.state.updateDraft('thread', { text: 'First saved version', attachments: [] });
-    await vi.waitFor(() => expect(first.state.getSnapshot().status.saving).toBe(false));
-    first.unmount();
-    await Promise.resolve();
-    await writeThreadDraft('scope', { text: 'Updated elsewhere', attachments: [] });
-    const second = mount();
-    await ready(second.state);
-    expect(second.state.getDraft('thread').text).toBe('Updated elsewhere');
-  });
+  describe('when leaving the conversation with a pending draft', () => {
+    it('flushes before the replacement controller reads storage', async () => {
+      const first = mount();
+      await ready(first.state);
+      first.state.updateDraft(previous => ({ ...previous, text: 'Last keystroke' }));
+      first.unmount();
+      const second = mount();
+      await ready(second.state);
+      expect(second.state.getSnapshot().draft.text).toBe('Last keystroke');
+    });
 
-  describe('when rapid edits are followed by immediate navigation', () => {
-    it('persists only the newest pending draft without waiting for a debounce', async () => {
+    it('coalesces a burst of text edits into one flushed snapshot', async () => {
       const { state, unmount } = mount();
       await ready(state);
       const put = vi.spyOn(IDBObjectStore.prototype, 'put');
       for (let index = 0; index < 100; index++) {
-        state.updateDraft('thread', { text: `Edit ${index}`, attachments: [] });
+        state.updateDraft(previous => ({ ...previous, text: `Edit ${index}` }));
       }
       unmount();
-      await vi.waitFor(() => expect(state.getSnapshot().status.saving).toBe(false));
       expect((await readThreadDraft('scope')).text).toBe('Edit 99');
       expect(put).toHaveBeenCalledTimes(1);
     });
   });
 
-  it('reports queued saves until the newest text has been committed', async () => {
-    const { state } = mount();
-    await ready(state);
-    state.updateDraft('thread', { text: 'First edit', attachments: [] });
-    state.updateDraft('thread', { text: 'Second edit', attachments: [] });
-    expect(state.getSnapshot().status.saving).toBe(true);
-    await vi.waitFor(() => expect(state.getSnapshot().status.saving).toBe(false));
-    expect((await readThreadDraft('scope')).text).toBe('Second edit');
-  });
-
-  it('applies edits queued during hydration without losing saved attachments', async () => {
-    const attachment = {
-      id: 'attachment',
-      name: 'notes.txt',
-      contentType: 'text/plain',
-      kind: 'text' as const,
-      isUrl: false,
-      file: new File(['Original'], 'notes.txt', { type: 'text/plain' }),
-    };
-    await writeThreadDraft('scope', { text: 'Saved', attachments: [attachment] });
-    const { state } = mount();
-    state.updateDraft('thread', previous => ({ ...previous, text: previous.text + ' edit' }));
-    await ready(state);
-    await vi.waitFor(() => expect(state.getSnapshot().status.saving).toBe(false));
-    expect(state.getDraft('thread').text).toBe('Saved edit');
-    expect(state.getDraft('thread').attachments).toHaveLength(1);
-    expect((await readThreadDraft('scope')).text).toBe('Saved edit');
-  });
-
-  it('shares pending edits across New Chat remounts with different temporary thread IDs', async () => {
-    const first = mount('new', 'uuid-one');
-    await ready(first.state);
-    first.state.updateDraft('uuid-one', { text: 'Latest', attachments: [] });
-    first.unmount();
-    const second = mount('new', 'uuid-two');
-    expect(second.state.getDraft('uuid-two').text).toBe('Latest');
-    second.state.updateDraft('uuid-two', { text: 'Next', attachments: [] });
-    await vi.waitFor(() => expect(second.state.getSnapshot().status.saving).toBe(false));
-    expect((await readThreadDraft('new')).text).toBe('Next');
-  });
-
-  it('routes edits made during the New Chat handoff to the created thread', async () => {
-    const { state } = mount('new');
-    await ready(state);
-    state.updateDraft('thread', { text: 'Follow-up', attachments: [] });
-    const moving = state.move('created');
-    state.updateDraft('thread', previous => ({ ...previous, text: previous.text + ' latest' }));
-    await moving;
-    const next = mount('created');
-    expect(next.state.getDraft('thread').text).toBe('Follow-up latest');
-    expect((await readThreadDraft('created')).text).toBe('Follow-up latest');
-    expect((await readThreadDraft('new')).text).toBe('');
-  });
-
-  it('waits for restoration before a handoff applies further edits', async () => {
-    await writeThreadDraft('new', { text: 'Saved', attachments: [] });
-    const { state } = mount('new');
-    const moving = state.move('created');
-    state.updateDraft('thread', previous => ({ ...previous, text: previous.text + ' edit' }));
-    await moving;
-    await ready(state);
-    expect((await readThreadDraft('created')).text).toBe('Saved edit');
-  });
-
-  it('does not overwrite a saved draft that could not be restored', async () => {
-    await writeThreadDraft('scope', { text: 'Recover this saved draft', attachments: [] });
-    vi.spyOn(indexedDB, 'open').mockImplementationOnce(() => {
-      throw new DOMException('Blocked', 'SecurityError');
+  describe('when New Chat becomes a saved conversation', () => {
+    it('moves the latest draft without recreating the old slot', async () => {
+      const { state } = mount('new');
+      await ready(state);
+      state.updateDraft(previous => ({ ...previous, text: 'Follow-up' }));
+      const moving = state.move('created');
+      state.updateDraft(previous => ({ ...previous, text: 'Latest follow-up' }));
+      await moving;
+      await saved(state);
+      expect((await readThreadDraft('created')).text).toBe('Latest follow-up');
+      expect((await readThreadDraft('new')).text).toBe('');
     });
-    const { state } = mount();
-    await ready(state);
-    state.updateDraft('thread', { text: 'Keep this new text in memory', attachments: [] });
-    expect(state.getSnapshot().status.error).toContain('could not be restored');
-    expect((await readThreadDraft('scope')).text).toBe('Recover this saved draft');
-    expect(state.getDraft('thread').text).toBe('Keep this new text in memory');
+
+    it('leaves a fresh New Chat independent of the outgoing handoff', async () => {
+      await writeThreadDraft('new', { text: 'Submitted', attachments: [] });
+      const first = mount('new');
+      await ready(first.state);
+      first.state.updateDraft({ text: '', attachments: [] });
+      const moving = first.state.move('created');
+      const second = mount('new');
+      await moving;
+      await ready(second.state);
+      expect(second.state.getSnapshot().draft.text).toBe('');
+      second.state.updateDraft({ text: 'Independent question', attachments: [] });
+      await saved(second.state);
+      expect((await readThreadDraft('new')).text).toBe('Independent question');
+      expect((await readThreadDraft('created')).text).toBe('');
+    });
   });
 
-  describe('when another tab signs out', () => {
-    it('clears mounted state and prevents stale pending edits from recreating drafts', async () => {
-      const scope = JSON.stringify(['http://localhost:4111', '/api', 'user']);
-      const key = JSON.stringify(['http://localhost:4111', '/api', 'user', 'agent', 'new']);
-      const first = mount(key);
-      await ready(first.state);
-      vi.resetModules();
-      const otherTab = await import('./thread-draft-state');
-      const second = otherTab.createThreadDraftState({ key, threadId: 'thread' });
-      unmounts.push(second.subscribe(() => {}));
-      await ready(second);
-      second.updateDraft('thread', { text: 'Pending edit', attachments: [] });
-      await otherTab.clearDraftsOnLogout(scope);
-      expect(second.getDraft('thread').text).toBe('');
-      second.updateDraft('thread', { text: 'Must not recreate', attachments: [] });
-      first.state.updateDraft('thread', { text: 'Stale other tab', attachments: [] });
-      await vi.waitFor(() => expect(first.state.getSnapshot().status.error).toContain('signed out'));
-      expect(first.state.getDraft('thread').text).toBe('');
+  describe('when edits arrive during restoration', () => {
+    it('applies them to the restored text without losing attachments', async () => {
+      await writeThreadDraft('scope', {
+        text: 'Saved',
+        attachments: [
+          {
+            id: 'file',
+            name: 'notes.txt',
+            contentType: 'text/plain',
+            kind: 'text',
+            isUrl: false,
+            file: new File(['Original'], 'notes.txt', { type: 'text/plain' }),
+          },
+        ],
+      });
+      const { state } = mount();
+      state.updateDraft(previous => ({ ...previous, text: previous.text + ' edit' }));
+      await ready(state);
+      await saved(state);
+      const draft = await readThreadDraft('scope');
+      expect(draft.text).toBe('Saved edit');
+      expect(await draft.attachments[0].file.text()).toBe('Original');
+    });
+  });
+
+  describe('when a pending draft is submitted', () => {
+    it('clears it immediately and cancels the old typing timer', async () => {
+      await writeThreadDraft('scope', { text: 'Saved', attachments: [] });
+      const { state } = mount();
+      await ready(state);
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      state.updateDraft(previous => ({ ...previous, text: 'New edit' }));
+      state.updateDraft(previous => ({ ...previous, text: '' }));
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect((await readThreadDraft('scope')).text).toBe('');
+    });
+  });
+
+  describe('when the browser hides the page', () => {
+    it.each(['visibilitychange', 'pagehide'])('flushes pending text on %s without a prompt', async event => {
+      vi.stubGlobal('document', Object.assign(new EventTarget(), { visibilityState: 'hidden' }));
+      vi.stubGlobal('window', new EventTarget());
+      const { state } = mount();
+      await ready(state);
+      state.updateDraft(previous => ({ ...previous, text: 'Before leaving' }));
+      (event === 'pagehide' ? window : document).dispatchEvent(new Event(event));
+      expect((await readThreadDraft('scope')).text).toBe('Before leaving');
+    });
+  });
+
+  describe('when this tab signs out', () => {
+    it('cancels pending writes before clearing that user’s drafts', async () => {
+      const scope = ['http://localhost:4111', '/api', 'user'];
+      const key = JSON.stringify([...scope, 'agent', 'new']);
+      const { state, unmount } = mount(key);
+      await ready(state);
+      state.updateDraft(previous => ({ ...previous, text: 'Private edit' }));
+      await clearDraftsOnLogout(JSON.stringify(scope));
+      unmount();
+      expect(state.getSnapshot().draft.text).toBe('');
       expect((await readThreadDraft(key)).text).toBe('');
     });
   });
 
-  describe('when a saved draft is corrupted', () => {
-    it('preserves the record until explicitly discarded and then saves current edits', async () => {
-      await writeThreadDraft('scope', { text: 'Original', attachments: [] });
-      const db = await openDB('mastra-composer-drafts');
-      const corrupted = { key: 'scope', text: 42 };
-      await db.put('drafts', corrupted);
+  describe('when a save fails', () => {
+    it('keeps editing usable and retries on the next edit', async () => {
       const { state } = mount();
       await ready(state);
-      state.updateDraft('thread', { text: 'Keep these edits', attachments: [] });
-      const stored = await db.get('drafts', 'scope');
-      db.close();
-      expect(state.getSnapshot().status.canDiscard).toBe(true);
-      expect(stored).toEqual(corrupted);
-      await state.discardUnreadable();
+      const put = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(() => {
+        throw new DOMException('Full', 'QuotaExceededError');
+      });
+      state.updateDraft({ text: 'Still here', attachments: [] });
+      await saved(state);
+      expect(state.getSnapshot().status.error).toContain('could not be saved');
+      expect(state.getSnapshot().draft.text).toBe('Still here');
+      put.mockRestore();
+      state.updateDraft({ text: 'Next edit', attachments: [] });
+      await saved(state);
       expect(state.getSnapshot().status.error).toBeUndefined();
-      expect((await readThreadDraft('scope')).text).toBe('Keep these edits');
+      expect((await readThreadDraft('scope')).text).toBe('Next edit');
     });
 
-    it('does not discard a draft repaired by another tab', async () => {
-      await writeThreadDraft('scope', { text: 'Original', attachments: [] });
-      const db = await openDB('mastra-composer-drafts');
-      await db.put('drafts', { key: 'scope', text: 42 });
-      db.close();
-      const { state } = mount();
-      await ready(state);
-      await writeThreadDraft('scope', { text: 'Repaired elsewhere', attachments: [] });
-      await state.discardUnreadable();
-      expect(state.getSnapshot().status.error).toContain('another tab');
-      expect((await readThreadDraft('scope')).text).toBe('Repaired elsewhere');
+    it('restores only the last successful save after remounting', async () => {
+      await writeThreadDraft('scope', { text: 'Last saved', attachments: [] });
+      const first = mount();
+      await ready(first.state);
+      first.state.updateDraft({ text: 'x'.repeat(50_001), attachments: [] });
+      await saved(first.state);
+      expect(first.state.getSnapshot().status.error).toContain('50,000');
+      first.unmount();
+      const second = mount();
+      await ready(second.state);
+      expect(second.state.getSnapshot().draft.text).toBe('Last saved');
     });
   });
 
-  it('keeps an in-memory draft and feedback when browser writes fail', async () => {
-    const { state } = mount();
-    await ready(state);
-    const put = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(() => {
-      throw new DOMException('Full', 'QuotaExceededError');
+  describe('when two tabs edit the same draft', () => {
+    it('keeps the last saved snapshot without requiring conflict recovery', async () => {
+      const { state: first } = mount('shared');
+      await ready(first);
+      vi.resetModules();
+      const otherTab = await import('./thread-draft-state');
+      const second = otherTab.createThreadDraftState('shared');
+      unmounts.push(second.subscribe(() => {}));
+      await ready(second);
+      first.updateDraft({ text: 'First tab', attachments: [] });
+      await saved(first);
+      second.updateDraft({ text: 'Last tab', attachments: [] });
+      await saved(second);
+      expect(second.getSnapshot().status.error).toBeUndefined();
+      expect((await readThreadDraft('shared')).text).toBe('Last tab');
     });
-    state.updateDraft('thread', { text: 'Still here', attachments: [] });
-    await vi.waitFor(() => expect(state.getSnapshot().status.error).toContain('could not be saved'));
-    expect(state.getDraft('thread').text).toBe('Still here');
-    put.mockRestore();
-    state.updateDraft('thread', { text: 'Retry', attachments: [] });
-    await vi.waitFor(() => expect(state.getSnapshot().status.error).toBeUndefined());
-    expect((await readThreadDraft('scope')).text).toBe('Retry');
+  });
+
+  describe('when a saved record is unreadable', () => {
+    it('starts empty and replaces the record on the next edit', async () => {
+      await readThreadDraft('__init__');
+      const db = await openDB('mastra-composer-drafts');
+      await db.put('drafts', { key: 'broken', text: 42 });
+      db.close();
+      const { state } = mount('broken');
+      await ready(state);
+      expect(state.getSnapshot().draft).toEqual({ text: '', attachments: [] });
+      expect(state.getSnapshot().status.error).toBeUndefined();
+      state.updateDraft({ text: 'New draft', attachments: [] });
+      await saved(state);
+      expect((await readThreadDraft('broken')).text).toBe('New draft');
+    });
   });
 });

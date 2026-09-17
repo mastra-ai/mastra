@@ -284,7 +284,7 @@ const AgentComposer = ({
   runOptionsSlot,
   refreshThreadList,
 }: AgentComposerProps) => {
-  const { threadInput: text, setThreadInput, updateDraft, draftStatus, discardUnreadable } = useThreadInput(threadId);
+  const { threadInput: text, setThreadInput, updateDraft, draftStatus } = useThreadInput(threadId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const preparing = useRef(false);
   const lifetime = useRef(0);
@@ -355,22 +355,9 @@ const AgentComposer = ({
           {preparationError || draftStatus?.error}
         </p>
       )}
-      {draftStatus?.canDiscard && (
-        <Button
-          type="button"
-          disabled={draftStatus.saving}
-          onClick={() => {
-            if (window.confirm('Permanently delete the unreadable saved draft? Your current edits will be kept.')) {
-              void discardUnreadable?.();
-            }
-          }}
-        >
-          Discard unreadable saved draft
-        </Button>
-      )}
-      {(draftStatus?.restoring || draftStatus?.saving) && (
+      {draftStatus?.restoring && (
         <p role="status" className="text-ui-sm">
-          {draftStatus.restoring ? 'Restoring draft…' : 'Saving draft…'}
+          Restoring draft…
         </p>
       )}
       <Composer

@@ -558,36 +558,50 @@ describe('Standalone thread page', () => {
     );
   });
   describe('when a saved draft cannot be decoded', () => {
-    it('requires confirmation to discard it and resumes saving current edits', async () => {
+    it('starts empty and saves subsequent edits without recovery controls', async () => {
       installHandlers();
       const path = `/agents/${AGENT_ID}/threads/${THREAD_ID}`;
       renderAt(path);
       fireEvent.change(await composerInput(), { target: { value: 'Original' } });
-      await waitFor(() => expect(screen.queryByText('Saving draft…')).toBeNull());
       cleanup();
+      await readThreadDraft('__drain__');
       const db = await openDB('mastra-composer-drafts');
       const [key] = await db.getAllKeys('drafts');
       await db.put('drafts', { key, text: 42 });
       db.close();
       renderAt(path);
-      const discard = await screen.findByRole('button', { name: 'Discard unreadable saved draft' });
-      fireEvent.change(await composerInput(), { target: { value: 'Keep my current edits' } });
-      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
-      try {
-        fireEvent.click(discard);
-        expect(screen.getByRole('alert').textContent).toContain('could not be restored');
-        confirm.mockReturnValue(true);
-        fireEvent.click(discard);
-        await waitFor(() =>
-          expect(screen.queryByRole('button', { name: 'Discard unreadable saved draft' })).toBeNull(),
-        );
-        cleanup();
-        renderAt(path);
-        expect((await composerInput()).value).toBe('Keep my current edits');
-      } finally {
-        confirm.mockRestore();
-      }
+      const input = await composerInput();
+      expect(input.value).toBe('');
+      expect(screen.queryByRole('button', { name: 'Discard unreadable saved draft' })).toBeNull();
+      fireEvent.change(input, { target: { value: 'Keep my current edits' } });
+      expect(screen.queryByText('Saving draft…')).toBeNull();
+      cleanup();
+      renderAt(path);
+      expect((await composerInput()).value).toBe('Keep my current edits');
     });
+  });
+
+  describe('when authentication status cannot be checked', () => {
+    it.each([false, true])(
+      'blocks fallback composing and restores the saved draft after recovery (retryOnMount=%s)',
+      async retryOnMount => {
+        installHandlers();
+        const path = `/agents/${AGENT_ID}/threads/new`;
+        renderAt(path);
+        fireEvent.change(await composerInput(), { target: { value: 'Existing safe draft' } });
+        cleanup();
+        server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => new HttpResponse(null, { status: 503 })));
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount } } });
+        renderAt(path, client);
+        await screen.findByText('Failed to check authentication');
+        expect(screen.queryByPlaceholderText('Enter your message...')).toBeNull();
+        server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false })));
+        await act(async () => {
+          await client.invalidateQueries({ queryKey: ['auth', 'capabilities'] });
+        });
+        expect((await composerInput()).value).toBe('Existing safe draft');
+      },
+    );
   });
 
   describe('when an unsent draft is entered', () => {
@@ -674,7 +688,6 @@ describe('Standalone thread page', () => {
           const contents = 'name,note\r\nZoë,"hello\nworld"\r\n';
           fireEvent.change(picker, { target: { files: [new File([contents], 'leads.csv', { type: 'text/csv' })] } });
           await screen.findByRole('button', { name: 'Preview leads.csv' });
-          await waitFor(() => expect(screen.queryByText('Saving draft…')).toBeNull());
           cleanup();
           renderAt(path);
           const input = await composerInput();
@@ -705,11 +718,15 @@ describe('Standalone thread page', () => {
           expect(JSON.stringify(sent.mock.calls[0][0])).toContain(JSON.stringify(contents).slice(1, -1));
           await act(async () => response.finish());
           await waitFor(() =>
-            expect(screen.queryAllByRole('button', { name: 'Remove next.txt' })).toHaveLength(editWhilePreparing ? 1 : 0),
+            expect(screen.queryAllByRole('button', { name: 'Remove next.txt' })).toHaveLength(
+              editWhilePreparing ? 1 : 0,
+            ),
           );
+          expect(screen.queryByRole('button', { name: 'Remove leads.csv' })).toBeNull();
           cleanup();
           renderAt(path);
           expect((await composerInput()).value).toBe(editWhilePreparing ? 'Keep the next question' : '');
+          expect(screen.queryByRole('button', { name: 'Remove leads.csv' })).toBeNull();
           expect(screen.queryAllByRole('button', { name: 'Remove next.txt' })).toHaveLength(editWhilePreparing ? 1 : 0);
           if (editWhilePreparing) await screen.findByRole('button', { name: 'Preview next.txt' });
         } finally {

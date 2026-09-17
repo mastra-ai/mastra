@@ -126,7 +126,7 @@ export function UserMenu({ user }: UserMenuProps) {
           <Button
             icon={<LogOut />}
             variant="ghost"
-            onClick={handleLogout}
+            onClick={() => handleLogout()}
             disabled={isPending}
             className="w-full justify-start"
           >

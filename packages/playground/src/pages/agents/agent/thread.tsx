@@ -38,7 +38,7 @@ import { ThreadViewByTrace } from '@/domains/traces/components/thread-view-by-tr
 function AgentThread() {
   const { agentId, threadId } = useParams();
   const client = useMastraClient();
-  const { data: auth, isLoading: isAuthLoading } = useAuthCapabilities();
+  const { data: auth, error: authError } = useAuthCapabilities();
   const signedIn = auth && isAuthenticated(auth);
   const userId = signedIn ? auth.user.id : undefined;
   const canPersistDraft = auth?.enabled === false || Boolean(signedIn);
@@ -111,7 +111,16 @@ function AgentThread() {
     );
   }
 
-  if (isAgentLoading || isAuthLoading) {
+  if (!auth && authError) {
+    return (
+      <ErrorState
+        title="Failed to check authentication"
+        message="Reload the page to try again. Your saved drafts have not been changed."
+      />
+    );
+  }
+
+  if (isAgentLoading || !auth) {
     return <AgentThreadLoadingSkeleton />;
   }
 
