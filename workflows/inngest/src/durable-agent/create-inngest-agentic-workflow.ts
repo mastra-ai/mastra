@@ -6,6 +6,8 @@ import {
   DurableAgentDefaults,
   DurableStepIds,
   emitFinishEvent,
+  emitErrorEvent,
+  DurableFinishError,
   runDurableFinishSideEffects,
   modelConfigSchema,
   durableAgenticOutputSchema,
@@ -15,6 +17,7 @@ import {
   executeDurableAgentScorers,
 } from '@mastra/core/agent/durable';
 import type {
+  DurableFinishSideEffectsResult,
   DurableAgenticExecutionOutput,
   DurableAgenticWorkflowInput,
   DurableLLMStepOutput,
@@ -334,21 +337,33 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           // Inngest step, which the Inngest protocol does not support: the nested step's
           // callback never executes and its promise never settles, hanging the run and
           // silently skipping output processors, memory persistence, and title generation.
-          const finishResult = await runDurableFinishSideEffects({
-            runId: state.runId,
-            initData,
-            messageListState: state.messageListState,
-            mastra,
-            requestContext,
-            tracingContext,
-            logger: mastra?.getLogger?.(),
-            outputResult: {
-              text: finalText ?? '',
-              usage: state.accumulatedUsage,
-              finishReason: state.lastStepResult?.reason ?? 'unknown',
-              steps: state.accumulatedSteps,
-            },
-          });
+          let finishResult: DurableFinishSideEffectsResult;
+          try {
+            finishResult = await runDurableFinishSideEffects({
+              runId: state.runId,
+              initData,
+              messageListState: state.messageListState,
+              mastra,
+              requestContext,
+              tracingContext,
+              logger: mastra?.getLogger?.(),
+              outputResult: {
+                text: finalText ?? '',
+                usage: state.accumulatedUsage,
+                finishReason: state.lastStepResult?.reason ?? 'unknown',
+                steps: state.accumulatedSteps,
+              },
+            });
+          } catch (error) {
+            if (!(error instanceof DurableFinishError)) throw error;
+            // Suspend this final mapping, not the model/tool loop. Native resume
+            // retries finalization from its saved input and keeps the run snapshot.
+            const suspendPayload = { reason: 'finalization-failed', message: error.message };
+            if (pubsub) {
+              await emitErrorEvent(pubsub, state.runId, error);
+            }
+            return params.suspend(suspendPayload);
+          }
           if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
             lastStep.text = finishResult.outputText;
             finalText = finishResult.outputText;

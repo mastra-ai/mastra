@@ -10,7 +10,7 @@ import { createWorkflow } from '../../../workflows/create';
 import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
 import { globalRunRegistry } from '../run-registry';
-import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
+import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent, emitErrorEvent } from '../stream-adapter';
 import type {
   DurableToolCallInput,
   DurableAgenticWorkflowInput,
@@ -19,7 +19,8 @@ import type {
   DurableToolCallOutput,
 } from '../types';
 import { createRunMessageList } from '../utils/run-message-list';
-import { runDurableFinishSideEffects } from './finalize-run';
+import { DurableFinishError, runDurableFinishSideEffects } from './finalize-run';
+import type { DurableFinishSideEffectsResult } from './finalize-run';
 import {
   modelConfigSchema,
   modelListEntrySchema,
@@ -638,21 +639,33 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
           let finalText = lastStep?.text;
 
-          const finishResult = await runDurableFinishSideEffects({
-            runId: state.runId,
-            initData,
-            messageListState: state.messageListState,
-            mastra: mastra as Mastra | undefined,
-            requestContext,
-            tracingContext,
-            logger,
-            outputResult: {
-              text: finalText ?? '',
-              usage: state.accumulatedUsage,
-              finishReason: state.lastStepResult?.reason ?? 'unknown',
-              steps: state.accumulatedSteps,
-            },
-          });
+          let finishResult: DurableFinishSideEffectsResult;
+          try {
+            finishResult = await runDurableFinishSideEffects({
+              runId: state.runId,
+              initData,
+              messageListState: state.messageListState,
+              mastra: mastra as Mastra | undefined,
+              requestContext,
+              tracingContext,
+              logger,
+              outputResult: {
+                text: finalText ?? '',
+                usage: state.accumulatedUsage,
+                finishReason: state.lastStepResult?.reason ?? 'unknown',
+                steps: state.accumulatedSteps,
+              },
+            });
+          } catch (error) {
+            if (!(error instanceof DurableFinishError)) throw error;
+            // Suspend this final mapping, not the model/tool loop. Native resume
+            // retries finalization from its saved input and keeps the run snapshot.
+            const suspendPayload = { reason: 'finalization-failed', message: error.message };
+            if (pubsub) {
+              await emitErrorEvent(pubsub, state.runId, error);
+            }
+            return params.suspend(suspendPayload);
+          }
           if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
             lastStep.text = finishResult.outputText;
             finalText = finishResult.outputText;

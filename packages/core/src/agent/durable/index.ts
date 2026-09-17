@@ -182,6 +182,7 @@ export {
 // Workflow creation
 export {
   createDurableAgenticWorkflow,
+  DurableFinishError,
   runDurableFinishSideEffects,
   type DurableAgenticWorkflowOptions,
   type DurableFinishSideEffectsOptions,

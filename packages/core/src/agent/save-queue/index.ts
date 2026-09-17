@@ -59,12 +59,16 @@ export class SaveQueueManager {
    */
   private enqueueSave(threadId: string, messageList: MessageList, memoryConfig?: MemoryConfigInternal) {
     const prev = this.saveQueues.get(threadId) || Promise.resolve();
+    // Each caller observes its own failure. A later flush may retry the restored
+    // messages even when the preceding write rejected.
+    const save = () => this.persistUnsavedMessages(messageList, memoryConfig);
     const next = prev
-      .then(() => this.persistUnsavedMessages(messageList, memoryConfig))
+      .then(save, save)
       .catch(err => {
         this.logger?.error?.('Error in enqueueSave', { err, threadId });
+        throw err;
       })
-      .then(() => {
+      .finally(() => {
         if (this.saveQueues.get(threadId) === next) {
           this.saveQueues.delete(threadId);
         }
@@ -93,12 +97,18 @@ export class SaveQueueManager {
    * @param memoryConfig - The memory configuration for saving.
    */
   private async persistUnsavedMessages(messageList: MessageList, memoryConfig?: MemoryConfigInternal) {
+    if (!this.memory) return;
     const newMessages = messageList.drainUnsavedMessages();
-    if (newMessages.length > 0 && this.memory) {
-      await this.memory.saveMessages({
-        messages: newMessages,
-        memoryConfig,
-      });
+    if (newMessages.length > 0) {
+      try {
+        await this.memory.saveMessages({
+          messages: newMessages,
+          memoryConfig,
+        });
+      } catch (error) {
+        messageList.restoreUnsavedMessages(newMessages);
+        throw error;
+      }
     }
   }
 

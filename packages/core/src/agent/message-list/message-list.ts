@@ -1001,6 +1001,16 @@ export class MessageList {
     return messages.map(message => this.transformMessageForTranscript(message));
   }
 
+  /** Restore a failed save without replacing messages updated while the write was in flight. */
+  public restoreUnsavedMessages(messages: MastraDBMessage[]): void {
+    const ids = new Set(messages.map(message => message.id));
+    for (const message of this.messages) {
+      if (!ids.has(message.id)) continue;
+      if (this.newUserMessagesPersisted.has(message)) this.newUserMessages.add(message);
+      if (this.newResponseMessagesPersisted.has(message)) this.newResponseMessages.add(message);
+    }
+  }
+
   private transformToolStateDataForTranscript(data: unknown, phase: 'approval' | 'suspend'): unknown {
     if (!data || typeof data !== 'object') {
       return data;

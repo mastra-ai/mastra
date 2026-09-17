@@ -1,5 +1,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { Mastra } from '../../../../mastra';
+import { MockMemory } from '../../../../memory/mock';
 import { MessageList } from '../../../message-list';
+import { SaveQueueManager } from '../../../save-queue';
 import { globalRunRegistry } from '../../run-registry';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../../types';
 
@@ -9,7 +12,7 @@ vi.mock('../../utils/resolve-runtime', () => ({
   resolveRuntimeDependencies: (...args: any[]) => resolveRuntimeDependencies(...args),
 }));
 
-const { runDurableFinishSideEffects } = await import('../finalize-run');
+const { DurableFinishError, runDurableFinishSideEffects } = await import('../finalize-run');
 
 function makeInitData(state: Record<string, unknown>): DurableAgenticWorkflowInput {
   return {
@@ -35,6 +38,29 @@ describe('runDurableFinishSideEffects', () => {
 
   afterEach(() => {
     globalRunRegistry.delete('run-1');
+    vi.restoreAllMocks();
+  });
+
+  it('propagates a real save-queue failure instead of returning a successful final output', async () => {
+    const memory = new MockMemory();
+    const storageError = new Error('Message storage unavailable');
+    vi.spyOn(memory, 'saveMessages').mockRejectedValue(storageError);
+    resolveRuntimeDependencies.mockResolvedValue({
+      memory,
+      saveQueueManager: new SaveQueueManager({ memory }),
+    });
+    const mastra = new Mastra({ logger: false });
+    try {
+      await expect(runDurableFinishSideEffects({
+        runId: 'run-1',
+        initData: makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: true }),
+        messageListState: makeMessageListState(),
+        mastra,
+      })).rejects.toEqual(new DurableFinishError(storageError));
+    } finally {
+      globalRunRegistry.clear();
+      await mastra.shutdown();
+    }
   });
 
   it('persists with the save queue the rebuild returned, even when the registry entry is not updated', async () => {

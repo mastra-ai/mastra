@@ -17,6 +17,14 @@ import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
 type GenerateThreadTitleArgs = Parameters<NonNullable<RunRegistryEntry['generateThreadTitle']>>[0];
 type AnyAgent = Agent<any, any, any, any>;
 
+/** A completed loop whose finish-time work must be retried before reporting success. */
+export class DurableFinishError extends Error {
+  constructor(cause: unknown) {
+    super('The response could not be finalized. Resume this run to retry finalization.', { cause });
+    this.name = 'DurableFinishError';
+  }
+}
+
 export interface DurableFinishSideEffectsOptions {
   runId: string;
   initData: DurableAgenticWorkflowInput;
@@ -161,6 +169,7 @@ export async function runDurableFinishSideEffects({
       );
     } catch (error) {
       effectiveLogger.warn('[DurableAgent] Error running output processors', { runId, error });
+      throw new DurableFinishError(error);
     }
   }
 
@@ -195,6 +204,7 @@ export async function runDurableFinishSideEffects({
         threadId: durableState.threadId,
         error,
       });
+      throw new DurableFinishError(error);
     }
   }
 

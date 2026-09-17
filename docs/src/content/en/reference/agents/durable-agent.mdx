@@ -294,6 +294,10 @@ cleanup()
 
 Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
 
+If finish-time message persistence or an output processor fails, the stream reports a `DurableFinishError`. The workflow suspends its finalization step with a `finalization-failed` payload instead of reporting success and deleting the snapshot. Once the underlying failure is resolved, call `resume(runId, undefined)` to retry finalization without repeating completed model or tool steps. Output processors run again, so their external side effects must tolerate a retry.
+
+Recovery requires the workflow storage to persist the suspended snapshot. If message storage and workflow storage both fail, retaining the snapshot is not guaranteed. The stream's error still reports that the response did not finalize.
+
 #### `resume(runId, resumeData, options?)`
 
 Resumes a suspended run, for example after a tool approval. Pass the `runId` from the original stream and the data the run was waiting on. Throws if no registry entry exists for the run.
