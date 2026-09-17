@@ -143,7 +143,7 @@ Examples:
   mastracode --prompt "Add tests" --timeout 300 --output json
   mastracode --prompt "Refactor" --output jsonl
   mastracode --prompt "Review this PR" --permission-mode deny --max-turns 10
-  mastracode --settings ./settings-ci.json --prompt "Run tests"
+  mastracode --settings ./config-ci.json --prompt "Run tests"
   mastracode -c --prompt "Continue where you left off"
   echo "Summarize the repo" | mastracode --prompt -
 `);
