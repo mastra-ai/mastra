@@ -289,6 +289,199 @@ describe('eager tool dispatch — excluded tool classes', () => {
     expect(events.indexOf('input-available-a')).toBe(-1);
   });
 
+  it('does not eagerly execute when an output processor runs after the stream', async () => {
+    // A processor with `processLLMResponse` or `processOutputStep` is allowed to rewrite
+    // or drop the whole response before any tool runs. Starting a tool early would put a
+    // side effect behind a response that processor can still veto, so the presence of one
+    // disables eager dispatch for the entire turn rather than per call.
+    const { events, record } = createRecorder();
+    const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
+
+    const agent = new Agent({
+      id: 'eager-post-stream-processor-agent',
+      name: 'Eager post-stream processor agent',
+      instructions: 'Call tool-a once.',
+      model,
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Ordinary server tool',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          onInputAvailable: async () => record('input-available-a'),
+          execute: async ({ value }) => {
+            record('execute-a');
+            return { value };
+          },
+        }),
+      },
+    });
+
+    await drain(
+      await agent.stream('go', {
+        maxSteps: 1,
+        eagerToolExecution: true,
+        outputProcessors: [
+          {
+            id: 'post-stream-veto',
+            processOutputStep: async () => {
+              record('post-stream-processor');
+              return [];
+            },
+          },
+        ],
+      }),
+    );
+
+    // Guard the guard: if the processor never ran, the exclusion was never exercised.
+    expect(events).toContain('post-stream-processor');
+    // The tool still runs, but only on the normal path after the model finished.
+    expect(events).toContain('execute-a');
+    const finishIndex = events.indexOf('finish');
+    for (const event of ['input-available-a', 'execute-a']) {
+      expect(events.indexOf(event)).toBeGreaterThan(finishIndex);
+    }
+  });
+
+  it('does not eagerly execute a client-side tool, which has no execute to call', async () => {
+    // A tool with no `execute` is the caller's to run. There is nothing to start early,
+    // and dispatching it would fire `onInputAvailable` for a call this process never runs.
+    const { events, record } = createRecorder();
+    const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
+
+    const agent = new Agent({
+      id: 'eager-client-side-agent',
+      name: 'Eager client-side agent',
+      instructions: 'Call tool-a once.',
+      model,
+      tools: {
+        'tool-a': {
+          id: 'tool-a',
+          description: 'Client-side tool with no execute',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          onInputAvailable: async () => record('input-available-a'),
+        } as any,
+      },
+    });
+
+    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
+
+    // Nothing may be dispatched early: `onInputAvailable` is the discriminating signal,
+    // since there is no execute whose absence would otherwise be visible.
+    const finishIndex = events.indexOf('finish');
+    const inputAvailableIndex = events.indexOf('input-available-a');
+    expect(inputAvailableIndex === -1 || inputAvailableIndex > finishIndex).toBe(true);
+  });
+
+  it('does not eagerly execute a provider-executed call', async () => {
+    // The provider already ran it. Executing our own copy early would duplicate the
+    // side effect and then race the provider's result into the same toolCallId.
+    const { events, record } = createRecorder();
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: new ReadableStream({
+          async start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({
+              type: 'response-metadata',
+              id: 'response-1',
+              modelId: 'mock-model',
+              timestamp: new Date(0),
+            });
+            record('complete-call-a');
+            controller.enqueue({
+              type: 'tool-call',
+              toolCallId: 'call-a',
+              toolName: 'tool-a',
+              input: JSON.stringify({ value: 'a' }),
+              providerExecuted: true,
+            });
+            await new Promise(resolve => setTimeout(resolve, 100));
+            record('later-output');
+            record('finish');
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            });
+            controller.close();
+          },
+        }),
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'eager-provider-executed-agent',
+      name: 'Eager provider-executed agent',
+      instructions: 'Call tool-a once.',
+      model,
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Also runs on the provider',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          onInputAvailable: async () => record('input-available-a'),
+          execute: async ({ value }) => {
+            record('execute-a');
+            return { value };
+          },
+        }),
+      },
+    });
+
+    await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
+
+    // Our copy must never start, early or late.
+    expect(events.indexOf('execute-a')).toBe(-1);
+    expect(events.indexOf('input-available-a')).toBe(-1);
+  });
+
+  it('does not eagerly execute when the run may auto-resume a suspended tool', async () => {
+    // With `autoResumeSuspendedTools`, any call in the run can be a resume rather than a
+    // fresh start, and a resume is the foreach's to sequence. Nothing starts early.
+    const { events, record } = createRecorder();
+    const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
+
+    const agent = new Agent({
+      id: 'eager-auto-resume-agent',
+      name: 'Eager auto-resume agent',
+      instructions: 'Call tool-a once.',
+      model,
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Ordinary server tool in an auto-resuming run',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          onInputAvailable: async () => record('input-available-a'),
+          execute: async ({ value }) => {
+            record('execute-a');
+            return { value };
+          },
+        }),
+      },
+    });
+
+    await drain(
+      await agent.stream('go', {
+        maxSteps: 1,
+        eagerToolExecution: true,
+        autoResumeSuspendedTools: true,
+      }),
+    );
+
+    // It still runs, but on the normal path.
+    expect(events).toContain('execute-a');
+    const finishIndex = events.indexOf('finish');
+    for (const event of ['input-available-a', 'execute-a']) {
+      expect(events.indexOf(event)).toBeGreaterThan(finishIndex);
+    }
+  });
+
   it('does not eagerly execute a suspendable tool', async () => {
     const { events, record } = createRecorder();
     const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);

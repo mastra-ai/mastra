@@ -2076,9 +2076,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                           | undefined,
                         requireToolApproval: requireToolApproval ?? requestContext?.get('__mastra_requireToolApproval'),
                         autoResumeSuspendedTools,
+                        // Output processors reach the loop wrapped in a workflow, so the
+                        // plain `processOutputStep` / `processLLMResponse` methods are not
+                        // visible here. The wrapper records whether anything inside it runs
+                        // after the stream; a workflow that does not say is assumed to.
                         hasPostStreamProcessor: Boolean(
-                          outputProcessors?.some(
-                            processor => 'processLLMResponse' in processor || 'processOutputStep' in processor,
+                          outputProcessors?.some(processor =>
+                            isProcessorWorkflow(processor)
+                              ? processor.__processOutputStep !== false
+                              : 'processLLMResponse' in processor || 'processOutputStep' in processor,
                           ),
                         ),
                         isProviderTool,
