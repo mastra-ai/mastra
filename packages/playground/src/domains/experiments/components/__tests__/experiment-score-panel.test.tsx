@@ -22,10 +22,4 @@ describe('ExperimentScorePanel', () => {
     expect(screen.getByText('accuracy')).toBeDefined();
     expect(screen.getByText(/Score: 0\.92/)).toBeDefined();
   });
-
-  it('hides the score content when collapsed', () => {
-    render(<ExperimentScorePanel open score={score} onClose={vi.fn()} collapsed />);
-
-    expect(screen.queryByText(/Score: 0\.92/)).toBeNull();
-  });
 });

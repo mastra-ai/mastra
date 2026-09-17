@@ -3,7 +3,7 @@ import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import ExperimentItemPage from '..';
+import { ExperimentItemPanel } from '../experiment-item-panel';
 import { ExperimentItemPanelProvider } from '@/domains/experiments/context/experiment-item-panel-context';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
@@ -65,7 +65,7 @@ function renderItemPage(results: DatasetExperimentResult[]) {
               results={results}
               isLoadingResults={false}
             >
-              <ExperimentItemPage />
+              <ExperimentItemPanel />
             </ExperimentItemPanelProvider>
           }
         />
@@ -75,7 +75,7 @@ function renderItemPage(results: DatasetExperimentResult[]) {
   );
 }
 
-describe('experiment item page — flag for review', () => {
+describe('ExperimentItemPanel — flag for review', () => {
   it('flags the result for review from the item view', async () => {
     renderItemPage([buildResult('pending')]);
 

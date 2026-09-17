@@ -36,19 +36,21 @@ export type ExperimentResultPanelResult = Pick<DatasetExperimentResult, 'id' | '
 export type ExperimentResultPanelScore = { id: string; scorerId: string; score: number };
 
 export type ExperimentResultPanelProps = {
-  result: ExperimentResultPanelResult;
+  /** Keep the panel mounted and pass `undefined` to close it, so the drawer animates out. */
+  result?: ExperimentResultPanelResult;
+  /** Item the panel is opened for while `result` is not available yet; keeps the drawer open showing `fallback`. */
+  itemId?: string;
+  /** Rendered instead of the result body while `itemId` is set but `result` is missing (loading / not found). */
+  fallback?: ReactNode;
   scores?: ExperimentResultPanelScore[];
   className?: string;
   onPrevious?: () => void;
   onNext?: () => void;
-  open: boolean;
   onClose: () => void;
   onShowTrace?: () => void;
   onScoreClick?: (scoreId: string) => void;
   featuredScoreId?: string | null;
   onFlagForReview?: (resultId: string) => void;
-  /** Controlled collapsed state used when opening related trace details. */
-  collapsed?: boolean;
   /** When provided, tags become editable in the metadata block (add via picker, remove via badge). */
   onTagsChange?: (tags: string[]) => void;
   /** Known tags offered by the tag picker. */
@@ -67,24 +69,56 @@ export type ExperimentResultPanelProps = {
 
 export function ExperimentResultPanel({
   result,
-  scores,
+  itemId,
+  fallback,
   className,
+  onClose,
+  ...bodyProps
+}: ExperimentResultPanelProps) {
+  const id = result?.id ?? itemId;
+  return (
+    <DataPanel open={!!id} onClose={onClose} title={`Result ${id ?? ''}`} depth={1} className={className}>
+      {result ? (
+        <ExperimentResultPanelBody result={result} onClose={onClose} {...bodyProps} />
+      ) : itemId ? (
+        <>
+          <DataPanel.Header>
+            <DataPanel.Heading>
+              Result <b>#{itemId}</b>
+            </DataPanel.Heading>
+            <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" className="ml-auto shrink-0" />
+          </DataPanel.Header>
+          {fallback}
+        </>
+      ) : null}
+    </DataPanel>
+  );
+}
+
+type ExperimentResultPanelBodyProps = Omit<
+  ExperimentResultPanelProps,
+  'result' | 'itemId' | 'fallback' | 'className'
+> & {
+  result: ExperimentResultPanelResult;
+};
+
+function ExperimentResultPanelBody({
+  result,
+  scores,
   onPrevious,
   onNext,
-  open,
   onClose,
   onShowTrace,
   onScoreClick,
   featuredScoreId,
   onFlagForReview,
-  collapsed = false,
   onTagsChange,
   tagVocabulary = [],
   isUpdatingTags = false,
   experimentLink,
   onComplete,
   feedbackTabSlot,
-}: ExperimentResultPanelProps) {
+}: ExperimentResultPanelBodyProps) {
   const hasError = Boolean(result?.error);
   const inputStr = formatValue(result?.input);
   const outputStr = formatValue(result?.output);
@@ -227,14 +261,7 @@ export function ExperimentResultPanel({
   );
 
   return (
-    <DataPanel
-      open={open}
-      onClose={onClose}
-      title={`Result ${result.id}`}
-      depth={1}
-      collapsed={collapsed}
-      className={className}
-    >
+    <>
       {/* Actions may wrap on narrow panels; the close button sits outside the group so it stays on the first row. */}
       <DataPanel.Header className="items-start">
         <DataPanel.Heading className="shrink-0 self-center whitespace-nowrap">
@@ -271,29 +298,28 @@ export function ExperimentResultPanel({
         <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" className="shrink-0" />
       </DataPanel.Header>
 
-      {!collapsed &&
-        (feedbackTraceId ? (
-          <Tabs<'details' | 'feedback'> defaultTab="details" className="grid h-full min-h-0 grid-rows-[auto_1fr]">
-            <DataPanel.Header className="py-2">
-              <TabList variant="pill-ghost">
-                <Tab value="details">Details</Tab>
-                <Tab value="feedback">
-                  Feedback
-                  <NeedsReviewDot feedback={traceFeedback?.feedback} />
-                </Tab>
-              </TabList>
-            </DataPanel.Header>
-            <TabContent value="details" className="min-h-0 py-0">
-              {details}
-            </TabContent>
-            <TabContent value="feedback" className="h-full min-h-0 py-0">
-              <DataPanel.Content>{feedbackTabSlot!({ traceId: feedbackTraceId })}</DataPanel.Content>
-            </TabContent>
-          </Tabs>
-        ) : (
-          details
-        ))}
-    </DataPanel>
+      {feedbackTraceId ? (
+        <Tabs<'details' | 'feedback'> defaultTab="details" className="grid h-full min-h-0 grid-rows-[auto_1fr]">
+          <DataPanel.Header className="py-2">
+            <TabList variant="pill-ghost">
+              <Tab value="details">Details</Tab>
+              <Tab value="feedback">
+                Feedback
+                <NeedsReviewDot feedback={traceFeedback?.feedback} />
+              </Tab>
+            </TabList>
+          </DataPanel.Header>
+          <TabContent value="details" className="min-h-0 py-0">
+            {details}
+          </TabContent>
+          <TabContent value="feedback" className="h-full min-h-0 py-0">
+            <DataPanel.Content>{feedbackTabSlot!({ traceId: feedbackTraceId })}</DataPanel.Content>
+          </TabContent>
+        </Tabs>
+      ) : (
+        details
+      )}
+    </>
   );
 }
 

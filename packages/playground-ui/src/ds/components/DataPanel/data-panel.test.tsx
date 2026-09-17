@@ -31,6 +31,30 @@ describe('DataPanel', () => {
     expect(document.querySelector(POPUP)?.getAttribute('data-swipe-direction')).toBe('right');
   });
 
+  describe('when a size is given', () => {
+    it('uses the viewport-relative width and ignores depth', () => {
+      render(
+        <>
+          <DataPanel open title="Wide" size="wide" depth={2}>
+            <DataPanel.Content>a</DataPanel.Content>
+          </DataPanel>
+          <DataPanel open title="Full" size="full" depth={3}>
+            <DataPanel.Content>b</DataPanel.Content>
+          </DataPanel>
+        </>,
+      );
+
+      // The second modal marks the first one inert, so query hidden dialogs too.
+      const wide = screen.getByRole('dialog', { name: 'Wide', hidden: true });
+      const full = screen.getByRole('dialog', { name: 'Full', hidden: true });
+      expect(wide.className).toContain('w-4/5');
+      expect(wide.className).not.toContain('w-sm');
+      expect(wide.getAttribute('data-depth')).toBe('2');
+      expect(full.className).toContain('w-full');
+      expect(full.className).not.toContain('w-xs');
+    });
+  });
+
   it('renders nothing when closed', () => {
     render(
       <DataPanel open={false} title="Span details">

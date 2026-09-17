@@ -94,15 +94,18 @@ export const Loading: Story = {
   ),
 };
 
-export const Collapsed: Story = {
+export const Wide: Story = {
   render: () => (
-    <DataPanel open title="Collapsed panel" collapsed>
+    <DataPanel open title="Wide panel" size="wide">
       <DataPanel.Header>
-        <DataPanel.Heading>Collapsed Panel</DataPanel.Heading>
+        <DataPanel.Heading>Wide Panel</DataPanel.Heading>
         <DataPanel.CloseButton onClick={() => {}} />
       </DataPanel.Header>
       <DataPanel.Content>
-        <p className="text-ui-sm text-neutral3">This panel uses h-auto instead of max-h-full.</p>
+        <p className="text-ui-sm text-neutral3">
+          <code>size=&quot;wide&quot;</code> takes 80% of the viewport for multi-column content;{' '}
+          <code>size=&quot;full&quot;</code> covers it entirely.
+        </p>
       </DataPanel.Content>
     </DataPanel>
   ),

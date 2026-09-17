@@ -5,21 +5,16 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
-import { ChevronsDownUpIcon, ChevronsUpDownIcon, GaugeIcon, ReceiptText } from 'lucide-react';
-import { useState } from 'react';
+import { GaugeIcon, ReceiptText } from 'lucide-react';
 
 export type ExperimentScorePanelProps = {
-  score: ClientScoreRowData;
+  /** Always mount the panel and pass `undefined` to close it, so the drawer can animate out. */
+  score?: ClientScoreRowData;
   onNext?: () => void;
   onPrevious?: () => void;
-  open: boolean;
   onClose: () => void;
   /** When provided, a Trace button appears in the header; hidden when `score.traceId` is absent. */
   onShowTrace?: () => void;
-  /** Controlled collapsed state. When omitted, the panel manages its own state. */
-  collapsed?: boolean;
-  /** When provided, the collapse button appears in the header and notifies the parent on toggle. */
-  onCollapsedChange?: (collapsed: boolean) => void;
   /** Extra classes applied to the panel root. */
   className?: string;
 };
@@ -35,43 +30,48 @@ export function ExperimentScorePanel({
   score,
   onNext,
   onPrevious,
-  open,
   onClose,
   onShowTrace,
-  collapsed: controlledCollapsed,
-  onCollapsedChange,
   className,
 }: ExperimentScorePanelProps) {
-  const [internalCollapsed, setInternalCollapsed] = useState(false);
-  const collapsed = controlledCollapsed ?? internalCollapsed;
-  const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
+  return (
+    <DataPanel
+      open={!!score}
+      onClose={onClose}
+      title={score ? `Score ${score.scorerId}` : 'Score'}
+      depth={2}
+      className={className}
+    >
+      {score && (
+        <ExperimentScorePanelBody
+          score={score}
+          onNext={onNext}
+          onPrevious={onPrevious}
+          onClose={onClose}
+          onShowTrace={onShowTrace}
+        />
+      )}
+    </DataPanel>
+  );
+}
 
+function ExperimentScorePanelBody({
+  score,
+  onNext,
+  onPrevious,
+  onClose,
+  onShowTrace,
+}: Omit<ExperimentScorePanelProps, 'score' | 'className'> & { score: ClientScoreRowData }) {
   const isCodeBased = isCodeBasedScorer(score);
   const naText = isCodeBased ? 'N/A — code-based scorer' : 'N/A — step not configured';
 
   return (
-    <DataPanel
-      open={open}
-      onClose={onClose}
-      title={`Score ${score.scorerId}`}
-      depth={2}
-      collapsed={collapsed}
-      className={className}
-    >
+    <>
       <DataPanel.Header>
         <DataPanel.Heading>
           Score <b>{score.scorerId}</b>
         </DataPanel.Heading>
         <ButtonsGroup className="ml-auto shrink-0">
-          {onCollapsedChange && (
-            <Button
-              size="md"
-              tooltip={collapsed ? 'Expand panel' : 'Collapse panel'}
-              onClick={() => setCollapsed(!collapsed)}
-            >
-              {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
-            </Button>
-          )}
           {(onPrevious || onNext) && (
             <DataPanel.NextPrevNav
               onPrevious={onPrevious}
@@ -89,47 +89,45 @@ export function ExperimentScorePanel({
         </ButtonsGroup>
       </DataPanel.Header>
 
-      {!collapsed && (
-        <DataPanel.Content>
-          <div className="grid gap-3">
-            <DataPanel.CodeSection
-              title={`Score: ${score.score}`}
-              icon={<GaugeIcon />}
-              codeStr={score.reason || naText}
-              simplified
-            />
+      <DataPanel.Content>
+        <div className="grid gap-3">
+          <DataPanel.CodeSection
+            title={`Score: ${score.score}`}
+            icon={<GaugeIcon />}
+            codeStr={score.reason || naText}
+            simplified
+          />
 
-            {!isCodeBased && (
-              <>
-                <DataPanel.CodeSection
-                  title="Preprocess Prompt"
-                  icon={<ReceiptText />}
-                  codeStr={score.preprocessPrompt || naText}
-                  simplified
-                />
-                <DataPanel.CodeSection
-                  title="Analyze Prompt"
-                  icon={<ReceiptText />}
-                  codeStr={score.analyzePrompt || naText}
-                  simplified
-                />
-                <DataPanel.CodeSection
-                  title="Generate Score Prompt"
-                  icon={<ReceiptText />}
-                  codeStr={score.generateScorePrompt || naText}
-                  simplified
-                />
-                <DataPanel.CodeSection
-                  title="Generate Reason Prompt"
-                  icon={<ReceiptText />}
-                  codeStr={score.generateReasonPrompt || naText}
-                  simplified
-                />
-              </>
-            )}
-          </div>
-        </DataPanel.Content>
-      )}
-    </DataPanel>
+          {!isCodeBased && (
+            <>
+              <DataPanel.CodeSection
+                title="Preprocess Prompt"
+                icon={<ReceiptText />}
+                codeStr={score.preprocessPrompt || naText}
+                simplified
+              />
+              <DataPanel.CodeSection
+                title="Analyze Prompt"
+                icon={<ReceiptText />}
+                codeStr={score.analyzePrompt || naText}
+                simplified
+              />
+              <DataPanel.CodeSection
+                title="Generate Score Prompt"
+                icon={<ReceiptText />}
+                codeStr={score.generateScorePrompt || naText}
+                simplified
+              />
+              <DataPanel.CodeSection
+                title="Generate Reason Prompt"
+                icon={<ReceiptText />}
+                codeStr={score.generateReasonPrompt || naText}
+                simplified
+              />
+            </>
+          )}
+        </div>
+      </DataPanel.Content>
+    </>
   );
 }
