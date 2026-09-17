@@ -80,15 +80,16 @@ export function StatusDot<T>({
   decorative?: boolean;
   resolved?: StatusPresentation;
 }) {
+  if (decorative) {
+    const presented = resolved ?? presentation(status);
+    return <span className={statusDotClass(presented)} aria-hidden />;
+  }
+
   if (variant === 'popover') {
     return <StatusDotPopoverInner status={status} presentation={presentation} />;
   }
 
   const presented = resolved ?? presentation(status);
-
-  if (decorative) {
-    return <span className={statusDotClass(presented)} aria-hidden />;
-  }
 
   return (
     <Tooltip>

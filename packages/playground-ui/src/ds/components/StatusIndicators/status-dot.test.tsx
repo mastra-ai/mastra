@@ -27,9 +27,7 @@ describe('StatusDot', () => {
   });
 
   it('renders decorative dots outside the accessibility tree', () => {
-    const html = renderToStaticMarkup(
-      <StatusDot status="running" presentation={presentation} variant="static" decorative />,
-    );
+    const html = renderToStaticMarkup(<StatusDot status="running" presentation={presentation} decorative />);
 
     expect(html).toContain('aria-hidden="true"');
     expect(html).not.toContain('<button');
