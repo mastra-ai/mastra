@@ -128,15 +128,17 @@ await dataset.addItems({
 
 ### Stored field values
 
-In-memory, LibSQL, and PostgreSQL dataset storage preserve JSON `null` in `input`, `groundTruth`, and `expectedTrajectory`, along with empty strings, arrays, and objects. Omitted optional JSON fields remain absent when serialized. Dataset schemas still determine which values an item accepts.
+In-memory, LibSQL, PostgreSQL, MySQL, MongoDB, and Spanner dataset storage preserve JSON `null` in `input`, `groundTruth`, and `expectedTrajectory`, along with empty strings, arrays, and objects. Omitted optional JSON fields remain absent when serialized. Dataset schemas still determine which values an item accepts.
 
-For configuration updates, `null` clears schemas, tags, target type, target IDs, or scorer IDs. All three adapters return cleared settings as `undefined`, while preserving empty arrays and objects. An item update with `scorerIds: null` removes its scorer override, whereas `scorerIds: []` disables scoring for that item. Omitted update fields leave existing values unchanged.
+Snapshot validation doesn't override database restrictions. MongoDB rejects object property names containing NUL (`\u0000`), even in valid JSON. A batch insert containing such keys fails without storing any items or advancing the dataset version.
+
+For configuration updates, `null` clears schemas, tags, target type, target IDs, or scorer IDs. These adapters return cleared settings as `undefined`, while preserving empty arrays and objects. An item update with `scorerIds: null` removes its scorer override, whereas `scorerIds: []` disables scoring for that item. Omitted update fields leave existing values unchanged.
 
 Retries with the same `externalId` retain the original item's representation. For backward compatibility, insert operations treat omitted and `null` payload fields as equivalent when comparing a retry with an existing item. For example, inserting an item without `groundTruth` and retrying with `groundTruth: null` returns the original item with no ground truth. Use an item update to store an explicit `null` instead.
 
 Unset configuration now reads as `undefined` where some adapters previously returned `null`, so serialized responses omit those properties. Use nullish checks such as `value ?? fallback` rather than relying on an explicit `null` property. LibSQL also returns an omitted dataset description as `undefined`, matching its declared type.
 
-Older LibSQL and PostgreSQL writes stored optional JSON `null` values as SQL `NULL`, so those values remain indistinguishable from omitted fields. The storage fix preserves new writes but doesn't reconstruct previously lost distinctions.
+Older LibSQL, PostgreSQL, MySQL, and Spanner writes stored optional JSON `null` values as SQL `NULL`, so those values remain indistinguishable from omitted fields. Older MongoDB writes stored omitted optional payload fields as BSON `null`. The storage fixes preserve new writes but don't reconstruct previously lost distinctions.
 
 ## Validate snapshot artifacts
 

@@ -15,9 +15,20 @@ const jsonValues = [
   '[]',
   '{"x":1}',
   '"quoted"',
+  'hello 🌎 漢字',
+  Number.MAX_SAFE_INTEGER,
+  9007199254740994,
+  1e20,
+  1e100,
+  1e308,
+  5e-324,
+  0.12345678901234568,
   [],
   {},
   { nested: [null, false, 0, ''] },
+  { nested: [9007199254740994, 1e20, 1e100, 5e-324, 0.12345678901234568, 'hello 🌎 漢字'] },
+  { 'a.b': 1, $field: 2, nested: { $numberLong: '123' } },
+  JSON.parse('{"__proto__":{"authored":true}}'),
 ];
 
 export function createDatasetFidelityTests(getStorage: () => DatasetsStorage) {
@@ -135,6 +146,17 @@ export function createDatasetFidelityTests(getStorage: () => DatasetsStorage) {
       const history = await storage.getItemHistory(item.id);
       expect(history).toHaveLength(3);
       for (const row of history)
+        expect(row).toMatchObject({ input: value, groundTruth: value, expectedTrajectory: value });
+
+      const [batched] = await storage.batchInsertItems({
+        datasetId: dataset.id,
+        items: [{ ...payload, externalId: 'batch-delete' }],
+      });
+      await storage.batchDeleteItems({ datasetId: dataset.id, itemIds: [batched!.id] });
+      const batchHistory = await storage.getItemHistory(batched!.id);
+      expect(batchHistory).toHaveLength(2);
+      expect(batchHistory[0]?.isDeleted).toBe(true);
+      for (const row of batchHistory)
         expect(row).toMatchObject({ input: value, groundTruth: value, expectedTrajectory: value });
     },
   );

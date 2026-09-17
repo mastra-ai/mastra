@@ -17,6 +17,24 @@ services:
       timeout: 2s
       retries: 15
       start_period: 3s
+  mongodb-fidelity:
+    image: mongo:7.0.37
+    profiles: ['fidelity']
+    command: ['mongod', '--replSet', 'rs0', '--bind_ip_all', '--port', '27019']
+    ports:
+      - '127.0.0.1:27019:27019'
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --port
+        - '27019'
+        - --quiet
+        - --eval
+        - 'try { rs.status() } catch { rs.initiate({_id: "rs0", members: [{_id: 0, host: "localhost:27019"}]}) }; if (!db.hello().isWritablePrimary) quit(1)'
+      interval: 2s
+      timeout: 5s
+      retries: 30
   mongodb-vector:
     # Pinned to 8.2: $rankFusion (used by hybridQuery) requires MongoDB >= 8.1.
     image: mongodb/mongodb-atlas-local:8.2
