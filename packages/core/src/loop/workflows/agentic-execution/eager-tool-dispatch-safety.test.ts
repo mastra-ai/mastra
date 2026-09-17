@@ -77,6 +77,54 @@ async function drain(stream: { fullStream: AsyncIterable<{ type: string; payload
   return chunks;
 }
 
+describe('eager tool dispatch — execution context parity', () => {
+  it('hands an eagerly dispatched tool the same context as the deferred path', async () => {
+    // The eager dispatch hand-builds the execution context that the foreach would
+    // otherwise build for it. Nothing forces the two to agree, so a field added to the
+    // deferred path would silently go missing from the eager one. This pins them
+    // together: whatever a tool can see when it runs late, it can see when it runs early.
+    const seen: Record<string, string[]> = {};
+
+    const run = async (eager: boolean) => {
+      const { record } = createRecorder();
+      const model = createToolCallModel([{ toolCallId: 'call-a', toolName: 'tool-a', input: { value: 'a' } }], record);
+      const agent = new Agent({
+        id: `eager-parity-agent-${eager}`,
+        name: 'Eager parity agent',
+        instructions: 'Call tool-a once.',
+        model,
+        tools: {
+          'tool-a': createTool({
+            id: 'tool-a',
+            description: 'Reports the context it was given',
+            inputSchema: z.object({ value: z.string() }),
+            outputSchema: z.object({ value: z.string() }),
+            execute: async ({ value }, options) => {
+              seen[String(eager)] = Object.keys(options ?? {})
+                .filter(key => (options as Record<string, unknown>)[key] !== undefined)
+                .sort();
+              return { value };
+            },
+          }),
+        },
+      });
+      await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: eager }));
+    };
+
+    await run(false);
+    await run(true);
+
+    // Sanity: the deferred path really did populate a context, so an empty-vs-empty
+    // comparison cannot pass this by accident.
+    expect(seen['false']!.length).toBeGreaterThan(3);
+    // Nothing the deferred path provides may be missing from the eager one.
+    expect(seen['true']).toEqual(expect.arrayContaining(seen['false']!));
+    // The only thing eager adds is the fused abort signal, which is how cancelling an
+    // early start reaches a tool that is already running. Any *other* extra field is drift.
+    expect(seen['true']!.filter(key => !seen['false']!.includes(key))).toEqual(['abortSignal']);
+  });
+});
+
 describe('eager tool dispatch — excluded tool classes', () => {
   it('does not eagerly execute a tool that requires approval', async () => {
     const { events, record } = createRecorder();

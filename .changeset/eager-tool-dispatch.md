@@ -15,6 +15,8 @@ const stream = await agent.stream('Compare the weather in Paris and Rome', {
 });
 ```
 
-Eligibility is narrow by design: approval-gated, suspendable, provider-executed, client-side, background-dispatched (by argument or by config), auto-resumed, missing and inactive tools keep the previous behaviour, as does any run configured with `toolCallConcurrency.strategy: 'called'`. Eager work honours the same effective concurrency limit, a caller abort cancels work already running, and durable agents reject the option.
+Eligibility is narrow by design: approval-gated, suspendable, provider-executed, client-side, background-dispatched (by argument or by config), auto-resumed, missing and inactive tools keep the previous behaviour, as does any run configured with `toolCallConcurrency.strategy: 'called'` or with an output processor that runs after the stream. A caller abort cancels work already running, and durable agents reject the option.
+
+Eager work honours the same configured concurrency limit, but counts against it separately from the deferred pipeline. A step that mixes eligible and ineligible calls can therefore run one of each at once, so a limit of 1 bounds each path rather than the step as a whole. Set `eagerToolExecution: false` where a tool depends on being the only one running.
 
 If the model errors and the request is retried or failed over, a tool that already finished is not run again: its call and result are written into the conversation so the replacement attempt sees the work as done. A tool still running when that happens is aborted.
