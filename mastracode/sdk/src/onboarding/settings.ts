@@ -4,7 +4,7 @@
  * so they carry across threads and restarts.
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
@@ -979,7 +979,9 @@ function readSettingsRecord(filePath: string): SettingsRecordRead {
   if (!existsSync(filePath)) return { status: 'missing' };
   try {
     const result = settingsRecordSchema.safeParse(JSON.parse(readFileSync(filePath, 'utf-8')));
-    return result.success ? { status: 'valid', value: result.data } : { status: 'invalid' };
+    if (!result.success) return { status: 'invalid' };
+    chmodSync(filePath, 0o600);
+    return { status: 'valid', value: result.data };
   } catch {
     return { status: 'invalid' };
   }
@@ -1366,10 +1368,15 @@ function splitSettingsRecord(record: SettingsRecord): SplitSettingsRecord {
 
 function writeSettingsRecord(filePath: string, value: SettingsRecord): void {
   const dir = dirname(filePath);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
   const temporaryPath = `${filePath}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
-  writeFileSync(temporaryPath, JSON.stringify(value, null, 2), 'utf-8');
-  renameSync(temporaryPath, filePath);
+  try {
+    writeFileSync(temporaryPath, JSON.stringify(value, null, 2), { encoding: 'utf-8', mode: 0o600 });
+    renameSync(temporaryPath, filePath);
+    chmodSync(filePath, 0o600);
+  } finally {
+    rmSync(temporaryPath, { force: true });
+  }
 }
 
 function writeSettingsRecordIfChanged(filePath: string, value: SettingsRecord, current?: SettingsRecord): void {

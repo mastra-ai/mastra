@@ -131,7 +131,7 @@ Authenticating with a Claude Max subscription through OAuth is a grey area. Anth
 
 Use `/custom-providers` to add OpenAI-compatible providers. Each provider has a name, base URL, optional API key, and one or more model IDs. Saved models appear in selectors such as `/models` and `/subagents` alongside built-in models.
 
-Custom providers are stored in global `config.json`. API keys saved through this flow are stored locally in plaintext, so use it only on a trusted user account and machine.
+Custom providers are stored in global `config.json`. During the legacy compatibility period, `settings.json` contains the same provider data so older Mastra Code versions continue to work. Mastra Code restricts both files to the current operating-system user on macOS and Linux. API keys saved through this flow are stored locally in plaintext, so use it only on a trusted user account and machine.
 
 ## Direct shell passthrough
 

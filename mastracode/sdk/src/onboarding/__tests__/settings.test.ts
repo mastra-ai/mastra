@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -400,6 +400,37 @@ describe('default config and state storage', () => {
 
       expect(loadSettings().preferences.theme).toBe('dark');
       expect(JSON.parse(readFileSync(getSettingsPath(), 'utf-8')).preferences.theme).toBe('dark');
+    });
+  });
+
+  it.skipIf(process.platform === 'win32')('protects credential-bearing config and mirror files', () => {
+    withTempDefaultSettings(() => {
+      const settings = createSettings({
+        customProviders: [
+          {
+            name: 'Private Provider',
+            url: 'https://models.example.com/v1',
+            apiKey: 'private-provider-key',
+            models: ['private/model'],
+          },
+        ],
+      });
+
+      saveSettings(settings);
+
+      const configPath = getSettingsPath();
+      const legacyPath = getLegacySettingsPath();
+      expect(readFileSync(configPath, 'utf-8')).toContain('private-provider-key');
+      expect(readFileSync(legacyPath, 'utf-8')).toContain('private-provider-key');
+      expect(statSync(configPath).mode & 0o777).toBe(0o600);
+      expect(statSync(legacyPath).mode & 0o777).toBe(0o600);
+
+      chmodSync(configPath, 0o644);
+      chmodSync(legacyPath, 0o644);
+      loadSettings();
+
+      expect(statSync(configPath).mode & 0o777).toBe(0o600);
+      expect(statSync(legacyPath).mode & 0o777).toBe(0o600);
     });
   });
 
