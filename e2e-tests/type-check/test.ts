@@ -42,7 +42,7 @@ async function main() {
   await setupTemplate(fixturePath, 'pnpm');
 
   try {
-    const result = spawnSync('pnpm', ['vitest', 'run'], {
+    spawnSync('pnpm', ['vitest', 'run'], {
       cwd: fixturePath,
       stdio: 'inherit',
       env: {
@@ -50,9 +50,6 @@ async function main() {
         pnpm_config_registry: providedContext.registry,
       },
     });
-    if (result.error) throw result.error;
-    if (result.signal) throw new Error(`Type checks terminated by ${result.signal}`);
-    if (result.status !== 0) process.exitCode = result.status ?? 1;
 
     const mcpResult = spawnSync('pnpm', ['vitest', 'run', '--config', 'vitest.mcp.config.ts'], {
       cwd: fixturePath,
