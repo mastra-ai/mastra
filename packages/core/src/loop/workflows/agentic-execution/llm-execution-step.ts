@@ -1979,6 +1979,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           transportResolver = () => readModelStreamTransport(modelResult) ?? routerModel._getStreamTransport();
         }
 
+        // Publish the step's tools and workspace before the stream rather than after it.
+        // The post-stream write below is the one that mattered when tool execution could
+        // only start after the model finished; eager dispatch runs a tool while the stream
+        // is still open, and it reads both of these from the run scope. Written late, a
+        // tool would see no workspace and no step tools. The values here are the ones
+        // `prepareStep` and the input processors already settled on; the later write
+        // repeats them and picks up anything the stream itself changed.
+        writeScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools', currentStep.tools);
+        if (currentStep.workspace !== undefined) {
+          writeScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace', currentStep.workspace);
+        }
+
         let toolResultTripwireFromStream: TripWire | null = null;
         try {
           const { collectedChunks, toolResultTripwire: streamToolResultTripwire } = await processOutputStream({
@@ -2063,7 +2075,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                           inputData: toolCall,
                           runId,
                           mastra,
-                          requestContext,
+                          // The workflow engine always hands the foreach a context; calling the
+                          // step directly does not, and the step reads it unconditionally. The
+                          // raw `loop()` entry point has no request context of its own.
+                          requestContext: requestContext || new RequestContext(),
                           // The coordinator's own signal, combined with the run's inside the
                           // step, so eager work can be cancelled when its attempt is discarded
                           // without the caller having aborted anything.

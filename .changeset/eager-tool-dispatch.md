@@ -2,19 +2,19 @@
 '@mastra/core': patch
 ---
 
-Add an opt-in `eagerToolExecution` option to `agent.stream()`. By default a tool cannot start until the model's streaming step has finished, so a tool whose arguments are already complete waits on later sibling calls and trailing content. With `eagerToolExecution: true`, a complete tool call for an eligible server-side tool starts immediately while the model keeps streaming, and the existing pipeline still owns result ordering and message history.
+Start a tool as soon as its own arguments are complete, instead of waiting for the model's streaming step to finish. Previously a tool whose arguments had fully arrived still waited on later sibling calls and trailing content, which cost seconds of dead time on every step that called a tool. `agent.stream()` now dispatches an eligible server-side tool call the moment it is complete, while the model keeps streaming, and the existing pipeline still owns result ordering and message history.
 
 ```ts
-// Before: `getWeather` starts only once the model has finished the step.
+// A tool call completes early in the step; its execution no longer waits for
+// the rest of the model's output.
 const stream = await agent.stream('Compare the weather in Paris and Rome');
 
-// After: `getWeather` starts as soon as its own arguments are complete,
-// while the model is still streaming the rest of the step.
+// Opt out to restore the previous scheduling.
 const stream = await agent.stream('Compare the weather in Paris and Rome', {
-  eagerToolExecution: true,
+  eagerToolExecution: false,
 });
 ```
 
-Eligibility is narrow by design: approval-gated, suspendable, provider-executed, client-side, background-dispatched (by argument or by config), auto-resumed, missing and inactive tools keep the existing behaviour, as does any run configured with `toolCallConcurrency.strategy: 'called'`. Eager work honours the same concurrency limit, a caller abort stops further dispatch, and durable agents reject the option. Default behaviour is unchanged when the option is omitted.
+Eligibility is narrow by design: approval-gated, suspendable, provider-executed, client-side, background-dispatched (by argument or by config), auto-resumed, missing and inactive tools keep the previous behaviour, as does any run configured with `toolCallConcurrency.strategy: 'called'`. Eager work honours the same effective concurrency limit, a caller abort cancels work already running, and durable agents reject the option.
 
-If an attempt is discarded after a tool has been dispatched eagerly, meaning the model errored and the request is retried or failed over, that tool is aborted rather than un-run and its result is discarded with the attempt. Leave the option off for tools whose side effects cannot safely be interrupted partway.
+If the model errors and the request is retried or failed over, a tool that already finished is not run again: its call and result are written into the conversation so the replacement attempt sees the work as done. A tool still running when that happens is aborted.
