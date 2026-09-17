@@ -20,13 +20,13 @@ const baseSystemPackages: GetSystemPackagesResponse = {
 export const metricsCapableSystemPackages: GetSystemPackagesResponse = {
   ...baseSystemPackages,
   observabilityStorageType: 'ObservabilityStoragePostgresVNext',
-  observabilityStorageCapabilities: { metrics: true, logs: true },
+  observabilityStorageCapabilities: { metrics: true, logs: true, traceQueryDiscovery: false },
 };
 
 export const metricsUnavailableSystemPackages: GetSystemPackagesResponse = {
   ...baseSystemPackages,
   observabilityStorageType: 'ObservabilityStoragePostgresVNext',
-  observabilityStorageCapabilities: { metrics: false, logs: true },
+  observabilityStorageCapabilities: { metrics: false, logs: true, traceQueryDiscovery: false },
 };
 
 const trace = {

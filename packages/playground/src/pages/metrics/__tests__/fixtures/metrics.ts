@@ -7,13 +7,13 @@ export const unsupportedStorage: GetSystemPackagesResponse = {
   liveKitConnectionRouteEnabled: false,
   observabilityEnabled: true,
   observabilityStorageType: 'ObservabilityLibSQL',
-  observabilityStorageCapabilities: { metrics: false, logs: false },
+  observabilityStorageCapabilities: { metrics: false, logs: false, traceQueryDiscovery: false },
 };
 
 export const supportedStorage: GetSystemPackagesResponse = {
   ...unsupportedStorage,
   observabilityStorageType: 'ObservabilityInMemory',
-  observabilityStorageCapabilities: { metrics: true, logs: true },
+  observabilityStorageCapabilities: { metrics: true, logs: true, traceQueryDiscovery: false },
 };
 
 export const aggregate: Awaited<ReturnType<MastraClient['getMetricAggregate']>> = { value: 0 };

@@ -16,8 +16,6 @@ export function WorkflowJsonInput({
   children,
   isSubmitLoading,
   onSubmit,
-  withoutSubmit,
-  isReadOnly,
   ...submitProps
 }: WorkflowJsonInputProps) {
   return (
@@ -31,9 +29,9 @@ export function WorkflowJsonInput({
           </ul>
         </div>
       )}
-      <CodeEditor value={value} onChange={onChange} editable={!isReadOnly && !isSubmitLoading} />
+      <CodeEditor value={value} onChange={onChange} editable={!isSubmitLoading} />
       {children}
-      {!withoutSubmit && <FormSubmitRow {...submitProps} isSubmitLoading={isSubmitLoading} onSubmit={onSubmit} />}
+      <FormSubmitRow {...submitProps} isSubmitLoading={isSubmitLoading} onSubmit={onSubmit} />
     </div>
   );
 }

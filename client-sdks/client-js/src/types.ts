@@ -195,10 +195,12 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   body?: any;
   stream?: boolean;
-  /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
-  credentials?: 'omit' | 'same-origin' | 'include';
+  /** Overrides the client's configured retry count for this request. */
+  retries?: number;
   /** Per-request abort signal. Merged with the client-wide `abortSignal` from `ClientOptions`. */
   signal?: AbortSignal;
+  /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
+  credentials?: 'omit' | 'same-origin' | 'include';
 }
 
 type ResponseInput = Body<'POST /v1/responses'>['input'];
@@ -462,8 +464,12 @@ export type ListWorkflowRunsResponse = Omit<WorkflowRunsRouteResponse, 'runs'> &
 };
 export type WorkflowRunCounts = GeneratedResponse<'GET /workflows/run-counts'>[string];
 export type ListWorkflowRunCountsResponse = GeneratedResponse<'GET /workflows/run-counts'>;
-export type GetWorkflowRunByIdResponse = GeneratedResponse<'GET /workflows/:workflowId/runs/:runId'> &
-  Serialized<WorkflowState>;
+export type GetWorkflowRunByIdResponse = Omit<
+  GeneratedResponse<'GET /workflows/:workflowId/runs/:runId'>,
+  'serializedStepGraph'
+> &
+  Omit<Serialized<WorkflowState>, 'serializedStepGraph'> &
+  Pick<WorkflowState, 'serializedStepGraph'>;
 
 export type ListDynamicWorkflowsParams = GeneratedRequest<QueryParams<'GET /stored/workflows'>>;
 export type ListDynamicWorkflowsResponse = GeneratedResponse<'GET /stored/workflows'>;
