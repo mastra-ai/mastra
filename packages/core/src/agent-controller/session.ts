@@ -1116,6 +1116,10 @@ export interface PendingSuspension {
   runId: string;
   /** The suspended tool's name (e.g. `ask_user`, `submit_plan`). */
   toolName: string;
+  /** The thread the suspended invocation was persisted under. */
+  threadId: string;
+  /** The memory resource the suspended invocation was persisted under. */
+  resourceId: string;
 }
 
 /**
@@ -1134,9 +1138,32 @@ export class SessionSuspensions {
   /** Parked tool calls awaiting a resume, keyed by `toolCallId`. */
   readonly #pending = new Map<string, PendingSuspension>();
 
-  /** Park `toolCallId` as awaiting a resume on `runId` for `toolName`. */
-  register({ toolCallId, runId, toolName }: { toolCallId: string; runId: string; toolName: string }): void {
-    this.#pending.set(toolCallId, { runId, toolName });
+  /**
+   * Park `toolCallId` as awaiting a resume on `runId` for `toolName`, recording
+   * the thread/resource the suspended invocation was persisted under. When the
+   * same tool call is replayed for the same run (e.g. a resumed stream re-emits
+   * the suspension), the original thread/resource binding is preserved so later
+   * settlement still targets where the invocation was first persisted.
+   */
+  register({
+    toolCallId,
+    runId,
+    toolName,
+    threadId,
+    resourceId,
+  }: {
+    toolCallId: string;
+    runId: string;
+    toolName: string;
+    threadId: string;
+    resourceId: string;
+  }): void {
+    const existing = this.#pending.get(toolCallId);
+    if (existing && existing.runId === runId) {
+      this.#pending.set(toolCallId, { ...existing, toolName });
+      return;
+    }
+    this.#pending.set(toolCallId, { runId, toolName, threadId, resourceId });
   }
 
   /** The parked suspension for `toolCallId`, or undefined when none. */
@@ -1175,10 +1202,12 @@ export class SessionSuspensions {
 
   /**
    * Drop all parked suspensions (e.g. on abort or thread switch), returning the
-   * dropped entries so callers can retract the corresponding prompts.
+   * dropped entries — including each suspension's original thread/resource
+   * binding — so callers can retract the corresponding prompts and settle each
+   * invocation where it was persisted.
    */
-  clear(): Array<{ toolCallId: string; runId: string; toolName: string }> {
-    const dropped = [...this.#pending].map(([toolCallId, { runId, toolName }]) => ({ toolCallId, runId, toolName }));
+  clear(): Array<{ toolCallId: string } & PendingSuspension> {
+    const dropped = [...this.#pending].map(([toolCallId, suspension]) => ({ toolCallId, ...suspension }));
     this.#pending.clear();
     return dropped;
   }

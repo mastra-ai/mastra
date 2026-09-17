@@ -810,6 +810,7 @@ export class SessionRunEngine {
         const suspResumeSchema = getString(getPayload(chunk).resumeSchema);
 
         const suspRunId = this.#session.run.getRunId();
+        const suspThreadId = this.#session.thread.getId();
         if (suspRunId) {
           const runScope = this.#machinery.getRunScope(suspRunId);
           // A subscription restored for the current mode can replay this
@@ -818,11 +819,20 @@ export class SessionRunEngine {
           if (!runScope?.get(SUSPENDED_RUN_AGENT_KEY)) {
             runScope?.set(SUSPENDED_RUN_AGENT_KEY, agent);
           }
-          this.#session.suspensions.register({
-            toolCallId: suspToolCallId,
-            runId: suspRunId,
-            toolName: suspToolName,
-          });
+          if (suspThreadId) {
+            // Record the thread/resource the stream is bound to right now: if
+            // the session is later rebound while this run stays suspended,
+            // abort settlement must still target where the suspended
+            // invocation was persisted. register() preserves the original
+            // binding when a replayed stream re-emits the same suspension.
+            this.#session.suspensions.register({
+              toolCallId: suspToolCallId,
+              runId: suspRunId,
+              toolName: suspToolName,
+              threadId: suspThreadId,
+              resourceId: this.#session.identity.getResourceId(),
+            });
+          }
         }
         state.isSuspended = true;
 
@@ -1247,59 +1257,75 @@ export class SessionRunEngine {
    * The run cannot emit another chunk after `suspend()`, so update the saved
    * assistant message directly instead of leaving its tool invocation in
    * `state: 'call'` forever.
+   *
+   * Each suspension is settled through its own originating binding: the agent
+   * retained on its run scope and the thread/resource it was persisted under.
+   * The session may have been rebound (new thread, resource, or agent) while
+   * the run stayed suspended, so the current binding cannot be assumed. If one
+   * suspension fails to settle, the rest are still attempted and the first
+   * error is rethrown for the caller to surface.
    */
   async settleSuspendedToolCallsAsDenied(
-    suspensions: Array<{ toolCallId: string; runId: string; toolName: string }>,
+    suspensions: Array<{ toolCallId: string; runId: string; toolName: string; threadId: string; resourceId: string }>,
   ): Promise<void> {
     if (suspensions.length === 0) return;
 
     const currentMessage = this.#session.displayState.get().currentMessage;
-    const agent =
-      this.#machinery.getRunScope(suspensions[0]!.runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? this.#machinery.getAgent();
-    const memory = await agent.getMemory();
-    const persistedMessages = memory
-      ? (
-          await memory.recall({
-            threadId: this.#session.thread.requireId(),
-            resourceId: this.#session.identity.getResourceId(),
-          })
-        ).messages
-      : [];
-    const candidates = currentMessage ? [currentMessage, ...persistedMessages] : persistedMessages;
-    const changedMessages = new Map<string, MastraDBMessage>();
+    const currentThreadId = this.#session.thread.getId();
+    const currentResourceId = this.#session.identity.getResourceId();
     const currentMessageUpdates = new Map<number, MastraMessagePart>();
+    let firstError: Error | undefined;
 
-    for (const { toolCallId } of suspensions) {
-      let settled = false;
-      for (const message of candidates) {
-        const partIndex = message.content.parts.findIndex(
-          part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId,
-        );
-        const part = message.content.parts[partIndex];
-        if (!part || part.type !== 'tool-invocation' || part.toolInvocation.state !== 'call') continue;
+    for (const suspension of suspensions) {
+      try {
+        const agent =
+          this.#machinery.getRunScope(suspension.runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? this.#machinery.getAgent();
+        const memory = await agent.getMemory();
+        const persistedMessages = memory
+          ? (await memory.recall({ threadId: suspension.threadId, resourceId: suspension.resourceId })).messages
+          : [];
+        // The live display message belongs to the session's current binding;
+        // only treat it as a candidate when this suspension originated there.
+        const candidates =
+          currentMessage && suspension.threadId === currentThreadId && suspension.resourceId === currentResourceId
+            ? [currentMessage, ...persistedMessages]
+            : persistedMessages;
+        const changedMessages = new Map<string, MastraDBMessage>();
+        let settled = false;
 
-        part.toolInvocation = Object.assign(part.toolInvocation, {
-          state: 'output-denied' as const,
-          approval: { id: toolCallId, approved: false as const, reason: ABORTED_BY_USER_REASON },
-        });
-        if (message.threadId) changedMessages.set(message.id, message);
-        if (message === currentMessage) currentMessageUpdates.set(partIndex, part);
-        settled = true;
-      }
-      if (settled) {
-        this.#session.emit({
-          type: 'tool_end',
-          toolCallId,
-          result: ABORTED_BY_USER_REASON,
-          isError: false,
-          denied: true,
-        });
+        for (const message of candidates) {
+          const partIndex = message.content.parts.findIndex(
+            part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === suspension.toolCallId,
+          );
+          const part = message.content.parts[partIndex];
+          if (!part || part.type !== 'tool-invocation' || part.toolInvocation.state !== 'call') continue;
+
+          part.toolInvocation = Object.assign(part.toolInvocation, {
+            state: 'output-denied' as const,
+            approval: { id: suspension.toolCallId, approved: false as const, reason: ABORTED_BY_USER_REASON },
+          });
+          if (message.threadId) changedMessages.set(message.id, message);
+          if (message === currentMessage) currentMessageUpdates.set(partIndex, part);
+          settled = true;
+        }
+
+        if (settled) {
+          this.#session.emit({
+            type: 'tool_end',
+            toolCallId: suspension.toolCallId,
+            result: ABORTED_BY_USER_REASON,
+            isError: false,
+            denied: true,
+          });
+        }
+        if (changedMessages.size > 0) {
+          await memory?.saveMessages({ messages: [...changedMessages.values()] });
+        }
+      } catch (error) {
+        firstError ??= getErrorFromUnknown(error);
       }
     }
 
-    if (changedMessages.size > 0) {
-      await memory?.saveMessages({ messages: [...changedMessages.values()] });
-    }
     if (currentMessage) {
       for (const [index, part] of currentMessageUpdates) {
         this.#session.emit({
@@ -1309,6 +1335,8 @@ export class SessionRunEngine {
         });
       }
     }
+
+    if (firstError) throw firstError;
   }
 
   /**

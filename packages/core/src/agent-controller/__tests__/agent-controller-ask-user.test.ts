@@ -213,8 +213,10 @@ describe('AgentController: ask_user native suspension', () => {
     };
 
     const pending = session.suspensions;
-    pending.register({ toolCallId: 'call-a', runId: 'run-a', toolName: 'ask_user' });
-    pending.register({ toolCallId: 'call-b', runId: 'run-b', toolName: 'ask_user' });
+    const threadId = session.thread.requireId();
+    const resourceId = session.identity.getResourceId();
+    pending.register({ toolCallId: 'call-a', runId: 'run-a', toolName: 'ask_user', threadId, resourceId });
+    pending.register({ toolCallId: 'call-b', runId: 'run-b', toolName: 'ask_user', threadId, resourceId });
 
     // Explicit toolCallId resumes only that suspension; the other stays pending.
     await session.respondToToolSuspension({ toolCallId: 'call-b', resumeData: 'two' });
@@ -238,14 +240,16 @@ describe('AgentController: ask_user native suspension', () => {
     };
 
     const pending = session.suspensions;
-    pending.register({ toolCallId: 'call-only', runId: 'run-only', toolName: 'ask_user' });
+    const threadId = session.thread.requireId();
+    const resourceId = session.identity.getResourceId();
+    pending.register({ toolCallId: 'call-only', runId: 'run-only', toolName: 'ask_user', threadId, resourceId });
 
     await session.respondToToolSuspension({ resumeData: 'ok' });
     expect(resumed).toEqual(['call-only']);
 
     // With more than one pending and no toolCallId, the call is a no-op.
-    pending.register({ toolCallId: 'call-x', runId: 'run-x', toolName: 'ask_user' });
-    pending.register({ toolCallId: 'call-y', runId: 'run-y', toolName: 'ask_user' });
+    pending.register({ toolCallId: 'call-x', runId: 'run-x', toolName: 'ask_user', threadId, resourceId });
+    pending.register({ toolCallId: 'call-y', runId: 'run-y', toolName: 'ask_user', threadId, resourceId });
     await session.respondToToolSuspension({ resumeData: 'ambiguous' });
     expect(resumed).toEqual(['call-only']);
     expect(pending.has({ toolCallId: 'call-x' })).toBe(true);
@@ -264,8 +268,10 @@ describe('AgentController: ask_user native suspension', () => {
     };
 
     const pending = session.suspensions;
-    pending.register({ toolCallId: 'call-a', runId: 'run-a', toolName: 'ask_user' });
-    pending.register({ toolCallId: 'call-b', runId: 'run-b', toolName: 'ask_user' });
+    const threadId = session.thread.requireId();
+    const resourceId = session.identity.getResourceId();
+    pending.register({ toolCallId: 'call-a', runId: 'run-a', toolName: 'ask_user', threadId, resourceId });
+    pending.register({ toolCallId: 'call-b', runId: 'run-b', toolName: 'ask_user', threadId, resourceId });
     expect(session.suspensions.hasPending()).toBe(true);
 
     session.abort();

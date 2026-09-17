@@ -246,6 +246,8 @@ describe('session.abort() during approval / suspension (#20592)', () => {
               toolCallId: 'call-2',
               runId: 'retained-suspended-run',
               toolName: 'confirmAccess',
+              threadId: session.thread.requireId(),
+              resourceId: session.identity.getResourceId(),
             });
             sawCombinedState = session.approval.isArmed() && session.suspensions.hasPending();
             session.abort();
@@ -288,6 +290,94 @@ describe('session.abort() during approval / suspension (#20592)', () => {
     expect(ds.pendingApproval).toBeNull();
     expect(ds.pendingSuspensions.size).toBe(0);
     expect(ds.isRunning).toBe(false);
+    expect(controller.listActiveThreadRuns()).toHaveLength(0);
+  });
+
+  it('Given a suspension persisted under an earlier thread, When the rebound session aborts, Then settlement writes the original thread and not the current one', async () => {
+    const { controller, session, events } = await createHarness('abort-cross-thread-suspension');
+
+    // Persist a suspended invocation under the original thread/resource (A).
+    const threadA = session.thread.requireId();
+    const resourceId = session.identity.getResourceId();
+    const memory = await session.machinery.getAgent().getMemory();
+    if (!memory) throw new Error('Expected memory for persisted suspension');
+    const suspendedMessage = {
+      id: 'suspended-message-a',
+      role: 'assistant' as const,
+      createdAt: new Date(),
+      threadId: threadA,
+      resourceId,
+      content: {
+        format: 2 as const,
+        parts: [
+          {
+            type: 'tool-invocation' as const,
+            toolInvocation: {
+              state: 'call' as const,
+              toolCallId: 'call-2',
+              toolName: 'confirmAccess',
+              args: { resource: 'profile' },
+            },
+          },
+        ],
+      },
+    };
+    await memory.saveMessages({ messages: [suspendedMessage as any] });
+    session.suspensions.register({
+      toolCallId: 'call-2',
+      runId: 'retained-suspended-run',
+      toolName: 'confirmAccess',
+      threadId: threadA,
+      resourceId,
+    });
+
+    // Rebind the session to a new thread (B). Suspensions survive rebinding.
+    await session.thread.create();
+    const threadB = session.thread.requireId();
+    expect(threadB).not.toBe(threadA);
+    expect(session.suspensions.hasPending()).toBe(true);
+
+    // Drive the approval-gate abort path on thread B.
+    const ended = waitForAgentEnd(session, events);
+    session.subscribe((event: AgentControllerEvent) => {
+      if (event.type === 'tool_approval_required') session.abort();
+    });
+    void session.sendMessage({ content: 'find dero' }).catch(() => {});
+    await ended;
+
+    expect(events.filter(event => event.type === 'error')).toEqual([]);
+    expect(events.some(event => event.type === 'tool_end' && event.toolCallId === 'call-2' && event.denied)).toBe(true);
+
+    // The invocation persisted under thread A is settled in place.
+    await vi.waitFor(async () => {
+      const messagesA = await session.thread.listMessages({ threadId: threadA });
+      const partsA = messagesA
+        .flatMap(message => message.content.parts)
+        .filter(part => part.type === 'tool-invocation');
+      expect(partsA).toHaveLength(1);
+      expect(partsA[0]?.toolInvocation).toMatchObject({
+        toolCallId: 'call-2',
+        state: 'output-denied',
+        approval: { approved: false, reason: 'Aborted by the user' },
+      });
+    });
+
+    // Thread B only holds its own gated call (denied); A's message never leaks in.
+    await vi.waitFor(async () => {
+      const messagesB = await session.thread.listMessages({ threadId: threadB });
+      const partsB = messagesB
+        .flatMap(message => message.content.parts)
+        .filter(part => part.type === 'tool-invocation');
+      expect(partsB.map(part => part.toolInvocation.toolCallId)).toEqual(['call-1']);
+      expect(partsB[0]?.toolInvocation.state).toBe('output-denied');
+      expect(messagesB.some(message => message.id === 'suspended-message-a')).toBe(false);
+    });
+
+    const ds = session.displayState.get();
+    expect(ds.pendingApproval).toBeNull();
+    expect(ds.pendingSuspensions.size).toBe(0);
+    expect(ds.isRunning).toBe(false);
+    expect(session.suspensions.hasPending()).toBe(false);
     expect(controller.listActiveThreadRuns()).toHaveLength(0);
   });
 });
