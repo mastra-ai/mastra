@@ -913,6 +913,7 @@ export class DurableAgent<
     threadRegistration?: AgentThreadRunRegistration;
   }> {
     let streamCleanup: (() => void) | undefined;
+    let streamOutput: MastraModelOutput<TOutput> | undefined;
     let threadRegistration: AgentThreadRunRegistration | undefined;
     try {
       recoveryLease.assertOwned();
@@ -952,6 +953,7 @@ export class DurableAgent<
         returnScorerData: workflowInput.options?.returnScorerData,
       });
       streamCleanup = stream.cleanup;
+      streamOutput = stream.output;
       await this.#raceRecoveryLease(stream.ready, recoveryLease);
       recoveryLease.assertOwned();
 
@@ -975,6 +977,7 @@ export class DurableAgent<
         this.getPubSub(),
         {
           strict: true,
+          continuation: 'across-suspension',
           validate: () => recoveryLease.assertOwned(),
         },
       );
@@ -987,6 +990,9 @@ export class DurableAgent<
         this.#mastra
           ?.getLogger?.()
           ?.warn?.(`[DurableAgent] recover(${runId}) failed to roll back thread registration: ${rollbackError}`);
+      }
+      if (streamOutput) {
+        agentThreadStreamRuntime.closeRunContinuation(streamOutput, this.getPubSub());
       }
       streamCleanup?.();
       if (this.#runRegistry.get(runId) === registryEntry) {
@@ -2135,6 +2141,7 @@ export class DurableAgent<
       output,
       options as AgentExecutionOptions<TOutput>,
       this.getPubSub(),
+      (options as any)?.[CLOSE_ON_SUSPEND] !== true ? { continuation: 'across-suspension' } : undefined,
     );
 
     // 5. Create cleanup function (cancels auto-cleanup timer if called)
@@ -2144,6 +2151,7 @@ export class DurableAgent<
         autoCleanupTimer = null;
       }
       if (!cleanedUp) {
+        agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
         streamCleanup();
         this.#runRegistry.cleanup(runId);
         globalRunRegistry.delete(runId);
@@ -2373,6 +2381,13 @@ export class DurableAgent<
     const globalEntry = globalRunRegistry.get(runId);
     const resumeModel = globalEntry?.model as any;
 
+    // Settle the prior segment before taking its event offset. Otherwise a late
+    // suspension event can be replayed into the new segment and close it early.
+    const priorExecution = globalRunRegistry.get(runId)?.workflowExecution;
+    await priorExecution?.catch(() => {
+      /* errors already handled by the prior segment */
+    });
+
     // Skip events already broadcast by the original run (e.g. the SUSPENDED
     // chunk that paused it). Without this, a resume that closes on suspend
     // (resumeGenerate) would immediately close on the replayed SUSPENDED.
@@ -2474,26 +2489,8 @@ export class DurableAgent<
     const workflow = this.getWorkflow();
     const requestContext = resolvedOptions.requestContext;
 
-    // Capture the prior workflow execution BEFORE creating the new promise.
-    // If we read it inside the `.then()` callback, the global registry will
-    // already point to the NEW promise (assigned synchronously below),
-    // causing a self-referential deadlock.
-    const priorExecution = globalRunRegistry.get(runId)?.workflowExecution;
-
     const workflowExecution = ready
       .then(async () => {
-        // Wait for the prior workflow execution (stream / previous resume) to
-        // fully settle so the snapshot is persisted as 'suspended' before we
-        // attempt to resume it.  Without this, the pubsub tool-call-suspended
-        // event can arrive (and the consumer can call resumeStream) before the
-        // engine has finished writing the snapshot, leading to
-        // "This workflow run was not suspended".
-        if (priorExecution) {
-          await priorExecution.catch(() => {
-            /* errors already handled by the prior segment */
-          });
-        }
-
         const run = await workflow.createRun({ runId, resourceId: memoryInfo?.resourceId, pubsub: this.pubsub });
         if (this.__getGoalConfig()) {
           await beginGoalActivity({
@@ -2536,18 +2533,25 @@ export class DurableAgent<
       trackedResumeEntry.workflowExecution = workflowExecution;
     }
 
-    // Register the resumed run with the thread-stream runtime so
-    // subscribeToThread subscribers are notified of the new stream.
     const resumeStreamOptions: AgentExecutionOptions<TOutput> = {
       ...resolvedOptions,
       runId,
     } as AgentExecutionOptions<TOutput>;
-    await agentThreadStreamRuntime.registerRun(
+    const continued = agentThreadStreamRuntime.continueRun(
       this as unknown as Agent<any, any, any, any>,
       output,
       resumeStreamOptions,
       this.getPubSub(),
     );
+    if (!continued) {
+      await agentThreadStreamRuntime.registerRun(
+        this as unknown as Agent<any, any, any, any>,
+        output,
+        resumeStreamOptions,
+        this.getPubSub(),
+        (resolvedOptions as any)[CLOSE_ON_SUSPEND] !== true ? { continuation: 'across-suspension' } : undefined,
+      );
+    }
 
     const cleanup = () => {
       if (autoCleanupTimer) {
@@ -2555,6 +2559,7 @@ export class DurableAgent<
         autoCleanupTimer = null;
       }
       if (!cleanedUp) {
+        agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
         streamCleanup();
         this.#runRegistry.cleanup(runId);
         globalRunRegistry.delete(runId);
@@ -2766,6 +2771,7 @@ export class DurableAgent<
         const leaseLossError = recoveryLease.getLossError();
         if (leaseLossError) {
           await threadRegistration?.rollback({ releaseLease: false });
+          agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
           streamCleanup();
           cleanupOwnedRegistryState();
         }
@@ -2773,6 +2779,7 @@ export class DurableAgent<
         const reported = await this.#reportRecoveryFailure(runId, recoveryError);
         if (!reported && !leaseLossError) {
           await threadRegistration?.rollback();
+          agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
           streamCleanup();
           cleanupOwnedRegistryState();
         }
@@ -2795,6 +2802,7 @@ export class DurableAgent<
         autoCleanupTimer = null;
       }
       if (!cleanedUp) {
+        agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
         streamCleanup();
         cleanupOwnedRegistryState();
       }
@@ -3080,6 +3088,7 @@ export class DurableAgent<
         autoCleanupTimer = null;
       }
       if (!cleanedUp) {
+        agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
         streamCleanup();
         this.#runRegistry.cleanup(runId);
         globalRunRegistry.delete(runId);
