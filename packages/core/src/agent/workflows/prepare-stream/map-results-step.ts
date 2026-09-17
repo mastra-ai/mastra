@@ -17,6 +17,7 @@ import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
 import { applyClientToolModelOutput, fireClientToolOutputHooks } from './client-tool-output-hooks';
 import type { PrepareStreamRunScope } from './run-scope';
+import type { MastraOnFinishCallbackContext } from '../../../stream/types';
 import {
   CONVERTED_TOOLS_KEY,
   INITIAL_SIGNAL_ECHOES_KEY,
@@ -292,7 +293,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       hideSignals: options.hideSignals,
       options: {
         ...(options.prepareStep && { prepareStep: options.prepareStep }),
-        onFinish: async (payload: any) => {
+        onFinish: async (payload: any, context?: MastraOnFinishCallbackContext) => {
           if (payload.finishReason === 'error') {
             const provider = payload.model?.provider;
             const modelId = payload.model?.modelId;
@@ -386,6 +387,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 threadExists: memoryData.threadExists || threadCreatedByStep,
                 structuredOutput: !!options.structuredOutput?.schema,
                 overrideScorers: options.scorers,
+                // Only streaming runs can deliver a `data-thread-title` chunk; `generate()` returns JSON.
+                writer: modelMethodType === 'stream' ? context?.writer : undefined,
+                abortSignal: options.abortSignal,
                 onTitleGenerated: options.memory?.onTitleGenerated,
                 waitUntil: options.serverless?.waitUntil,
               });
