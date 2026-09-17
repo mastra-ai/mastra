@@ -97,6 +97,8 @@ const durableLLMInputSchema = z.object({
   modelSpanData: z.any().optional(),
   // Step index for continuation (step: 0, 1, 2, ...)
   stepIndex: z.number().optional(),
+  // Step results from previous iterations, passed to processor hooks as `steps`
+  accumulatedSteps: z.array(z.any()).optional(),
 });
 
 /**
@@ -704,7 +706,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   prompt: inputMessages,
                   model: currentModel,
                   messageList,
-                  stepNumber: (inputData as any).accumulatedSteps?.length ?? 0,
+                  stepNumber: (inputData as any).stepIndex ?? 0,
                   steps: (inputData as any).accumulatedSteps ?? [],
                   retryCount: (inputData as any).processorRetryCount ?? 0,
                   requestContext,
@@ -1587,7 +1589,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 await requestStepRunner.runProcessLLMResponse({
                   chunks: collectedChunks,
                   model: currentModel,
-                  stepNumber: (inputData as any).accumulatedSteps?.length ?? 0,
+                  stepNumber: (inputData as any).stepIndex ?? 0,
                   steps: (inputData as any).accumulatedSteps ?? [],
                   warnings,
                   request,
@@ -1676,7 +1678,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   steps: (inputData as any).accumulatedSteps ?? [],
                   messages: messageList.get.all.db(),
                   messageList,
-                  stepNumber: (inputData as any).accumulatedSteps?.length ?? 0,
+                  stepNumber: (inputData as any).stepIndex ?? 0,
                   finishReason,
                   providerMetadata: responseMetadata,
                   toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
