@@ -3,6 +3,7 @@ export { AgentBrowser } from './agent-browser';
 
 // Type exports
 export type { BrowserConfig } from './types';
+export type { SavedBrowserTabsOptions } from './saved-tabs';
 export type { AgentBrowserConfig } from './agent-browser';
 export type { CreateAgentBrowserThreadManager } from './thread-manager';
 
