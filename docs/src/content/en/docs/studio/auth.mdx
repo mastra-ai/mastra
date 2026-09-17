@@ -128,7 +128,7 @@ The token rides in a URL parameter, so the host application is responsible for h
 
 ## Role-based access control
 
-RBAC lets you control what each user can see and do inside Studio. It's separate from authentication: `server.auth` handles who the user is, while `server.rbac` handles what they can do. When using `studio.auth`, configure `studio.rbac` for Studio-specific permissions. If `studio.rbac` is unset, Studio requests fall back to `server.rbac`.
+RBAC lets you control what each user can see and do inside Studio. It's separate from authentication: `server.auth` or `studio.auth` handles who the user is, while the RBAC provider handles what they can do. When using `studio.auth`, configure `studio.rbac` for Studio-specific permissions. If `studio.rbac` is unset, Studio requests fall back to `server.rbac`.
 
 ### Default roles
 
