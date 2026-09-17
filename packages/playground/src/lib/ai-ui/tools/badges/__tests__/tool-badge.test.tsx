@@ -99,6 +99,49 @@ describe('ToolBadge', () => {
 });
 
 describe('ToolBadge edit body', () => {
+  describe('when a successful edit returns a long result', () => {
+    it('keeps the full result alongside the file change', () => {
+      const result = 'Updated successfully.\n'.repeat(100);
+      renderWithProviders(
+        <ToolBadge
+          toolName="mastra_workspace_edit_file"
+          args={{ path: 'a.ts', old_string: 'x', new_string: 'y' }}
+          result={result}
+          toolOutput={[]}
+          toolCallId="call-edit"
+          toolApprovalMetadata={undefined}
+          isNetwork={false}
+        />,
+      );
+
+      fireEvent.click(screen.getByText('Edit'));
+
+      expect(screen.getByRole('group', { name: 'File change' })).toBeTruthy();
+      expect(screen.getByTestId('tool-result').textContent).toBe(result);
+    });
+  });
+
+  describe('when a shell command includes additional arguments', () => {
+    it('keeps every argument available for inspection', () => {
+      renderWithProviders(
+        <ToolBadge
+          toolName="execute_command"
+          args={{ command: 'pnpm test', cwd: '/workspace', timeout: 30000 }}
+          result={undefined}
+          toolOutput={[]}
+          toolCallId="call-command"
+          toolApprovalMetadata={undefined}
+          isNetwork={false}
+        />,
+      );
+
+      fireEvent.click(screen.getByText('Run'));
+
+      expect(screen.getByTestId('tool-args').textContent).toContain('"cwd": "/workspace"');
+      expect(screen.getByTestId('tool-args').textContent).toContain('"timeout": 30000');
+    });
+  });
+
   it('shows an edit-style call as a diff instead of raw arguments', () => {
     renderWithProviders(
       <ToolBadge

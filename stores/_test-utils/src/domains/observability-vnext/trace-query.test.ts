@@ -62,6 +62,12 @@ describe('trace-query reference evaluator', () => {
         {
           traceId: 'trace-a',
           rootSpanId: 'root-a',
+          name: 'root-a',
+          entityId: null,
+          parentSpanId: null,
+          createdAt: '2026-08-05T10:00:00.000Z',
+          metadata: TRACE_QUERY_FIXTURE_DATA.spans.find(span => span.spanId === 'root-a')?.metadata,
+          inputPreview: null,
           threadId: 'thread-1',
           resourceId: 'resource-1',
           startedAt: '2026-08-05T10:00:00.000Z',

@@ -1,5 +1,33 @@
 # @mastra/cloudflare-sandbox
 
+## 0.5.0-alpha.0
+
+### Minor Changes
+
+- Added bucket mounts to `CloudflareSandbox` so files can survive container sleep. Cloudflare stops an idle container after `sleepAfter`, and the next command starts fresh, so `/workspace` was silently lost between agent turns. The sandbox now implements the Workspace `mounts` hook: any `S3Filesystem` (including Cloudflare R2) listed under `mounts` is mounted through the bridge on `start()`. A slept container boots without its mounts, so the sandbox detects and re-mounts any dropped paths before the next filesystem operation, keeping mounted data durable across sleep. ([#24100](https://github.com/mastra-ai/mastra/pull/24100))
+
+  ```typescript
+  const workspace = new Workspace({
+    sandbox: new CloudflareSandbox({ baseUrl, apiToken }),
+    mounts: {
+      '/workspace/data': new S3Filesystem({
+        bucket: 'agent-data',
+        region: 'auto',
+        endpoint,
+        accessKeyId,
+        secretAccessKey,
+      }),
+    },
+  });
+  ```
+
+  The default instructions now tell the model that `/workspace` is scratch space that does not survive between commands and list the mounted paths to use instead. Fixes #23706.
+
+### Patch Changes
+
+- Updated dependencies [[`b246a1b`](https://github.com/mastra-ai/mastra/commit/b246a1ba0cec1ca2781c661a6b90c777520b64c7), [`13b0f30`](https://github.com/mastra-ai/mastra/commit/13b0f304533a43df7a7c486b6f37c9dca2187ecf), [`b2942c0`](https://github.com/mastra-ai/mastra/commit/b2942c0f3c99dd1edba9dc8c2c17bfa55c851ae8), [`99fab39`](https://github.com/mastra-ai/mastra/commit/99fab399c35952ae15427ea64845d4762e9ec144), [`d65d4d4`](https://github.com/mastra-ai/mastra/commit/d65d4d40a24a482d5b0ee83d9bab6042702ca1be), [`4fb5ae9`](https://github.com/mastra-ai/mastra/commit/4fb5ae9e2cba9b14ba6c5cef0894e49bccf6f607), [`e581e66`](https://github.com/mastra-ai/mastra/commit/e581e66e14bb1b2863698aecca7324fbf1ec4ff5), [`a3f8f05`](https://github.com/mastra-ai/mastra/commit/a3f8f05ecb60c52056c590325e3821ecfc85afe3), [`13b0f30`](https://github.com/mastra-ai/mastra/commit/13b0f304533a43df7a7c486b6f37c9dca2187ecf), [`9cd9b4e`](https://github.com/mastra-ai/mastra/commit/9cd9b4eca69a3db0a0c415d0dcedf266cc7d5ec6), [`3589cde`](https://github.com/mastra-ai/mastra/commit/3589cde4ea8dd210df6b9a2355a3e568210965fc), [`783e48a`](https://github.com/mastra-ai/mastra/commit/783e48aba82489a085230f6b8539a9fb338c326b), [`07a81c8`](https://github.com/mastra-ai/mastra/commit/07a81c8be0cbdb5413ffa5c289d32765d80f4ea4), [`07ff1b8`](https://github.com/mastra-ai/mastra/commit/07ff1b8eafbd9c7786ef77decc6be3b63497cfd9), [`0ca5d6d`](https://github.com/mastra-ai/mastra/commit/0ca5d6d58a24e73a364451660a5a8696883eba45)]:
+  - @mastra/core@1.68.0-alpha.3
+
 ## 0.4.0
 
 ### Minor Changes

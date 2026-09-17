@@ -1,11 +1,11 @@
 'use client';
 
-import type { SpanRecord } from '@mastra/core/storage';
 import { collectToolMocks } from '@mastra/core/utils/collect-tool-mocks';
 import { safeStringify } from '@mastra/core/utils/safe-stringify';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
 import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
+import type { SpanRecord } from '@mastra/playground-ui/domains/traces/types';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { EyeIcon } from 'lucide-react';

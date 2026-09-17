@@ -58,16 +58,16 @@ function renderInformation() {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
-  // A finished run makes the "New workflow run" button visible.
+  // A selected run makes the "New workflow run" button visible.
   const contextValue = {
     result: null,
     payload: undefined,
     clearData: () => {},
     setRunId: () => {},
-    runId: '',
+    runId: 'run-1',
     workflowError: null,
     closeStreamsAndReset: () => {},
-    streamResult: { status: 'success' },
+    streamResult: null,
     isStreamingWorkflow: false,
     createWorkflowRun: async () => ({ runId: 'r' }),
     streamWorkflow: () => {},

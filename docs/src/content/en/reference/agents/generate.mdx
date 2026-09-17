@@ -438,7 +438,8 @@ const result = await agent.generate('message for agent')
                     name: 'instructions',
                     type: 'string',
                     isOptional: true,
-                    description: 'Additional instructions for the structured output model.',
+                    description:
+                      'Additional instructions for the structured output model. With `jsonPromptInjection` and no structuring `model`, this text is injected into the prompt in place of the serialized schema.',
                   },
                 ],
               },

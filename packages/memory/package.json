@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "1.31.0-alpha.0",
+  "version": "1.31.0-alpha.2",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -27,6 +27,16 @@
       "require": {
         "types": "./dist/processors/index.d.ts",
         "default": "./dist/processors/index.cjs"
+      }
+    },
+    "./hooks": {
+      "import": {
+        "types": "./dist/hooks.d.ts",
+        "default": "./dist/hooks.js"
+      },
+      "require": {
+        "types": "./dist/hooks.d.ts",
+        "default": "./dist/hooks.cjs"
       }
     },
     "./package.json": "./package.json"
