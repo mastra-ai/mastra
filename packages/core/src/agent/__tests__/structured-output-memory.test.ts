@@ -404,6 +404,52 @@ describe('Structured output with memory - assistant message in final position (#
     expect(JSON.stringify(secondStep)).not.toContain('Continue.');
   });
 
+  it('guards Gemini 3 when history ends on assistant text followed by an unfinished tool call', async () => {
+    // Shape left behind when a previous run died mid-tool: the call never got a result. Default
+    // prompt conversion drops the unpaired call, leaving the assistant text as the trailing turn.
+    const capturedPrompts: any[] = [];
+    const mockModel = new MockLanguageModelV2({
+      provider: 'google',
+      modelId: 'gemini-3.5-flash-lite',
+      doGenerate: async options => {
+        capturedPrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: 'done' }],
+          warnings: [],
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'gemini-3-orphaned-call-guard-test',
+      name: 'Gemini 3 Orphaned Call Guard Test',
+      instructions: 'Reply briefly.',
+      model: mockModel,
+    });
+
+    await agent.generate([
+      { role: 'user', content: 'Weather in SF?' },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Let me check.' },
+          { type: 'tool-call', toolCallId: 'call-1', toolName: 'weather', input: { city: 'SF' } },
+        ],
+      },
+    ]);
+
+    expect(capturedPrompts).toHaveLength(1);
+    const nonSystemMessages = capturedPrompts[0].filter((message: any) => message.role !== 'system');
+    expect(JSON.stringify(nonSystemMessages)).not.toContain('call-1');
+    expect(nonSystemMessages.at(-2)).toMatchObject({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'Let me check.' }],
+    });
+    expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'user', content: [{ type: 'text', text: 'Continue.' }] });
+  });
+
   it('preserves the trailing assistant turn for Anthropic without structured output (valid prefill)', async () => {
     const capturedPrompts: any[] = [];
     const mockModel = new MockLanguageModelV2({

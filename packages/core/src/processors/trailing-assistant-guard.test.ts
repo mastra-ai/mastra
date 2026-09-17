@@ -17,10 +17,11 @@ const createMessage = (role: 'user' | 'assistant', text: string): MastraDBMessag
 });
 
 const makeArgs = (
-  overrides: Pick<Partial<ProcessInputStepArgs>, 'messages' | 'structuredOutput' | 'model'> = {},
+  overrides: Pick<Partial<ProcessInputStepArgs>, 'messages' | 'structuredOutput' | 'model' | 'messageList'> = {},
 ): ProcessInputStepArgs =>
   ({
     messages: overrides.messages ?? [createMessage('assistant', 'draft response')],
+    messageList: overrides.messageList,
     structuredOutput:
       'structuredOutput' in overrides ? overrides.structuredOutput : { schema: z.object({ answer: z.string() }) },
     model: overrides.model ?? { provider: 'anthropic.messages', modelId: 'claude-opus-4-6' },
@@ -243,13 +244,42 @@ describe('TrailingAssistantGuard', () => {
       expect(result?.messages?.at(-1)).toMatchObject({ role: 'user' });
     });
 
-    it('does not append after a still-pending tool call (prompt conversion pairs it with a placeholder result)', () => {
-      const guard = new TrailingAssistantGuard();
-      const messages = [createMessage('user', 'question'), assistantWith(toolInvocation('call'))];
+    describe('still-pending tool call (no result yet)', () => {
+      // Default MessageList behaviour drops unpaired calls from the prompt, so what precedes
+      // the call decides whether the prompt ends on a model turn.
+      it('appends when text precedes the pending call, because the call is dropped and the text remains', () => {
+        const guard = new TrailingAssistantGuard();
+        const messages = [
+          createMessage('user', 'question'),
+          assistantWith({ type: 'text', text: 'Let me check.' }, toolInvocation('call')),
+        ];
 
-      expect(
-        guard.processInputStep(makeArgs({ messages, structuredOutput: undefined, model: gemini3 })),
-      ).toBeUndefined();
+        const result = guard.processInputStep(makeArgs({ messages, structuredOutput: undefined, model: gemini3 }));
+
+        expect(result?.messages?.at(-1)).toMatchObject({ role: 'user' });
+      });
+
+      it('does not append when the pending call is the only content, because the whole message is dropped', () => {
+        const guard = new TrailingAssistantGuard();
+        const messages = [createMessage('user', 'question'), assistantWith(toolInvocation('call'))];
+
+        expect(
+          guard.processInputStep(makeArgs({ messages, structuredOutput: undefined, model: gemini3 })),
+        ).toBeUndefined();
+      });
+
+      it('does not append when the list keeps incomplete calls, because they are paired with a placeholder result', () => {
+        const guard = new TrailingAssistantGuard();
+        const messages = [
+          createMessage('user', 'question'),
+          assistantWith({ type: 'text', text: 'Let me check.' }, toolInvocation('call')),
+        ];
+        const messageList = { dropsIncompleteToolCalls: false } as ProcessInputStepArgs['messageList'];
+
+        expect(
+          guard.processInputStep(makeArgs({ messages, structuredOutput: undefined, model: gemini3, messageList })),
+        ).toBeUndefined();
+      });
     });
   });
 
