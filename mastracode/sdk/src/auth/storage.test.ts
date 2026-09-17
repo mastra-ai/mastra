@@ -510,6 +510,63 @@ describe('AuthStorage multi-account registry', () => {
     expect(reopened.getActiveAccount(PROVIDER)?.id).toBe(work.id);
   });
 
+  it('re-authenticating onto a collided account takes that subscription’s credential metadata', async () => {
+    const { storage } = makeStorage();
+    // Work: the active subscription, with its own enterprise endpoint.
+    await storage.addAccount(
+      PROVIDER,
+      { refresh: 'r1', access: 'a1', expires: FUTURE, enterpriseUrl: 'https://ghe.work.example.com' },
+      { label: 'Work' },
+    );
+    const work = storage.getActiveAccount(PROVIDER)!;
+    // Personal: inactive, no enterprise endpoint of its own.
+    const personal = await storage.addAccount(
+      PROVIDER,
+      { refresh: 'r2', access: 'a2', expires: FUTURE },
+      { label: 'Personal', activate: false },
+    );
+
+    // Re-authenticate Personal with Work's tokens *and no enterprise URL*, as a
+    // token response without enterprise metadata looks. The surviving entry owns
+    // Work's subscription, so it must not keep serving Personal's (absent)
+    // metadata: the collided entry supplies it.
+    const returned = await storage.addAccount(
+      PROVIDER,
+      { refresh: 'r1', access: 'a1-new', expires: FUTURE },
+      { replaceAccountId: personal.id },
+    );
+
+    expect(returned.id).toBe(work.id);
+    expect(returned.enterpriseUrl).toBe('https://ghe.work.example.com');
+    // Registry metadata still comes from the picked (target) account.
+    expect(returned.label).toBe('Personal');
+    expect(returned.addedAt).toBe(personal.addedAt);
+  });
+
+  it('fresh re-authentication credentials win over the collided entry’s metadata', async () => {
+    const { storage } = makeStorage();
+    await storage.addAccount(
+      PROVIDER,
+      { refresh: 'r1', access: 'a1', expires: FUTURE, enterpriseUrl: 'https://ghe.old.example.com' },
+      { label: 'Work' },
+    );
+    const work = storage.getActiveAccount(PROVIDER)!;
+    const personal = await storage.addAccount(
+      PROVIDER,
+      { refresh: 'r2', access: 'a2', expires: FUTURE },
+      { label: 'Personal', activate: false },
+    );
+
+    const returned = await storage.addAccount(
+      PROVIDER,
+      { refresh: 'r1', access: 'a1-new', expires: FUTURE, enterpriseUrl: 'https://ghe.new.example.com' },
+      { replaceAccountId: personal.id },
+    );
+
+    expect(returned.id).toBe(work.id);
+    expect(returned.enterpriseUrl).toBe('https://ghe.new.example.com');
+  });
+
   it('a fresh AuthStorage instance reloads the registry intact (restart semantics)', async () => {
     const { storage, authPath } = makeStorage();
     await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1', expires: FUTURE }, { label: 'Work' });

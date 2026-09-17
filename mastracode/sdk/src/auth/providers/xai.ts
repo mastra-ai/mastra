@@ -184,9 +184,12 @@ async function pollXAITokenOnce(
     case 'expired_token':
       return { status: 'failed', error: 'xAI device code expired before authorization completed' };
     default:
+      // Status only: `body.error` is untrusted upstream text (RFC 6749 does not
+      // constrain it), so echoing it would render provider-controlled content
+      // in the TUI. The known flow codes above are handled explicitly.
       return {
         status: 'failed',
-        error: `xAI device authorization failed: ${response.status}${body.error ? ` ${body.error}` : ''}`,
+        error: `xAI device authorization failed: ${response.status}`,
       };
   }
 }

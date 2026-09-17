@@ -436,13 +436,6 @@ export class AuthStorage {
         throw new Error(`No account ${opts.replaceAccountId} for provider ${providerId}`);
       }
       const newId = accountIdFor(providerId, creds.refresh);
-      const replacement: OAuthAccountRecord = {
-        ...target,
-        ...creds,
-        type: 'oauth-account',
-        id: newId,
-        label: opts.label ?? target.label,
-      };
       // Re-key in place so the account keeps its insertion position; a
       // stale entry already owning the new id (same tokens) is dropped in
       // favor of the picked account. That collision means both entries are the
@@ -451,6 +444,20 @@ export class AuthStorage {
       // onto the active account's tokens would delete the active entry and
       // leave the registry with no active account at all.
       const collided = newId === target.id ? undefined : entries.find(entry => entry.id === newId);
+      // Credential metadata (device id, enterprise URL, …) follows the tokens:
+      // when the fresh response omits a field, the collided entry's value is the
+      // coherent fallback, not the target's — pairing fresh tokens with another
+      // subscription's stale endpoint would misroute requests. Fresh `creds`
+      // win last; only the target's registry metadata (label, addedAt) carries
+      // over.
+      const replacement: OAuthAccountRecord = {
+        ...target,
+        ...(collided ? credentialFieldsOf(collided) : {}),
+        ...creds,
+        type: 'oauth-account',
+        id: newId,
+        label: opts.label ?? target.label,
+      };
       const rebuilt: AuthStorageData = {};
       for (const [key, value] of Object.entries(this.data)) {
         if (key === this.accountKeyFor(target.id)) {

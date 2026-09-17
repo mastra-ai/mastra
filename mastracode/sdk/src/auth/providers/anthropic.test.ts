@@ -133,6 +133,6 @@ describe('refreshAnthropicToken', () => {
 
   it('throws without exposing the response body on failure', async () => {
     fetchMock.mockResolvedValueOnce(new Response('upstream-secret', { status: 400 }));
-    await expect(refreshAnthropicToken('rt')).rejects.toThrow('Anthropic token refresh failed: 400');
+    await expect(refreshAnthropicToken('rt')).rejects.toThrow(/^Anthropic token refresh failed: 400$/);
   });
 });

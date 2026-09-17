@@ -135,13 +135,15 @@ describe('pollXAIDeviceLogin', () => {
     expect(result).toMatchObject({ status: 'failed', error: expect.stringContaining('denied') });
   });
 
-  it('fails loudly with the response body on unknown errors', async () => {
+  it('fails with a status-only error on unknown upstream errors', async () => {
     const pending = await startPending();
-    fetchMock.mockResolvedValueOnce(new Response('{"error":"server_error"}', { status: 500 }));
+    fetchMock.mockResolvedValueOnce(new Response('{"error":"upstream-secret"}', { status: 500 }));
 
     const result = await pollXAIDeviceLogin(pending);
 
-    expect(result).toMatchObject({ status: 'failed', error: expect.stringContaining('server_error') });
+    // The upstream `error` string is provider-controlled text; it must never
+    // reach the user-visible flow state.
+    expect(result).toMatchObject({ status: 'failed', error: 'xAI device authorization failed: 500' });
   });
 
   it('fails with a timeout after the deadline passes', async () => {
@@ -220,7 +222,7 @@ describe('refreshXAIToken', () => {
   it('throws without exposing the response body on failure', async () => {
     fetchMock.mockResolvedValueOnce(new Response('upstream-secret', { status: 400 }));
 
-    await expect(refreshXAIToken('old-rt')).rejects.toThrow('xAI token refresh failed: 400');
+    await expect(refreshXAIToken('old-rt')).rejects.toThrow(/^xAI token refresh failed: 400$/);
   });
 });
 
