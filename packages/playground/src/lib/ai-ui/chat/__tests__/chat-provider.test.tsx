@@ -1,5 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { useToolCall } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { useMemoryThreadMessages } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
 import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { MastraReactProvider } from '@mastra/react';
@@ -14,6 +15,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageRow } from '../../messages/message-row';
 import { ChatProvider } from '../chat-provider';
 import {
+  approvalChunks,
+  approvalHistory,
+  emptyApprovalHistory,
+  generatedApprovalResponse,
+} from './fixtures/nested-approval';
+import {
   acceptedToolRun,
   emptyMcpServers,
   toolRunChunks,
@@ -24,6 +31,7 @@ import { workingMemoryFixture } from './fixtures/working-memory';
 import { WorkingMemoryProvider, useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { PlaygroundModelProvider, usePlaygroundModel } from '@/domains/agents/context/playground-model-context';
 import { useMemoryConfig } from '@/domains/memory/hooks';
+import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -211,6 +219,128 @@ describe('ChatProvider', () => {
     // Default tests target the legacy stream-until-idle route, not signals.
     (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
     server.resetHandlers();
+  });
+
+  describe.each(['nested', 'ordinary'] as const)('when same-named %s calls need approval', kind => {
+    describe.each(['signals-live', 'legacy-live', 'signals-history', 'legacy-history', 'generate-history'])(
+      'when the transcript uses %s',
+      scenario => {
+        it.each(['Approve', 'Decline'])(
+          'routes %s independently and keeps decided controls disabled after settling',
+          async action => {
+            const signals = scenario.startsWith('signals');
+            const generate = scenario.startsWith('generate');
+            const live = scenario.endsWith('live');
+            Object.assign(window, { MASTRA_AGENT_SIGNALS: signals ? 'true' : 'false' });
+            const requests: Captured[] = [];
+            const gates = [createDeferred(), createDeferred()];
+            let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
+            let subscribed = false;
+            let sent = false;
+            const response = () =>
+              new HttpResponse(
+                new ReadableStream<Uint8Array>({
+                  start(controller) {
+                    stream = controller;
+                  },
+                }),
+                { headers: { 'content-type': 'text/event-stream' } },
+              );
+            const decision = action === 'Approve' ? 'approve' : 'decline';
+            const endpoint = signals ? 'send-tool-approval' : `${decision}-tool-call${generate ? '-generate' : ''}`;
+            server.use(
+              http.get(`${BASE_URL}/api/memory/threads/thread-1/messages`, () =>
+                HttpResponse.json(
+                  live ? emptyApprovalHistory : approvalHistory(kind, generate ? 'generate' : 'stream'),
+                ),
+              ),
+              http.post(`${BASE_URL}/api/agents/agent-1/threads/subscribe`, () => {
+                subscribed = true;
+                return response();
+              }),
+              http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => {
+                sent = true;
+                return response();
+              }),
+              http.post(`${BASE_URL}/api/agents/agent-1/send-message`, () => {
+                sent = true;
+                return HttpResponse.json(acceptedToolRun('parent-run'));
+              }),
+              http.post(`${BASE_URL}/api/agents/agent-1/${endpoint}`, async ({ request }) => {
+                const index = requests.length;
+                requests.push({ url: request.url, body: await captureBody(request) });
+                await gates[index].promise;
+                if (signals) return HttpResponse.json(acceptedToolRun('parent-run'));
+                return generate ? HttpResponse.json(generatedApprovalResponse) : sseResponse();
+              }),
+              http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(emptyMcpServers)),
+              ...baseHandlers([]),
+            );
+            const Transcript = () => {
+              const messages = useChatMessages();
+              const send = useChatSend();
+              const { isRunning } = useToolCall();
+              return (
+                <>
+                  <button onClick={() => send({ message: 'Look up both companies' })}>Start approval run</button>
+                  <output data-testid="approval-request-state">{isRunning ? 'running' : 'idle'}</output>
+                  {messages.map(message => (
+                    <MessageRow key={message.id} message={message} />
+                  ))}
+                </>
+              );
+            };
+            const LoadedChat = () => {
+              const { data } = useAgentMessages({ threadId: 'thread-1', agentId: 'agent-1', memory: true });
+              if (!data) return null;
+              return (
+                <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={data.messages}>
+                  <Transcript />
+                </ChatProvider>
+              );
+            };
+            const rendered = render(
+              <Wrapper>
+                <LoadedChat />
+              </Wrapper>,
+            );
+            await screen.findByRole('button', { name: 'Start approval run' });
+            if (signals) await waitFor(() => expect(subscribed).toBe(true));
+            if (live) {
+              fireEvent.click(screen.getByRole('button', { name: 'Start approval run' }));
+              await waitFor(() => expect(sent).toBe(true));
+              await act(async () => {
+                for (const chunk of approvalChunks(kind))
+                  stream?.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+              });
+            }
+            // Live tool rows share the transcript's paced reveal.
+            await waitFor(() => expect(screen.getAllByRole('button', { name: 'Approve' })).toHaveLength(2), {
+              timeout: 3000,
+            });
+            const cards = screen.getAllByTestId(kind === 'nested' ? 'agent-badge' : 'tool-badge');
+            expect(cards).toHaveLength(2);
+            for (const [index, id] of ['first', 'second'].entries()) {
+              fireEvent.click(within(cards[index]).getByRole('button', { name: action }));
+              await waitFor(() => expect(requests).toHaveLength(index + 1));
+              expect(requests[index].body).toMatchObject({ toolCallId: id });
+              if (signals)
+                expect(requests[index].body).toMatchObject({ approved: action === 'Approve', threadId: 'thread-1' });
+              else expect(requests[index].body).toMatchObject({ runId: 'parent-run' });
+              expect(screen.getByTestId('approval-request-state').textContent).toBe('running');
+              await act(async () => gates[index].resolve());
+              await waitFor(() => expect(screen.getByTestId('approval-request-state').textContent).toBe('idle'));
+              expect(within(cards[index]).getByRole('button', { name: 'Approve' }).hasAttribute('disabled')).toBe(true);
+              expect(within(cards[index]).getByRole('button', { name: 'Decline' }).hasAttribute('disabled')).toBe(true);
+              if (index === 0)
+                expect(within(cards[1]).getByRole('button', { name: action }).hasAttribute('disabled')).toBe(false);
+            }
+            rendered.unmount();
+            stream?.close();
+          },
+        );
+      },
+    );
   });
 
   describe('when a later run starts after an interrupted run', () => {

@@ -5,9 +5,10 @@ import { useNextPerStep } from './use-workflow-trigger';
 
 export interface WorkflowDebugStepControlsProps {
   isStreaming?: boolean;
+  disabled?: boolean;
 }
 
-export function WorkflowDebugStepControls({ isStreaming }: WorkflowDebugStepControlsProps) {
+export function WorkflowDebugStepControls({ isStreaming, disabled }: WorkflowDebugStepControlsProps) {
   const { result } = useContext(WorkflowRunContext);
   const { canRunNextStep, runNextStep, continueFullRun } = useNextPerStep();
 
@@ -16,6 +17,7 @@ export function WorkflowDebugStepControls({ isStreaming }: WorkflowDebugStepCont
   return (
     <WorkflowDebugControls
       isStreaming={isStreaming}
+      disabled={disabled}
       canRunNextStep={canRunNextStep}
       onRunNextStep={runNextStep}
       onContinueRun={continueFullRun}
