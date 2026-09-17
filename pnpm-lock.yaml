@@ -9838,6 +9838,9 @@ importers:
 
   workspaces/docker:
     dependencies:
+      '@grpc/grpc-js':
+        specifier: ^1.14.4
+        version: 1.14.4
       dockerode:
         specifier: ^4.0.9
         version: 4.0.12(supports-color@10.2.2)
@@ -9851,6 +9854,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
+      '@internal/workspace':
+        specifier: workspace:*
+        version: link:../../packages/_internals/workspace
       '@internal/workspace-test-utils':
         specifier: workspace:*
         version: link:../_test-utils
