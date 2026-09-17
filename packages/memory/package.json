@@ -29,6 +29,16 @@
         "default": "./dist/processors/index.cjs"
       }
     },
+    "./hooks": {
+      "import": {
+        "types": "./dist/hooks.d.ts",
+        "default": "./dist/hooks.js"
+      },
+      "require": {
+        "types": "./dist/hooks.d.ts",
+        "default": "./dist/hooks.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

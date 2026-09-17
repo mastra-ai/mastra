@@ -151,6 +151,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/ai21',
+          label: 'AI21 Labs',
+        },
+        {
+          type: 'doc',
           id: 'providers/aihubmix',
           label: 'AIHubMix',
         },
@@ -313,6 +318,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/coralbricks',
           label: 'CoralBricks',
+        },
+        {
+          type: 'doc',
+          id: 'providers/wandb',
+          label: 'CoreWeave',
         },
         {
           type: 'doc',
@@ -716,6 +726,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/oci',
+          label: 'OCI Generative AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/ofox',
           label: 'Ofox',
         },
@@ -1033,11 +1048,6 @@ const sidebars = {
           type: 'doc',
           id: 'providers/wallaby',
           label: 'Wallaby',
-        },
-        {
-          type: 'doc',
-          id: 'providers/wandb',
-          label: 'Weights & Biases',
         },
         {
           type: 'doc',
