@@ -1432,7 +1432,9 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    * Index a skill for search
    */
   async #indexSkill(skill: InternalSkill): Promise<void> {
-    if (!this.#searchEngine) return;
+    // A released view must not write under its namespace until re-admitted;
+    // an in-flight reconcile racing an eviction would otherwise leak documents.
+    if (!this.#searchEngine || this.#indexReleased) return;
 
     // Index the main skill instructions
     const skillDocumentId = this.#searchDocumentId(skill.path, 'SKILL.md');
@@ -1636,10 +1638,10 @@ export class ResolvedSourceWorkspaceSkills implements WorkspaceSkills {
     const { source, maxCachedSources, ...rest } = config;
     this.#resolver = source;
     this.#config = rest;
-    this.#maxCachedSources =
-      typeof maxCachedSources === 'number' && Number.isFinite(maxCachedSources) && maxCachedSources >= 1
-        ? Math.floor(maxCachedSources)
-        : DEFAULT_MAX_CACHED_SOURCES;
+    if (maxCachedSources !== undefined && (!Number.isSafeInteger(maxCachedSources) || maxCachedSources < 1)) {
+      throw new RangeError(`maxCachedSources must be a positive integer, received ${String(maxCachedSources)}`);
+    }
+    this.#maxCachedSources = maxCachedSources ?? DEFAULT_MAX_CACHED_SOURCES;
   }
 
   async getScoped(context?: SkillsContext): Promise<WorkspaceSkills> {

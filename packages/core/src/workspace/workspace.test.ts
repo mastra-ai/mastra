@@ -995,19 +995,16 @@ Line 3 conclusion`;
         expect(searchEngine.countByPrefix('skill-scope:')).toBe(1);
       });
 
-      it('falls back to the default cache bound for invalid maxCachedSources', async () => {
-        for (const maxCachedSources of [Number.NaN, Number.POSITIVE_INFINITY, 0, -3]) {
-          const searchEngine = new SearchEngine({ bm25: true });
-          const skills = new ResolvedSourceWorkspaceSkills({
-            source: () => new LocalFilesystem({ basePath: remoteDir }),
-            skills: ['skills'],
-            searchEngine,
-            maxCachedSources,
-          });
-          for (let i = 0; i < 20; i++) {
-            await (await skills.getScoped({ requestContext: new RequestContext() })).list();
-          }
-          expect(searchEngine.countByPrefix('skill-scope:')).toBe(16);
+      it('rejects invalid maxCachedSources', () => {
+        for (const maxCachedSources of [Number.NaN, Number.POSITIVE_INFINITY, 0, -3, 1.5]) {
+          expect(
+            () =>
+              new ResolvedSourceWorkspaceSkills({
+                source: () => new LocalFilesystem({ basePath: remoteDir }),
+                skills: ['skills'],
+                maxCachedSources,
+              }),
+          ).toThrow(RangeError);
         }
       });
     });
