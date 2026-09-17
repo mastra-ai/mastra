@@ -3,7 +3,7 @@ import { MessageList } from '@mastra/core/agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ChunkType } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
-import { accumulateChunk, finishStreamingAssistantMessage } from './accumulator';
+import { accumulateChunk, finishStreamingAssistantMessage, mapWorkflowStreamChunkToWatchResult } from './accumulator';
 import { CLIENT_MESSAGE_ID_KEY } from './types';
 import type { BackgroundTaskEntry, MastraDBMessageMetadata, MastraReasoningPart, MastraTextPart } from './types';
 
@@ -1680,6 +1680,32 @@ describe('finishStreamingAssistantMessage', () => {
   it('drops an empty trailing assistant message', () => {
     const out = reduce([startChunk('asst-1')]);
     expect(finishStreamingAssistantMessage(out)).toEqual([]);
+  });
+});
+
+describe('mapWorkflowStreamChunkToWatchResult', () => {
+  it('uses the canonical terminal result instead of inferring from the last step', () => {
+    const result = mapWorkflowStreamChunkToWatchResult(
+      {
+        status: 'running',
+        steps: {
+          branch: { status: 'success', output: { branchValue: 1 } },
+        },
+      } as any,
+      {
+        type: 'workflow-finish',
+        runId: RUN_ID,
+        from: 'WORKFLOW',
+        payload: {
+          workflowStatus: 'success',
+          finalWorkflowResult: { total: 5 },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+        },
+      } as any,
+    );
+
+    expect(result).toMatchObject({ status: 'success', result: { total: 5 } });
   });
 });
 

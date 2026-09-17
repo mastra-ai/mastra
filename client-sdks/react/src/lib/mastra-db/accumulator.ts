@@ -274,13 +274,15 @@ export const mapWorkflowStreamChunkToWatchResult = (
     return {
       ...previous,
       status: chunk.payload.workflowStatus,
-      ...(finalStatus === 'success' && lastStep?.status === 'success'
-        ? { result: lastStep?.output }
-        : finalStatus === 'failed' && lastStep?.status === 'failed'
-          ? { error: lastStep?.error }
-          : finalStatus === 'tripwire' && chunk.payload.tripwire
-            ? { tripwire: chunk.payload.tripwire }
-            : {}),
+      ...(finalStatus === 'success' && chunk.payload.finalWorkflowResult !== undefined
+        ? { result: chunk.payload.finalWorkflowResult }
+        : finalStatus === 'success' && lastStep?.status === 'success'
+          ? { result: lastStep?.output }
+          : finalStatus === 'failed' && lastStep?.status === 'failed'
+            ? { error: lastStep?.error }
+            : finalStatus === 'tripwire' && chunk.payload.tripwire
+              ? { tripwire: chunk.payload.tripwire }
+              : {}),
     };
   }
 
