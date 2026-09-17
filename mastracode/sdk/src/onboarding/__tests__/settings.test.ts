@@ -434,6 +434,19 @@ describe('default config and state storage', () => {
     });
   });
 
+  it.skipIf(process.platform === 'win32')('does not replace an unchanged compatibility mirror', () => {
+    withTempDefaultSettings(() => {
+      const settings = loadSettings();
+      const legacyPath = getLegacySettingsPath();
+      saveSettings(settings);
+      const inode = statSync(legacyPath).ino;
+
+      saveSettings(settings);
+
+      expect(statSync(legacyPath).ino).toBe(inode);
+    });
+  });
+
   it('keeps old-instance edits made before a new-instance save', () => {
     withTempDefaultSettings(() => {
       const settings = loadSettings();

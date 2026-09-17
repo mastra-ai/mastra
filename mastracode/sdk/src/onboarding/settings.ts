@@ -1383,11 +1383,15 @@ function writeSettingsRecordIfChanged(filePath: string, value: SettingsRecord, c
   if (!current || !isDeepStrictEqual(current, value)) writeSettingsRecord(filePath, value);
 }
 
-function writeLegacyMirror(filePath: string, settings: SettingsRecord): void {
-  writeSettingsRecord(filePath, {
-    ...settings,
-    [LEGACY_MIRROR_KEY]: { version: LEGACY_MIRROR_VERSION, baseline: settings },
-  });
+function writeLegacyMirror(filePath: string, settings: SettingsRecord, current?: SettingsRecord): void {
+  writeSettingsRecordIfChanged(
+    filePath,
+    {
+      ...settings,
+      [LEGACY_MIRROR_KEY]: { version: LEGACY_MIRROR_VERSION, baseline: settings },
+    },
+    current,
+  );
 }
 
 export function saveSettings(
@@ -1435,7 +1439,7 @@ export function saveSettings(
   const split = splitSettingsRecord(merged);
   writeSettingsRecordIfChanged(configPath, split.config, currentConfig);
   writeSettingsRecordIfChanged(statePath, split.state, currentState);
-  writeLegacyMirror(getLegacySettingsPath(), merged);
+  writeLegacyMirror(getLegacySettingsPath(), merged, legacyRecord);
   loadedSettingsRecords.set(settings, desired);
   loadedSettingsConfigDirs.set(settings, configDirName);
 }
