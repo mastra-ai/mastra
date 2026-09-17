@@ -11,7 +11,7 @@ function IsClampedDemo() {
   return (
     <HookDemo>
       <div className="max-w-80">
-        <p ref={ref} className={expanded ? 'text-ui-md' : 'line-clamp-2 text-ui-md'}>
+        <p ref={ref} className={expanded ? 'text-ui-md' : 'text-ui-md line-clamp-2'}>
           A trace can contain many spans, tool calls, and model responses. Keep the summary compact until someone wants
           to read every detail. Expanding this paragraph reveals the rest without losing the collapse control.
         </p>

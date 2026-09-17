@@ -13,7 +13,7 @@ function MeasuredAutoHeightDemo() {
       <Button onClick={() => setExpanded(value => !value)}>{expanded ? 'Collapse details' : 'Expand details'}</Button>
       <div
         style={heightStyle}
-        className="overflow-hidden rounded-lg border border-border1 motion-safe:transition-[height] motion-safe:duration-200"
+        className="border-border1 overflow-hidden rounded-lg border motion-safe:transition-[height] motion-safe:duration-200"
       >
         <div ref={ref} className="space-y-4 p-4">
           <Txt>Workflow run details</Txt>
