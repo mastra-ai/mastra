@@ -17,7 +17,6 @@ import { TracesLayout } from '@mastra/playground-ui/domains/traces/components/tr
 import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
 import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
 import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
-import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
 import { useTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/hooks/use-trace-column-preferences';
 import { useTraceFilterPersistence } from '@mastra/playground-ui/domains/traces/hooks/use-trace-filter-persistence';
 import { useTraceListNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-list-navigation';
@@ -89,10 +88,9 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const querySearchParams = new URLSearchParams(searchParams);
   querySearchParams.delete('listMode');
   if (querySearchParams.get('status') === 'running') querySearchParams.delete('status');
-  // Drop params the query API can't run on — except tags, which stays a visible
-  // chip; buildTraceQueryRequest skips it when building predicates.
+  // Drop params the query API can't run on, so no chip ever advertises a filter
+  // that has no effect on the list.
   for (const field of TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS) {
-    if (field === 'tags') continue;
     querySearchParams.delete(`filter${field[0]?.toUpperCase()}${field.slice(1)}`);
   }
   const url = useTraceUrlState(querySearchParams, setPersistedSearchParams);
@@ -148,7 +146,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     rootOnly: true,
   });
   const { data: discoveredEnvironments = [] } = useEnvironments();
-  const { data: discoveredTags = [] } = useTags();
 
   const filterBarFields = useMemo(
     () => [
@@ -156,11 +153,10 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       ...createTraceFilterBarFields({
         availableRootEntityNames: rootEntityNameSuggestions,
         availableEnvironments: discoveredEnvironments,
-        availableTags: discoveredTags,
         hiddenFieldIds,
       }),
     ],
-    [rootEntityNameSuggestions, discoveredEnvironments, discoveredTags, hiddenFieldIds],
+    [rootEntityNameSuggestions, discoveredEnvironments, hiddenFieldIds],
   );
   const filterBarItems = useMemo(() => traceTokensToFilterBarItems(url.filterTokens), [url.filterTokens]);
   // The time-range chip is a synthetic, always-present item so it takes part in keyboard

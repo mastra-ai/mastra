@@ -533,16 +533,17 @@ describe('Traces page filter bar', () => {
     });
   });
 
-  describe('when the URL carries filterTraceId and filterTags', () => {
-    it('renders one chip per filter in URL order, without the implied operator', async () => {
+  describe('when the URL carries filterTraceId, filterEnvironment and a legacy filterTags', () => {
+    it('renders one chip per query-supported filter in URL order, ignoring tags', async () => {
       setTracePageHandlers(metricsCapableSystemPackages);
 
-      const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterTags=alpha&filterTags=beta');
+      const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterTags=alpha&filterEnvironment=prod');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
+      // Tags cannot be filtered by the trace query API, so no chip advertises them.
       expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([
         'Trace IDtrace-a',
-        'Tagsalpha, beta',
+        'Environmentprod',
       ]);
     });
   });

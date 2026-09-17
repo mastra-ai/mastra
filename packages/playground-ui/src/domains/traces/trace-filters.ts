@@ -194,19 +194,16 @@ const TRACE_FILTER_BAR_TEXT_FIELD_IDS = [
 
 /** FilterBar field definitions for the trace pages. Fields the query API cannot
  *  filter on (see `TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS`) are omitted, as is the
- *  `running` status. `tags` is the one exception: it is kept as a multi-value
- *  `in` field so `filterTags` URLs round-trip as chips (`buildTraceQueryRequest`
- *  still ignores it). Hidden fields are never offered in the input's field step
- *  but still label existing (e.g. scoped, read-only) chips. */
+ *  `running` status, so no chip advertises a filter that has no effect. Hidden
+ *  fields are never offered in the input's field step but still label existing
+ *  (e.g. scoped, read-only) chips. */
 export function createTraceFilterBarFields({
   availableRootEntityNames,
   availableEnvironments,
-  availableTags = [],
   hiddenFieldIds = [],
 }: {
   availableRootEntityNames: string[];
   availableEnvironments: string[];
-  availableTags?: string[];
   hiddenFieldIds?: readonly string[];
 }): FilterBarField[] {
   const pick = (id: string, suggestions: { value: string; label?: string }[]): FilterBarField => ({
@@ -235,20 +232,13 @@ export function createTraceFilterBarFields({
       'environment',
       availableEnvironments.map(env => ({ value: env })),
     ),
-    {
-      ...pick(
-        'tags',
-        availableTags.map(tag => ({ value: tag })),
-      ),
-      operators: ['in'],
-    },
   ];
   const textFields = TRACE_FILTER_BAR_TEXT_FIELD_IDS.map(text);
 
   const byLabel = (a: FilterBarField, b: FilterBarField) => a.label.localeCompare(b.label);
   const hidden = new Set(hiddenFieldIds);
   return [...pickFields.sort(byLabel), ...textFields.sort(byLabel)]
-    .filter(field => field.id === 'tags' || !TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(field.id))
+    .filter(field => !TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(field.id))
     .map(field => (hidden.has(field.id) ? { ...field, hidden: true } : field));
 }
 

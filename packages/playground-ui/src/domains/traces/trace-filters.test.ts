@@ -42,7 +42,6 @@ describe('createTraceFilterBarFields', () => {
   const fields = createTraceFilterBarFields({
     availableRootEntityNames: ['weather-agent'],
     availableEnvironments: ['prod'],
-    availableTags: ['alpha', 'beta'],
     hiddenFieldIds: ['rootEntityType', 'entityId'],
   });
   const byId = (id: string) => fields.find(f => f.id === id);
@@ -53,10 +52,10 @@ describe('createTraceFilterBarFields', () => {
     expect(byId('traceId')?.hidden).toBeUndefined();
   });
 
-  it('omits fields the query API cannot filter on, except tags', () => {
+  it('omits fields the query API cannot filter on', () => {
     expect(byId('runId')).toBeUndefined();
     expect(byId('serviceName')).toBeUndefined();
-    expect(byId('tags')).toBeDefined();
+    expect(byId('tags')).toBeUndefined();
   });
 
   it('does not suggest the unsupported running status', () => {
@@ -64,19 +63,8 @@ describe('createTraceFilterBarFields', () => {
     expect(Array.isArray(suggestions) && suggestions.map(s => s.value)).toEqual(['success', 'error']);
   });
 
-  it('uses the single is operator on every field but tags', () => {
-    expect(fields.filter(f => f.id !== 'tags').every(f => f.operators.length === 1 && f.operators[0] === 'is')).toBe(
-      true,
-    );
-  });
-
-  it('offers tags as a strict multi-value in field with the available tags', () => {
-    expect(byId('tags')).toMatchObject({
-      label: 'Tags',
-      operators: ['in'],
-      strict: true,
-      suggestions: [{ value: 'alpha' }, { value: 'beta' }],
-    });
+  it('uses the single is operator on every field', () => {
+    expect(fields.every(f => f.operators.length === 1 && f.operators[0] === 'is')).toBe(true);
   });
 
   it('lists picker fields before free-text fields, alphabetically', () => {
@@ -85,7 +73,6 @@ describe('createTraceFilterBarFields', () => {
       'entityName',
       'rootEntityType',
       'status',
-      'tags',
       'entityId',
       'resourceId',
       'threadId',

@@ -2,10 +2,35 @@
 '@mastra/playground-ui': patch
 ---
 
-Replaced the trace filters in Studio (Traces, agent traces, and workflow traces) with the typeahead FilterBar. Filters are now added by typing field → operator → value in one input and appear as inline editable chips; "Clear filters" removes them all. The time range now lives in the same bar as an always-present `Time is …` chip (defaulting to Last 7 days) that opens the usual preset / custom-range picker. Scoped views keep their Primitive Type and Primitive ID chips read-only. Existing filter URLs keep working. The Columns button is now a ghost button.
+Trace filtering in the `domains/traces` module now builds on the typeahead `FilterBar` instead of `PropertyFilter`. `createTraceFilterBarFields`, `traceTokensToFilterBarItems`, `filterBarItemsToTraceTokens` and `TRACE_FILTER_BAR_OPERATORS` adapt the existing `filterX` URL tokens to FilterBar items, so existing trace filter URLs keep working. A new `TraceTimeRangeChip` renders the date range as an always-present, non-removable `Time is …` chip (default Last 7 days). `useTraceUrlState` gains `handleDateRangeChange(from, to)` to write a custom range atomically. `TracesToolbar`, `createTracePropertyFilterFields` and `neutralizeFilterTokens` are removed. `TraceColumnsMenu` now renders a ghost button. FilterBar popups size to their content and fields with a single operator skip the operator step.
 
-**Also added**
+New public options:
 
-- `hidden` flag on `FilterBarField` so a field can be excluded from the FilterBar input's field step while chips for it still render.
-- `removable` prop on `FilterBar.Chip` (default `true`) — when `false` the chip has no remove button and ignores Backspace/Delete.
-- `renderTrigger` prop on `DateTimeRangePicker` to render a custom trigger for the preset menu.
+- `FilterBarField.hidden` — exclude a field from the FilterBar input's field step while chips for it still render.
+
+  ```tsx
+  const fields: FilterBarField[] = [{ id: 'entityId', label: 'Primitive ID', operators: ['is'], hidden: true }];
+  ```
+
+- `FilterBar.Chip` `removable` (default `true`) — when `false` the chip has no remove button and ignores Backspace/Delete.
+
+  ```tsx
+  <FilterBar.Chip item={item} removable={false} />
+  ```
+
+- `DateTimeRangePicker` `renderTrigger` and `onDateRangeChange` — render a custom element as the preset menu trigger (it receives the menu's props via Base UI `render`) and receive both ends of a custom range in one call.
+
+  ```tsx
+  <DateTimeRangePicker
+    preset={preset}
+    onPresetChange={setPreset}
+    dateFrom={from}
+    dateTo={to}
+    onDateRangeChange={(from, to) => setRange({ from, to })}
+    renderTrigger={({ label, disabled }) => (
+      <button type="button" disabled={disabled}>
+        {label}
+      </button>
+    )}
+  />
+  ```
