@@ -85,20 +85,66 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Conversation: Story = {};
+async function expandReviewTools(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  await userEvent.click(within(canvas.getByRole('group', { name: /^Tool group:/ })).getByRole('button'));
+  await expect(await canvas.findByRole('group', { name: 'Tool: read_file' })).toBeVisible();
+}
+
+const verifyStreamingCommand: Story['play'] = async ({ canvasElement }) => {
+  const canvas = within(canvasElement);
+  await expandReviewTools(canvasElement);
+  const command = canvas.getByRole('group', { name: 'Tool: execute_command' });
+  await expect(command).toHaveAttribute('aria-busy', 'true');
+  await expect(canvas.queryByText('6 tests passed.')).not.toBeInTheDocument();
+};
+
+export const Conversation: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expandReviewTools(canvasElement);
+    const command = canvas.getByRole('group', { name: 'Tool: execute_command' });
+    await userEvent.click(within(command).getByRole('button'));
+    await expect(await canvas.findByText('6 tests passed.')).toBeVisible();
+  },
+};
 export const Studio: Story = {};
 export const Factory: Story = { args: { presentation: 'factory' } };
 export const FactoryAwaitingApproval: Story = { args: { presentation: 'factory', scenario: 'approval' } };
-export const FactoryStreaming: Story = { args: { presentation: 'factory', scenario: 'streaming' } };
+export const FactoryStreaming: Story = {
+  args: { presentation: 'factory', scenario: 'streaming' },
+  play: verifyStreamingCommand,
+};
 export const FactoryLongConversation: Story = { args: { presentation: 'factory', scenario: 'long' } };
 export const FactoryLight: Story = { args: { presentation: 'factory' }, globals: { backgrounds: { value: 'light' } } };
 export const Empty: Story = { args: { scenario: 'empty' } };
-export const Streaming: Story = { args: { scenario: 'streaming' } };
+export const Streaming: Story = { args: { scenario: 'streaming' }, play: verifyStreamingCommand };
 export const Stopped: Story = { args: { scenario: 'stopped' } };
 export const AwaitingAnswer: Story = { args: { scenario: 'question' } };
 export const AwaitingApproval: Story = { args: { scenario: 'approval' } };
 export const Declined: Story = { args: { scenario: 'declined' } };
-export const ToolFailed: Story = { args: { scenario: 'tool-error' } };
+export const ToolFailed: Story = {
+  args: { scenario: 'tool-error' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expandReviewTools(canvasElement);
+    const command = canvas.getByRole('group', { name: 'Tool: execute_command' });
+    await expect(command).toHaveAttribute('aria-invalid', 'true');
+    await expect(
+      await canvas.findByText('Keyboard test failed: expected focus to return to the composer.'),
+    ).toBeVisible();
+    await expect(canvas.queryByText('6 tests passed.')).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('button', { name: 'Retry tool' }));
+    await waitFor(() => expect(canvas.getByText('The conversation is ready for another review.')).toBeVisible(), {
+      timeout: 8000,
+    });
+    await expect(canvas.getByRole('group', { name: 'Tool: execute_command' })).toHaveAttribute('aria-busy', 'false');
+  },
+};
+export const FactoryToolFailed: Story = {
+  ...ToolFailed,
+  args: { presentation: 'factory', scenario: 'tool-error' },
+};
 export const Error: Story = { args: { scenario: 'error' } };
 export const LongConversation: Story = { args: { scenario: 'long' } };
 
@@ -129,7 +175,7 @@ export const ReviewAndApprove: Story = {
   args: { scenario: 'question' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(within(canvas.getByRole('group', { name: 'Tool group: 3 steps' })).getByRole('button'));
+    await expandReviewTools(canvasElement);
     await userEvent.click(within(await canvas.findByRole('group', { name: 'Tool: read_file' })).getByRole('button'));
     await waitFor(() => expect(canvas.getByText('Enter currently adds a newline.')).toBeVisible());
     await userEvent.click(canvas.getByRole('radio', { name: /Keyboard access/ }));
@@ -238,7 +284,7 @@ export const StudioModelSelection: Story = {
   play: async ({ canvasElement }) => {
     const page = within(canvasElement.ownerDocument.body);
     await userEvent.click(page.getByRole('combobox', { name: 'Provider' }));
-    await userEvent.click(await page.findByRole('option', { name: 'Anthropic' }));
+    await userEvent.click(await page.findByRole('option', { name: 'Connected Anthropic' }));
     await userEvent.click(await page.findByRole('option', { name: 'claude-sonnet-4-5' }));
     await expect(page.getByRole('combobox', { name: 'Model' })).toHaveTextContent('claude-sonnet-4-5');
     await userEvent.click(page.getByRole('button', { name: 'Model settings' }));
@@ -254,12 +300,12 @@ export const FactoryModelSelection: Story = {
   args: { presentation: 'factory', factorySession: 'personal', scenario: 'empty' },
   play: async ({ canvasElement }) => {
     const page = within(canvasElement.ownerDocument.body);
-    await userEvent.click(page.getByRole('button', { name: 'Session model' }));
+    await userEvent.click(page.getByRole('button', { name: 'Session model, GPT-4.1' }));
     await userEvent.click(await page.findByRole('option', { name: 'Model pack Review' }));
-    await expect(page.getByRole('button', { name: 'Session model' })).toHaveTextContent('Claude Sonnet 4.5');
-    await userEvent.click(page.getByRole('button', { name: 'Session model' }));
+    await expect(page.getByRole('button', { name: 'Session model, Claude Sonnet 4.5' })).toBeVisible();
+    await userEvent.click(page.getByRole('button', { name: 'Session model, Claude Sonnet 4.5' }));
     await userEvent.click(await page.findByRole('option', { name: 'Reset to default pack' }));
-    await expect(page.getByRole('button', { name: 'Session model' })).toHaveTextContent('GPT-4.1');
+    await expect(page.getByRole('button', { name: 'Session model, GPT-4.1' })).toBeVisible();
   },
 };
 

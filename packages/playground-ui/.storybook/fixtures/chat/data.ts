@@ -66,14 +66,12 @@ export const reviewTools = [
     hasResult: true,
     output: 'composer.tsx:42: onKeyDown',
   },
-  {
-    toolName: 'execute_command',
-    args: { command: 'pnpm test composer' },
-    status: 'idle',
-    hasResult: true,
-    output: '6 tests passed.',
-  },
 ] satisfies (ToolCallGroupStep & { output: string })[];
+
+export const reviewCommand = {
+  toolName: 'execute_command',
+  args: { command: 'pnpm test composer' },
+};
 
 export const editArgs = {
   path: 'src/chat/composer.tsx',

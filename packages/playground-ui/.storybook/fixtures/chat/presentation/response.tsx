@@ -1,5 +1,5 @@
 import type { TextPart } from '@mastra/react/ui';
-import { plan, reviewTools } from '../data';
+import { plan, reviewCommand, reviewTools } from '../data';
 import type { ChatPresentation, Phase, Turn } from '../data';
 import { ConversationApproval } from './approval';
 import { ConversationNotification } from './events';
@@ -38,6 +38,7 @@ export function ConversationResponse({ turn, presentation, transitionTurn }: Con
   const isRevealing = shownParts !== writtenParts;
   const approveEdit = () => transitionTurn(turn.id, 'approval', 'streaming');
   const declineEdit = () => transitionTurn(turn.id, 'approval', 'declined');
+  const showSettledCommand = turn.review && (turn.phase === 'complete' || turn.phase === 'stopped');
   return (
     <Message
       from="assistant"
@@ -110,20 +111,19 @@ export function ConversationResponse({ turn, presentation, transitionTurn }: Con
             )}
           </>
         )}
-        {turn.phase === 'streaming' && (
+        {showSettledCommand && (
           <ReviewTool
             presentation={presentation}
-            toolName="execute_command"
-            args={{ command: 'pnpm test composer' }}
-            status="running"
+            {...reviewCommand}
+            output={turn.phase === 'complete' ? '6 tests passed.' : undefined}
           />
         )}
+        {turn.phase === 'streaming' && <ReviewTool presentation={presentation} {...reviewCommand} status="running" />}
         {turn.phase === 'tool-error' && (
           <>
             <ReviewTool
               presentation={presentation}
-              toolName="execute_command"
-              args={{ command: 'pnpm test composer' }}
+              {...reviewCommand}
               status="error"
               output="Keyboard test failed: expected focus to return to the composer."
               defaultOpen
