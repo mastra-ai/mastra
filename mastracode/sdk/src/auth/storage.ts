@@ -445,11 +445,16 @@ export class AuthStorage {
       };
       // Re-key in place so the account keeps its insertion position; a
       // stale entry already owning the new id (same tokens) is dropped in
-      // favor of the picked account.
+      // favor of the picked account. That collision means both entries are the
+      // same underlying subscription, so the survivor inherits the collided
+      // entry's active state — otherwise re-authenticating an inactive account
+      // onto the active account's tokens would delete the active entry and
+      // leave the registry with no active account at all.
+      const collided = newId === target.id ? undefined : entries.find(entry => entry.id === newId);
       const rebuilt: AuthStorageData = {};
       for (const [key, value] of Object.entries(this.data)) {
         if (key === this.accountKeyFor(target.id)) {
-          rebuilt[this.accountKeyFor(newId)] = replacement;
+          rebuilt[this.accountKeyFor(newId)] = collided?.active ? { ...replacement, active: true } : replacement;
         } else if (newId !== target.id && key === this.accountKeyFor(newId)) {
           continue;
         } else {
@@ -459,10 +464,13 @@ export class AuthStorage {
       this.data = rebuilt;
       // Re-authentication preserves the account's active state: fixing a
       // secondary account's tokens must not hijack the active slot. The target
-      // is activated when it was already active, or when the provider has no
-      // active account at all (first account, or a self-healed gap).
+      // is activated when it was already active, when the entry it collided
+      // with was active, or when the provider has no active account at all
+      // (first account, or a self-healed gap).
       const wasActive =
-        target.active === true || entries.some(entry => entry.active && entry.id !== target.id) === false;
+        target.active === true ||
+        collided?.active === true ||
+        entries.some(entry => entry.active && entry.id !== target.id) === false;
       if (wasActive) {
         const activated = this.activateInMemory(providerId, newId);
         if (!activated) {
