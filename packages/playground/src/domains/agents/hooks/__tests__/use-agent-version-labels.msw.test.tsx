@@ -1,5 +1,5 @@
 import type { AgentVersionLabel } from '@mastra/client-js';
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -39,6 +39,18 @@ import { server } from '@/test/msw-server';
 import { makeWrapper, TEST_BASE_URL } from '@/test/render';
 
 const AGENT_ID = 'agent-1';
+
+const AuthorizationAndLabelsConsumer = () => {
+  const authorization = useAuthCapabilities();
+  const labels = useAgentVersionLabels({ agentId: AGENT_ID });
+
+  return (
+    <>
+      <output aria-label="Authorization status">{authorization.status}</output>
+      <output aria-label="Label status">{labels.status}</output>
+    </>
+  );
+};
 
 const createDeferred = () => {
   let resolve = () => {};
@@ -364,22 +376,22 @@ describe('useAgentVersionLabels', () => {
           return HttpResponse.text('', { status: 403 });
         }),
       );
-      const { wrapper } = makeWrapper();
-      const useAuthorizationAndLabels = () => ({
-        authorization: useAuthCapabilities(),
-        labels: useAgentVersionLabels({ agentId: AGENT_ID }),
-      });
-      const firstConsumer = renderHook(useAuthorizationAndLabels, { wrapper });
+      const { wrapper, queryClient } = makeWrapper();
+      const consumer = render(<AuthorizationAndLabelsConsumer />, { wrapper });
 
-      await waitFor(() => expect(firstConsumer.result.current.authorization.isSuccess).toBe(true));
+      await waitFor(() => expect(screen.getByLabelText('Authorization status').textContent).toBe('success'));
       labelReadGate.resolve();
-      await waitFor(() => expect(firstConsumer.result.current.labels.isError).toBe(true));
+      await waitFor(() => expect(screen.getByLabelText('Label status').textContent).toBe('error'));
       await waitFor(() => expect(authorizationRequests).toBe(2));
-      firstConsumer.unmount();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-      const secondConsumer = renderHook(useAuthorizationAndLabels, { wrapper });
+      // Keep the provider and its client-scoped authorization cache alive while
+      // the consumer remounts, as it does during navigation within Studio.
+      consumer.rerender(<></>);
+      expect(screen.queryByLabelText('Label status')).toBeNull();
+      consumer.rerender(<AuthorizationAndLabelsConsumer />);
 
-      await waitFor(() => expect(secondConsumer.result.current.labels.isError).toBe(true));
+      await waitFor(() => expect(screen.getByLabelText('Label status').textContent).toBe('error'));
       await new Promise(resolve => setTimeout(resolve, 25));
       expect(labelRequests).toBe(1);
       expect(authorizationRequests).toBe(2);
