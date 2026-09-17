@@ -92,6 +92,49 @@ describe('request-scoped credentials', () => {
     await expect(scopedB.getOAuthCredential?.('anthropic')).resolves.toMatchObject({ access: 'token-b' });
     await expect(scopedA.getOAuthCredential?.('anthropic')).resolves.toMatchObject({ access: 'token-a' });
   });
+
+  it('fails closed when a recorded selection no longer resolves to an account', () => {
+    const base = {
+      reload: vi.fn(),
+      // The provider's active credential — the account routing passed over.
+      get: vi.fn(() => ({
+        type: 'oauth' as const,
+        access: 'active-token',
+        refresh: 'r',
+        expires: Date.now() + 60_000,
+      })),
+      getStoredApiKey: vi.fn(),
+      getApiKey: vi.fn(async () => 'active-token'),
+      listAccounts: vi.fn(() => []),
+    } satisfies CredentialStore;
+    const requestContext = new RequestContext();
+    // Selected, then removed before the credential read.
+    setRequestAccountSelection(requestContext, 'anthropic', 'anthropic:gone');
+    const scoped = createRequestScopedCredentialStore(base, requestContext);
+
+    // Falling through to `base.get` would serve the active account, i.e. the
+    // exhausted one routing just refused.
+    expect(scoped.get('anthropic')).toBeUndefined();
+    expect(base.get).not.toHaveBeenCalled();
+  });
+
+  it('still uses the base credential when the request has no selection', () => {
+    const base = {
+      reload: vi.fn(),
+      get: vi.fn(() => ({
+        type: 'oauth' as const,
+        access: 'active-token',
+        refresh: 'r',
+        expires: Date.now() + 60_000,
+      })),
+      getStoredApiKey: vi.fn(),
+      getApiKey: vi.fn(async () => 'active-token'),
+      listAccounts: vi.fn(() => []),
+    } satisfies CredentialStore;
+    const scoped = createRequestScopedCredentialStore(base, new RequestContext());
+
+    expect(scoped.get('anthropic')).toMatchObject({ access: 'active-token' });
+  });
 });
 
 describe('getDynamicModel error branches', () => {

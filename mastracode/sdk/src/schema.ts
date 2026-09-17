@@ -64,6 +64,19 @@ export interface MastraCodeState {
   omScope?: 'thread' | 'resource';
   /** Explicit model-pack identity for the current thread. */
   activeModelPackId?: string | null;
+  /**
+   * Pending pack hop written by the account-rotation processor on a cascade
+   * hop; cleared back to null once the TUI applies it. Declared here so
+   * consumers resolve it as a typed record instead of casting `unknown`.
+   */
+  mastracodePendingPackFallback?: {
+    fromPackId: string;
+    toPackId: string;
+    toModelId: string;
+    threadId?: string;
+    reason: 'pool-exhausted' | 'persistent-outage';
+    at: string;
+  } | null;
   /** Exhausted OAuth account IDs keyed by pack and resolved model. */
   mastracodeAccountRoutingExhausted?: Record<string, Record<string, string[]>>;
   /**

@@ -944,12 +944,11 @@ export class AccountRotationProcessor implements Processor {
     // re-applies routing when the retried request begins on the target pack.
     const targetRoute = resolveAccountRoute(args, this.options.settingsPath, { packId: to.packId, modelId: toModelId });
     if (targetRoute) {
-      await applyPreferredAccountRoute(
-        args,
-        this.options.credentialStore,
-        this.options.settingsPath,
-        targetRoute,
-      ).catch(() => undefined);
+      // Deployed requests must hop on the tenant store: activating the target
+      // pack's preferred account on the host registry would mutate a local
+      // account to serve a tenant request.
+      const store = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
+      await applyPreferredAccountRoute(args, store, this.options.settingsPath, targetRoute).catch(() => undefined);
     }
     // Live visibility: data parts never ride controller message events, so
     // emit the same line as an info event (see emitAccountSwitchPart).

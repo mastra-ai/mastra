@@ -853,6 +853,16 @@ export class AuthStorage {
         ...accountCredential
       } = selectedEntry;
       credential = accountCredential;
+      // The active account's credentials live in both the legacy slot and its
+      // registry entry, and a legacy writer (older build, another worktree) can
+      // refresh the slot without rotating the refresh token. `migrate()` only
+      // reconciles those when the refresh token changes, so the registry entry
+      // can hold stale access/expiry. Prefer the slot for the active account
+      // and keep the registry entry as the account identity.
+      if (selectedEntry.active && slot?.type === 'oauth' && slot.refresh === selectedEntry.refresh) {
+        const { type: _slotType, ...slotCredential } = slot;
+        credential = { ...credential, ...slotCredential };
+      }
     } else if (!accountInstanceId && slot?.type === 'oauth') {
       credential = slot;
     }

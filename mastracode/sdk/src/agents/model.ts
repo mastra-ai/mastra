@@ -88,8 +88,13 @@ export function createRequestScopedCredentialStore(
     reload: () => base.reload(),
     get: providerId => {
       if (rejectAll(providerId)) return undefined;
+      // A selection that no longer resolves (the account was removed between
+      // routing and the credential read) must not fall through to the active
+      // account — that is the account routing deliberately passed over.
+      const accountInstanceId = selectedId(providerId);
+      if (accountInstanceId === undefined) return base.get(providerId);
       const selected = selectedAccount(providerId);
-      return selected ? accountCredential(selected) : base.get(providerId);
+      return selected ? accountCredential(selected) : undefined;
     },
     getStoredApiKey: providerId => (rejectAll(providerId) ? undefined : base.getStoredApiKey(providerId)),
     getApiKey: providerId =>

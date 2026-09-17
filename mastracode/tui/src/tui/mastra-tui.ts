@@ -1666,8 +1666,12 @@ export class MastraTUI {
     settings.models.activeModelPackId = activeModePackId;
     if (this.state.session.thread.getId()) {
       await this.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: activeModePackId });
+      // Selecting a pack here is a deliberate choice, not a fallback landing:
+      // a status restored from a previous run on this thread would otherwise
+      // keep claiming the thread is on a fallback pack.
+      await this.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
     }
-    await this.state.session.state.set({ activeModelPackId: activeModePackId });
+    await this.state.session.state.set({ activeModelPackId: activeModePackId, fallbackStatus: undefined });
 
     settings.models.activeOmPackId = omPack?.id ?? null;
     settings.models.omModelOverride = omPack?.id === 'custom' ? omPack.modelId : null;

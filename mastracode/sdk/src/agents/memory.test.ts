@@ -108,6 +108,7 @@ async function createMemoryConfig(
   state: Record<string, unknown>,
   projectScope: 'thread' | 'resource' = 'thread',
   vector?: unknown,
+  settingsPath?: string,
 ) {
   vi.resetModules();
   memoryConstructorMock.mockClear();
@@ -120,6 +121,7 @@ async function createMemoryConfig(
   const memory = getDynamicMemory(
     storage as never,
     vector as never,
+    settingsPath,
   )({ requestContext: requestContext as never }) as unknown as {
     config: MemoryConfig;
   };
@@ -456,6 +458,34 @@ describe('pack-driven OM models (A11)', () => {
     resolvePackMemoryModelChainMock.mockReset();
     loadSettingsMock.mockReset();
     delete process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS;
+  });
+
+  it('reads role overrides and pack memory models from the configured settings file', async () => {
+    // A caller pointing the agent at another settings path must not have OM
+    // resolve from the default one — it would read another user's overrides.
+    loadSettingsMock.mockReturnValue({ models: { activeModelPackId: 'anthropic' } });
+    resolvePackMemoryModelChainMock.mockReturnValue({ modelId: 'gpt-5.4-mini' });
+    const { config, requestContext } = await createMemoryConfig(
+      { projectPath: '/tmp/project' },
+      'thread',
+      undefined,
+      '/custom/settings.json',
+    );
+
+    expect(loadSettingsMock).not.toHaveBeenCalled();
+    config.options.observationalMemory.observation.model({ requestContext });
+    expect(loadSettingsMock).toHaveBeenCalledWith('/custom/settings.json');
+    config.options.observationalMemory.reflection.model({ requestContext });
+    expect(loadSettingsMock).toHaveBeenLastCalledWith('/custom/settings.json');
+  });
+
+  it('falls back to the default settings file when none is configured', async () => {
+    loadSettingsMock.mockReturnValue({ models: {} });
+    const { config, requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' });
+
+    config.options.observationalMemory.observation.model({ requestContext });
+
+    expect(loadSettingsMock).toHaveBeenCalledWith(undefined);
   });
 
   it('resolves observer and reflector from the active pack OM chain when set', async () => {

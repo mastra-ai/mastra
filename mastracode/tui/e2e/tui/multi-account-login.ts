@@ -140,7 +140,8 @@ export const multiAccountLoginScenario = {
 
     // Re-authenticate account A in place from its submenu: fresh tokens
     // (rotated refresh token) must replace A's entry — same label, same
-    // position, now active — without appending a third account.
+    // position, still inactive because B holds the active slot — without
+    // appending a third account.
     terminal.submit('/login');
     await runtime.waitForScreenText(/\(2 accounts\)/i, terminal, 8_000);
     terminal.write('\r');
@@ -160,28 +161,32 @@ export const multiAccountLoginScenario = {
     await runtime.waitForScreenText(/Enter to keep/i, terminal, 8_000);
     await runtime.waitForScreenText(/Account A/i, terminal, 8_000);
     terminal.write('\r'); // keep the label
-    await runtime.waitForScreenText(/Logged in to Anthropic/i, terminal, 8_000);
+    // Re-authenticating an inactive account never activates it, so the command
+    // reports the account as added-but-not-active rather than switching models.
+    await runtime.waitForScreenText(/Added Anthropic \(Claude Pro\/Max\) Account A \(not active\)/i, terminal, 8_000);
 
     // Registry on disk after re-auth: two entries, A re-keyed to the new
-    // refresh token and active with its label preserved, slot holds A's new
-    // tokens.
+    // refresh token and still inactive with its label preserved; the slot keeps
+    // B's tokens because B is the active account.
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const a=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); const keys=Object.keys(a).filter(k=>k.startsWith("accounts:anthropic:")); const reAuth=keys.find(k=>a[k].label==="Anthropic (Claude Pro/Max) Account A"); console.log("REAUTH_COUNT="+keys.length); console.log("REAUTH_REFRESH_OK="+Boolean(reAuth&&a[reAuth].refresh==="mc-multi-a2-refresh")); console.log("REAUTH_ACTIVE="+(reAuth?a[reAuth].active:"missing")); console.log("REAUTH_SLOT_OK="+Boolean(a.anthropic&&a.anthropic.access==="mc-multi-a2-access"));'`,
+      `!node -e 'const fs=require("fs"); const a=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); const keys=Object.keys(a).filter(k=>k.startsWith("accounts:anthropic:")); const reAuth=keys.find(k=>a[k].label==="Anthropic (Claude Pro/Max) Account A"); const active=keys.find(k=>a[k].active); console.log("REAUTH_COUNT="+keys.length); console.log("REAUTH_REFRESH_OK="+Boolean(reAuth&&a[reAuth].refresh==="mc-multi-a2-refresh")); console.log("REAUTH_ACTIVE="+Boolean(reAuth&&a[reAuth].active)); console.log("REAUTH_ACTIVE_LABEL="+(active?a[active].label:"missing")); console.log("REAUTH_SLOT_OK="+Boolean(a.anthropic&&a.anthropic.access==="mc-multi-b-access"));'`,
     );
     await runtime.waitForScreenText(/REAUTH_COUNT=2/i, terminal, 8_000);
     await runtime.waitForScreenText(/REAUTH_REFRESH_OK=true/i, terminal, 8_000);
-    await runtime.waitForScreenText(/REAUTH_ACTIVE=true/i, terminal, 8_000);
+    await runtime.waitForScreenText(/REAUTH_ACTIVE=false/i, terminal, 8_000);
+    await runtime.waitForScreenText(/REAUTH_ACTIVE_LABEL=Anthropic \(Claude Pro\/Max\) Account B/i, terminal, 8_000);
     await runtime.waitForScreenText(/REAUTH_SLOT_OK=true/i, terminal, 8_000);
 
-    // Remove the re-authenticated account A from its submenu. A is active,
-    // so its submenu has no "Set as active": [Re-authenticate…, Remove…, Back].
+    // Remove the re-authenticated account A from its submenu. A is inactive, so
+    // its submenu is the full [Set as active, Re-authenticate…, Remove…, Back].
     terminal.submit('/login');
     await runtime.waitForScreenText(/\(2 accounts\)/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Account A\s*✓ active/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Account B\s*✓ active/i, terminal, 8_000);
     terminal.write('\r');
     await runtime.waitForScreenText(/Anthropic \(Claude Pro\/Max\) Account A:/i, terminal, 8_000);
-    await runtime.waitForScreenTextAbsent(/Set as active/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Set as active/i, terminal, 8_000);
+    terminal.write('\x1b[B');
     terminal.write('\x1b[B');
     await runtime.waitForScreenText(/→ Remove…/i, terminal, 8_000);
     terminal.write('\r');

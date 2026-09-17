@@ -166,7 +166,11 @@ export function pruneUnknownPackAccountPreferences(
     packModels.set(pack.id, new Set(Object.values({ ...pack.models, ...modePackOverrides[pack.id] })));
   }
   for (const pack of savedCustomPacks) {
-    packModels.set(`custom:${pack.name}`, new Set(Object.values(pack.models)));
+    // Settings files are user-editable: a malformed entry without `models`
+    // would otherwise throw here, and the loader's catch-all would replace the
+    // whole saved settings object with defaults. Treat it as having no models.
+    const models = pack?.models && typeof pack.models === 'object' ? pack.models : {};
+    packModels.set(`custom:${pack.name}`, new Set(Object.values(models)));
   }
 
   const result: Record<string, Record<string, string>> = {};

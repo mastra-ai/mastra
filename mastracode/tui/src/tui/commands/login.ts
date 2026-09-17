@@ -126,10 +126,12 @@ async function performLogin(
         // pack — that only belongs to the onboarding flow. Only auto-select the
         // provider default when no model is selected yet (e.g. onboarding was
         // skipped), so the user isn't left without a usable model. An
-        // add-another login (activate:false) never touches the model: the
-        // account was registered but not activated.
+        // add-another login (activate:false) never touches the model, and
+        // neither does re-authenticating an account that stays inactive — the
+        // account is registered but not activated in both cases.
         const label = ctx.authStorage?.listAccounts(providerId).find(a => a.id === account.id)?.label ?? account.label;
-        if (opts?.activate === false) {
+        const activated = opts?.activate !== false && account.active !== false;
+        if (!activated) {
           ctx.showInfo(`Added ${label} (not active)`);
         } else {
           const hasSelectedModel = ctx.state.session.model.get() !== '';

@@ -26,12 +26,16 @@ import type { PackMemoryModelChainEntry } from './model.js';
 function resolveOmRoleModelForRequest(
   role: 'observer' | 'reflector',
   requestContext: RequestContext,
+  settingsPath?: string,
 ): GatewayLanguageModel | PackMemoryModelChainEntry[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = controller?.getState() as MastraCodeState | undefined;
   const resolveOptions = { remapForCodexOAuth: true, requestContext } as const;
 
-  const settings = loadSettings();
+  // The configured settings file, not the default one: a caller that points the
+  // agent at another settings path must get the same pack/override resolution
+  // for observational memory as it does for the main model.
+  const settings = loadSettings(settingsPath);
   const roleOverride =
     role === 'observer' ? settings.models?.observerModelOverride : settings.models?.reflectorModelOverride;
   if (roleOverride) return resolveModel(roleOverride, resolveOptions);
@@ -55,22 +59,6 @@ function resolveOmRoleModelForRequest(
 
   const stateModelId = role === 'observer' ? state?.observerModelId : state?.reflectorModelId;
   return resolveModel(stateModelId ?? DEFAULT_OM_MODEL_ID, resolveOptions);
-}
-
-/**
- * Observer model function — reads the current observer model ID from
- * controller state via requestContext (now propagated by OM's agent.generate).
- */
-function getObserverModel({ requestContext }: { requestContext: RequestContext }) {
-  return resolveOmRoleModelForRequest('observer', requestContext);
-}
-
-/**
- * Reflector model function — reads the current reflector model ID from
- * controller state via requestContext (now propagated by OM's agent.generate).
- */
-function getReflectorModel({ requestContext }: { requestContext: RequestContext }) {
-  return resolveOmRoleModelForRequest('reflector', requestContext);
 }
 
 const DYNAMIC_AGENTS_MD_INSTRUCTION =
@@ -155,11 +143,20 @@ export function hasSubconsciousTools(vector: MastraVector | undefined, state: Ma
  * Reads OM thresholds from controller state via requestContext.
  * Model functions also read from requestContext (no mutable bridge needed).
  */
-export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector) {
+export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector, settingsPath?: string) {
   // Cache is scoped per storage instance (per getDynamicMemory call) so a
   // Memory bound to one storage is never reused after storage changes.
   let cachedMemory: Memory | null = null;
   let cachedMemoryKey: string | null = null;
+
+  // Observer/reflector model functions — read the current model ID from
+  // controller state via requestContext (propagated by OM's agent.generate).
+  // Bound here so the configured settings path reaches role overrides and pack
+  // memory-model resolution.
+  const getObserverModel = ({ requestContext }: { requestContext: RequestContext }) =>
+    resolveOmRoleModelForRequest('observer', requestContext, settingsPath);
+  const getReflectorModel = ({ requestContext }: { requestContext: RequestContext }) =>
+    resolveOmRoleModelForRequest('reflector', requestContext, settingsPath);
 
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
@@ -222,7 +219,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
         // accept fallback arrays.
         generateTitle: {
           model: ({ requestContext }) => {
-            const resolved = resolveOmRoleModelForRequest('observer', requestContext);
+            const resolved = getObserverModel({ requestContext });
             return Array.isArray(resolved) ? resolved[0]!.model : resolved;
           },
         },

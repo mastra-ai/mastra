@@ -679,7 +679,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     closeVector: vector instanceof LibSQLVector ? () => vector.close() : undefined,
   });
 
-  const memory = config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vector));
+  const memory =
+    config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vector, config?.settingsPath));
   // Only the default memory wiring registers the subconscious tools; a
   // caller-supplied memory is opaque here, so its prompt must not advertise them.
   const hasSubconscious =

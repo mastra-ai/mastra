@@ -769,6 +769,42 @@ describe('AuthStorage multi-account registry', () => {
     expect(slot?.enterpriseUrl).toBeUndefined();
   });
 
+  it('prefers the legacy slot for the active account when a legacy writer refreshed it', async () => {
+    const { storage, authPath } = makeStorage();
+    await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1', expires: FUTURE }, { label: 'Work' });
+    const work = storage.getActiveAccount(PROVIDER)!;
+
+    // An older build (or another worktree) refreshes the provider slot without
+    // rotating the refresh token, so `migrate()`'s token-change branch never
+    // reconciles the registry entry. The registry then holds stale access/expiry
+    // while the slot holds the live token.
+    const onDisk = readAuthJson(authPath);
+    onDisk[PROVIDER] = { type: 'oauth', refresh: 'r1', access: 'a1-slot-fresh', expires: FUTURE + 1 };
+    writeFileSync(authPath, JSON.stringify(onDisk), 'utf-8');
+
+    const snapshot = await storage.getOAuthCredential(PROVIDER, work.id);
+
+    // Slot credentials, registry identity.
+    expect(snapshot).toMatchObject({ access: 'a1-slot-fresh', accountInstanceId: work.id });
+  });
+
+  it('keeps registry credentials for an inactive selected account', async () => {
+    const { storage } = makeStorage();
+    await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1', expires: FUTURE }, { label: 'Work' });
+    const personal = await storage.addAccount(
+      PROVIDER,
+      { refresh: 'r2', access: 'a2', expires: FUTURE },
+      { label: 'Personal', activate: false },
+    );
+
+    // The slot carries Work's tokens; the inactive selection must not pick them
+    // up — that would send Personal's request with Work's credential.
+    await expect(storage.getOAuthCredential(PROVIDER, personal.id)).resolves.toMatchObject({
+      access: 'a2',
+      accountInstanceId: personal.id,
+    });
+  });
+
   it('logout removes the slot and every registered account', async () => {
     const { storage, authPath } = makeStorage();
     await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1', expires: FUTURE });
