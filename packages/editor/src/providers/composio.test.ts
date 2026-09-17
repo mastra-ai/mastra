@@ -215,6 +215,15 @@ describe('ComposioToolProvider — catalog allowlist', () => {
       search: 'send',
     });
   });
+
+  it('listTools surfaces catalog retrieval failures', async () => {
+    const integration = new ComposioToolProvider({ apiKey: 'k' });
+    await integration.listTools({ toolkit: 'gmail' }).catch(() => undefined);
+    const raw = getRawInstance();
+    raw.tools.getRawComposioTools.mockRejectedValue(new Error('catalog unavailable'));
+
+    await expect(integration.listTools({ toolkit: 'gmail' })).rejects.toThrow('catalog unavailable');
+  });
 });
 
 describe('ComposioToolProvider — resolveTools', () => {
