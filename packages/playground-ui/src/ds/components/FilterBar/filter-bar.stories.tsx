@@ -76,7 +76,7 @@ const meta: Meta = {
           '',
           '**Keyboard**: `↑/↓` move the highlight, `Enter`/`Tab` pick, `Esc`/`Backspace` step back. Empty input: `←` focuses the last chip, `Backspace` removes it. On a chip: `←/→` move across segments and chips, `Enter` edits, `Delete` removes. Multi-value (`in`): `Enter` toggles, `Ctrl/⌘+Enter` or **Done** commits.',
           '',
-          'Values are plain strings; the component has no business typing. `suggestions` can be a static list or a lazy resolver invoked only once the value step opens.',
+          'Values follow the field type (text, number, or boolean); multi-value operators produce arrays. `suggestions` can be a static list or a lazy resolver invoked only once the value step opens.',
         ].join('\n'),
       },
     },
@@ -112,7 +112,9 @@ function Demo({
       </FilterBar>
       {children?.(items)}
       {variant === 'input' && (
-        <pre className="bg-surface3 text-ui-xs text-neutral4 rounded-lg p-3">{JSON.stringify(items, null, 2)}</pre>
+        <pre className="bg-surface3 text-ui-xs text-neutral4 min-w-0 overflow-x-auto rounded-lg p-3">
+          {JSON.stringify(items, null, 2)}
+        </pre>
       )}
     </div>
   );
@@ -141,7 +143,7 @@ export const ButtonWithFilters: Story = {
       initial={[
         { id: '1', fieldId: 'status', operatorId: 'is', value: 'error' },
         { id: '2', fieldId: 'tags', operatorId: 'in', value: ['production', 'canary'] },
-        { id: '3', fieldId: 'duration', operatorId: 'gt', value: '1500' },
+        { id: '3', fieldId: 'duration', operatorId: 'gt', value: 1500 },
       ]}
     />
   ),
@@ -153,7 +155,7 @@ export const WithPrefilledFilters: Story = {
       initial={[
         { id: '1', fieldId: 'status', operatorId: 'is', value: 'error' },
         { id: '2', fieldId: 'tags', operatorId: 'in', value: ['production', 'canary'] },
-        { id: '3', fieldId: 'duration', operatorId: 'gt', value: '1500' },
+        { id: '3', fieldId: 'duration', operatorId: 'gt', value: 1500 },
         { id: '4', fieldId: 'traceId', operatorId: 'is-empty', value: '' },
       ]}
     />
@@ -240,26 +242,24 @@ export const CustomLayout: Story = {
       { id: '1', fieldId: 'status', operatorId: 'is-not', value: 'success' },
     ]);
     return (
-      <div className="grid gap-2">
-        <FilterBar
-          fields={FIELDS}
-          operators={DEFAULT_FILTER_OPERATORS}
-          value={items}
-          onValueChange={setItems}
-          className="rounded-lg"
-        >
+      <FilterBar
+        fields={FIELDS}
+        operators={DEFAULT_FILTER_OPERATORS}
+        value={items}
+        onValueChange={setItems}
+        className="gap-2"
+      >
+        <div className="flex w-full">
           <FilterBar.Input placeholder="Add a filter…" />
-        </FilterBar>
-        <div className="flex flex-wrap items-center gap-1">
-          {items.map(item => (
-            <FilterBar.Chip key={item.id} item={item}>
-              <FilterBar.Chip.Field />
-              <FilterBar.Chip.Value />
-              <FilterBar.Chip.Remove />
-            </FilterBar.Chip>
-          ))}
         </div>
-      </div>
+        {items.map(item => (
+          <FilterBar.Chip key={item.id} item={item}>
+            <FilterBar.Chip.Field />
+            <FilterBar.Chip.Value />
+            <FilterBar.Chip.Remove />
+          </FilterBar.Chip>
+        ))}
+      </FilterBar>
     );
   },
 };

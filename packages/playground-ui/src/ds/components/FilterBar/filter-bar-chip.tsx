@@ -217,6 +217,8 @@ type SegmentSearchInputProps<T> = {
   /** Leading icon. Defaults to a search glass; free-text editing uses a pencil. */
   icon?: LucideIcon;
   inputMode?: ComponentProps<'input'>['inputMode'];
+  validationMessage?: string;
+  validationMessageId?: string;
   onKeyDown?: (event: BaseUIEvent<KeyboardEvent<HTMLInputElement>>, highlighted: T | null) => void;
 };
 
@@ -224,6 +226,8 @@ function SegmentSearchInput<T>({
   placeholder,
   icon: Icon = SearchIcon,
   inputMode,
+  validationMessage,
+  validationMessageId,
   onKeyDown,
 }: SegmentSearchInputProps<T>) {
   const { highlighted } = useContext(SegmentPopupContext);
@@ -234,6 +238,8 @@ function SegmentSearchInput<T>({
         className={comboboxStyles.searchInput}
         placeholder={placeholder}
         inputMode={inputMode}
+        aria-invalid={validationMessage ? true : undefined}
+        aria-describedby={validationMessage ? validationMessageId : undefined}
         onKeyDown={event => onKeyDown?.(event, highlighted as T | null)}
       />
     </div>
@@ -493,7 +499,11 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
           isSelected={o => (step.isMany ? step.selected.includes(o.value) : String(chip.item.value) === o.value)}
           isLoading={step.isLoading}
           error={step.error}
-          emptyText={step.allowFreeText ? 'No suggestions — press Enter to use your text.' : 'No matching value.'}
+          emptyTextId={step.validationMessageId}
+          emptyText={
+            step.validationMessage ??
+            (step.allowFreeText ? 'No suggestions — press Enter to use your text.' : 'No matching value.')
+          }
         />
       )}
       {step.isMany && (
@@ -522,6 +532,8 @@ function FreeTextValueInput({
       <SegmentSearchInput<FilterBarOption>
         icon={step.hasSuggestions ? SearchIcon : PencilIcon}
         inputMode={inputMode}
+        validationMessage={step.validationMessage}
+        validationMessageId={step.validationMessageId}
         placeholder={
           step.hasSuggestions
             ? step.allowFreeText
@@ -536,6 +548,11 @@ function FreeTextValueInput({
           if (handled || (event.key === 'Enter' && highlightedOption === null)) event.preventBaseUIHandler();
         }}
       />
+      {!step.hasSuggestions && step.validationMessage && (
+        <ComboboxPrimitive.Status id={step.validationMessageId} className="text-ui-sm text-error px-3 py-1">
+          {step.validationMessage}
+        </ComboboxPrimitive.Status>
+      )}
       <ValueOptions step={step} onCancel={onCancel} />
     </>
   );

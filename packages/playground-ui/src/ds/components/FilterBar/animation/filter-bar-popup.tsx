@@ -32,7 +32,7 @@ export function FilterBarPopup({
         <ComboboxPrimitive.Popup
           className={cn(
             comboboxStyles.popup,
-            'max-w-[calc(100vw-2rem)] min-w-44',
+            'max-w-[min(var(--available-width),calc(100vw-2rem))]',
             'data-[closed]:animate-none data-[open]:animate-none',
             styles.popup,
           )}

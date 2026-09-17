@@ -49,7 +49,7 @@ function getInputPlaceholder(
 ) {
   if (step === 'field') return placeholder;
   if (step === 'operator') return 'Operator…';
-  if (canSearchAndCreate) return 'Search or type a value…';
+  if (canSearchAndCreate) return fieldType === 'number' ? 'Search or type a number…' : 'Search or type a value…';
   return fieldType === 'number' ? 'Number…' : 'Value…';
 }
 
@@ -230,6 +230,8 @@ export function FilterBarInput({
         if (!isButton) ctx.registerInput(el);
       }}
       aria-label={isButton ? inputPlaceholder : ariaLabel}
+      aria-invalid={valueStep.validationMessage ? true : undefined}
+      aria-describedby={valueStep.validationMessage ? valueStep.validationMessageId : undefined}
       spellCheck={false}
       data-slot="filter-bar-input"
       data-step={draft.step}
@@ -349,15 +351,22 @@ export function FilterBarInput({
               isSelected={o => valueStep.isMany && valueStep.selected.includes(o.value)}
               isLoading={valueStep.isLoading}
               error={valueStep.error}
+              emptyTextId={valueStep.validationMessageId}
               emptyText={
-                valueStep.allowFreeText ? 'No suggestions — press Enter to use your text.' : 'No matching value.'
+                valueStep.validationMessage ??
+                (valueStep.allowFreeText ? 'No suggestions — press Enter to use your text.' : 'No matching value.')
               }
             />
           )}
           {draft.step === 'value' && !valueStep.hasSuggestions && (
             <div className="flex items-center justify-between gap-2 py-1 pr-1 pl-[.9em]">
-              <Txt variant="ui-sm" className="text-neutral3">
-                Type a value
+              <Txt
+                id={valueStep.validationMessageId}
+                role={valueStep.validationMessage ? 'status' : undefined}
+                variant="ui-sm"
+                className={valueStep.validationMessage ? 'text-error' : 'text-neutral3'}
+              >
+                {valueStep.validationMessage ?? (field?.type === 'number' ? 'Type a number' : 'Type a value')}
               </Txt>
               <Button
                 size="xs"
