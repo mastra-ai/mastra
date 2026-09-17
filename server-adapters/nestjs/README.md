@@ -35,7 +35,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
   await app.listen(3000);
 }
 
@@ -47,6 +47,8 @@ bootstrap();
 `MastraModule.register()` accepts the Mastra instance and optional settings for the route prefix, rate limits, graceful shutdown, request body limits, stream heartbeat and redaction, tracing, request context parsing, tools, MCP transport, authentication, and per-route auth overrides.
 
 The module registers Mastra routes under `/api` by default. Because it uses a catch-all NestJS controller, either import `MastraModule` last or assign a dedicated prefix such as `/api/mastra`.
+
+Disable NestJS's default body parser when creating the application. `MastraModule` installs its own JSON parser so body limits, DELETE request bodies, scalar JSON, and route schema validation use the same adapter behavior.
 
 - [NestJS adapter reference](https://mastra.ai/reference/server/nestjs-adapter)
 

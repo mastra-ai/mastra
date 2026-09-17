@@ -12210,19 +12210,19 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'message/send';
+      method: 'message/send' | 'SendMessage';
       params: InputShared_Type_30;
     }
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'message/stream';
+      method: 'message/stream' | 'SendStreamingMessage';
       params: InputShared_Type_30;
     }
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/get';
+      method: 'tasks/get' | 'GetTask';
       params: {
         /** Task id */
         id: string;
@@ -12238,7 +12238,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/list';
+      method: 'tasks/list' | 'ListTasks';
       params: {
         tenant?: string | undefined;
         contextId?: string | undefined;
@@ -12253,7 +12253,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/cancel';
+      method: 'tasks/cancel' | 'CancelTask';
       params: {
         /** Task id */
         id: string;
@@ -12267,7 +12267,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/resubscribe';
+      method: 'tasks/resubscribe' | 'SubscribeToTask';
       params: {
         /** Task id */
         id: string;
@@ -12281,7 +12281,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/pushNotificationConfig/set';
+      method: 'tasks/pushNotificationConfig/set' | 'CreateTaskPushNotificationConfig';
       params: {
         /** Task id */
         taskId: string;
@@ -12291,7 +12291,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/pushNotificationConfig/get';
+      method: 'tasks/pushNotificationConfig/get' | 'GetTaskPushNotificationConfig';
       params: {
         /** Task id */
         id: string;
@@ -12307,7 +12307,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/pushNotificationConfig/list';
+      method: 'tasks/pushNotificationConfig/list' | 'ListTaskPushNotificationConfigs';
       params: {
         /** Task id */
         id: string;
@@ -12321,7 +12321,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/pushNotificationConfig/delete';
+      method: 'tasks/pushNotificationConfig/delete' | 'DeleteTaskPushNotificationConfig';
       params: {
         /** Task id */
         id: string;
@@ -12337,7 +12337,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'agent/getAuthenticatedExtendedCard';
+      method: 'agent/getAuthenticatedExtendedCard' | 'GetExtendedAgentCard';
     };
 
 export type PostA2aAgentId_Response = PostAgentsAgentIdGenerate_Response;

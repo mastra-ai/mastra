@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@mastra/core": "type-check-test",
+    "@mastra/mcp": "type-check-test",
     "@mastra/client-js": "type-check-test",
     "@mastra/auth": "type-check-test",
     "@mastra/auth-workos": "type-check-test",

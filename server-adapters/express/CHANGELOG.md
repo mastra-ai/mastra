@@ -4422,7 +4422,7 @@
   - Moved authentication helpers from deployer to `@mastra/server/auth`
 
   **Testing:**
-  - Added shared MCP route and transport test suites in `@internal/server-adapter-test-utils`
+  - Added shared MCP route and transport test suites in `@mastra/server-adapters-test-suite`
   - Added comprehensive MCP endpoint tests for both Hono and Express adapters
   - Added GitHub Actions workflow for server adapter CI testing
 
@@ -4806,7 +4806,7 @@
   - Moved authentication helpers from deployer to `@mastra/server/auth`
 
   **Testing:**
-  - Added shared MCP route and transport test suites in `@internal/server-adapter-test-utils`
+  - Added shared MCP route and transport test suites in `@mastra/server-adapters-test-suite`
   - Added comprehensive MCP endpoint tests for both Hono and Express adapters
   - Added GitHub Actions workflow for server adapter CI testing
 

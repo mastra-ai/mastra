@@ -13,7 +13,6 @@ import {
   TraceTimeRangeChip,
 } from '@mastra/playground-ui/domains/traces/components/trace-time-range-chip';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
-import { TracesLayout } from '@mastra/playground-ui/domains/traces/components/traces-layout';
 import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
 import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
 import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
@@ -239,17 +238,14 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // Tool mocks only make sense for agent runs — gate the "Add tool mocks to item" action
   // on the displayed root/anchor span being an agent.
   const isAgentTrace = anchorSpan?.entityType === 'agent';
-  // The side panel widens per column shown: Messages (agent turn) and/or span detail.
+  // The trace drawer widens per column shown: Messages (agent turn) and/or span detail.
   const hasMessagesColumn = !!getTraceThreadId(anchorSpan, anchorSpanId ?? undefined);
-  const hasDetailColumn = !!url.spanIdParam || !!featuredScore;
-  // The full thread view embeds its own columns (messages, spans, span detail), so it takes the whole frame.
+  const hasDetailColumn = !!url.spanIdParam;
   const isFullThreadOpen = !!url.traceIdParam && fullThreadTraceId === url.traceIdParam;
-  const sidePanelWidth =
-    isFullThreadOpen || (hasMessagesColumn && hasDetailColumn)
-      ? 'full'
-      : hasMessagesColumn || hasDetailColumn
-        ? 'wide'
-        : 'half';
+  const selectedTraceId =
+    url.traceIdParam && (url.listMode !== 'branches' || !!url.anchorSpanIdParam) ? url.traceIdParam : undefined;
+  const tracePanelSize =
+    hasMessagesColumn && hasDetailColumn ? 'full' : hasMessagesColumn || hasDetailColumn ? 'wide' : 'half';
 
   const filtersApplied =
     !!url.selectedEntityOption ||
@@ -343,90 +339,72 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     <PageLayout width="wide" height="full">
       {pageTopArea}
 
-      <TracesLayout
-        sidePanelWidth={sidePanelWidth}
-        listSlot={
-          <TracesListView
-            traces={traces}
-            isLoading={isTracesLoading}
-            isFetchingNextPage={isFetchingNextPage}
-            hasNextPage={hasNextPage}
-            setEndOfListElement={setEndOfListElement}
-            filtersApplied={filtersApplied}
-            featuredTraceId={url.traceIdParam}
-            isBranchesMode={url.listMode === 'branches'}
-            columnPreferences={displayedColumnPreferences}
-            usageByTraceId={traceUsage.data}
-            onTraceClick={trace => {
-              const isBranches = url.listMode === 'branches';
-              const isSameRow = isBranches
-                ? url.traceIdParam === trace.traceId && url.anchorSpanIdParam === trace.spanId
-                : url.traceIdParam === trace.traceId;
-              if (isSameRow) {
-                url.handleTraceClick('');
-                return;
-              }
-              // Branches mode: seed both anchorSpanId (the branch identity) and spanId (initial
-              // selected span = the anchor). Span nav inside the panel only mutates spanId after.
-              const branchSpanId = isBranches ? (trace.spanId ?? undefined) : undefined;
-              url.handleTraceClick(trace.traceId, branchSpanId, branchSpanId);
-            }}
-          />
+      <TracesListView
+        traces={traces}
+        isLoading={isTracesLoading}
+        isFetchingNextPage={isFetchingNextPage}
+        hasNextPage={hasNextPage}
+        setEndOfListElement={setEndOfListElement}
+        filtersApplied={filtersApplied}
+        featuredTraceId={url.traceIdParam}
+        isBranchesMode={url.listMode === 'branches'}
+        columnPreferences={displayedColumnPreferences}
+        usageByTraceId={traceUsage.data}
+        onTraceClick={trace => {
+          const isBranches = url.listMode === 'branches';
+          const isSameRow = isBranches
+            ? url.traceIdParam === trace.traceId && url.anchorSpanIdParam === trace.spanId
+            : url.traceIdParam === trace.traceId;
+          if (isSameRow) {
+            url.handleTraceClick('');
+            return;
+          }
+          // Branches mode: seed both anchorSpanId (the branch identity) and spanId (initial
+          // selected span = the anchor). Span nav inside the panel only mutates spanId after.
+          const branchSpanId = isBranches ? (trace.spanId ?? undefined) : undefined;
+          url.handleTraceClick(trace.traceId, branchSpanId, branchSpanId);
+        }}
+      />
+
+      <TraceSpanPanel
+        title="Trace details"
+        size={tracePanelSize}
+        traceId={selectedTraceId}
+        spans={traceSpans}
+        anchorSpanId={anchorSpanId}
+        usage={selectedTraceUsageSummary}
+        isLoadingSpans={isLoadingTraceSpans}
+        selectedSpanId={url.spanIdParam ?? null}
+        onClose={() => {
+          setFullThreadTraceId(null);
+          url.handleTraceClose();
+        }}
+        isFullThreadOpen={isFullThreadOpen}
+        onFullThreadOpenChange={open => setFullThreadTraceId(open ? (url.traceIdParam ?? null) : null)}
+        onSpanSelect={id => url.handleSpanChange(id ?? null)}
+        onSpanClose={url.handleSpanClose}
+        onSaveAsDatasetItem={args => setDatasetDialogTarget(args)}
+        onAddTraceMocksToItem={isAgentTrace ? args => setAddMocksTarget(args) : undefined}
+        initialSpanId={url.spanIdParam}
+        onPrevious={handlePreviousTrace}
+        onNext={handleNextTrace}
+        showPartialThread
+        featuredSpanIds={url.highlightSpanIdsParam}
+        onHighlightSpans={url.handleHighlightSpans}
+        feedbackTabBadge={<NeedsReviewDot feedback={traceFeedbackData?.feedback} />}
+        feedbackTabSlot={({ traceId: tid }) => <TraceFeedbackTab traceId={tid} />}
+        scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
+        scoresTabSlot={({ traceId: tid, rootSpanId }) =>
+          rootSpanId ? <TraceScoresTab traceId={tid} spanId={rootSpanId} onScoreSelect={url.handleScoreChange} /> : null
         }
-        tracePanelSlot={
-          url.traceIdParam && (url.listMode !== 'branches' || url.anchorSpanIdParam) ? (
-            <TraceSpanPanel
-              key={`${url.traceIdParam}:${url.anchorSpanIdParam ?? ''}`}
-              traceId={url.traceIdParam}
-              spans={traceSpans}
-              anchorSpanId={anchorSpanId}
-              usage={selectedTraceUsageSummary}
-              isLoadingSpans={isLoadingTraceSpans}
-              selectedSpanId={url.spanIdParam ?? null}
-              onClose={() => {
-                setFullThreadTraceId(null);
-                url.handleTraceClose();
-              }}
-              isFullThreadOpen={isFullThreadOpen}
-              onFullThreadOpenChange={open => setFullThreadTraceId(open ? (url.traceIdParam ?? null) : null)}
-              onSpanSelect={id => url.handleSpanChange(id ?? null)}
-              onSpanClose={url.handleSpanClose}
-              onSaveAsDatasetItem={args => setDatasetDialogTarget(args)}
-              onAddTraceMocksToItem={isAgentTrace ? args => setAddMocksTarget(args) : undefined}
-              initialSpanId={url.spanIdParam}
-              onPrevious={handlePreviousTrace}
-              onNext={handleNextTrace}
-              showPartialThread
-              featuredSpanIds={url.highlightSpanIdsParam}
-              onHighlightSpans={url.handleHighlightSpans}
-              feedbackTabBadge={<NeedsReviewDot feedback={traceFeedbackData?.feedback} />}
-              feedbackTabSlot={({ traceId: tid }) => <TraceFeedbackTab traceId={tid} />}
-              scorePanelSlot={
-                featuredScore ? (
-                  <ScoreDataPanel
-                    className="rounded-none border-0 bg-transparent"
-                    score={featuredScore}
-                    onClose={() => url.handleScoreChange(null)}
-                  />
-                ) : undefined
-              }
-              scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
-              scoresTabSlot={({ traceId: tid, rootSpanId }) =>
-                rootSpanId ? (
-                  <TraceScoresTab traceId={tid} spanId={rootSpanId} onScoreSelect={url.handleScoreChange} />
-                ) : null
-              }
-              spanActiveTab={url.spanTabParam ?? 'details'}
-              onSpanTabChange={tab => url.handleSpanTabChange(tab as SpanTab)}
-              spanFeedbackTabBadge={<NeedsReviewDot feedback={spanFeedbackData?.feedback} />}
-              spanFeedbackTabSlot={({ traceId: tid, spanId: sid }) =>
-                tid && sid ? <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} /> : null
-              }
-              spanPanelClassName="rounded-none border-0 bg-transparent"
-            />
-          ) : null
+        spanActiveTab={url.spanTabParam ?? 'details'}
+        onSpanTabChange={tab => url.handleSpanTabChange(tab as SpanTab)}
+        spanFeedbackTabBadge={<NeedsReviewDot feedback={spanFeedbackData?.feedback} />}
+        spanFeedbackTabSlot={({ traceId: tid, spanId: sid }) =>
+          tid && sid ? <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} /> : null
         }
       />
+      <ScoreDataPanel depth={2} score={featuredScore} onClose={() => url.handleScoreChange(null)} />
 
       <TraceAsItemDialog
         rootSpanId={datasetDialogTarget?.rootSpanId}
