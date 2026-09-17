@@ -266,8 +266,10 @@ describe('A2A Handler', () => {
         }),
       } as any);
 
-      expect(response.url).toBe('http://localhost:4111/api/a2a/test-agent');
-      expect(response.capabilities.pushNotifications).toBe(true);
+      expect(response.headers.get('Vary')).toBe('A2A-Version');
+      const card = await response.json();
+      expect(card.url).toBe('http://localhost:4111/api/a2a/test-agent');
+      expect(card.capabilities.pushNotifications).toBe(true);
     });
 
     it('should sign the agent card when A2A signing is configured', async () => {
@@ -3984,6 +3986,49 @@ describe('A2A Handler', () => {
       });
 
       expect(() => resolveA2AProtocolVersion(request)).toThrow('Version not supported: 2.0');
+    });
+  });
+
+  describe('protocol discovery', () => {
+    let agent: MockAgent;
+    let mastra: Mastra;
+
+    beforeEach(() => {
+      agent = new MockAgent({
+        id: 'canonical-agent',
+        name: 'Discovery agent',
+        instructions: 'Test discovery',
+        model: openai('gpt-4o'),
+      });
+      mastra = createMockMastra({ registeredAgent: agent });
+    });
+
+    it('selects distinct legacy and v1 cards without changing metadata version', async () => {
+      const options = {
+        mastra,
+        agentId: agent.id,
+        requestContext: new RequestContext(),
+        executionUrl: 'https://example.com/api/a2a/canonical-agent',
+        version: 'release-2',
+      };
+      const legacy = await getAgentCardByIdHandler({ ...options, protocolVersion: '0.3' });
+      const v1 = await getAgentCardByIdHandler({ ...options, protocolVersion: '1.0' });
+      expect(legacy).toMatchObject({ protocolVersion: '0.3.0', url: options.executionUrl, version: 'release-2' });
+      expect(legacy).not.toHaveProperty('supportedInterfaces');
+      expect(v1.version).toBe('release-2');
+      expect(v1.supportedInterfaces).toEqual([
+        { url: options.executionUrl, protocolBinding: 'JSONRPC', protocolVersion: '0.3' },
+        { url: options.executionUrl, protocolBinding: 'JSONRPC', protocolVersion: '1.0' },
+      ]);
+      for (const field of [
+        'url',
+        'protocolVersion',
+        'additionalInterfaces',
+        'security',
+        'supportsAuthenticatedExtendedCard',
+      ]) {
+        expect(v1).not.toHaveProperty(field);
+      }
     });
   });
 

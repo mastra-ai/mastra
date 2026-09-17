@@ -207,12 +207,12 @@ type InputShared_Auxiliary_731 = {
   children?: InputShared_Auxiliary_731[] | undefined;
 };
 
-type Shared_Auxiliary_728 = {
+type Shared_Auxiliary_739 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_728[] | undefined;
+  children?: Shared_Auxiliary_739[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -4026,7 +4026,7 @@ type Shared_Type_78 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_728[] | undefined;
+  files?: Shared_Auxiliary_739[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -12133,56 +12133,108 @@ export interface GetEmbedders_RouteContract {
 // ============================================================================
 export type GetWellKnownAgentIdAgentCardJson_PathParams = GetAgentsAgentId_PathParams;
 
-export type GetWellKnownAgentIdAgentCardJson_Response = {
-  additionalInterfaces?: unknown[] | undefined;
-  name: string;
-  description: string;
-  url: string;
-  protocolVersion: string;
-  provider?:
-    | {
-        organization: string;
+export type GetWellKnownAgentIdAgentCardJson_Response =
+  | {
+      additionalInterfaces?: unknown[] | undefined;
+      name: string;
+      description: string;
+      url: string;
+      protocolVersion: string;
+      provider?:
+        | {
+            organization: string;
+            url: string;
+          }
+        | undefined;
+      security?:
+        | {
+            [key: string]: string[];
+          }[]
+        | undefined;
+      securitySchemes?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      version: string;
+      capabilities: {
+        extensions?: unknown[] | undefined;
+        streaming?: boolean | undefined;
+        pushNotifications?: boolean | undefined;
+        stateTransitionHistory?: boolean | undefined;
+      };
+      defaultInputModes: string[];
+      defaultOutputModes: string[];
+      supportsAuthenticatedExtendedCard?: boolean | undefined;
+      signatures?:
+        | {
+            protected: string;
+            signature: string;
+            header?:
+              | {
+                  [key: string]: unknown;
+                }
+              | undefined;
+          }[]
+        | undefined;
+      skills: {
+        id: string;
+        name: string;
+        description: string;
+        tags?: string[] | undefined;
+      }[];
+    }
+  | {
+      name: string;
+      description?: string | undefined;
+      provider?:
+        | {
+            organization: string;
+            url: string;
+          }
+        | undefined;
+      securitySchemes?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      version: string;
+      capabilities: {
+        streaming?: boolean | undefined;
+        pushNotifications?: boolean | undefined;
+        extendedAgentCard?: boolean | undefined;
+        extensions?: unknown[] | undefined;
+      };
+      defaultInputModes?: string[] | undefined;
+      defaultOutputModes?: string[] | undefined;
+      signatures?:
+        | {
+            protected: string;
+            signature: string;
+            header?:
+              | {
+                  [key: string]: unknown;
+                }
+              | undefined;
+          }[]
+        | undefined;
+      skills?:
+        | {
+            id: string;
+            name: string;
+            description?: string | undefined;
+            tags?: string[] | undefined;
+            examples?: string[] | undefined;
+            inputModes?: string[] | undefined;
+            outputModes?: string[] | undefined;
+          }[]
+        | undefined;
+      supportedInterfaces: {
         url: string;
-      }
-    | undefined;
-  security?:
-    | {
-        [key: string]: string[];
-      }[]
-    | undefined;
-  securitySchemes?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  version: string;
-  capabilities: {
-    extensions?: unknown[] | undefined;
-    streaming?: boolean | undefined;
-    pushNotifications?: boolean | undefined;
-    stateTransitionHistory?: boolean | undefined;
-  };
-  defaultInputModes: string[];
-  defaultOutputModes: string[];
-  supportsAuthenticatedExtendedCard?: boolean | undefined;
-  signatures?:
-    | {
-        protected: string;
-        signature: string;
-        header?:
-          | {
-              [key: string]: unknown;
-            }
-          | undefined;
-      }[]
-    | undefined;
-  skills: {
-    id: string;
-    name: string;
-    description: string;
-    tags?: string[] | undefined;
-  }[];
-};
+        protocolBinding: 'JSONRPC';
+        protocolVersion: '0.3' | '1.0';
+      }[];
+    };
 
 export type GetWellKnownAgentIdAgentCardJson_Request = Simplify<
   (GetWellKnownAgentIdAgentCardJson_PathParams extends never
@@ -12198,7 +12250,7 @@ export interface GetWellKnownAgentIdAgentCardJson_RouteContract {
   body: never;
   request: GetWellKnownAgentIdAgentCardJson_Request;
   response: GetWellKnownAgentIdAgentCardJson_Response;
-  responseType: 'json';
+  responseType: 'datastream-response';
 }
 
 // ============================================================================
