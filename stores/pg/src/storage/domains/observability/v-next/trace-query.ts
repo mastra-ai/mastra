@@ -17,7 +17,7 @@ import type {
 
 import type { DbClient, TxClient } from '../../../client';
 import { qualifiedTable, TABLE_FEEDBACK_EVENTS, TABLE_SCORE_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
-import { currentScoresRelation } from './scores';
+import { latestScorePredicate } from './scores';
 
 type SqlFragment = { sql: string; values: unknown[] };
 type FieldRegistry<TField extends string> = Record<TField, string>;
@@ -408,9 +408,10 @@ function compilePostgresTraceScope(
       s."entityVersionId",
       s."parentEntityVersionId",
       s."rootEntityVersionId"
-    FROM ${currentScoresRelation(scoreTable, 's')}
+    FROM ${scoreTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)
+      AND ${latestScorePredicate(scoreTable)}
   )`);
   }
   if (relationCollections.has('feedback')) {

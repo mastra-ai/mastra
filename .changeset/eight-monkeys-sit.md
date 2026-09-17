@@ -2,4 +2,4 @@
 '@mastra/pg': patch
 ---
 
-Fixed rewritten observability scores so reads and trace predicates consistently use the latest value for each score ID.
+Fixed rewritten observability scores so filtered reads and trace predicates consistently return the latest value for each score ID without globally deduplicating score history.

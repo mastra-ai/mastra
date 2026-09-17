@@ -34,6 +34,8 @@ export const TABLE_TRACE_BRANCHES_DELTA = 'mastra_trace_branches_delta';
 export const TABLE_METRIC_EVENTS = 'mastra_metric_events';
 export const TABLE_LOG_EVENTS = 'mastra_log_events';
 export const TABLE_SCORE_EVENTS = 'mastra_score_events';
+export const TABLE_SCORE_EVENTS_CURRENT = 'mastra_score_events_current';
+export const TABLE_SCORE_EVENTS_CURRENT_BACKFILL = 'mastra_score_events_current_backfill';
 export const TABLE_FEEDBACK_EVENTS = 'mastra_feedback_events';
 export const TABLE_DELETION_REQUESTS = 'mastra_deletion_requests';
 export const TABLE_METRIC_EVENTS_DELTA = 'mastra_metric_events_delta';
@@ -54,6 +56,7 @@ export const MV_TRACE_BRANCHES_DELTA = 'mastra_mv_trace_branches_delta';
 export const MV_METRIC_EVENTS_DELTA = 'mastra_mv_metric_events_delta';
 export const MV_LOG_EVENTS_DELTA = 'mastra_mv_log_events_delta';
 export const MV_SCORE_EVENTS_DELTA = 'mastra_mv_score_events_delta';
+export const MV_SCORE_EVENTS_CURRENT = 'mastra_mv_score_events_current';
 export const MV_FEEDBACK_EVENTS_DELTA = 'mastra_mv_feedback_events_delta';
 export const MV_DISCOVERY_VALUES = 'mastra_mv_discovery_values';
 export const MV_DISCOVERY_PAIRS = 'mastra_mv_discovery_pairs';
@@ -661,20 +664,54 @@ FROM (
 // score_events — ReplacingMergeTree history with durable per-score write order
 // ---------------------------------------------------------------------------
 
-export const SCORE_EVENTS_DDL = `
-CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
-  -- Timestamp
-  timestamp          DateTime64(3, 'UTC'),
+export const SCORE_EVENT_COLUMN_NAMES = [
+  'timestamp',
+  'scoreId',
+  'writeVersion',
+  'traceId',
+  'spanId',
+  'experimentId',
+  'scoreTraceId',
+  'entityType',
+  'entityId',
+  'entityName',
+  'entityVersionId',
+  'parentEntityVersionId',
+  'parentEntityType',
+  'parentEntityId',
+  'parentEntityName',
+  'rootEntityVersionId',
+  'rootEntityType',
+  'rootEntityId',
+  'rootEntityName',
+  'userId',
+  'organizationId',
+  'resourceId',
+  'runId',
+  'sessionId',
+  'threadId',
+  'requestId',
+  'environment',
+  'executionSource',
+  'serviceName',
+  'scorerId',
+  'scorerVersion',
+  'scoreSource',
+  'score',
+  'reason',
+  'tags',
+  'metadata',
+  'scope',
+] as const;
 
-  -- IDs
+const SCORE_EVENT_COLUMNS_DDL = `
+  timestamp          DateTime64(3, 'UTC'),
   scoreId            String,
   writeVersion       UInt64 DEFAULT 0,
   traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
   scoreTraceId       Nullable(String),
-
-  -- Entity hierarchy
   entityType         LowCardinality(Nullable(String)),
   entityId           Nullable(String),
   entityName         Nullable(String),
@@ -687,8 +724,6 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
   rootEntityType     LowCardinality(Nullable(String)),
   rootEntityId       Nullable(String),
   rootEntityName     Nullable(String),
-
-  -- Context
   userId             Nullable(String),
   organizationId     Nullable(String),
   resourceId         Nullable(String),
@@ -699,31 +734,51 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
   environment        LowCardinality(Nullable(String)),
   executionSource    LowCardinality(Nullable(String)),
   serviceName        LowCardinality(Nullable(String)),
-
-  -- Scorer identity
   scorerId           LowCardinality(String),
   scorerVersion      LowCardinality(Nullable(String)),
   scoreSource        LowCardinality(Nullable(String)),
-
-  -- Score value
   score              Float64,
-
-  -- Information-only
   reason             Nullable(String),
-
-  -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
-
-  -- Information-only JSON payloads
   metadata           Nullable(String),
-  scope              Nullable(String),
+  scope              Nullable(String)
+`;
 
+export const SCORE_EVENTS_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
+${SCORE_EVENT_COLUMNS_DDL},
   INDEX idx_scoreId scoreId TYPE bloom_filter(0.01) GRANULARITY 1
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
 ORDER BY (traceId, timestamp, scoreId)
 SETTINGS allow_nullable_key = 1
+`;
+
+export const SCORE_EVENTS_CURRENT_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS_CURRENT} (
+${SCORE_EVENT_COLUMNS_DDL}
+)
+ENGINE = ReplacingMergeTree(writeVersion)
+PARTITION BY cityHash64(scoreId) % 64
+ORDER BY scoreId
+`;
+
+export const SCORE_EVENTS_CURRENT_BACKFILL_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS_CURRENT_BACKFILL} (
+  marker String,
+  completedAt DateTime64(3, 'UTC')
+)
+ENGINE = ReplacingMergeTree(completedAt)
+ORDER BY marker
+`;
+
+export const SCORE_EVENTS_CURRENT_MV_DDL = `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_SCORE_EVENTS_CURRENT}
+TO ${TABLE_SCORE_EVENTS_CURRENT}
+AS
+SELECT ${SCORE_EVENT_COLUMN_NAMES.join(', ')}
+FROM ${TABLE_SCORE_EVENTS}
 `;
 
 export function buildScoreEventsDeltaDDL(): string {
@@ -1068,6 +1123,8 @@ export const BASE_TABLE_DDL = [
   METRIC_EVENTS_DDL,
   LOG_EVENTS_DDL,
   SCORE_EVENTS_DDL,
+  SCORE_EVENTS_CURRENT_DDL,
+  SCORE_EVENTS_CURRENT_BACKFILL_DDL,
   FEEDBACK_EVENTS_DDL,
   DELETION_REQUESTS_DDL,
   DISCOVERY_VALUES_DDL,
@@ -1089,7 +1146,7 @@ export function buildAllTableDDL(): string[] {
   return [...BASE_TABLE_DDL, ...buildDeltaTableDDL()];
 }
 
-export const BASE_MV_DDL = [TRACE_ROOTS_MV_DDL, TRACE_BRANCHES_MV_DDL];
+export const BASE_MV_DDL = [TRACE_ROOTS_MV_DDL, TRACE_BRANCHES_MV_DDL, SCORE_EVENTS_CURRENT_MV_DDL];
 
 export function buildDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string[] {
   return [
@@ -1211,6 +1268,8 @@ export const ALL_TABLE_NAMES = [
   TABLE_METRIC_EVENTS,
   TABLE_LOG_EVENTS,
   TABLE_SCORE_EVENTS,
+  TABLE_SCORE_EVENTS_CURRENT,
+  TABLE_SCORE_EVENTS_CURRENT_BACKFILL,
   TABLE_FEEDBACK_EVENTS,
   TABLE_DELETION_REQUESTS,
   TABLE_METRIC_EVENTS_DELTA,
@@ -1254,6 +1313,7 @@ const SIGNAL_TTL_COLUMNS: Record<string, string> = {
   [TABLE_METRIC_EVENTS]: 'timestamp',
   [TABLE_LOG_EVENTS]: 'timestamp',
   [TABLE_SCORE_EVENTS]: 'timestamp',
+  [TABLE_SCORE_EVENTS_CURRENT]: 'timestamp',
   [TABLE_FEEDBACK_EVENTS]: 'timestamp',
 };
 
@@ -1262,7 +1322,7 @@ const SIGNAL_TO_TABLES: Record<keyof RetentionConfig, string[]> = {
   tracing: [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_BRANCHES],
   logs: [TABLE_LOG_EVENTS],
   metrics: [TABLE_METRIC_EVENTS],
-  scores: [TABLE_SCORE_EVENTS],
+  scores: [TABLE_SCORE_EVENTS, TABLE_SCORE_EVENTS_CURRENT],
   feedback: [TABLE_FEEDBACK_EVENTS],
 };
 

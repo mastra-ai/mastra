@@ -24,7 +24,7 @@ import { parseFieldKey } from '@mastra/core/utils';
 
 import { isReplicationConfigured } from '../../../db/replication';
 import type { ClickhouseReplicationConfig } from '../../../db/replication';
-import { TABLE_SCORE_EVENTS, TABLE_SCORE_EVENTS_DELTA } from './ddl';
+import { TABLE_SCORE_EVENTS, TABLE_SCORE_EVENTS_CURRENT, TABLE_SCORE_EVENTS_DELTA } from './ddl';
 import { recordDeletionRequest } from './deletion-requests';
 import { buildPaginationClause, buildScoresFilterConditions, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
@@ -125,14 +125,10 @@ function toWhereClause(filter: FilterResult): string {
 
 export function currentScoresRelation(sourcePredicate?: string): string {
   const whereClause = sourcePredicate ? `WHERE ${sourcePredicate}` : '';
-  // FINAL resolves exact sorting-key duplicates before this projection runs.
-  // The fingerprint only stabilizes ties between physically distinct rows that survive FINAL.
   return `(
-    SELECT *, cityHash64(tuple(*)) AS _currentScoreFingerprint
-    FROM ${TABLE_SCORE_EVENTS} FINAL
+    SELECT *
+    FROM ${TABLE_SCORE_EVENTS_CURRENT} FINAL
     ${whereClause}
-    ORDER BY scoreId, writeVersion DESC, timestamp DESC, _currentScoreFingerprint DESC
-    LIMIT 1 BY scoreId
   )`;
 }
 
@@ -269,11 +265,14 @@ export async function deleteScores(
     params.delResourceId = args.resourceId;
   }
 
-  await client.command({
-    query: `DELETE FROM ${TABLE_SCORE_EVENTS} WHERE ${conditions.join(' AND ')}`,
-    query_params: params,
-    clickhouse_settings: { lightweight_deletes_sync: isReplicationConfigured(replication) ? '2' : '1' },
-  });
+  const clickhouse_settings = { lightweight_deletes_sync: isReplicationConfigured(replication) ? '2' : '1' };
+  for (const table of [TABLE_SCORE_EVENTS_CURRENT, TABLE_SCORE_EVENTS]) {
+    await client.command({
+      query: `DELETE FROM ${table} WHERE ${conditions.join(' AND ')}`,
+      query_params: params,
+      clickhouse_settings,
+    });
+  }
 }
 
 // ============================================================================
