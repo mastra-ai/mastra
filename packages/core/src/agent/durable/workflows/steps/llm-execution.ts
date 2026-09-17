@@ -405,6 +405,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 ? {
                     schema: structuredOutputConfig.schema,
                     jsonPromptInjection: structuredOutputConfig.jsonPromptInjection,
+                    instructions: structuredOutputConfig.instructions,
                   }
                 : undefined;
 

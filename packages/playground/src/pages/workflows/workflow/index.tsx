@@ -9,7 +9,6 @@ import { Panel } from 'react-resizable-panels';
 import { useParams } from 'react-router';
 import { WorkflowStepDetailContent } from '@/domains/workflows/components/workflow-step-detail';
 import { useWorkflowStepDetail } from '@/domains/workflows/context/workflow-step-detail-context';
-import { WorkflowStepDetailProvider } from '@/domains/workflows/context/workflow-step-detail-provider';
 import { WorkflowGraph } from '@/domains/workflows/workflow/workflow-graph';
 import { WorkflowSuspendedOverlay } from '@/domains/workflows/workflow/workflow-suspended-overlay';
 import { WorkflowTimeline } from '@/domains/workflows/workflow/workflow-timeline';
@@ -85,9 +84,5 @@ export const Workflow = () => {
     );
   }
 
-  return (
-    <WorkflowStepDetailProvider>
-      <WorkflowContent workflowId={workflowId!} workflow={workflow ?? undefined} isLoading={isLoading} />
-    </WorkflowStepDetailProvider>
-  );
+  return <WorkflowContent workflowId={workflowId!} workflow={workflow ?? undefined} isLoading={isLoading} />;
 };

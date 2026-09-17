@@ -10,6 +10,7 @@ import type {
   Task,
   TaskPushNotificationConfig,
 } from '@mastra/core/a2a/client';
+import { MastraA2AError } from '@mastra/core/a2a/client';
 import {
   CancelTaskRequest,
   GetTaskRequest,
@@ -20,6 +21,7 @@ import {
 import canonicalize from 'canonicalize';
 import { CompactSign, base64url, exportJWK } from 'jose';
 import { describe, it, beforeEach, afterEach, expect, expectTypeOf } from 'vitest';
+import { MastraClient } from '../client';
 import { MastraClientError } from '../types';
 import { A2A, A2AV1 } from './a2a';
 import type { A2AStreamEventData } from './a2a';
@@ -732,6 +734,117 @@ describe('A2AV1', () => {
     expect(receivedBody).toMatchObject({ jsonrpc: '2.0', id: expect.any(String), method, params });
     const expectedResult = 'task' in response ? { payload: { $case: 'task', value: task } } : task;
     expect(result).toMatchObject(streaming ? [expectedResult] : expectedResult);
+  });
+
+  const config = {
+    tenant: 'tenant-1',
+    id: 'config-1',
+    taskId: 'task-1',
+    url: 'https://example.com/callback',
+    token: 'callback-token',
+    authentication: { scheme: 'Bearer', credentials: 'callback-secret' },
+  };
+  const identifier = { tenant: 'tenant-1', taskId: 'task-1', id: 'config-1' };
+  const pagination = { tenant: 'tenant-1', taskId: 'task-1', pageSize: 2, pageToken: 'page-1' };
+  const operations = [
+    {
+      method: 'CreateTaskPushNotificationConfig',
+      params: config,
+      result: config,
+      expected: config,
+      invoke: (client: A2AV1) => client.createTaskPushNotificationConfig(config),
+    },
+    {
+      method: 'GetTaskPushNotificationConfig',
+      params: identifier,
+      result: config,
+      expected: config,
+      invoke: (client: A2AV1) => client.getTaskPushNotificationConfig(identifier),
+    },
+    {
+      method: 'ListTaskPushNotificationConfigs',
+      params: pagination,
+      result: { configs: [config], nextPageToken: 'page-2' },
+      expected: { configs: [config], nextPageToken: 'page-2' },
+      invoke: (client: A2AV1) => client.listTaskPushNotificationConfigs(pagination),
+    },
+    {
+      method: 'DeleteTaskPushNotificationConfig',
+      params: identifier,
+      result: {},
+      expected: undefined,
+      invoke: (client: A2AV1) => client.deleteTaskPushNotificationConfig(identifier),
+    },
+  ];
+
+  it.each(operations)('sends and decodes $method using the v1 wire contract', async operation => {
+    let receivedBody: unknown;
+    let receivedPath: string | undefined;
+    let receivedMethod: string | undefined;
+    let receivedVersion: string | string[] | undefined;
+    server.on('request', (req, res) => {
+      receivedPath = req.url;
+      receivedMethod = req.method;
+      receivedVersion = req.headers['a2a-version'];
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk;
+      });
+      req.on('end', () => {
+        const request = JSON.parse(body);
+        receivedBody = request;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: operation.result }));
+      });
+    });
+
+    const client = new MastraClient({ baseUrl: serverUrl }).getA2AV1('test-agent');
+    expect(await operation.invoke(client)).toEqual(operation.expected);
+    expect(receivedPath).toBe('/api/a2a/test-agent');
+    expect(receivedMethod).toBe('POST');
+    expect(receivedVersion).toBe('1.0');
+    expect(receivedBody).toEqual({
+      jsonrpc: '2.0',
+      id: expect.any(String),
+      method: operation.method,
+      params: operation.params,
+    });
+  });
+
+  it.each(operations)('preserves JSON-RPC errors from $method', async operation => {
+    server.on('request', (req, res) => {
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk;
+      });
+      req.on('end', () => {
+        const request = JSON.parse(body);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: request.id,
+            error: { code: -32001, message: 'Task not found', data: { taskId: 'task-1' } },
+          }),
+        );
+      });
+    });
+    const client = new MastraClient({ baseUrl: serverUrl }).getA2AV1('test-agent');
+    const response = operation.invoke(client);
+    await expect(response).rejects.toBeInstanceOf(MastraA2AError);
+    await expect(response).rejects.toMatchObject({ code: -32001, message: 'Task not found' });
+  });
+
+  it('decodes an empty config list with default pagination fields', async () => {
+    server.on('request', (req, res) => {
+      req.resume();
+      req.on('end', () => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ jsonrpc: '2.0', id: 'empty', result: {} }));
+      });
+    });
+    const client = new A2AV1({ baseUrl: serverUrl }, 'test-agent');
+    expect(await client.listTaskPushNotificationConfigs(pagination)).toEqual({ configs: [], nextPageToken: '' });
   });
 
   it('sends the v1 protocol header and serializes list tasks requests', async () => {

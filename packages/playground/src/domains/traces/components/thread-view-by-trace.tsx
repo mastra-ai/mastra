@@ -1,11 +1,9 @@
-import type { LightSpanRecord } from '@mastra/core/storage';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ThreadTrace, useThreadTraceRow } from '@mastra/playground-ui/domains/traces/components/thread-trace';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
-import { useTraces } from '@mastra/playground-ui/domains/traces/hooks/use-traces';
 import { ExternalLinkIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 
 import { NeedsReviewDot } from '@/domains/traces/components/needs-review-dot';
@@ -13,6 +11,7 @@ import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
 import { useThreadRailTurns } from '@/domains/traces/hooks/use-thread-rail-turns';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
+import { useTracesListSource } from '@/pages/traces/hooks/use-traces-list-source';
 
 export interface ThreadViewByTraceProps {
   threadId: string;
@@ -24,11 +23,18 @@ export interface ThreadViewByTraceProps {
  * its detail panel on the side so the conversation stays readable.
  */
 export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
-  const filters = useMemo(() => ({ threadId }), [threadId]);
-  const { data: tracesData, isLoading, setEndOfListElement, error } = useTraces({ filters });
-
-  // The list comes back newest-first; a conversation reads oldest-first.
-  const traces = useMemo(() => [...(tracesData?.spans ?? [])].reverse(), [tracesData]);
+  const { rows, isLoading, setEndOfListElement, error } = useTracesListSource({
+    initialAutoRefetch: false,
+    query: now => ({
+      timeRange: {
+        from: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+        to: now.toISOString(),
+      },
+      where: { op: 'eq', left: { path: 'threadId' }, right: { literal: threadId } },
+      orderBy: [{ field: 'startedAt', direction: 'asc' }],
+    }),
+  });
+  const traceIds = rows.map(trace => trace.traceId);
 
   if (error) {
     return (
@@ -48,7 +54,7 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
     );
   }
 
-  if (traces.length === 0) {
+  if (traceIds.length === 0) {
     return (
       <div className="flex h-full items-center justify-center p-4">
         <Txt variant="ui-md" className="text-neutral3">
@@ -58,17 +64,16 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
     );
   }
 
-  return <LoadedThreadViewByTrace traces={traces} setEndOfListElement={setEndOfListElement} />;
+  return <LoadedThreadViewByTrace key={threadId} traceIds={traceIds} setEndOfListElement={setEndOfListElement} />;
 }
 
 interface LoadedThreadViewByTraceProps {
-  traces: LightSpanRecord[];
+  traceIds: string[];
   setEndOfListElement: (node: HTMLDivElement | null) => void;
 }
 
 /** Mounts once the first page is in, so state seeded from `traces` at mount only sees that page. */
-function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadViewByTraceProps) {
-  const traceIds = useMemo(() => traces.map(trace => trace.traceId), [traces]);
+function LoadedThreadViewByTrace({ traceIds, setEndOfListElement }: LoadedThreadViewByTraceProps) {
   const railTurns = useThreadRailTurns(traceIds);
 
   // "View full thread" on the traces page lands here with the originating trace: that row starts
@@ -77,21 +82,19 @@ function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadVi
   const [searchParams] = useSearchParams();
   const [anchorTraceId] = useState(() => {
     const requested = searchParams.get('traceId');
-    return requested && traces.some(trace => trace.traceId === requested) ? requested : null;
+    return requested && traceIds.includes(requested) ? requested : null;
   });
 
   return (
     <ThreadTrace traceIds={traceIds} anchorTraceId={anchorTraceId}>
       <ThreadTrace.List data-testid="thread-view-by-trace">
         <ThreadTrace.Rail turns={railTurns} />
-        {/* Pages load older traces, and the list reads oldest-first, so the sentinel sits at the top.
-            Scroll anchoring keeps the viewport in place when a page is prepended. */}
-        <ThreadTrace.LoadMoreSentinel ref={setEndOfListElement} />
-        {traces.map((trace, index) => (
-          <ThreadTrace.Row key={trace.traceId} traceId={trace.traceId} isFirst={index === 0}>
+        {traceIds.map((traceId, index) => (
+          <ThreadTrace.Row key={traceId} traceId={traceId} isFirst={index === 0}>
             <ThreadTraceRowContent />
           </ThreadTrace.Row>
         ))}
+        <ThreadTrace.LoadMoreSentinel ref={setEndOfListElement} />
       </ThreadTrace.List>
       <ThreadTrace.SpanPanel />
     </ThreadTrace>

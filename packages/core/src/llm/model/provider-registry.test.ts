@@ -14,6 +14,24 @@ import {
   _resetCapabilityCaches,
 } from './provider-registry.js';
 
+/** Remove a model from OpenRouter's checked-in capability arrays (all, or one dimension). */
+function stripFromOpenRouterCapabilities(modelId: string, dimension?: string) {
+  const originalReadFileSync = fs.readFileSync;
+  vi.spyOn(fs, 'readFileSync').mockImplementation((filePath, ...rest) => {
+    const content = originalReadFileSync(filePath as any, ...(rest as [any]));
+    if (typeof filePath === 'string' && path.basename(filePath) === 'openrouter.json' && typeof content === 'string') {
+      const data = JSON.parse(content);
+      for (const key of Object.keys(data)) {
+        if (Array.isArray(data[key]) && (!dimension || key === dimension)) {
+          data[key] = data[key].filter((id: string) => id !== modelId);
+        }
+      }
+      return JSON.stringify(data);
+    }
+    return content;
+  });
+}
+
 describe('modelSupportsAttachments', () => {
   afterEach(() => {
     _resetCapabilityCaches();
@@ -41,6 +59,81 @@ describe('modelSupportsAttachments', () => {
     expect(modelSupportsAttachments('mastra/openrouter/openai/gpt-oss-120b')).toBe(false);
     expect(modelSupportsAttachments('openrouter/openai/gpt-4o')).toBe(true);
     expect(modelSupportsAttachments('mastra/openrouter/openai/gpt-4o')).toBe(true);
+  });
+
+  it('does not fall back to the nested provider when the gateway lists the model without support', () => {
+    const originalReadFileSync = fs.readFileSync;
+    vi.spyOn(fs, 'readFileSync').mockImplementation((filePath, ...rest) => {
+      const content = originalReadFileSync(filePath as any, ...(rest as [any]));
+      if (typeof filePath === 'string' && path.basename(filePath) === 'deepseek.json' && typeof content === 'string') {
+        // Simulate a gateway-synced DeepSeek file where the direct API gained vision.
+        const data = JSON.parse(content);
+        data.attachment = [...(data.attachment ?? []), 'deepseek-v4-flash'];
+        return JSON.stringify(data);
+      }
+      return content;
+    });
+
+    // DeepSeek direct supports it, but OpenRouter lists the model without attachment support.
+    expect(modelSupportsAttachments('deepseek/deepseek-v4-flash')).toBe(true);
+    expect(modelSupportsAttachments('openrouter/deepseek/deepseek-v4-flash')).toBe(false);
+  });
+
+  it('treats a gateway-listed model absent from every capability array as unsupported', () => {
+    // A model with no capabilities at all is in the gateway's model list but in
+    // none of its capability arrays; that must not trigger the nested fallback.
+    stripFromOpenRouterCapabilities('openai/gpt-4o');
+
+    expect(modelSupportsAttachments('openai/gpt-4o')).toBe(true);
+    expect(modelSupportsAttachments('openrouter/openai/gpt-4o')).toBe(false);
+  });
+
+  it('falls back to the nested provider when the gateway does not list the model', () => {
+    const registry = GatewayRegistry.getInstance();
+    const originalGetModels = registry.getModels.bind(registry);
+    vi.spyOn(registry, 'getModels').mockImplementation(() => {
+      const models = originalGetModels();
+      return { ...models, openrouter: models.openrouter.filter(id => id !== 'openai/gpt-4o') };
+    });
+
+    expect(modelSupportsAttachments('openrouter/openai/gpt-4o')).toBe(true);
+  });
+
+  it('falls back to the nested provider when the gateway lists the model but publishes no capability data', () => {
+    // Netlify enumerates models but implements no capability getters, so no
+    // capabilities/netlify.json exists. Listing alone is not an answer.
+    expect(fs.existsSync(path.join(process.cwd(), 'src', 'llm', 'model', 'capabilities', 'netlify.json'))).toBe(false);
+    expect(GatewayRegistry.getInstance().getModels().netlify).toContain('openai/gpt-4o');
+
+    expect(modelSupportsAttachments('netlify/openai/gpt-4o')).toBe(true);
+    expect(modelSupportsAttachments('netlify/openai/gpt-oss-120b')).toBe(false);
+  });
+});
+
+describe('gateway capability precedence across dimensions', () => {
+  afterEach(() => {
+    _resetCapabilityCaches();
+    vi.restoreAllMocks();
+  });
+
+  it('honors the gateway false for temperature over the nested provider', () => {
+    stripFromOpenRouterCapabilities('openai/gpt-4o', 'temperature');
+
+    expect(modelSupportsTemperature('openai/gpt-4o')).toBe(true);
+    expect(modelSupportsTemperature('openrouter/openai/gpt-4o')).toBe(false);
+  });
+
+  it('honors the gateway false for structured output over the nested provider', () => {
+    stripFromOpenRouterCapabilities('openai/gpt-4o', 'structuredOutput');
+
+    expect(modelSupportsStructuredOutput('openai/gpt-4o')).toBe(true);
+    expect(modelSupportsStructuredOutput('openrouter/openai/gpt-4o')).toBe(false);
+  });
+
+  it('keeps the nested fallback for catalog-only gateways across dimensions', () => {
+    expect(modelSupportsTemperature('netlify/anthropic/claude-sonnet-4-6')).toBe(true);
+    expect(modelSupportsTemperature('netlify/anthropic/claude-sonnet-5')).toBe(false);
+    expect(modelSupportsStructuredOutput('netlify/openai/gpt-4o')).toBe(true);
   });
 });
 
