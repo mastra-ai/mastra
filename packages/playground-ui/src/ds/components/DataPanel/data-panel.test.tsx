@@ -52,6 +52,18 @@ describe('DataPanel', () => {
       expect(wide.getAttribute('data-depth')).toBe('2');
       expect(full.className).toContain('w-full');
       expect(full.className).not.toContain('w-xs');
+      // Deeper same-size panels are trimmed so the parent peeks out beneath.
+      expect(wide.style.width).toBe('calc(80% - 1.5rem)');
+      expect(full.style.width).toBe('calc(100% - 3rem)');
+    });
+
+    it('does not trim a non-md panel at depth 1', () => {
+      render(
+        <DataPanel open title="Wide" size="wide">
+          <DataPanel.Content>a</DataPanel.Content>
+        </DataPanel>,
+      );
+      expect(screen.getByRole('dialog', { name: 'Wide' }).style.width).toBe('');
     });
   });
 
