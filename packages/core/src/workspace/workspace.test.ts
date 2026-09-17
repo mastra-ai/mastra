@@ -16,6 +16,8 @@ import {
 import { CompositeFilesystem, LocalFilesystem } from './filesystem';
 import { LSPManager } from './lsp';
 import { LocalSandbox } from './sandbox';
+import { SearchEngine } from './search/search-engine';
+import { ResolvedSourceWorkspaceSkills } from './skills/workspace-skills';
 import { createWorkspaceTools } from './tools';
 import { Workspace } from './workspace';
 
@@ -876,6 +878,52 @@ Line 3 conclusion`;
         expect((await workspace.skills!.list()).map(s => s.name)).toEqual(['demo']);
         expect(await workspace.skills!.has('demo')).toBe(true);
         expect(await workspace.skills!.has('leaked-from-local-disk')).toBe(false);
+      });
+
+      it('shares one search namespace when fresh filesystems carry a stable id', async () => {
+        const searchEngine = new SearchEngine({ bm25: true });
+        const indexSpy = vi.spyOn(searchEngine, 'index');
+
+        const skills = new ResolvedSourceWorkspaceSkills({
+          source: () => new LocalFilesystem({ basePath: remoteDir, id: 'tenant-a' }),
+          skills: ['skills'],
+          searchEngine,
+        });
+
+        for (let i = 0; i < 5; i++) {
+          const scoped = await skills.getScoped({ requestContext: new RequestContext() });
+          await scoped.list();
+        }
+
+        expect(new Set(indexSpy.mock.calls.map(([doc]) => doc.id)).size).toBe(1);
+      });
+
+      it('bounds indexed documents when the resolver returns a fresh filesystem per request', async () => {
+        const searchEngine = new SearchEngine({ bm25: true });
+        const indexSpy = vi.spyOn(searchEngine, 'index');
+        const removeSpy = vi.spyOn(searchEngine, 'remove');
+
+        const skills = new ResolvedSourceWorkspaceSkills({
+          source: () => new LocalFilesystem({ basePath: remoteDir }),
+          skills: ['skills'],
+          searchEngine,
+          maxCachedSources: 2,
+        });
+
+        for (let i = 0; i < 5; i++) {
+          const scoped = await skills.getScoped({ requestContext: new RequestContext() });
+          await scoped.list();
+        }
+
+        const indexedIds = new Set(indexSpy.mock.calls.map(([doc]) => doc.id));
+        expect(indexedIds.size).toBe(5);
+        // Three sources evicted → their documents removed
+        expect(removeSpy).toHaveBeenCalledTimes(3);
+        const removedIds = new Set(removeSpy.mock.calls.map(([id]) => id));
+        for (const id of removedIds) expect(indexedIds.has(id)).toBe(true);
+
+        const scoped = await skills.getScoped({ requestContext: new RequestContext() });
+        expect((await scoped.search('demo')).map(r => r.skillName)).toEqual(['demo']);
       });
     });
 
