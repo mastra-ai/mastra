@@ -375,7 +375,8 @@ describe('experiment item sub-route', () => {
     });
   });
 
-  describe('when the user opens a result trace and selects a span', () => {
+  // Three stacked drawers per test; under full-suite load these exceed the default 5s.
+  describe('when the user opens a result trace and selects a span', { timeout: 15_000 }, () => {
     it('shows trace feedback (with a needs-review dot) and anchor-span scores with a badge count', async () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
 
