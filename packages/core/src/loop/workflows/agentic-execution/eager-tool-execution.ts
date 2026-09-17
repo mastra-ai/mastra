@@ -210,7 +210,16 @@ export class EagerToolExecutionNotRun extends Error {
  * normal foreach path must handle the call instead of surfacing the failure.
  */
 export function eagerToolCallDidNotExecute(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && EAGER_NOT_EXECUTED in error;
+  // Walk `cause`: a tool that suspends at runtime raises this from inside its own
+  // execute, and CoreToolBuilder wraps anything thrown there in a TOOL_EXECUTION_FAILED
+  // MastraError. Matching only the top-level error would lose the brand and record the
+  // wrapper as the tool's result instead of handing the call back to the foreach.
+  let current: unknown = error;
+  for (let depth = 0; depth < 10 && typeof current === 'object' && current !== null; depth++) {
+    if (EAGER_NOT_EXECUTED in current) return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
 }
 
 /**
