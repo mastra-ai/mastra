@@ -1,9 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { models } from '../../../../.storybook/fixtures/model-picker/models';
-import { ModelPicker, ModelPickerTrigger, ModelPickerContent } from './model-picker';
-import { ModelPickerModels } from './model-picker-models';
+import { CombinedPicker, PickerWithPacks } from '../../../../.storybook/fixtures/model-picker/combined-picker';
+import { SegmentedPicker } from '../../../../.storybook/fixtures/model-picker/segmented-picker';
+import { ModelPicker } from './model-picker';
+import { ModelPickerLocked, ModelPickerWarning, ModelPickerWarnings, ModelProviderIcon } from './model-picker-group';
+import { OpenAIIcon } from '@/ds/icons/OpenAIIcon';
 import { ModelPickerLoading, ModelPickerUnavailable, ModelPickerReadOnly } from './model-picker-status';
 
 const meta = {
@@ -14,36 +15,13 @@ const meta = {
     docs: {
       description: {
         component:
-          'Compose a trigger, model choices and optional pack choices/actions inside ModelPicker. Studio composes provider and model comboboxes instead. Applications own catalogs, filtering, optimistic selection and persistence; the menu only owns opening, search and dismissal.',
+          'Compose a trigger, model choices and optional pack choices/actions inside ModelPicker. Provider and model comboboxes can also be composed as segments. Applications own catalogs, filtering, optimistic selection and persistence; the menu only owns opening, search and dismissal.',
       },
     },
   },
 } satisfies Meta<typeof ModelPicker>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-
-function CombinedPicker({
-  busy = false,
-  notConfigured = false,
-  label,
-  empty = false,
-}: {
-  busy?: boolean;
-  notConfigured?: boolean;
-  label?: string;
-  empty?: boolean;
-}) {
-  const [modelId, setModelId] = useState('openai/gpt-4.1');
-  const selectedModel = models.find(model => model.id === modelId);
-  return (
-    <ModelPicker busy={busy}>
-      <ModelPickerTrigger label={label ?? selectedModel?.modelName ?? modelId} notConfigured={notConfigured} />
-      <ModelPickerContent>
-        <ModelPickerModels options={empty ? [] : models} value={modelId} onValueChange={setModelId} />
-      </ModelPickerContent>
-    </ModelPicker>
-  );
-}
 
 export const Combined: Story = {
   render: () => <CombinedPicker />,
@@ -72,4 +50,51 @@ export const ReadOnly: Story = { render: () => <ModelPickerReadOnly value={'open
 export const NoModels: Story = { render: () => <CombinedPicker empty label="No model" /> };
 export const LongName: Story = {
   render: () => <CombinedPicker label="A provider with a very long model identifier for a narrow composer" />,
+};
+
+export const Segmented: Story = {
+  render: () => <SegmentedPicker />,
+  play: async ({ canvasElement }) => {
+    const page = within(canvasElement.ownerDocument.body);
+    await userEvent.click(page.getByRole('combobox', { name: 'Provider' }));
+    await userEvent.click(await page.findByRole('option', { name: 'Connected Anthropic' }));
+    await expect(page.getByRole('combobox', { name: 'Model' })).toHaveTextContent('Select model…');
+    await userEvent.click(page.getByRole('combobox', { name: 'Model' }));
+    await userEvent.click(await page.findByRole('option', { name: 'Claude Sonnet 4.5' }));
+    await expect(page.getByRole('combobox', { name: 'Model' })).toHaveTextContent('Claude Sonnet 4.5');
+  },
+};
+export const SegmentedDisabled: Story = { render: () => <SegmentedPicker disabled /> };
+export const Locked: Story = { render: () => <ModelPickerLocked label="openai/gpt-4.1" /> };
+export const Warnings: Story = {
+  render: () => (
+    <ModelPickerWarnings>
+      <ModelPickerWarning role="alert">This model is unavailable. Choose another model.</ModelPickerWarning>
+      <ModelPickerWarning>Connect the provider to use this model.</ModelPickerWarning>
+    </ModelPickerWarnings>
+  ),
+};
+export const ProviderConnection: Story = {
+  render: () => (
+    <div className="flex items-center gap-4">
+      <ModelProviderIcon connected>
+        <OpenAIIcon />
+      </ModelProviderIcon>
+      <ModelProviderIcon connected={false}>
+        <OpenAIIcon />
+      </ModelProviderIcon>
+    </div>
+  ),
+};
+export const WithPacksAndActions: Story = {
+  render: () => <PickerWithPacks />,
+  play: async ({ canvasElement }) => {
+    const page = within(canvasElement.ownerDocument.body);
+    await userEvent.click(page.getByRole('button', { name: 'Session model, Balanced' }));
+    await expect(page.getByText('Choose a model or a group of models.')).toBeVisible();
+    await userEvent.click(await page.findByRole('option', { name: 'Model pack Review' }));
+    await userEvent.click(page.getByRole('button', { name: 'Session model, Review' }));
+    await userEvent.click(await page.findByRole('option', { name: 'Reset selection' }));
+    await expect(page.getByRole('button', { name: 'Session model, Balanced' })).toBeVisible();
+  },
 };

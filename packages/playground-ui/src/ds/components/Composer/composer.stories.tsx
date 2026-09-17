@@ -1,11 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowUp, Paperclip } from 'lucide-react';
 import { expect, userEvent, within } from 'storybook/test';
 import { ComposerModeStates, ComposerPreview } from '../../../../.storybook/fixtures/composer';
 
 import { Badge } from '../Badge/Badge';
-import { Button } from '../Button';
-import { ComposerSendButton } from './actions/composer-buttons';
+import { ComposerSendButton, ComposerStopButton, ComposerAttachmentButton } from './actions/composer-buttons';
 import { Composer, ComposerActions, ComposerAttachments, ComposerBox, ComposerInput, ComposerRing } from './composer';
 
 const meta: Meta<typeof Composer> = {
@@ -32,9 +30,7 @@ export const Empty: Story = {
         <ComposerInput aria-label="Message" placeholder="Enter your message..." />
         <ComposerActions>
           <span />
-          <Button type="submit" size="icon-md" aria-label="Send message" disabled>
-            <ArrowUp />
-          </Button>
+          <ComposerSendButton aria-label="Send message" disabled />
         </ComposerActions>
       </ComposerBox>
     </Composer>
@@ -50,12 +46,8 @@ export const WithAttachmentsAndActions: Story = {
       <ComposerBox>
         <ComposerInput aria-label="Message" defaultValue="Summarize the attached notes." />
         <ComposerActions>
-          <Button type="button" size="icon-md" aria-label="Attach file">
-            <Paperclip />
-          </Button>
-          <Button type="submit" size="icon-md" aria-label="Send message">
-            <ArrowUp />
-          </Button>
+          <ComposerAttachmentButton aria-label="Attach file" />
+          <ComposerSendButton aria-label="Send message" />
         </ComposerActions>
       </ComposerBox>
     </Composer>
@@ -69,9 +61,7 @@ export const DisabledAndRunning: Story = {
         <ComposerInput aria-label="Message" value="Waiting for the current run..." disabled readOnly />
         <ComposerActions>
           <span className="text-ui-sm text-neutral3">Running</span>
-          <Button type="button" size="md">
-            Cancel
-          </Button>
+          <ComposerStopButton aria-label="Stop response" />
         </ComposerActions>
       </ComposerBox>
     </Composer>
@@ -85,9 +75,7 @@ const RingStory = ({ busy }: { busy: boolean }) => (
         <ComposerInput aria-label="Message" placeholder="Enter your message..." />
         <ComposerActions>
           <span />
-          <Button type="submit" size="icon-md" aria-label="Send message">
-            <ArrowUp />
-          </Button>
+          <ComposerSendButton aria-label="Send message" />
         </ComposerActions>
       </ComposerBox>
     </ComposerRing>
@@ -115,7 +103,7 @@ export const WithModeControls: Story = {
   render: () => <ComposerPreview />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('combobox', { name: 'Session mode' }));
+    await userEvent.click(canvas.getByRole('combobox', { name: 'Session mode: Build' }));
     await userEvent.click(await within(canvasElement.ownerDocument.body).findByRole('option', { name: 'Plan' }));
     const label = canvas.getByText('Plan');
     const ring = canvasElement.querySelector('[data-slot="composer-ring"]');
@@ -130,7 +118,7 @@ export const WithModeControls: Story = {
     await expect(input).toHaveValue('');
     await userEvent.click(canvas.getByRole('button', { name: 'Stop response' }));
     await expect(input).toHaveFocus();
-    await expect(canvas.getByRole('combobox', { name: 'Session mode' })).toHaveTextContent('Plan');
+    await expect(canvas.getByRole('combobox', { name: 'Session mode: Plan' })).toHaveTextContent('Plan');
   },
 };
 
