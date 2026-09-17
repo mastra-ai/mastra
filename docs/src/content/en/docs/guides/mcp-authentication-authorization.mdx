@@ -1,5 +1,5 @@
 ---
-title: "Authentication and authorization with MCP"
+title: "MCP authentication and authorization"
 description: "Choose credentials for MCP connections, protect a Mastra MCP server, and separate delegated access from tool and data permissions."
 packages:
   - "@mastra/mcp"
@@ -7,13 +7,13 @@ packages:
   - "@mastra/server"
 ---
 
-# Authentication and authorization with MCP
+# MCP authentication
 
 You either connect your Mastra application to someone else's protected MCP server, or you expose your own tools and data to a third-party client. Each direction needs different credentials and different checks.
 
 In both directions, an MCP connection crosses several security boundaries: authenticating a caller doesn't decide which customer records they can read, and permission to connect doesn't authorize every tool operation. Treat credentials, delegated access, and application permissions as separate decisions.
 
-This guide explains those decisions for Mastra as an MCP client and server. Protocol requirements refer to the [MCP authorization specification dated July 28, 2026](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization). They aren't a claim that every Mastra configuration implements that specification.
+This guide explains those decisions for Mastra as an MCP client and server. Protocol requirements refer to the [MCP authorization specification dated July 28, 2026](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization).
 
 ## Understand the boundaries
 
