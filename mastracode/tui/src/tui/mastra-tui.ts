@@ -285,6 +285,7 @@ export class MastraTUI {
   }
 
   private refreshBackgroundActivity(): void {
+    if (!this.state.options.backgroundToolsEnabled) return;
     this.state.globalBackgroundNotice.setActivities(this.getCurrentThreadBackgroundActivities());
     flushRender(this.state);
   }

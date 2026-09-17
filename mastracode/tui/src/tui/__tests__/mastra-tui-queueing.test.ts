@@ -995,6 +995,22 @@ describe('syncInitialThreadState', () => {
 });
 
 describe('background completion queue', () => {
+  it.each([undefined, false])('does not refresh background activity when enabled is %s', backgroundToolsEnabled => {
+    const setActivities = vi.fn();
+    const getActivities = vi.fn();
+    const tui = Object.create(MastraTUI.prototype) as any;
+    tui.state = {
+      options: { backgroundToolsEnabled },
+      globalBackgroundNotice: { setActivities },
+    };
+    tui.getCurrentThreadBackgroundActivities = getActivities;
+
+    tui.refreshBackgroundActivity();
+
+    expect(getActivities).not.toHaveBeenCalled();
+    expect(setActivities).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     mocks.showError.mockReset();
   });
