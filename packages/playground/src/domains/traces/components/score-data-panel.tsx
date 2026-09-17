@@ -1,6 +1,5 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -38,11 +37,10 @@ export interface ScoreDataPanelProps {
   onClose: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
-  className?: string;
   depth?: 1 | 2 | 3;
 }
 
-export function ScoreDataPanel({ score, onClose, onPrevious, onNext, className, depth }: ScoreDataPanelProps) {
+export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: ScoreDataPanelProps) {
   const { Link } = useLinkComponent();
   const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
   const isCodeBased = isCodeBasedScorer(score);
@@ -50,20 +48,14 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, className, 
 
   return (
     <>
-      <DataPanel
-        open={!!score}
-        onClose={onClose}
-        title={score ? `Score ${score.id}` : 'Score'}
-        depth={depth}
-        className={className}
-      >
+      <DataPanel open={!!score} onClose={onClose} title={score ? `Score ${score.id}` : 'Score'} depth={depth}>
         {score && (
           <>
             <DataPanel.Header>
-              <DataPanel.Heading className="items-center whitespace-nowrap">
+              <DataPanel.Heading>
                 Score <b># {score.id}</b>
               </DataPanel.Heading>
-              <ButtonsGroup className="ml-auto shrink-0 self-start">
+              <DataPanel.HeaderActions>
                 <DataPanel.NextPrevNav
                   onPrevious={onPrevious}
                   onNext={onNext}
@@ -71,7 +63,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, className, 
                   nextLabel="Next score"
                 />
                 <DataPanel.CloseButton onClick={onClose} />
-              </ButtonsGroup>
+              </DataPanel.HeaderActions>
             </DataPanel.Header>
 
             <DataPanel.Content>

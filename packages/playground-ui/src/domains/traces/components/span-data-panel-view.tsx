@@ -6,7 +6,6 @@ import { SpanSummaryDescription } from './span-summary-description';
 import { SpanTokenUsage } from './span-token-usage';
 import type { TokenUsage } from './span-token-usage';
 import { TraceIdButton } from './trace-id-button';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
@@ -79,25 +78,23 @@ export function SpanDataPanelView({
   // which already provides the panel chrome.
   return (
     <section className={cn('flex min-h-0 flex-1 flex-col overflow-hidden', className)}>
-      {/* Two-line header (heading + summary); neighbouring panel headers use min-h-16 to stay level. */}
-      <DataPanel.Header className="min-h-16 py-2">
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <DataPanel.Heading className="items-center whitespace-nowrap">
+      <DataPanel.Header>
+        <DataPanel.HeaderContent>
+          <DataPanel.Heading>
             Span
             <TraceIdButton id={spanId} />
           </DataPanel.Heading>
           {span && <SpanSummaryDescription span={span} />}
-        </div>
-        <ButtonsGroup className="ml-auto shrink-0 self-start">
+        </DataPanel.HeaderContent>
+        <DataPanel.HeaderActions>
           <DataPanel.NextPrevNav
-            variant="ghost"
             onPrevious={onPrevious}
             onNext={onNext}
             previousLabel="Previous span"
             nextLabel="Next span"
           />
-          <DataPanel.CloseButton variant="ghost" onClick={onClose} />
-        </ButtonsGroup>
+          <DataPanel.CloseButton onClick={onClose} />
+        </DataPanel.HeaderActions>
       </DataPanel.Header>
 
       {isLoading ? (

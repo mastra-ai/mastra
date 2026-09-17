@@ -147,7 +147,7 @@ type InputShared_Auxiliary_246 =
           };
     };
 
-type InputShared_Auxiliary_648 =
+type InputShared_Auxiliary_657 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -192,19 +192,19 @@ type InputShared_Auxiliary_648 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_648[];
+      args: InputShared_Auxiliary_657[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_648;
+      arg: InputShared_Auxiliary_657;
     };
 
-type InputShared_Auxiliary_722 = {
+type InputShared_Auxiliary_731 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_722[] | undefined;
+  children?: InputShared_Auxiliary_731[] | undefined;
 };
 
 type Shared_Auxiliary_728 = {
@@ -1725,7 +1725,7 @@ type InputShared_Type_86 = {
       }
     | undefined;
   steps: InputShared_Type_81[];
-  predicates: InputShared_Auxiliary_648[];
+  predicates: InputShared_Auxiliary_657[];
 };
 
 type InputShared_Type_87 = {
@@ -1739,7 +1739,7 @@ type InputShared_Type_87 = {
     | undefined;
   step: InputShared_Type_81;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_648;
+  predicate: InputShared_Auxiliary_657;
 };
 
 type InputShared_Type_88 =
@@ -12281,7 +12281,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/pushNotificationConfig/set' | 'CreateTaskPushNotificationConfig';
+      method: 'tasks/pushNotificationConfig/set';
       params: {
         /** Task id */
         taskId: string;
@@ -12291,7 +12291,24 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/pushNotificationConfig/get' | 'GetTaskPushNotificationConfig';
+      method: 'CreateTaskPushNotificationConfig';
+      params: {
+        /** URL for sending the push notifications */
+        url: string;
+        /** Push Notification ID - created by server to support multiple callbacks */
+        id?: string | undefined;
+        /** Token unique to this task/session */
+        token?: string | undefined;
+        authentication?: InputShared_Type_27 | undefined;
+        /** Task id */
+        taskId: string;
+        tenant?: string | undefined;
+      };
+    }
+  | {
+      jsonrpc: '2.0';
+      id: string | number;
+      method: 'tasks/pushNotificationConfig/get';
       params: {
         /** Task id */
         id: string;
@@ -12307,7 +12324,17 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/pushNotificationConfig/list' | 'ListTaskPushNotificationConfigs';
+      method: 'GetTaskPushNotificationConfig';
+      params: {
+        tenant?: string | undefined;
+        taskId: string;
+        id: string;
+      };
+    }
+  | {
+      jsonrpc: '2.0';
+      id: string | number;
+      method: 'tasks/pushNotificationConfig/list';
       params: {
         /** Task id */
         id: string;
@@ -12321,7 +12348,18 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/pushNotificationConfig/delete' | 'DeleteTaskPushNotificationConfig';
+      method: 'ListTaskPushNotificationConfigs';
+      params: {
+        tenant?: string | undefined;
+        taskId: string;
+        pageSize?: number | undefined;
+        pageToken?: string | undefined;
+      };
+    }
+  | {
+      jsonrpc: '2.0';
+      id: string | number;
+      method: 'tasks/pushNotificationConfig/delete';
       params: {
         /** Task id */
         id: string;
@@ -12332,6 +12370,16 @@ export type PostA2aAgentId_Body =
           | undefined;
         /** Push notification config id */
         pushNotificationConfigId: string;
+      };
+    }
+  | {
+      jsonrpc: '2.0';
+      id: string | number;
+      method: 'DeleteTaskPushNotificationConfig';
+      params: {
+        tenant?: string | undefined;
+        taskId: string;
+        id: string;
       };
     }
   | {
@@ -17736,7 +17784,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_722[] | undefined;
+  files?: InputShared_Auxiliary_731[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -17794,7 +17842,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_722[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_731[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (

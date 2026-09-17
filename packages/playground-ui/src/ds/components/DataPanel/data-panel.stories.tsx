@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { CalendarClockIcon, TimerIcon, BotIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../Button';
 import { TooltipProvider } from '../Tooltip';
@@ -42,7 +43,9 @@ export const Default: Story = {
     <DataPanel open title="Span details">
       <DataPanel.Header>
         <DataPanel.Heading>Span Details</DataPanel.Heading>
-        <DataPanel.CloseButton onClick={() => {}} />
+        <DataPanel.HeaderActions>
+          <DataPanel.CloseButton onClick={() => {}} />
+        </DataPanel.HeaderActions>
       </DataPanel.Header>
       <DataPanel.Content>
         <p className="text-ui-sm text-neutral3">Panel content goes here.</p>
@@ -58,13 +61,48 @@ export const WithNavigation: Story = {
         <DataPanel.Heading>
           <b>Trace</b> abc123
         </DataPanel.Heading>
-        <div className="flex items-center gap-2">
+        <DataPanel.HeaderActions>
           <DataPanel.NextPrevNav onPrevious={() => {}} onNext={() => {}} />
           <DataPanel.CloseButton onClick={() => {}} />
-        </div>
+        </DataPanel.HeaderActions>
       </DataPanel.Header>
       <DataPanel.Content>
         <p className="text-ui-sm text-neutral3">Navigate between items with the arrows.</p>
+      </DataPanel.Content>
+    </DataPanel>
+  ),
+};
+
+export const WithMetadata: Story = {
+  render: () => (
+    <DataPanel open title="Trace abc123">
+      <DataPanel.Header>
+        <DataPanel.HeaderContent>
+          <DataPanel.Heading>
+            Trace <b>abc123</b>
+          </DataPanel.Heading>
+          <DataPanel.Metadata>
+            <DataPanel.Meta as="a" href="#" icon={<BotIcon />} tooltip="Agent">
+              weather-agent
+            </DataPanel.Meta>
+            <DataPanel.Meta icon={<CalendarClockIcon />} tooltip="Started at 2024-01-01 10:00:00">
+              2 min ago
+            </DataPanel.Meta>
+            <DataPanel.Meta icon={<TimerIcon />} tooltip="Duration 1,234ms">
+              1.2s
+            </DataPanel.Meta>
+          </DataPanel.Metadata>
+        </DataPanel.HeaderContent>
+        <DataPanel.HeaderActions>
+          <Button variant="primary" size="md">
+            Score trace
+          </Button>
+          <DataPanel.NextPrevNav onPrevious={() => {}} onNext={() => {}} />
+          <DataPanel.CloseButton onClick={() => {}} />
+        </DataPanel.HeaderActions>
+      </DataPanel.Header>
+      <DataPanel.Content>
+        <p className="text-ui-sm text-neutral3">Actions are centred against heading + metadata.</p>
       </DataPanel.Content>
     </DataPanel>
   ),
@@ -75,7 +113,9 @@ export const NoData: Story = {
     <DataPanel open title="Empty panel">
       <DataPanel.Header>
         <DataPanel.Heading>Empty Panel</DataPanel.Heading>
-        <DataPanel.CloseButton onClick={() => {}} />
+        <DataPanel.HeaderActions>
+          <DataPanel.CloseButton onClick={() => {}} />
+        </DataPanel.HeaderActions>
       </DataPanel.Header>
       <DataPanel.NoData />
     </DataPanel>
@@ -87,7 +127,9 @@ export const Loading: Story = {
     <DataPanel open title="Loading panel">
       <DataPanel.Header>
         <DataPanel.Heading>Loading Panel</DataPanel.Heading>
-        <DataPanel.CloseButton onClick={() => {}} />
+        <DataPanel.HeaderActions>
+          <DataPanel.CloseButton onClick={() => {}} />
+        </DataPanel.HeaderActions>
       </DataPanel.Header>
       <DataPanel.LoadingData>Fetching trace data...</DataPanel.LoadingData>
     </DataPanel>
@@ -99,7 +141,9 @@ export const Wide: Story = {
     <DataPanel open title="Wide panel" size="wide">
       <DataPanel.Header>
         <DataPanel.Heading>Wide Panel</DataPanel.Heading>
-        <DataPanel.CloseButton onClick={() => {}} />
+        <DataPanel.HeaderActions>
+          <DataPanel.CloseButton onClick={() => {}} />
+        </DataPanel.HeaderActions>
       </DataPanel.Header>
       <DataPanel.Content>
         <p className="text-ui-sm text-neutral3">
@@ -118,10 +162,10 @@ export const DisabledNav: Story = {
         <DataPanel.Heading>
           <b>First Item</b> (no previous)
         </DataPanel.Heading>
-        <div className="flex items-center gap-2">
+        <DataPanel.HeaderActions>
           <DataPanel.NextPrevNav onNext={() => {}} />
           <DataPanel.CloseButton onClick={() => {}} />
-        </div>
+        </DataPanel.HeaderActions>
       </DataPanel.Header>
       <DataPanel.Content>
         <p className="text-ui-sm text-neutral3">Previous button is disabled because onPrevious is undefined.</p>
@@ -143,9 +187,11 @@ const StackedDemo = () => {
           <DataPanel.Heading>
             <b>Span</b> agent.generate
           </DataPanel.Heading>
-          <DataPanel.CloseButton onClick={() => setOuterOpen(false)} />
+          <DataPanel.HeaderActions>
+            <DataPanel.CloseButton onClick={() => setOuterOpen(false)} />
+          </DataPanel.HeaderActions>
         </DataPanel.Header>
-        <DataPanel.Content className="flex flex-col gap-3">
+        <DataPanel.Content>
           <p className="text-ui-sm text-neutral3">
             Escape, backdrop click or the close button dismiss this panel. Open a nested panel to stack a second one on
             top.
@@ -162,7 +208,9 @@ const StackedDemo = () => {
               <DataPanel.Heading>
                 <b>Score</b> answer-relevancy
               </DataPanel.Heading>
-              <DataPanel.CloseButton onClick={() => setInnerOpen(false)} />
+              <DataPanel.HeaderActions>
+                <DataPanel.CloseButton onClick={() => setInnerOpen(false)} />
+              </DataPanel.HeaderActions>
             </DataPanel.Header>
             <DataPanel.Content>
               <p className="text-ui-sm text-neutral3">
@@ -198,9 +246,11 @@ const SiblingsWithDepthDemo = () => {
           <DataPanel.Heading>
             <b>Result</b> item-42
           </DataPanel.Heading>
-          <DataPanel.CloseButton onClick={closeResult} />
+          <DataPanel.HeaderActions>
+            <DataPanel.CloseButton onClick={closeResult} />
+          </DataPanel.HeaderActions>
         </DataPanel.Header>
-        <DataPanel.Content className="flex flex-col gap-3">
+        <DataPanel.Content>
           <p className="text-ui-sm text-neutral3">
             The score panel is a <b>sibling</b> drawer (not nested in the DOM) rendered after this one with a higher{' '}
             <code>depth</code>, so it is narrower and this panel peeks out on the left.
@@ -214,7 +264,9 @@ const SiblingsWithDepthDemo = () => {
           <DataPanel.Heading>
             <b>Score</b> answer-relevancy
           </DataPanel.Heading>
-          <DataPanel.CloseButton onClick={() => setScoreOpen(false)} />
+          <DataPanel.HeaderActions>
+            <DataPanel.CloseButton onClick={() => setScoreOpen(false)} />
+          </DataPanel.HeaderActions>
         </DataPanel.Header>
         <DataPanel.Content>
           <p className="text-ui-sm text-neutral3">Escape closes this panel first; the result stays open beneath.</p>
