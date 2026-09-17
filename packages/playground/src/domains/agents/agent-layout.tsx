@@ -7,12 +7,10 @@ import { AgentDetailHeaderActions } from '@/domains/agents/components/agent-deta
 import { AgentOverviewPanel } from '@/domains/agents/components/agent-overview-panel/agent-overview-panel';
 import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
 import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
-import { AgentTopBarRunOptions } from '@/domains/agents/components/agent-top-bar-controls';
 import { OverviewPanelShortcuts } from '@/domains/agents/components/overview-panel-shortcuts';
 import { ThreadTracesToggle } from '@/domains/agents/components/thread-traces-toggle';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
-import { ReviewQueueProvider } from '@/domains/agents/context/review-queue-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
@@ -43,7 +41,6 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
 
   const defaultProvider = cleanProviderId(agent?.provider ?? '');
   const defaultModel = agent?.modelId ?? '';
-  const requestContextSchema = agent?.requestContextSchema;
 
   const activeTab: AgentPageTab | 'none' = location.pathname.includes('/threads')
     ? 'chat'
@@ -51,14 +48,9 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
       ? 'versions'
       : location.pathname.includes('/evaluate')
         ? 'evaluate'
-        : location.pathname.includes('/review')
-          ? 'review'
-          : location.pathname.includes('/traces')
-            ? 'traces'
-            : 'none';
-
-  const showTopBarRunOptions =
-    (activeTab === 'evaluate' || activeTab === 'review') && (showPlayground || showObservability);
+        : location.pathname.includes('/traces')
+          ? 'traces'
+          : 'none';
 
   const content = (
     <KeyboardScope>
@@ -76,13 +68,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
           activeTab={activeTab}
           showPlayground={showPlayground}
           showObservability={showObservability}
-          rightSlot={
-            activeTab === 'chat' ? (
-              <ThreadTracesToggle />
-            ) : showTopBarRunOptions ? (
-              <AgentTopBarRunOptions requestContextSchema={requestContextSchema} />
-            ) : undefined
-          }
+          rightSlot={activeTab === 'chat' ? <ThreadTracesToggle /> : undefined}
         />
         {children}
       </MainContentLayout>
@@ -97,9 +83,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
           defaultProvider={defaultProvider}
           defaultModel={defaultModel}
         >
-          <GenerationProvider>
-            <ReviewQueueProvider>{content}</ReviewQueueProvider>
-          </GenerationProvider>
+          <GenerationProvider>{content}</GenerationProvider>
         </PlaygroundModelProvider>
       </SchemaRequestContextProvider>
     </TracingSettingsProvider>

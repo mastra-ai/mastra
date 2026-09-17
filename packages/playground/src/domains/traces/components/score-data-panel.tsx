@@ -1,4 +1,4 @@
-import type { ScoreRowData } from '@mastra/core/evals';
+import type { ClientScoreRowData } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
@@ -10,7 +10,7 @@ import { useState } from 'react';
 import { ScoreAsItemDialog } from '@/domains/scores/components/score-as-item-dialog';
 import { useLinkComponent } from '@/lib/framework';
 
-function isCodeBasedScorer(score?: ScoreRowData): boolean {
+function isCodeBasedScorer(score?: ClientScoreRowData): boolean {
   if (!score) return false;
   const scorer = score.scorer as Record<string, unknown> | undefined;
   if (scorer?.hasJudge === false) return true;
@@ -18,7 +18,7 @@ function isCodeBasedScorer(score?: ScoreRowData): boolean {
   return !score.preprocessPrompt && !score.analyzePrompt && !score.generateScorePrompt && !score.generateReasonPrompt;
 }
 
-function buildDialogTitle(sectionTitle: string, icon: React.ReactNode, score: ScoreRowData) {
+function buildDialogTitle(sectionTitle: string, icon: React.ReactNode, score: ClientScoreRowData) {
   return (
     <>
       <span className="text-neutral2 flex items-center gap-1.5 tracking-widest uppercase [&>svg]:size-3.5">
@@ -33,13 +33,14 @@ function buildDialogTitle(sectionTitle: string, icon: React.ReactNode, score: Sc
 }
 
 export interface ScoreDataPanelProps {
-  score: ScoreRowData;
+  score: ClientScoreRowData;
   onClose: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
+  className?: string;
 }
 
-export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreDataPanelProps) {
+export function ScoreDataPanel({ score, onClose, onPrevious, onNext, className }: ScoreDataPanelProps) {
   const { Link } = useLinkComponent();
   const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
   const isCodeBased = isCodeBasedScorer(score);
@@ -47,12 +48,13 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreData
 
   return (
     <>
-      <DataPanel>
-        <DataPanel.Header>
-          <DataPanel.Heading>
+      <DataPanel className={className}>
+        {/* Matches SpanDataPanelView's header height so neighbouring panel headers stay level. */}
+        <DataPanel.Header className="min-h-16 py-2">
+          <DataPanel.Heading className="items-center whitespace-nowrap">
             Score <b># {score.id}</b>
           </DataPanel.Heading>
-          <ButtonsGroup className="ml-auto shrink-0">
+          <ButtonsGroup className="ml-auto shrink-0 self-start">
             <DataPanel.NextPrevNav
               onPrevious={onPrevious}
               onNext={onNext}

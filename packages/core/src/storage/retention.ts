@@ -1,4 +1,5 @@
 import type { StorageDomains } from './base';
+import { parseDuration } from './utils';
 
 /**
  * A human-friendly duration for retention policies.
@@ -224,3 +225,130 @@ export interface RetentionTableDescriptor {
  * A domain's `retentionTables` descriptor: stable table key → descriptor.
  */
 export type RetentionTablesDescriptor = Record<string, RetentionTableDescriptor>;
+
+/** A configured physical table ready for a retention adapter to prune. */
+export interface RetentionPruneTarget<TTable extends string = string> extends RetentionTableDescriptor {
+  table: TTable;
+  policy: TableRetentionPolicy;
+}
+
+/** Convert a policy into the shared millisecond cutoff used by retention adapters. */
+export function retentionCutoffMs(policy: TableRetentionPolicy, now = Date.now()): number {
+  return now - parseDuration(policy.maxAge);
+}
+
+/**
+ * Resolve configured table policies against a domain's physical table descriptor.
+ * Unconfigured keys are omitted, preserving the caller-provided dependency order.
+ */
+export function resolveRetentionTargets<TTable extends string = string>({
+  policies,
+  descriptor,
+  order,
+}: {
+  policies: Record<string, TableRetentionPolicy>;
+  descriptor: RetentionTablesDescriptor;
+  order: string[];
+}): RetentionPruneTarget<TTable>[] {
+  const targets: RetentionPruneTarget<TTable>[] = [];
+  for (const key of order) {
+    const policy = policies[key];
+    const entry = descriptor[key];
+    if (!policy || !entry) continue;
+    targets.push({ ...entry, table: entry.table as TTable, policy });
+  }
+  return targets;
+}
+
+async function retentionSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0 || signal?.aborted) return;
+  await new Promise<void>(resolve => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/** Run one bounded, resumable retention batch loop. */
+export async function runRetentionBatches({
+  deleteBatch,
+  batchSize,
+  options,
+}: {
+  deleteBatch: (limit: number) => Promise<number>;
+  batchSize: number;
+  options?: PruneOptions;
+}): Promise<{ deleted: number; done: boolean }> {
+  if (!Number.isSafeInteger(batchSize) || batchSize <= 0) {
+    throw new Error(`retention batchSize must be a positive integer; received ${batchSize}`);
+  }
+
+  let deleted = 0;
+  let batches = 0;
+
+  while (true) {
+    if (options?.signal?.aborted) return { deleted, done: false };
+    if (options?.maxBatches !== undefined && batches >= options.maxBatches) return { deleted, done: false };
+
+    let limit = batchSize;
+    if (options?.maxRows !== undefined) {
+      const remaining = options.maxRows - deleted;
+      if (remaining <= 0) return { deleted, done: false };
+      limit = Math.min(limit, remaining);
+    }
+
+    const affected = await deleteBatch(limit);
+    deleted += affected;
+    batches += 1;
+
+    if (affected < limit) return { deleted, done: true };
+    if (options?.pauseMs) await retentionSleep(options.pauseMs, options.signal);
+  }
+}
+
+/**
+ * Apply the shared prune lifecycle while delegating cutoff encoding and SQL to
+ * the storage adapter.
+ */
+export async function executeRetentionPrune<TTable extends string, TCutoff>({
+  domain,
+  targets,
+  options,
+  cutoffFor,
+  deleteBatch,
+  beforeTarget,
+}: {
+  domain: string;
+  targets: RetentionPruneTarget<TTable>[];
+  options?: PruneOptions;
+  cutoffFor: (target: RetentionPruneTarget<TTable>, now: number) => TCutoff;
+  deleteBatch: (target: RetentionPruneTarget<TTable>, cutoff: TCutoff, limit: number) => Promise<number>;
+  beforeTarget?: (target: RetentionPruneTarget<TTable>) => Promise<void>;
+}): Promise<PruneResult[]> {
+  const results: PruneResult[] = [];
+  const now = Date.now();
+
+  for (const target of targets) {
+    if (options?.signal?.aborted) {
+      results.push({ domain, table: target.table, deleted: 0, done: false });
+      continue;
+    }
+
+    await beforeTarget?.(target);
+    const cutoff = cutoffFor(target, now);
+    const { deleted, done } = await runRetentionBatches({
+      deleteBatch: limit => deleteBatch(target, cutoff, limit),
+      batchSize: target.policy.batchSize ?? 1000,
+      options,
+    });
+    results.push({ domain, table: target.table, deleted, done });
+  }
+
+  return results;
+}

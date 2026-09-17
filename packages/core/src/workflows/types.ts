@@ -163,6 +163,18 @@ export type StepSkipped<P, R, S, T> = {
   metadata?: StepMetadata;
 };
 
+export type StepCanceled<P, R, S, T> = {
+  status: 'canceled';
+  payload?: P;
+  resumePayload?: R;
+  suspendPayload?: S;
+  suspendOutput?: T;
+  output?: T;
+  startedAt?: number;
+  endedAt?: number;
+  metadata?: StepMetadata;
+};
+
 export type StepResult<P, R, S, T> =
   | StepSuccess<P, R, S, T>
   | StepFailure<P, R, S, T>
@@ -170,7 +182,8 @@ export type StepResult<P, R, S, T> =
   | StepRunning<P, R, S, T>
   | StepWaiting<P, R, S, T>
   | StepPaused<P, R, S, T>
-  | StepSkipped<P, R, S, T>;
+  | StepSkipped<P, R, S, T>
+  | StepCanceled<P, R, S, T>;
 
 /**
  * Serialized version of StepFailure where error is a SerializedError
@@ -191,7 +204,8 @@ export type SerializedStepResult<P, R, S, T> =
   | StepRunning<P, R, S, T>
   | StepWaiting<P, R, S, T>
   | StepPaused<P, R, S, T>
-  | StepSkipped<P, R, S, T>;
+  | StepSkipped<P, R, S, T>
+  | StepCanceled<P, R, S, T>;
 
 export type TimeTravelContext<P, R, S, T> = Record<
   string,
@@ -493,6 +507,15 @@ export interface WorkflowErrorCallbackInfo {
   stepExecutionPath?: string[];
 }
 
+/**
+ * Predicate deciding whether a workflow run snapshot is persisted for a given
+ * status transition. Returning false skips the storage write entirely.
+ */
+export type ShouldPersistSnapshotFn = (params: {
+  stepResults: Record<string, StepResult<any, any, any, any>>;
+  workflowStatus: WorkflowRunStatus;
+}) => boolean;
+
 export interface WorkflowOptions {
   tracingPolicy?: TracingPolicy;
   validateInputs?: boolean;
@@ -516,10 +539,7 @@ export interface WorkflowOptions {
    * dedicated opt-in path (`recovery.durableAgents: 'auto'`).
    */
   autoRestartActiveRuns?: boolean;
-  shouldPersistSnapshot?: (params: {
-    stepResults: Record<string, StepResult<any, any, any, any>>;
-    workflowStatus: WorkflowRunStatus;
-  }) => boolean;
+  shouldPersistSnapshot?: ShouldPersistSnapshotFn;
 
   /**
    * Acknowledges that `resume()` calls for this workflow cannot be de-duplicated

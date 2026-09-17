@@ -2,19 +2,26 @@ import { SpanType } from '@mastra/core/observability';
 import type {
   AnyExportedSpan,
   ModelGenerationAttributes,
+  ModelInferenceAttributes,
   RagEmbeddingAttributes,
   UsageStats,
 } from '@mastra/core/observability';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MODEL_TOKENS } from '../../../docs/src/plugins/remark-model-tokens/models';
+import { __setObservabilityFeaturesForTest } from './features';
 import { getAttributes, formatUsageMetrics, getSpanName } from './gen-ai-semantics';
 
-function createModelGenerationSpan(attributes: ModelGenerationAttributes): AnyExportedSpan {
+const INFERENCE_ENABLED = new Set(['model-inference-span']);
+
+// Paired packages emit MODEL_INFERENCE, so it is the exported `chat` call.
+beforeAll(() => __setObservabilityFeaturesForTest(INFERENCE_ENABLED));
+
+function createModelInferenceSpan(attributes: ModelInferenceAttributes): AnyExportedSpan {
   return {
     id: 'test-span-id',
     traceId: 'test-trace-id',
-    name: 'test-generation',
-    type: SpanType.MODEL_GENERATION,
+    name: 'test-inference',
+    type: SpanType.MODEL_INFERENCE,
     startTime: new Date(),
     isRootSpan: false,
     isEvent: false,
@@ -92,7 +99,7 @@ describe('getAttributes - tool attributes', () => {
 
 describe('getAttributes - token usage', () => {
   it('should extract basic tokens', () => {
-    const span = createModelGenerationSpan({
+    const span = createModelInferenceSpan({
       model: 'gpt-4',
       provider: 'openai',
       usage: { inputTokens: 100, outputTokens: 50 },
@@ -103,7 +110,7 @@ describe('getAttributes - token usage', () => {
   });
 
   it('should extract cacheRead from inputDetails using OTel-spec attribute name', () => {
-    const span = createModelGenerationSpan({
+    const span = createModelInferenceSpan({
       model: 'claude-3-opus',
       provider: 'anthropic',
       usage: { inputTokens: 1000, outputTokens: 200, inputDetails: { cacheRead: 800 } },
@@ -113,7 +120,7 @@ describe('getAttributes - token usage', () => {
   });
 
   it('should extract cacheWrite from inputDetails using OTel-spec attribute name', () => {
-    const span = createModelGenerationSpan({
+    const span = createModelInferenceSpan({
       model: 'claude-3-opus',
       provider: 'anthropic',
       usage: { inputTokens: 1000, outputTokens: 200, inputDetails: { cacheWrite: 500 } },
@@ -123,7 +130,7 @@ describe('getAttributes - token usage', () => {
   });
 
   it('should extract reasoning from outputDetails', () => {
-    const span = createModelGenerationSpan({
+    const span = createModelInferenceSpan({
       model: 'o1-preview',
       provider: 'openai',
       usage: { inputTokens: 100, outputTokens: 500, outputDetails: { reasoning: 400 } },
@@ -210,7 +217,7 @@ describe('formatUsageMetrics', () => {
 });
 
 describe('getAttributes - conversation id', () => {
-  it.each([SpanType.MODEL_GENERATION, SpanType.TOOL_CALL, SpanType.MCP_TOOL_CALL])(
+  it.each([SpanType.MODEL_INFERENCE, SpanType.TOOL_CALL, SpanType.MCP_TOOL_CALL])(
     'should set gen_ai.conversation.id from metadata.threadId for %s spans',
     spanType => {
       const attrs = getAttributes(createSpan(spanType, { threadId: 'thread-123' }));
@@ -404,5 +411,163 @@ describe('getAttributes - workflow attributes', () => {
 
     expect(attrs).not.toHaveProperty('mastra.workflow_parallel.branch_count');
     expect(attrs).not.toHaveProperty('mastra.workflow_parallel.parallel_steps');
+  });
+
+  describe('authored entry identity', () => {
+    const entryMetadata = { phase: 'processing', enabled: false, count: 0, nested: { deep: true } };
+    const entryFields = {
+      entryId: 'parallel-group',
+      entryDescription: 'Run two tasks in parallel',
+      entryMetadata,
+    };
+
+    it('preserves parallel entry fields from attributes without relying on span.metadata', () => {
+      const span = createWorkflowSpan(SpanType.WORKFLOW_PARALLEL, {
+        name: "parallel: '2 branches'",
+        metadata: {},
+        attributes: { branchCount: 2, parallelSteps: ['first', 'second'], ...entryFields },
+      });
+      const attrs = getAttributes(span);
+
+      expect(attrs).toMatchObject({
+        'mastra.workflow_parallel.branch_count': 2,
+        'mastra.workflow_parallel.entry_id': 'parallel-group',
+        'mastra.workflow_parallel.entry_description': 'Run two tasks in parallel',
+        'mastra.workflow_parallel.entry_metadata': JSON.stringify(entryMetadata),
+      });
+      expect(Object.keys(attrs).some(key => key.startsWith('mastra.metadata.'))).toBe(false);
+    });
+
+    it('round-trips nested and falsy entry metadata values', () => {
+      const span = createWorkflowSpan(SpanType.WORKFLOW_PARALLEL, { attributes: { entryMetadata } });
+      const serialized = getAttributes(span)['mastra.workflow_parallel.entry_metadata'];
+
+      expect(JSON.parse(serialized as string)).toEqual(entryMetadata);
+    });
+
+    it.each([
+      [SpanType.WORKFLOW_CONDITIONAL, 'workflow_conditional'],
+      [SpanType.WORKFLOW_LOOP, 'workflow_loop'],
+      [SpanType.WORKFLOW_SLEEP, 'workflow_sleep'],
+    ])('preserves entry fields for %s spans', (type, prefix) => {
+      const span = createWorkflowSpan(type, { attributes: entryFields });
+
+      expect(getAttributes(span)).toMatchObject({
+        [`mastra.${prefix}.entry_id`]: 'parallel-group',
+        [`mastra.${prefix}.entry_description`]: 'Run two tasks in parallel',
+        [`mastra.${prefix}.entry_metadata`]: JSON.stringify(entryMetadata),
+      });
+    });
+
+    it('preserves step entry description and metadata', () => {
+      const span = createWorkflowSpan(SpanType.WORKFLOW_STEP, {
+        entityId: 'left',
+        attributes: { status: 'success', entryDescription: 'Left branch', entryMetadata: { retries: 0 } },
+      });
+
+      expect(getAttributes(span)).toMatchObject({
+        'mastra.workflow_step.step_id': 'left',
+        'mastra.workflow_step.entry_description': 'Left branch',
+        'mastra.workflow_step.entry_metadata': '{"retries":0}',
+      });
+    });
+
+    it('adds no entry keys when entry fields are absent', () => {
+      const span = createWorkflowSpan(SpanType.WORKFLOW_LOOP, { attributes: { loopType: 'foreach' } });
+      const attrs = getAttributes(span);
+
+      expect(attrs).not.toHaveProperty('mastra.workflow_loop.entry_id');
+      expect(attrs).not.toHaveProperty('mastra.workflow_loop.entry_description');
+      expect(attrs).not.toHaveProperty('mastra.workflow_loop.entry_metadata');
+    });
+  });
+});
+
+describe('getAttributes - one span per model call', () => {
+  const usage: UsageStats = { inputTokens: 61, outputTokens: 14, inputDetails: { cacheRead: 40 } };
+
+  function span(type: SpanType, attributes: Record<string, unknown>): AnyExportedSpan {
+    return {
+      ...createSpan(type),
+      entityId: 'weather-agent',
+      entityName: 'weather-agent',
+      input: [{ role: 'user', content: 'hi' }],
+      output: [{ role: 'assistant', content: 'hello' }],
+      attributes,
+    } as AnyExportedSpan;
+  }
+
+  it('exports the inference span as the chat call with model, usage and messages', () => {
+    const attrs = getAttributes(
+      span(SpanType.MODEL_INFERENCE, {
+        model: MODEL_TOKENS.__AI_SDK_OPENAI_MODEL_BASE__,
+        provider: 'openai',
+        stepIndex: 1,
+        finishReason: 'tool-calls',
+        responseModel: 'gpt-5-2025-08-07',
+        responseId: 'resp-1',
+        usage,
+      }),
+    );
+    expect(attrs).toMatchObject({
+      'gen_ai.operation.name': 'chat',
+      'gen_ai.request.model': MODEL_TOKENS.__AI_SDK_OPENAI_MODEL_BASE__,
+      'gen_ai.provider.name': 'openai',
+      'gen_ai.usage.input_tokens': 61,
+      'gen_ai.usage.output_tokens': 14,
+      'gen_ai.usage.cache_read.input_tokens': 40,
+      'gen_ai.response.finish_reasons': JSON.stringify(['tool-calls']),
+      'gen_ai.response.model': 'gpt-5-2025-08-07',
+      'gen_ai.response.id': 'resp-1',
+      'gen_ai.agent.name': 'weather-agent',
+    });
+    expect(attrs).toHaveProperty('gen_ai.input.messages');
+    expect(attrs).toHaveProperty('gen_ai.output.messages');
+    expect(getSpanName(span(SpanType.MODEL_INFERENCE, { model: 'gpt-4o' }))).toBe('chat gpt-4o');
+  });
+
+  it('exports the generation span as a parent without model or usage so backends do not count it twice', () => {
+    const attrs = getAttributes(
+      span(SpanType.MODEL_GENERATION, { model: 'gpt-4o', provider: 'openai', finishReason: 'stop', usage }),
+    );
+    expect(attrs['gen_ai.operation.name']).toBe('model_generation');
+    expect(attrs).not.toHaveProperty('gen_ai.request.model');
+    expect(attrs).not.toHaveProperty('gen_ai.usage.input_tokens');
+    expect(attrs).not.toHaveProperty('gen_ai.response.finish_reasons');
+    expect(attrs).not.toHaveProperty('gen_ai.input.messages');
+    expect(attrs).toHaveProperty('mastra.model_generation.input');
+    expect(attrs).toHaveProperty('mastra.model_generation.output');
+    expect(getSpanName(span(SpanType.MODEL_GENERATION, { model: 'gpt-4o' }))).toBe('model_generation gpt-4o');
+  });
+
+  it('exports the step span as agent_step with its index but no usage', () => {
+    const attrs = getAttributes(span(SpanType.MODEL_STEP, { stepIndex: 0, isContinued: false, usage }));
+    expect(attrs['gen_ai.operation.name']).toBe('agent_step');
+    expect(attrs['mastra.model_step.step_index']).toBe(0);
+    expect(attrs['mastra.model_step.is_continued']).toBe(false);
+    expect(attrs).not.toHaveProperty('gen_ai.usage.input_tokens');
+    expect(getSpanName(span(SpanType.MODEL_STEP, { stepIndex: 0 }))).toBe('agent_step weather-agent');
+  });
+
+  describe('paired with an older @mastra/observability that emits no inference spans', () => {
+    beforeAll(() => __setObservabilityFeaturesForTest(undefined));
+    afterAll(() => __setObservabilityFeaturesForTest(INFERENCE_ENABLED));
+
+    it('keeps the generation span as the chat call', () => {
+      const attrs = getAttributes(span(SpanType.MODEL_GENERATION, { model: 'gpt-4o', provider: 'openai', usage }));
+      expect(attrs).toMatchObject({
+        'gen_ai.operation.name': 'chat',
+        'gen_ai.request.model': 'gpt-4o',
+        'gen_ai.usage.input_tokens': 61,
+      });
+      expect(attrs).toHaveProperty('gen_ai.input.messages');
+      expect(getSpanName(span(SpanType.MODEL_GENERATION, { model: 'gpt-4o' }))).toBe('chat gpt-4o');
+    });
+
+    it('does not export usage from a stray inference span', () => {
+      const attrs = getAttributes(span(SpanType.MODEL_INFERENCE, { model: 'gpt-4o', usage }));
+      expect(attrs['gen_ai.operation.name']).toBe('model_inference');
+      expect(attrs).not.toHaveProperty('gen_ai.usage.input_tokens');
+    });
   });
 });

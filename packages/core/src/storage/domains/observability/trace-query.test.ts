@@ -2,11 +2,25 @@ import { describe, expect, it } from 'vitest';
 import { ObservabilityStorage } from './base';
 import {
   compareTraceQueryStrings,
+  createTraceQueryObservedFieldDescriptor,
   encodeTraceQueryCursor,
+  getTraceQueryCanonicalFieldDescriptors,
+  getTraceQueryFieldsArgsSchema,
+  getTraceQueryFieldsResponseSchema,
+  getTraceQueryValuesArgsSchema,
+  getTraceQueryValuesResponseSchema,
+  isTraceQueryValueSuggestionsPath,
+  parseGetTraceQueryFieldsArgs,
+  parseGetTraceQueryValuesArgs,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
   planThreadQuery,
   planTraceQuery,
+  planTraceQueryObservedFields,
+  planTraceQueryValues,
+  TRACE_QUERY_DISCOVERY_DEFAULT_LIMIT,
+  TRACE_QUERY_DISCOVERY_MAX_LIMIT,
+  TRACE_QUERY_FIELD_REGISTRY,
   TRACE_QUERY_MAX_DEPTH,
   TRACE_QUERY_MAX_LITERAL_UNITS,
   TRACE_QUERY_MAX_NODES,
@@ -24,6 +38,7 @@ import {
   traceQueryTraceResponseSchema,
   TraceQueryCursorError,
   TraceQueryExecutionError,
+  TraceQueryResourceLimitError,
   TraceQueryValidationError,
   type TraceQueryPredicate,
 } from './trace-query';
@@ -1283,6 +1298,149 @@ describe('trace-query cursors', () => {
   });
 });
 
+describe('trace-query discovery contract', () => {
+  const discoveryArgs = { ...baseRequest, predicateScope: 'trace' as const };
+
+  it('normalizes bounded requests and permits empty substring searches', () => {
+    expect(parseGetTraceQueryFieldsArgs({ ...discoveryArgs, search: '  ' })).toEqual({
+      ...discoveryArgs,
+      search: '',
+      limit: TRACE_QUERY_DISCOVERY_DEFAULT_LIMIT,
+    });
+    expect(
+      getTraceQueryFieldsArgsSchema.safeParse({ ...discoveryArgs, limit: TRACE_QUERY_DISCOVERY_MAX_LIMIT }).success,
+    ).toBe(true);
+    expect(
+      getTraceQueryFieldsArgsSchema.safeParse({ ...discoveryArgs, limit: TRACE_QUERY_DISCOVERY_MAX_LIMIT + 1 }).success,
+    ).toBe(false);
+    expect(
+      getTraceQueryFieldsArgsSchema.safeParse({
+        ...discoveryArgs,
+        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00.001Z' },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('bounds observed fields and values in public responses', () => {
+    const observedFields = Array.from({ length: TRACE_QUERY_DISCOVERY_MAX_LIMIT + 1 }, () =>
+      createTraceQueryObservedFieldDescriptor('metadata.region', 1),
+    );
+    const values = Array.from({ length: TRACE_QUERY_DISCOVERY_MAX_LIMIT + 1 }, (_, index) => ({
+      value: `value-${index}`,
+      count: 1,
+    }));
+
+    expect(
+      getTraceQueryFieldsResponseSchema.safeParse({
+        canonicalFields: [],
+        observedFields: observedFields.slice(0, TRACE_QUERY_DISCOVERY_MAX_LIMIT),
+        observedFieldsTruncated: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      getTraceQueryFieldsResponseSchema.safeParse({
+        canonicalFields: [],
+        observedFields,
+        observedFieldsTruncated: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      getTraceQueryValuesResponseSchema.safeParse({
+        values: values.slice(0, TRACE_QUERY_DISCOVERY_MAX_LIMIT),
+        valuesTruncated: true,
+      }).success,
+    ).toBe(true);
+    expect(getTraceQueryValuesResponseSchema.safeParse({ values, valuesTruncated: true }).success).toBe(false);
+    expect(
+      getTraceQueryValuesResponseSchema.safeParse({
+        values: [{ value: 'é'.repeat(TRACE_QUERY_MAX_STRING_BYTES / 2), count: 1 }],
+        valuesTruncated: false,
+      }).success,
+    ).toBe(true);
+    expect(
+      getTraceQueryValuesResponseSchema.safeParse({
+        values: [{ value: 'é'.repeat(TRACE_QUERY_MAX_STRING_BYTES / 2 + 1), count: 1 }],
+        valuesTruncated: false,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('derives ordered canonical descriptors and value eligibility from one registry', () => {
+    for (const scope of ['trace', 'spans', 'scores', 'feedback'] as const) {
+      const descriptors = getTraceQueryCanonicalFieldDescriptors(scope);
+      expect(descriptors.map(field => field.path)).toEqual(Object.keys(TRACE_QUERY_FIELD_REGISTRY[scope]));
+      expect(descriptors.every(field => field.operators.length > 0)).toBe(true);
+      for (const descriptor of descriptors) {
+        expect(isTraceQueryValueSuggestionsPath(scope, descriptor.path)).toBe(descriptor.valueSuggestions);
+      }
+    }
+
+    expect(getTraceQueryCanonicalFieldDescriptors('spans', 'DEL')).toEqual([
+      expect.objectContaining({ path: 'model', valueKind: 'string', valueSuggestions: true }),
+    ]);
+  });
+
+  it('accepts only eligible scope and path pairs for value discovery', () => {
+    expect(parseGetTraceQueryValuesArgs({ ...discoveryArgs, path: 'environment' })).toMatchObject({
+      path: 'environment',
+      limit: TRACE_QUERY_DISCOVERY_DEFAULT_LIMIT,
+    });
+    expect(parseGetTraceQueryValuesArgs({ ...discoveryArgs, path: ' ${metadata.region} ' })).toMatchObject({
+      path: 'metadata.region',
+    });
+    expect(parseGetTraceQueryValuesArgs({ ...discoveryArgs, path: '${metadata.region }' })).toMatchObject({
+      path: 'metadata.region ',
+    });
+    for (const path of ['traceId', 'startedAt', 'metadata', 'metadata.customer.plan']) {
+      expect(getTraceQueryValuesArgsSchema.safeParse({ ...discoveryArgs, path }).success, path).toBe(false);
+    }
+    expect(
+      getTraceQueryValuesArgsSchema.safeParse({ ...discoveryArgs, predicateScope: 'spans', path: 'environment' })
+        .success,
+    ).toBe(false);
+  });
+
+  it('produces normalized trusted storage plans', () => {
+    expect(
+      planTraceQueryObservedFields(
+        parseGetTraceQueryFieldsArgs({
+          timeRange: { from: '2026-08-01T02:00:00+02:00', to: '2026-08-02T02:00:00+02:00' },
+          predicateScope: 'scores',
+          search: ' source ',
+          limit: 10,
+        }),
+      ),
+    ).toEqual({
+      timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-02T00:00:00.000Z' },
+      predicateScope: 'scores',
+      search: 'source',
+      limit: 10,
+    });
+    expect(planTraceQueryValues(parseGetTraceQueryValuesArgs({ ...discoveryArgs, path: 'status' }))).toMatchObject({
+      predicateScope: 'trace',
+      path: 'status',
+      limit: TRACE_QUERY_DISCOVERY_DEFAULT_LIMIT,
+    });
+  });
+
+  it('returns only fields that the trace-query planner accepts in the same scope', () => {
+    for (const scope of ['trace', 'spans', 'scores', 'feedback'] as const) {
+      for (const descriptor of getTraceQueryCanonicalFieldDescriptors(scope)) {
+        const predicate = { op: 'exists', path: descriptor.path };
+        const where = scope === 'trace' ? predicate : { [scope]: { some: predicate } };
+        expect(() => planTraceQuery(parsed({ ...baseRequest, where })), `${scope}.${descriptor.path}`).not.toThrow();
+      }
+    }
+
+    const observed = createTraceQueryObservedFieldDescriptor('metadata.region', 3);
+    expect(observed).toMatchObject({ valueKind: 'string', valueSuggestions: true, occurrences: 3 });
+    expect(() =>
+      planTraceQuery(parsed({ ...baseRequest, where: { op: 'exists', path: observed.path } })),
+    ).not.toThrow();
+    expect(() => createTraceQueryObservedFieldDescriptor('metadata.customer.plan', 1)).toThrow();
+  });
+});
+
 describe('trace-query execution timeout contract', () => {
   it('uses a conservative default and rejects invalid timeout configuration', () => {
     expect(resolveTraceQueryTimeoutMs()).toBe(TRACE_QUERY_DEFAULT_TIMEOUT_MS);
@@ -1294,10 +1452,14 @@ describe('trace-query execution timeout contract', () => {
     }
   });
 
-  it('exposes a stable timeout identity without a driver message', () => {
+  it('exposes stable execution-budget identities without driver messages', () => {
     expect(new TraceQueryExecutionError()).toMatchObject({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
       message: 'The trace query exceeded its execution timeout',
+    });
+    expect(new TraceQueryResourceLimitError()).toMatchObject({
+      code: 'TRACE_QUERY_RESOURCE_LIMIT',
+      message: 'The trace query exceeded its resource limit',
     });
   });
 });
@@ -1307,6 +1469,12 @@ describe('trace-query responses and storage capability', () => {
     const trace = {
       traceId: 'trace-1',
       rootSpanId: 'span-1',
+      name: 'Agent run',
+      entityId: 'agent-1',
+      parentSpanId: null,
+      createdAt: '2026-08-01T00:00:00Z',
+      metadata: { customer: { id: 'customer-1' }, labels: ['support'], count: 2 },
+      inputPreview: 'Help with my order',
       threadId: null,
       resourceId: null,
       startedAt: '2026-08-01T00:00:00Z',
@@ -1341,5 +1509,15 @@ describe('trace-query responses and storage capability', () => {
     await expect(storage.queryThreads(planThreadQuery(parsedThreads()))).rejects.toMatchObject({
       id: 'OBSERVABILITY_STORAGE_QUERY_THREADS_NOT_IMPLEMENTED',
     });
+    await expect(
+      storage.getTraceQueryObservedFields(
+        planTraceQueryObservedFields(parseGetTraceQueryFieldsArgs({ ...baseRequest, predicateScope: 'trace' })),
+      ),
+    ).rejects.toMatchObject({ id: 'OBSERVABILITY_STORAGE_TRACE_QUERY_DISCOVERY_NOT_IMPLEMENTED' });
+    await expect(
+      storage.getTraceQueryValues(
+        planTraceQueryValues(parseGetTraceQueryValuesArgs({ ...baseRequest, predicateScope: 'trace', path: 'status' })),
+      ),
+    ).rejects.toMatchObject({ id: 'OBSERVABILITY_STORAGE_TRACE_QUERY_DISCOVERY_NOT_IMPLEMENTED' });
   });
 });

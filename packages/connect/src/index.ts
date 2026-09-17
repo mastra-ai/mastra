@@ -7,4 +7,4 @@ export type { ConnectClientOptions, ConnectionCredential, ProjectConnection } fr
 export type { ProviderToolsOptions, ProxyToolConfig, ProxyToolContext } from './toolset.js';
 export { defineProxyTool, resolveConnectionId, applyAllowTools } from './toolset.js';
 export { PROVIDERS, findRegistration } from './registry.js';
-export type { ProviderRegistration } from './registry.js';
+export type { McpProviderRegistration, ProviderRegistration, ProxyProviderRegistration } from './registry.js';

@@ -42,7 +42,7 @@ export function useMcpAppTools() {
           const meta = tool._meta as { ui?: { resourceUri?: string } } | undefined;
           const resourceUri = meta?.ui?.resourceUri;
           if (resourceUri) {
-            const toolId = tool.id ?? tool.name;
+            const toolId = tool.name;
             const info: McpAppToolInfo = { serverId, toolId, toolName: tool.name, resourceUri };
             map[toolId] = info;
             if (tool.name !== toolId) {

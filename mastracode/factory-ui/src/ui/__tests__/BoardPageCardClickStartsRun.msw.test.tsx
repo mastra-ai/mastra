@@ -63,7 +63,7 @@ const linearWorkItem = {
     url: 'https://linear.app/acme/issue/ENG-42/fix-intake-sync',
   },
   title: 'ENG-42: Fix intake sync',
-  metadata: { identifier: 'ENG-42' },
+  metadata: { identifier: 'ENG-42', linearIssueId: 'linear-issue-1' },
 };
 
 interface TransitionRequest {
@@ -141,14 +141,15 @@ function stubBoardEndpoints({ issues = [] as object[], workItems = [issueWorkIte
         description: 'The app crashes when logging out.',
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/linear/issues/:identifier`, ({ params }) =>
-      HttpResponse.json({
+    http.get(`${TEST_BASE_URL}/web/linear/issues/:identifier`, ({ params, request }) => {
+      expect(new URL(request.url).searchParams.get('issueId')).toBe('linear-issue-1');
+      return HttpResponse.json({
         identifier: String(params.identifier),
         title: 'Fix intake sync',
         url: 'https://linear.app/acme/issue/ENG-42/fix-intake-sync',
         description: 'The sync runs the wrong way.',
-      }),
-    ),
+      });
+    }),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs/:number`, () =>
       HttpResponse.json({ error: 'pull_request_not_found' }, { status: 404 }),
     ),

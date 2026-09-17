@@ -1,5 +1,6 @@
 {
   "attachment": [
+    "deepseek/deepseek-v4.1-flash",
     "minimax/minimax-m3",
     "moonshotai/kimi-k2.5",
     "moonshotai/kimi-k2.6",
@@ -17,6 +18,7 @@
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-0731",
     "deepseek/deepseek-v4-pro",
+    "deepseek/deepseek-v4.1-flash",
     "minimax/minimax-m2.5",
     "minimax/minimax-m3",
     "moonshotai/kimi-k2.6",
@@ -38,6 +40,7 @@
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-0731",
     "deepseek/deepseek-v4-pro",
+    "deepseek/deepseek-v4.1-flash",
     "moonshotai/kimi-k2.5",
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",

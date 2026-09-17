@@ -76,6 +76,7 @@ async function relocateSourceCards({
   factoryProjectId,
   sourceId,
   targetBoard,
+  attributionSourceIds,
 }: {
   workItems: Pick<WorkItemsStorage, 'list' | 'update' | 'supersedeDecisionsForWorkItem'>;
   integration: IntakeIntegration;
@@ -85,6 +86,7 @@ async function relocateSourceCards({
   factoryProjectId: string;
   sourceId: string;
   targetBoard: string;
+  attributionSourceIds: string[];
 }): Promise<{ moved: number; skipped: number }> {
   if (!boardRegistry.has(targetBoard)) return { moved: 0, skipped: 0 };
 
@@ -94,10 +96,18 @@ async function relocateSourceCards({
   for (let page = 0; page < REBIND_MAX_PAGES; page += 1) {
     const result = await withTimeout(
       integration.id,
-      () => integration.intake.listItems({ orgId, userId, sourceIds: [sourceId], cursor }),
+      () =>
+        integration.intake.listItems({
+          orgId,
+          userId,
+          sourceIds: [sourceId],
+          attributionSourceIds,
+          cursor,
+        }),
       deadline - Date.now(),
     );
     for (const item of result.items) {
+      if (item.sourceId !== sourceId) continue;
       for (const key of intakeItemSourceKeys(integration.id, item)) sourceKeys.add(key);
     }
     if (!result.nextCursor) break;
@@ -340,7 +350,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
           const tenant = await this.#resolveTenant(loose(c));
           if ('response' in tenant) return tenant.response;
           await intake.ensureReady();
-          const config = await intake.getConfig({ ...tenant, integrationIds });
+          const config = await intake.getConfig({ orgId: tenant.orgId, integrationIds });
           return c.json({ config });
         },
       }),
@@ -374,7 +384,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
           }
 
           await intake.ensureReady();
-          await intake.saveConfig({ ...tenant, config: registeredConfig });
+          await intake.saveConfig({ orgId: tenant.orgId, config: registeredConfig });
           await audit.emit({
             context: loose(c),
             input: {
@@ -465,6 +475,14 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
               previousBinding.board !== nextBoard
             ) {
               try {
+                const config = await intake.getConfig({
+                  orgId: tenant.orgId,
+                  integrationIds: [binding.integrationId],
+                });
+                const configuredSourceIds = config[binding.integrationId]?.sourceIds ?? [];
+                const attributionSourceIds = configuredSourceIds.includes(binding.sourceId)
+                  ? configuredSourceIds
+                  : [...configuredSourceIds, binding.sourceId];
                 relocated = await relocateSourceCards({
                   workItems,
                   integration,
@@ -473,6 +491,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
                   userId: tenant.userId,
                   factoryProjectId: binding.factoryProjectId,
                   sourceId: binding.sourceId,
+                  attributionSourceIds,
                   targetBoard: nextBoard,
                 });
               } catch (error) {
@@ -617,7 +636,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
           if (!cursors) return c.json({ error: 'invalid_cursor' }, 400);
 
           await intake.ensureReady();
-          const config = await intake.getConfig({ ...tenant, integrationIds });
+          const config = await intake.getConfig({ orgId: tenant.orgId, integrationIds });
           const { pages, failures } = await settleByIntegration(
             integrations.flatMap(integration => {
               const selection = config[integration.id];

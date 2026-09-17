@@ -2013,6 +2013,24 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /observability/threads/query": {
+    "method": "POST",
+    "path": "/observability/threads/query",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "page",
+      "traces",
+      "where"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "threads",
+      "paginationProperty": "page"
+    }
+  },
   "GET /observability/metrics": {
     "method": "GET",
     "path": "/observability/metrics",
@@ -3330,7 +3348,9 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
-      "data"
+      "data",
+      "resumeData",
+      "suspendPayload"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -6039,6 +6059,7 @@ export const API_ROUTE_METADATA = {
       "prompt",
       "providerOptions",
       "requestContext",
+      "resourceId",
       "signalType",
       "status",
       "tagName",
