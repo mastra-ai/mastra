@@ -1545,9 +1545,10 @@ describe('EagerToolExecutionCoordinator', () => {
   });
 
   it('keeps each discarded attempt in model-call order, and attempts in discard order', () => {
-    // `sequence` numbers calls within one attempt and restarts with the next, so it
-    // orders a batch but says nothing across batches. Calls inside one batch keep the
-    // order the model emitted them; batches keep the order they were discarded in.
+    // Calls inside one batch keep the order the model emitted them; batches keep the
+    // order they were discarded in. `sequence` happens to be run-global today, so a sort
+    // of the whole buffer would agree — sorting per batch keeps that coincidence from
+    // becoming load-bearing.
     const coordinator = new EagerToolExecutionCoordinator(() => 1);
     coordinator.carryDiscardedWork([
       { toolCallId: 'first-b', toolName: 'tool-b', args: {}, result: 'b', sequence: 1 },
