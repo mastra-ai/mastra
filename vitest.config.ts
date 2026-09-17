@@ -9,7 +9,7 @@ const EXCLUDED_DIRS = new Set([
   'packages/_config',
   'packages/_types-builder',
   'packages/_vendored',
-  'server-adapters/_test-utils',
+  'server-adapters/server-adapters-test-suite',
   'browser/_test-utils',
   'workspaces/_test-utils',
   'observability/_examples',

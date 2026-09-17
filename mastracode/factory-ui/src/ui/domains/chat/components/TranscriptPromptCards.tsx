@@ -1,4 +1,5 @@
 import type { PlanResume } from '@mastra/client-js';
+import { ToolApproval } from '@mastra/playground-ui/components/ai/tool-approval';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
@@ -9,10 +10,8 @@ import type { ApprovalPrompt, SubagentEntry, SuspensionPrompt } from '../service
 import { SubmitPlanCard } from './SubmitPlanCard';
 import { resultBlock, stringify, truncate } from './transcript-shared';
 
-// Prompt cards (approval / suspension) — an elevated card with a colored left rail.
-const promptCardBase = 'my-2 rounded-lg border border-border1 bg-surface3 px-4 py-3 shadow-md';
-const promptCardApproval = `${promptCardBase} border-l-4 border-l-warning1`;
-const promptCardSuspension = `${promptCardBase} border-l-4 border-l-accent2`;
+const promptCardSuspension =
+  'my-2 rounded-lg border border-border1 border-l-4 border-l-accent2 bg-surface3 px-4 py-3 shadow-md';
 const promptTitle = 'mb-1.5 text-sm font-semibold text-icon6';
 const promptActions = 'mt-2 flex gap-2';
 
@@ -40,32 +39,15 @@ export function ApprovalCard({
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
 }) {
   return (
-    <div className={promptCardApproval} role="group" aria-label={`Tool approval for ${prompt.toolName}`}>
-      <div className={promptTitle}>
-        Approve <code className="bg-surface5 rounded px-1.5 py-px font-mono text-xs">{prompt.toolName}</code>?
-      </div>
+    <ToolApproval
+      toolName={prompt.toolName}
+      autoFocus
+      disabled={isSubmitting}
+      onApprove={() => onApprove(prompt.toolCallId, true, prompt.id)}
+      onDecline={() => onApprove(prompt.toolCallId, false, prompt.id)}
+    >
       <pre className={resultBlock}>{truncate(stringify(prompt.args), 400)}</pre>
-      <div className={promptActions}>
-        <Button
-          variant="primary"
-          size="sm"
-          aria-label={`Approve ${prompt.toolName}`}
-          autoFocus
-          disabled={isSubmitting}
-          onClick={() => onApprove(prompt.toolCallId, true, prompt.id)}
-        >
-          Approve
-        </Button>
-        <Button
-          size="sm"
-          aria-label={`Decline ${prompt.toolName}`}
-          disabled={isSubmitting}
-          onClick={() => onApprove(prompt.toolCallId, false, prompt.id)}
-        >
-          Decline
-        </Button>
-      </div>
-    </div>
+    </ToolApproval>
   );
 }
 

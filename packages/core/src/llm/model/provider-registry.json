@@ -1735,6 +1735,7 @@
         "runpod/kimi-k3",
         "runware/deepseek-v4-flash",
         "runware/deepseek-v4-pro",
+        "runware/deepseek-v4.1-flash",
         "runware/gemma-4-31b-it",
         "runware/glm-5.2",
         "runware/glm-5.3",
@@ -2043,7 +2044,8 @@
         "doubao-seed-2-1-turbo-260628",
         "doubao-seed-character-260628",
         "doubao-seed-evolving",
-        "glm-5-2-260617"
+        "glm-5-2-260617",
+        "glm-5-3-flash-260828"
       ],
       "docUrl": "https://www.volcengine.com/docs/82379/1330310",
       "gateway": "models.dev"
@@ -2479,6 +2481,7 @@
         "kimi-k2-thinking",
         "kimi-k2.5",
         "kimi-k2.6",
+        "kimi-k3",
         "kimi/kimi-k2.5",
         "moonshot-kimi-k2-instruct",
         "qvq-max",
@@ -3251,27 +3254,16 @@
         "deepseek-v4-pro-0813",
         "deepseek-v4.1-flash",
         "gemma-4-26b-a4b-it",
-        "glm-5",
-        "glm-5.1",
         "glm-5.2",
         "glm-5.3",
         "glm-5.3-flash",
         "gpt-oss-120b",
         "inkling",
         "kimi-k2-thinking",
-        "kimi-k2.5",
-        "kimi-k2.6",
         "kimi-k2.7-code",
         "kimi-k3",
-        "llama-3.3-70b-instruct",
-        "llama-4-maverick-17b-128e-instruct-fp8",
         "minimax-m2.7",
         "minimax-m3",
-        "qwen3-coder-480b-a35b-instruct-int4-mixed-ar",
-        "qwen3-next-80b-a3b-instruct",
-        "qwen3.6-flash",
-        "qwen3.6-max",
-        "qwen3.6-plus",
         "qwen3.7-flash",
         "qwen3.7-max",
         "qwen3.7-plus",
@@ -3761,6 +3753,7 @@
       "models": [
         "deepseek-v4-flash-0731",
         "glm-5.2",
+        "kimi-k3",
         "qvq-max",
         "qwen-flash",
         "qwen-max",
@@ -3927,6 +3920,7 @@
         "thinkingmachines/inkling",
         "upstage/solar-10.7b-instruct",
         "z-ai/glm-5.2",
+        "z-ai/glm-5.3",
         "z-ai/glm-5.3-flash"
       ],
       "docUrl": "https://docs.api.nvidia.com/nim/",
@@ -4580,7 +4574,7 @@
       "url": "https://api.inference.wandb.ai/v1",
       "apiKeyEnvVar": "WANDB_API_KEY",
       "apiKeyHeader": "Authorization",
-      "name": "Weights & Biases",
+      "name": "CoreWeave",
       "models": [
         "JetBrains/Mellum2-12B-A2.5B-Instruct",
         "MiniMaxAI/MiniMax-M3",
@@ -4610,7 +4604,7 @@
         "zai-org/GLM-5.2",
         "zai-org/GLM-5.3-Flash"
       ],
-      "docUrl": "https://docs.wandb.ai/guides/integrations/inference/",
+      "docUrl": "https://docs.wandb.ai/inference",
       "gateway": "models.dev"
     },
     "friendli": {
@@ -4993,7 +4987,7 @@
       "apiKeyHeader": "Authorization",
       "name": "Inception",
       "models": ["mercury-2", "mercury-2.5", "mercury-edit-2"],
-      "docUrl": "https://platform.inceptionlabs.ai/docs",
+      "docUrl": "https://docs.inceptionlabs.ai/get-started/models",
       "gateway": "models.dev"
     },
     "lilac": {
@@ -5168,7 +5162,6 @@
         "accounts/fireworks/models/kimi-k3",
         "accounts/fireworks/models/minimax-m2p7",
         "accounts/fireworks/models/minimax-m3",
-        "accounts/fireworks/models/mistral-large-3-fp8",
         "accounts/fireworks/models/muse-glimmer-30b",
         "accounts/fireworks/models/nemotron-3-ultra-nvfp4",
         "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b",
@@ -5189,7 +5182,18 @@
         "accounts/fireworks/routers/qwen-max-latest"
       ],
       "docUrl": "https://fireworks.ai/docs/",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "deprecatedModels": [
+        "accounts/fireworks/models/deepseek-v4-flash-0731",
+        "accounts/fireworks/models/deepseek-v4-flash-vision-exp",
+        "accounts/fireworks/models/deepseek-v4-pro",
+        "accounts/fireworks/models/deepseek-v4-pro-0813",
+        "accounts/fireworks/models/glm-5p2",
+        "accounts/fireworks/models/kimi-k2p6",
+        "accounts/fireworks/models/kimi-k2p7-code",
+        "accounts/fireworks/models/minimax-m2p7",
+        "accounts/fireworks/models/muse-glimmer-30b"
+      ]
     },
     "opper": {
       "url": "https://api.opper.ai/v3/compat",
@@ -5458,6 +5462,8 @@
       "models": [
         "deepseek-ocr-2",
         "glm-5.3",
+        "glm-5.3-flash",
+        "glm-flash-latest",
         "glm-latest",
         "gpt-oss-120b",
         "kimi-k2.6",
@@ -5467,7 +5473,8 @@
         "whisper-large-v3"
       ],
       "docUrl": "https://docs.privatemode.ai/api/overview",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "deprecatedModels": ["kimi-k2.6", "kimi-latest"]
     },
     "minimax-coding-plan": {
       "url": "https://api.minimax.io/anthropic/v1",
@@ -5519,8 +5526,7 @@
         "umans-deepseek-v4-flash-0731",
         "umans-deepseek-v4-pro-0813",
         "umans-flash",
-        "umans-glm-5.2",
-        "umans-kimi-k2.7",
+        "umans-glm-5.3-flash",
         "umans-kimi-k3",
         "umans-qwen3.6-35b-a3b"
       ],
@@ -5620,8 +5626,7 @@
         "umans-deepseek-v4-flash-0731",
         "umans-deepseek-v4-pro-0813",
         "umans-flash",
-        "umans-glm-5.2",
-        "umans-kimi-k2.7",
+        "umans-glm-5.3-flash",
         "umans-kimi-k3"
       ],
       "docUrl": "https://app.umans.ai/offers/code/docs/orgs",
@@ -7318,7 +7323,17 @@
       "apiKeyEnvVar": "ITERACOMPUTE_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "IteraCompute",
-      "models": ["iteracompute/ornith-1.5-35b-a3b", "iteracompute/qwen3.8-27b"],
+      "models": [
+        "deepseek/deepseek-v4-flash-0731",
+        "deepseek/deepseek-v4-pro-0813",
+        "minimax/minimax-m3",
+        "moonshotai/kimi-k3",
+        "ornith-ai/ornith-1.5-35b-a3b",
+        "qwen/qwen3.8-2.4t-a95b",
+        "qwen/qwen3.8-27b",
+        "z-ai/glm-5.3",
+        "z-ai/glm-5.3-flash"
+      ],
       "docUrl": "https://iteracompute.com/docs.html",
       "gateway": "models.dev"
     },
@@ -8364,6 +8379,23 @@
       "docUrl": "https://developers.upstage.ai/docs/apis/chat",
       "gateway": "models.dev"
     },
+    "inco": {
+      "url": "https://api.inco.ai/v1",
+      "apiKeyEnvVar": "INCO_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Inco",
+      "models": [
+        "deepseek-v4.1-flash:fast",
+        "glm-5.3",
+        "glm-5.3-flash:fast",
+        "glm-5.3:fast",
+        "kimi-k3:fast",
+        "minimax-m3",
+        "minimax-m3:fast"
+      ],
+      "docUrl": "https://platform.inco.ai/docs",
+      "gateway": "models.dev"
+    },
     "sarvam": {
       "url": "https://api.sarvam.ai/v1",
       "apiKeyEnvVar": "SARVAM_API_KEY",
@@ -8556,6 +8588,7 @@
       "models": [
         "hf:MiniMaxAI/MiniMax-M3",
         "hf:Qwen/Qwen3.6-27B",
+        "hf:deepseek-ai/DeepSeek-V4.1-Flash",
         "hf:moonshotai/Kimi-K2.7-Code",
         "hf:moonshotai/Kimi-K3",
         "hf:nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4",
@@ -9106,7 +9139,6 @@
         "kimi-k2.6",
         "kimi-k2.7-code",
         "kimi-k3",
-        "llama-3.1-405b-instruct",
         "llama-3.1-8b-instruct",
         "llama-3.3-70b-instruct",
         "minicpm-v-4.5",
@@ -9213,6 +9245,15 @@
       "docUrl": "https://nan.builders/docs/models",
       "gateway": "models.dev"
     },
+    "ai21": {
+      "url": "https://api.ai21.com/studio/v1",
+      "apiKeyEnvVar": "AI21_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "AI21 Labs",
+      "models": ["jamba-large", "jamba-mini"],
+      "docUrl": "https://docs.ai21.com/docs/jamba-foundation-models",
+      "gateway": "models.dev"
+    },
     "perplexity": {
       "apiKeyEnvVar": "PERPLEXITY_API_KEY",
       "name": "Perplexity",
@@ -9268,6 +9309,25 @@
       "docUrl": "https://www.alibabacloud.com/help/zh/model-studio/token-plan-overview",
       "gateway": "models.dev",
       "deprecatedModels": ["qwen3.8-max-preview"]
+    },
+    "oci": {
+      "url": "https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/openai/v1",
+      "apiKeyEnvVar": "OCI_GENAI_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "OCI Generative AI",
+      "models": [
+        "meta.llama-3.3-70b-instruct",
+        "meta.llama-4-maverick-17b-128e-instruct-fp8",
+        "meta.llama-4-scout-17b-16e-instruct",
+        "openai.gpt-oss-120b",
+        "openai.gpt-oss-20b",
+        "xai.grok-4.20-non-reasoning",
+        "xai.grok-4.20-reasoning",
+        "xai.grok-4.3",
+        "xai.grok-4.6"
+      ],
+      "docUrl": "https://docs.oracle.com/en-us/iaas/Content/generative-ai/pretrained-models.htm",
+      "gateway": "models.dev"
     },
     "drun": {
       "url": "https://chat.d.run/v1",
@@ -9616,6 +9676,7 @@
         "moonshot/kimi-k3",
         "nebius/deepseek-ai/DeepSeek-V4-Flash-0731",
         "nebius/deepseek-ai/DeepSeek-V4-Pro-0813",
+        "nebius/deepseek-ai/DeepSeek-V4.1-Flash",
         "nebius/google/gemma-3-27b-it",
         "nebius/meta-llama/Llama-3.3-70B-Instruct",
         "nebius/nvidia/Nemotron-3-Ultra-550b-a55b",
@@ -11487,6 +11548,7 @@
       "runpod/kimi-k3",
       "runware/deepseek-v4-flash",
       "runware/deepseek-v4-pro",
+      "runware/deepseek-v4.1-flash",
       "runware/gemma-4-31b-it",
       "runware/glm-5.2",
       "runware/glm-5.3",
@@ -11714,7 +11776,8 @@
       "doubao-seed-2-1-turbo-260628",
       "doubao-seed-character-260628",
       "doubao-seed-evolving",
-      "glm-5-2-260617"
+      "glm-5-2-260617",
+      "glm-5-3-flash-260828"
     ],
     "sensenova": ["deepseek-v4-flash", "deepseek-v4-pro", "glm-5.2", "kimi-k3", "sensenova-6.8-flash-lite"],
     "orcarouter": [
@@ -12022,6 +12085,7 @@
       "kimi-k2-thinking",
       "kimi-k2.5",
       "kimi-k2.6",
+      "kimi-k3",
       "kimi/kimi-k2.5",
       "moonshot-kimi-k2-instruct",
       "qvq-max",
@@ -12643,27 +12707,16 @@
       "deepseek-v4-pro-0813",
       "deepseek-v4.1-flash",
       "gemma-4-26b-a4b-it",
-      "glm-5",
-      "glm-5.1",
       "glm-5.2",
       "glm-5.3",
       "glm-5.3-flash",
       "gpt-oss-120b",
       "inkling",
       "kimi-k2-thinking",
-      "kimi-k2.5",
-      "kimi-k2.6",
       "kimi-k2.7-code",
       "kimi-k3",
-      "llama-3.3-70b-instruct",
-      "llama-4-maverick-17b-128e-instruct-fp8",
       "minimax-m2.7",
       "minimax-m3",
-      "qwen3-coder-480b-a35b-instruct-int4-mixed-ar",
-      "qwen3-next-80b-a3b-instruct",
-      "qwen3.6-flash",
-      "qwen3.6-max",
-      "qwen3.6-plus",
       "qwen3.7-flash",
       "qwen3.7-max",
       "qwen3.7-plus",
@@ -13062,6 +13115,7 @@
     "alibaba": [
       "deepseek-v4-flash-0731",
       "glm-5.2",
+      "kimi-k3",
       "qvq-max",
       "qwen-flash",
       "qwen-max",
@@ -13220,6 +13274,7 @@
       "thinkingmachines/inkling",
       "upstage/solar-10.7b-instruct",
       "z-ai/glm-5.2",
+      "z-ai/glm-5.3",
       "z-ai/glm-5.3-flash"
     ],
     "jiekou": [
@@ -14248,7 +14303,6 @@
       "accounts/fireworks/models/kimi-k3",
       "accounts/fireworks/models/minimax-m2p7",
       "accounts/fireworks/models/minimax-m3",
-      "accounts/fireworks/models/mistral-large-3-fp8",
       "accounts/fireworks/models/muse-glimmer-30b",
       "accounts/fireworks/models/nemotron-3-ultra-nvfp4",
       "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b",
@@ -14426,6 +14480,8 @@
     "privatemode-ai": [
       "deepseek-ocr-2",
       "glm-5.3",
+      "glm-5.3-flash",
+      "glm-flash-latest",
       "glm-latest",
       "gpt-oss-120b",
       "kimi-k2.6",
@@ -14462,8 +14518,7 @@
       "umans-deepseek-v4-flash-0731",
       "umans-deepseek-v4-pro-0813",
       "umans-flash",
-      "umans-glm-5.2",
-      "umans-kimi-k2.7",
+      "umans-glm-5.3-flash",
       "umans-kimi-k3",
       "umans-qwen3.6-35b-a3b"
     ],
@@ -14523,8 +14578,7 @@
       "umans-deepseek-v4-flash-0731",
       "umans-deepseek-v4-pro-0813",
       "umans-flash",
-      "umans-glm-5.2",
-      "umans-kimi-k2.7",
+      "umans-glm-5.3-flash",
       "umans-kimi-k3"
     ],
     "sakana": ["fugu", "fugu-ultra", "fugu-ultra-20260615", "sakana-namazu"],
@@ -15835,7 +15889,17 @@
       "cline-pass/qwen3.7-plus",
       "cline-pass/qwen3.8-max"
     ],
-    "iteracompute": ["iteracompute/ornith-1.5-35b-a3b", "iteracompute/qwen3.8-27b"],
+    "iteracompute": [
+      "deepseek/deepseek-v4-flash-0731",
+      "deepseek/deepseek-v4-pro-0813",
+      "minimax/minimax-m3",
+      "moonshotai/kimi-k3",
+      "ornith-ai/ornith-1.5-35b-a3b",
+      "qwen/qwen3.8-2.4t-a95b",
+      "qwen/qwen3.8-27b",
+      "z-ai/glm-5.3",
+      "z-ai/glm-5.3-flash"
+    ],
     "model-oracle-ai": [
       "auto",
       "claude-fable-5",
@@ -16431,6 +16495,15 @@
       "qwen3.8-max"
     ],
     "upstage": ["solar-mini", "solar-pro2", "solar-pro3", "solar-pro4"],
+    "inco": [
+      "deepseek-v4.1-flash:fast",
+      "glm-5.3",
+      "glm-5.3-flash:fast",
+      "glm-5.3:fast",
+      "kimi-k3:fast",
+      "minimax-m3",
+      "minimax-m3:fast"
+    ],
     "sarvam": ["sarvam-105b", "sarvam-30b"],
     "xai": [
       "grok-4.20-0309-non-reasoning",
@@ -16524,6 +16597,7 @@
     "synthetic": [
       "hf:MiniMaxAI/MiniMax-M3",
       "hf:Qwen/Qwen3.6-27B",
+      "hf:deepseek-ai/DeepSeek-V4.1-Flash",
       "hf:moonshotai/Kimi-K2.7-Code",
       "hf:moonshotai/Kimi-K3",
       "hf:nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4",
@@ -16813,7 +16887,6 @@
       "kimi-k2.6",
       "kimi-k2.7-code",
       "kimi-k3",
-      "llama-3.1-405b-instruct",
       "llama-3.1-8b-instruct",
       "llama-3.3-70b-instruct",
       "minicpm-v-4.5",
@@ -16885,6 +16958,7 @@
       "tc-code-latest"
     ],
     "nan": ["deepseek-v4-flash", "gemma4", "glm5.3", "glm5.3-flash", "mimo-v2.5", "qwen3.6", "qwen3.8-flash"],
+    "ai21": ["jamba-large", "jamba-mini"],
     "perplexity": ["sonar", "sonar-deep-research", "sonar-pro", "sonar-reasoning-pro"],
     "kimi-for-coding": ["k3", "k3-256k", "kimi-for-coding", "kimi-for-coding-highspeed"],
     "alibaba-token-plan-cn": [
@@ -16915,6 +16989,17 @@
       "qwen3.8-max-preview",
       "wan2.7-image",
       "wan2.7-image-pro"
+    ],
+    "oci": [
+      "meta.llama-3.3-70b-instruct",
+      "meta.llama-4-maverick-17b-128e-instruct-fp8",
+      "meta.llama-4-scout-17b-16e-instruct",
+      "openai.gpt-oss-120b",
+      "openai.gpt-oss-20b",
+      "xai.grok-4.20-non-reasoning",
+      "xai.grok-4.20-reasoning",
+      "xai.grok-4.3",
+      "xai.grok-4.6"
     ],
     "drun": ["public/deepseek-r1", "public/deepseek-v3", "public/minimax-m25"],
     "anyapi": [
@@ -17157,6 +17242,7 @@
       "moonshot/kimi-k3",
       "nebius/deepseek-ai/DeepSeek-V4-Flash-0731",
       "nebius/deepseek-ai/DeepSeek-V4-Pro-0813",
+      "nebius/deepseek-ai/DeepSeek-V4.1-Flash",
       "nebius/google/gemma-3-27b-it",
       "nebius/meta-llama/Llama-3.3-70B-Instruct",
       "nebius/nvidia/Nemotron-3-Ultra-550b-a55b",
