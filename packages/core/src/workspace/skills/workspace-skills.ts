@@ -1541,17 +1541,17 @@ const DEFAULT_MAX_CACHED_SOURCES = 16;
  * WorkspaceSkills backed by a per-request skill source.
  *
  * `getScoped()` resolves the source for the request and returns a
- * `WorkspaceSkillsImpl` bound to it. Views are cached per resolved source and
- * per request context. A source is identified by its `id` when it has one
- * (so a resolver that constructs a fresh filesystem per request can still
- * share one cache per tenant by giving each tenant a stable id), otherwise
- * by instance. Each source gets its own search namespace so same-named skills
+ * `WorkspaceSkillsImpl` bound to it. Views are cached per resolved source
+ * instance and per request context. Sources are keyed by object identity only
+ * (never by a user-supplied `id`) so two tenants can never share a view by
+ * accident. Each source gets its own search namespace so same-named skills
  * from different sources never bleed into each other's search results.
  *
  * The per-source cache is a bounded LRU: when a source is evicted, every
  * document it indexed into the shared search engine is removed, so a resolver
  * that returns a new filesystem on every request cannot grow the index
- * without bound.
+ * without bound. Resolvers that return a stable instance per tenant keep
+ * that tenant's discovery cache warm across requests.
  *
  * Calls made directly on this instance (without `getScoped`) resolve the
  * source with an empty context, mirroring how workspace tools resolve the
@@ -1565,7 +1565,7 @@ export class ResolvedSourceWorkspaceSkills implements WorkspaceSkills {
 
   readonly #scopedByRequest = new WeakMap<object, Promise<WorkspaceSkills>>();
   /** Map insertion order doubles as LRU order; hits re-insert. */
-  readonly #bySource = new Map<string | SkillSourceInterface, { impl: WorkspaceSkillsImpl; namespace: string }>();
+  readonly #bySource = new Map<SkillSourceInterface, { impl: WorkspaceSkillsImpl; namespace: string }>();
   #nextSourceId = 0;
 
   constructor(config: ResolvedSourceWorkspaceSkillsConfig) {
@@ -1594,13 +1594,12 @@ export class ResolvedSourceWorkspaceSkills implements WorkspaceSkills {
 
   async #createScoped(context: SkillsContext): Promise<WorkspaceSkills> {
     const source = await this.#resolver(context);
-    const key = sourceCacheKey(source);
 
-    let entry = this.#bySource.get(key);
+    let entry = this.#bySource.get(source);
     if (entry) {
       // Refresh LRU position
-      this.#bySource.delete(key);
-      this.#bySource.set(key, entry);
+      this.#bySource.delete(source);
+      this.#bySource.set(source, entry);
     } else {
       const namespace = `source-${this.#nextSourceId++}`;
       entry = {
@@ -1612,7 +1611,7 @@ export class ResolvedSourceWorkspaceSkills implements WorkspaceSkills {
           sharedSearchState: this.#sharedSearchState,
         }),
       };
-      this.#bySource.set(key, entry);
+      this.#bySource.set(source, entry);
       await this.#evictOverflow();
     }
 
@@ -1694,16 +1693,6 @@ export class ResolvedSourceWorkspaceSkills implements WorkspaceSkills {
   async listAssets(skillName: string): Promise<string[]> {
     return (await this.getScoped()).listAssets(skillName);
   }
-}
-
-/**
- * Sources with a string `id` are cached by id so equivalent resolutions
- * (e.g. a fresh filesystem object per request for the same tenant) share one
- * discovery cache and search namespace.
- */
-function sourceCacheKey(source: SkillSourceInterface): string | SkillSourceInterface {
-  const id = (source as { id?: unknown }).id;
-  return typeof id === 'string' && id.length > 0 ? id : source;
 }
 
 /**

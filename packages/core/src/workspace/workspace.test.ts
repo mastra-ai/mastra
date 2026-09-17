@@ -907,22 +907,31 @@ Line 3 conclusion`;
         }
       });
 
-      it('shares one search namespace when fresh filesystems carry a stable id', async () => {
-        const searchEngine = new SearchEngine({ bm25: true });
-        const indexSpy = vi.spyOn(searchEngine, 'index');
+      it('never shares a skills view between distinct sources that carry the same id', async () => {
+        const tenantBDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-tenant-b-'));
+        await fs.mkdir(path.join(tenantBDir, 'skills', 'secret'), { recursive: true });
+        await fs.writeFile(
+          path.join(tenantBDir, 'skills', 'secret', 'SKILL.md'),
+          `---\nname: secret\ndescription: tenant b only\n---\n\nTenant B content\n`,
+        );
+        try {
+          const workspace = new Workspace({
+            filesystem: ({ requestContext }) =>
+              new LocalFilesystem({
+                basePath: requestContext.get('tenant') === 'b' ? tenantBDir : remoteDir,
+                id: 'fs',
+              }),
+            skills: ['skills'],
+          });
 
-        const skills = new ResolvedSourceWorkspaceSkills({
-          source: () => new LocalFilesystem({ basePath: remoteDir, id: 'tenant-a' }),
-          skills: ['skills'],
-          searchEngine,
-        });
+          const skillsA = await workspace.skills!.getScoped!({ requestContext: new RequestContext([['tenant', 'a']]) });
+          const skillsB = await workspace.skills!.getScoped!({ requestContext: new RequestContext([['tenant', 'b']]) });
 
-        for (let i = 0; i < 5; i++) {
-          const scoped = await skills.getScoped({ requestContext: new RequestContext() });
-          await scoped.list();
+          expect((await skillsA.list()).map(s => s.name)).toEqual(['demo']);
+          expect((await skillsB.list()).map(s => s.name)).toEqual(['secret']);
+        } finally {
+          await fs.rm(tenantBDir, { recursive: true, force: true });
         }
-
-        expect(new Set(indexSpy.mock.calls.map(([doc]) => doc.id)).size).toBe(1);
       });
 
       it('bounds indexed documents when the resolver returns a fresh filesystem per request', async () => {
