@@ -6221,7 +6221,7 @@ describe('Agent signals', () => {
 
     const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => {
       const timeout = setTimeout(() => child.kill('SIGKILL'), 5_000);
-      child.once('exit', (code, signal) => {
+      child.once('close', (code, signal) => {
         clearTimeout(timeout);
         resolve({ code, signal });
       });
