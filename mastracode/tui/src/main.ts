@@ -23,6 +23,7 @@ import {
   createShutdownCoordinator,
   startTuiProcessMemoryDiagnostics,
 } from './process-memory-diagnostics-lifecycle.js';
+import { formatResumeHint, parseResumeThreadId, shouldRunHeadless } from './resume-command.js';
 import { resolveTuiSubagents } from './subagent-settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
@@ -41,6 +42,7 @@ let tui: MastraTUI | undefined;
 let processMemoryDiagnostics: ProcessMemoryDiagnostics | undefined;
 let storageClosed = false;
 let cleanupPromise: Promise<void> | null = null;
+let getResumeThreadId: (() => string | null) | undefined;
 
 const CRASH_LOG_PATH = '/tmp/mastra-crash.log';
 
@@ -68,7 +70,7 @@ process.on('unhandledRejection', reason => {
   handleFatalError(reason instanceof Error ? reason : new Error(String(reason)));
 });
 
-async function tuiMain(pipedInput?: string | null) {
+async function tuiMain(pipedInput?: string | null, resumeThreadId?: string) {
   const settings = loadSettings();
   processMemoryDiagnostics = await startTuiProcessMemoryDiagnostics(process.env, warning => {
     console.info(`⚠ ${warning}`);
@@ -133,6 +135,7 @@ async function tuiMain(pipedInput?: string | null) {
   // createMastraCode() brought up shared resources and minted the single
   // session that all work runs through. The AgentController owns no session of its own.
   const session = result.session;
+  getResumeThreadId = () => session.thread.getId();
 
   analytics = createMastraCodeAnalytics({ version: getCurrentVersion() });
   analytics.capture('mastracode_session_started', {
@@ -157,6 +160,7 @@ async function tuiMain(pipedInput?: string | null) {
     appName: 'Mastra Code',
     version: getCurrentVersion(),
     inlineQuestions: true,
+    ...(resumeThreadId ? { resumeThreadId } : {}),
     githubSignals: result.githubSignals,
     exit: exitCode => void shutdownAndExit(exitCode),
     ...(pipedInput ? { initialMessage: `The following was piped via stdin:\n\n${pipedInput}` } : {}),
@@ -246,6 +250,14 @@ process.on('exit', () => {
   }
   restoreTerminalForeground();
   releaseAllThreadLocks();
+  try {
+    const threadId = getResumeThreadId?.();
+    if (threadId) {
+      process.stdout.write(`\n${formatResumeHint(threadId)}\n`);
+    }
+  } catch {
+    // session state or stdout may already be closed during exit
+  }
 });
 
 // Start durable diagnostics shutdown before synchronous TUI teardown so a stalled
@@ -352,7 +364,16 @@ async function main() {
     return pluginMain(process.argv.slice(3));
   }
 
-  if (hasHeadlessFlag(process.argv) || process.argv.includes('--help') || process.argv.includes('-h')) {
+  let resumeThreadId: string | undefined;
+  try {
+    resumeThreadId = parseResumeThreadId(process.argv.slice(2));
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (shouldRunHeadless(process.argv, resumeThreadId, hasHeadlessFlag(process.argv))) {
     return runMCCli(undefined, { coAuthor: TUI_CO_AUTHOR });
   }
 
@@ -376,12 +397,17 @@ async function main() {
     // stdin is consumed/closed and the TUI needs a live TTY for keyboard input.
     const reopenedStdin = reopenStdinFromTTY();
     if (!reopenedStdin) {
+      if (resumeThreadId) {
+        process.stderr.write('mastracode resume requires an interactive terminal.\n');
+        process.exitCode = 1;
+        return;
+      }
       process.stderr.write('No TTY available — falling back to headless mode.\n');
       return runMCCli(pipedInput, { coAuthor: TUI_CO_AUTHOR });
     }
   }
 
-  return tuiMain(pipedInput);
+  return tuiMain(pipedInput, resumeThreadId);
 }
 
 main().catch(error => {

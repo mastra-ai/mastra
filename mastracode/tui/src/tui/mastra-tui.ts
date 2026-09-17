@@ -74,13 +74,13 @@ import {
   refreshSkillsAutocomplete,
   setupKeyHandlers,
   subscribeToAgentController,
-  promptForThreadSelection,
   renderExistingTasks,
 } from './setup.js';
 import { handleShellPassthrough } from './shell.js';
 import type { MastraTUIOptions, TUIState } from './state.js';
 import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state.js';
 import { updateStatusLine } from './status-line.js';
+import { resumeThreadOnStartup } from './thread-startup.js';
 import { setCurrentThreadTitle } from './thread-title.js';
 
 // =============================================================================
@@ -645,8 +645,8 @@ export class MastraTUI {
     // Start the UI before thread selection so resource-drift prompts can render.
     this.state.ui.start();
 
-    // Check for existing threads and prompt for resume
-    await promptForThreadSelection(this.state);
+    // Resume the latest unlocked thread for this directory.
+    await resumeThreadOnStartup(this.state, this.state.options.resumeThreadId);
 
     // Subscribe to controller events
     subscribeToAgentController(this.state, event => this.handleEvent(event));
@@ -662,7 +662,7 @@ export class MastraTUI {
     await this.state.controller.loadOMProgress(this.state.session);
 
     // Sync current thread metadata — the thread_changed event from
-    // promptForThreadSelection fired before we subscribed above.
+    // Initial thread setup ran before we subscribed above.
     await syncInitialThreadState(this.state);
 
     this.state.isInitialized = true;

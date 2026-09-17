@@ -132,6 +132,9 @@ export interface MastraTUIOptions {
   /** Initial message to send on startup */
   initialMessage?: string;
 
+  /** Thread ID requested by `mastracode resume`. */
+  resumeThreadId?: string;
+
   /** Whether to show verbose startup info */
   verbose?: boolean;
 

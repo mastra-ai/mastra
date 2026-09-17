@@ -17,11 +17,11 @@ interface CloneResetContext {
  * confirmed, false on cancel or "No".
  */
 export async function confirmClone(state: TUIState, threadLabel?: string): Promise<boolean> {
-  const label = threadLabel ? `Clone thread "${threadLabel}"?` : 'Clone the current thread?';
+  const label = threadLabel ? `Fork thread "${threadLabel}"?` : 'Fork the current thread?';
   const answer = await askModalQuestion(state.ui, {
     question: label,
     options: [
-      { label: 'Yes', description: 'Clone this thread' },
+      { label: 'Yes', description: 'Fork this thread' },
       { label: 'No', description: 'Cancel' },
     ],
   });
@@ -33,7 +33,7 @@ export async function confirmClone(state: TUIState, threadLabel?: string): Promi
  * if the user presses Esc or submits an empty string.
  */
 export async function askCloneName(state: TUIState): Promise<string | null> {
-  const answer = await askModalQuestion(state.ui, { question: 'Give the cloned thread a name? (Esc to skip)' });
+  const answer = await askModalQuestion(state.ui, { question: 'Give the forked thread a name? (Esc to skip)' });
   const trimmed = answer?.trim() ?? '';
   return trimmed.length > 0 ? trimmed : null;
 }
@@ -65,7 +65,7 @@ export async function resetUIAfterClone(ctx: CloneResetContext, clonedTitle: str
   ctx.updateStatusLine();
   await ctx.renderExistingMessages();
   state.ui.requestRender();
-  ctx.showInfo(`Cloned thread: ${clonedTitle}`);
+  ctx.showInfo(`Forked thread: ${clonedTitle}`);
 }
 
 export async function handleCloneCommand(ctx: SlashCommandContext): Promise<void> {
@@ -73,7 +73,7 @@ export async function handleCloneCommand(ctx: SlashCommandContext): Promise<void
 
   const currentThreadId = state.session.thread.getId();
   if (!currentThreadId) {
-    ctx.showInfo('No active thread to clone');
+    ctx.showInfo('No active thread to fork');
     return;
   }
 
@@ -91,6 +91,6 @@ export async function handleCloneCommand(ctx: SlashCommandContext): Promise<void
 
     await resetUIAfterClone(ctx, clonedThread.title || clonedThread.id);
   } catch (error) {
-    ctx.showError(`Failed to clone thread: ${error instanceof Error ? error.message : String(error)}`);
+    ctx.showError(`Failed to fork thread: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
