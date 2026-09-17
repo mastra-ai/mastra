@@ -3684,7 +3684,11 @@ describe('generateTitle.emitEvent', () => {
     };
   }
 
-  function createEmitEventAgent(agentModel: MockLanguageModelV2, titleModel: MockLanguageModelV2, generateTitle: unknown) {
+  function createEmitEventAgent(
+    agentModel: MockLanguageModelV2,
+    titleModel: MockLanguageModelV2,
+    generateTitle: unknown,
+  ) {
     const mockMemory = new MockMemory();
     mockMemory.getMergedThreadConfig = () => ({ generateTitle }) as any;
 

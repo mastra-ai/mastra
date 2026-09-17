@@ -199,7 +199,7 @@ export const supportAgent = new Agent({
 
 Stream consumers receive the chunk with the persisted title, so a chat UI can rename its thread list entry without polling:
 
-```typescript
+```typescript oxfmt:false
 for await (const chunk of stream.fullStream) {
   if (chunk.type === 'data-thread-title') {
     renameThreadInSidebar(chunk.data.threadId, chunk.data.title)
