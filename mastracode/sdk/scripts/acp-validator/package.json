@@ -1,0 +1,10 @@
+{
+  "name": "mastra-acp-conformance-validator",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Isolated upstream JSON Schema validator for the ACP release checks",
+  "dependencies": {
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1"
+  }
+}

@@ -838,6 +838,8 @@ export type AgentControllerEvent =
   | {
       type: 'error';
       error: Error;
+      /** Provider finish reason when a response ended without normal completion. */
+      finishReason?: string;
       errorType?: string;
       retryable?: boolean;
       retryDelay?: number;
