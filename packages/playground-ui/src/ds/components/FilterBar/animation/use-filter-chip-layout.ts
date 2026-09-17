@@ -27,7 +27,7 @@ function measureChips(elements: Map<string, HTMLDivElement>) {
 export function useFilterChipLayout(items: readonly FilterBarItem[]) {
   const chipElements = useRef(new Map<string, HTMLDivElement>());
   const exitLayerRef = useRef<HTMLDivElement>(null);
-  const previousLayout = useRef(new Map<string, ChipLayout>());
+  const previousLayout = useRef<Map<string, ChipLayout> | undefined>(undefined);
   const animations = useRef(new Map<HTMLElement, () => void>());
 
   useLayoutEffect(() => {
@@ -36,6 +36,12 @@ export function useFilterChipLayout(items: readonly FilterBarItem[]) {
     const nextLayout = measureChips(chipElements.current);
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     const runningAnimations = animations.current;
+
+    if (!reduceMotion && previousLayout.current) {
+      for (const [id, current] of nextLayout) {
+        if (!previousLayout.current.has(id)) current.element.setAttribute('data-activated', '');
+      }
+    }
 
     function animateChip(element: HTMLElement, keyframes: Keyframe[], onFinish?: () => void) {
       runningAnimations.get(element)?.();
@@ -56,7 +62,7 @@ export function useFilterChipLayout(items: readonly FilterBarItem[]) {
       runningAnimations.set(element, finish);
     }
 
-    for (const [id, previous] of previousLayout.current) {
+    for (const [id, previous] of previousLayout.current ?? []) {
       const current = nextLayout.get(id);
       const element = previous.element;
       if (!current) {
@@ -92,6 +98,7 @@ export function useFilterChipLayout(items: readonly FilterBarItem[]) {
     const runningAnimations = animations.current;
     const cancelAnimations = () => {
       for (const finish of runningAnimations.values()) finish();
+      for (const element of chipElements.current.values()) element.removeAttribute('data-activated');
     };
     const media = window.matchMedia?.('(prefers-reduced-motion: reduce)');
     const handleMotionPreference = () => {
@@ -109,7 +116,7 @@ export function useFilterChipLayout(items: readonly FilterBarItem[]) {
       observer?.disconnect();
       media?.removeEventListener('change', handleMotionPreference);
       cancelAnimations();
-      previousLayout.current.clear();
+      previousLayout.current = undefined;
     };
   }, []);
 

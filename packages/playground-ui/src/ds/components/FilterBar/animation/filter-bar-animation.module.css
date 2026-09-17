@@ -27,12 +27,37 @@
   border-bottom-right-radius: 0;
 }
 
+.chip {
+  position: relative;
+  border-radius: var(--radius-lg);
+}
+
+.chip::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(
+    110deg,
+    transparent 35%,
+    color-mix(in srgb, currentcolor 12%, transparent) 45%,
+    color-mix(in srgb, currentcolor 32%, transparent) 50%,
+    color-mix(in srgb, currentcolor 12%, transparent) 55%,
+    transparent 65%
+  );
+  background-size: 300% 100%;
+  background-repeat: no-repeat;
+  background-position: 100% 0;
+  opacity: 0;
+}
+
 @media (prefers-reduced-motion: no-preference) {
-  .chip {
-    animation: chip-appear 160ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  .chip[data-activated]::after {
+    animation: filter-activate 520ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  .exitLayer .chip {
+  .exitLayer .chip::after {
     animation: none;
   }
 
@@ -78,11 +103,20 @@
   }
 }
 
-@keyframes chip-appear {
-  from {
+@keyframes filter-activate {
+  0% {
     opacity: 0;
-    transform: translateY(2px) scale(0.96);
-    filter: blur(2px);
+    background-position: 100% 0;
+  }
+
+  20%,
+  65% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    background-position: 0 0;
   }
 }
 
