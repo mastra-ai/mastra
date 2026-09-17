@@ -7,6 +7,10 @@ type ActionProps = Omit<ComponentProps<typeof Button>, 'variant' | 'size' | 'chi
   appearance?: 'round' | 'outline';
 };
 
+function actionLabel(props: ActionProps, fallback: string) {
+  return props['aria-label'] ?? (typeof props.tooltip === 'string' ? props.tooltip : fallback);
+}
+
 export function ComposerSendButton({ appearance = 'round', className, ...props }: ActionProps) {
   return (
     <Button
@@ -15,6 +19,7 @@ export function ComposerSendButton({ appearance = 'round', className, ...props }
       size={appearance === 'outline' ? 'icon-sm' : 'icon-md'}
       className={cn(appearance === 'round' && 'rounded-full border border-border1 bg-surface5', className)}
       {...props}
+      aria-label={actionLabel(props, 'Send message')}
     >
       <ArrowUp
         size={appearance === 'outline' ? 16 : 24}
@@ -31,6 +36,7 @@ export function ComposerStopButton({ appearance = 'round', ...props }: ActionPro
       variant={appearance === 'outline' ? 'outline' : 'default'}
       size={appearance === 'outline' ? 'icon-sm' : 'icon-md'}
       {...props}
+      aria-label={actionLabel(props, 'Stop response')}
     >
       {appearance === 'outline' ? <Square size={14} /> : <ComposerStopIcon />}
     </Button>
@@ -64,6 +70,7 @@ export function ComposerAttachmentButton({ appearance = 'round', ...props }: Act
       variant={appearance === 'outline' ? 'outline' : 'default'}
       size={appearance === 'outline' ? 'icon-sm' : 'icon-md'}
       {...props}
+      aria-label={actionLabel(props, 'Add attachment')}
     >
       {appearance === 'outline' ? (
         <ImagePlus size={14} />
@@ -83,6 +90,7 @@ export function ComposerModelSettingsButton(props: Omit<ActionProps, 'appearance
       tooltip="Model settings"
       data-testid="composer-model-settings-trigger"
       {...props}
+      aria-label={actionLabel(props, 'Model settings')}
     >
       <Sliders className="text-neutral3 hover:text-neutral6 size-5" />
     </Button>

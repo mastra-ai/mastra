@@ -53,3 +53,36 @@ export const SendAndStop: Story = {
     </ButtonsGroup>
   ),
 };
+
+export const DefaultNames: Story = {
+  render: () => (
+    <ButtonsGroup>
+      <ComposerSendButton />
+      <ComposerStopButton />
+      <ComposerAttachmentButton />
+      <ComposerModelSettingsButton />
+    </ButtonsGroup>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('button', { name: 'Send message' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Stop response' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Add attachment' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Model settings' })).toBeVisible();
+  },
+};
+export const CustomNames: Story = {
+  render: () => (
+    <ButtonsGroup>
+      <ComposerSendButton aria-label="Submit prompt" tooltip="Send" />
+      <ComposerStopButton tooltip="Cancel" />
+      <ComposerAttachmentButton tooltip="Attach image" />
+    </ButtonsGroup>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('button', { name: 'Submit prompt' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Cancel' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Attach image' })).toBeVisible();
+  },
+};
