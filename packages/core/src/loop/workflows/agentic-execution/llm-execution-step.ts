@@ -2833,8 +2833,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // checked rather than assumed. A `processOutputStep` processor switches eager
         // dispatch off for the whole turn, and the other producer of a retrying tripwire —
         // a `processToolResult` hook firing on a provider-executed result mid-stream —
-        // bails the attempt at the tripwire return above (see the
-        // `toolResultTripwireFromStream` bail) before this retry is ever considered. These
+        // bails the attempt at the `toolResultTripwireFromStream` return above, and that
+        // bail response carries no `toolResultTripwire`, so the seeding of
+        // `processOutputStepTripwire` from it further down is itself dead. These
         // two lines are therefore insurance against that arrangement changing, not a live
         // path: cheap, and the thing they prevent is a second real side effect.
         discardAttemptEagerWork();

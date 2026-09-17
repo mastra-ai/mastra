@@ -288,14 +288,19 @@ export class EagerToolExecutionCoordinator {
    * Accumulated per id rather than kept as "the last batch": a chain of failing attempts
    * commits under the same id more than once, and forgetting the earlier batch would let
    * a single `removeByIds` delete work nothing could recover.
+   *
+   * Entries are only removed by the message they describe being removed, so a run that
+   * never does that keeps them until it ends. It holds one entry per attempt that died
+   * with finished work, which retry limits bound to a handful.
    */
   readonly #committed = new Map<string, CompletedEagerWork[]>();
 
   /**
    * Hold a discarded attempt's finished work until a replacement attempt starts. Each
    * batch is sorted into model-call order as it arrives, and batches keep the order they
-   * were discarded in — sorting the whole buffer instead would be gambling that one
-   * counter is meaningful across attempts, which is not a property worth relying on.
+   * were discarded in. The dispatch counter happens to be run-global, so sorting the whole
+   * buffer would agree today — sorting per batch keeps that coincidence from becoming
+   * load-bearing.
    */
   carryDiscardedWork(work: CompletedEagerWork[]) {
     this.#carried.push(...[...work].sort((a, b) => a.sequence - b.sequence));
