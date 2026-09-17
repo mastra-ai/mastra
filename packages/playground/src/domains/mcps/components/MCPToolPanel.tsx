@@ -1,5 +1,6 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useRequestContext } from '@mastra/playground-ui/domains/request-context';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import type { JsonSchema } from '@mastra/schema-compat/json-to-zod';
@@ -28,6 +29,28 @@ function getAppResourceUri(meta?: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
+function MCPToolApp({
+  html,
+  toolName,
+  executeTool,
+}: {
+  html: string;
+  toolName: string;
+  executeTool: ReturnType<typeof useExecuteMCPTool>['mutateAsync'];
+}) {
+  const { requestContext } = useRequestContext();
+  const handleToolCall = useCallback(
+    (_toolName: string, args: Record<string, unknown>) => executeTool({ data: args, requestContext }),
+    [executeTool, requestContext],
+  );
+
+  return (
+    <div className="border-border1 border-b p-4">
+      <McpAppViewer html={html} toolName={toolName} onToolCall={handleToolCall} />
+    </div>
+  );
+}
+
 export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   const { canExecute } = usePermissions();
   const canExecuteTool = canExecute('tools');
@@ -50,14 +73,6 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
     enabled: !!appResourceUri,
   });
 
-  const handleToolCall = useCallback(
-    async (_toolName: string, args: Record<string, unknown>) => {
-      const response = await executeTool(args);
-      return response;
-    },
-    [executeTool],
-  );
-
   useEffect(() => {
     if (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load tool';
@@ -65,10 +80,10 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
     }
   }, [error]);
 
-  const handleExecuteTool = async (data: any) => {
+  const handleExecuteTool = async (data: any, requestContext: Record<string, unknown>) => {
     if (!tool) return;
 
-    return await executeTool(data);
+    return await executeTool({ data, requestContext });
   };
 
   if (isLoading) {
@@ -111,18 +126,17 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
 
   return (
     <div className="flex flex-col gap-4">
-      {appHtml && (
-        <div className="border-border1 border-b p-4">
-          <McpAppViewer html={appHtml} toolName={tool.name} onToolCall={handleToolCall} />
-        </div>
-      )}
       <ToolExecutor
+        beforeContent={
+          appHtml && <MCPToolApp html={appHtml} toolName={tool.name} executeTool={executeTool} />
+        }
         executionResult={result}
         isExecutingTool={isExecuting}
         zodInputSchema={zodInputSchema}
         handleExecuteTool={handleExecuteTool}
         toolDescription={tool.description || ''}
         toolId={tool.name}
+        entityKey={`mcp:${serverId}:${tool.id}`}
       />
     </div>
   );

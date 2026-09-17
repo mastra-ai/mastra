@@ -1,6 +1,6 @@
+import { useOptionalRequestContext } from '@mastra/playground-ui/domains/request-context';
 import { useEffect, useRef } from 'react';
 import { useAgentSettings } from '../context/agent-context';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { ChatProvider } from '@/lib/ai-ui/chat/chat-provider';
 import { Thread } from '@/lib/ai-ui/thread';
@@ -31,7 +31,7 @@ export const AgentChat = ({
   runOptionsSlot?: React.ReactNode;
 }) => {
   const { settings } = useAgentSettings();
-  const requestContext = useMergedRequestContext();
+  const requestContext = useOptionalRequestContext();
 
   const { data, isLoading: isMessagesLoading } = useAgentMessages({
     agentId: agentId,

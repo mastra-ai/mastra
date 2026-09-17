@@ -116,7 +116,11 @@ Visit [Middleware](/docs/server/middleware) for how to use server middleware.
 
 ## Studio
 
-When developing locally, you can define presets in a JSON file and load them into [Studio](/docs/studio/overview) with the [`--request-context-presets`](/reference/cli/mastra#--request-context-presets) CLI flag. This adds a dropdown to the request context editor in Studio so you can quickly switch between configurations without manually editing JSON each time.
+[Studio](/docs/studio/overview) lets you set a request context per agent, workflow, and tool. Open the **Run options** popover (sliders icon) next to the run action — in the agent chat composer, on the workflow run form, or in the tool executor header. It holds the request context editor and, for agents and workflows, the tracing options. Edit values as JSON, or use the schema-driven form when the entity defines a `requestContextSchema` and switch between **Form** and **JSON** modes.
+
+Values are saved in your browser per entity, so the context you set for one agent is sent with every chat for that agent and does not affect other agents, workflows, or tools. Request context is only sent with runs, chats, and tool executions, not when Studio lists entities.
+
+When developing locally, you can define presets in a JSON file and load them with the [`--request-context-presets`](/reference/cli/mastra#--request-context-presets) CLI flag. This adds a dropdown to the JSON editor so you can quickly switch between configurations without manually editing JSON each time.
 
 ```bash
 mastra dev --request-context-presets ./presets.json

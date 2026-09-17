@@ -1,6 +1,6 @@
+import { useOptionalRequestContext } from '@mastra/playground-ui/domains/request-context';
 import { useMastraClient } from '@mastra/react';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 function parseJsonString(jsonString: string): any {
   try {
@@ -18,7 +18,7 @@ export function useAgentWorkingMemory(agentId: string, threadId: string, resourc
   const [workingMemoryFormat, setWorkingMemoryFormat] = useState<'json' | 'markdown'>('markdown');
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
-  const { requestContext } = usePlaygroundStore();
+  const requestContext = useOptionalRequestContext();
   const latestRequest = useRef(0);
 
   const refetch = useCallback(async () => {

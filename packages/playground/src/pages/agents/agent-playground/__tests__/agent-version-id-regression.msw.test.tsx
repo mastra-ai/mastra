@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { RequestContextProvider } from '@mastra/playground-ui/domains/request-context';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -17,7 +18,6 @@ import {
   PUBLISHED_VERSION_ID,
 } from './fixtures/agent-version-id-regression';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
-import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -33,11 +33,11 @@ const renderAgentPlayground = () => {
         <MemoryRouter initialEntries={[`/agents/${AGENT_ID}/editor`]}>
           <TooltipProvider>
             <TracingSettingsProvider entityId={AGENT_ID} entityType="agent">
-              <SchemaRequestContextProvider>
+              <RequestContextProvider entityKey={`agent:${AGENT_ID}`}>
                 <Routes>
                   <Route path="/agents/:agentId/editor" element={<AgentPlayground />} />
                 </Routes>
-              </SchemaRequestContextProvider>
+              </RequestContextProvider>
             </TracingSettingsProvider>
           </TooltipProvider>
         </MemoryRouter>

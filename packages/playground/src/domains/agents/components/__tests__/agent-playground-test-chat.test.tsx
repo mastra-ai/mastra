@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { RequestContextProvider } from '@mastra/playground-ui/domains/request-context';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -9,7 +10,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentPlaygroundTestChat } from '../agent-playground/agent-playground-test-chat';
 import { memoryDisabled, v2Agent } from './fixtures/composer-model-settings';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
-import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -26,14 +26,14 @@ const renderEditorTestChat = () => {
         <MemoryRouter>
           <TooltipProvider>
             <TracingSettingsProvider entityId={AGENT_ID} entityType="agent">
-              <SchemaRequestContextProvider>
+              <RequestContextProvider entityKey="agent:test-agent">
                 <AgentPlaygroundTestChat
                   agentId={AGENT_ID}
                   agentName="Test Agent"
                   modelVersion="v2"
                   hasMemory={false}
                 />
-              </SchemaRequestContextProvider>
+              </RequestContextProvider>
             </TracingSettingsProvider>
           </TooltipProvider>
         </MemoryRouter>

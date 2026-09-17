@@ -1,6 +1,6 @@
+import { useOptionalRequestContext } from '@mastra/playground-ui/domains/request-context';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export interface UseAgentMessagesProps {
   threadId?: string;
@@ -9,10 +9,10 @@ export interface UseAgentMessagesProps {
 }
 export const useAgentMessages = ({ threadId, agentId, memory }: UseAgentMessagesProps) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
+  const requestContext = useOptionalRequestContext();
 
   return useQuery({
-    queryKey: ['memory', 'messages', threadId, agentId, 'requestContext'],
+    queryKey: ['memory', 'messages', threadId, agentId, requestContext],
     queryFn: async () => {
       if (!threadId) return null;
       const result = await client.listThreadMessages(threadId, {

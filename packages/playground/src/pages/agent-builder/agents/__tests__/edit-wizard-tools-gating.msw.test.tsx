@@ -13,10 +13,6 @@ import { authEnabledNoRbacCapabilities, currentUser } from './fixtures/auth';
 import { emptyAgents, oneOtherAgent, settingsAgentsOnly } from './fixtures/builder';
 import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
-vi.mock('@mastra/playground-ui/store/playground-store', () => ({
-  usePlaygroundStore: () => ({ requestContext: undefined }),
-}));
-
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));

@@ -3,6 +3,7 @@ import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useOptionalRequestContext } from '@mastra/playground-ui/domains/request-context';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -14,7 +15,6 @@ import { parse } from 'superjson';
 import { z } from 'zod';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { WorkflowInputData } from './workflow-input-data';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
 const buttonClass = 'text-neutral3 hover:text-neutral6';
@@ -209,7 +209,7 @@ export const WorkflowTimeTravelForm = ({
     setDebugMode,
   } = useContext(WorkflowRunContext);
 
-  const requestContext = useMergedRequestContext();
+  const requestContext = useOptionalRequestContext();
   const stepResult = inputData ? { payload: inputData } : result?.steps?.[stepKey];
   const [resumeData, setResumeData] = useState(() => '{}');
   const [contextValue, setContextValue] = useState(() => '{}');

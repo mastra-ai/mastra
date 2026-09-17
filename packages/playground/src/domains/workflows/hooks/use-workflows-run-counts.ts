@@ -2,7 +2,6 @@ import type { ListWorkflowRunCountsResponse } from '@mastra/client-js';
 import { MastraClientError } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export const RUN_COUNTS_REFETCH_INTERVAL_MS = 5000;
 
@@ -33,11 +32,10 @@ export function runCountsRefetchInterval(error: unknown): number | false {
  */
 export const useWorkflowsRunCounts = (): ListWorkflowRunCountsResponse => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   const { data } = useQuery({
-    queryKey: ['workflow-run-counts', requestContext],
-    queryFn: () => client.listWorkflowRunCounts(requestContext),
+    queryKey: ['workflow-run-counts'],
+    queryFn: () => client.listWorkflowRunCounts(),
     retry: false,
     refetchInterval: query => runCountsRefetchInterval(query.state.error),
   });

@@ -1,10 +1,10 @@
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { RequestContextProvider } from '@mastra/playground-ui/domains/request-context';
 import { useParams } from 'react-router';
 import { WorkflowHeader } from './workflow-header';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
-import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { WorkflowInformation } from '@/domains/workflows/components/workflow-information';
 import { WorkflowLayout as WorkflowLayoutUI } from '@/domains/workflows/components/workflow-layout';
 import { WorkflowRunProvider } from '@/domains/workflows/context/workflow-run-provider';
@@ -53,7 +53,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <TracingSettingsProvider entityId={workflowId} entityType="workflow">
-      <SchemaRequestContextProvider>
+      <RequestContextProvider key={workflowId} entityKey={`workflow:${workflowId}`}>
         <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId}>
           <WorkflowSelectedStepProvider>
             <WorkflowStepDetailProvider>
@@ -69,7 +69,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
             </WorkflowStepDetailProvider>
           </WorkflowSelectedStepProvider>
         </WorkflowRunProvider>
-      </SchemaRequestContextProvider>
+      </RequestContextProvider>
     </TracingSettingsProvider>
   );
 };
