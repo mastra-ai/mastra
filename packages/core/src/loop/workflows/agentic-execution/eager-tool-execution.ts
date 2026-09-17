@@ -270,6 +270,55 @@ export class EagerToolExecutionCoordinator {
   get pendingAdoptions() {
     return this.#executions.size;
   }
+
+  /**
+   * Work surrendered by a discarded attempt, held until a replacement attempt actually
+   * starts. Kept on the coordinator rather than in the step's own scope because a retry
+   * re-enters the step as a fresh invocation: anything local to the dying attempt is gone
+   * by the time its replacement exists. Never committed if no replacement comes — a run
+   * that dies must not leave an assistant turn the caller never saw streamed.
+   */
+  readonly #carried: CompletedEagerWork[] = [];
+
+  /**
+   * The last batch written into the conversation, and the message id it was written
+   * under. Held so that a path which deletes that message can hand the work back to the
+   * carry buffer instead of destroying the only record of a side effect that happened.
+   */
+  #lastCommitted: { messageId: string; work: CompletedEagerWork[] } | undefined;
+
+  /** Hold a discarded attempt's finished work until a replacement attempt starts. */
+  carryDiscardedWork(work: CompletedEagerWork[]) {
+    this.#carried.push(...work);
+  }
+
+  /** Drain the carried work, in model-call order, for committing into the conversation. */
+  takeCarriedWork(): CompletedEagerWork[] {
+    return this.#carried.splice(0).sort((a, b) => a.sequence - b.sequence);
+  }
+
+  /** Remember what was written where, so a later removal of that message can undo it. */
+  recordCommittedWork(messageId: string, work: CompletedEagerWork[]) {
+    this.#lastCommitted = { messageId, work };
+  }
+
+  /**
+   * Undo a commit whose message is being removed: the work goes back into the carry
+   * buffer so the next replacement attempt writes it again. Without this, a processor
+   * retry that deletes the attempt's messages would also delete the only record that a
+   * tool already ran, and the tool would run a second time.
+   */
+  recarryCommittedWork(messageId: string) {
+    if (this.#lastCommitted?.messageId !== messageId) return false;
+    this.#carried.push(...this.#lastCommitted.work);
+    this.#lastCommitted = undefined;
+    return true;
+  }
+
+  /** Discarded work awaiting a replacement attempt. Exposed for assertions in tests. */
+  get carriedWork(): readonly CompletedEagerWork[] {
+    return this.#carried;
+  }
 }
 
 /**

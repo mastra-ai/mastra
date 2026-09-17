@@ -1038,6 +1038,108 @@ describe('eager tool dispatch — discarded model attempt', () => {
     expect(retryPrompt).toContain('answered-finished');
   });
 
+  it('hands the next fallback model work the failed model already finished', async () => {
+    // The fallback route discards an attempt without ever going through a retry return:
+    // the callback throws, and the fallback machinery invokes it again with the next
+    // model. Nothing on that path used to write the finished work, so the second model
+    // was shown a clean slate and asked for the same tool again.
+    const executions: string[] = [];
+    const prompts: any[][] = [];
+
+    const failingModel = new MockLanguageModelV2({
+      modelId: 'failing-model',
+      doStream: async ({ prompt }) => {
+        prompts.push(prompt as any[]);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: 'response-failing',
+                modelId: 'failing-model',
+                timestamp: new Date(0),
+              });
+              controller.enqueue({
+                type: 'tool-call',
+                toolCallId: 'call-finished',
+                toolName: 'tool-a',
+                input: JSON.stringify({ value: 'finished' }),
+              });
+              // Long enough that the eager execution has certainly settled before the
+              // model takes the attempt down with it.
+              await new Promise(resolve => setTimeout(resolve, 80));
+              controller.error(new Error('model blew up mid-stream'));
+            },
+          }),
+        };
+      },
+    });
+
+    const fallbackModel = new MockLanguageModelV2({
+      modelId: 'fallback-model',
+      doStream: async ({ prompt }) => {
+        prompts.push(prompt as any[]);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: 'response-fallback',
+                modelId: 'fallback-model',
+                timestamp: new Date(0),
+              });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'recovered' });
+              controller.enqueue({ type: 'text-end', id: 'text-1' });
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'eager-fallback-work-agent',
+      name: 'Eager fallback work agent',
+      instructions: 'Call tool-a.',
+      model: [{ model: failingModel }, { model: fallbackModel }] as never,
+      tools: {
+        'tool-a': createTool({
+          id: 'tool-a',
+          description: 'Finishes immediately',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ answer: z.string() }),
+          execute: async ({ value }) => {
+            executions.push(value);
+            return { answer: `answered-${value}` };
+          },
+        }),
+      },
+    });
+
+    await drain(await agent.stream('go', { maxSteps: 3, eagerToolExecution: true })).catch(() => {});
+
+    // Pins that the fallback model was actually reached, so the assertion below cannot
+    // pass because the run died before the second attempt existed.
+    expect(prompts.length).toBe(2);
+    expect(executions).toEqual(['finished']);
+
+    const fallbackPrompt = JSON.stringify(prompts[1]);
+    expect(fallbackPrompt).toContain('call-finished');
+    expect(fallbackPrompt).toContain('answered-finished');
+  });
+
   it('cancels eager work when an error chunk is answered with a retry', async () => {
     const withoutEager = await runErrorChunkRetryScenario(false);
     const withEager = await runErrorChunkRetryScenario(true);
@@ -1386,6 +1488,42 @@ describe('EagerToolExecutionCoordinator', () => {
     // The entry is dropped so the normal foreach path owns the call again.
     expect(coordinator.take('call-b')).toBeUndefined();
     expect(executed).toEqual(['a']);
+  });
+
+  it('takes carried work back when the message it was committed under is removed', () => {
+    // A processor retry deletes the rejected attempt's messages by id. If a previous
+    // discard had committed finished eager work under that same id, the delete would take
+    // the only record of a side effect with it, and the next attempt would run the tool
+    // again. The work goes back into the carry buffer instead.
+    const coordinator = new EagerToolExecutionCoordinator(() => 1);
+    const work = [{ toolCallId: 'call-1', toolName: 'tool-a', args: {}, result: { ok: true }, sequence: 0 }];
+
+    coordinator.carryDiscardedWork(work);
+    const committed = coordinator.takeCarriedWork();
+    expect(committed).toEqual(work);
+    expect(coordinator.carriedWork).toEqual([]);
+
+    coordinator.recordCommittedWork('message-1', committed);
+
+    // A different message being removed is none of its business.
+    expect(coordinator.recarryCommittedWork('message-2')).toBe(false);
+    expect(coordinator.carriedWork).toEqual([]);
+
+    expect(coordinator.recarryCommittedWork('message-1')).toBe(true);
+    expect(coordinator.carriedWork).toEqual(work);
+
+    // Taken back once, not once per removal: a second remove of the same id must not
+    // duplicate the call in the conversation.
+    expect(coordinator.recarryCommittedWork('message-1')).toBe(false);
+    expect(coordinator.carriedWork).toEqual(work);
+  });
+
+  it('keeps carried work in model-call order regardless of when it settled', () => {
+    const coordinator = new EagerToolExecutionCoordinator(() => 1);
+    coordinator.carryDiscardedWork([{ toolCallId: 'call-b', toolName: 'tool-b', args: {}, result: 'b', sequence: 1 }]);
+    coordinator.carryDiscardedWork([{ toolCallId: 'call-a', toolName: 'tool-a', args: {}, result: 'a', sequence: 0 }]);
+
+    expect(coordinator.takeCarriedWork().map(work => work.toolCallId)).toEqual(['call-a', 'call-b']);
   });
 
   it('dispatches a given toolCallId at most once', async () => {
