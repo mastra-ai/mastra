@@ -30,7 +30,8 @@ export const UnconfiguredProvider: Story = {
     const screen = within(canvasElement.ownerDocument.body);
     await expect(canvas.getByText('OPENAI_API_KEY')).toBeVisible();
     await userEvent.click(canvas.getByRole('combobox', { name: 'Provider' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'Anthropic' }));
+    await expect(await screen.findByRole('option', { name: 'Not connected OpenAI' })).toBeVisible();
+    await userEvent.click(await screen.findByRole('option', { name: 'Connected Anthropic' }));
     await expect(canvas.queryByText('OPENAI_API_KEY')).not.toBeInTheDocument();
   },
 };

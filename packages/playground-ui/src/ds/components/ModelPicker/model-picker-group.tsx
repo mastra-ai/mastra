@@ -58,13 +58,16 @@ export function ModelPickerWarning({ children, className, ...props }: ComponentP
 }
 
 export function ModelProviderIcon({ children, connected }: { children: ReactNode; connected: boolean }) {
+  const connectionLabel = connected ? 'Connected' : 'Not connected';
   return (
     <div className="relative shrink-0">
       {children}
       <div
         className={cn('absolute -top-0.5 -right-0.5 size-1.5 rounded-full', connected ? 'bg-accent1' : 'bg-accent2')}
-        title={connected ? 'Connected' : 'Not connected'}
+        title={connectionLabel}
+        aria-hidden
       />
+      <span className="sr-only">{connectionLabel}</span>
     </div>
   );
 }
