@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { ComposerModelWarnings } from '../src/domains/agents/components/composer-model-warnings';
 import { StudioModelExample } from './fixtures/studio-model-controls';
 const meta = { title: 'Applications/Studio/Model picker' } satisfies Meta;
@@ -30,7 +30,7 @@ export const UnconfiguredProvider: Story = {
     const screen = within(canvasElement.ownerDocument.body);
     await expect(canvas.getByText('OPENAI_API_KEY')).toBeVisible();
     await userEvent.click(canvas.getByRole('combobox', { name: 'Provider' }));
-    await expect(await screen.findByRole('option', { name: 'Not connected OpenAI' })).toBeVisible();
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Not connected OpenAI' })).toBeVisible());
     await userEvent.click(await screen.findByRole('option', { name: 'Connected Anthropic' }));
     await expect(canvas.queryByText('OPENAI_API_KEY')).not.toBeInTheDocument();
   },
