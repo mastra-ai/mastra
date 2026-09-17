@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
-import { join, relative } from 'path';
+import { dirname, join, relative } from 'path';
 import { setupMonorepo } from './prepare';
 import { mkdtemp, mkdir, readdir, readFile, readlink, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -1152,18 +1152,17 @@ export const mastra = new Mastra({
     );
   });
 
-  describe.sequential('reproducible tool bundles', () => {
+  describe.sequential('reproducible bundles', () => {
     it(
-      'produces identical tool bundles when invoked from the app and monorepo roots',
+      'produces identical bundles when invoked from the app and monorepo roots',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-reproducible-test-${pkgManager}-`));
         try {
           await setupMonorepo(isolatedFixturePath, pkgManager);
 
           const appDir = join(isolatedFixturePath, 'apps', 'custom');
-          const outputRoot = join(appDir, '.mastra', 'output');
-          const build = async (cwd: string, args: string[], cliPath?: string) => {
-            await rm(join(appDir, '.mastra'), { recursive: true, force: true });
+          const build = async (cwd: string, args: string[], outputRoot: string, cliPath?: string) => {
+            await rm(dirname(outputRoot), { recursive: true, force: true });
             const options = {
               cwd,
               env: { ...process.env, MASTRA_BUILD_SKIP_INSTALL: 'true' },
@@ -1174,15 +1173,17 @@ export const mastra = new Mastra({
             const outputDigests = await getDirectoryDigests(outputRoot);
             return Object.fromEntries(
               Object.entries(outputDigests).filter(
-                ([path]) => path === 'tools.mjs' || (path.startsWith('tools/') && path.endsWith('.mjs')),
+                ([path]) =>
+                  path === 'mastra.mjs' || path === 'tools.mjs' || (path.startsWith('tools/') && path.endsWith('.mjs')),
               ),
             );
           };
 
-          const first = await build(appDir, ['build']);
+          const first = await build(appDir, ['build'], join(appDir, '.mastra', 'output'));
           const second = await build(
             isolatedFixturePath,
-            ['build', '--root', 'apps/custom'],
+            ['build', '--root', '.', '--dir', 'apps/custom/src/mastra'],
+            join(isolatedFixturePath, '.mastra', 'output'),
             join(appDir, 'node_modules', 'mastra', 'dist', 'index.js'),
           );
 

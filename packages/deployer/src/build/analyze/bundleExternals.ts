@@ -174,7 +174,7 @@ async function getInputPlugins(
         {} as Record<string, string>,
       ),
     ),
-    tsConfigPaths({ cwd: rootDir }),
+    tsConfigPaths({ cwd: projectRoot }),
     protocolExternalResolver(),
     subpathExternalsResolver(externals),
     transpilePackagesMap.size

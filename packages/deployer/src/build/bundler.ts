@@ -129,7 +129,7 @@ export async function getInputOptions(
         },
       } satisfies Plugin,
       mastraInternalAliasPlugin(entryFile),
-      tsConfigPaths({ cwd: workspaceRoot || projectRoot }),
+      tsConfigPaths({ cwd: projectRoot }),
       mastraToolsAliasPlugin(),
       esbuild({
         platform,
