@@ -486,6 +486,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/inco',
+          label: 'Inco',
+        },
+        {
+          type: 'doc',
           id: 'providers/infer',
           label: 'Infer by Flow7',
         },
