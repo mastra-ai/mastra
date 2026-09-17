@@ -353,12 +353,12 @@ describe('eager tool dispatch — excluded tool classes', () => {
         },
       });
 
-      const chunks = await drain(
-        await agent.stream('go', { maxSteps: 1, ...(eager ? { eagerToolExecution: true } : {}) }),
-      );
+      const chunks = await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: eager }));
       return chunks.map(chunk => chunk.type);
     };
 
+    // Explicitly off, not merely defaulted: eager is the default now, so an omitted
+    // option would compare the eager path against itself.
     const base = await run(false);
     const eager = await run(true);
 
