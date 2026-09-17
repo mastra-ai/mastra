@@ -34,28 +34,18 @@ export function ThreadTraceDetails({ className, children, ...props }: ThreadTrac
   );
 }
 
-export interface ThreadTraceDetailsHeaderProps extends ComponentProps<'div'> {
-  headerClassName?: string;
-}
+export type ThreadTraceDetailsHeaderProps = ComponentProps<'div'>;
 
 /**
  * Same header/tab layout as the traces page so both surfaces read identically. Children are a
  * `ThreadTrace.TabList` plus an optional `ThreadTrace.DetailsActions`. Measured: its height is
  * taken out of the timeline budget so the details cell never overshoots the messages column.
  */
-export function ThreadTraceDetailsHeader({
-  className,
-  headerClassName,
-  children,
-  ...props
-}: ThreadTraceDetailsHeaderProps) {
+export function ThreadTraceDetailsHeader({ className, children, ...props }: ThreadTraceDetailsHeaderProps) {
   const { detailsHeaderRef } = useThreadTraceRow();
   return (
     <div ref={detailsHeaderRef} data-slot="thread-trace-details-header" className={className} {...props}>
-      {/* Explicit border: the measuring wrapper makes the header the "last" child. */}
-      <DataPanel.Header className={cn('min-h-0 border-b border-border1 py-1.5', headerClassName)}>
-        {children}
-      </DataPanel.Header>
+      <DataPanel.Header>{children}</DataPanel.Header>
     </div>
   );
 }

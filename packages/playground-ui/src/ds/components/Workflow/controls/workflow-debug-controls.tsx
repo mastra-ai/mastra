@@ -4,6 +4,7 @@ import { Icon } from '@/ds/icons/Icon';
 
 export interface WorkflowDebugControlsProps {
   isStreaming?: boolean;
+  disabled?: boolean;
   canRunNextStep: boolean;
   onRunNextStep: () => void;
   onContinueRun: () => void;
@@ -11,6 +12,7 @@ export interface WorkflowDebugControlsProps {
 
 export function WorkflowDebugControls({
   isStreaming,
+  disabled,
   canRunNextStep,
   onRunNextStep,
   onContinueRun,
@@ -22,7 +24,7 @@ export function WorkflowDebugControls({
         variant="primary"
         className="w-full"
         onClick={onRunNextStep}
-        disabled={!canRunNextStep || isStreaming}
+        disabled={disabled || !canRunNextStep || isStreaming}
       >
         {isStreaming ? (
           <Icon>
@@ -41,7 +43,7 @@ export function WorkflowDebugControls({
         variant="ghost"
         className="w-full"
         onClick={onContinueRun}
-        disabled={isStreaming}
+        disabled={disabled || isStreaming}
         icon={<StepForwardIcon />}
       >
         Continue full run

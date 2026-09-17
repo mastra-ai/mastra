@@ -15,19 +15,11 @@ test.describe('Traces page', () => {
       await expectCurrentBreadcrumb(page, 'Traces');
     });
 
-    test('shows the filter dropdown', async ({ page }) => {
+    test('shows the filter bar', async ({ page }) => {
       await page.goto('/traces');
 
-      // The unified filter dropdown button should be present
-      const filterButton = page.getByRole('button', { name: 'Filter' });
-      await expect(filterButton).toBeVisible();
-    });
-
-    test('renders the empty state or traces list with the default date preset', async ({ page }) => {
-      await page.goto('/traces');
-
-      // We check that the page has loaded and the traces tools are visible
-      await expect(page.getByRole('button', { name: 'Last 7 days' })).toBeVisible();
+      // The typeahead filter input should be present against a real server.
+      await expect(page.getByRole('combobox', { name: 'Add filter' })).toBeVisible();
     });
   });
 

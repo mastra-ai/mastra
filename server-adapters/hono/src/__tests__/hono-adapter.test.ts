@@ -1,21 +1,5 @@
 import type { Server } from 'node:http';
 import { serve } from '@hono/node-server';
-import type {
-  AdapterTestContext,
-  AdapterSetupOptions,
-  HttpRequest,
-  HttpResponse,
-} from '@internal/server-adapter-test-utils';
-import {
-  createRouteAdapterTestSuite,
-  createDefaultTestContext,
-  createStreamWithSensitiveData,
-  createStreamWithUnserializableChunk,
-  expectSerializedStreamChunks,
-  consumeSSEStream,
-  createMultipartTestSuite,
-  createBodyLimitTestSuite,
-} from '@internal/server-adapter-test-utils';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
 import {
@@ -27,6 +11,22 @@ import {
 import { QUERY_TRACES } from '@mastra/server/handlers/observability-new-endpoints';
 import { MASTRA_IS_STUDIO_KEY, createRoute } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
+import {
+  createRouteAdapterTestSuite,
+  createDefaultTestContext,
+  createStreamWithSensitiveData,
+  createStreamWithUnserializableChunk,
+  expectSerializedStreamChunks,
+  consumeSSEStream,
+  createMultipartTestSuite,
+  createBodyLimitTestSuite,
+} from '@mastra/server-adapters-test-suite';
+import type {
+  AdapterTestContext,
+  AdapterSetupOptions,
+  HttpRequest,
+  HttpResponse,
+} from '@mastra/server-adapters-test-suite';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';

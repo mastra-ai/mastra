@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { LucideIcon } from 'lucide-react';
 
 /** How many values an operator takes: `none` (is empty), `one` (default) or `many` (string[]). */
 export type FilterBarArity = 'none' | 'one' | 'many';
@@ -45,7 +45,10 @@ export const parseFieldValue = (type: FilterBarFieldType | undefined, text: stri
 export type FilterBarField = {
   id: string;
   label: string;
-  icon?: ReactNode;
+  /** Leading icon, shown in the field step and on the chip's field segment. */
+  icon?: LucideIcon;
+  /** Accent (any CSS color) applied to the chip's field segment (label + icon). */
+  color?: string;
   type?: FilterBarFieldType;
   /** Operator ids allowed for this field. Defaults to every root operator. */
   operators?: string[];
@@ -59,6 +62,8 @@ export type FilterBarField = {
   suggestions?: FilterBarOption[] | FilterBarSuggestionsResolver;
   /** When true, the value must come from suggestions (no free text). */
   strict?: boolean;
+  /** Never offered in the input's field step; existing chips for it still render with the field label. */
+  hidden?: boolean;
 };
 
 export type FilterBarItem = {

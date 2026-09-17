@@ -1465,6 +1465,46 @@ const selector = new ModelByInputTokens({
 ]}
 />
 
+### skillResultRedactor
+
+`skillResultRedactor` builds a `beforeObservation` transform hook that redacts the results of the built-in Agent Skills tools (`skill`, `skill_search`, and `skill_read`) before the Observer model sees them. Each result is replaced with a placeholder while the tool call is kept, so the Observer still records which skill was used and what it was called with, without the skill text.
+
+```typescript
+import { Memory } from '@mastra/memory'
+import { skillResultRedactor } from '@mastra/memory/hooks'
+
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: '__GATEWAY_GOOGLE_MODEL_FLASH__',
+      hooks: {
+        beforeObservation: skillResultRedactor(),
+      },
+    },
+  },
+})
+```
+
+#### Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'toolNames',
+    type: 'readonly string[]',
+    description:
+      'Tool names whose results are redacted. Defaults to the built-in skill tools: `skill`, `skill_search`, and `skill_read`. Use this to redact a different set of tool results.',
+    isOptional: true,
+  },
+]}
+/>
+
+#### Returns
+
+`(input: { messages: MastraDBMessage[] } & ObserveHookContext) => { messages: MastraDBMessage[] } | undefined`
+
+The hook returns messages with matching tool results replaced by a placeholder, or `undefined` when no message matched (which passes the payload through unchanged). Tool calls, arguments, and every other message are left as they are.
+
 ### Related
 
 - [Observational Memory](/docs/memory/observational-memory)

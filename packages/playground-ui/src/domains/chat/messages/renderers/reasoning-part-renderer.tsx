@@ -1,4 +1,4 @@
-import type { ReasoningPart } from '@mastra/react';
+import type { ReasoningPart } from '@mastra/react/ui';
 
 import { Reasoning } from '../reasoning';
 import { getReasoningContent } from '../reasoning-content';

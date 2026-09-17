@@ -1,5 +1,15 @@
 # @mastra/hono
 
+## 1.7.10-alpha.3
+
+### Patch Changes
+
+- Fixed request context query parsing for POST requests. ([#23961](https://github.com/mastra-ai/mastra/pull/23961))
+
+- Updated dependencies [[`b246a1b`](https://github.com/mastra-ai/mastra/commit/b246a1ba0cec1ca2781c661a6b90c777520b64c7), [`ab0632c`](https://github.com/mastra-ai/mastra/commit/ab0632ca5e1a76da1db23d37bf9a8704f7cea9e6), [`ab0632c`](https://github.com/mastra-ai/mastra/commit/ab0632ca5e1a76da1db23d37bf9a8704f7cea9e6), [`13b0f30`](https://github.com/mastra-ai/mastra/commit/13b0f304533a43df7a7c486b6f37c9dca2187ecf), [`b2942c0`](https://github.com/mastra-ai/mastra/commit/b2942c0f3c99dd1edba9dc8c2c17bfa55c851ae8), [`99fab39`](https://github.com/mastra-ai/mastra/commit/99fab399c35952ae15427ea64845d4762e9ec144), [`d65d4d4`](https://github.com/mastra-ai/mastra/commit/d65d4d40a24a482d5b0ee83d9bab6042702ca1be), [`4fb5ae9`](https://github.com/mastra-ai/mastra/commit/4fb5ae9e2cba9b14ba6c5cef0894e49bccf6f607), [`e581e66`](https://github.com/mastra-ai/mastra/commit/e581e66e14bb1b2863698aecca7324fbf1ec4ff5), [`a3f8f05`](https://github.com/mastra-ai/mastra/commit/a3f8f05ecb60c52056c590325e3821ecfc85afe3), [`13b0f30`](https://github.com/mastra-ai/mastra/commit/13b0f304533a43df7a7c486b6f37c9dca2187ecf), [`9cd9b4e`](https://github.com/mastra-ai/mastra/commit/9cd9b4eca69a3db0a0c415d0dcedf266cc7d5ec6), [`3589cde`](https://github.com/mastra-ai/mastra/commit/3589cde4ea8dd210df6b9a2355a3e568210965fc), [`783e48a`](https://github.com/mastra-ai/mastra/commit/783e48aba82489a085230f6b8539a9fb338c326b), [`07a81c8`](https://github.com/mastra-ai/mastra/commit/07a81c8be0cbdb5413ffa5c289d32765d80f4ea4), [`07ff1b8`](https://github.com/mastra-ai/mastra/commit/07ff1b8eafbd9c7786ef77decc6be3b63497cfd9), [`0ca5d6d`](https://github.com/mastra-ai/mastra/commit/0ca5d6d58a24e73a364451660a5a8696883eba45)]:
+  - @mastra/core@1.68.0-alpha.3
+  - @mastra/server@1.68.0-alpha.3
+
 ## 1.7.10-alpha.2
 
 ### Patch Changes
@@ -4632,7 +4642,7 @@
   - Moved authentication helpers from deployer to `@mastra/server/auth`
 
   **Testing:**
-  - Added shared MCP route and transport test suites in `@internal/server-adapter-test-utils`
+  - Added shared MCP route and transport test suites in `@mastra/server-adapters-test-suite`
   - Added comprehensive MCP endpoint tests for both Hono and Express adapters
   - Added GitHub Actions workflow for server adapter CI testing
 
@@ -5010,7 +5020,7 @@
   - Moved authentication helpers from deployer to `@mastra/server/auth`
 
   **Testing:**
-  - Added shared MCP route and transport test suites in `@internal/server-adapter-test-utils`
+  - Added shared MCP route and transport test suites in `@mastra/server-adapters-test-suite`
   - Added comprehensive MCP endpoint tests for both Hono and Express adapters
   - Added GitHub Actions workflow for server adapter CI testing
 
