@@ -18,13 +18,14 @@ function createProgram(action: (provider: string, options: TraceImportCommandOpt
 }
 
 describe('trace import command', () => {
-  it('defaults to Langfuse and forwards the customer-facing options', async () => {
+  it('forwards the required provider and customer-facing options', async () => {
     const action = vi.fn();
     await createProgram(action).parseAsync([
       'node',
       'mastra',
       'traces',
       'import',
+      'langfuse',
       '--project',
       'support',
       '--from',
@@ -46,6 +47,12 @@ describe('trace import command', () => {
       }),
       expect.any(Command),
     );
+  });
+
+  it('requires a source provider', async () => {
+    await expect(createProgram(vi.fn()).parseAsync(['node', 'mastra', 'traces', 'import'])).rejects.toMatchObject({
+      code: 'commander.missingArgument',
+    });
   });
 
   it('rejects providers that do not have an adapter', async () => {
