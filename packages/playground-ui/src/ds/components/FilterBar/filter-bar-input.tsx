@@ -3,6 +3,7 @@ import type { BaseUIEvent } from '@base-ui/react/types';
 import { SearchIcon } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
+import styles from './animation/filter-bar-animation.module.css';
 import { FilterBarPopup } from './animation/filter-bar-popup';
 import { FilterBarAddButton } from './filter-bar-add-button';
 import { FilterBarFieldLabel, formatValue } from './filter-bar-chip';
@@ -16,7 +17,7 @@ import { Button } from '@/ds/components/Button/Button';
 import { comboboxStyles } from '@/ds/components/Combobox/combobox-styles';
 import { Kbd } from '@/ds/components/Kbd/kbd';
 import { Txt } from '@/ds/components/Txt/Txt';
-import { unstyledFormElementStyle } from '@/ds/primitives/form-element';
+import { inputOutlineAndFocusStyle } from '@/ds/primitives/form-element';
 import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
 
@@ -227,10 +228,10 @@ export function FilterBarInput({
         isButton
           ? comboboxStyles.searchInput
           : cn(
-              unstyledFormElementStyle,
-              'flex-1 px-1 text-ui-smd leading-ui-sm text-neutral6',
+              inputOutlineAndFocusStyle,
+              'h-form-md w-48 min-w-24 rounded-lg px-2 text-ui-smd leading-ui-sm text-neutral6',
               'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
-              'w-full min-w-0',
+              styles.inlineInput,
               className,
             )
       }
