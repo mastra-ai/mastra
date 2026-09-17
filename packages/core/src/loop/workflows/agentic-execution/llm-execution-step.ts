@@ -2141,9 +2141,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // or a stream that ends without finishing. `onModelFinished` has normally closed
           // dispatch already, and stopping twice is harmless.
           //
-          // Queued work dropped here falls back to the foreach, which is about to run it
-          // and accounts for it against the same limit. Work already running is left alone
-          // and still adopted, so a real side effect is never left unrecorded.
+          // Queued work dropped here falls back to the foreach when there is one, which
+          // is about to run it and accounts for it against the same limit. Work already
+          // running is left alone rather than cancelled: on a normal terminal finish the
+          // foreach adopts it, and on a tripwire, which bails before the foreach, letting
+          // it finish is still better than aborting a side effect that is already underway.
           eagerCoordinator?.stop();
 
           if (toolResultTripwireFromStream) {
