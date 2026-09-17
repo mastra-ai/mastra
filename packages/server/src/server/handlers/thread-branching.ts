@@ -39,6 +39,33 @@ export async function inspectVisibleMemoryThread(
   return state;
 }
 
+/**
+ * Read-side guard for observational-memory status lookups: authorize threads that
+ * actually exist, hide pending branches, and let absent thread rows fall through
+ * so pre-first-message lookups (e.g. `/chat/new`) keep returning the empty record
+ * exactly like the pre-branch handler did.
+ */
+export async function authorizeMemoryThreadForOMRead({
+  mastra,
+  requestContext,
+  memory,
+  threadId,
+  effectiveResourceId,
+}: {
+  mastra: any;
+  requestContext?: RequestContext;
+  memory: MastraMemory;
+  threadId: string;
+  effectiveResourceId?: string;
+}): Promise<void> {
+  const state = await inspectThreadBranchState(memory, threadId);
+  if (state.state === 'pending') throwThreadBranchNotFound();
+  if (state.state === 'absent') return;
+  const thread = await memory.getThreadById({ threadId });
+  if (!thread) throwThreadBranchNotFound();
+  await authorizeMemoryThreadAccess({ mastra, requestContext, memory, thread, effectiveResourceId });
+}
+
 export async function createMemoryThreadIfAbsent(
   memory: MastraMemory,
   input: {
