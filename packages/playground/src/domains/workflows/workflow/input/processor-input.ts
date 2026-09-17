@@ -11,10 +11,16 @@ const processorMessageSchema = z
   })
   .passthrough();
 const processorDraftSchema = z
-  .object({ phase: z.string().optional(), messages: z.array(processorMessageSchema).optional() })
-  .passthrough();
+  .object({ phase: z.string(), messages: z.array(processorMessageSchema).optional() })
+  .passthrough()
+  .refine(hasTextInFirstMessage, 'Simple input edits the text part of the first message');
 
 export type ProcessorDraft = z.infer<typeof processorDraftSchema>;
+
+function hasTextInFirstMessage(draft: { messages?: { content?: { parts?: { type: string }[] } }[] }) {
+  const parts = draft.messages?.[0]?.content?.parts;
+  return !parts?.length || parts.some(part => part.type === 'text');
+}
 type ProcessorMessage = NonNullable<ProcessorDraft['messages']>[number];
 
 const FALLBACK_MESSAGE_TEXT = 'Hello, this is a test message.';

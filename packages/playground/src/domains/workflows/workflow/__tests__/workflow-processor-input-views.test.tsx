@@ -162,9 +162,12 @@ describe('Workflow processor input views', () => {
     });
   });
 
-  describe('when a stored processor payload has an invalid message shape', () => {
-    it('opens the payload in JSON instead of crashing Simple', () => {
-      const stored = { phase: 'input', messages: [{ content: { parts: {} } }] };
+  describe('when a stored processor payload is not editable as Simple', () => {
+    it.each([
+      ['has an invalid message shape', { phase: 'input', messages: [{ content: { parts: {} } }] }],
+      ['has no text part', { phase: 'input', messages: [{ content: { parts: [{ type: 'file', url: 'a.png' }] } }] }],
+      ['has no phase', { messages: [{ content: { parts: [{ type: 'text', text: 'Hello' }] } }] }],
+    ])('opens the payload in JSON when it %s', (_case, stored) => {
       render(
         <WorkflowInputData
           schema={z.object({ phase: z.string(), messages: z.array(z.unknown()) })}
