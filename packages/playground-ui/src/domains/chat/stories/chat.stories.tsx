@@ -5,10 +5,20 @@ import { ChatConversation } from '../../../../.storybook/fixtures/chat/conversat
 const meta = {
   title: 'AI/Chat',
   component: ChatConversation,
-  args: { scenario: 'complete', presentation: 'studio', tone: 'green' },
+  args: {
+    scenario: 'complete',
+    presentation: 'studio',
+    tone: 'green',
+    factorySession: 'work-item',
+    modelState: 'ready',
+    canSendWhileStreaming: false,
+  },
   argTypes: {
     presentation: { control: 'inline-radio', options: ['studio', 'factory'] },
     tone: { control: 'select', options: ['green', 'purple', 'orange', 'default'] },
+    factorySession: { control: 'inline-radio', options: ['work-item', 'personal'] },
+    modelState: { control: 'select', options: ['ready', 'loading', 'unconfigured', 'locked'] },
+    canSendWhileStreaming: { control: 'boolean' },
     scenario: {
       control: 'select',
       options: [
@@ -30,7 +40,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'A design workbench using the same playground-ui components as Studio and Factory. Choose the presentation and scenario in Controls. Both include the production Message envelope, attachments, reasoning, grouped tools, edits, plan, question, approvals, tasks, timeline and composer. Studio shows signal cards and notification metadata; Factory shows lane-change notifications, phase signals, skill activation, reminders, time gaps and GitHub links. Factory tool rows include timestamps and command lines; Studio keeps argument data. Approvals use the corresponding inline or standalone presentation. Sending, stopping, retrying, answering and approving run locally against deterministic fixtures. The fixture does not connect to an agent or reproduce application routing, model selection, voice, dataset actions, or controller steering. Component stories cover additional states. Streaming snapshots stay running for design review; sending a message or approving an edit plays incoming chunks. Reset restores the selected scenario.',
+          'A design workbench using the same playground-ui components as Studio and Factory. Choose the presentation and scenario in Controls. Both include the production Message envelope, attachments, reasoning, grouped tools, edits, plan, question, approvals, tasks, timeline and composer. Studio shows signal cards and notification metadata; Factory shows lane-change notifications, phase signals, skill activation, reminders, time gaps and GitHub links. Factory tool rows include timestamps and command lines; Studio keeps argument data. Approvals use the corresponding inline or standalone presentation. Sending, stopping, retrying, answering and approving run locally against deterministic fixtures. The composer uses the production model picker presentations, settings including advanced fields, attachment menu, dictation and voice controls. Factory personal sessions also expose modes and model packs. Selection and voice state are local fixtures; no model request, microphone capture, audio connection or settings navigation is performed. Dataset actions, browser sessions, request-context/tracing controls and Factory runtime status indicators are not yet included; see the coverage document beside this story. Component stories cover additional states. Streaming snapshots stay running for design review; sending a message or approving an edit plays incoming chunks. Reset restores the selected scenario.',
       },
     },
   },
@@ -57,7 +67,7 @@ export const Error: Story = { args: { scenario: 'error' } };
 export const LongConversation: Story = { args: { scenario: 'long' } };
 
 export const SlashCommands: Story = {
-  args: { scenario: 'empty' },
+  args: { scenario: 'empty', presentation: 'factory' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const input = canvas.getByRole('textbox', { name: 'Message' });
@@ -129,7 +139,7 @@ export const SendAttachmentsAndStop: Story = {
     );
     await userEvent.click(await canvas.findByRole('button', { name: 'Stop response' }));
     await expect(input).toHaveFocus();
-    await expect(canvas.getByText('Response stopped')).toBeVisible();
+    await expect(canvas.getByRole('status')).toHaveTextContent('Response stopped');
     await userEvent.type(input, 'Continue.{enter}');
     await expect(canvas.getAllByRole('region', { name: /^Turn / })).toHaveLength(2);
     await waitFor(() => expect(canvas.getByText('The conversation is ready for another review.')).toBeVisible(), {
@@ -176,5 +186,56 @@ export const FactoryEventsAndApproval: Story = {
       'href',
       'https://github.com/mastra-ai/mastra/pull/24263',
     );
+  },
+};
+
+export const StudioModelLocked: Story = { args: { modelState: 'locked' } };
+export const StudioProviderUnconfigured: Story = { args: { modelState: 'unconfigured' } };
+export const StudioInterjection: Story = { args: { scenario: 'streaming', canSendWhileStreaming: true } };
+export const FactoryPersonalSession: Story = {
+  args: { presentation: 'factory', factorySession: 'personal', scenario: 'empty' },
+};
+export const FactoryModelLoading: Story = { args: { presentation: 'factory', modelState: 'loading' } };
+export const FactoryModelUnconfigured: Story = { args: { presentation: 'factory', modelState: 'unconfigured' } };
+
+export const StudioModelSelection: Story = {
+  play: async ({ canvasElement }) => {
+    const page = within(canvasElement.ownerDocument.body);
+    await userEvent.click(page.getByRole('combobox', { name: 'Provider' }));
+    await userEvent.click(await page.findByRole('option', { name: 'Anthropic' }));
+    await userEvent.click(await page.findByRole('option', { name: 'claude-sonnet-4-5' }));
+    await expect(page.getByRole('combobox', { name: 'Model' })).toHaveTextContent('claude-sonnet-4-5');
+    await userEvent.click(page.getByRole('button', { name: 'Model settings' }));
+    await userEvent.click(await page.findByRole('radio', { name: 'Generate' }));
+    await userEvent.click(page.getByRole('button', { name: 'Advanced Settings' }));
+    const dialog = within(await page.findByRole('dialog', { name: 'Advanced model settings' }));
+    await userEvent.type(dialog.getByRole('spinbutton', { name: 'Max Tokens' }), '2048');
+    await expect(dialog.getByRole('spinbutton', { name: 'Max Tokens' })).toHaveValue(2048);
+  },
+};
+
+export const FactoryModelSelection: Story = {
+  args: { presentation: 'factory', factorySession: 'personal', scenario: 'empty' },
+  play: async ({ canvasElement }) => {
+    const page = within(canvasElement.ownerDocument.body);
+    await userEvent.click(page.getByRole('button', { name: 'Session model' }));
+    await userEvent.click(await page.findByRole('option', { name: 'Model pack Review' }));
+    await expect(page.getByRole('button', { name: 'Session model' })).toHaveTextContent('Claude Sonnet 4.5');
+    await userEvent.click(page.getByRole('button', { name: 'Session model' }));
+    await userEvent.click(await page.findByRole('option', { name: 'Reset to default pack' }));
+    await expect(page.getByRole('button', { name: 'Session model' })).toHaveTextContent('GPT-4.1');
+  },
+};
+
+export const StudioVoiceControls: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Start voice call' }));
+    await expect(canvas.getByTestId('voice-call-panel')).toHaveTextContent('Listening…');
+    await userEvent.click(canvas.getByRole('button', { name: 'End voice call' }));
+    await expect(canvas.queryByTestId('voice-call-panel')).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('button', { name: 'Start dictation' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Stop dictation' }));
+    await expect(canvas.getByRole('textbox', { name: 'Message' })).toHaveValue('Review the composer keyboard access.');
   },
 };

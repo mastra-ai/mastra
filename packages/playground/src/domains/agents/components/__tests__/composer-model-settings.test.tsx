@@ -59,7 +59,6 @@ const openAdvancedDialog = async () => {
 
 afterEach(() => {
   cleanup();
-  // Clear per-agent localStorage between tests so resetAll/setSettings cannot leak.
   window.localStorage.clear();
 });
 
@@ -98,12 +97,11 @@ describe('ComposerModelSettings', () => {
     await openPopover();
 
     expect(await screen.findByText('Chat Method')).not.toBeNull();
-    // v2 model defaults to the modern Generate/Stream Subscription/Stream options (no Legacy variants).
-    expect(document.getElementById('generate')).not.toBeNull();
-    expect(document.getElementById('streamSubscription')).not.toBeNull();
-    expect(document.getElementById('stream')).not.toBeNull();
-    expect(document.getElementById('generateLegacy')).toBeNull();
-    expect(document.getElementById('streamLegacy')).toBeNull();
+    expect(screen.getByRole('radio', { name: 'Generate' })).not.toBeNull();
+    expect(screen.getByRole('radio', { name: 'Stream subscription (default)' })).not.toBeNull();
+    expect(screen.getByRole('radio', { name: 'Stream' })).not.toBeNull();
+    expect(screen.queryByRole('radio', { name: 'Generate (Legacy)' })).toBeNull();
+    expect(screen.queryByRole('radio', { name: 'Stream (Legacy)' })).toBeNull();
   });
 
   it('persists legacy stream as an explicit no-subscription fallback', async () => {
@@ -111,10 +109,9 @@ describe('ComposerModelSettings', () => {
     renderSettings();
     await openPopover();
 
-    const legacyStream = document.getElementById('stream');
-    expect(legacyStream).not.toBeNull();
+    const legacyStream = screen.getByRole('radio', { name: 'Stream' });
     await act(async () => {
-      fireEvent.click(legacyStream!);
+      fireEvent.click(legacyStream);
     });
 
     const stored = JSON.parse(window.localStorage.getItem(`mastra-agent-store-${AGENT_ID}`) ?? '{}');
@@ -133,8 +130,33 @@ describe('ComposerModelSettings', () => {
     renderSettings();
     await openPopover();
 
-    expect((document.getElementById('stream') as HTMLInputElement | null)?.checked).toBe(true);
-    expect((document.getElementById('streamSubscription') as HTMLInputElement | null)?.disabled).toBe(true);
+    expect(screen.getByRole('radio', { name: 'Stream' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('radio', { name: 'Stream subscription (default)' }).getAttribute('aria-disabled')).toBe(
+      'true',
+    );
+  });
+
+  it('persists advanced fields without resetting the selected chat method', async () => {
+    useDefaultHandlers();
+    renderSettings();
+    await openPopover();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('radio', { name: 'Generate' }));
+      fireEvent.click(screen.getByRole('button', { name: /advanced settings/i }));
+    });
+    const maxTokens = await screen.findByRole('spinbutton', { name: 'Max Tokens' });
+    await act(async () => {
+      fireEvent.change(maxTokens, { target: { value: '4096' } });
+    });
+    const stored = JSON.parse(window.localStorage.getItem(`mastra-agent-store-${AGENT_ID}`) ?? '{}');
+    expect(stored.modelSettings.maxTokens).toBe(4096);
+    expect(stored.modelSettings.chatWithGenerate).toBe(true);
+    await act(async () => {
+      fireEvent.change(maxTokens, { target: { value: '' } });
+    });
+    const cleared = JSON.parse(window.localStorage.getItem(`mastra-agent-store-${AGENT_ID}`) ?? '{}');
+    expect(cleared.modelSettings.maxTokens).toBeUndefined();
+    expect(cleared.modelSettings.chatWithGenerate).toBe(true);
   });
 
   it('keeps the popover open when the Advanced Settings dialog is dismissed via its built-in close button', async () => {
@@ -151,7 +173,6 @@ describe('ComposerModelSettings', () => {
       expect(screen.queryByRole('heading', { name: /advanced model settings/i })).toBeNull();
     });
 
-    // The popover stays open: the Chat Method label that lives inside it must still be present.
     expect(screen.getByText('Chat Method')).not.toBeNull();
   });
 
@@ -181,9 +202,6 @@ describe('ComposerModelSettings', () => {
 
     expect(await screen.findByText('Chat Method')).not.toBeNull();
 
-    // With the dialog closed, Escape is a normal popover dismissal — the
-    // guard only suppresses dismissals whose target is inside the dialog id,
-    // so this path must still close the popover.
     await act(async () => {
       fireEvent.keyDown(document.activeElement ?? document.body, {
         key: 'Escape',

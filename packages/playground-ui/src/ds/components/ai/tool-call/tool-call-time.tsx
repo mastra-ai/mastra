@@ -4,6 +4,7 @@ const calendar = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeSty
 export function ToolCallTime({ at }: { at?: number }) {
   if (at === undefined) return null;
   const time = new Date(at);
+  if (Number.isNaN(time.getTime())) return null;
 
   return (
     <time

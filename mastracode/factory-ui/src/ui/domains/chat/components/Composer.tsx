@@ -1,9 +1,11 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
-import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
   Composer as ComposerRoot,
   ComposerActions,
+  ComposerSendButton,
+  ComposerStopButton,
+  ComposerAttachmentButton,
   ComposerBox,
   ComposerInput,
   type ComposerInputProps,
@@ -13,7 +15,6 @@ import {
 } from '@mastra/playground-ui/components/Composer';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowUp, ImagePlus, Square } from 'lucide-react';
 import { useRef } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useMatch, useNavigate, useParams } from 'react-router';
@@ -285,39 +286,27 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
           <ComposerActions>
             <StatusLine />
             <ButtonsGroup className="ml-auto" spacing="close" aria-label="Composer actions">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon-sm"
+              <ComposerAttachmentButton
+                appearance="outline"
                 disabled={attachDisabled}
                 onClick={() => fileInputRef.current?.click()}
                 aria-label="Attach image"
-              >
-                <ImagePlus size={14} />
-              </Button>
+              />
               {liveRun && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon-sm"
+                <ComposerStopButton
+                  appearance="outline"
                   onClick={() => void abortMutation.mutateAsync()}
                   aria-label="Abort"
-                >
-                  <Square size={14} />
-                </Button>
+                />
               )}
-              <Button
-                type="submit"
-                variant="outline"
-                size="icon-sm"
+              <ComposerSendButton
+                appearance="outline"
                 disabled={
                   sendDisabled || (!draft.trim() && images.length === 0) || (planFeedback.pending && !draft.trim())
                 }
                 aria-label="Send message"
                 title={sendTitle}
-              >
-                <ArrowUp size={16} />
-              </Button>
+              />
             </ButtonsGroup>
           </ComposerActions>
         </ComposerBox>

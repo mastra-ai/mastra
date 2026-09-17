@@ -21,3 +21,16 @@ export { useComposerCommands } from './commands/use-composer-commands';
 export type { UseComposerCommandsProps } from './commands/use-composer-commands';
 export { matchCommands, matchCommandOptions } from './commands/command-matches';
 export type { ComposerCommand, ComposerCommandOption } from './commands/command-matches';
+
+export {
+  ComposerSendButton,
+  ComposerStopButton,
+  ComposerAttachmentButton,
+  ComposerDictationButton,
+  ComposerModelSettingsButton,
+} from './actions/composer-buttons';
+export { ComposerStatusLine } from './actions/composer-status';
+export { ComposerModeSelect } from './actions/composer-mode-select';
+export type { ComposerModeOption, ComposerModeSelectProps } from './actions/composer-mode-select';
+export { ComposerAttachmentPicker } from './actions/composer-attachment-picker';
+export type { ComposerAttachmentPickerProps } from './actions/composer-attachment-picker';

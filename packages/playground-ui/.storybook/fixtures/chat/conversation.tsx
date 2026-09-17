@@ -1,6 +1,7 @@
 import { MessageSquare, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import { ConversationComposer } from './composer';
+import type { ModelControlState } from './controls/models';
 import type { ChatPresentation, Scenario } from './data';
 import { ConversationContext } from './presentation/events';
 import { ConversationResponse } from './presentation/response';
@@ -23,15 +24,26 @@ interface ChatConversationProps {
   scenario: Scenario;
   presentation?: ChatPresentation;
   tone?: ComposerTone;
+  factorySession?: 'work-item' | 'personal';
+  modelState?: ModelControlState;
+  canSendWhileStreaming?: boolean;
 }
 
 function Conversation({
   scenario,
   presentation = 'studio',
   tone = 'green',
+  factorySession = 'work-item',
+  modelState = 'ready',
+  canSendWhileStreaming = false,
   onReset,
 }: ChatConversationProps & { onReset: () => void }) {
-  const { turns, phase, busy, sendMessage, transitionTurn } = useStoryConversation(scenario, presentation);
+  const canInterject = presentation === 'factory' || canSendWhileStreaming;
+  const { turns, phase, busy, sendMessage, transitionTurn } = useStoryConversation(
+    scenario,
+    presentation,
+    canInterject,
+  );
   const activeTurn = turns.at(-1);
   let verificationStatus: TaskListItem['status'] = 'pending';
   if (phase === 'complete') verificationStatus = 'completed';
@@ -126,6 +138,9 @@ function Conversation({
                   phase={phase}
                   tone={tone}
                   presentation={presentation}
+                  factorySession={factorySession}
+                  modelState={modelState}
+                  canSendWhileStreaming={canInterject}
                   busy={busy}
                   onSend={sendMessage}
                   onStop={() => {
@@ -151,14 +166,24 @@ function Conversation({
   );
 }
 
-export function ChatConversation({ scenario, presentation, tone }: ChatConversationProps) {
+export function ChatConversation({
+  scenario,
+  presentation,
+  tone,
+  factorySession,
+  modelState,
+  canSendWhileStreaming,
+}: ChatConversationProps) {
   const [revision, setRevision] = useState(0);
   return (
     <Conversation
-      key={`${scenario}-${presentation}-${revision}`}
+      key={`${scenario}-${presentation}-${factorySession}-${modelState}-${revision}`}
       scenario={scenario}
       presentation={presentation}
       tone={tone}
+      factorySession={factorySession}
+      modelState={modelState}
+      canSendWhileStreaming={canSendWhileStreaming}
       onReset={() => setRevision(current => current + 1)}
     />
   );

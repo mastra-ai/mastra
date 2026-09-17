@@ -90,7 +90,7 @@ export function createInitialTurns(scenario: Scenario, presentation: ChatPresent
   const phase = scenario === 'long' ? 'complete' : scenario;
   let initialText = '';
   if (phase === 'complete') initialText = reply;
-  if (phase === 'streaming') initialText = 'I’m verifying keyboard access and attachment previews.';
+  if (phase === 'streaming') initialText = reply.slice(0, 60);
   if (phase === 'stopped') initialText = reply.slice(0, 100);
   const review: Turn = {
     id: 'review',

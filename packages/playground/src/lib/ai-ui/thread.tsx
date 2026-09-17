@@ -1,18 +1,21 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
-import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import {
   Composer,
   ComposerActions,
+  ComposerSendButton as SendButton,
+  ComposerStopButton,
+  ComposerDictationButton,
   ComposerAttachments,
   ComposerBox,
   ComposerInput,
   ComposerRing,
 } from '@mastra/playground-ui/components/Composer';
 import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
+import { ModelPickerGroup } from '@mastra/playground-ui/components/ModelPicker';
 import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
 import {
   buildThreadRailTurns,
@@ -24,7 +27,6 @@ import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { useSpeechRecognition } from '@mastra/react';
 import type { MessageFactoryPart } from '@mastra/react/ui';
-import { ArrowUp, Mic } from 'lucide-react';
 import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AttachFilePopover } from './attachments/attach-file-popover';
@@ -367,17 +369,7 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
     startTransition(() => onTranscript(transcript));
   }, [onTranscript, transcript]);
 
-  return (
-    <Button
-      variant="default"
-      size="icon-md"
-      type="button"
-      tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
-      onClick={() => (isListening ? stop() : start())}
-    >
-      {isListening ? <CircleStopIcon /> : <Mic className="text-neutral3 hover:text-neutral6 h-5 w-5" />}
-    </Button>
-  );
+  return <ComposerDictationButton listening={isListening} onClick={() => (isListening ? stop() : start())} />;
 };
 
 interface ComposerActionRowProps {
@@ -411,9 +403,9 @@ const ComposerActionRow = ({
         <div className="flex max-w-full shrink-0 items-center gap-1.5">
           {showModelSwitcher && agentId && (
             <>
-              <div className="bg-surface3 border-border1 duration-normal focus-within:border-border2 rounded-full border transition-colors">
+              <ModelPickerGroup>
                 <ComposerModelSwitcher />
-              </div>
+              </ModelPickerGroup>
               <ComposerModelSettings agentId={agentId} />
             </>
           )}
@@ -456,50 +448,13 @@ const ComposerSendButton = ({
 }: ComposerSendButtonProps) => {
   // While streaming and not allowed to send mid-stream, the only action is cancel.
   if (isRunning && !canSendWhileStreaming) {
-    return (
-      <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>
-        <CircleStopIcon />
-      </Button>
-    );
+    return <ComposerStopButton tooltip="Cancel" onClick={onCancel} />;
   }
 
   return (
     <>
-      <Button
-        type="submit"
-        variant="default"
-        size="icon-md"
-        tooltip={canExecute ? 'Send' : 'No permission to execute'}
-        className="border-border1 bg-surface5 rounded-full border"
-        disabled={!canExecute || isEmpty}
-      >
-        <ArrowUp className="text-neutral3 hover:text-neutral6 h-6 w-6" />
-      </Button>
-      {isRunning && (
-        <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>
-          <CircleStopIcon />
-        </Button>
-      )}
+      <SendButton tooltip={canExecute ? 'Send' : 'No permission to execute'} disabled={!canExecute || isEmpty} />
+      {isRunning && <ComposerStopButton tooltip="Cancel" onClick={onCancel} />}
     </>
-  );
-};
-
-const CircleStopIcon = () => {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="text-neutral3 hover:text-neutral6"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <rect width="6" height="6" x="9" y="9" rx="1" />
-    </svg>
   );
 };
