@@ -1,8 +1,10 @@
+import { describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { SpanRecord } from '../types';
 import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
 import { SpanErrorRenderer, SpanInputRenderer, SpanOutputRenderer, SpanPayloadSection } from './span-payload';
+import { asCoreSpan } from './span-payload/span-payload-registry';
 import { SpanSummaryDescription } from './span-summary-description';
 import { SpanTokenUsage } from './span-token-usage';
 import type { TokenUsage } from './span-token-usage';
@@ -223,10 +225,20 @@ function SpanDataPanelContent({
       </DataKeysAndValues>
 
       <div className="mt-3 grid gap-3">
-        <SpanPayloadSection title="Input" icon={<FileInputIcon />} raw={span.input}>
+        <SpanPayloadSection
+          title="Input"
+          icon={<FileInputIcon />}
+          raw={span.input}
+          hasPreview={describeSpanInput(asCoreSpan(span))?.type !== 'json'}
+        >
           <SpanInputRenderer span={span} />
         </SpanPayloadSection>
-        <SpanPayloadSection title="Output" icon={<FileOutputIcon />} raw={span.output}>
+        <SpanPayloadSection
+          title="Output"
+          icon={<FileOutputIcon />}
+          raw={span.output}
+          hasPreview={describeSpanOutput(asCoreSpan(span))?.type !== 'json'}
+        >
           <SpanOutputRenderer span={span} />
         </SpanPayloadSection>
         <DataPanel.CodeSection

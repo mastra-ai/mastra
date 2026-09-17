@@ -1,6 +1,8 @@
+import { describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { SpanRecord } from '../types';
 import { SpanErrorRenderer, SpanInputRenderer, SpanOutputRenderer, SpanPayloadSection } from './span-payload';
+import { asCoreSpan } from './span-payload/span-payload-registry';
 import { SpanSummaryDescription } from './span-summary-description';
 import { TraceIdButton } from './trace-id-button';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
@@ -54,10 +56,22 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
             <SpanErrorRenderer span={span} />
           </SpanPayloadSection>
 
-          <SpanPayloadSection title="Input" icon={<FileInputIcon />} raw={span.input} layout="details">
+          <SpanPayloadSection
+            title="Input"
+            icon={<FileInputIcon />}
+            raw={span.input}
+            hasPreview={describeSpanInput(asCoreSpan(span))?.type !== 'json'}
+            layout="details"
+          >
             <SpanInputRenderer span={span} />
           </SpanPayloadSection>
-          <SpanPayloadSection title="Output" icon={<FileOutputIcon />} raw={span.output} layout="details">
+          <SpanPayloadSection
+            title="Output"
+            icon={<FileOutputIcon />}
+            raw={span.output}
+            hasPreview={describeSpanOutput(asCoreSpan(span))?.type !== 'json'}
+            layout="details"
+          >
             <SpanOutputRenderer span={span} />
           </SpanPayloadSection>
           <DataDetailsPanel.CodeSection

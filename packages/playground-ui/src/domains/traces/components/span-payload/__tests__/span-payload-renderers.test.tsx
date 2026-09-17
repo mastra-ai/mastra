@@ -162,14 +162,16 @@ describe.each(['panel', 'details'] as const)('Span %s view', layout => {
       );
       expect(slot('span-error')).not.toBeNull();
       const toggles = screen.getAllByRole('button', { name: 'JSON' });
-      expect(toggles).toHaveLength(2);
+      expect(toggles).toHaveLength(1);
+      expect(slot('span-input-card')).toBeNull();
+      expect(slot('span-payload-json')).not.toBeNull();
       const jsonToggle = toggles[0];
       if (!jsonToggle) throw new Error('Missing error JSON toggle');
       fireEvent.click(jsonToggle);
       expect(slot('span-error')).toBeNull();
       expect(document.body.textContent).toContain('"message": "City not found: Atlantis"');
       expect(screen.getAllByRole('button', { name: 'JSON' })[0]?.getAttribute('aria-pressed')).toBe('true');
-      expect(screen.getAllByRole('button', { name: 'JSON' })[1]?.getAttribute('aria-pressed')).toBe('false');
+      expect(screen.getAllByRole('button', { name: 'JSON' })).toHaveLength(1);
       const previewToggle = screen.getAllByRole('button', { name: 'Preview' })[0];
       if (!previewToggle) throw new Error('Missing error Preview toggle');
       fireEvent.click(previewToggle);

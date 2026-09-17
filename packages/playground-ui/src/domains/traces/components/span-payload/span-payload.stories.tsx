@@ -45,7 +45,12 @@ export const InputRenderers: StoryObj = {
         const span = ALL_SPAN_FIXTURES[name];
         return (
           <Cell key={name} title={name} tag={describeSpanInput(asCoreSpan(span))?.type}>
-            <SpanPayloadSection title="Input" icon={<FileInputIcon />} raw={span.input}>
+            <SpanPayloadSection
+              title="Input"
+              icon={<FileInputIcon />}
+              raw={span.input}
+              hasPreview={describeSpanInput(asCoreSpan(span))?.type !== 'json'}
+            >
               <SpanInputRenderer span={span} />
             </SpanPayloadSection>
           </Cell>
@@ -62,7 +67,12 @@ export const OutputRenderers: StoryObj = {
         const span = ALL_SPAN_FIXTURES[name];
         return (
           <Cell key={name} title={name} tag={describeSpanOutput(asCoreSpan(span))?.type}>
-            <SpanPayloadSection title="Output" icon={<FileOutputIcon />} raw={span.output}>
+            <SpanPayloadSection
+              title="Output"
+              icon={<FileOutputIcon />}
+              raw={span.output}
+              hasPreview={describeSpanOutput(asCoreSpan(span))?.type !== 'json'}
+            >
               <SpanOutputRenderer span={span} />
             </SpanPayloadSection>
           </Cell>
@@ -90,10 +100,20 @@ export const ErrorRenderer: StoryObj = {
 function Both({ span }: { span: SpanRecord }) {
   return (
     <div className="flex max-w-3xl flex-col gap-3">
-      <SpanPayloadSection title="Input" icon={<FileInputIcon />} raw={span.input}>
+      <SpanPayloadSection
+        title="Input"
+        icon={<FileInputIcon />}
+        raw={span.input}
+        hasPreview={describeSpanInput(asCoreSpan(span))?.type !== 'json'}
+      >
         <SpanInputRenderer span={span} />
       </SpanPayloadSection>
-      <SpanPayloadSection title="Output" icon={<FileOutputIcon />} raw={span.output}>
+      <SpanPayloadSection
+        title="Output"
+        icon={<FileOutputIcon />}
+        raw={span.output}
+        hasPreview={describeSpanOutput(asCoreSpan(span))?.type !== 'json'}
+      >
         <SpanOutputRenderer span={span} />
       </SpanPayloadSection>
       <SpanPayloadSection title="Error" raw={span.error}>

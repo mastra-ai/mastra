@@ -14,6 +14,8 @@ export interface SpanPayloadSectionProps {
   icon?: ReactNode;
   /** The payload as stored; shown as JSON in the Raw view. */
   raw: unknown;
+  /** Whether a dedicated presentation exists rather than a JSON fallback. */
+  hasPreview?: boolean;
   /**
    * The human-readable rendering. `null` when the payload has no rich form
    * (JSON fallback): the section then shows Raw only and hides the toggle.
@@ -56,6 +58,7 @@ export function SpanPayloadSection({
   title,
   icon,
   raw,
+  hasPreview = true,
   children,
   layout = 'panel',
   defaultView = 'rich',
@@ -64,7 +67,7 @@ export function SpanPayloadSection({
   const [view, setView] = useState<SpanPayloadView>(defaultView);
   if (raw == null) return null;
 
-  const hasRich = children != null;
+  const hasRich = hasPreview && children != null;
   const showJson = !hasRich || view === 'raw';
 
   return (
@@ -78,7 +81,7 @@ export function SpanPayloadSection({
           {title}
         </DataPanelSectionHeading>
         <div className="ml-auto flex items-center gap-2">
-          {showJson && <CopyButton content={JSON.stringify(raw, null, 2)} size="sm" />}
+          <CopyButton content={JSON.stringify(raw, null, 2)} size="sm" />
           {hasRich && <ViewToggle view={view} onChange={setView} />}
         </div>
       </div>

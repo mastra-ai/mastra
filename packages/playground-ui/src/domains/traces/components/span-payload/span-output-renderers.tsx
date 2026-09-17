@@ -176,9 +176,15 @@ export interface SpanOutputRendererProps {
 export function SpanOutputRenderer({ span }: SpanOutputRendererProps) {
   const description = describeSpanOutput(asCoreSpan(span));
   if (!description) return null;
+  if (description.type === 'json') return <SpanPayloadJson value={description.value} />;
   const Renderer = pickRenderer(SPAN_OUTPUT_RENDERERS, description);
   return (
-    <Card data-slot="span-output-card" className="min-w-0">
+    <Card
+      data-slot="span-output-card"
+      appearance="surface"
+      elevation="raised"
+      className="border-border1 min-w-0 border"
+    >
       <CardContent>
         <Renderer value={description.value} />
       </CardContent>
