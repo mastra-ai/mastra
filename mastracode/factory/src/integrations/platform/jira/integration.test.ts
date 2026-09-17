@@ -9,6 +9,7 @@ import {
   encodeIssueReference,
   encodeSourceId,
   PlatformJiraIntegration,
+  resolvePlatformDashboardUrl,
 } from './integration.js';
 
 const PLATFORM_BASE = 'https://integrations.example.com';
@@ -99,6 +100,23 @@ function stubRoutes(
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+
+describe('resolvePlatformDashboardUrl', () => {
+  it('defaults integration management links to the Platform UI', () => {
+    vi.stubEnv('MASTRA_SHARED_API_URL', 'https://platform.mastra.ai/v1');
+    vi.stubEnv('MASTRA_PLATFORM_DASHBOARD_URL', '');
+
+    expect(resolvePlatformDashboardUrl()).toBe('https://cloud.mastra.ai');
+  });
+
+  it('uses and normalizes an explicit dashboard URL override', () => {
+    vi.stubEnv('MASTRA_PLATFORM_DASHBOARD_URL', 'https://platform-ui.example.com///');
+
+    expect(resolvePlatformDashboardUrl()).toBe('https://platform-ui.example.com');
+    expect(resolvePlatformDashboardUrl('https://configured.example.com/')).toBe('https://configured.example.com');
+  });
 });
 
 describe('PlatformJiraIntegration discovery', () => {

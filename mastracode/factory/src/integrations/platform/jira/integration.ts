@@ -71,15 +71,12 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const JIRA_CONNECTION_TOKEN_PREFIX = 'jira-connection:';
 const JIRA_ISSUE_REF_PREFIX = 'jira-issue:';
 const JIRA_SOURCE_PREFIX = 'jira-project:';
-const DEFAULT_PLATFORM_DASHBOARD_URL = 'https://platform.mastra.ai';
+const DEFAULT_PLATFORM_DASHBOARD_URL = 'https://cloud.mastra.ai';
 
-function resolvePlatformDashboardUrl(configuredUrl?: string): string {
+export function resolvePlatformDashboardUrl(configuredUrl?: string): string {
   const url =
-    configuredUrl?.trim() ||
-    process.env.MASTRA_PLATFORM_DASHBOARD_URL?.trim() ||
-    process.env.MASTRA_SHARED_API_URL?.trim() ||
-    DEFAULT_PLATFORM_DASHBOARD_URL;
-  return url.replace(/\/+$/, '').replace(/\/v1$/, '');
+    configuredUrl?.trim() || process.env.MASTRA_PLATFORM_DASHBOARD_URL?.trim() || DEFAULT_PLATFORM_DASHBOARD_URL;
+  return url.replace(/\/+$/, '');
 }
 
 const STATE_TYPE_TO_CATEGORY: Record<'unstarted' | 'started' | 'completed', string> = {
