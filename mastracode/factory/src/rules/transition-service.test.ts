@@ -861,6 +861,59 @@ describe('FactoryTransitionService', () => {
     await vi.waitFor(() => expect(onAccepted).toHaveBeenCalledTimes(2));
   });
 
+  it('isolates a synchronous acceptance-hook failure after the transition commits', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const item = await createItem(storage);
+    const failure = new Error('label sync down');
+    const onAccepted = vi.fn(() => {
+      throw failure;
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const audit = vi.spyOn(seed.audit, 'record');
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+      audit: seed.audit,
+      onAccepted,
+    });
+    try {
+      const classified = await service.transition({
+        ...request(item, { stage: 'intake', identity: 'classify-sync-hook' }),
+        actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
+        ingress: { type: 'agent', identity: 'classify-sync-hook' },
+        triageType: 'feature request',
+      });
+      expect(classified.status).toBe('accepted');
+      if (classified.status !== 'accepted') throw new Error('Classification failed');
+      audit.mockClear();
+      const input = {
+        ...request({ id: item.id, revision: classified.revision }, { stage: 'planning', identity: 'accept-sync-hook' }),
+        cause: 'board_drag',
+      };
+      const accepted = await service.transition(input);
+      expect(accepted).toMatchObject({ status: 'accepted', stage: 'planning' });
+      expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+        stages: ['planning'],
+        acceptedAt: expect.any(Date),
+      });
+      await vi.waitFor(() =>
+        expect(warn).toHaveBeenCalledWith(`[factory] acceptance hook failed for work item ${item.id}:`, failure),
+      );
+      expect(audit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'factory.work_item.stage_moved',
+          metadata: expect.objectContaining({ to: 'planning' }),
+        }),
+      );
+      expect(await service.transition(input)).toEqual(accepted);
+      expect(onAccepted).toHaveBeenCalledOnce();
+    } finally {
+      warn.mockRestore();
+      audit.mockRestore();
+    }
+  });
+
   it('fires onAccepted once, with the accepted row, and never lets the hook fail the transition', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
