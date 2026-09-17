@@ -144,6 +144,28 @@ export const deletePushNotificationConfigParamsSchema = taskIdParamsSchema.exten
   pushNotificationConfigId: z.string().describe('Push notification config id'),
 });
 
+const v1TaskPushNotificationConfigSchema = pushNotificationConfigSchema.extend({
+  taskId: z.string().describe('Task id'),
+  tenant: z.string().optional(),
+});
+
+const v1GetPushNotificationConfigParamsSchema = z.object({
+  tenant: z.string().optional(),
+  taskId: z.string(),
+  id: z.string(),
+});
+
+const v1ListPushNotificationConfigParamsSchema = z.object({
+  tenant: z.string().optional(),
+  taskId: z.string(),
+  pageSize: z.number().int().min(1).max(100).optional(),
+  pageToken: z
+    .string()
+    .regex(/^(0|[1-9]\d*)$/)
+    .refine(token => Number.isSafeInteger(Number(token)), 'Page token must be a safe integer')
+    .optional(),
+});
+
 // Legacy schema for backwards compatibility
 export const messageSendBodySchema = z.object({
   message: messageSchema,
@@ -159,65 +181,99 @@ const requestBaseSchema = {
   id: z.union([z.string(), z.number()]),
 } as const;
 
+export const a2aV1MethodMap = {
+  SendMessage: 'message/send',
+  SendStreamingMessage: 'message/stream',
+  GetTask: 'tasks/get',
+  ListTasks: 'tasks/list',
+  CancelTask: 'tasks/cancel',
+  SubscribeToTask: 'tasks/resubscribe',
+  CreateTaskPushNotificationConfig: 'tasks/pushNotificationConfig/set',
+  GetTaskPushNotificationConfig: 'tasks/pushNotificationConfig/get',
+  ListTaskPushNotificationConfigs: 'tasks/pushNotificationConfig/list',
+  DeleteTaskPushNotificationConfig: 'tasks/pushNotificationConfig/delete',
+  GetExtendedAgentCard: 'agent/getAuthenticatedExtendedCard',
+} as const;
+
 export const agentExecutionBodySchema = z.discriminatedUnion('method', [
   z.object({
     ...requestBaseSchema,
-    method: z.literal('message/send'),
+    method: z.enum([a2aV1MethodMap.SendMessage, 'SendMessage']),
     params: messageSendParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.literal('message/stream'),
+    method: z.enum([a2aV1MethodMap.SendStreamingMessage, 'SendStreamingMessage']),
     params: messageSendParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.literal('tasks/get'),
+    method: z.enum([a2aV1MethodMap.GetTask, 'GetTask']),
     params: taskQueryParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.literal('tasks/list'),
+    method: z.enum([a2aV1MethodMap.ListTasks, 'ListTasks']),
     params: listTasksParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.literal('tasks/cancel'),
+    method: z.enum([a2aV1MethodMap.CancelTask, 'CancelTask']),
     params: taskIdParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.literal('tasks/resubscribe'),
+    method: z.enum([a2aV1MethodMap.SubscribeToTask, 'SubscribeToTask']),
     params: taskResubscribeParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.literal('tasks/pushNotificationConfig/set'),
+    method: z.literal(a2aV1MethodMap.CreateTaskPushNotificationConfig),
     params: setPushNotificationConfigParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.literal('tasks/pushNotificationConfig/get'),
+    method: z.literal('CreateTaskPushNotificationConfig'),
+    params: v1TaskPushNotificationConfigSchema,
+  }),
+  z.object({
+    ...requestBaseSchema,
+    method: z.literal(a2aV1MethodMap.GetTaskPushNotificationConfig),
     params: getPushNotificationConfigParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.literal('tasks/pushNotificationConfig/list'),
+    method: z.literal('GetTaskPushNotificationConfig'),
+    params: v1GetPushNotificationConfigParamsSchema,
+  }),
+  z.object({
+    ...requestBaseSchema,
+    method: z.literal(a2aV1MethodMap.ListTaskPushNotificationConfigs),
     params: listPushNotificationConfigParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.literal('tasks/pushNotificationConfig/delete'),
+    method: z.literal('ListTaskPushNotificationConfigs'),
+    params: v1ListPushNotificationConfigParamsSchema,
+  }),
+  z.object({
+    ...requestBaseSchema,
+    method: z.literal(a2aV1MethodMap.DeleteTaskPushNotificationConfig),
     params: deletePushNotificationConfigParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,
-    method: z.literal('agent/getAuthenticatedExtendedCard'),
+    method: z.literal('DeleteTaskPushNotificationConfig'),
+    params: v1GetPushNotificationConfigParamsSchema,
+  }),
+  z.object({
+    ...requestBaseSchema,
+    method: z.enum([a2aV1MethodMap.GetExtendedAgentCard, 'GetExtendedAgentCard']),
   }),
 ]);
 
 // Response schemas
-export const agentCardResponseSchema = z.object({
+const legacyAgentCardResponseSchema = z.object({
   additionalInterfaces: z.array(z.unknown()).optional(),
   name: z.string(),
   description: z.string(),
@@ -259,6 +315,48 @@ export const agentCardResponseSchema = z.object({
     }),
   ),
 });
+
+export const agentCardV1ResponseSchema = legacyAgentCardResponseSchema
+  .omit({
+    additionalInterfaces: true,
+    url: true,
+    protocolVersion: true,
+    security: true,
+    supportsAuthenticatedExtendedCard: true,
+  })
+  .extend({
+    description: z.string().optional(),
+    supportedInterfaces: z.array(
+      z.object({
+        url: z.string(),
+        protocolBinding: z.literal('JSONRPC'),
+        protocolVersion: z.enum(['0.3', '1.0']),
+      }),
+    ),
+    capabilities: z.object({
+      streaming: z.boolean().optional(),
+      pushNotifications: z.boolean().optional(),
+      extendedAgentCard: z.boolean().optional(),
+      extensions: z.array(z.unknown()).optional(),
+    }),
+    defaultInputModes: z.array(z.string()).optional(),
+    defaultOutputModes: z.array(z.string()).optional(),
+    skills: z
+      .array(
+        z.object({
+          id: z.string(),
+          name: z.string(),
+          description: z.string().optional(),
+          tags: z.array(z.string()).optional(),
+          examples: z.array(z.string()).optional(),
+          inputModes: z.array(z.string()).optional(),
+          outputModes: z.array(z.string()).optional(),
+        }),
+      )
+      .optional(),
+  });
+
+export const agentCardResponseSchema = z.union([legacyAgentCardResponseSchema, agentCardV1ResponseSchema]);
 
 export const taskResponseSchema = z.unknown(); // Complex task state structure
 

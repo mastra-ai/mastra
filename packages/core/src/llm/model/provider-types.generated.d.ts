@@ -1570,6 +1570,7 @@ export type ProviderModelsMap = {
     'glm-5',
     'glm-5.1',
     'glm-5.2',
+    'glm-5.3',
     'happyhorse-1.1-i2v',
     'happyhorse-1.1-r2v',
     'happyhorse-1.1-t2v',
@@ -2923,18 +2924,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.3',
     'zai-org/GLM-5.3-Flash',
   ];
-  readonly 'zhipuai-coding-plan': readonly [
-    'glm-4.6v',
-    'glm-4.7',
-    'glm-5-turbo',
-    'glm-5.1',
-    'glm-5.2',
-    'glm-5.2-highspeed',
-    'glm-5.3',
-    'glm-5.3-flash',
-    'glm-5.3-highspeed',
-    'glm-5v-turbo',
-  ];
+  readonly 'zhipuai-coding-plan': readonly ['glm-4.6v', 'glm-5.3', 'glm-5.3-flash', 'glm-5.3-highspeed'];
   readonly daoxe: readonly [
     'claude-haiku-4-5-20251001',
     'claude-opus-4-8',
@@ -3748,6 +3738,7 @@ export type ProviderModelsMap = {
     'tencent/hy4-preview',
     'thinkingmachines/inkling',
     'thinkingmachines/inkling-small',
+    'typesafe-ai/jev',
     'voyage/rerank-2.5',
     'voyage/rerank-2.5-lite',
     'voyage/voyage-3-large',
@@ -5882,6 +5873,7 @@ export type ProviderModelsMap = {
     'bailian/qwen3.7-max',
     'bailian/qwen3.7-plus',
     'bailian/qwen3.8-27b',
+    'bailian/qwen3.8-flash',
     'bailian/qwen3.8-max',
     'bailian/qwen3.8-max-0902',
     'deepseek/deepseek-v3.2',
@@ -6086,6 +6078,7 @@ export type ProviderModelsMap = {
     'DeepSeek-V4-Flash-0731',
     'DeepSeek-V4-Pro',
     'DeepSeek-V4-Pro-0813',
+    'DeepSeek-V4.1-Flash',
     'GLM-5',
     'GLM-5.1',
     'GLM-5.2',
@@ -6818,7 +6811,6 @@ export type ProviderModelsMap = {
     'kimi-k2.6',
     'kimi-k2.7-code',
     'kimi-k3',
-    'llama-3.1-405b-instruct',
     'llama-3.1-8b-instruct',
     'llama-3.3-70b-instruct',
     'minicpm-v-4.5',
@@ -6868,6 +6860,7 @@ export type ProviderModelsMap = {
     'voxtral-small-2507',
   ];
   readonly wallaby: readonly ['moonshotai/kimi-k3'];
+  readonly ainetcafe: readonly ['Kimi-K3'];
   readonly 'hpc-ai': readonly [
     'anthropic/claude-opus-4.7',
     'deepseek/deepseek-v4-flash',
@@ -6912,6 +6905,7 @@ export type ProviderModelsMap = {
     'glm-5',
     'glm-5.1',
     'glm-5.2',
+    'glm-5.3',
     'happyhorse-1.1-i2v',
     'happyhorse-1.1-r2v',
     'happyhorse-1.1-t2v',
@@ -7529,6 +7523,7 @@ export type ProviderModelsMap = {
     'openrouter/qwen/qwen3.6-35b-a3b',
     'openrouter/qwen/qwen3.8-2.4t-a95b',
     'openrouter/qwen/qwen3.8-27b',
+    'openrouter/qwen/qwen3.8-27b:free',
     'openrouter/rekaai/reka-edge',
     'openrouter/rekaai/reka-flash-3',
     'openrouter/relace/relace-apply-3',
@@ -7576,6 +7571,9 @@ export type ProviderModelsMap = {
     'openrouter/~x-ai/grok-latest',
     'openrouter/~z-ai/glm-flash-latest',
     'openrouter/~z-ai/glm-latest',
+    'typesafe/jev-1.13.0',
+    'typesafe/jev-latest',
+    'typesafe/jev-preview',
   ];
 };
 

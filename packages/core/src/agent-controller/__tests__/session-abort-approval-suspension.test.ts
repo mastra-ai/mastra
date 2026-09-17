@@ -12,6 +12,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { Agent } from '../../agent';
+import { createDurableAgent } from '../../agent/durable';
+import { InMemoryServerCache } from '../../cache';
+import { EventEmitterPubSub } from '../../events';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
@@ -64,7 +67,7 @@ function textStream() {
   });
 }
 
-async function createHarness(id: string) {
+async function createHarness(id: string, durable: boolean) {
   const findUser = createTool({
     id: 'find-user',
     description: 'Look up a user by name.',
@@ -79,7 +82,7 @@ async function createHarness(id: string) {
 
   const storage = new InMemoryStore();
   let callCount = 0;
-  const agent = new Agent({
+  const baseAgent = new Agent({
     id: `${id}-agent`,
     name: `${id} agent`,
     instructions: 'You look up users.',
@@ -93,10 +96,15 @@ async function createHarness(id: string) {
     tools: { findUser },
   });
 
-  const mastra = new Mastra({ agents: { [`${id}-agent`]: agent }, logger: false, storage });
+  const cache = new InMemoryServerCache();
+  const pubsub = new EventEmitterPubSub();
+  const agent = durable ? createDurableAgent({ agent: baseAgent, cache, pubsub }) : baseAgent;
+  const mastra = new Mastra({ agents: { [`${id}-agent`]: agent as any }, logger: false, storage, cache, pubsub });
   const registeredAgent = mastra.getAgent(`${id}-agent`);
 
   const controller = new AgentController({
+    agent: registeredAgent,
+    pubsub,
     workspace: createMockWorkspace(),
     id: `${id}-controller`,
     storage,
@@ -106,7 +114,7 @@ async function createHarness(id: string) {
   const session = await controller.createSession({ id: `${id}-session`, ownerId: 'owner-1' });
   await session.thread.create();
 
-  return { controller, session, events: [] as AgentControllerEvent[] };
+  return { controller, session, agent: registeredAgent, events: [] as AgentControllerEvent[] };
 }
 
 function waitForAgentEnd(session: any, events: AgentControllerEvent[]) {
@@ -118,9 +126,9 @@ function waitForAgentEnd(session: any, events: AgentControllerEvent[]) {
   });
 }
 
-describe('session.abort() during approval / suspension (#20592)', () => {
+describe.each([false, true])('session.abort() during approval / suspension (#20592), durable=%s', durable => {
   it('Given a tool awaiting approval, When abort() is called synchronously from the subscriber, Then the run aborts without an error event', async () => {
-    const { session, events } = await createHarness('abort-approval');
+    const { session, events } = await createHarness('abort-approval', durable);
 
     const ended = waitForAgentEnd(session, events);
     session.subscribe((event: AgentControllerEvent) => {
@@ -135,7 +143,7 @@ describe('session.abort() during approval / suspension (#20592)', () => {
   });
 
   it('Given an aborted approval, When agent_end fires, Then the display state no longer shows the tool as pending', async () => {
-    const { session, events } = await createHarness('abort-approval-ds');
+    const { session, events } = await createHarness('abort-approval-ds', durable);
 
     const ended = waitForAgentEnd(session, events);
     session.subscribe((event: AgentControllerEvent) => {
@@ -160,7 +168,7 @@ describe('session.abort() during approval / suspension (#20592)', () => {
   });
 
   it('Given two subscribers that both abort a parked approval, When the run ends, Then it still aborts without an error event', async () => {
-    const { session, events } = await createHarness('abort-approval-twice');
+    const { session, events } = await createHarness('abort-approval-twice', durable);
 
     const ended = waitForAgentEnd(session, events);
     session.subscribe((event: AgentControllerEvent) => {
@@ -178,18 +186,35 @@ describe('session.abort() during approval / suspension (#20592)', () => {
   });
 
   it('Given an approved tool parked in suspend(), When abort() is called, Then the parked suspension is retracted from the display state', async () => {
-    const { session, events } = await createHarness('abort-suspension');
+    const { session, agent, events } = await createHarness('abort-suspension', durable);
 
     const ended = waitForAgentEnd(session, events);
     session.subscribe((event: AgentControllerEvent) => {
       if (event.type === 'tool_approval_required') {
         void session.respondToToolApproval({ decision: 'approve' });
       }
-      if (event.type === 'agent_end' && event.reason === 'suspended') session.abort();
+      if (!durable && event.type === 'agent_end' && event.reason === 'suspended') session.abort();
     });
 
-    await session.sendMessage({ content: 'find dero' });
-    await ended;
+    const sending = session.sendMessage({ content: 'find dero' });
+    if (durable) {
+      await vi.waitFor(
+        async () => {
+          const parked = await agent.listSuspendedRuns({});
+          expect(
+            parked.runs.some((run: { toolCalls: Array<{ toolCallId: string; requiresApproval?: boolean }> }) =>
+              run.toolCalls.some(tool => tool.toolCallId === 'call-1' && !tool.requiresApproval),
+            ),
+          ).toBe(true);
+        },
+        { timeout: 5000 },
+      );
+      session.abort();
+      await vi.waitFor(() => expect(session.displayState.get().pendingSuspensions.size).toBe(0));
+    } else {
+      await ended;
+    }
+    await sending;
 
     const ds = session.displayState.get();
     expect(ds.pendingSuspensions.size).toBe(0);
@@ -209,7 +234,7 @@ describe('session.abort() during approval / suspension (#20592)', () => {
   });
 
   it('Given an approval gate and a retained suspended tool, When abort() is called, Then both tool calls are denied before teardown', async () => {
-    const { controller, session, events } = await createHarness('abort-approval-and-suspension');
+    const { controller, session, events } = await createHarness('abort-approval-and-suspension', durable);
 
     const ended = waitForAgentEnd(session, events);
     let sawCombinedState = false;
@@ -295,7 +320,7 @@ describe('session.abort() during approval / suspension (#20592)', () => {
   });
 
   it('Given a suspension persisted under an earlier thread, When the rebound session aborts, Then settlement writes the original thread and not the current one', async () => {
-    const { controller, session, events } = await createHarness('abort-cross-thread-suspension');
+    const { controller, session, events } = await createHarness('abort-cross-thread-suspension', durable);
 
     // Persist a suspended invocation under the original thread/resource (A).
     const threadA = session.thread.requireId();
@@ -383,7 +408,7 @@ describe('session.abort() during approval / suspension (#20592)', () => {
   });
 
   it('Given a suspension whose run scope carries its own memory, When abort() settles it, Then settlement writes through the stashed memory', async () => {
-    const { controller, session, events } = await createHarness('abort-stashed-memory');
+    const { controller, session, events } = await createHarness('abort-stashed-memory', durable);
 
     const threadId = session.thread.requireId();
     const resourceId = session.identity.getResourceId();

@@ -32,7 +32,7 @@ export function MetricsToolbar({
   const hasActiveFilters = filterTokens.length > 0;
   const hasNonDefaultFilter = filterTokens.some(token => isNonDefaultFilter(token, filterFields));
 
-  // Match TracesToolbar: no filters → no empty grid row (and its gap) in `PageLayout.TopArea`.
+  // No filters → no empty grid row (and its gap) in `PageLayout.TopArea`.
   if (!hasActiveFilters) return null;
 
   return (

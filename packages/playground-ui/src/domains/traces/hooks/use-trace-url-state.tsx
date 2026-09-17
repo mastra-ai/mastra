@@ -115,6 +115,9 @@ export interface UseTraceUrlStateResult {
   handleListModeChange: (mode: TraceListMode) => void;
   handleFilterTokensChange: (nextTokens: PropertyFilterToken[]) => void;
   handleDateChange: (value: Date | undefined, type: 'from' | 'to') => void;
+  /** Writes both ends of a custom range in one URL update (two `handleDateChange` calls in the
+   *  same tick would clobber each other through react-router's closure-bound setter). */
+  handleDateRangeChange: (from: Date | undefined, to: Date | undefined) => void;
   handleDatePresetChange: (preset: TraceDatePreset) => void;
   handleRemoveAll: () => void;
 
@@ -395,6 +398,25 @@ export function useTraceUrlState(
     [setSearchParams],
   );
 
+  const handleDateRangeChange = useCallback(
+    (from: Date | undefined, to: Date | undefined) => {
+      if (datePresetRef.current !== 'custom') return;
+      setSearchParams(
+        prev => {
+          const next = new URLSearchParams(prev);
+          if (from) next.set(TRACE_DATE_FROM_PARAM, from.toISOString());
+          else next.delete(TRACE_DATE_FROM_PARAM);
+          if (to) next.set(TRACE_DATE_TO_PARAM, to.toISOString());
+          else next.delete(TRACE_DATE_TO_PARAM);
+          clearSelectionParams(next);
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   const handleDatePresetChange = useCallback(
     (preset: TraceDatePreset) => {
       // Update ref synchronously so any onDateChange fired by the picker in the
@@ -492,6 +514,7 @@ export function useTraceUrlState(
     handleListModeChange,
     handleFilterTokensChange,
     handleDateChange,
+    handleDateRangeChange,
     handleDatePresetChange,
     handleRemoveAll,
     applyFilterTokens,
