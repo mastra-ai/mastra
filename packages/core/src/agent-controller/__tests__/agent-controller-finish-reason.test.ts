@@ -129,6 +129,7 @@ describe('AgentController: non-success finish reasons', () => {
     const errorEvent = events.find(e => e.type === 'error');
     expect(errorEvent).toBeDefined();
     expect(errorEvent.error.message).toContain('content filter');
+    expect(errorEvent.finishReason).toBe('content-filter');
 
     const messageStart = events.find(e => e.type === 'message_start' && e.message.role === 'assistant');
     const messageEnd = [...events].reverse().find(e => e.type === 'message_end');
@@ -170,6 +171,7 @@ describe('AgentController: non-success finish reasons', () => {
     expect(events.find(e => e.type === 'error')?.error.message).toBe(
       'The model stopped because it reached its maximum output length before finishing.',
     );
+    expect(events.find(e => e.type === 'error')?.finishReason).toBe('length');
     const messageStart = events.find(e => e.type === 'message_start' && e.message.role === 'assistant');
     const messageEnd = [...events].reverse().find(e => e.type === 'message_end');
     expect(messageEnd?.id).toBe(messageStart?.message.id);
@@ -222,4 +224,80 @@ describe('AgentController: non-success finish reasons', () => {
     expect(messageEnd?.id).toBe(messageStart?.message.id);
     expect(messageStart?.message.content.parts).toEqual([{ type: 'text', text: '' }]);
   });
+});
+
+describe('Session cancellation during startup', () => {
+  it.each(['subscription', 'model-sync'] as const)('does not dispatch after cancellation during %s', async phase => {
+    const model = vi.fn(() => createFinishReasonStream('stop'));
+    const { session } = await buildController(`startup-${phase}`, model);
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    if (phase === 'subscription') {
+      const original = session.thread.ensureSubscription.bind(session.thread);
+      vi.spyOn(session.thread, 'ensureSubscription').mockImplementationOnce(async (...args) => {
+        entered.resolve();
+        await release.promise;
+        return original(...args);
+      });
+    } else {
+      const original = session.model.syncFromPersisted.bind(session.model);
+      vi.spyOn(session.model, 'syncFromPersisted').mockImplementationOnce(async (...args) => {
+        entered.resolve();
+        await release.promise;
+        return original(...args);
+      });
+    }
+    const pending = session.sendMessage({ content: 'Cancel before model dispatch' });
+    const rejection = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await entered.promise;
+    session.abort();
+    release.resolve();
+    await rejection;
+    expect(model).not.toHaveBeenCalled();
+    const secondEntered = Promise.withResolvers<void>();
+    const secondRelease = Promise.withResolvers<void>();
+    const ensureSubscription = session.thread.ensureSubscription.bind(session.thread);
+    vi.spyOn(session.thread, 'ensureSubscription').mockImplementationOnce(async (...args) => {
+      secondEntered.resolve();
+      await secondRelease.promise;
+      return ensureSubscription(...args);
+    });
+    const second = session.sendMessage({ content: 'Cancel a second startup' });
+    const secondRejection = expect(second).rejects.toMatchObject({ name: 'AbortError' });
+    await secondEntered.promise;
+    session.abort();
+    secondRelease.resolve();
+    await secondRejection;
+    expect(model).not.toHaveBeenCalled();
+    await session.sendMessage({ content: 'A fresh turn still works' });
+    expect(model).toHaveBeenCalledOnce();
+  });
+});
+
+it('rejects an obsolete startup without aborting a newer streaming turn', async () => {
+  const streaming = Promise.withResolvers<ReadableStreamDefaultController>();
+  const model = vi.fn(() => new ReadableStream({ start: controller => streaming.resolve(controller) }));
+  const { session } = await buildController('startup-concurrent', model);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const original = session.model.syncFromPersisted.bind(session.model);
+  vi.spyOn(session.model, 'syncFromPersisted').mockImplementationOnce(async (...args) => {
+    entered.resolve();
+    await release.promise;
+    return original(...args);
+  });
+  const obsolete = session.sendSignal({ content: 'Old startup' }, { requireDelivery: true }).accepted;
+  const rejection = expect(obsolete).rejects.toMatchObject({ name: 'AbortError' });
+  await entered.promise;
+  session.abort();
+  const newer = session.sendMessage({ content: 'New turn' });
+  const stream = await streaming.promise;
+  const signal = session.run.ensureAbortController().signal;
+  release.resolve();
+  await rejection;
+  expect(signal.aborted).toBe(false);
+  expect(model).toHaveBeenCalledOnce();
+  stream.enqueue({ type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 0, totalTokens: 1 } });
+  stream.close();
+  await newer;
 });

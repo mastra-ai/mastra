@@ -30,8 +30,11 @@
     "build:lib": "tsdown --silent --config tsdown.config.ts",
     "check": "tsc --noEmit",
     "test": "vitest run",
+    "test:acp": "vitest run --config vitest.acp.config.ts",
     "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "build:acp:dev": "node scripts/build-acp-dev.mjs",
+    "test:acp:conformance": "node scripts/run-acp-conformance.mjs"
   },
   "keywords": [],
   "author": "",

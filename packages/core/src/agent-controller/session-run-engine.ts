@@ -237,6 +237,7 @@ type StreamState = {
    * into an explicit terminal error state instead of silently completing.
    */
   terminalError?: string;
+  terminalFinishReason?: string;
 };
 
 /**
@@ -511,7 +512,11 @@ export class SessionRunEngine {
     // silently stops without a visible terminal state.
     if (state.terminalError && !error && !aborted && !this.#session.run.isAbortRequested() && !result.suspended) {
       error = true;
-      this.#session.emit({ type: 'error', error: new Error(state.terminalError) });
+      this.#session.emit({
+        type: 'error',
+        error: new Error(state.terminalError),
+        finishReason: state.terminalFinishReason,
+      });
     }
 
     await this.#session.finishAgentRun(
@@ -936,6 +941,7 @@ export class SessionRunEngine {
             this.setStopReason(state.currentMessage, 'error', true);
             this.setErrorMessage(state.currentMessage, errorMessage);
             state.terminalError = errorMessage;
+            state.terminalFinishReason = finishReason;
           } else {
             this.setStopReason(state.currentMessage, 'complete', true);
           }
@@ -1388,7 +1394,11 @@ export class SessionRunEngine {
               !suspended
             ) {
               isError = true;
-              this.#session.emit({ type: 'error', error: new Error(currentRun.terminalError) });
+              this.#session.emit({
+                type: 'error',
+                error: new Error(currentRun.terminalError),
+                finishReason: currentRun.terminalFinishReason,
+              });
             }
             await this.finishSubscribedStreamRun({
               suspended,
