@@ -10,6 +10,27 @@ import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from './
 const SETTLED_TOOL_STATES = new Set(['result', 'output-error']);
 
 /**
+ * Whether a step needs `TrailingAssistantGuard` attached.
+ *
+ * True when the model as configured rejects a prompt ending on a model turn
+ * (Anthropic 4.6+ assistant prefill, Gemini 3+), or when any input processors are
+ * configured, since a processor may swap `model` mid-step. In the latter case the
+ * guard re-checks the provider against the final model it receives, so attaching
+ * it is only ever a no-op cost.
+ *
+ * Used both where the `ProcessorRunner` is created for a step and where the
+ * runner assembles its processor list, so an agent with no input processors
+ * still gets a runner and that runner still appends the guard.
+ */
+export function needsTrailingAssistantGuard(model: unknown, inputProcessors: readonly unknown[]): boolean {
+  return (
+    inputProcessors.length > 0 ||
+    isMaybeAnthropicWithoutAssistantPrefill(model) ||
+    isMaybeGoogleWithoutTrailingModelTurn(model)
+  );
+}
+
+/**
  * Whether the prompt built from this message will end on a model turn.
  *
  * Mirrors prompt conversion: a settled tool invocation becomes an assistant

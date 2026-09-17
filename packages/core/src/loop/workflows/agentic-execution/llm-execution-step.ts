@@ -33,12 +33,9 @@ import type {
 } from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
-import {
-  isMaybeAnthropicWithoutAssistantPrefill,
-  isMaybeGoogleWithoutTrailingModelTurn,
-} from '../../../processors/provider-history-compat';
 import type { ProcessorState } from '../../../processors/runner';
 import { ProcessorRunner } from '../../../processors/runner';
+import { needsTrailingAssistantGuard } from '../../../processors/trailing-assistant-guard';
 import { RequestContext } from '../../../request-context';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
@@ -1399,11 +1396,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           ...(inputProcessors || []),
           ...(options?.prepareStep ? [new PrepareStepProcessor({ prepareStep: options.prepareStep })] : []),
         ];
-        if (
-          inputStepProcessors.length > 0 ||
-          isMaybeAnthropicWithoutAssistantPrefill(model) ||
-          isMaybeGoogleWithoutTrailingModelTurn(model)
-        ) {
+        if (needsTrailingAssistantGuard(model, inputStepProcessors)) {
           const processorRunner = new ProcessorRunner({
             inputProcessors: inputStepProcessors,
             outputProcessors: [],

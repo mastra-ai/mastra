@@ -29,10 +29,6 @@ import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import type { OutputWriter } from '../workflows/types';
 import { isProcessorWorkflow } from './is-processor-workflow';
-import {
-  isMaybeAnthropicWithoutAssistantPrefill,
-  isMaybeGoogleWithoutTrailingModelTurn,
-} from './provider-history-compat';
 import { createProcessorSendSignal } from './send-signal';
 import { resolveProcessorSpanAttributes, resolveProcessorSpanName } from './span-declaration';
 import {
@@ -44,7 +40,7 @@ import {
 } from './span-payload';
 import type { ProcessorStepOutput } from './step-schema';
 import { REPROCESS_PART_KEY } from './stream-reprocess';
-import { TrailingAssistantGuard } from './trailing-assistant-guard';
+import { needsTrailingAssistantGuard, TrailingAssistantGuard } from './trailing-assistant-guard';
 import type {
   CachedLLMStepChunk,
   CachedLLMStepResponse,
@@ -1488,15 +1484,8 @@ export class ProcessorRunner {
       retryCount: args.retryCount ?? 0,
     };
 
-    // Append the trailing assistant guard when the resolved model rejects a prompt ending on an
-    // assistant turn (Anthropic 4.6+ assistant prefill, Gemini 3+ trailing model turn). Input
-    // processors may swap `model` mid-step, so when any are configured the guard is attached
-    // regardless and re-checks the provider against the final model it receives.
     const processors =
-      stepInput.model &&
-      (this.inputProcessors.length > 0 ||
-        isMaybeAnthropicWithoutAssistantPrefill(stepInput.model) ||
-        isMaybeGoogleWithoutTrailingModelTurn(stepInput.model))
+      stepInput.model && needsTrailingAssistantGuard(stepInput.model, this.inputProcessors)
         ? [...this.inputProcessors, new TrailingAssistantGuard()]
         : this.inputProcessors;
 
