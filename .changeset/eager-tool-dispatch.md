@@ -20,3 +20,5 @@ Eligibility is narrow by design: approval-gated, suspendable, provider-executed,
 Eager work honours the same configured concurrency limit, but counts against it separately from the deferred pipeline. A step that mixes eligible and ineligible calls can therefore run one of each at once, so a limit of 1 bounds each path rather than the step as a whole. Set `eagerToolExecution: false` where a tool depends on being the only one running.
 
 If the model errors and the request is retried or failed over, a tool that already finished is not run again: its call and result are written into the conversation so the replacement attempt sees the work as done. A tool still running when that happens is aborted.
+
+A caller abort is the exception. It drops both the work still running and any result that finished but has not been written into the conversation yet, so a tool that completed in the moments before the abort can leave its side effect unrecorded.
