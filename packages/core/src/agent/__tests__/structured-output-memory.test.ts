@@ -567,8 +567,8 @@ describe('Structured output memory inheritance', () => {
   });
 
   it('keeps memory context but excludes rejected output when useAgent retries', async () => {
-    const threadId = randomUUID();
-    const resourceId = `structured-output-retry-memory-${randomUUID()}`;
+    const threadId = globalThis.crypto.randomUUID();
+    const resourceId = `structured-output-retry-memory-${globalThis.crypto.randomUUID()}`;
     const mockMemory = new MockMemory();
     const mainModel = new MockLanguageModelV2({
       doGenerate: async () => ({
