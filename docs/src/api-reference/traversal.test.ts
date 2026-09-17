@@ -1,8 +1,6 @@
-import { readFileSync } from 'node:fs'
-import { parse } from 'valibot'
 import { describe, expect, it } from 'vitest'
 import type { ApiContract, ApiDeclaration, ApiType } from './model'
-import { apiContractSchema } from './schema'
+import { loadContract as load } from './test-support'
 import { descriptionGaps, traverseSurface, validateDescriptions } from './traversal'
 
 function declaration(id: string, values: Partial<ApiDeclaration> = {}): ApiDeclaration {
@@ -83,12 +81,6 @@ function independentlyReachable(contract: ApiContract, seeds: unknown[]): Set<st
   }
   return found
 }
-
-const load = (name: string) =>
-  parse(
-    apiContractSchema,
-    JSON.parse(readFileSync(new URL(`../data/api-reference/${name}.json`, import.meta.url), 'utf8')),
-  )
 
 describe('complete page-scoped traversal', () => {
   it('includes unions, callback parameters, and recursive data exactly once', () => {

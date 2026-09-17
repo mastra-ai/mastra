@@ -1,5 +1,6 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { ApiSection } from '../../src/api-reference/traversal'
 
 export const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
 export const artifactDirectory = path.join(repositoryRoot, 'docs/src/data/api-reference')
@@ -9,9 +10,24 @@ export const ownedPackages = new Map([
   ['@internal/auth', 'packages/_internals/auth'],
 ])
 
-export const roots = [
-  { name: 'Config', parent: undefined, id: '@mastra/core!Config', file: 'configuration.json' },
-  { name: 'generate', parent: 'Agent', id: '@mastra/core/agent!Agent.generate', file: 'agent-generate.json' },
+/** Each root owns one committed artifact and the page that must render its complete surface. */
+export const roots: { name: string; parent?: string; id: string; file: string; page: string; section: ApiSection }[] = [
+  {
+    name: 'Config',
+    parent: undefined,
+    id: '@mastra/core!Config',
+    file: 'configuration.json',
+    page: 'configuration.mdx',
+    section: 'properties',
+  },
+  {
+    name: 'generate',
+    parent: 'Agent',
+    id: '@mastra/core/agent!Agent.generate',
+    file: 'agent-generate.json',
+    page: 'agents/generate.mdx',
+    section: 'method',
+  },
 ]
 
 export const canonicalDestinations = new Map([
@@ -20,9 +36,12 @@ export const canonicalDestinations = new Map([
   ['@mastra/core/agent!Agent.generate', '/reference/agents/generate'],
 ])
 
-// These are behavioral dependencies, not data records. Unlisted declarations expand,
-// including classes and options/result records that happen to contain callbacks.
-const serviceGroups: { path: string; names: string[]; reason: string }[] = [
+/**
+ * Behavioral dependencies, not data records. Unlisted declarations expand,
+ * including classes and options/result records that happen to contain callbacks.
+ * `extraction.test.ts` asserts every configured name is declared in its source file.
+ */
+export const serviceGroups: { path: string; names: string[]; reason: string }[] = [
   { path: 'agent/agent.ts', names: ['Agent'], reason: 'Agent execution and resource lifecycle' },
   { path: 'mastra/index.ts', names: ['Mastra'], reason: 'Dependency registry and application lifecycle' },
   { path: 'agent/types.ts', names: ['DurableAgentLike'], reason: 'Durable execution engine wrapper' },

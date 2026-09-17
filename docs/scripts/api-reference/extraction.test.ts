@@ -5,7 +5,7 @@ import ts from 'typescript'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { ApiContract } from '../../src/api-reference/model'
 import { descriptionGaps, traverseSurface } from '../../src/api-reference/traversal'
-import { repositoryRoot } from './config'
+import { repositoryRoot, serviceGroups } from './config'
 import { convertPilot, selectRoots } from './generate'
 import { normalize } from './normalize'
 
@@ -64,12 +64,47 @@ function withoutComments(source: string, file: string) {
     .printFile(ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true))
 }
 
+function sectionFor(contract: ApiContract) {
+  return contract.root === '@mastra/core!Config' ? 'properties' : 'method'
+}
+
+function consumedGaps(contract: ApiContract) {
+  return descriptionGaps(traverseSurface(contract, sectionFor(contract)), contract.root)
+}
+
 describe('real source extraction', () => {
   let contracts: ApiContract[]
   beforeAll(async () => {
     const { project } = await convertPilot()
     contracts = selectRoots(project).map(root => normalize(project, root.reflection, root.id))
   }, 120_000)
+
+  it('resolves every service classification to a declared source symbol', async () => {
+    const unresolved: string[] = []
+    for (const { path: file, names } of serviceGroups) {
+      const source = ts.createSourceFile(
+        file,
+        await readFile(path.join(repositoryRoot, 'packages/core/src', file), 'utf8'),
+        ts.ScriptTarget.Latest,
+        true,
+      )
+      const declared = new Set<string>()
+      source.forEachChild(function collect(node: ts.Node) {
+        if (
+          (ts.isInterfaceDeclaration(node) ||
+            ts.isClassDeclaration(node) ||
+            ts.isTypeAliasDeclaration(node) ||
+            ts.isEnumDeclaration(node) ||
+            ts.isFunctionDeclaration(node)) &&
+          node.name
+        )
+          declared.add(node.name.text)
+        node.forEachChild(collect)
+      })
+      for (const name of names) if (!declared.has(name)) unresolved.push(`${file}:${name}`)
+    }
+    expect(unresolved).toEqual([])
+  })
 
   it('includes every public Config member independently enumerated from the source AST', async () => {
     const source = ts.createSourceFile(
@@ -220,25 +255,18 @@ describe('real source extraction', () => {
       const shapes = fields.flatMap(field =>
         field.type?.declaration ? [contract.declarations[field.type.declaration]!] : [],
       )
-      for (const node of [
+      const undescribed = [
         declaration!,
         ...fields,
         ...shapes.flatMap(shape => shape.children.map(id => contract.declarations[id]!)),
-      ]) {
-        expect(
-          node.comment?.summary.some(part => part.text.trim()),
-          `${name}.${node.name}`,
-        ).toBe(true)
-      }
+      ]
+        .filter(node => !node.comment?.summary.some(part => part.text.trim()))
+        .map(node => `${name}.${node.name}`)
+      expect(undescribed).toEqual([])
       for (const shape of shapes) {
         for (const id of shape.indexSignatures) {
           const signature = contract.declarations[id]!
-          for (const parameter of signature.parameters) {
-            expect(
-              contract.declarations[parameter]!.comment?.summary.some(part => part.text.trim()),
-              `${name} nested index key`,
-            ).toBe(true)
-          }
+          expect(signature.parameters, `${name} nested index signatures`).toHaveLength(1)
         }
       }
     }
@@ -264,11 +292,6 @@ describe('real source extraction', () => {
       expect(shape.indexSignatures, name).toHaveLength(1)
       const signature = contract.declarations[shape.indexSignatures[0]!]!
       expect(signature.parameters).toHaveLength(1)
-      const key = contract.declarations[signature.parameters[0]!]!
-      expect(
-        key.comment?.summary.some(part => part.text.trim()),
-        `${name} index key`,
-      ).toBe(true)
     }
     const delta = Object.values(contract.declarations).find(node => node.name === 'TextDeltaPayload')!
     const text = delta.children.map(id => contract.declarations[id]!).find(node => node.name === 'text')!
@@ -333,33 +356,23 @@ describe('real source extraction', () => {
     )
     expect(variants).toHaveLength(46)
     const literals = new Set<string>()
+    const undescribed: string[] = []
     for (const variant of variants) {
       const fields = variant.children.map(id => contract.declarations[id]!)
       expect(fields).toHaveLength(2)
       const discriminator = fields.find(field => field.name === 'type')!
       expect(discriminator.type?.kind).toBe('literal')
       literals.add(discriminator.type!.display)
-      for (const field of fields) {
-        expect(
-          field.comment?.summary.some(part => part.text.trim()),
-          field.id,
-        ).toBe(true)
-      }
+      undescribed.push(
+        ...fields.filter(field => !field.comment?.summary.some(part => part.text.trim())).map(field => field.id),
+      )
     }
+    expect(undescribed).toEqual([])
     expect(literals.size).toBe(46)
   })
 
   it('describes all consumed tracing attributes and preserves legacy deprecations', () => {
     for (const contract of contracts) {
-      const section = contract.root === '@mastra/core!Config' ? 'properties' : 'method'
-      const graph = traverseSurface(contract, section)
-      expect(
-        descriptionGaps(graph, contract.root).filter(
-          gap =>
-            gap.source?.path === 'packages/core/src/observability/types/tracing.ts' ||
-            gap.owner.startsWith('@mastra/core:src/observability/types/tracing.ts:'),
-        ),
-      ).toEqual([])
       const map = Object.values(contract.declarations).find(node => node.name === 'SpanTypeMap')
       if (!map) continue
       expect(map.children).toHaveLength(32)
@@ -375,17 +388,7 @@ describe('real source extraction', () => {
     }
   })
 
-  it('describes every consumed stored-message owner without conflating storage and SDK versions', () => {
-    for (const contract of contracts) {
-      const section = contract.root === '@mastra/core!Config' ? 'properties' : 'method'
-      expect(
-        descriptionGaps(traverseSurface(contract, section), contract.root).filter(
-          gap =>
-            gap.source?.path === 'packages/core/src/agent/message-list/state/types.ts' ||
-            gap.owner.startsWith('@mastra/core:src/agent/message-list/state/types.ts:'),
-        ),
-      ).toEqual([])
-    }
+  it('distinguishes stored-message formats from AI SDK adapter versions', () => {
     const contract = contracts.find(contract => contract.root === '@mastra/core/agent!Agent.generate')!
     const legacy = Object.values(contract.declarations).find(node => node.name === 'MastraMessageV1')!
     expect(legacy.comment?.summary.map(part => part.text).join('')).toContain('Legacy Mastra message representation')
@@ -395,17 +398,7 @@ describe('real source extraction', () => {
     expect(format.comment?.summary.map(part => part.text).join('')).toContain('stored content format')
   })
 
-  it('describes consumed processor step schemas and distinguishes tool values from generation summaries', () => {
-    for (const contract of contracts) {
-      const section = contract.root === '@mastra/core!Config' ? 'properties' : 'method'
-      expect(
-        descriptionGaps(traverseSurface(contract, section), contract.root).filter(
-          gap =>
-            gap.source?.path === 'packages/core/src/processors/step-schema.ts' ||
-            gap.owner.startsWith('@mastra/core:src/processors/step-schema.ts:'),
-        ),
-      ).toEqual([])
-    }
+  it('distinguishes processor tool values from generation summaries', () => {
     const contract = contracts.find(contract => contract.root === '@mastra/core/agent!Agent.generate')!
     const output = Object.values(contract.declarations).find(node => node.name === 'ProcessorStepOutputType')!
     const fields = output.children.map(id => contract.declarations[id]!)
@@ -418,17 +411,7 @@ describe('real source extraction', () => {
     expect(step.comment?.summary.map(part => part.text).join('')).toContain('Zero-based')
   })
 
-  it('describes every consumed server configuration owner without changing route contracts', () => {
-    for (const contract of contracts) {
-      const section = contract.root === '@mastra/core!Config' ? 'properties' : 'method'
-      expect(
-        descriptionGaps(traverseSurface(contract, section), contract.root).filter(
-          gap =>
-            gap.source?.path === 'packages/core/src/server/types.ts' ||
-            gap.owner.startsWith('@mastra/core:src/server/types.ts:'),
-        ),
-      ).toEqual([])
-    }
+  it('preserves server route contracts and their exact source summaries', () => {
     const contract = contracts.find(contract => contract.root === '@mastra/core!Config')!
     const route = Object.values(contract.declarations).find(node => node.name === 'SchemaApiRoute')!
     const fields = route.type!.operands.flatMap(operand => {
@@ -456,15 +439,7 @@ describe('real source extraction', () => {
     }
   })
 
-  it('describes every consumed signal owner and distinguishes transport transience from signal persistence', () => {
-    for (const contract of contracts) {
-      const section = contract.root === '@mastra/core!Config' ? 'properties' : 'method'
-      expect(
-        descriptionGaps(traverseSurface(contract, section), contract.root).filter(gap =>
-          gap.owner.startsWith('@mastra/core:src/agent/signals.ts:'),
-        ),
-      ).toEqual([])
-    }
+  it('distinguishes signal transport transience from signal persistence', () => {
     const contract = contracts.find(contract => contract.root === '@mastra/core/agent!Agent.generate')!
     const dataPart = contract.declarations['@mastra/core:src/agent/signals.ts:AgentSignalDataPart']!
     const transient = dataPart.children.map(id => contract.declarations[id]!).find(node => node.name === 'transient')!
@@ -481,15 +456,7 @@ describe('real source extraction', () => {
     ])
   })
 
-  it('describes every consumed schedule hook owner and distinguishes dispatch from run completion', () => {
-    for (const contract of contracts) {
-      const section = contract.root === '@mastra/core!Config' ? 'properties' : 'method'
-      expect(
-        descriptionGaps(traverseSurface(contract, section), contract.root).filter(gap =>
-          gap.owner.startsWith('@mastra/core:src/schedules/types.ts:'),
-        ),
-      ).toEqual([])
-    }
+  it('distinguishes schedule dispatch from run completion', () => {
     const contract = contracts.find(contract => contract.root === '@mastra/core!Config')!
     const outcome = contract.declarations['@mastra/core:src/schedules/types.ts:ScheduleFinishContext/0/outcome/0']!
     expect(outcome.comment?.summary.map(part => part.text).join('')).toContain(
@@ -499,15 +466,7 @@ describe('real source extraction', () => {
     expect(abort.comment?.summary.map(part => part.text).join('')).toContain('unthreaded generation')
   })
 
-  it('describes every consumed vector filter owner without claiming universal provider support', () => {
-    for (const contract of contracts) {
-      const section = contract.root === '@mastra/core!Config' ? 'properties' : 'method'
-      expect(
-        descriptionGaps(traverseSurface(contract, section), contract.root).filter(gap =>
-          gap.owner.startsWith('@mastra/core:src/vector/filter/base.ts:'),
-        ),
-      ).toEqual([])
-    }
+  it('preserves vector filter operator support without claiming universal provider support', () => {
     const contract = contracts.find(contract => contract.root === '@mastra/core/agent!Agent.generate')!
     const operators = contract.declarations['@mastra/core:src/vector/filter/base.ts:OperatorValueMap']!
     expect(operators.comment?.summary.map(part => part.text).join('')).toContain('may support a subset')
@@ -529,89 +488,10 @@ describe('real source extraction', () => {
     ])
   })
 
-  it('describes every consumed background-task owner without changing persisted task fields', () => {
-    for (const contract of contracts) {
-      const section = contract.root === '@mastra/core!Config' ? 'properties' : 'method'
-      expect(
-        descriptionGaps(traverseSurface(contract, section), contract.root).filter(gap =>
-          gap.owner.startsWith('@mastra/core:src/background-tasks/types.ts:'),
-        ),
-      ).toEqual([])
-    }
-  })
-
-  it('describes every consumed memory configuration owner without changing configuration types', () => {
-    for (const contract of contracts) {
-      const section = contract.root === '@mastra/core!Config' ? 'properties' : 'method'
-      expect(
-        descriptionGaps(traverseSurface(contract, section), contract.root).filter(gap =>
-          gap.owner.startsWith('@mastra/core:src/memory/types.ts:'),
-        ),
-      ).toEqual([])
-    }
-  })
-
-  it.each([
-    'tools/types.ts',
-    'agent/agent.types.ts',
-    'agent/state-signals.ts',
-    'predicate/index.ts',
-    'types/dynamic-argument.ts',
-    'llm/model/provider-types.generated.d.ts',
-    'llm/model/shared.types.ts',
-    'llm/model/provider-options.ts',
-    'evals/base.ts',
-    'evals/types.ts',
-    'observability/types/metrics.ts',
-    'loop/types.ts',
-    'agent/types.ts',
-    'events/types.ts',
-    'bundler/types.ts',
-    'tool-loop-agent/utils.ts',
-    'notifications/workflow.ts',
-    'harness/index.ts',
-    'mastra/types.ts',
-    'storage/domains/schedules/base.ts',
-  ])('describes every consumed %s owner', file => {
-    for (const contract of contracts) {
-      const section = contract.root === '@mastra/core!Config' ? 'properties' : 'method'
-      expect(
-        descriptionGaps(traverseSurface(contract, section), contract.root).filter(gap =>
-          gap.owner.startsWith(`@mastra/core:src/${file}:`),
-        ),
-      ).toEqual([])
-    }
-  })
-
   it('describes every owner consumed by the complete pilot surfaces', () => {
     for (const contract of contracts) {
-      const section = contract.root === '@mastra/core!Config' ? 'properties' : 'method'
-      expect(descriptionGaps(traverseSurface(contract, section), contract.root)).toEqual([])
-    }
-  })
-
-  it('describes every consumed authentication owner', () => {
-    for (const contract of contracts) {
-      const section = contract.root === '@mastra/core!Config' ? 'properties' : 'method'
-      expect(
-        descriptionGaps(traverseSurface(contract, section), contract.root).filter(gap =>
-          gap.owner.startsWith('@internal/auth:'),
-        ),
-      ).toEqual([])
-    }
-  })
-
-  it('has source descriptions for every consumed stream type owner', () => {
-    for (const contract of contracts) {
-      const section = contract.root === '@mastra/core!Config' ? 'properties' : 'method'
-      const gaps = descriptionGaps(traverseSurface(contract, section), contract.root)
-      expect(
-        gaps.filter(
-          gap =>
-            gap.source?.path === 'packages/core/src/stream/types.ts' ||
-            gap.owner.startsWith('@mastra/core:src/stream/types.ts:'),
-        ),
-      ).toEqual([])
+      const gaps = consumedGaps(contract)
+      expect(gaps.map(gap => (gap.source ? `${gap.source.path}:${gap.source.line}` : gap.owner))).toEqual([])
     }
   })
 
@@ -626,25 +506,16 @@ describe('real source extraction', () => {
     )
     expect(variants).toHaveLength(27)
     const kinds = []
+    const undescribed: string[] = []
     for (const variant of variants) {
       const fields = variant.children.map(id => contract.declarations[id]!)
       expect(fields.map(field => field.name).sort()).toEqual(['payload', 'type'])
       kinds.push(fields.find(field => field.name === 'type')!.type!.kind)
       for (const field of fields) {
-        expect(
-          field.comment?.summary.some(part => part.text.trim()),
-          field.id,
-        ).toBe(true)
-        if (field.type?.declaration) {
-          for (const child of contract.declarations[field.type.declaration]!.children) {
-            expect(
-              contract.declarations[child]!.comment?.summary.some(part => part.text.trim()),
-              child,
-            ).toBe(true)
-          }
-        }
+        if (!field.comment?.summary.some(part => part.text.trim())) undescribed.push(field.id)
       }
     }
+    expect(undescribed).toEqual([])
     expect(kinds.filter(kind => kind === 'literal')).toHaveLength(25)
     expect(kinds.filter(kind => kind === 'templateLiteral')).toHaveLength(2)
   })

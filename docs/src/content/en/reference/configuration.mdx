@@ -23,8 +23,6 @@ export const mastra = new Mastra({
 
 ### agents
 
-A record of agent instances keyed by their names. Agents are autonomous systems that can make decisions and take actions using AI models, tools, and memory.
-
 Visit the [Agents documentation](/docs/agents/overview) to learn more.
 
 ```typescript title="src/mastra/index.ts"
@@ -44,8 +42,6 @@ export const mastra = new Mastra({
 ```
 
 ### backgroundTasks
-
-Enables and configures the background task manager. When enabled, agents can dispatch long-running tool calls (including subagent invocations) to run asynchronously while the agentic loop continues. Tasks are persisted, so a configured `storage` backend is required.
 
 Visit the [Background tasks documentation](/docs/harness/background-tasks) to learn more.
 
@@ -70,8 +66,6 @@ export const mastra = new Mastra({
 
 ### deployer
 
-Deployment provider for publishing applications to cloud platforms.
-
 Visit the [Deployment documentation](/docs/deployment/overview) to learn more.
 
 ```typescript title="src/mastra/index.ts"
@@ -85,11 +79,7 @@ export const mastra = new Mastra({
 
 ### events
 
-Event handlers for the internal pub/sub system. Maps event topics to handler functions that are called when events are published to those topics.
-
-:::warning
-This is used internally by Mastra's workflow engine. Most users won't need to configure this option.
-:::
+Visit the [PubSub documentation](/docs/server/pubsub) to learn more.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -105,8 +95,6 @@ export const mastra = new Mastra({
 
 ### gateways
 
-Custom model router gateways for accessing LLM providers. Gateways handle provider-specific authentication, URL construction, and model resolution. Use this to add support for custom or self-hosted LLM providers.
-
 Visit the [Custom Gateways documentation](/models/gateways/custom-gateways) to learn more.
 
 ```typescript title="src/mastra/index.ts"
@@ -121,18 +109,6 @@ export const mastra = new Mastra({
 ```
 
 ### idGenerator
-
-Custom ID generator function for creating unique identifiers. Mastra passes optional context so you can generate IDs based on what's being created.
-
-`IdGeneratorContext` includes:
-
-- `idType`: `'thread' | 'message' | 'run' | 'step' | 'generic'`
-- `source?`: `'agent' | 'workflow' | 'memory'`
-- `entityId?`: ID of the requesting agent/workflow/memory entity
-- `threadId?`: Thread ID when relevant (for example, when creating message IDs)
-- `resourceId?`: Resource ID when relevant (for example, user-scoped threads)
-- `role?`: Message role when creating a message ID
-- `stepType?`: Workflow step type when creating a step ID
 
 :::warning
 
@@ -161,8 +137,6 @@ export const mastra = new Mastra({
 
 ### logger
 
-Logger implementation for application logging and debugging. Set to `false` to disable logging entirely.
-
 Visit the [Logging documentation](/docs/observability/logging) to learn more.
 
 ```typescript title="src/mastra/index.ts"
@@ -175,8 +149,6 @@ export const mastra = new Mastra({
 ```
 
 ### mcpServers
-
-MCP (Model Context Protocol) servers that expose Mastra tools, agents, workflows, and resources to MCP-compatible clients. Use this to author your own MCP servers that can be consumed by any system that supports the protocol.
 
 Visit the [MCP Overview](/docs/connections/mcp) to learn more.
 
@@ -198,8 +170,6 @@ export const mastra = new Mastra({
 ```
 
 ### memory
-
-A registry of memory instances that can be referenced by agents. Memory gives agents coherence across interactions by retaining relevant information from past conversations. Mastra supports message history for recent messages and working memory for persistent user-specific details. Semantic recall retrieves older messages based on relevance.
 
 Visit the [Memory documentation](/docs/memory/overview) to learn more.
 
@@ -231,8 +201,6 @@ export const mastra = new Mastra({
 
 ### observability
 
-Mastra provides observability features for AI applications. Monitor LLM operations, trace agent decisions, and debug complex workflows with tools that understand AI-specific patterns. Tracing captures model interactions, agent execution paths, tool calls, and workflow steps.
-
 Visit the [Observability documentation](/docs/observability/overview) to learn more.
 
 ```typescript title="src/mastra/index.ts"
@@ -258,8 +226,6 @@ export const mastra = new Mastra({
 
 ### processors
 
-Input/output processors for transforming agent inputs and outputs. Processors run at specific points in the agent's execution pipeline, allowing you to modify inputs before they reach the language model or outputs before they're returned. Use processors to add guardrails, detect prompt injection, moderate content, or apply custom business logic.
-
 Visit the [Processors documentation](/docs/agents/processors) to learn more.
 
 :::note
@@ -284,8 +250,6 @@ export const mastra = new Mastra({
 
 ### pubsub
 
-Pub/sub system for event-driven communication between components. Used internally by Mastra for workflow event processing and component communication.
-
 :::warning
 This is used internally by Mastra. Most users won't need to configure this option.
 :::
@@ -300,8 +264,6 @@ export const mastra = new Mastra({
 ```
 
 ### scorers
-
-Scorers assess the quality of agent responses and workflow outputs. They provide quantifiable metrics for measuring agent quality using model-graded, rule-based, and statistical methods. Use scorers to track performance and compare approaches. They can also identify areas for improvement.
 
 Visit the [Scorers documentation](/docs/evals/overview) to learn more.
 
@@ -324,8 +286,6 @@ export const mastra = new Mastra({
 
 ### storage
 
-Storage provider for persisting application data. Used by memory, workflows, traces, and other components that require persistence. Mastra supports multiple database backends including PostgreSQL, MongoDB, libSQL, and more.
-
 Visit the [Storage documentation](/docs/storage) to learn more.
 
 ```typescript title="src/mastra/index.ts"
@@ -341,8 +301,6 @@ export const mastra = new Mastra({
 ```
 
 ### tools
-
-Tools are reusable functions that agents can use to interact with external systems. Each tool defines inputs, outputs, and execution logic.
 
 Visit the [Tools documentation](/docs/agents/tools) to learn more.
 
@@ -375,8 +333,6 @@ export const mastra = new Mastra({
 
 ### tts
 
-Text-to-speech providers for voice synthesis capabilities. Register voice providers to enable agents to convert text responses into spoken audio.
-
 Visit the [Voice documentation](/reference/voice/overview) to learn more.
 
 :::note
@@ -395,8 +351,6 @@ export const mastra = new Mastra({
 ```
 
 ### vectors
-
-Vector stores for semantic search and embeddings. Used in RAG pipelines, similarity search, and other embedding-based features. Mastra supports multiple vector databases including Pinecone, PostgreSQL with pgvector, OracleDB, MongoDB, and more.
 
 Visit the [RAG documentation](/reference/rag/overview) to learn more.
 
@@ -420,8 +374,6 @@ export const mastra = new Mastra({
 
 ### workflows
 
-Workflows define step-based execution pipelines with type-safe inputs and outputs. Use workflows for tasks that involve multiple steps with a specific execution order, giving you control over how data flows between steps.
-
 Visit the [Workflows documentation](/docs/workflows/overview) to learn more.
 
 ```typescript title="src/mastra/index.ts"
@@ -436,8 +388,6 @@ export const mastra = new Mastra({
 ```
 
 ### workspace
-
-A Mastra workspace gives agents a persistent environment for storing files and executing commands. Agents inherit the global workspace on the `Mastra` class unless they have their own workspace configured.
 
 See the [Workspace documentation](/docs/sandbox/overview) for implementation details.
 
@@ -458,8 +408,6 @@ const mastra = new Mastra({
 
 ### bundler.externals
 
-When `mastra build` is run, Mastra bundles your project into the `.mastra/output` directory. This option controls which packages are excluded from the bundle (marked as "external") and installed separately through a package manager. This is useful when the internal Mastra bundler ([Rollup](https://rollupjs.org/configuration-options/#external)) has trouble bundling packages.
-
 By default, `mastra build` sets this option to `true`.
 
 Use `false` to disable the all-dependencies preset. The built-in global externals still apply. When you pass a package-name array to `mastra build`, the CLI retains those packages as runtime dependencies and keeps the all-dependencies preset enabled. The source-backed `bundler.externals` entry above describes these settings.
@@ -476,8 +424,6 @@ export const mastra = new Mastra({
 
 ### bundler.sourcemap
 
-Enables source map generation for the bundled output.
-
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 
@@ -489,8 +435,6 @@ export const mastra = new Mastra({
 ```
 
 ### bundler.minify
-
-Minifies the bundled output, stripping comments and whitespace and shortening local identifiers. Exported names are preserved.
 
 Off by default so build output stays readable and stack traces stay usable. Enable it when bundle size matters, such as packaging a container image for an on-prem deployment. `mastra dev` is never minified.
 
@@ -505,8 +449,6 @@ export const mastra = new Mastra({
 ```
 
 ### bundler.transpilePackages
-
-List of packages whose source code should be transpiled through esbuild during the build process. Use this for dependencies that contain TypeScript or other code that needs compilation before bundling.
 
 You only need this option if you're importing uncompiled source code directly. If your packages are already compiled to CommonJS or ESM, they don't need to be listed here.
 
@@ -588,8 +530,6 @@ export const mastra = new Mastra({
 
 ### server.mcpOptions
 
-MCP transport options applied to all MCP HTTP and SSE routes. Use this to enable stateless mode for serverless environments (Cloudflare Workers, Vercel Edge, AWS Lambda, etc.) where persistent connections and in-memory session state aren't available.
-
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 
@@ -640,8 +580,6 @@ export const mastra = new Mastra({
 ```
 
 ### server.handleShutdownSignals
-
-Whether the server generated by `mastra dev` and `mastra build` installs its own `SIGINT`/`SIGTERM` handlers. By default, receiving a signal begins graceful shutdown. The generated server stops accepting new connections and drains in-flight requests before it runs `mastra.shutdown()` and exits the process (see [`server.drainTimeout`](#serverdraintimeout)).
 
 Set `handleShutdownSignals: false` to manage signals yourself, for example with a handler registered in your Mastra config module that calls `mastra.shutdown()`:
 
@@ -847,8 +785,6 @@ export const mastra = new Mastra({
 - With `studioBase`: `http://localhost:4111/my-mastra-studio/` (studio at sub-path)
 
 ### server.timeout
-
-Request timeout in milliseconds. Requests that exceed this duration will be terminated.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'

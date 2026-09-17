@@ -1,5 +1,12 @@
 import * as v from 'valibot'
-import type { ApiContract, ApiType } from './model'
+import {
+  apiTypeKinds,
+  commentPartKinds,
+  diagnosticCodes,
+  referenceBoundaries,
+  type ApiContract,
+  type ApiType,
+} from './model'
 
 const identity = v.pipe(v.string(), v.minLength(1))
 const source = v.strictObject({
@@ -10,7 +17,7 @@ const source = v.strictObject({
 const reference = v.strictObject({
   id: identity,
   name: identity,
-  boundary: v.picklist(['data', 'service', 'external', 'type-parameter']),
+  boundary: v.picklist(referenceBoundaries),
   reason: v.optional(identity),
   source: v.optional(source),
   canonical: v.optional(v.pipe(v.string(), v.startsWith('/'))),
@@ -18,27 +25,7 @@ const reference = v.strictObject({
 
 export const apiTypeSchema: v.GenericSchema<ApiType> = v.lazy(() =>
   v.strictObject({
-    kind: v.picklist([
-      'array',
-      'conditional',
-      'indexedAccess',
-      'inferred',
-      'intersection',
-      'intrinsic',
-      'literal',
-      'mapped',
-      'namedTupleMember',
-      'optional',
-      'predicate',
-      'query',
-      'reference',
-      'reflection',
-      'rest',
-      'templateLiteral',
-      'tuple',
-      'typeOperator',
-      'union',
-    ]),
+    kind: v.picklist(apiTypeKinds),
     display: v.string(),
     attributes: v.record(v.string(), v.union([v.string(), v.number(), v.boolean()])),
     operands: v.array(v.strictObject({ role: identity, type: apiTypeSchema })),
@@ -48,7 +35,7 @@ export const apiTypeSchema: v.GenericSchema<ApiType> = v.lazy(() =>
 )
 
 const part = v.strictObject({
-  kind: v.picklist(['text', 'code', 'inline-tag']),
+  kind: v.picklist(commentPartKinds),
   text: v.string(),
   tag: v.optional(v.string()),
   target: v.optional(v.string()),
@@ -72,6 +59,7 @@ const declaration = v.strictObject({
   defaultValue: v.optional(v.string()),
   sourceSignature: v.optional(v.string()),
   sourceType: v.optional(v.string()),
+  sourceTypeBody: v.optional(v.literal(true)),
   children: v.array(identity),
   signatures: v.array(identity),
   parameters: v.array(identity),
@@ -86,7 +74,7 @@ export const apiContractSchema: v.GenericSchema<ApiContract> = v.pipe(
     declarations: v.record(identity, declaration),
     diagnostics: v.array(
       v.strictObject({
-        code: v.picklist(['unresolved-link', 'unsupported-tag', 'unmapped-external']),
+        code: v.picklist(diagnosticCodes),
         owner: identity,
         message: v.string(),
       }),

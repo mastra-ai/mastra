@@ -1,49 +1,13 @@
-import { readFileSync } from 'node:fs'
 import { expect, it } from 'vitest'
 import { partitionMethod } from './appendix'
 import { composeSurface } from './compose'
 import { discriminatedUnion } from './discriminated-union'
-import type { ApiItem, CommentNode } from './presentation'
 import { memberAnchor } from './presentation'
-import { parseContract } from './schema'
+import type { ApiItem } from './presentation'
+import { itemLinks, loadContract, navigationIds, renderedIds } from './test-support'
 
-const contract = parseContract(
-  JSON.parse(readFileSync(new URL('../data/api-reference/agent-generate.json', import.meta.url), 'utf8')),
-)
+const contract = loadContract('agent-generate')
 const chunk = Object.values(contract.declarations).find(node => node.name === 'AgentChunkType')!
-function entries(items: ApiItem[]): string[] {
-  return items.flatMap(item => ('target' in item ? [] : [item.id, ...entries(item.nested ?? [])]))
-}
-function navigation(items: ApiItem[]): string[] {
-  return items.flatMap(item =>
-    'target' in item
-      ? []
-      : [...(item.parameterDefinition ? [item.parameterDefinition.id] : []), ...navigation(item.nested ?? [])],
-  )
-}
-function links(items: ApiItem[]): string[] {
-  function comments(nodes: CommentNode[]): string[] {
-    return nodes.flatMap(node => [
-      ...(node.kind === 'link' ? [node.href] : []),
-      ...('children' in node ? comments(node.children) : []),
-      ...(node.kind === 'tabs' ? node.items.flatMap(tab => comments(tab.content)) : []),
-    ])
-  }
-  return items.flatMap(item =>
-    'target' in item
-      ? [item.target]
-      : [
-          ...comments([
-            ...(item.typeContent ?? []),
-            ...item.description,
-            ...item.deprecated,
-            ...item.defaults,
-            ...item.examples.flat(),
-          ]),
-          ...links(item.nested ?? []),
-        ],
-  )
-}
 
 it('represents all 46 AgentChunkType variants semantically with BaseChunkType shared once', () => {
   const union = discriminatedUnion(chunk.type, contract)!
@@ -83,7 +47,7 @@ it('keeps exact discriminator owners, all other fields, and generic metadata for
     expect(entry.variantDiscriminator).toBe(memberAnchor(variant.discriminator))
     expect(copy.declarations[variant.discriminator].type?.display).toBe(variant.value)
     for (const child of copy.declarations[variant.id].children) {
-      expect(entries(entry.nested ?? [])).toContain(memberAnchor(child))
+      expect(renderedIds(entry.nested ?? [])).toContain(memberAnchor(child))
     }
   }
   for (const id of [first.id, first.discriminator, ...chunk.typeParameters]) {
@@ -117,29 +81,29 @@ it('preserves every canonical entry exactly once across the method and generated
   const serialized = JSON.stringify(original)
   const partition = partitionMethod(original, '/reference/agents/generate')
   const methodItems = [...partition.method.entries, ...(partition.method.definitions ?? [])]
-  const main = entries(methodItems)
-  const appendix = entries(partition.appendix.entries)
+  const main = renderedIds(methodItems)
+  const appendix = renderedIds(partition.appendix.entries)
   const all = [...main, ...appendix]
   expect(new Set(all).size).toBe(all.length)
-  const anchors = navigation(methodItems)
+  const anchors = navigationIds(methodItems)
   expect(anchors).toHaveLength(3)
   expect(new Set(anchors).size).toBe(anchors.length)
   expect(anchors.some(anchor => all.includes(anchor))).toBe(false)
-  expect([...all].sort()).toEqual(entries([...original.entries, ...(original.definitions ?? [])]).sort())
+  expect([...all].sort()).toEqual(renderedIds([...original.entries, ...(original.definitions ?? [])]).sort())
   expect(partition.method.entries).toHaveLength(4)
   expect(partition.method.definitions?.map(entry => entry.name)).toContain('FullOutput')
   expect(main.length).toBeLessThan(all.length / 4)
   expect(partition.appendix.entries.find(entry => entry.id === memberAnchor(chunk.id))?.variantKey).toBe('type')
   for (const [items, local, other, remotePath] of [
-    [methodItems, [...main, ...navigation(methodItems)], appendix, partition.appendixPath],
-    [partition.appendix.entries, appendix, [...main, ...navigation(methodItems)], partition.methodPath],
+    [methodItems, [...main, ...navigationIds(methodItems)], appendix, partition.appendixPath],
+    [partition.appendix.entries, appendix, [...main, ...navigationIds(methodItems)], partition.methodPath],
   ] satisfies [ApiItem[], string[], string[], string][]) {
-    for (const href of links(items)) {
+    for (const href of itemLinks(items)) {
       if (href.startsWith('#api-')) expect(local).toContain(href.slice(1))
       if (href.startsWith(`${remotePath}#api-`)) expect(other).toContain(href.split('#')[1])
     }
   }
-  expect(links(methodItems).some(href => href.startsWith(`${partition.appendixPath}#api-`))).toBe(true)
+  expect(itemLinks(methodItems).some(href => href.startsWith(`${partition.appendixPath}#api-`))).toBe(true)
   expect(JSON.stringify(original)).toBe(serialized)
 })
 

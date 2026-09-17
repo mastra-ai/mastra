@@ -1,25 +1,10 @@
-import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { composeSurfaces } from './compose'
-import type { ApiItem, ApiSurface } from './presentation'
+import type { ApiItem } from './presentation'
 import { memberAnchor } from './presentation'
-import { parseContract } from './schema'
+import { loadContract as load, referenceTargets, renderedIds, surfaceItems } from './test-support'
 import { traverseSurface } from './traversal'
 import type { ApiSection } from './traversal'
-
-const load = (name: string) =>
-  parseContract(JSON.parse(readFileSync(new URL(`../data/api-reference/${name}.json`, import.meta.url), 'utf8')))
-
-function surfaceItems(surface: ApiSurface): ApiItem[] {
-  return [...surface.entries, ...(surface.definitions ?? [])]
-}
-
-function renderedIds(items: ApiItem[]): string[] {
-  return items.flatMap(item => ('target' in item ? [] : [item.id, ...renderedIds(item.nested ?? [])]))
-}
-function referenceTargets(items: ApiItem[]): string[] {
-  return items.flatMap(item => ('target' in item ? [item.target] : referenceTargets(item.nested ?? [])))
-}
 
 describe('complete SSR projection', () => {
   it('emits every configuration declaration exactly once, including inline fields and linked type definitions', () => {

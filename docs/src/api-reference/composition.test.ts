@@ -1,18 +1,10 @@
-import { readFileSync } from 'node:fs'
-import { parse } from 'valibot'
 import { describe, expect, it } from 'vitest'
 import { compileComment, safeCommentUrl } from './comments'
 import { composeSurface } from './compose'
 import { memberAnchor } from './presentation'
+import { loadContract as load } from './test-support'
 import { isObjectType } from './type-content'
-import { apiContractSchema } from './schema'
 import { MODEL_TOKENS } from '../plugins/remark-model-tokens/models'
-
-const load = (name: string) =>
-  parse(
-    apiContractSchema,
-    JSON.parse(readFileSync(new URL(`../data/api-reference/${name}.json`, import.meta.url), 'utf8')),
-  )
 
 describe('source-backed visual surfaces', () => {
   it('projects the complete Config property list without authored member selection', () => {
@@ -107,7 +99,9 @@ describe('source-backed visual surfaces', () => {
       ).toBeGreaterThanOrEqual(3)
     }
     const signature = contract.declarations[contract.declarations[contract.root].signatures[0]]
-    contract.declarations[signature.parameters[1]].sourceType = 'NamedOptions<T>'
+    const options = contract.declarations[signature.parameters[1]]
+    options.sourceType = 'NamedOptions<T>'
+    options.sourceTypeBody = undefined
     const named = composeSurface(contract, 'parameters').entries[0].nested?.find(item => item.name === 'options')
     expect(named && !('target' in named) && named.parameterDefinition).toBeUndefined()
     expect(named && !('target' in named) && named.type).toBe('NamedOptions<T>')

@@ -5,14 +5,20 @@ import { parseContract } from '../../src/api-reference/schema'
 import { memberAnchor } from '../../src/api-reference/presentation'
 import { traverseSurface } from '../../src/api-reference/traversal'
 
-export function expectedApiPreviewIds() {
-  const agent = parseContract(JSON.parse(readFileSync(resolve('src/data/api-reference/agent-generate.json'), 'utf8')))
-  const config = parseContract(JSON.parse(readFileSync(resolve('src/data/api-reference/configuration.json'), 'utf8')))
+export function loadContract(name: 'agent-generate' | 'configuration') {
+  return parseContract(JSON.parse(readFileSync(resolve(`src/data/api-reference/${name}.json`), 'utf8')))
+}
+
+export function expectedApiConfigurationIds() {
+  return [...traverseSurface(loadContract('configuration'), 'properties').nodes.keys()].map(memberAnchor).sort()
+}
+
+export function expectedApiGenerateIds() {
+  const agent = loadContract('agent-generate')
   return [
     ...new Set(
       [
         ...traverseSurface(agent, 'method').nodes.keys(),
-        ...traverseSurface(config, 'properties').nodes.keys(),
         ...agent.declarations[agent.root].signatures.flatMap(id => [`${id}:parameters`, `${id}:returns`]),
       ].map(memberAnchor),
     ),
@@ -20,8 +26,7 @@ export function expectedApiPreviewIds() {
 }
 
 export async function probeApiConfiguration(page: Page) {
-  const config = parseContract(JSON.parse(readFileSync(resolve('src/data/api-reference/configuration.json'), 'utf8')))
-  const expected = [...traverseSurface(config, 'properties').nodes.keys()].map(memberAnchor).sort()
+  const expected = expectedApiConfigurationIds()
   const properties = page.getByRole('region', { name: 'Properties', exact: true })
   await expect(properties).toBeVisible()
   const actual = await page
@@ -61,9 +66,7 @@ export async function probeApiSources(page: Page) {
 }
 
 export async function probeApiOptions(page: Page) {
-  const contract = parseContract(
-    JSON.parse(readFileSync(resolve('src/data/api-reference/agent-generate.json'), 'utf8')),
-  )
+  const contract = loadContract('agent-generate')
   const original = page.url().split('#')[0]
   const region = page.getByRole('region', { name: 'Method', exact: true })
   if (!(await region.locator('[data-api-definition]').count())) return { C2destinations: false }
@@ -107,9 +110,7 @@ export async function probeApiOptions(page: Page) {
 
 export async function probeApiDeclarations(page: Page) {
   const original = page.url().split('#')[0]
-  const contract = parseContract(
-    JSON.parse(readFileSync(resolve('src/data/api-reference/agent-generate.json'), 'utf8')),
-  )
+  const contract = loadContract('agent-generate')
   const signatures = contract.declarations[contract.root].signatures.map(id => contract.declarations[id])
   if (
     (await page.getByRole('region', { name: 'Method', exact: true }).locator('[data-api-call]').count()) !==
@@ -171,9 +172,7 @@ export async function probeApiDeclarations(page: Page) {
 }
 
 export async function probeApiNoScriptDeclarations(page: Page) {
-  const contract = parseContract(
-    JSON.parse(readFileSync(resolve('src/data/api-reference/agent-generate.json'), 'utf8')),
-  )
+  const contract = loadContract('agent-generate')
   const signatures = contract.declarations[contract.root].signatures.map(id => contract.declarations[id])
   if (
     (await page.getByRole('region', { name: 'Method', exact: true }).locator('[data-api-call]').count()) !==
@@ -266,9 +265,7 @@ export async function probeApiMethod(page: Page) {
 }
 
 export async function probeApiTypes(page: Page) {
-  const contract = parseContract(
-    JSON.parse(readFileSync(resolve('src/data/api-reference/agent-generate.json'), 'utf8')),
-  )
+  const contract = loadContract('agent-generate')
   const chunk = Object.values(contract.declarations).find(node => node.name === 'AgentChunkType')!
   const expected = {
     variants: chunk.type!.operands.map(({ type }) => {

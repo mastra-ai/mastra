@@ -1,23 +1,30 @@
-export type ApiTypeKind =
-  | 'array'
-  | 'conditional'
-  | 'indexedAccess'
-  | 'inferred'
-  | 'intersection'
-  | 'intrinsic'
-  | 'literal'
-  | 'mapped'
-  | 'namedTupleMember'
-  | 'optional'
-  | 'predicate'
-  | 'query'
-  | 'reference'
-  | 'reflection'
-  | 'rest'
-  | 'templateLiteral'
-  | 'tuple'
-  | 'typeOperator'
-  | 'union'
+export const apiTypeKinds = [
+  'array',
+  'conditional',
+  'indexedAccess',
+  'inferred',
+  'intersection',
+  'intrinsic',
+  'literal',
+  'mapped',
+  'namedTupleMember',
+  'optional',
+  'predicate',
+  'query',
+  'reference',
+  'reflection',
+  'rest',
+  'templateLiteral',
+  'tuple',
+  'typeOperator',
+  'union',
+] as const
+
+export type ApiTypeKind = (typeof apiTypeKinds)[number]
+
+export const referenceBoundaries = ['data', 'service', 'external', 'type-parameter'] as const
+export const commentPartKinds = ['text', 'code', 'inline-tag'] as const
+export const diagnosticCodes = ['unresolved-link', 'unsupported-tag', 'unmapped-external'] as const
 
 export interface ApiSource {
   path: string
@@ -28,7 +35,7 @@ export interface ApiSource {
 export interface ApiReference {
   id: string
   name: string
-  boundary: 'data' | 'service' | 'external' | 'type-parameter'
+  boundary: (typeof referenceBoundaries)[number]
   reason?: string
   source?: ApiSource
   canonical?: string
@@ -44,7 +51,7 @@ export interface ApiType {
 }
 
 export interface ApiCommentPart {
-  kind: 'text' | 'code' | 'inline-tag'
+  kind: (typeof commentPartKinds)[number]
   text: string
   tag?: string
   target?: string
@@ -69,6 +76,8 @@ export interface ApiDeclaration {
   defaultValue?: string
   sourceSignature?: string
   sourceType?: string
+  /** The `sourceType` annotation writes out its own object body rather than naming a declared type. */
+  sourceTypeBody?: true
   children: string[]
   signatures: string[]
   parameters: string[]
@@ -77,7 +86,7 @@ export interface ApiDeclaration {
 }
 
 export interface ApiDiagnostic {
-  code: 'unresolved-link' | 'unsupported-tag' | 'unmapped-external'
+  code: (typeof diagnosticCodes)[number]
   owner: string
   message: string
 }

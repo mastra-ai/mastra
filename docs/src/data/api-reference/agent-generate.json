@@ -207433,6 +207433,7 @@
         ]
       },
       "sourceType": "AgentExecutionOptionsBase<T> & {\n    structuredOutput: PublicStructuredOutputOptions<T>;\n} & {\n    model?: DynamicArgument<MastraModelConfig>;\n}",
+      "sourceTypeBody": true,
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -210766,6 +210767,7 @@
         ]
       },
       "sourceType": "AgentExecutionOptionsBase<OUTPUT> & {\n    structuredOutput: PublicStructuredOutputOptions<OUTPUT>;\n} & {\n    model?: DynamicArgument<MastraModelConfig>;\n}",
+      "sourceTypeBody": true,
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -214028,6 +214030,7 @@
         ]
       },
       "sourceType": "AgentExecutionOptionsBase<unknown> & {\n    structuredOutput?: never;\n} & {\n    model?: DynamicArgument<MastraModelConfig>;\n}",
+      "sourceTypeBody": true,
       "children": [],
       "signatures": [],
       "parameters": [],

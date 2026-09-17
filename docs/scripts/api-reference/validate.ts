@@ -6,7 +6,7 @@ import remarkMdx from 'remark-mdx'
 import remarkParse from 'remark-parse'
 import { unified } from 'unified'
 import { remarkApiReference, discoverSurfaces } from '../../src/plugins/remark-api-reference'
-import { repositoryRoot } from './config'
+import { repositoryRoot, roots } from './config'
 
 export async function validatePages(cwd = repositoryRoot, revision = process.env.API_REFERENCE_SOURCE_REVISION) {
   const content = join(cwd, 'docs/src/content/en/reference')
@@ -32,13 +32,10 @@ export async function validatePages(cwd = repositoryRoot, revision = process.env
   }
   try {
     scan(content)
-    for (const { page, root, section } of [
-      { page: 'configuration.mdx', root: '@mastra/core!Config', section: 'properties' },
-      { page: 'agents/generate.mdx', root: '@mastra/core/agent!Agent.generate', section: 'method' },
-    ]) {
+    for (const { page, id, section } of roots) {
       const path = join(content, page)
       const selections = discoverSurfaces(parser.parse(readFileSync(path, 'utf8')))
-      if (selections.length !== 1 || selections[0]?.root.id !== root || selections[0]?.section !== section)
+      if (selections.length !== 1 || selections[0]?.root.id !== id || selections[0]?.section !== section)
         throw new Error(`${page}: requires its complete source-backed ${section} surface`)
     }
     const routeRegistry = join(directory, 'routes.json')

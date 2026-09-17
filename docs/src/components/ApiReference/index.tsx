@@ -50,14 +50,12 @@ export default function ApiReference({ data }: { data: ApiSurface }) {
       if (link instanceof HTMLAnchorElement && link.href === window.location.href) reveal()
     }
     reveal()
-    window.addEventListener('hashchange', reveal)
     window.addEventListener('click', revealRepeatedLink)
     return () => {
       cancelAnimationFrame(frame)
-      window.removeEventListener('hashchange', reveal)
       window.removeEventListener('click', revealRepeatedLink)
     }
-  }, [data.id, hash])
+  }, [data.id, hash]) // hash re-runs reveal after ApiOverloads mounts the target panel; no extra listener needed
   return (
     <section
       className={styles.surface}

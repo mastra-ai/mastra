@@ -286,8 +286,11 @@ export function normalize(project: ProjectReflection, root: Reflection, rootId: 
     if (source) node.source = source
     if (reflection instanceof ParameterReflection) {
       const annotationSource = source ?? sourceOf(reflection.parent)
-      const declaredType = annotationSource ? sourceSignature(annotationSource, node.name) : undefined
-      if (declaredType) node.sourceType = declaredType
+      const annotation = annotationSource ? sourceSignature(annotationSource, node.name) : undefined
+      if (annotation) {
+        node.sourceType = annotation.text
+        if (annotation.anonymousBody) node.sourceTypeBody = true
+      }
     }
     for (const [name, enabled] of Object.entries(reflection.flags.toObject())) if (enabled) node.flags.push(name)
     node.flags.sort()
@@ -319,7 +322,7 @@ export function normalize(project: ProjectReflection, root: Reflection, rootId: 
     if (reflection instanceof SignatureReflection) {
       if (source) {
         const signature = sourceSignature(source)
-        if (signature) node.sourceSignature = signature
+        if (signature) node.sourceSignature = signature.text
       }
       node.parameters = reflection.parameters?.map(visit) ?? []
       node.typeParameters = reflection.typeParameters?.map(visit) ?? []

@@ -2,6 +2,9 @@ import type { ApiCommentPart, ApiContract, ApiDeclaration, ApiSource, ApiType } 
 
 export type ApiSection = 'properties' | 'signatures' | 'parameters' | 'returns' | 'method'
 
+/** Ordered parts that together make up a method surface. */
+export const methodSections = ['signatures', 'parameters', 'returns'] as const
+
 export interface SurfaceEdge {
   role: string
   target: string
@@ -31,7 +34,7 @@ export interface SurfaceGraph {
 
 export function traverseSurface(contract: ApiContract, section: ApiSection): SurfaceGraph {
   if (section === 'method') {
-    const graphs = (['signatures', 'parameters', 'returns'] as const).map(part => traverseSurface(contract, part))
+    const graphs = methodSections.map(part => traverseSurface(contract, part))
     return {
       root: contract.root,
       section,

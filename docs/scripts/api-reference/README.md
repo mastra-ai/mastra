@@ -23,6 +23,10 @@ The core build supplies workspace dependencies needed for extraction. After setu
 
 `api:generate` stages the complete validated output before replacing its owned artifact directory. Failed conversion does not reuse an older result. Do not store handwritten files in that directory.
 
+## Report extraction gaps
+
+`pnpm --filter mastra-docs api:inventory` reads the committed artifacts and writes a gap report to the uncommitted proof directory. It counts unique source owners separately from rendered occurrences, so a declaration shared by several surfaces is listed once with every occurrence. Use it to find undocumented declarations before they reach a page, or to audit which declarations a new surface would consume. It is a reporting aid; the page-level gate is `api:validate`.
+
 ## Compose complete surfaces
 
 Use literal, standalone selectors with no import in authored MDX:

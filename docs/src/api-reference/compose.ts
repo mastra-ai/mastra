@@ -4,20 +4,9 @@ import { discriminatedUnion } from './discriminated-union'
 import type { ApiContract, ApiDeclaration } from './model'
 import { memberAnchor } from './presentation'
 import type { ApiEntry, ApiItem, ApiSurface, CommentNode } from './presentation'
-import { requiresDescription, traverseSurface } from './traversal'
+import { methodSections, requiresDescription, traverseSurface } from './traversal'
 import { isObjectType, typeContent } from './type-content'
 import type { ApiSection, SurfaceGraph } from './traversal'
-
-function hasAnonymousObject(annotation: string): boolean {
-  const source = ts.createSourceFile('annotation.ts', `type Annotation = ${annotation}`, ts.ScriptTarget.Latest, true)
-  const type = source.statements.find(ts.isTypeAliasDeclaration)?.type
-  function containsBody(node: ts.TypeNode): boolean {
-    if (ts.isTypeLiteralNode(node)) return true
-    if (ts.isParenthesizedTypeNode(node)) return containsBody(node.type)
-    return ts.isIntersectionTypeNode(node) && node.types.some(containsBody)
-  }
-  return Boolean(type && containsBody(type))
-}
 
 interface CompositionOptions {
   sourceLinks?: ReadonlyMap<string, string>
@@ -31,28 +20,40 @@ export function composeSurfaces(
   if (selections.some(selection => selection.section === 'method')) {
     const expanded = selections.flatMap(selection =>
       selection.section === 'method'
-        ? (['signatures', 'parameters', 'returns'] as const).map(section => ({ contract: selection.contract, section }))
+        ? methodSections.map(section => ({ contract: selection.contract, section }))
         : [selection],
     )
-    const surfaces = composeSurfaces(expanded, options)
-    let cursor = 0
+    const composed = composeSurfaces(expanded, options)
+    const parts = new Map(
+      expanded.map((selection, index) => [`${selection.contract.root}:${selection.section}`, composed[index]!]),
+    )
+    function part(contract: ApiContract, section: (typeof methodSections)[number]): ApiSurface {
+      const surface = parts.get(`${contract.root}:${section}`)
+      if (!surface) throw new Error(`Missing ${section} surface for ${contract.root}`)
+      return surface
+    }
     return selections.map(selection => {
-      const signatures = surfaces[cursor++]
+      const signatures = part(selection.contract, 'signatures')
       if (selection.section !== 'method') return signatures
-      const parameters = surfaces[cursor++]
-      const returns = surfaces[cursor++]
+      const parameters = part(selection.contract, 'parameters')
+      const returns = part(selection.contract, 'returns')
+      const named = (surface: ApiSurface) => new Map(surface.entries.map(entry => [entry.name, entry]))
+      const parametersByName = named(parameters)
+      const returnsByName = named(returns)
       return {
-        section: 'method',
+        section: 'method' as const,
         id: memberAnchor(`${selection.contract.root}:method`),
         title: 'Method',
-        entries: signatures.entries.map((entry, index) => ({
-          ...entry,
-          nested: [
-            ...(entry.nested ?? []),
-            { ...parameters.entries[index], name: 'Parameters' },
-            { ...returns.entries[index], name: 'Returns' },
-          ],
-        })),
+        entries: signatures.entries.map(entry => {
+          const parameter = parametersByName.get(entry.name)
+          const result = returnsByName.get(entry.name)
+          if (!parameter || !result)
+            throw new Error(`Missing overload parts for ${selection.contract.root} ${entry.name}`)
+          return {
+            ...entry,
+            nested: [...(entry.nested ?? []), { ...parameter, name: 'Parameters' }, { ...result, name: 'Returns' }],
+          }
+        }),
         definitions: [signatures, parameters, returns].flatMap(surface => surface.definitions ?? []),
       }
     })
@@ -158,8 +159,7 @@ export function composeSurfaces(
     const objectParameter =
       graph.section === 'parameters' &&
       node.kind === 'Parameter' &&
-      node.sourceType &&
-      hasAnonymousObject(node.sourceType) &&
+      node.sourceTypeBody === true &&
       isObjectType(node.type, selections[graphs.indexOf(graph)].contract.declarations)
     const parameterDefinition = objectParameter
       ? {
