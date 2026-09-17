@@ -13,7 +13,12 @@ import { UnknownToolProviderError } from '@mastra/core/tool-provider';
 import type { ZodTypeAny } from 'zod';
 import { ServerRoute, WorkflowRegistry } from '@mastra/server/server-adapter';
 import { BaseLogMessage, IMastraLogger, LogLevel } from '@mastra/core/logger';
-import { generateValidDataFromSchema, getDefaultValidPathParams, normalizeRoutePath } from './route-test-utils';
+import {
+  generateValidDataFromSchema,
+  getDefaultValidPathParams,
+  getRouteSpecificSchemaDefaults,
+  normalizeRoutePath,
+} from './route-test-utils';
 import { MCPServer } from '@mastra/mcp';
 import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
@@ -1415,13 +1420,18 @@ export function buildRouteRequest(route: ServerRoute, overrides: RouteRequestOve
     }
   }
 
-  // Get route-specific path defaults
-  const routeDefaults = getRouteSpecificPathDefaults(route);
+  const pathDefaults = getRouteSpecificPathDefaults(route);
+  const schemaDefaults = getRouteSpecificSchemaDefaults(route);
 
   let query: Record<string, string | string[]> | undefined;
   if (route.queryParamSchema) {
     const generated = generateValidDataFromSchema(route.queryParamSchema) as Record<string, unknown>;
-    query = convertQueryValues({ ...generated, ...(routeDefaults.query ?? {}), ...(overrides.query ?? {}) });
+    query = convertQueryValues({
+      ...generated,
+      ...(schemaDefaults.query ?? {}),
+      ...(pathDefaults.query ?? {}),
+      ...(overrides.query ?? {}),
+    });
   } else if (overrides.query) {
     query = convertQueryValues(overrides.query);
   }
@@ -1429,7 +1439,12 @@ export function buildRouteRequest(route: ServerRoute, overrides: RouteRequestOve
   let body: Record<string, unknown> | undefined;
   if (route.bodySchema) {
     const generated = generateValidDataFromSchema(route.bodySchema) as Record<string, unknown>;
-    body = { ...generated, ...(routeDefaults.body ?? {}), ...(overrides.body ?? {}) };
+    body = {
+      ...generated,
+      ...(schemaDefaults.body ?? {}),
+      ...(pathDefaults.body ?? {}),
+      ...(overrides.body ?? {}),
+    };
   } else if (overrides.body) {
     body = { ...overrides.body };
   }

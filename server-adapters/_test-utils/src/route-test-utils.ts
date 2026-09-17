@@ -33,6 +33,20 @@ export function normalizeRoutePath(path: string): string {
 }
 
 /**
+ * Provide valid schema values for routes whose fields have cross-field constraints.
+ */
+export function getRouteSpecificSchemaDefaults(route: ServerRoute): {
+  query?: Record<string, unknown>;
+  body?: Record<string, unknown>;
+} {
+  if (route.path === '/observability/traces/query/values') {
+    return { body: { predicateScope: 'trace', path: 'entityName' } };
+  }
+
+  return {};
+}
+
+/**
  * Generate context-aware test value based on field name
  */
 export function generateContextualValue(fieldName?: string): string {
@@ -304,10 +318,6 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
         continue;
       }
       obj[key] = generateValidDataFromSchema(fieldSchema as z.ZodTypeAny, key);
-    }
-    if ('predicateScope' in shape && 'path' in shape) {
-      obj.predicateScope = 'trace';
-      obj.path = 'entityName';
     }
     return obj;
   }

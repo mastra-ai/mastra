@@ -5,6 +5,7 @@ import {
   generateValidDataFromSchema,
   getDefaultValidPathParams,
   getDefaultInvalidPathParams,
+  getRouteSpecificSchemaDefaults,
   validateRouteMetadata,
 } from './route-test-utils';
 import { ServerRoute } from '@mastra/server/server-adapter';
@@ -94,7 +95,9 @@ export function createRouteTestSuite(config: RouteTestConfig) {
       // Query parameter validation
       if (route.queryParamSchema) {
         it('should validate query parameters', () => {
-          const validParams = generateValidDataFromSchema(route.queryParamSchema!);
+          const routeDefaults = getRouteSpecificSchemaDefaults(route);
+          const generated = generateValidDataFromSchema(route.queryParamSchema!);
+          const validParams = { ...generated, ...(routeDefaults.query ?? {}) };
           expectValidSchema(route.queryParamSchema!, validParams);
         });
       }
@@ -102,7 +105,9 @@ export function createRouteTestSuite(config: RouteTestConfig) {
       // Body validation
       if (route.bodySchema) {
         it('should validate request body schema', () => {
-          const validBody = generateValidDataFromSchema(route.bodySchema!);
+          const routeDefaults = getRouteSpecificSchemaDefaults(route);
+          const generated = generateValidDataFromSchema(route.bodySchema!);
+          const validBody = { ...generated, ...(routeDefaults.body ?? {}) };
           expectValidSchema(route.bodySchema!, validBody);
         });
       }
