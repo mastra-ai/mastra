@@ -147,7 +147,7 @@ type Shared_Auxiliary_647 =
           };
     };
 
-type Shared_Auxiliary_1169 =
+type Shared_Auxiliary_1180 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -192,19 +192,19 @@ type Shared_Auxiliary_1169 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1169[];
+      args: Shared_Auxiliary_1180[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1169;
+      arg: Shared_Auxiliary_1180;
     };
 
-type Shared_Auxiliary_1309 = {
+type Shared_Auxiliary_1320 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1309[] | undefined;
+  children?: Shared_Auxiliary_1320[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -2643,7 +2643,7 @@ type Shared_Type_111 = {
       }
     | undefined;
   steps: Shared_Type_106;
-  predicates: Shared_Auxiliary_1169[];
+  predicates: Shared_Auxiliary_1180[];
 };
 
 type Shared_Type_112 = {
@@ -2666,7 +2666,7 @@ type Shared_Type_112 = {
         description?: string | undefined;
       };
   loopType: 'dowhile' | 'dountil';
-  predicate: Shared_Auxiliary_1169;
+  predicate: Shared_Auxiliary_1180;
 };
 
 type Shared_Type_113 =
@@ -3020,7 +3020,7 @@ type Shared_Type_126 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1309[] | undefined;
+  files?: Shared_Auxiliary_1320[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -11320,56 +11320,108 @@ export interface GetEmbedders_RouteContract {
 // ============================================================================
 export type GetWellKnownAgentIdAgentCardJson_PathParams = GetAgentsAgentId_PathParams;
 
-export type GetWellKnownAgentIdAgentCardJson_Response = {
-  additionalInterfaces?: unknown[] | undefined;
-  name: string;
-  description: string;
-  url: string;
-  protocolVersion: string;
-  provider?:
-    | {
-        organization: string;
+export type GetWellKnownAgentIdAgentCardJson_Response =
+  | {
+      additionalInterfaces?: unknown[] | undefined;
+      name: string;
+      description: string;
+      url: string;
+      protocolVersion: string;
+      provider?:
+        | {
+            organization: string;
+            url: string;
+          }
+        | undefined;
+      security?:
+        | {
+            [key: string]: string[];
+          }[]
+        | undefined;
+      securitySchemes?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      version: string;
+      capabilities: {
+        extensions?: unknown[] | undefined;
+        streaming?: boolean | undefined;
+        pushNotifications?: boolean | undefined;
+        stateTransitionHistory?: boolean | undefined;
+      };
+      defaultInputModes: string[];
+      defaultOutputModes: string[];
+      supportsAuthenticatedExtendedCard?: boolean | undefined;
+      signatures?:
+        | {
+            protected: string;
+            signature: string;
+            header?:
+              | {
+                  [key: string]: unknown;
+                }
+              | undefined;
+          }[]
+        | undefined;
+      skills: {
+        id: string;
+        name: string;
+        description: string;
+        tags?: string[] | undefined;
+      }[];
+    }
+  | {
+      name: string;
+      description?: string | undefined;
+      provider?:
+        | {
+            organization: string;
+            url: string;
+          }
+        | undefined;
+      securitySchemes?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      version: string;
+      capabilities: {
+        streaming?: boolean | undefined;
+        pushNotifications?: boolean | undefined;
+        extendedAgentCard?: boolean | undefined;
+        extensions?: unknown[] | undefined;
+      };
+      defaultInputModes?: string[] | undefined;
+      defaultOutputModes?: string[] | undefined;
+      signatures?:
+        | {
+            protected: string;
+            signature: string;
+            header?:
+              | {
+                  [key: string]: unknown;
+                }
+              | undefined;
+          }[]
+        | undefined;
+      skills?:
+        | {
+            id: string;
+            name: string;
+            description?: string | undefined;
+            tags?: string[] | undefined;
+            examples?: string[] | undefined;
+            inputModes?: string[] | undefined;
+            outputModes?: string[] | undefined;
+          }[]
+        | undefined;
+      supportedInterfaces: {
         url: string;
-      }
-    | undefined;
-  security?:
-    | {
-        [key: string]: string[];
-      }[]
-    | undefined;
-  securitySchemes?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  version: string;
-  capabilities: {
-    extensions?: unknown[] | undefined;
-    streaming?: boolean | undefined;
-    pushNotifications?: boolean | undefined;
-    stateTransitionHistory?: boolean | undefined;
-  };
-  defaultInputModes: string[];
-  defaultOutputModes: string[];
-  supportsAuthenticatedExtendedCard?: boolean | undefined;
-  signatures?:
-    | {
-        protected: string;
-        signature: string;
-        header?:
-          | {
-              [key: string]: unknown;
-            }
-          | undefined;
-      }[]
-    | undefined;
-  skills: {
-    id: string;
-    name: string;
-    description: string;
-    tags?: string[] | undefined;
-  }[];
-};
+        protocolBinding: 'JSONRPC';
+        protocolVersion: '0.3' | '1.0';
+      }[];
+    };
 
 export type GetWellKnownAgentIdAgentCardJson_Request = Simplify<
   (GetWellKnownAgentIdAgentCardJson_PathParams extends never
@@ -11385,7 +11437,7 @@ export interface GetWellKnownAgentIdAgentCardJson_RouteContract {
   body: never;
   request: GetWellKnownAgentIdAgentCardJson_Request;
   response: GetWellKnownAgentIdAgentCardJson_Response;
-  responseType: 'json';
+  responseType: 'datastream-response';
 }
 
 // ============================================================================
@@ -17017,7 +17069,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1309[] | undefined;
+  files?: Shared_Auxiliary_1320[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -17075,7 +17127,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1309[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1320[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (

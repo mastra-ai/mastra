@@ -174,7 +174,16 @@ export type A2AAgentCardSigningConfig = {
   header?: Record<string, unknown>;
 };
 
+export type A2AProtocolVersion = '0.3' | '1.0';
+
 export type A2AConfig = {
+  /** Enabled protocol versions. Defaults to both versions; an empty array disables A2A. */
+  protocolVersions?: A2AProtocolVersion[];
+  /**
+   * Per-agent exposure overrides, keyed by agent ID or registration key.
+   * Agent ID takes precedence. Overrides replace the global list rather than intersecting it.
+   */
+  agents?: Record<string, { protocolVersions?: A2AProtocolVersion[] }>;
   /**
    * Optional Agent Card signing configuration.
    * When provided, Mastra signs the served Agent Card and includes `signatures`.
