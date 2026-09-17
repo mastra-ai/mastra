@@ -619,6 +619,9 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     );
     const placeholder = 'Background task started. Task ID: task-1. The tool "view" is running in the background.';
 
+    component.updateResult({ content: [{ type: 'text', text: placeholder }], isError: false });
+    expect(stripAnsi(component.render(100).join('\n'))).not.toContain('background · task-1');
+    component.setBackgroundTaskId('task-1');
     component.updateResult({ content: [{ type: 'text', text: placeholder }], isError: false }, true);
 
     let output = stripAnsi(component.render(100).join('\n'));

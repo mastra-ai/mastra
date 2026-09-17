@@ -230,21 +230,23 @@ export async function dispatchEvent(
 
     case 'tool_end': {
       state.agentRunLastStreamPartAt = Date.now();
-      const taskId = getBackgroundToolTaskId(event.result);
-      const context = state.backgroundToolContexts.get(event.toolCallId);
-      if (taskId && context) {
-        acceptBackgroundActivity(state.backgroundActivities, taskId, event.toolCallId, context);
-        state.backgroundToolContexts.delete(event.toolCallId);
-        state.globalBackgroundNotice.setActivities(
-          getBackgroundActivitiesForTarget(
-            state.backgroundActivities,
-            state.session.identity.getResourceId(),
-            state.pendingNewThread ? null : state.session.thread.getId(),
-          ),
-        );
-        flushRender(state);
+      if (state.options.backgroundToolsEnabled) {
+        const taskId = getBackgroundToolTaskId(event.result);
+        const context = state.backgroundToolContexts.get(event.toolCallId);
+        if (taskId && context) {
+          acceptBackgroundActivity(state.backgroundActivities, taskId, event.toolCallId, context);
+          state.backgroundToolContexts.delete(event.toolCallId);
+          state.globalBackgroundNotice.setActivities(
+            getBackgroundActivitiesForTarget(
+              state.backgroundActivities,
+              state.session.identity.getResourceId(),
+              state.pendingNewThread ? null : state.session.thread.getId(),
+            ),
+          );
+          flushRender(state);
+        }
+        if (!taskId) state.backgroundToolContexts.delete(event.toolCallId);
       }
-      if (!taskId) state.backgroundToolContexts.delete(event.toolCallId);
       handleToolEnd(ectx, event.toolCallId, event.result, event.isError);
       break;
     }

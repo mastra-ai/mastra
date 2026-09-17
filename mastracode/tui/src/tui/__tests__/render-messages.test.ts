@@ -21,6 +21,7 @@ import type { TUIState } from '../state.js';
 
 function createState(): TUIState {
   return {
+    options: {},
     chatContainer: new Container(),
     ui: { requestRender: vi.fn() },
     toolOutputExpanded: false,
@@ -1128,31 +1129,35 @@ describe('renderExistingMessages tools', () => {
     expect(state.chatContainer.children.filter(child => child instanceof NotificationComponent)).toHaveLength(1);
   });
 
-  it('reconstructs deferred background placeholders as pending tool rows', async () => {
-    const message = assistantToolMessage('assistant-background-tool', [
-      {
-        id: 'tool-background-1',
-        name: 'view',
-        args: { path: 'package.json' },
-        result: 'Background task started. Task ID: task-1',
-      },
-    ]);
-    const state = createState();
-    state.session = {
-      ...state.session,
-      thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
-    } as unknown as TUIState['session'];
+  it.each([undefined, false, true])(
+    'reconstructs pending background rows only when enabled is true (%s)',
+    async enabled => {
+      const message = assistantToolMessage('assistant-background-tool', [
+        {
+          id: 'tool-background-1',
+          name: 'view',
+          args: { path: 'package.json' },
+          result: 'Background task started. Task ID: task-1',
+        },
+      ]);
+      const state = createState();
+      state.options.backgroundToolsEnabled = enabled;
+      state.session = {
+        ...state.session,
+        thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+      } as unknown as TUIState['session'];
 
-    await renderExistingMessages(state);
+      await renderExistingMessages(state);
 
-    expect(state.pendingTools.has('tool-background-1')).toBe(true);
-    const rendered = state.chatContainer
-      .render(100)
-      .join('\n')
-      .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(rendered).toContain('◌ background · task-1');
-    expect(rendered).not.toContain('Background task started');
-  });
+      expect(state.pendingTools.has('tool-background-1')).toBe(enabled === true);
+      const rendered = state.chatContainer
+        .render(100)
+        .join('\n')
+        .replace(/\x1b\[[0-9;]*m/g, '');
+      expect(rendered.includes('◌ background · task-1')).toBe(enabled === true);
+      expect(rendered.includes('Background task started')).toBe(enabled !== true);
+    },
+  );
 });
 
 describe('renderExistingMessages subagents', () => {
@@ -1180,6 +1185,30 @@ describe('renderExistingMessages subagents', () => {
       .replace(/\x1b\[[0-9;]*m/g, '');
     expect(rendered).toContain('▐view▌src/quiet-mode-e2e.ts');
     expect(rendered).toContain('QUIET_MODE_LOADED_PREVIEW');
+  });
+
+  it.each([undefined, false, true])('gates pending plugin placeholder replay when enabled is %s', async enabled => {
+    const state = createState();
+    state.options.backgroundToolsEnabled = enabled;
+    const message = assistantToolMessage('plugin-collision', [
+      {
+        id: 'plugin-call',
+        name: 'mastra_expert',
+        args: { question: 'demo' },
+        result: 'Background task started. Task ID: visible-demo-123',
+        isError: false,
+      },
+    ]);
+    state.pluginManager = {
+      getToolRenderConfig: vi.fn(() => ({ type: 'subagent', agentType: 'alexandria' })),
+    } as unknown as TUIState['pluginManager'];
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+    } as unknown as TUIState['session'];
+    await renderExistingMessages(state);
+    expect(state.pendingSubagents.has('plugin-call')).toBe(enabled === true);
+    expect(state.chatContainer.render(120).join('\n').includes('background · visible-demo-123')).toBe(enabled === true);
   });
 
   it('uses static plugin renderer config when replaying persisted plugin tool calls', async () => {

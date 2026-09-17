@@ -11,7 +11,6 @@ import type { TaskItemInput } from '@mastra/core/signals';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
 import type { Theme as HighlightTheme } from 'cli-highlight';
-import { parseBackgroundToolTaskId } from '../background-tool-result.js';
 import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
 import { BOX_INDENT, theme, mastra, tintHex, ensureTerminalGlyphContrast } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
@@ -250,8 +249,6 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   updateResult(result: ToolResult, isPartial = false): void {
     this.result = result;
     this.isPartial = isPartial;
-    const backgroundTaskId = parseBackgroundToolTaskId(this.getFormattedOutput());
-    if (backgroundTaskId) this.backgroundTaskId = backgroundTaskId;
     // Keep streaming output for colored display in final result
     this.rebuild();
   }

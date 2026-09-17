@@ -943,11 +943,13 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   state.allShellComponents = [];
 
   const backgroundTasksByToolCallId = new Map<string, string>();
+  const cancelledBackgroundToolCalls = new Set<string>();
   for (const message of messages) {
     if (message.role !== 'signal') continue;
     const completion = getBackgroundCompletionView(message);
     if (completion) {
       backgroundTasksByToolCallId.set(completion.originToolCallId, completion.taskId);
+      if (completion.status === 'cancelled') cancelledBackgroundToolCalls.add(completion.originToolCallId);
     }
   }
 
@@ -987,7 +989,11 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           const hasResult = part.hasResult;
           const resultValue = part.result;
           const resultIsError = part.isError;
-          const isBackgroundPlaceholder = hasResult && !resultIsError && isBackgroundToolPlaceholder(resultValue);
+          const isBackgroundPlaceholder =
+            !!state.options?.backgroundToolsEnabled &&
+            hasResult &&
+            !resultIsError &&
+            isBackgroundToolPlaceholder(resultValue);
 
           // Render subagent tool calls with dedicated component
           if (toolName === 'subagent') {
@@ -1070,11 +1076,14 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               },
             );
             const backgroundTaskId =
-              getBackgroundToolTaskId(resultValue) ?? backgroundTasksByToolCallId.get(part.toolCallId);
+              (isBackgroundPlaceholder ? getBackgroundToolTaskId(resultValue) : undefined) ??
+              backgroundTasksByToolCallId.get(part.toolCallId);
             if (backgroundTaskId) {
               subComponent.setBackgroundTaskId(backgroundTaskId);
             }
-            if (isBackgroundPlaceholder) {
+            if (cancelledBackgroundToolCalls.has(part.toolCallId)) {
+              subComponent.cancel();
+            } else if (isBackgroundPlaceholder) {
               state.pendingSubagents.set(part.toolCallId, subComponent);
             } else {
               subComponent.finish(isErr ?? false, 0, rawResult);
@@ -1095,7 +1104,8 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             state.ui,
           );
           const backgroundTaskId =
-            getBackgroundToolTaskId(resultValue) ?? backgroundTasksByToolCallId.get(part.toolCallId);
+            (isBackgroundPlaceholder ? getBackgroundToolTaskId(resultValue) : undefined) ??
+            backgroundTasksByToolCallId.get(part.toolCallId);
           if (backgroundTaskId) {
             toolComponent.setBackgroundTaskId(backgroundTaskId);
           }
@@ -1115,7 +1125,9 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             );
           }
 
-          if (isBackgroundPlaceholder) {
+          if (cancelledBackgroundToolCalls.has(part.toolCallId)) {
+            toolComponent.cancelBackground();
+          } else if (isBackgroundPlaceholder) {
             state.pendingTools.set(part.toolCallId, toolComponent);
           }
 

@@ -775,7 +775,8 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
   if (subagentComponent) {
     const resultText = formatToolResult(result);
     if (pluginSubagentToolCallIds.has(toolCallId)) {
-      const backgroundTaskId = !isError ? getBackgroundToolTaskId(result) : undefined;
+      const backgroundTaskId =
+        state.options?.backgroundToolsEnabled && !isError ? getBackgroundToolTaskId(result) : undefined;
       if (backgroundTaskId) {
         subagentComponent.setBackgroundTaskId(backgroundTaskId);
         flushRender(state);
@@ -812,7 +813,10 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
     }
 
     const resultText = formatToolResult(result);
-    const isBackgroundPlaceholder = !effectiveIsError && isBackgroundToolPlaceholder(result);
+    const backgroundTaskId =
+      state.options?.backgroundToolsEnabled && !effectiveIsError ? getBackgroundToolTaskId(result) : undefined;
+    const isBackgroundPlaceholder = backgroundTaskId !== undefined;
+    if (backgroundTaskId) component.setBackgroundTaskId?.(backgroundTaskId);
     const toolResult: ToolResult = {
       content: [{ type: 'text', text: resultText }],
       isError: effectiveIsError,
