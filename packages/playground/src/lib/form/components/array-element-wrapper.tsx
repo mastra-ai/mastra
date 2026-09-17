@@ -2,9 +2,10 @@ import type { ArrayElementWrapperProps } from '@autoform/react';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Check, ChevronRight, Trash2 } from 'lucide-react';
-import { useContext, useRef, useState } from 'react';
+import { useContext, useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
-import { ArrayAddButtonContext, ArrayItemPathContext, FormReadOnlyContext } from '../field-context';
+import { ArrayAddButtonContext, FieldPathContext, FormReadOnlyContext } from '../field-context';
+import { useSectionDisclosure } from '../use-section-disclosure';
 import { isPlainObject } from '../utils';
 
 const HUMAN_SUMMARY_KEYS = ['title', 'name', 'label'];
@@ -21,27 +22,20 @@ function itemSummary(value: unknown) {
 }
 
 export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementWrapperProps) {
-  const path = useContext(ArrayItemPathContext);
+  const path = useContext(FieldPathContext);
   const readOnly = useContext(FormReadOnlyContext);
   const addButtonRef = useContext(ArrayAddButtonContext);
-  const { control, getFieldState, formState } = useFormContext();
+  const { control } = useFormContext();
   const value: unknown = useWatch({ control, name: path });
   const summary = itemSummary(value);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const [disclosure, setDisclosure] = useState({ expanded: !summary, dismissedSubmission: 0 });
-  const invalid = getFieldState(path, formState).invalid;
-  const hasNewErrors = invalid && formState.submitCount > disclosure.dismissedSubmission;
-  const expanded = disclosure.expanded || hasNewErrors;
+  const { expanded, invalid, setExpanded } = useSectionDisclosure(path, !summary);
   const itemLabel = `Item ${index + 1}${summary ? `: ${summary}` : ''}`;
-
-  function changeExpanded(expanded: boolean) {
-    setDisclosure({ expanded, dismissedSubmission: formState.submitCount });
-  }
 
   return (
     <Collapsible
       open={expanded}
-      onOpenChange={changeExpanded}
+      onOpenChange={setExpanded}
       className="border-border1 bg-surface2 overflow-hidden rounded-lg border motion-reduce:[&_[data-slot=collapsible-content]]:transition-none motion-reduce:[&_svg]:transition-none"
     >
       <div className="flex min-w-0 items-center gap-1 pr-1">
@@ -85,7 +79,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
               className="min-h-11"
               aria-label={`Done editing item ${index + 1}`}
               onClick={() => {
-                changeExpanded(false);
+                setExpanded(false);
                 triggerRef.current?.focus();
               }}
               icon={<Check />}

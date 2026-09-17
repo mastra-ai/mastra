@@ -1,19 +1,16 @@
-import type { GetWorkflowResponse } from '@mastra/client-js';
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { Loader2 } from 'lucide-react';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { WorkflowRequestContextDialog } from '../components/workflow-request-context-dialog';
 import { WorkflowRunOptionsDialog } from '../components/workflow-run-options-dialog';
-import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
+import type { WorkflowRunContextType } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
+import { isWorkflowRunFinished } from '../utils';
 import { useSuspendedSteps, useWorkflowSchemas } from './use-workflow-trigger';
 import { WorkflowCancelButton } from './workflow-cancel-button';
 import { WorkflowDebugModeSwitch } from './workflow-debug-mode-switch';
@@ -23,75 +20,26 @@ import { WorkflowRunError } from './workflow-run-error';
 import { RunWorkflowHeader } from './workflow-run-header';
 import { WorkflowTriggerForm } from './workflow-trigger-form';
 import type { WorkflowTriggerFormProps } from './workflow-trigger-form';
+import { InitialWorkflowHeader } from './workflow-trigger-header';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 
-export interface WorkflowTriggerProps {
-  workflowId: string;
+export type WorkflowTriggerProps = Pick<
+  WorkflowRunContextType,
+  | 'workflowId'
+  | 'workflow'
+  | 'isLoading'
+  | 'createWorkflowRun'
+  | 'streamWorkflow'
+  | 'resumeWorkflow'
+  | 'isStreamingWorkflow'
+  | 'isCancellingWorkflowRun'
+  | 'cancelWorkflowRun'
+> & {
   paramsRunId?: string;
   paramsRunStatus?: WorkflowRunStatus;
-  workflow?: GetWorkflowResponse;
-  isLoading?: boolean;
-  createWorkflowRun: ({ workflowId, prevRunId }: { workflowId: string; prevRunId?: string }) => Promise<{
-    runId: string;
-  }>;
-  isStreamingWorkflow: boolean;
-  streamWorkflow: ({
-    workflowId,
-    runId,
-    inputData,
-    initialState,
-    requestContext,
-    perStep,
-  }: {
-    workflowId: string;
-    runId: string;
-    inputData: Record<string, unknown>;
-    initialState?: Record<string, unknown>;
-    requestContext: Record<string, unknown>;
-    perStep?: boolean;
-  }) => Promise<void>;
-  observeWorkflowStream?: ({ workflowId, runId }: { workflowId: string; runId: string }) => void;
-  resumeWorkflow: ({
-    workflowId,
-    step,
-    runId,
-    resumeData,
-    requestContext,
-    perStep,
-  }: {
-    workflowId: string;
-    step: string | string[];
-    runId: string;
-    resumeData: Record<string, unknown>;
-    requestContext: Record<string, unknown>;
-    perStep?: boolean;
-  }) => Promise<void>;
-  streamResult: WorkflowRunStreamResult | null;
-  isCancellingWorkflowRun: boolean;
-  cancelWorkflowRun: ({ workflowId, runId }: { workflowId: string; runId: string }) => Promise<{
-    message: string;
-  }>;
-}
-
-function InitialWorkflowHeader({ workflow, workflowId }: { workflow: GetWorkflowResponse; workflowId: string }) {
-  const stepsCount = Object.keys(workflow.steps ?? {}).length;
-
-  return (
-    <div className="flex w-full items-center gap-2 px-5">
-      <Icon className="text-neutral4 shrink-0">
-        <WorkflowIcon />
-      </Icon>
-      <Txt as="span" variant="ui-md" className="text-neutral5 truncate font-semibold">
-        {workflow.name ?? workflowId}
-      </Txt>
-      <CopyButton content={workflow.name ?? workflowId} variant="ghost" className="shrink-0" />
-      <Badge className="ml-auto shrink-0">
-        {stepsCount} step{stepsCount > 1 ? 's' : ''}
-      </Badge>
-    </div>
-  );
-}
+  observeWorkflowStream?: (params: { workflowId: string; runId: string }) => void;
+};
 
 export function WorkflowTrigger({
   workflowId,
@@ -129,10 +77,11 @@ export function WorkflowTrigger({
   const activeRunId = paramsRunId || contextRunId;
   const currentCancellation = cancelResponse?.runId === activeRunId ? cancelResponse : undefined;
   const streamResultToUse = activeRunId ? result : null;
-  const suspendedSteps = useSuspendedSteps(streamResultToUse, activeRunId ?? '');
+  const suspendedSteps = useSuspendedSteps(streamResultToUse, activeRunId);
   const { zodSchemaToUse, hasStateSchema } = useWorkflowSchemas(workflow);
 
-  const hasFinished = ['success', 'failed', 'canceled', 'bailed'].includes(streamResultToUse?.status ?? '');
+  const hasFinished = isWorkflowRunFinished(streamResultToUse?.status);
+
   const isPausedDebug = streamResultToUse?.status === 'paused';
 
   useEffect(() => () => pendingStart.current?.abort(), []);
@@ -171,7 +120,7 @@ export function WorkflowTrigger({
       const response = await cancelWorkflowRun({ workflowId, runId: activeRunId });
       setCancelResponse({ ...response, runId: activeRunId });
       // Paused runs have no active stream to publish cancellation.
-      setResult(current => (current && current === pausedResult ? { ...current, status: 'canceled' } : current));
+      if (pausedResult) setResult({ ...pausedResult, status: 'canceled' });
     } catch {
       toast.error('Error cancelling workflow run');
     }
@@ -200,6 +149,7 @@ export function WorkflowTrigger({
   if (!workflow) return null;
 
   const isSuspendedSteps = suspendedSteps.length > 0;
+  const showsCancelButton = streamResultToUse?.status === 'running' || isSuspendedSteps;
 
   const isViewingRun = !!activeRunId;
   const runStatus = streamResultToUse?.status ?? paramsRunStatus ?? (isStreamingWorkflow ? 'running' : 'pending');
@@ -237,7 +187,7 @@ export function WorkflowTrigger({
 
         {canExecuteWorkflow && (
           <WorkflowTriggerForm
-            key={`input-${activeRunId || 'new-run'}`}
+            key={`${workflowId}:${activeRunId || 'new'}`}
             zodSchema={zodSchemaToUse}
             defaultValues={payload}
             isStreaming={isStarting || isStreamingWorkflow}
@@ -283,7 +233,7 @@ export function WorkflowTrigger({
           </div>
         )}
 
-        {(streamResultToUse?.status === 'running' || isSuspendedSteps) && (
+        {showsCancelButton && (
           <div data-testid="workflow-cancel-action" className="flex justify-end px-5 pt-3 pb-4">
             {cancelAction}
           </div>

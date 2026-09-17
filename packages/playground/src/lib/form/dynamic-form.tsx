@@ -6,6 +6,7 @@ import type { UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
 import { AutoForm } from './auto-form';
 import { FormSubmitRow } from './components/form-submit-row';
+import { ROOT_FIELD_KEY } from './field-context';
 import { isEmptyZodObject } from './is-empty-zod-object';
 import { CustomZodProvider } from './zod-provider';
 import { getShape } from './zod-provider/compat';
@@ -30,8 +31,6 @@ interface DynamicFormProps {
 function isZodObjectLike(schema: any): boolean {
   return getShape(schema) !== undefined;
 }
-
-const ROOT_FIELD_KEY = '\u200B';
 
 function getFormInput(values: Record<string, unknown>, isWrapped: boolean) {
   return isWrapped ? values[ROOT_FIELD_KEY] : values;

@@ -1,60 +1,54 @@
+import { nanoid } from 'nanoid';
 import { z } from 'zod';
 
-// Simple mode edits only this projection; unknown metadata stays in the draft.
-export const processorDraftSchema = z.object({
-  phase: z.string().optional(),
-  messages: z
-    .array(
-      z.object({
-        content: z
-          .object({
-            parts: z.array(z.object({ type: z.string(), text: z.string().optional() })).optional(),
-          })
-          .optional(),
-      }),
-    )
-    .optional(),
-});
+const processorPartSchema = z.object({ type: z.string(), text: z.string().optional() }).passthrough();
+const processorMessageSchema = z
+  .object({
+    content: z
+      .object({ parts: z.array(processorPartSchema).optional() })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+const processorDraftSchema = z
+  .object({ phase: z.string(), messages: z.array(processorMessageSchema).optional() })
+  .passthrough()
+  .refine(hasTextInFirstMessage, 'Simple input edits the text part of the first message');
 
-type ProcessorMessagePart = { type: string; text?: string };
+export type ProcessorDraft = z.infer<typeof processorDraftSchema>;
 
-type ProcessorMessage = {
-  id: string;
-  role: string;
-  createdAt: string;
-  content: { format: number; parts: ProcessorMessagePart[] };
-};
-
-type ProcessorInput = { phase?: string; messages?: ProcessorMessage[] } & Record<string, unknown>;
+function hasTextInFirstMessage(draft: { messages?: { content?: { parts?: { type: string }[] } }[] }) {
+  const parts = draft.messages?.[0]?.content?.parts;
+  return !parts?.length || parts.some(part => part.type === 'text');
+}
+type ProcessorMessage = NonNullable<ProcessorDraft['messages']>[number];
 
 const FALLBACK_MESSAGE_TEXT = 'Hello, this is a test message.';
 
+export function parseProcessorDraft(input: unknown): ProcessorDraft | undefined {
+  const result = processorDraftSchema.safeParse(input);
+  return result.success ? result.data : undefined;
+}
+
 function createProcessorMessage(text: string): ProcessorMessage {
   return {
-    id: crypto.randomUUID(),
+    id: nanoid(),
     role: 'user',
     createdAt: new Date().toISOString(),
     content: { format: 2, parts: [{ type: 'text', text }] },
   };
 }
 
-export function createProcessorInput() {
+export function createProcessorInput(): ProcessorDraft {
   return { messages: [createProcessorMessage(FALLBACK_MESSAGE_TEXT)], phase: 'input' };
 }
 
-export function getProcessorPhase(input: ProcessorInput) {
-  return typeof input?.phase === 'string' ? input.phase : undefined;
+export function getProcessorMessage(draft: ProcessorDraft) {
+  return draft.messages?.[0]?.content?.parts?.find(part => part.type === 'text')?.text ?? '';
 }
 
-export function getProcessorMessage(input: ProcessorInput) {
-  if (!Array.isArray(input?.messages)) return '';
-  const textPart = input.messages[0]?.content?.parts?.find(part => part.type === 'text');
-  return textPart?.text ?? '';
-}
-
-export function updateProcessorMessage(input: ProcessorInput, text: string): ProcessorInput {
-  const messages = Array.isArray(input?.messages) ? input.messages : [];
-  const [firstMessage = createProcessorMessage(text), ...otherMessages] = messages;
+export function updateProcessorMessage(draft: ProcessorDraft, text: string): ProcessorDraft {
+  const [firstMessage = createProcessorMessage(text), ...otherMessages] = draft.messages ?? [];
   const parts = firstMessage.content?.parts ?? [];
   const textIndex = parts.findIndex(part => part.type === 'text');
   const nextParts =
@@ -63,18 +57,18 @@ export function updateProcessorMessage(input: ProcessorInput, text: string): Pro
       : parts.map((part, index) => (index === textIndex ? { ...part, text } : part));
 
   return {
-    ...input,
+    ...draft,
     messages: [{ ...firstMessage, content: { ...firstMessage.content, parts: nextParts } }, ...otherMessages],
   };
 }
 
-// The processor contract ties the author of the first message to the phase being exercised.
-export function withPhaseRole(input: ProcessorInput): ProcessorInput {
-  if (!Array.isArray(input?.messages)) return input;
-  const role = input.phase === 'outputStep' || input.phase === 'outputResult' ? 'assistant' : 'user';
+// Output phases feed the processor an assistant message, every other phase a user message.
+export function withPhaseRole(draft: ProcessorDraft): ProcessorDraft {
+  if (!draft.messages) return draft;
+  const role = draft.phase === 'outputStep' || draft.phase === 'outputResult' ? 'assistant' : 'user';
 
   return {
-    ...input,
-    messages: input.messages.map((message, index) => (index === 0 ? { ...message, role } : message)),
+    ...draft,
+    messages: draft.messages.map((message, index) => (index === 0 ? { ...message, role } : message)),
   };
 }

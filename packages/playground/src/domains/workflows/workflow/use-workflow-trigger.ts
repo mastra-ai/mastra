@@ -23,21 +23,14 @@ import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 export interface SuspendedStep {
   stepId: string;
   runId: string;
-  suspendPayload: any;
-  workflow?: GetWorkflowResponse;
-  isLoading: boolean;
+  suspendPayload: unknown;
 }
 
 export function useSuspendedSteps(streamResult: WorkflowRunStreamResult | null, runId: string): SuspendedStep[] {
   return useMemo(() => {
     return Object.entries(streamResult?.steps || {})
       .filter(([_, { status }]) => status === 'suspended')
-      .map(([stepId, { suspendPayload }]) => ({
-        stepId,
-        runId,
-        suspendPayload,
-        isLoading: false,
-      }));
+      .map(([stepId, { suspendPayload }]) => ({ stepId, runId, suspendPayload }));
   }, [streamResult?.steps, runId]);
 }
 

@@ -3,9 +3,12 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MastraClientProvider } from '../mastra-client-context';
 import type { WorkflowStreamResult } from './types';
-import { useStreamWorkflow } from './use-stream-workflow';
+
+// Sibling files stub MastraClient; with isolate:false the cached context module would keep their stub.
+vi.resetModules();
+const { MastraClientProvider } = await import('../mastra-client-context');
+const { useStreamWorkflow } = await import('./use-stream-workflow');
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -95,6 +98,25 @@ const operations = ['start', 'observe', 'resume', 'time travel'] as const;
 afterEach(cleanup);
 
 describe('useStreamWorkflow stream ownership', () => {
+  it('marks a live per-step run paused when only the paused chunk arrives', async () => {
+    const { result, streams, invoke } = renderWorkflow();
+    const remote = streamResponse();
+    streams.set('stepped', remote.response);
+    let run!: Promise<void>;
+    act(() => {
+      run = invoke('start', 'stepped');
+    });
+    await act(async () => {
+      remote.send('workflow-start', {});
+      remote.send('workflow-step-result', { id: 'first', status: 'success', output: 1 });
+      remote.send('workflow-paused', {});
+      remote.close();
+      await run;
+    });
+    expect(result.current.streamResult).toMatchObject({ status: 'paused', steps: { first: { status: 'success' } } });
+    expect(result.current.isStreaming).toBe(false);
+  });
+
   it('continues observing a paused run and preserves opaque outputs, custom IDs and metadata', async () => {
     const { result, streams } = renderWorkflow();
     const remote = streamResponse();
@@ -189,7 +211,7 @@ describe('useStreamWorkflow stream ownership', () => {
       oldOperation = invoke(operation, 'obsolete');
     });
     await act(async () => obsolete.send('workflow-start'));
-    await waitFor(() => expect(result.current.streamResult.status).toBe('running'));
+    await waitFor(() => expect(result.current.streamResult?.status).toBe('running'));
     let newOperation!: Promise<void>;
     await act(async () => {
       obsolete.send('workflow-step-result', { id: 'stale', status: 'success', output: 'must not appear' });
@@ -198,7 +220,7 @@ describe('useStreamWorkflow stream ownership', () => {
       await obsolete.canceled;
     });
     expect(result.current.isStreaming).toBe(true);
-    expect(result.current.streamResult.steps?.stale).toBeUndefined();
+    expect(result.current.streamResult?.steps?.stale).toBeUndefined();
     await act(async () => {
       current.send('workflow-step-result', { id: 'current', status: 'success', output: false });
       current.send('workflow-finish', { workflowStatus: 'success' });
@@ -280,7 +302,7 @@ describe('useStreamWorkflow stream ownership', () => {
       operation = invoke('start', 'active');
     });
     await act(async () => remote.send('workflow-start'));
-    await waitFor(() => expect(result.current.streamResult.status).toBe('running'));
+    await waitFor(() => expect(result.current.streamResult?.status).toBe('running'));
     const requestCount = requests.length;
     unmount();
     await remote.canceled;
@@ -313,7 +335,7 @@ describe('useStreamWorkflow stream ownership', () => {
       operation = invoke('start', 'active');
     });
     await act(async () => remote.send('workflow-start'));
-    await waitFor(() => expect(result.current.streamResult.status).toBe('running'));
+    await waitFor(() => expect(result.current.streamResult?.status).toBe('running'));
     const failure = new TypeError('Disconnected transport');
     await act(async () => {
       remote.error(failure);

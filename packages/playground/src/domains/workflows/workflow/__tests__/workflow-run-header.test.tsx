@@ -43,7 +43,7 @@ describe('Workflow run header', () => {
   });
 
   describe('when a paused run resumes after time has passed', () => {
-    it('starts the live duration at the current time and stops at the recorded end', () => {
+    it('counts from the run start once running and stops at the recorded end', () => {
       vi.useFakeTimers();
       vi.setSystemTime(1_000);
       const active: WorkflowRunStreamResult = {
@@ -52,10 +52,12 @@ describe('Workflow run header', () => {
         steps: { work: { status: 'running', payload: {}, startedAt: 0 } },
       };
       const view = render(<RunWorkflowHeader runId="run" status="paused" result={active} />);
+      expect(screen.queryByTitle('Run duration')).toBeNull();
       act(() => vi.setSystemTime(5_000));
       view.rerender(<RunWorkflowHeader runId="run" status="running" result={active} />);
-      expect(screen.getByTitle('Run duration').textContent).toBe('5s');
-      act(() => vi.advanceTimersByTime(1_000));
+      act(() => vi.advanceTimersByTime(100));
+      expect(screen.getByTitle('Run duration').textContent).toBe('5.1s');
+      act(() => vi.advanceTimersByTime(900));
       expect(screen.getByTitle('Run duration').textContent).toBe('6s');
       view.rerender(<RunWorkflowHeader runId="run" status="success" result={completed} />);
       act(() => vi.advanceTimersByTime(5_000));

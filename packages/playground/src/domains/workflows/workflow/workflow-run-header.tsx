@@ -3,9 +3,9 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { Timer } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
+import { useTimeDiff } from '@/lib/ai-ui/hooks/use-time-diff';
 
 function formatRunStatus(status?: WorkflowRunStatus) {
   if (!status) return 'Run';
@@ -25,8 +25,7 @@ export function WorkflowRunStatusBadge({ status }: { status?: WorkflowRunStatus 
   );
 }
 
-function formatRunDuration(durationMs?: number) {
-  if (durationMs === undefined) return '—';
+function formatRunDuration(durationMs: number) {
   if (durationMs < 1000) return `${durationMs}ms`;
 
   const seconds = durationMs / 1000;
@@ -40,42 +39,32 @@ function formatRunDuration(durationMs?: number) {
 const isRunInProgress = (status?: WorkflowRunStatus) =>
   status === 'running' || status === 'suspended' || status === 'waiting';
 
-function RunningRunDuration({ result }: { result: WorkflowRunStreamResult | null }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, []);
-  return <RunDuration duration={getRunDuration(result, true, now)} />;
-}
+type RunSpan = { startedAt: number; endedAt?: number };
 
-function RunDuration({ duration }: { duration?: number }) {
-  if (duration === undefined) return null;
-  return (
-    <span className="text-ui-xs text-neutral4 flex items-center gap-1.5 tabular-nums" title="Run duration">
-      <Timer aria-hidden className="size-3.5" />
-      {formatRunDuration(duration)}
-    </span>
-  );
-}
-
-function getRunDuration(result: WorkflowRunStreamResult | null, isRunning: boolean, now: number) {
-  const stepTimes: Array<{ startedAt: number; endedAt?: number }> = Object.values(result?.steps ?? {}).flatMap(step => {
+function getRunSpan(result: WorkflowRunStreamResult | null, status?: WorkflowRunStatus): RunSpan | undefined {
+  const stepSpans = Object.values(result?.steps ?? {}).flatMap(step => {
     const startedAt = 'startedAt' in step ? step.startedAt : undefined;
     if (typeof startedAt !== 'number' || !Number.isFinite(startedAt)) return [];
     const endedAt = 'endedAt' in step ? step.endedAt : undefined;
     const hasValidEnd = typeof endedAt === 'number' && Number.isFinite(endedAt) && endedAt >= startedAt;
     return [{ startedAt, ...(hasValidEnd ? { endedAt } : {}) }];
   });
+  if (stepSpans.length === 0) return undefined;
 
-  if (stepTimes.length === 0) return undefined;
+  const startedAt = Math.min(...stepSpans.map(span => span.startedAt));
+  if (isRunInProgress(status)) return { startedAt };
 
-  const startedAt = Math.min(...stepTimes.map(step => step.startedAt));
-  const endedTimes = stepTimes.flatMap(step => (step.endedAt !== undefined ? [step.endedAt] : []));
-  const endedAt = endedTimes.length > 0 ? Math.max(...endedTimes) : undefined;
-  const effectiveEndedAt = isRunning ? now : endedAt;
-  if (effectiveEndedAt === undefined || effectiveEndedAt < startedAt) return undefined;
-  return effectiveEndedAt - startedAt;
+  const endedTimes = stepSpans.flatMap(span => (span.endedAt === undefined ? [] : [span.endedAt]));
+  return endedTimes.length === 0 ? undefined : { startedAt, endedAt: Math.max(...endedTimes) };
+}
+
+function RunDuration({ span }: { span: RunSpan }) {
+  return (
+    <span className="text-ui-xs text-neutral4 flex items-center gap-1.5 tabular-nums" title="Run duration">
+      <Timer aria-hidden className="size-3.5" />
+      {formatRunDuration(useTimeDiff(span))}
+    </span>
+  );
 }
 
 export function RunWorkflowHeader({
@@ -89,17 +78,13 @@ export function RunWorkflowHeader({
   result: WorkflowRunStreamResult | null;
   timestamp?: number;
 }) {
-  const isRunning = isRunInProgress(status);
+  const runSpan = getRunSpan(result, status);
 
   return (
     <div className="flex w-full flex-col gap-2 px-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <WorkflowRunStatusBadge status={status} />
-        {isRunning ? (
-          <RunningRunDuration key={runId} result={result} />
-        ) : (
-          <RunDuration duration={getRunDuration(result, false, 0)} />
-        )}
+        {runSpan && <RunDuration span={runSpan} />}
       </div>
       <div className="text-ui-xs text-neutral3 flex min-w-0 items-center gap-1">
         <span className="min-w-0 truncate font-mono" title={runId}>

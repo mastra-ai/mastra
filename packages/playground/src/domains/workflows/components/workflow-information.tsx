@@ -27,7 +27,6 @@ type WorkflowActionProps = Pick<
   | 'createWorkflowRun'
   | 'streamWorkflow'
   | 'resumeWorkflow'
-  | 'streamResult'
   | 'isStreamingWorkflow'
   | 'isCancellingWorkflowRun'
   | 'cancelWorkflowRun'
@@ -134,7 +133,6 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
   const {
     createWorkflowRun,
     streamWorkflow,
-    streamResult,
     isStreamingWorkflow,
     observeWorkflowStream,
     resumeWorkflow,
@@ -146,8 +144,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
 
   const { setSelectedStepId } = useWorkflowSelectedStep();
 
-  const isCurrentRunFinished = ['success', 'failed', 'canceled', 'bailed'].includes(streamResult?.status ?? '');
-  const showNewRunButton = Boolean(initialRunId || contextRunId || isStreamingWorkflow) || isCurrentRunFinished;
+  const activeRunId = initialRunId || contextRunId;
 
   const actionProps = {
     workflowId,
@@ -156,7 +153,6 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
     createWorkflowRun,
     streamWorkflow,
     resumeWorkflow,
-    streamResult,
     isStreamingWorkflow,
     isCancellingWorkflowRun,
     cancelWorkflowRun,
@@ -194,7 +190,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
     >
       <WorkflowInformationTopSection
         workflowId={workflowId}
-        showNewRunButton={showNewRunButton}
+        showNewRunButton={Boolean(activeRunId)}
         onNewRun={resetToNewRun}
       >
         {initialRunId ? (
@@ -204,7 +200,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
         )}
       </WorkflowInformationTopSection>
 
-      <RecentWorkflowRunsSection workflowId={workflowId} activeRunId={initialRunId || contextRunId} />
+      <RecentWorkflowRunsSection workflowId={workflowId} activeRunId={activeRunId} />
     </div>
   );
 }

@@ -17,37 +17,9 @@ type StreamOperation = {
   reader?: ReadableStreamDefaultReader<StreamVNextChunkType>;
 };
 
-/**
- * Hook for streaming workflow execution with support for observing, resuming, and time-travel.
- *
- * @example
- * ```tsx
- * const {
- *   streamWorkflow,
- *   streamResult,
- *   isStreaming,
- *   observeWorkflowStream,
- *   closeStreamsAndReset,
- *   resumeWorkflowStream,
- *   timeTravelWorkflowStream,
- * } = useStreamWorkflow({
- *   debugMode: true,
- *   tracingOptions: { enabled: true },
- *   onError: (error, defaultMessage) => console.error(defaultMessage, error),
- * });
- *
- * // Start streaming a workflow
- * await streamWorkflow.mutateAsync({
- *   workflowId: 'my-workflow',
- *   runId: 'run-123',
- *   inputData: { key: 'value' },
- *   requestContext: {},
- * });
- * ```
- */
 export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStreamWorkflowParams) {
   const client = useMastraClient();
-  const [streamResult, setStreamResult] = useState<WorkflowStreamResult>({} as WorkflowStreamResult);
+  const [streamResult, setStreamResult] = useState<WorkflowStreamResult>();
   const [isStreaming, setIsStreaming] = useState(false);
   const activeStream = useRef<StreamOperation | undefined>(undefined);
   const isMountedRef = useRef(true);
@@ -74,7 +46,6 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
   async function consumeStream(
     openStream: (signal: AbortSignal) => Promise<ReadableStream<StreamVNextChunkType> | undefined>,
     defaultMessage: string,
-    initialResult?: WorkflowStreamResult,
   ) {
     if (!isMountedRef.current) return;
     closeActiveStream();
@@ -82,7 +53,6 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
     activeStream.current = operation;
     const { signal } = operation.controller;
     setIsStreaming(true);
-    if (initialResult) setStreamResult(initialResult);
 
     try {
       const stream = await openStream(signal);
@@ -124,43 +94,37 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
   }
 
   const streamWorkflow = useMutation<void, Error, StreamWorkflowParams>(
-    ({ workflowId, runId, inputData, initialState, requestContext, perStep }) =>
-      consumeStream(
-        async signal => {
-          const run = await client.getWorkflow(workflowId).createRun({ runId });
-          if (signal.aborted) return;
-          return run.stream({
-            inputData,
-            initialState,
-            requestContext,
-            closeOnSuspend: true,
-            tracingOptions,
-            perStep: perStep ?? debugMode,
-          });
-        },
-        'Error streaming workflow',
-        { input: inputData } as WorkflowStreamResult,
-      ),
+    ({ workflowId, runId, inputData, initialState, requestContext, perStep }) => {
+      setStreamResult({ status: 'pending', input: inputData, steps: {} });
+      return consumeStream(async signal => {
+        const run = await client.getWorkflow(workflowId).createRun({ runId });
+        if (signal.aborted) return;
+        return run.stream({
+          inputData,
+          initialState,
+          requestContext,
+          closeOnSuspend: true,
+          tracingOptions,
+          perStep: perStep ?? debugMode,
+        });
+      }, 'Error streaming workflow');
+    },
   );
 
   const observeWorkflowStream = useMutation<void, Error, ObserveWorkflowStreamParams>(
     async ({ workflowId, runId, storeRunResult }) => {
       if (!isMountedRef.current) return;
+      setStreamResult(storeRunResult ?? undefined);
       if (storeRunResult?.status === 'suspended') {
         closeActiveStream();
-        setStreamResult(storeRunResult);
         setIsStreaming(false);
         return;
       }
-      await consumeStream(
-        async signal => {
-          const run = await client.getWorkflow(workflowId).createRun({ runId });
-          if (signal.aborted) return;
-          return run.observeStream();
-        },
-        'Error observing workflow',
-        (storeRunResult || {}) as WorkflowStreamResult,
-      );
+      await consumeStream(async signal => {
+        const run = await client.getWorkflow(workflowId).createRun({ runId });
+        if (signal.aborted) return;
+        return run.observeStream();
+      }, 'Error observing workflow');
     },
   );
 
@@ -190,7 +154,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
   const closeStreamsAndReset = useCallback(() => {
     closeActiveStream();
     setIsStreaming(false);
-    setStreamResult({} as WorkflowStreamResult);
+    setStreamResult(undefined);
   }, [closeActiveStream]);
 
   return {

@@ -21,9 +21,7 @@ import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 export interface ResumeStepParams {
   stepId: string | string[];
   runId: string;
-  suspendPayload: any;
-  resumeData: any;
-  isLoading: boolean;
+  resumeData: Record<string, unknown>;
 }
 
 export interface WorkflowSuspendedStepsProps {
@@ -120,6 +118,17 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
   const [isPayloadOpen, setIsPayloadOpen] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
 
+  const resumeWithResponse = async (resumeData: Record<string, unknown>) => {
+    setIsResuming(true);
+    try {
+      await onResume({ stepId: step.stepId.split('.'), runId: step.runId, resumeData });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error resuming workflow');
+    } finally {
+      setIsResuming(false);
+    }
+  };
+
   return (
     <div className="[&+&]:border-border1/50 space-y-5 p-5 [&+&]:border-t">
       <div className="space-y-2">
@@ -191,22 +200,7 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
             collapsible={false}
             hideHeading
             hideInputTypeLabel
-            onSubmit={async data => {
-              setIsResuming(true);
-              try {
-                await onResume({
-                  stepId: step.stepId.split('.'),
-                  runId: step.runId,
-                  suspendPayload: step.suspendPayload,
-                  resumeData: data,
-                  isLoading: false,
-                });
-              } catch (error) {
-                toast.error(error instanceof Error ? error.message : 'Error resuming workflow');
-              } finally {
-                setIsResuming(false);
-              }
-            }}
+            onSubmit={resumeWithResponse}
           />
         </div>
       </div>

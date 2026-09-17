@@ -27,6 +27,7 @@ import { isInterruptedTaskState, isTerminalTaskState } from '../a2a/task-state';
 import { applyUpdateToTask, loadOrCreateTask, resolveTaskMemory } from '../a2a/tasks';
 import {
   a2aAgentIdPathParams,
+  a2aV1MethodMap,
   agentExecutionBodySchema,
   agentCardResponseSchema,
   agentExecutionResponseSchema,
@@ -2368,6 +2369,10 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
   },
 });
 
+function isV1Method(method: string): method is keyof typeof a2aV1MethodMap {
+  return Object.hasOwn(a2aV1MethodMap, method);
+}
+
 export const AGENT_EXECUTION_ROUTE = createRoute({
   method: 'POST',
   path: '/a2a/:agentId',
@@ -2380,12 +2385,19 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
   tags: ['Agent-to-Agent'],
   requiresAuth: true,
   handler: async ({ mastra, agentId, requestContext, taskStore, abortSignal, request, ...bodyParams }) => {
-    const { id: requestId, method } = bodyParams;
+    const { id: requestId } = bodyParams;
+    let { method } = bodyParams;
     const params = 'params' in bodyParams ? bodyParams.params : undefined;
 
     let protocolVersion: A2AProtocolVersion;
     try {
       protocolVersion = resolveA2AProtocolVersion(request);
+      if (isV1Method(method)) {
+        if (protocolVersion !== '1.0') {
+          throw MastraA2AError.methodNotFound(method);
+        }
+        method = a2aV1MethodMap[method];
+      }
     } catch (error) {
       return createA2AJsonResponse(normalizeError(error, requestId));
     }

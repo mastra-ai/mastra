@@ -19,33 +19,43 @@ export function formatTimelineDuration(durationMs: number) {
   return `${Number((durationMs / 1000).toPrecision(3))}s`;
 }
 
+type StepSpan = { start: number; end: number };
+
+const isStepRunning = (step: Step) => step.status === 'running' && step.endedAt === undefined;
+
+function measureStep(step: Step, now: number): StepSpan | undefined {
+  const start = step.startedAt;
+  if (start === undefined || !Number.isFinite(start)) return undefined;
+  const end = isStepRunning(step) ? Math.max(now, start) : step.endedAt;
+  if (end === undefined || !Number.isFinite(end) || end < start) return undefined;
+  return { start, end };
+}
+
 export function buildTimeline(steps: Record<string, Step>, now: number): TimelineRow[] {
   const entries = Object.entries(steps)
     .filter(([key]) => !isInputKey(key))
-    .sort(([aId, a], [bId, b]) => a.startedAt - b.startedAt || aId.localeCompare(bId))
-    .map(([stepId, step]) => {
-      const isRunning = step.status === 'running' && step.endedAt === undefined;
-      const end = isRunning ? Math.max(now, step.startedAt) : step.endedAt;
-      const hasTiming =
-        Number.isFinite(step.startedAt) && end !== undefined && Number.isFinite(end) && end >= step.startedAt;
-      return { stepId, step, isRunning, end: hasTiming ? end : undefined };
-    });
-  const measured = entries.filter(entry => entry.end !== undefined);
-  const runStart = measured.reduce(
-    (start, { step }) => Math.min(start, step.startedAt),
-    measured[0]?.step.startedAt ?? 0,
-  );
-  const runEnd = measured.reduce((latest, { end }) => Math.max(latest, end ?? runStart), runStart);
+    .map(([stepId, step]) => ({ stepId, step, span: measureStep(step, now) }))
+    .sort((a, b) => (a.span?.start ?? Infinity) - (b.span?.start ?? Infinity) || a.stepId.localeCompare(b.stepId));
+  const spans = entries.flatMap(entry => (entry.span ? [entry.span] : []));
+  const runStart = Math.min(...spans.map(span => span.start));
+  const runEnd = Math.max(runStart, ...spans.map(span => span.end));
   const totalMs = Math.max(runEnd - runStart, 1);
 
-  return entries.map(({ stepId, step, isRunning, end }) => {
+  return entries.map(({ stepId, step, span }) => {
     let timing: TimelineRow['timing'];
-    if (end !== undefined) {
-      const durationMs = Math.max(0, end - step.startedAt);
-      const offsetPct = Math.min(((step.startedAt - runStart) / totalMs) * 100, 100 - MIN_WIDTH_PCT);
+    if (span) {
+      const durationMs = span.end - span.start;
+      const offsetPct = Math.min(((span.start - runStart) / totalMs) * 100, 100 - MIN_WIDTH_PCT);
       const widthPct = Math.min(Math.max((durationMs / totalMs) * 100, MIN_WIDTH_PCT), 100 - offsetPct);
       timing = { durationMs, offsetPct, widthPct };
     }
-    return { stepId, step, status: step.status, timing, isRunning, isNestedEntry: isNestedTimelineEntry(stepId) };
+    return {
+      stepId,
+      step,
+      status: step.status,
+      timing,
+      isRunning: isStepRunning(step),
+      isNestedEntry: isNestedTimelineEntry(stepId),
+    };
   });
 }

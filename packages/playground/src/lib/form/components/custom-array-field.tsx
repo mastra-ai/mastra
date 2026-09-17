@@ -3,7 +3,7 @@ import { getLabel } from '@autoform/core';
 import { useAutoForm } from '@autoform/react';
 import React from 'react';
 import { useFieldArray, useFormContext } from 'react-hook-form';
-import { ArrayItemPathContext } from '../field-context';
+import { FieldPathContext } from '../field-context';
 import { CustomAutoFormField } from './custom-auto-form-field';
 
 export const CustomArrayField: React.FC<{
@@ -40,11 +40,11 @@ export const CustomArrayField: React.FC<{
   return (
     <uiComponents.ArrayWrapper label={getLabel(field)} field={field} onAddItem={() => append(defaultValue)}>
       {fields.map((item, index) => (
-        <ArrayItemPathContext key={item.id} value={[...path, index.toString()].join('.')}>
+        <FieldPathContext key={item.id} value={[...path, index.toString()].join('.')}>
           <uiComponents.ArrayElementWrapper onRemove={() => remove(index)} index={index}>
             <CustomAutoFormField field={subField} path={[...path, index.toString()]} />
           </uiComponents.ArrayElementWrapper>
-        </ArrayItemPathContext>
+        </FieldPathContext>
       ))}
     </uiComponents.ArrayWrapper>
   );

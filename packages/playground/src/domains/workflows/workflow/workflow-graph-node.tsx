@@ -78,8 +78,8 @@ const WorkflowStepCard = ({
       isWaiting={isWaiting}
       isHovered={isHovered}
       onHoverChange={isHovered => setHoverStepId(isHovered ? stepKey : null)}
-      duration={step?.duration ?? data.duration}
-      date={step?.date ?? data.date}
+      duration={data.duration}
+      date={data.date}
       isForEach={data.isForEach}
       foreachProgress={step?.foreachProgress}
       mapConfig={mapConfig}

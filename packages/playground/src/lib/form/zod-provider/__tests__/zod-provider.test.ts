@@ -91,19 +91,42 @@ describe('CustomZodProvider.validateSchema', () => {
   });
 
   describe('when explicit empty values satisfy the schema', () => {
-    it('preserves empty collections, required strings, and nullable values', () => {
+    it('preserves empty collections, cleared defaults, and nullable values', () => {
       const provider = new CustomZodProvider(
         z.object({
           documents: z.array(z.string()),
           options: z.object({}).optional(),
-          details: z.object({ label: z.string() }).optional(),
-          note: z.string(),
+          note: z.string().default('Default note'),
           choice: z.string().nullable().optional(),
         }),
       );
-      const input = { documents: [], options: {}, details: { label: '' }, note: '', choice: null };
+      const input = { documents: [], options: {}, note: '', choice: null };
 
       expect(provider.validateSchema(input)).toEqual({ success: true, data: input });
+    });
+  });
+
+  describe('when a required text field is left blank', () => {
+    it('reports it as missing instead of submitting an empty string', () => {
+      const provider = new CustomZodProvider(
+        z.object({ note: z.string(), details: z.object({ label: z.string() }).optional() }),
+      );
+
+      expect(provider.validateSchema({ note: '', details: { label: '' } })).toEqual({
+        success: false,
+        errors: [{ path: ['note'], message: 'Required' }],
+      });
+    });
+  });
+
+  describe('when a record entry is left blank', () => {
+    it('omits the entry instead of rejecting the blank string', () => {
+      const provider = new CustomZodProvider(z.object({ limits: z.record(z.string(), z.number().optional()) }));
+
+      expect(provider.validateSchema({ limits: { threshold: '', retries: 3 } })).toEqual({
+        success: true,
+        data: { limits: { retries: 3 } },
+      });
     });
   });
 
@@ -115,6 +138,47 @@ describe('CustomZodProvider.validateSchema', () => {
       const input = { documents: [{ title: '' }] };
 
       expect(provider.validateSchema(input)).toEqual({ success: true, data: input });
+    });
+  });
+  describe('when a union option has a blank optional field', () => {
+    it('normalizes that field before the union picks an option', () => {
+      const provider = new CustomZodProvider(
+        z.object({
+          target: z.union([z.object({ limit: z.number().optional() }), z.object({ name: z.string().min(1) })]),
+        }),
+      );
+
+      expect(provider.validateSchema({ target: { limit: '', name: '' } })).toEqual({
+        success: true,
+        data: { target: {} },
+      });
+    });
+  });
+
+  describe('when an optional union group is left blank', () => {
+    it('omits the group', () => {
+      const provider = new CustomZodProvider(
+        z.object({
+          target: z.union([z.object({ a: z.string().min(1) }), z.object({ b: z.string().min(1) })]).optional(),
+        }),
+      );
+
+      expect(provider.validateSchema({ target: { a: '', b: '' } })).toEqual({ success: true, data: {} });
+    });
+  });
+
+  describe('when an intersection side has a blank optional field', () => {
+    it('normalizes both sides before validating', () => {
+      const provider = new CustomZodProvider(
+        z.object({
+          target: z.intersection(z.object({ id: z.string() }), z.object({ limit: z.number().optional() })),
+        }),
+      );
+
+      expect(provider.validateSchema({ target: { id: 'a', limit: '' } })).toEqual({
+        success: true,
+        data: { target: { id: 'a' } },
+      });
     });
   });
 });

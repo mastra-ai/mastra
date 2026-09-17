@@ -6818,7 +6818,6 @@ export type ProviderModelsMap = {
     'kimi-k2.6',
     'kimi-k2.7-code',
     'kimi-k3',
-    'llama-3.1-405b-instruct',
     'llama-3.1-8b-instruct',
     'llama-3.3-70b-instruct',
     'minicpm-v-4.5',

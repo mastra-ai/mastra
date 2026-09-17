@@ -2,7 +2,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useId, useState } from 'react';
 import type { WorkflowInputDataProps } from '../workflow-input-data';
-import { getProcessorMessage, getProcessorPhase, updateProcessorMessage, withPhaseRole } from './processor-input';
+import { getProcessorMessage, updateProcessorMessage, withPhaseRole } from './processor-input';
+import type { ProcessorDraft } from './processor-input';
 import { FormSubmitRow } from '@/lib/form/components/form-submit-row';
 
 const PROCESSOR_PHASES = [
@@ -13,9 +14,15 @@ const PROCESSOR_PHASES = [
   { value: 'outputStep', label: 'Output Step - Process after each LLM response' },
 ];
 
+type WorkflowProcessorInputProps = Omit<WorkflowInputDataProps, 'defaultValues'> & {
+  value: ProcessorDraft;
+  onChange: (draft: ProcessorDraft) => void;
+};
+
 export const WorkflowProcessorInput = ({
   schema,
-  defaultValues,
+  value,
+  onChange,
   isSubmitLoading,
   submitButtonLabel,
   onSubmit,
@@ -25,18 +32,15 @@ export const WorkflowProcessorInput = ({
   submitButtonIcon,
   submitButtonVariant,
   submitButtonFullWidth,
-  onValuesChange,
-}: WorkflowInputDataProps & { onValuesChange: (value: unknown) => void }) => {
+}: WorkflowProcessorInputProps) => {
   const messageId = useId();
   const phaseId = useId();
-  const message = getProcessorMessage(defaultValues);
-  const phase = getProcessorPhase(defaultValues);
   const [errors, setErrors] = useState<string[]>([]);
 
   const handleSubmit = () => {
     setErrors([]);
 
-    const result = schema.safeParse(defaultValues);
+    const result = schema.safeParse(value);
     if (!result.success) {
       setErrors(result.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`));
       return;
@@ -66,10 +70,10 @@ export const WorkflowProcessorInput = ({
           Phase
         </Txt>
         <Select
-          value={phase}
+          value={value.phase}
           onValueChange={phase => {
             setErrors([]);
-            onValuesChange(withPhaseRole({ ...defaultValues, phase }));
+            onChange(withPhaseRole({ ...value, phase }));
           }}
           disabled={isSubmitLoading}
         >
@@ -77,15 +81,15 @@ export const WorkflowProcessorInput = ({
             <SelectValue placeholder="Select phase" />
           </SelectTrigger>
           <SelectContent>
-            {PROCESSOR_PHASES.map(p => (
-              <SelectItem key={p.value} value={p.value}>
-                {p.value}
+            {PROCESSOR_PHASES.map(phaseOption => (
+              <SelectItem key={phaseOption.value} value={phaseOption.value}>
+                {phaseOption.value}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
         <Txt variant="ui-xs" className="text-neutral4">
-          {PROCESSOR_PHASES.find(p => p.value === phase)?.label}
+          {PROCESSOR_PHASES.find(phaseOption => phaseOption.value === value.phase)?.label}
         </Txt>
       </div>
 
@@ -95,10 +99,10 @@ export const WorkflowProcessorInput = ({
         </Txt>
         <textarea
           id={messageId}
-          value={message}
+          value={getProcessorMessage(value)}
           onChange={event => {
             setErrors([]);
-            onValuesChange(withPhaseRole(updateProcessorMessage(defaultValues, event.target.value)));
+            onChange(withPhaseRole(updateProcessorMessage(value, event.target.value)));
           }}
           placeholder="Enter a test message..."
           rows={4}
