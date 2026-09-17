@@ -1184,12 +1184,12 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
       html_url?: string;
       updated_at?: string;
     }>(`select c.author_login, c.author_type, c.is_bot, c.body, json_extract(c.raw_json, '$.html_url') as html_url,
-                 coalesce(c.updated_at_gh, c.created_at_gh) as updated_at
+                 coalesce(c.updated_at_gh, c.created_at_gh, json_extract(c.raw_json, '$.submitted_at')) as updated_at
             from comments c
             join threads t on t.id=c.thread_id
             join repositories r on r.id=t.repo_id
            where r.owner=${owner} and r.name=${repo} and t.number=${number}
-           order by coalesce(c.updated_at_gh, c.created_at_gh) desc
+           order by coalesce(c.updated_at_gh, c.created_at_gh, json_extract(c.raw_json, '$.submitted_at')) desc
            limit 20`);
     const latestComment = latestComments[0];
 
