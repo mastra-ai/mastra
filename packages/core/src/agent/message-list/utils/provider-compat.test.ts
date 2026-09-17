@@ -2,12 +2,7 @@ import type { ModelMessage } from '@internal/ai-sdk-v5';
 import { describe, expect, it, vi } from 'vitest';
 import type { IMastraLogger } from '../../../logger';
 import type { MastraDBMessage } from '../state/types';
-import {
-  dropCrossProviderExecutedParts,
-  pairOrphanedToolCalls,
-  sanitizeOrphanedReasoningItems,
-  sanitizeOrphanedToolPairs,
-} from './provider-compat';
+import { dropCrossProviderExecutedParts, pairOrphanedToolCalls, sanitizeOrphanedToolPairs } from './provider-compat';
 
 const assistantWithToolCalls = (...callIds: string[]): ModelMessage => ({
   role: 'assistant',
@@ -503,120 +498,5 @@ describe('dropCrossProviderExecutedParts', () => {
     );
 
     expect(messages).toEqual(snapshot);
-  });
-});
-
-describe('sanitizeOrphanedReasoningItems', () => {
-  const reasoningPart = (itemId: string) => ({
-    type: 'reasoning' as const,
-    text: '',
-    providerOptions: { openai: { itemId } },
-  });
-
-  const textPart = (text: string, itemId?: string) => ({
-    type: 'text' as const,
-    text,
-    ...(itemId ? { providerOptions: { openai: { itemId } } } : {}),
-  });
-
-  const userMessage = (text: string): ModelMessage => ({ role: 'user', content: text });
-
-  it('returns empty input untouched', () => {
-    expect(sanitizeOrphanedReasoningItems([])).toEqual([]);
-  });
-
-  it('preserves a message itemId when the turn group has a reasoning item', () => {
-    const messages: ModelMessage[] = [
-      userMessage('hi'),
-      { role: 'assistant', content: [reasoningPart('rs_1'), textPart('Four', 'msg_1')] } as ModelMessage,
-    ];
-
-    expect(sanitizeOrphanedReasoningItems(messages)).toEqual(messages);
-  });
-
-  it('strips an orphaned message itemId when the turn group has no reasoning item', () => {
-    const messages: ModelMessage[] = [
-      userMessage('hi'),
-      {
-        role: 'assistant',
-        content: [textPart('Four', 'msg_1')],
-      } as ModelMessage,
-    ];
-
-    const result = sanitizeOrphanedReasoningItems(messages);
-    const assistant = result[1] as ModelMessage & { content: any[] };
-    expect(assistant.content[0].providerOptions.openai.itemId).toBeUndefined();
-    // other providerOptions.openai fields survive (mirrors #23323)
-    expect(assistant.content[0].providerOptions.openai).toEqual({});
-  });
-
-  it('preserves other openai fields when stripping the itemId', () => {
-    const messages: ModelMessage[] = [
-      userMessage('hi'),
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text',
-            text: 'Four',
-            providerOptions: { openai: { itemId: 'msg_1', reasoningEncryptedContent: null } },
-          },
-        ],
-      } as ModelMessage,
-    ];
-
-    const result = sanitizeOrphanedReasoningItems(messages);
-    const assistant = result[1] as ModelMessage & { content: any[] };
-    expect(assistant.content[0].providerOptions.openai).toEqual({ reasoningEncryptedContent: null });
-  });
-
-  it('keeps a text-only message when its reasoning partner is in an earlier message of the same turn', () => {
-    const messages: ModelMessage[] = [
-      userMessage('book a meeting'),
-      {
-        role: 'assistant',
-        content: [reasoningPart('rs_1'), { type: 'tool-call', toolCallId: 'call_1', toolName: 'book', input: {} }],
-      } as ModelMessage,
-      {
-        role: 'tool',
-        content: [
-          {
-            type: 'tool-result',
-            toolCallId: 'call_1',
-            toolName: 'book',
-            output: { type: 'json', value: { ok: true } },
-          },
-        ],
-      } as ModelMessage,
-      { role: 'assistant', content: [textPart('Booked', 'msg_1')] } as ModelMessage,
-    ];
-
-    const result = sanitizeOrphanedReasoningItems(messages);
-    const lastAssistant = result[3] as ModelMessage & { content: any[] };
-    expect(lastAssistant.content[0].providerOptions.openai.itemId).toBe('msg_1');
-  });
-
-  it('only strips the reasoning-less group when groups are split by a user message', () => {
-    const messages: ModelMessage[] = [
-      userMessage('q1'),
-      { role: 'assistant', content: [reasoningPart('rs_1'), textPart('a1', 'msg_1')] } as ModelMessage,
-      userMessage('q2'),
-      { role: 'assistant', content: [textPart('a2', 'msg_2')] } as ModelMessage,
-    ];
-
-    const result = sanitizeOrphanedReasoningItems(messages);
-    const groupA = result[1] as ModelMessage & { content: any[] };
-    const groupB = result[3] as ModelMessage & { content: any[] };
-    expect(groupA.content[1].providerOptions.openai.itemId).toBe('msg_1');
-    expect(groupB.content[0].providerOptions.openai.itemId).toBeUndefined();
-  });
-
-  it('leaves text parts without an openai itemId untouched', () => {
-    const messages: ModelMessage[] = [
-      userMessage('hi'),
-      { role: 'assistant', content: [textPart('plain')] } as ModelMessage,
-    ];
-
-    expect(sanitizeOrphanedReasoningItems(messages)).toEqual(messages);
   });
 });

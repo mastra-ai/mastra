@@ -12,7 +12,6 @@ import type { AIV5Type, AIV6Type } from '../types';
 import {
   ensureAnthropicCompatibleMessages,
   pairOrphanedToolCalls,
-  sanitizeOrphanedReasoningItems,
   sanitizeOrphanedToolPairs,
 } from '../utils/provider-compat';
 import {
@@ -712,9 +711,9 @@ export function aiV5UIMessagesToAIV5ModelMessages(
 
   switch (mode) {
     case 'prompt':
-      return sanitizeOrphanedReasoningItems(sanitizeOrphanedToolPairs(anthropicCompat));
+      return sanitizeOrphanedToolPairs(anthropicCompat);
     case 'prompt-with-suspended':
-      return sanitizeOrphanedReasoningItems(pairOrphanedToolCalls(anthropicCompat));
+      return pairOrphanedToolCalls(anthropicCompat);
     default:
       return anthropicCompat;
   }
