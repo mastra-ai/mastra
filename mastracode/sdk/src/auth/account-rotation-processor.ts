@@ -23,7 +23,7 @@ import { TripWire } from '@mastra/core/agent';
 import type { ProcessAPIErrorArgs, ProcessInputArgs, ProcessInputResult, Processor } from '@mastra/core/processors';
 
 import { resolveCredentialStore } from '../agents/credential-resolver.js';
-import { listResolvableModePacks, resolveModel } from '../agents/model.js';
+import { listResolvableModePacks, resolveModel, resolveRequestThinkingLevel } from '../agents/model.js';
 import { resolveModePackFallbackChain } from '../onboarding/packs.js';
 import {
   findModePackForModel,
@@ -771,13 +771,6 @@ export class AccountRotationProcessor implements Processor {
   }
 
   /**
-   * Pool done for this request: every instance recorded in the tried-set and
-   * a `to: null` part emitted. Returns `retry: false`, which today surfaces
-   * the error as before; segment 03's fallback chain turns this exact return
-   * into a pack hop. Silent (no part) when the provider has no registry at
-   * all — there are no accounts to declare unavailable.
-   */
-  /**
    * The request's pack cascade, computed once from the session's pack and
    * cached in processor state. Truncated at the first pack that lacks the
    * session mode's model — mirroring getDynamicModel's truncation — so the
@@ -792,7 +785,10 @@ export class AccountRotationProcessor implements Processor {
       return (args.state.packCascade as PackCascade | null) ?? null;
     }
     const controller = args.requestContext?.get('controller') as
-      | { session?: { modelId?: unknown; modeId?: unknown }; getState?: () => { activeModelPackId?: unknown } }
+      | {
+          session?: { modelId?: unknown; modeId?: unknown };
+          getState?: () => { activeModelPackId?: unknown; thinkingLevel?: unknown };
+        }
       | undefined;
     const modelId = controller?.session?.modelId;
     if (typeof modelId !== 'string' || modelId.length === 0) {
@@ -805,7 +801,8 @@ export class AccountRotationProcessor implements Processor {
         : 'build';
     const settings = loadSettings(this.options.settingsPath);
     const packs = listResolvableModePacks(settings);
-    const statePackId = controller?.getState?.()?.activeModelPackId ?? settings.models.activeModelPackId;
+    const controllerState = controller?.getState?.();
+    const statePackId = controllerState?.activeModelPackId ?? settings.models.activeModelPackId;
     const activePack = findModePackForModel(
       settings,
       packs,
@@ -831,9 +828,21 @@ export class AccountRotationProcessor implements Processor {
         // Mirror getDynamicModel's truncation: an entry whose model cannot
         // resolve (e.g. unconnected provider in deployed fail-closed mode)
         // ends the cascade here so a later hop is never announced for a pack
-        // core's fallback array cannot reach.
+        // core's fallback array cannot reach. Resolved with the exact options
+        // getDynamicModel uses (agents/model.ts) — including thinkingLevel —
+        // so the probe can't pass where the chain builder fails.
         try {
-          resolveModel(entryModelId, { remapForCodexOAuth: true, requestContext: args.requestContext });
+          resolveModel(entryModelId, {
+            thinkingLevel: resolveRequestThinkingLevel(
+              {
+                state: { thinkingLevel: controllerState?.thinkingLevel },
+                session: { modeId },
+              },
+              this.options.settingsPath,
+            ),
+            remapForCodexOAuth: true,
+            requestContext: args.requestContext,
+          });
         } catch {
           break;
         }
@@ -950,6 +959,13 @@ export class AccountRotationProcessor implements Processor {
     cascade.position++;
   }
 
+  /**
+   * Pool done for this request: every instance recorded in the tried-set and
+   * a `to: null` part emitted. Returns `retry: false` so core's fallback
+   * array can hop to the next pack (announced by `emitPackFallbackPart`).
+   * Silent on the account part when the provider has no registry at all —
+   * there are no accounts to declare unavailable, but the hop still applies.
+   */
   private async declarePoolUnavailable(
     args: ProcessAPIErrorArgs,
     providerId: string,

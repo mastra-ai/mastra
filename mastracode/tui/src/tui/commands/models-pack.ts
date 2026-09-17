@@ -1,7 +1,7 @@
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
-import { providerFromModelId } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { PACK_FALLBACK_STATE_KEY, providerFromModelId } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { setClipboardText } from '@mastra/code-sdk/clipboard/index';
 import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
@@ -252,7 +252,7 @@ async function askCustomPackAction(
       activate: activateActionDetail(getPackDetail(pack), loadSettings(), packs, pack.id),
       routing: accountRoutingActionDetail(ctx, pack),
       fallback: fallbackActionDetail(packs, pack.id),
-      edit: theme.fg('dim', '  Edit one setting at a time (Rename, plan, build, fast).'),
+      edit: theme.fg('dim', '  Edit one setting at a time (Rename, plan, build, fast, memory).'),
       share: theme.fg('dim', '  Copy shareable config to clipboard. Paste it to import elsewhere.'),
       delete: theme.fg('error', '  Permanently removes this custom pack from settings.'),
     };
@@ -775,8 +775,12 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
 
   await ctx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pack.id });
   await ctx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
+  // A manual switch supersedes any queued hop: getDynamicModel prefers the
+  // pending toModelId over the session model, so leaving the marker in place
+  // would override the user's choice until the hop landed.
+  await ctx.state.session.thread.setSetting({ key: PACK_FALLBACK_STATE_KEY, value: undefined });
   ctx.state.fallbackStatus = undefined;
-  await ctx.state.session.state.set({ activeModelPackId: pack.id });
+  await ctx.state.session.state.set({ activeModelPackId: pack.id, [PACK_FALLBACK_STATE_KEY]: null });
 
   const s = loadSettings();
   const modeDefaults: Record<string, string> = {};

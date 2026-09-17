@@ -54,7 +54,7 @@ export const customPackRenameActiveScenario = {
     await runtime.waitForScreenText(/Custom pack: Rename Source E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/Edit\s+Update this pack/i, terminal, 8_000);
 
-    // Rows: [Activate, Edit, Share, Set fallback…, Delete].
+    // Rows: [Activate, Edit, Share, Set subscription routing…, Set fallback…, Delete].
     terminal.write('\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/Edit custom pack: Rename Source E2E/i, terminal, 8_000);
@@ -69,7 +69,8 @@ export const customPackRenameActiveScenario = {
     await runtime.waitForScreenText(/Edit custom pack: Renamed Active E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/Rename → Renamed Active E2E/i, terminal, 8_000);
 
-    terminal.write('\x1b[B\x1b[B\x1b[B\x1b[B');
+    // Edit rows: [rename, plan, build, fast, memory, Save] — five downs lands on Save.
+    terminal.write('\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/Renamed Active E2E/i, terminal, 8_000);
 
