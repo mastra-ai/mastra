@@ -45,7 +45,10 @@ export const skillTabAutocompleteScenario = {
     await runtime.waitForScreenText(/│ \/ skill\/tab-complete-e2e/i, terminal, 10_000);
     runtime.printScreen('after Tab', terminal);
 
-    terminal.write(` ${SKILL_ARGS}`);
+    // No leading space here on purpose: the separator has to come from the Tab
+    // completion itself, otherwise this scenario would pass even if Tab stopped
+    // appending the trailing space and glued the arguments onto the skill name.
+    terminal.write(SKILL_ARGS);
     await terminal.flushInput?.();
     await new Promise(resolve => setTimeout(resolve, 200));
     terminal.write(ENTER);
