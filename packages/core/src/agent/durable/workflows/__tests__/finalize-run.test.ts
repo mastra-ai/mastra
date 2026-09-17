@@ -110,6 +110,53 @@ describe('runDurableFinishSideEffects', () => {
     expect(generateThreadTitle).toHaveBeenCalledTimes(1);
   });
 
+  it('does not hold the finish back while the title is still being generated', async () => {
+    let finishTitle: () => void = () => {};
+    const generateThreadTitle = vi.fn(
+      () =>
+        new Promise<void>(resolve => {
+          finishTitle = resolve;
+        }),
+    );
+
+    globalRunRegistry.set('run-1', {
+      isPlaceholder: false,
+      outputProcessors: [],
+      generateThreadTitle,
+    } as unknown as RunRegistryEntry);
+
+    // Resolves although the title call is still pending.
+    const result = await runDurableFinishSideEffects({
+      runId: 'run-1',
+      initData: makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: true }),
+      messageListState: makeMessageListState(),
+    });
+
+    expect(result.messageListState).toBeDefined();
+    expect(generateThreadTitle).toHaveBeenCalledTimes(1);
+    finishTitle();
+  });
+
+  it('does not fail the finish when title generation rejects later', async () => {
+    const generateThreadTitle = vi.fn().mockRejectedValue(new Error('title model down'));
+
+    globalRunRegistry.set('run-1', {
+      isPlaceholder: false,
+      outputProcessors: [],
+      generateThreadTitle,
+    } as unknown as RunRegistryEntry);
+
+    await expect(
+      runDurableFinishSideEffects({
+        runId: 'run-1',
+        initData: makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: true }),
+        messageListState: makeMessageListState(),
+      }),
+    ).resolves.toBeDefined();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(generateThreadTitle).toHaveBeenCalledTimes(1);
+  });
+
   it('deserializes into the run MessageList the stream is already holding', async () => {
     const existing = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' });
 

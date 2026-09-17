@@ -215,9 +215,12 @@ export async function runDurableFinishSideEffects({
       tracingContext,
     };
 
-    try {
-      if (registryEntry?.generateThreadTitle) {
-        await registryEntry.generateThreadTitle(titleArgs);
+    // Fire-and-forget, like Agent.generate()/stream(): the answer is already written and
+    // saved, so a title model call must not hold the run's finish back by seconds.
+    const generateThreadTitle = registryEntry?.generateThreadTitle;
+    const titlePromise = (async () => {
+      if (generateThreadTitle) {
+        await generateThreadTitle(titleArgs);
       } else if (mastra) {
         const agent = mastra.getAgentById(initData.agentId);
         const titleMemory = memory ?? (await agent.getMemory({ requestContext: effectiveRequestContext }));
@@ -225,9 +228,10 @@ export async function runDurableFinishSideEffects({
           await generateDurableThreadTitle({ agent, memory: titleMemory, ...titleArgs });
         }
       }
-    } catch (error) {
+    })().catch(error => {
       effectiveLogger.warn('[DurableAgent] Error generating thread title', { runId, error });
-    }
+    });
+    void titlePromise;
   }
 
   return {
