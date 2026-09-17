@@ -23,6 +23,12 @@ async function collectIds(readPage: (page: number) => Promise<{ id: string }[]>,
   return ids;
 }
 
+/** Ids of one page must already be in id order (ascending or descending) when every timestamp is equal. */
+function expectPageInIdOrder(ids: string[], direction: 'ASC' | 'DESC') {
+  const sorted = [...ids].sort((a, b) => (direction === 'ASC' ? a.localeCompare(b) : b.localeCompare(a)));
+  expect(ids).toEqual(sorted);
+}
+
 describe('MemoryPG paging over rows that share one timestamp', () => {
   let pool: Pool;
   let store: MemoryPG;
@@ -95,6 +101,10 @@ describe('MemoryPG paging over rows that share one timestamp', () => {
             orderBy: { field: 'createdAt', direction },
           });
           if (page === 0) firstId = result.messages[0]!.id;
+          expectPageInIdOrder(
+            result.messages.map(message => message.id),
+            direction,
+          );
           return result.messages;
         },
         async () => {
@@ -136,6 +146,10 @@ describe('MemoryPG paging over rows that share one timestamp', () => {
             orderBy: { field: 'createdAt', direction },
           });
           if (page === 0) firstId = result.messages[0]!.id;
+          expectPageInIdOrder(
+            result.messages.map(message => message.id),
+            direction,
+          );
           return result.messages;
         },
         async () => {
