@@ -1,3 +1,4 @@
+import { ErrorBoundary } from '@mastra/playground-ui/components/ErrorBoundary';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useParams } from 'react-router';
@@ -12,6 +13,19 @@ import { WorkflowStepDetailProvider } from '@/domains/workflows/context/workflow
 import { useWorkflow } from '@/hooks/use-workflows';
 
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
+  const { workflowId, runId } = useParams();
+  return (
+    <ErrorBoundary
+      resetKeys={[workflowId, runId]}
+      title="Unable to display this workflow"
+      description="The workflow data could not be displayed. Try again or open another workflow."
+    >
+      <WorkflowRoute>{children}</WorkflowRoute>
+    </ErrorBoundary>
+  );
+};
+
+function WorkflowRoute({ children }: { children: React.ReactNode }) {
   const { workflowId, runId } = useParams();
   const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId);
 
@@ -39,12 +53,9 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
         <WorkflowStepDetailProvider key={workflowId}>
           <WorkflowRunProvider workflowId={workflowId} initialRunId={runId}>
             <WorkflowSelectedStepProvider>
-              <div className="h-full min-h-0">
+              <div className="flex h-full min-h-0 flex-col">
                 <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} />
-                <WorkflowLayoutUI
-                  workflowId={workflowId!}
-                  leftSlot={<WorkflowInformation workflowId={workflowId} initialRunId={runId} />}
-                >
+                <WorkflowLayoutUI leftSlot={<WorkflowInformation workflowId={workflowId} initialRunId={runId} />}>
                   {children}
                 </WorkflowLayoutUI>
               </div>
@@ -54,4 +65,4 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
       </SchemaRequestContextProvider>
     </TracingSettingsProvider>
   );
-};
+}

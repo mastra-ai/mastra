@@ -8,8 +8,6 @@ import type { ReactNode } from 'react';
 export type FormSubmitRowProps = {
   isSubmitLoading?: boolean;
   submitButtonLabel?: string;
-  disableSubmit?: boolean;
-  submitButtonClassName?: string;
   submitButtonIcon?: ReactNode;
   submitButtonVariant?: ButtonProps['variant'];
   submitButtonFullWidth?: boolean;
@@ -22,8 +20,6 @@ export type FormSubmitRowProps = {
 export const FormSubmitRow = ({
   isSubmitLoading,
   submitButtonLabel,
-  disableSubmit,
-  submitButtonClassName,
   submitButtonIcon,
   submitButtonVariant,
   submitButtonFullWidth,
@@ -43,8 +39,8 @@ export const FormSubmitRow = ({
         type={onSubmit ? 'button' : 'submit'}
         variant={submitButtonVariant}
         onClick={onSubmit}
-        disabled={isSubmitLoading || disableSubmit}
-        className={cn(submitButtonFullWidth && 'w-full justify-center', submitButtonClassName)}
+        disabled={isSubmitLoading}
+        className={cn(submitButtonFullWidth && 'w-full justify-center')}
       >
         {isSubmitLoading ? (
           <Icon>

@@ -18,8 +18,6 @@ interface DynamicFormProps {
   defaultValues?: any;
   isSubmitLoading?: boolean;
   submitButtonLabel?: string;
-  submitButtonClassName?: string;
-  disableSubmit?: boolean;
   submitButtonIcon?: ReactNode;
   submitButtonVariant?: ButtonProps['variant'];
   submitButtonFullWidth?: boolean;
@@ -45,8 +43,6 @@ export function DynamicForm({
   defaultValues,
   isSubmitLoading,
   submitButtonLabel,
-  submitButtonClassName,
-  disableSubmit,
   submitButtonIcon,
   submitButtonVariant,
   submitButtonFullWidth,
@@ -130,8 +126,6 @@ export function DynamicForm({
           <FormSubmitRow
             isSubmitLoading={isSubmitLoading}
             submitButtonLabel={submitButtonLabel}
-            submitButtonClassName={submitButtonClassName}
-            disableSubmit={disableSubmit}
             submitButtonIcon={submitButtonIcon}
             submitButtonVariant={submitButtonVariant}
             submitButtonFullWidth={submitButtonFullWidth}
@@ -146,8 +140,6 @@ export function DynamicForm({
       onSubmit,
       isSubmitLoading,
       submitButtonLabel,
-      submitButtonClassName,
-      disableSubmit,
       submitButtonIcon,
       submitButtonVariant,
       submitButtonFullWidth,
