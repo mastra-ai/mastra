@@ -90,6 +90,38 @@ describe('AuthStorage multi-account registry', () => {
     expect(onDisk[PROVIDER]).toEqual({ type: 'oauth', refresh: 'r1', access: 'a1', expires: FUTURE });
   });
 
+  it('heals a registry whose legacy slot was deleted by mirroring the active entry back into the slot', () => {
+    const active = accountRecord('r1', 'a1', { active: true, label: 'Work' });
+    const inactive = accountRecord('r2', 'a2', { label: 'Personal' });
+    const { storage, authPath } = makeStorage({
+      [`accounts:${active.id}`]: active,
+      [`accounts:${inactive.id}`]: inactive,
+    });
+
+    // Without the slot, isLoggedIn() would report logged-out while
+    // listAccounts() still lists accounts — the heal re-mirrors the slot.
+    expect(storage.isLoggedIn(PROVIDER)).toBe(true);
+    expect(storage.get(PROVIDER)).toEqual(oauthCred('r1', 'a1'));
+    expect(storage.listAccounts(PROVIDER)).toHaveLength(2);
+    expect(storage.listAccounts(PROVIDER).find(account => account.active)?.id).toBe(active.id);
+
+    const onDisk = readAuthJson(authPath);
+    expect(onDisk[PROVIDER]).toEqual({ type: 'oauth', refresh: 'r1', access: 'a1', expires: FUTURE });
+  });
+
+  it('activates the first registry entry when both slot and active marker are missing', () => {
+    const first = accountRecord('r1', 'a1');
+    const second = accountRecord('r2', 'a2');
+    const { storage } = makeStorage({
+      [`accounts:${first.id}`]: first,
+      [`accounts:${second.id}`]: second,
+    });
+
+    expect(storage.isLoggedIn(PROVIDER)).toBe(true);
+    expect(storage.get(PROVIDER)).toEqual(oauthCred('r1', 'a1'));
+    expect(storage.listAccounts(PROVIDER).find(account => account.active)?.id).toBe(first.id);
+  });
+
   it('never exposes a partial auth.json to a concurrently running legacy reader', async () => {
     const entry = accountRecord('r1', 'a1', { active: true, label: 'Work' });
     const padding = Object.fromEntries(

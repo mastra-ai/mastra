@@ -126,6 +126,10 @@ export class AuthStorage {
    *    slot wins and its tokens are adopted onto the active entry.
    * 3. A registry with no active entry (hand-edited) self-heals to its first
    *    entry; malformed `accounts:` values are skipped, never fatal.
+   * 4. A registry whose legacy slot disappeared (`remove()` deletes only the
+   *    slot) self-heals by mirroring the active entry's tokens back into the
+   *    slot, so `isLoggedIn()`/`getOAuthCredential()` keep agreeing with
+   *    `listAccounts()`.
    */
   private migrate(): void {
     let changed = false;
@@ -168,6 +172,28 @@ export class AuthStorage {
         }
       }
     }
+
+    // Case 4: registry entries without a legacy slot (the slot loop above
+    // only ever sees providers that still have one).
+    const registeredProviders = new Set<string>();
+    for (const key of Object.keys(this.data)) {
+      if (!key.startsWith('accounts:')) continue;
+      const providerId = key.slice('accounts:'.length).split(':')[0];
+      if (providerId) registeredProviders.add(providerId);
+    }
+    for (const providerId of registeredProviders) {
+      if (this.data[providerId]?.type === 'oauth') continue;
+      const entries = this.accountEntries(providerId);
+      if (entries.length === 0) continue;
+      let active = entries.find(entry => entry.active);
+      if (!active) {
+        active = entries[0]!;
+        this.data[this.accountKeyFor(active.id)] = { ...active, active: true };
+      }
+      this.data[providerId] = { type: 'oauth', ...credentialFieldsOf(active) };
+      changed = true;
+    }
+
     if (changed) this.save();
   }
 
