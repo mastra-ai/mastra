@@ -26,7 +26,6 @@ import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useReviewItems, useCompletedItems } from '../hooks/use-dataset-review-items';
 import { ProposalTag } from './proposal-tag';
-import { RouteItemOverlay } from '@/components/route-item-overlay';
 import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
@@ -70,7 +69,6 @@ export interface DatasetReviewProps {
    * to `null` when navigating away so a re-open of the same id retriggers selection).
    */
   featuredItemId?: string | null;
-  detailPanelVariant?: 'inline' | 'overlay';
   /** Rendered before the status/tag filters in the toolbar (e.g. an experiment picker). */
   toolbarStart?: ReactNode;
   /** Rendered at the end of the toolbar, after the bulk actions. */
@@ -87,7 +85,6 @@ export function DatasetReview({
   targetType,
   targetId,
   featuredItemId: featuredItemIdRequest,
-  detailPanelVariant = 'inline',
   toolbarStart,
   toolbarEnd,
   onCreateScorer,
@@ -509,17 +506,19 @@ export function DatasetReview({
     );
   }
 
-  const detailPanel = featuredItem ? (
+  const detailPanel = (
     <ExperimentResultDetail
-      className="h-full"
-      result={featuredItem}
-      scores={featuredScoresByItemId?.[featuredItem.itemId]}
+      result={featuredItem ?? undefined}
+      title={`Review item ${featuredItem?.id ?? ''}`}
+      scores={featuredItem ? featuredScoresByItemId?.[featuredItem.itemId] : undefined}
       experimentLink={
-        featuredItem.experimentId ? paths.experimentItemLink(featuredItem.experimentId, featuredItem.itemId) : undefined
+        featuredItem?.experimentId
+          ? paths.experimentItemLink(featuredItem.experimentId, featuredItem.itemId)
+          : undefined
       }
       tagVocabulary={datasetTagVocabulary}
       onTagsChange={
-        showCompleted
+        showCompleted || !featuredItem
           ? undefined
           : tags => {
               setItemTags(featuredItem.id, tags);
@@ -530,12 +529,12 @@ export function DatasetReview({
               }
             }
       }
-      onComplete={showCompleted ? undefined : () => completeItem(featuredItem.id)}
+      onComplete={showCompleted || !featuredItem ? undefined : () => completeItem(featuredItem.id)}
       onPrevious={toPreviousItem}
       onNext={toNextItem}
       onClose={() => setFeaturedItemId(null)}
     />
-  ) : null;
+  );
 
   return (
     <>
@@ -662,14 +661,8 @@ export function DatasetReview({
         </DialogContent>
       </Dialog>
 
-      {/* Main layout: List + Detail Panel */}
-      <PageLayout.MainArea
-        className={cn(
-          'grid h-full min-h-0 w-full grid-cols-1 gap-4',
-          detailPanelVariant === 'overlay' ? 'overflow-visible' : 'overflow-hidden',
-          featuredItem && detailPanelVariant === 'inline' && 'grid-cols-[1fr_1fr]',
-        )}
-      >
+      {/* Main layout: list; the detail opens as a drawer. */}
+      <PageLayout.MainArea className="grid h-full min-h-0 w-full grid-cols-1 gap-4 overflow-hidden">
         <div className="min-h-0 w-full overflow-hidden">
           {isLoadingDisplay ? (
             <div className="flex h-full items-center justify-center">
@@ -701,16 +694,7 @@ export function DatasetReview({
           )}
         </div>
 
-        {detailPanel &&
-          (detailPanelVariant === 'overlay' ? (
-            <RouteItemOverlay label={`Review item ${featuredItem?.id ?? ''}`}>
-              <div className="[&>section]:bg-surface3 h-full min-h-0 p-3 [&>section]:rounded-lg [&>section]:shadow-lg">
-                {detailPanel}
-              </div>
-            </RouteItemOverlay>
-          ) : (
-            detailPanel
-          ))}
+        {detailPanel}
       </PageLayout.MainArea>
     </>
   );
