@@ -18,6 +18,7 @@ import { Button } from '@/ds/components/Button/Button';
 import { comboboxStyles } from '@/ds/components/Combobox/combobox-styles';
 import { Kbd } from '@/ds/components/Kbd/kbd';
 import { Txt } from '@/ds/components/Txt/Txt';
+import { controlSizeClasses } from '@/ds/primitives/control-size';
 import { inputOutlineAndFocusStyle } from '@/ds/primitives/form-element';
 import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
@@ -239,7 +240,8 @@ export function FilterBarInput({
           ? comboboxStyles.searchInput
           : cn(
               inputOutlineAndFocusStyle,
-              'h-form-md w-48 min-w-24 rounded-lg px-2 text-ui-smd leading-ui-sm text-neutral6',
+              controlSizeClasses.md,
+              'w-48 min-w-24 px-2 leading-ui-sm text-neutral6',
               'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
               styles.inlineInput,
               className,

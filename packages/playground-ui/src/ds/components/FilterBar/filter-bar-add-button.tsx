@@ -7,6 +7,7 @@ import { FilterBarFieldLabel, fieldSegmentAccentStyle } from './filter-bar-chip'
 import { useFilterBarContext } from './filter-bar-context';
 import type { FilterBarField, FilterBarOperator } from './types';
 import { buttonVariants } from '@/ds/components/Button/Button';
+import { controlHeight } from '@/ds/primitives/control-size';
 import { cn } from '@/lib/utils';
 
 type FilterBarAddButtonProps = {
@@ -37,7 +38,8 @@ export function FilterBarAddButton({
       data-slot="filter-bar-add-button"
       data-compact={isCompact || undefined}
       className={cn(
-        'relative inline-flex h-form-md max-w-full shrink-0 cursor-pointer rounded-lg outline-hidden [&:focus-visible_[data-slot=filter-bar-draft-segment]]:border-neutral5/50 [&:focus-visible>span]:border-neutral5/50',
+        controlHeight.md,
+        'relative inline-flex max-w-full shrink-0 cursor-pointer rounded-full outline-hidden [&:focus-visible_[data-slot=filter-bar-draft-segment]]:border-neutral5/50 [&:focus-visible>span]:border-neutral5/50',
         className,
       )}
       onKeyDown={event => {
@@ -51,7 +53,11 @@ export function FilterBarAddButton({
       {isCompact ? (
         <span
           key="compact"
-          className={cn(buttonVariants({ variant: 'ghost', size: 'icon-md' }), 'transition-colors', styles.compact)}
+          className={cn(
+            buttonVariants({ variant: 'ghost', size: 'icon-md' }),
+            'rounded-full transition-colors',
+            styles.compact,
+          )}
         >
           <PlusIcon aria-hidden className="size-3" />
         </span>
@@ -78,7 +84,7 @@ function FilterBarAddSegments({
   const operatorImplied = field && ctx.getFieldOperators(field).length === 1;
 
   return (
-    <span className="h-form-md relative flex max-w-full items-stretch">
+    <span className={cn(controlHeight.md, 'relative flex max-w-full items-stretch')}>
       <FilterBarDraftSegment key="field" style={fieldSegmentAccentStyle(field)}>
         {field ? (
           <FilterBarFieldLabel field={field} />

@@ -7,6 +7,7 @@ import { FilterBarClear } from './filter-bar-clear';
 import { FilterBarProvider, useFilterBarContext } from './filter-bar-context';
 import { FilterBarInput } from './filter-bar-input';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from './types';
+import { controlHeight } from '@/ds/primitives/control-size';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
 
@@ -45,7 +46,7 @@ function FilterBarSurface({
       data-slot="filter-bar"
       data-variant={ctx.variant}
       className={cn(
-        'relative flex w-full flex-wrap content-start items-center gap-1 overflow-x-clip [&_[data-slot=filter-bar-chip]]:h-form-md',
+        'relative flex w-full min-w-0 flex-wrap content-start items-center gap-1 overflow-x-clip',
         styles.surface,
         className,
       )}
@@ -54,7 +55,7 @@ function FilterBarSurface({
         {children}
       </div>
       {!isButton && (
-        <span ref={registerClear} className="h-form-md flex shrink-0 items-center empty:hidden">
+        <span ref={registerClear} className={cn(controlHeight.md, 'flex shrink-0 items-center empty:hidden')}>
           <FilterBarClear label={clearLabel} />
         </span>
       )}

@@ -74,7 +74,14 @@ export function useFilterDraftMotion(
           animations.run(current.element, [origin.frame, current.frame]);
         }
         if (added.length > 0) {
-          animations.reveal(input, inputTarget.box.width);
+          animations.revealInput(input, inputTarget.box.width);
+          const inputOrigin = input.getBoundingClientRect();
+          animations.run(input, [
+            {
+              transform: `translate(${before.input.box.left - inputOrigin.left}px, ${before.input.box.top - inputOrigin.top}px)`,
+            },
+            { transform: 'translate(0, 0)' },
+          ]);
         } else if (removed[0]) {
           const origin = before.segments.get(removed[0]);
           if (origin) animations.run(input, [origin.frame, inputTarget.frame]);

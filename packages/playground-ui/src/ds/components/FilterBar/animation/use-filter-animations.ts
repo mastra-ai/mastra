@@ -47,6 +47,13 @@ function createFilterAnimations() {
         },
       ]);
     },
+    revealInput(element: HTMLInputElement, width: number) {
+      run(element, [
+        { width: `${width}px`, minWidth: '0px', flexShrink: 0, opacity: 0 },
+        { opacity: 0, offset: 0.96 },
+        { width: `${width}px`, minWidth: '0px', flexShrink: 0, opacity: 1 },
+      ]);
+    },
     cancel() {
       for (const finish of running.values()) finish();
     },

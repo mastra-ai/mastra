@@ -145,11 +145,7 @@ export function useFilterBarLayout(items: readonly FilterBarItem[]): FilterBarLa
           for (const [key, current] of next) {
             const old = key === `chip:${commitId}` ? before.get('composer') : before.get(key);
             const isCommittedInput = key === 'composer' && commitId && inputRef.current instanceof HTMLInputElement;
-            let origin = isCommittedInput && inputOrigin ? inputOrigin : old;
-            if (isCommittedInput && !capturedSegments.has('value') && capturedInput && inputOrigin) {
-              const gap = Number.parseFloat(getComputedStyle(root).columnGap) || 0;
-              origin = { left: inputOrigin.left + capturedInput.box.width + gap, top: inputOrigin.top };
-            }
+            const origin = isCommittedInput && inputOrigin ? inputOrigin : old;
             if (key === 'composer' && commitId && !isCommittedInput) continue;
             if (origin) {
               const deltaX = origin.left - current.left;
@@ -197,7 +193,7 @@ export function useFilterBarLayout(items: readonly FilterBarItem[]): FilterBarLa
                 const inputWidth = input.getBoundingClientRect().width;
                 const composer = next.get('composer');
                 if (composer) animations.holdWidth(composer.element, composer.width);
-                animations.reveal(input, inputWidth);
+                animations.revealInput(input, inputWidth);
               }
             }
           }

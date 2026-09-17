@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode, Ref } from 'react';
 import { segmentClass } from '../filter-bar-chip';
 import styles from './filter-bar-animation.module.css';
+import { controlSizeClasses } from '@/ds/primitives/control-size';
 import { cn } from '@/lib/utils';
 
 export function FilterBarDraftSegment({
@@ -23,8 +24,9 @@ export function FilterBarDraftSegment({
       data-joined={joined || undefined}
       className={cn(
         segmentClass,
+        controlSizeClasses.md,
         styles.segment,
-        'h-form-md border border-border1 bg-surface5 py-1 text-neutral5 hover:bg-surface6 hover:text-neutral6',
+        'border border-border1 bg-surface5 py-1 text-neutral5 hover:bg-surface6 hover:text-neutral6',
         className,
       )}
       style={style}

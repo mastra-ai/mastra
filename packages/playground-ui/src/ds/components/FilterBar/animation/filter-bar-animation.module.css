@@ -1,4 +1,9 @@
+.surface {
+  --filter-radius: calc(var(--spacing-form-md) / 2);
+}
+
 .surface :is([data-slot='filter-bar-draft-segment'], [data-slot='filter-bar-chip'], .inlineInput) {
+  border-radius: var(--filter-radius);
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--color-neutral6) 5%, transparent), transparent 60%),
     color-mix(in srgb, var(--color-surface5) 86%, transparent);
@@ -10,10 +15,6 @@
 
 .inlineInput:not([data-step='field']) {
   margin-left: 7px;
-}
-
-.segment {
-  border-radius: var(--radius-lg);
 }
 
 .segment + .segment {
@@ -38,7 +39,7 @@
 
 .chip {
   position: relative;
-  border-radius: var(--radius-lg);
+  border-radius: var(--filter-radius);
 }
 
 .chip::after {
@@ -85,8 +86,8 @@
   @starting-style {
     .segment[data-joined] {
       margin-left: 7px;
-      border-top-left-radius: var(--radius-lg);
-      border-bottom-left-radius: var(--radius-lg);
+      border-top-left-radius: var(--filter-radius);
+      border-bottom-left-radius: var(--filter-radius);
     }
   }
 

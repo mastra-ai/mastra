@@ -17,13 +17,13 @@ export function FilterBarPopup({
   buttonRef: RefObject<HTMLButtonElement | null>;
   children: ReactNode;
 }) {
-  const { variant, animation } = useFilterBarContext();
+  const { variant } = useFilterBarContext();
   const container = usePortalContainer();
   const isButton = variant === 'button';
   return (
     <ComboboxPrimitive.Portal container={container}>
       <ComboboxPrimitive.Positioner
-        anchor={isButton ? buttonRef : animation.rootRef}
+        anchor={isButton ? buttonRef : inputRef}
         align="start"
         sideOffset={MENU_SIDE_OFFSET}
         positionMethod={FLOATING_POSITION_METHOD}
