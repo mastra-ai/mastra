@@ -66,7 +66,6 @@ export interface TraceSpanPanelProps {
   /** Accessible drawer name; defaults to the trace id. */
   title?: string;
   showUnavailableFeaturesMsg?: TraceDataPanelViewProps['showUnavailableFeaturesMsg'];
-  className?: string;
 
   // Span-panel pass-through.
   spanActiveTab?: string;
@@ -110,7 +109,6 @@ export function TraceSpanPanel({
   headerSlot,
   title,
   showUnavailableFeaturesMsg,
-  className,
   spanActiveTab,
   onSpanTabChange,
   spanFeedbackTabBadge,
@@ -129,7 +127,6 @@ export function TraceSpanPanel({
   if (traceId && isFullThreadOpen && threadId) {
     return (
       <TraceThreadPanel
-        className={className}
         title={title}
         threadId={threadId}
         onBack={() => onFullThreadOpenChange?.(false)}
@@ -140,7 +137,6 @@ export function TraceSpanPanel({
 
   return (
     <TraceDataPanel
-      className={className}
       traceId={traceId}
       spans={spans}
       anchorSpanId={anchorSpanId}

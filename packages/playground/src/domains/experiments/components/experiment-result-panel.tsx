@@ -2,7 +2,6 @@
 
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DataList } from '@mastra/playground-ui/components/DataList';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
@@ -45,7 +44,6 @@ export type ExperimentResultPanelProps = {
   /** Accessible dialog name. Defaults to `Experiment item <itemId>` when opened by item, else `Result <id>`. */
   title?: string;
   scores?: ExperimentResultPanelScore[];
-  className?: string;
   onPrevious?: () => void;
   onNext?: () => void;
   onClose: () => void;
@@ -74,13 +72,12 @@ export function ExperimentResultPanel({
   itemId,
   fallback,
   title,
-  className,
   onClose,
   ...bodyProps
 }: ExperimentResultPanelProps) {
   const dialogTitle = title ?? (itemId ? `Experiment item ${itemId}` : `Result ${result?.id ?? ''}`);
   return (
-    <DataPanel open={!!(result ?? itemId)} onClose={onClose} title={dialogTitle} depth={1} className={className}>
+    <DataPanel open={!!(result ?? itemId)} onClose={onClose} title={dialogTitle} depth={1} size="half">
       {result ? (
         <ExperimentResultPanelBody result={result} onClose={onClose} {...bodyProps} />
       ) : itemId ? (
@@ -89,7 +86,9 @@ export function ExperimentResultPanel({
             <DataPanel.Heading>
               Experiment item <b>#{itemId}</b>
             </DataPanel.Heading>
-            <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" className="ml-auto shrink-0" />
+            <DataPanel.HeaderActions>
+              <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" />
+            </DataPanel.HeaderActions>
           </DataPanel.Header>
           {fallback}
         </>
@@ -98,10 +97,7 @@ export function ExperimentResultPanel({
   );
 }
 
-type ExperimentResultPanelBodyProps = Omit<
-  ExperimentResultPanelProps,
-  'result' | 'itemId' | 'fallback' | 'className'
-> & {
+type ExperimentResultPanelBodyProps = Omit<ExperimentResultPanelProps, 'result' | 'itemId' | 'fallback'> & {
   result: ExperimentResultPanelResult;
 };
 
@@ -265,12 +261,11 @@ function ExperimentResultPanelBody({
 
   return (
     <>
-      {/* Actions may wrap on narrow panels; the close button sits outside the group so it stays on the first row. */}
-      <DataPanel.Header className="items-start">
-        <DataPanel.Heading className="shrink-0 self-center whitespace-nowrap">
+      <DataPanel.Header>
+        <DataPanel.Heading>
           Result <b># {result.id.length > 12 ? `${result.id.slice(0, 12)}…` : result.id}</b>
         </DataPanel.Heading>
-        <ButtonsGroup className="ml-auto flex-wrap justify-end">
+        <DataPanel.HeaderActions>
           <DataPanel.NextPrevNav
             onPrevious={onPrevious}
             onNext={onNext}
@@ -278,32 +273,32 @@ function ExperimentResultPanelBody({
             nextLabel="Next result"
           />
           {experimentLink && (
-            <Button size="md" as={Link} to={experimentLink} icon={<FlaskConical />}>
+            <Button size="sm" variant="ghost" as={Link} to={experimentLink} icon={<FlaskConical />}>
               See experiment
             </Button>
           )}
           {result.traceId && onShowTrace && (
-            <Button size="md" onClick={onShowTrace} icon={<TraceIcon />}>
+            <Button size="sm" variant="ghost" onClick={onShowTrace} icon={<TraceIcon />}>
               Trace
             </Button>
           )}
           {canFlag && (
-            <Button size="md" variant="primary" onClick={() => onFlagForReview!(result.id)} icon={<ClipboardCheck />}>
+            <Button size="sm" variant="primary" onClick={() => onFlagForReview!(result.id)} icon={<ClipboardCheck />}>
               Flag for Review
             </Button>
           )}
           {onComplete && result.status === 'needs-review' && (
-            <Button size="md" variant="primary" onClick={onComplete} icon={<CheckCircle />}>
+            <Button size="sm" variant="primary" onClick={onComplete} icon={<CheckCircle />}>
               Mark as reviewed
             </Button>
           )}
-        </ButtonsGroup>
-        <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" className="shrink-0" />
+          <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" />
+        </DataPanel.HeaderActions>
       </DataPanel.Header>
 
       {feedbackTraceId ? (
         <Tabs<'details' | 'feedback'> defaultTab="details" className="grid h-full min-h-0 grid-rows-[auto_1fr]">
-          <DataPanel.Header className="py-2">
+          <DataPanel.Header>
             <TabList variant="pill-ghost">
               <Tab value="details">Details</Tab>
               <Tab value="feedback">
