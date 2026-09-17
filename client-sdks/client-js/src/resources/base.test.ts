@@ -85,6 +85,52 @@ describe('BaseResource', () => {
     });
   });
 
+  it('should let a request override the client retry count', async () => {
+    server.on('request', (_req, res) => {
+      requestCount++;
+      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end('Internal Server Error');
+    });
+
+    await expect(resource.request('/test', { retries: 0 })).rejects.toBeInstanceOf(Error);
+    expect(requestCount).toBe(1);
+  });
+
+  it('should prefer a request abort signal over the client abort signal', async () => {
+    const clientSignal = new AbortController().signal;
+    const requestSignal = new AbortController().signal;
+    let receivedSignal: AbortSignal | null | undefined;
+    const customResource = new BaseResource({
+      baseUrl: serverUrl,
+      abortSignal: clientSignal,
+      fetch: async (_input, init) => {
+        receivedSignal = init?.signal;
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+      },
+    });
+
+    await customResource.request('/test', { signal: requestSignal });
+
+    expect(receivedSignal).toBe(requestSignal);
+  });
+
+  it('should use the client abort signal when the request does not provide one', async () => {
+    const clientSignal = new AbortController().signal;
+    let receivedSignal: AbortSignal | null | undefined;
+    const customResource = new BaseResource({
+      baseUrl: serverUrl,
+      abortSignal: clientSignal,
+      fetch: async (_input, init) => {
+        receivedSignal = init?.signal;
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+      },
+    });
+
+    await customResource.request('/test');
+
+    expect(receivedSignal).toBe(clientSignal);
+  });
+
   it('should use custom fetch function when provided', async () => {
     // Arrange: Create a custom fetch that adds a custom header
     const customFetch = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {

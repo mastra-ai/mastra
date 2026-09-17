@@ -2,7 +2,7 @@
 '@mastra/client-js': minor
 ---
 
-Added Client JS methods for bounded trace-query field and value discovery.
+Added Client JS methods for bounded trace-query field and value discovery. Requests can now override client-level retry and abort settings with the per-request `retries` and `signal` options.
 
 ```ts
 const fields = await mastraClient.getTraceQueryFields({
