@@ -1706,88 +1706,101 @@ export class AgentChannels {
         'AgentChannels.rebindThread requires a Mastra instance: pass `mastra` or bind the channels to an agent.',
       );
     }
-    const {
-      thread: previous,
-      memoryStore,
-      metadata,
-    } = await this.findThreadMapping({ externalThreadId, channelId, platform, mastra: resolvedMastra });
-
-    if (await memoryStore.getThreadById({ threadId })) {
-      throw new Error(`Cannot rebind ${platform} thread ${externalThreadId}: thread ${threadId} already exists`);
+    const storage = resolvedMastra.getStorage();
+    if (!storage) {
+      throw new Error('Storage is required for channel thread mapping. Configure storage in your Mastra instance.');
+    }
+    const memoryStore = await storage.getStore('memory');
+    if (!memoryStore) {
+      throw new Error(
+        'Memory store is required for channel thread mapping. Configure storage in your Mastra instance.',
+      );
     }
 
-    let previousMetadata: Record<string, unknown> = {};
-    if (previous) {
-      // Serialized per thread: of two concurrent rebinds only the first sees
-      // the mapping still active; the second finds it retired and stops before
-      // it can save a second replacement.
-      let retired = false;
-      await memoryStore.updateThreadMetadata({
-        id: previous.id,
-        update: current => {
-          const currentMetadata = (current.metadata ?? {}) as Record<string, unknown>;
-          if (
-            currentMetadata.channel_platform !== platform ||
-            currentMetadata.channel_externalThreadId !== externalThreadId
-          ) {
-            return undefined;
-          }
-          retired = true;
-          previousMetadata = { ...currentMetadata };
-          return {
-            ...currentMetadata,
-            channel_platform: HANDED_OFF_PLATFORM,
-            channel_handedOffPlatform: platform,
-            channel_handedOffTo: threadId,
-          };
-        },
-      });
-      if (!retired) {
-        throw new Error(
-          `Cannot rebind ${platform} thread ${externalThreadId}: thread ${previous.id} was already handed off`,
-        );
-      }
-    }
+    return memoryStore.withThreadMappingLock({
+      ownerId: this.getOwnerId(),
+      platform,
+      externalThreadId,
+      externalChannelId: channelId,
+      operation: async () => {
+        const { thread: previous, metadata } = await this.findThreadMapping({
+          externalThreadId,
+          channelId,
+          platform,
+          mastra: resolvedMastra,
+        });
 
-    const boundMetadata: Record<string, unknown> = { ...metadata };
-    if (previous) boundMetadata.channel_handedOffFrom = previous.id;
-    let thread: StorageThreadType;
-    try {
-      thread = await memoryStore.saveThread({
-        thread: {
-          id: threadId,
-          title: `${platform} conversation`,
-          resourceId,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          metadata: boundMetadata,
-        },
-      });
-    } catch (error) {
-      // The previous thread is already marked handed-off. Without restoring it
-      // the conversation has no active mapping at all and every later message
-      // mints a fresh thread, losing the history. `updateThread` merges
-      // metadata, so the handoff markers are cleared explicitly.
-      if (previous) {
-        await memoryStore
-          .updateThreadMetadata({
+        if (await memoryStore.getThreadById({ threadId })) {
+          throw new Error(`Cannot rebind ${platform} thread ${externalThreadId}: thread ${threadId} already exists`);
+        }
+
+        let previousMetadata: Record<string, unknown> = {};
+        if (previous) {
+          let retired = false;
+          await memoryStore.updateThreadMetadata({
             id: previous.id,
-            update: () => ({
-              ...previousMetadata,
-              channel_handedOffPlatform: undefined,
-              channel_handedOffTo: undefined,
-            }),
-          })
-          .catch(restoreError =>
-            this.log(
-              'error',
-              `Failed to restore ${platform} thread ${externalThreadId} after a failed rebind: ${restoreError}`,
-            ),
-          );
-      }
-      throw error;
-    }
-    return { previous, thread };
+            update: current => {
+              const currentMetadata = (current.metadata ?? {}) as Record<string, unknown>;
+              if (
+                currentMetadata.channel_platform !== platform ||
+                currentMetadata.channel_externalThreadId !== externalThreadId
+              ) {
+                return undefined;
+              }
+              retired = true;
+              previousMetadata = { ...currentMetadata };
+              return {
+                ...currentMetadata,
+                channel_platform: HANDED_OFF_PLATFORM,
+                channel_handedOffPlatform: platform,
+                channel_handedOffTo: threadId,
+              };
+            },
+          });
+          if (!retired) {
+            throw new Error(
+              `Cannot rebind ${platform} thread ${externalThreadId}: thread ${previous.id} was already handed off`,
+            );
+          }
+        }
+
+        const boundMetadata: Record<string, unknown> = { ...metadata };
+        if (previous) boundMetadata.channel_handedOffFrom = previous.id;
+        let thread: StorageThreadType;
+        try {
+          thread = await memoryStore.saveThread({
+            thread: {
+              id: threadId,
+              title: `${platform} conversation`,
+              resourceId,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              metadata: boundMetadata,
+            },
+          });
+        } catch (error) {
+          if (previous) {
+            await memoryStore
+              .updateThreadMetadata({
+                id: previous.id,
+                update: () => ({
+                  ...previousMetadata,
+                  channel_handedOffPlatform: undefined,
+                  channel_handedOffTo: undefined,
+                }),
+              })
+              .catch(restoreError =>
+                this.log(
+                  'error',
+                  `Failed to restore ${platform} thread ${externalThreadId} after a failed rebind: ${restoreError}`,
+                ),
+              );
+          }
+          throw error;
+        }
+        return { previous, thread };
+      },
+    });
   }
 
   /**

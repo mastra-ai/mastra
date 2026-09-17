@@ -1418,39 +1418,51 @@ describe('AgentChannels', () => {
         getThreadById.mockRestore();
       });
 
-      it('lets only one of two concurrent rebinds replace the mapping', async () => {
+      it('serializes concurrent rebinds through replacement failure and restoration', async () => {
         const mockMastra = makeMastra();
         await agentChannels.initialize(mockMastra);
         const chatThread = makeChatThread({ adapter: agentChannels.adapters.discord });
         await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
         const memoryStore = await mockMastra.getStorage().getStore('memory');
+        let markFirstSaveStarted!: () => void;
+        const firstSaveStarted = new Promise<void>(resolve => {
+          markFirstSaveStarted = resolve;
+        });
+        let releaseFirstSave!: () => void;
+        const firstSaveBlocked = new Promise<void>(resolve => {
+          releaseFirstSave = resolve;
+        });
+        const saveThread = vi.spyOn(memoryStore, 'saveThread').mockImplementationOnce(async () => {
+          markFirstSaveStarted();
+          await firstSaveBlocked;
+          throw new Error('storage down');
+        });
 
-        const results = await Promise.allSettled([
-          agentChannels.rebindThread({
-            ...coordinates,
-            resourceId: 'session-b',
-            threadId: 'session-b',
-            mastra: mockMastra,
-          }),
-          agentChannels.rebindThread({
-            ...coordinates,
-            resourceId: 'session-c',
-            threadId: 'session-c',
-            mastra: mockMastra,
-          }),
-        ]);
+        const firstRebind = agentChannels.rebindThread({
+          ...coordinates,
+          resourceId: 'session-b',
+          threadId: 'session-b',
+          mastra: mockMastra,
+        });
+        await firstSaveStarted;
+        const secondRebind = agentChannels.rebindThread({
+          ...coordinates,
+          resourceId: 'session-c',
+          threadId: 'session-c',
+          mastra: mockMastra,
+        });
+        await Promise.resolve();
 
-        const fulfilled = results.filter(result => result.status === 'fulfilled');
-        const rejected = results.filter(result => result.status === 'rejected');
-        expect(fulfilled).toHaveLength(1);
-        expect(rejected).toHaveLength(1);
-        expect((rejected[0] as PromiseRejectedResult).reason.message).toMatch(/already handed off/);
+        expect(saveThread).toHaveBeenCalledTimes(1);
+        releaseFirstSave();
+        await expect(firstRebind).rejects.toThrow('storage down');
+        await expect(secondRebind).resolves.toMatchObject({ thread: { id: 'session-c' } });
+        saveThread.mockRestore();
 
         const { threads } = await memoryStore.listThreads({ filter: { metadata: legacyFilter }, perPage: 10 });
         expect(threads).toHaveLength(1);
-        expect(threads[0]!.id).toBe(
-          (fulfilled[0] as PromiseFulfilledResult<{ thread: { id: string } }>).value.thread.id,
-        );
+        expect(threads[0]!.id).toBe('session-c');
+        await expect(memoryStore.getThreadById({ threadId: 'session-b' })).resolves.toBeNull();
       });
 
       it('refuses a thread id that already exists', async () => {

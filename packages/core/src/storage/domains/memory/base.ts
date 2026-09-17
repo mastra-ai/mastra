@@ -56,6 +56,7 @@ export abstract class MemoryStorage extends StorageDomain {
   readonly supportsPartialThreadUpdate?: boolean = false;
 
   private threadMetadataUpdateQueues = new Map<string, Promise<void>>();
+  private threadMappingQueues = new Map<string, Promise<void>>();
 
   constructor() {
     super({
@@ -159,6 +160,36 @@ export abstract class MemoryStorage extends StorageDomain {
     } finally {
       release();
       if (this.threadMetadataUpdateQueues.get(id) === current) this.threadMetadataUpdateQueues.delete(id);
+    }
+  }
+
+  async withThreadMappingLock<T>({
+    ownerId,
+    platform,
+    externalThreadId,
+    externalChannelId,
+    operation,
+  }: {
+    ownerId: string | null;
+    platform: string;
+    externalThreadId: string;
+    externalChannelId: string;
+    operation: () => Promise<T>;
+  }): Promise<T> {
+    const key = JSON.stringify([ownerId, platform, externalThreadId, externalChannelId]);
+    const previous = this.threadMappingQueues.get(key) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    this.threadMappingQueues.set(key, current);
+
+    await previous.catch(() => {});
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (this.threadMappingQueues.get(key) === current) this.threadMappingQueues.delete(key);
     }
   }
 
