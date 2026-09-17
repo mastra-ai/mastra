@@ -1527,10 +1527,20 @@ describe('EagerToolExecutionCoordinator', () => {
     const first = { toolCallId: 'call-a', toolName: 'tool-a', args: {}, result: 'a', sequence: 0 };
     const second = { toolCallId: 'call-b', toolName: 'tool-b', args: {}, result: 'b', sequence: 0 };
 
-    coordinator.recordCommittedWork('message-1', [first]);
-    coordinator.recordCommittedWork('message-1', [second]);
+    // Same array instance both times: a store that kept the caller's array instead of
+    // copying it would then have the second batch append into the first and read back
+    // correctly by accident.
+    const batch = [first];
+    coordinator.recordCommittedWork('message-1', batch);
+    batch[0] = second;
+    coordinator.recordCommittedWork('message-1', batch);
 
     expect(coordinator.recarryCommittedWork('message-1')).toBe(true);
+    expect(coordinator.carriedWork).toEqual([first, second]);
+
+    // The whole entry left with that removal — a second removal of the same id must not
+    // write either batch into the conversation twice.
+    expect(coordinator.recarryCommittedWork('message-1')).toBe(false);
     expect(coordinator.carriedWork).toEqual([first, second]);
   });
 

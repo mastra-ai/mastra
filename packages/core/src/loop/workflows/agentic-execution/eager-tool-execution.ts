@@ -292,10 +292,10 @@ export class EagerToolExecutionCoordinator {
   readonly #committed = new Map<string, CompletedEagerWork[]>();
 
   /**
-   * Hold a discarded attempt's finished work until a replacement attempt starts. Sorted
-   * into model-call order here, per attempt: `sequence` counts calls within one attempt,
-   * so batches from successive discarded attempts stay in the order they were discarded
-   * rather than interleaving by each attempt's own numbering.
+   * Hold a discarded attempt's finished work until a replacement attempt starts. Each
+   * batch is sorted into model-call order as it arrives, and batches keep the order they
+   * were discarded in — sorting the whole buffer instead would be gambling that one
+   * counter is meaningful across attempts, which is not a property worth relying on.
    */
   carryDiscardedWork(work: CompletedEagerWork[]) {
     this.#carried.push(...[...work].sort((a, b) => a.sequence - b.sequence));
@@ -318,6 +318,9 @@ export class EagerToolExecutionCoordinator {
    * buffer so the next replacement attempt writes it again. Without this, a processor
    * retry that deletes the attempt's messages would also delete the only record that a
    * tool already ran, and the tool would run a second time.
+   *
+   * What comes back goes on the end of whatever is already carried, so the resulting
+   * order is "work already written once, then work never written".
    */
   recarryCommittedWork(messageId: string) {
     const committed = this.#committed.get(messageId);
