@@ -27,7 +27,7 @@ function getJscodeshiftBin(): string {
   return require.resolve('jscodeshift/bin/jscodeshift.js');
 }
 
-export function buildArgs(codemodPath: string, targetPath: string, options: TransformOptions): string[] {
+function buildArgs(codemodPath: string, targetPath: string, options: TransformOptions): string[] {
   // Ignoring everything under `.*/` covers `.mastra/` along with any other
   // framework build related or otherwise intended-to-be-hidden directories.
   const args = [
