@@ -1091,6 +1091,54 @@ Line 3 conclusion`;
       }
     });
 
+    it('excludes persisted scoped skill vectors before applying topK', async () => {
+      const persistedVectors = [
+        {
+          id: 'scoped-skill',
+          score: 1,
+          metadata: { id: 'scoped-skill', text: 'zebra zebra zebra', skillScope: 'owner-previous/source-0' },
+        },
+        {
+          id: 'workspace-doc',
+          score: 0.5,
+          metadata: { id: 'workspace-doc', text: 'zebra note', category: 'docs' },
+        },
+      ];
+      const query = vi.fn(async ({ topK, filter }: { topK: number; filter?: Record<string, any> }) => {
+        const branches = filter?.$and ?? [filter];
+        const excludesScoped = branches.some((branch: Record<string, any>) => branch?.skillScope?.$exists === false);
+        const category = branches.find((branch: Record<string, any>) => branch?.category)?.category;
+        return persistedVectors
+          .filter(result => !excludesScoped || result.metadata.skillScope === undefined)
+          .filter(result => category === undefined || result.metadata.category === category)
+          .slice(0, topK);
+      });
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        vectorStore: {
+          id: 'persistent-vector-store',
+          query,
+          upsert: vi.fn(async () => []),
+          deleteVector: vi.fn(async () => {}),
+        } as any,
+        embedder: vi.fn(async () => [0.1, 0.2, 0.3]),
+      });
+
+      const results = await workspace.search('zebra', {
+        mode: 'vector',
+        topK: 1,
+        filter: { category: 'docs' },
+      });
+
+      expect(results.map(result => result.id)).toEqual(['workspace-doc']);
+      expect(query).toHaveBeenCalledWith(
+        expect.objectContaining({
+          topK: 1,
+          filter: { $and: [{ category: 'docs' }, { skillScope: { $exists: false } }] },
+        }),
+      );
+    });
+
     it('should de-duplicate symlinked skill aliases when workspace skills use LocalFilesystem as the source', async () => {
       await fs.mkdir(path.join(tempDir, '.agents', 'skills', 'mastra'), { recursive: true });
       await fs.writeFile(

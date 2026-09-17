@@ -1096,15 +1096,19 @@ export class Workspace<
     // Documents tagged with `skillScope` belong to request-scoped skill views
     // (dynamic paths or resolver-backed filesystems). They are only meaningful
     // through `skills.getScoped(...).search()`; exposing them here would leak
-    // one request's skills into another's unscoped workspace search. The engine
-    // ranks and truncates to topK before we can filter, so over-fetch by the
-    // number of scoped documents to keep topK meaningful for unscoped content.
+    // one request's skills into another's unscoped workspace search. Exclude
+    // them in the vector query so persisted records from previous processes do
+    // not consume topK before filtering. BM25 ignores the vector filter, so
+    // over-fetch its currently indexed scoped documents before post-filtering.
     const scopedCount = this._searchEngine.countByPrefix(SKILL_SCOPE_DOCUMENT_PREFIX);
-    if (scopedCount === 0) {
-      return this._searchEngine.search(query, options);
-    }
     const topK = options?.topK ?? DEFAULT_SEARCH_TOP_K;
-    const results = await this._searchEngine.search(query, { ...options, topK: topK + scopedCount });
+    const unscopedFilter = { skillScope: { $exists: false } };
+    const filter = options?.filter ? { $and: [options.filter, unscopedFilter] } : unscopedFilter;
+    const results = await this._searchEngine.search(query, {
+      ...options,
+      topK: topK + scopedCount,
+      filter,
+    });
     return results.filter(result => result.metadata?.skillScope === undefined).slice(0, topK);
   }
 
