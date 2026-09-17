@@ -40,6 +40,8 @@ Interactive login authorizes project discovery. Set the Platform access token us
 MASTRA_PLATFORM_ACCESS_TOKEN=<mastra-platform-access-token>
 ```
 
+If `mastra init` configured observability for the project, use the token it wrote to `.env`. Otherwise, create an access token in [Mastra Platform](https://projects.mastra.ai).
+
 You can run `--dry-run` without this token because a dry run doesn't contact the collector or query API.
 
 Specify the destination with `--project`, or set `MASTRA_PROJECT_ID`. You can use a project name, slug, or ID with `--project`:
