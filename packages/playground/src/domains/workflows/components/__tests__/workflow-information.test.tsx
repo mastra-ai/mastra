@@ -54,7 +54,7 @@ function SelectionProbe({ initial }: { initial: string }) {
   return <div data-testid="selected-step">{selectedStepId ?? ''}</div>;
 }
 
-function renderInformation() {
+function renderInformation({ runId = 'run-1' }: { runId?: string } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -64,7 +64,7 @@ function renderInformation() {
     payload: undefined,
     clearData: () => {},
     setRunId: () => {},
-    runId: 'run-1',
+    runId,
     workflowError: null,
     closeStreamsAndReset: () => {},
     streamResult: null,
@@ -129,7 +129,7 @@ describe('WorkflowInformation', () => {
 
   describe('when the run panel is collapsed', () => {
     it('keeps the input draft mounted and restores its edited value', async () => {
-      renderInformation();
+      renderInformation({ runId: '' });
       const input = await screen.findByRole('textbox', { name: /Title/ });
       fireEvent.change(input, { target: { value: 'My draft' } });
       const trigger = screen.getByRole('button', { name: /Workflow run/ });
