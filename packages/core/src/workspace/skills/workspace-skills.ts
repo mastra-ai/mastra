@@ -184,7 +184,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
         validateOnLoad: this.#validateOnLoad,
         assertAvailable: this.#assertAvailable,
         checkSkillFileMtime: this.#checkSkillFileMtime,
-        searchNamespace: encodeURIComponent(key),
+        // Nest under this instance's namespace so views built for different
+        // resolved sources never share search documents for the same path set.
+        searchNamespace: this.#searchNamespace
+          ? `${this.#searchNamespace}/${encodeURIComponent(key)}`
+          : encodeURIComponent(key),
         sharedSearchState: this.#sharedSearchState,
       }),
     );
@@ -1504,6 +1508,134 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   #getParentPath(path: string): string {
     const lastSlash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
     return lastSlash > 0 ? path.substring(0, lastSlash) : '/';
+  }
+}
+
+// =============================================================================
+// ResolvedSourceWorkspaceSkills
+// =============================================================================
+
+/**
+ * Resolves the skill source per request (e.g. from a dynamic workspace
+ * filesystem resolver).
+ */
+export type SkillSourceResolver = (context: SkillsContext) => Promise<SkillSourceInterface> | SkillSourceInterface;
+
+export interface ResolvedSourceWorkspaceSkillsConfig extends Omit<
+  WorkspaceSkillsImplConfig,
+  'source' | 'searchNamespace' | 'sharedSearchState'
+> {
+  /** Resolves the skill source for a request. */
+  source: SkillSourceResolver;
+}
+
+/**
+ * WorkspaceSkills backed by a per-request skill source.
+ *
+ * `getScoped()` resolves the source for the request and returns a
+ * `WorkspaceSkillsImpl` bound to it. Views are cached per resolved source
+ * instance (so a resolver that returns a stable filesystem for a tenant keeps
+ * its discovery cache across requests) and per request context. Each source
+ * gets its own search namespace so same-named skills from different sources
+ * never bleed into each other's search results.
+ *
+ * Calls made directly on this instance (without `getScoped`) resolve the
+ * source with an empty context, mirroring how workspace tools resolve the
+ * filesystem when no request context is available.
+ */
+export class ResolvedSourceWorkspaceSkills implements WorkspaceSkills {
+  readonly #resolver: SkillSourceResolver;
+  readonly #config: Omit<ResolvedSourceWorkspaceSkillsConfig, 'source'>;
+  readonly #sharedSearchState: SharedSearchState = { documentIds: new Set() };
+
+  readonly #scopedByRequest = new WeakMap<object, Promise<WorkspaceSkills>>();
+  readonly #bySource = new WeakMap<SkillSourceInterface, WorkspaceSkillsImpl>();
+  #nextSourceId = 0;
+
+  constructor(config: ResolvedSourceWorkspaceSkillsConfig) {
+    const { source, ...rest } = config;
+    this.#resolver = source;
+    this.#config = rest;
+  }
+
+  async getScoped(context?: SkillsContext): Promise<WorkspaceSkills> {
+    const requestContext = context?.requestContext;
+    if (requestContext && typeof requestContext === 'object') {
+      const cached = this.#scopedByRequest.get(requestContext);
+      if (cached) return cached;
+
+      const scoped = this.#createScoped(context).catch(error => {
+        this.#scopedByRequest.delete(requestContext);
+        throw error;
+      });
+      this.#scopedByRequest.set(requestContext, scoped);
+      return scoped;
+    }
+
+    return this.#createScoped(context ?? {});
+  }
+
+  async #createScoped(context: SkillsContext): Promise<WorkspaceSkills> {
+    const source = await this.#resolver(context);
+    let forSource = this.#bySource.get(source);
+    if (!forSource) {
+      forSource = new WorkspaceSkillsImpl({
+        ...this.#config,
+        source,
+        searchNamespace: `source:${this.#nextSourceId++}`,
+        sharedSearchState: this.#sharedSearchState,
+      });
+      this.#bySource.set(source, forSource);
+    }
+    return forSource.getScoped(context);
+  }
+
+  async list(): Promise<SkillMetadata[]> {
+    return (await this.getScoped()).list();
+  }
+
+  async get(name: string): Promise<Skill | null> {
+    return (await this.getScoped()).get(name);
+  }
+
+  async has(name: string): Promise<boolean> {
+    return (await this.getScoped()).has(name);
+  }
+
+  async refresh(): Promise<void> {
+    return (await this.getScoped()).refresh();
+  }
+
+  async maybeRefresh(context?: SkillsContext): Promise<void> {
+    return (await this.getScoped(context)).maybeRefresh(context);
+  }
+
+  async search(query: string, options?: SkillSearchOptions): Promise<SkillSearchResult[]> {
+    return (await this.getScoped()).search(query, options);
+  }
+
+  async getReference(skillName: string, referencePath: string): Promise<string | null> {
+    return (await this.getScoped()).getReference(skillName, referencePath);
+  }
+
+  async getScript(skillName: string, scriptPath: string): Promise<string | null> {
+    return (await this.getScoped()).getScript(skillName, scriptPath);
+  }
+
+  async getAsset(skillName: string, assetPath: string): Promise<Buffer | null> {
+    return (await this.getScoped()).getAsset(skillName, assetPath);
+  }
+
+  async listReferences(skillName: string): Promise<string[]> {
+    return (await this.getScoped()).listReferences(skillName);
+  }
+
+  async listScripts(skillName: string): Promise<string[]> {
+    return (await this.getScoped()).listScripts(skillName);
+  }
+
+  async listAssets(skillName: string): Promise<string[]> {
+    return (await this.getScoped()).listAssets(skillName);
   }
 }
 

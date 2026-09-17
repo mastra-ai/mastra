@@ -759,6 +759,126 @@ Line 3 conclusion`;
       expect(skills1).toBe(skills2);
     });
 
+    describe('with a dynamic filesystem resolver', () => {
+      let remoteDir: string;
+      let hostDir: string;
+      let originalCwd: string;
+
+      beforeEach(async () => {
+        remoteDir = await fs.mkdtemp(path.join(os.tmpdir(), 'skills-remote-'));
+        hostDir = await fs.mkdtemp(path.join(os.tmpdir(), 'skills-host-'));
+        await fs.mkdir(path.join(remoteDir, 'skills', 'demo'), { recursive: true });
+        await fs.writeFile(
+          path.join(remoteDir, 'skills', 'demo', 'SKILL.md'),
+          skillContent('demo', 'a skill that lives in the resolved filesystem'),
+        );
+        // Control skill on the server's local disk that must never be discovered
+        await fs.mkdir(path.join(hostDir, 'skills', 'leaked-from-local-disk'), { recursive: true });
+        await fs.writeFile(
+          path.join(hostDir, 'skills', 'leaked-from-local-disk', 'SKILL.md'),
+          skillContent('leaked-from-local-disk', 'a skill that lives on the host disk'),
+        );
+        originalCwd = process.cwd();
+        process.chdir(hostDir);
+      });
+
+      afterEach(async () => {
+        process.chdir(originalCwd);
+        await fs.rm(remoteDir, { recursive: true, force: true });
+        await fs.rm(hostDir, { recursive: true, force: true });
+      });
+
+      it('discovers skills from the resolved filesystem, not the host disk', async () => {
+        const remoteFs = new LocalFilesystem({ basePath: remoteDir });
+        const resolver = vi.fn(async () => remoteFs);
+        const workspace = new Workspace({
+          filesystem: resolver,
+          skills: ['skills'],
+        });
+
+        const requestContext = new RequestContext();
+        const skills = await workspace.skills!.getScoped!({ requestContext });
+        await skills.maybeRefresh({ requestContext });
+        const listed = await skills.list();
+
+        expect(listed.map(s => `${s.name} @ ${s.path}`)).toEqual(['demo @ skills/demo']);
+        expect(resolver).toHaveBeenCalledWith({ requestContext });
+        expect(await skills.get('leaked-from-local-disk')).toBeNull();
+      });
+
+      it('resolves skills per request when the resolver returns different filesystems', async () => {
+        const tenantBDir = await fs.mkdtemp(path.join(os.tmpdir(), 'skills-tenant-b-'));
+        await fs.mkdir(path.join(tenantBDir, 'skills', 'beta'), { recursive: true });
+        await fs.writeFile(path.join(tenantBDir, 'skills', 'beta', 'SKILL.md'), skillContent('beta', 'tenant B only'));
+        try {
+          const fsA = new LocalFilesystem({ basePath: remoteDir });
+          const fsB = new LocalFilesystem({ basePath: tenantBDir });
+          const workspace = new Workspace({
+            filesystem: ({ requestContext }) => (requestContext.get('tenant') === 'b' ? fsB : fsA),
+            skills: ['skills'],
+          });
+
+          const ctxA = new RequestContext([['tenant', 'a']]);
+          const ctxB = new RequestContext([['tenant', 'b']]);
+          const [skillsA, skillsB] = await Promise.all([
+            workspace.skills!.getScoped!({ requestContext: ctxA }),
+            workspace.skills!.getScoped!({ requestContext: ctxB }),
+          ]);
+
+          expect((await skillsA.list()).map(s => s.name)).toEqual(['demo']);
+          expect((await skillsB.list()).map(s => s.name)).toEqual(['beta']);
+          expect(await skillsA.get('beta')).toBeNull();
+          expect(await skillsB.get('demo')).toBeNull();
+
+          // Same request context returns the same scoped view; same filesystem shares the view across requests
+          expect(await workspace.skills!.getScoped!({ requestContext: ctxA })).toBe(skillsA);
+          expect(await workspace.skills!.getScoped!({ requestContext: new RequestContext([['tenant', 'a']]) })).toBe(
+            skillsA,
+          );
+        } finally {
+          await fs.rm(tenantBDir, { recursive: true, force: true });
+        }
+      });
+
+      it('isolates search results between resolved filesystems', async () => {
+        const tenantBDir = await fs.mkdtemp(path.join(os.tmpdir(), 'skills-tenant-b-'));
+        await fs.mkdir(path.join(tenantBDir, 'skills', 'demo'), { recursive: true });
+        await fs.writeFile(
+          path.join(tenantBDir, 'skills', 'demo', 'SKILL.md'),
+          `---\nname: demo\ndescription: same-named skill\n---\n\nTenant B exclusive zebra content\n`,
+        );
+        try {
+          const fsA = new LocalFilesystem({ basePath: remoteDir });
+          const fsB = new LocalFilesystem({ basePath: tenantBDir });
+          const workspace = new Workspace({
+            filesystem: ({ requestContext }) => (requestContext.get('tenant') === 'b' ? fsB : fsA),
+            skills: ['skills'],
+          });
+
+          const skillsA = await workspace.skills!.getScoped!({ requestContext: new RequestContext([['tenant', 'a']]) });
+          const skillsB = await workspace.skills!.getScoped!({ requestContext: new RequestContext([['tenant', 'b']]) });
+          await Promise.all([skillsA.list(), skillsB.list()]);
+
+          expect((await skillsA.search('zebra')).map(r => r.skillName)).toEqual([]);
+          expect((await skillsB.search('zebra')).map(r => r.skillName)).toEqual(['demo']);
+        } finally {
+          await fs.rm(tenantBDir, { recursive: true, force: true });
+        }
+      });
+
+      it('serves direct calls through the resolver instead of the host disk', async () => {
+        const remoteFs = new LocalFilesystem({ basePath: remoteDir });
+        const workspace = new Workspace({
+          filesystem: () => remoteFs,
+          skills: ['skills'],
+        });
+
+        expect((await workspace.skills!.list()).map(s => s.name)).toEqual(['demo']);
+        expect(await workspace.skills!.has('demo')).toBe(true);
+        expect(await workspace.skills!.has('leaked-from-local-disk')).toBe(false);
+      });
+    });
+
     it('should de-duplicate symlinked skill aliases when workspace skills use LocalFilesystem as the source', async () => {
       await fs.mkdir(path.join(tempDir, '.agents', 'skills', 'mastra'), { recursive: true });
       await fs.writeFile(

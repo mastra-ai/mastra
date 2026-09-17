@@ -108,7 +108,7 @@ const workspace = new Workspace({
     name: 'skills',
     type: 'string[] | ((context: SkillsContext) => string[] | Promise<string[]>)',
     description:
-      "Paths where SKILL.md files are located. This can be a static array or an async function that resolves paths dynamically. Supports glob patterns like './**/skills' for discovery.",
+      "Paths where SKILL.md files are located. This can be a static array or an async function that resolves paths dynamically. Supports glob patterns like './**/skills' for discovery. Skills are read from `skillSource` when set, otherwise from the workspace `filesystem` — including a resolver-backed filesystem, which is resolved per request. Only when no filesystem is configured are skills read from the local disk.",
     isOptional: true,
   },
   {

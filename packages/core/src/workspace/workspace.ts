@@ -59,7 +59,7 @@ import type {
 } from './search';
 import { SearchEngine, splitIntoChunks } from './search';
 import type { WorkspaceSkills, SkillsResolver, SkillSource } from './skills';
-import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
+import { WorkspaceSkillsImpl, ResolvedSourceWorkspaceSkills, LocalSkillSource } from './skills';
 import type { WorkspaceToolsConfig } from './tools';
 import type { WorkspaceStatus } from './types';
 
@@ -968,17 +968,37 @@ export class Workspace<
 
     // Lazy initialization
     if (!this._skills) {
-      // Priority: explicit skillSource > workspace filesystem > LocalSkillSource (read-only from local disk)
-      const source = this._config.skillSource ?? this._fs ?? new LocalSkillSource();
-
-      this._skills = new WorkspaceSkillsImpl({
-        source,
+      const baseConfig = {
         skills: this._config.skills!,
         searchEngine: this._searchEngine,
         validateOnLoad: true,
         assertAvailable: () => this.assertSearchWritable(),
         checkSkillFileMtime: this._config.checkSkillFileMtime,
-      });
+      };
+
+      // Priority: explicit skillSource > resolved filesystem (per request) > static filesystem
+      //           > LocalSkillSource (read-only from local disk, only when no filesystem is configured)
+      if (!this._config.skillSource && this._filesystemResolver) {
+        this._skills = new ResolvedSourceWorkspaceSkills({
+          ...baseConfig,
+          source: async ({ requestContext }) => {
+            const fs = await this.resolveFilesystem({ requestContext: requestContext ?? new RequestContext() });
+            if (!fs) {
+              throw new WorkspaceError(
+                'Filesystem resolver returned no filesystem; cannot discover skills',
+                'FILESYSTEM_NOT_RESOLVED',
+                this.id,
+              );
+            }
+            return fs;
+          },
+        });
+      } else {
+        this._skills = new WorkspaceSkillsImpl({
+          ...baseConfig,
+          source: this._config.skillSource ?? this._fs ?? new LocalSkillSource(),
+        });
+      }
     }
 
     return this._skills;
