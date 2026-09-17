@@ -1156,8 +1156,10 @@ export class Agent extends BaseResource {
     Output extends JSONSchema7 | ZodSchema | undefined = undefined,
     _StructuredOutput extends JSONSchema7 | ZodSchema | undefined = undefined,
   >(params: GenerateLegacyParams<Output>): Promise<GenerateReturn<any, any, any>> {
+    // `abortSignal` is forwarded to fetch and must never be serialized into the request body
+    const { abortSignal, ...bodyParams } = params;
     const processedParams = {
-      ...params,
+      ...bodyParams,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       requestContext: parseClientRequestContext(params.requestContext),
@@ -1169,9 +1171,13 @@ export class Agent extends BaseResource {
     const response: GenerateReturn<any, any, any> = await this.request(`/agents/${this.agentId}/generate-legacy`, {
       method: 'POST',
       body: processedParams,
+      signal: abortSignal,
     });
 
     if (response.finishReason === 'tool-calls') {
+      if (abortSignal?.aborted) {
+        throw abortSignal.reason ?? new DOMException('This operation was aborted', 'AbortError');
+      }
       const toolCalls = (
         response as unknown as {
           toolCalls: { toolName: string; args: any; toolCallId: string }[];
@@ -1255,8 +1261,11 @@ export class Agent extends BaseResource {
       messages: messages,
     } as StreamParams<OUTPUT>;
     const resolvedClientTools = params.clientToolsResolver?.() ?? params.clientTools;
+    // `abortSignal` is forwarded to fetch and must never be serialized into the request body
+    const abortSignal = params.abortSignal;
     const processedParams = {
       ...params,
+      abortSignal: undefined,
       requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(resolvedClientTools),
       structuredOutput: params.structuredOutput
@@ -1277,10 +1286,15 @@ export class Agent extends BaseResource {
       {
         method: 'POST',
         body: processedParams,
+        signal: abortSignal,
       },
     );
 
     if (response.finishReason === 'tool-calls') {
+      if (abortSignal?.aborted) {
+        throw abortSignal.reason ?? new DOMException('This operation was aborted', 'AbortError');
+      }
+      // params still carries abortSignal, so the continuation request inherits it
       return executeToolCallAndRespond<OUTPUT>({
         response,
         // Dispatch from the resolved tools so resolver-only calls execute; the

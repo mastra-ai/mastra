@@ -351,6 +351,84 @@ describe('Agent client-side tools', () => {
     expect(JSON.stringify(secondCallBody.messages)).toContain('tool-result');
   });
 
+  it('generate: forwards abortSignal to fetch and stops client-tool continuations once aborted', async () => {
+    const controller = new AbortController();
+    const firstResponse = {
+      finishReason: 'tool-calls',
+      toolCalls: [{ payload: { toolCallId: 'call_1', toolName: 'weatherTool', args: { location: 'NYC' } } }],
+      response: { messages: [{ role: 'assistant', content: [] }] },
+      usage: { totalTokens: 2 },
+    };
+    (global.fetch as any).mockImplementationOnce(async (_url: string, init: RequestInit) => {
+      // Abort while the first request is "in flight" – the response still arrives, but the
+      // client must not execute the tool or fire the continuation request afterwards.
+      controller.abort();
+      return new Response(JSON.stringify(firstResponse), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const executeWeather = vi.fn(async () => ({ ok: true }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      execute: executeWeather,
+    });
+
+    await expect(
+      agent.generate('weather?', { clientTools: { weatherTool }, abortSignal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [, init] = (global.fetch as any).mock.calls[0];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect(init.signal.aborted).toBe(true);
+    expect(JSON.parse(init.body)).not.toHaveProperty('abortSignal');
+    expect(executeWeather).not.toHaveBeenCalled();
+  });
+
+  it('generateLegacy: forwards abortSignal to fetch and stops client-tool continuations once aborted', async () => {
+    const controller = new AbortController();
+    const firstResponse = {
+      finishReason: 'tool-calls',
+      toolCalls: [{ toolCallId: 'call_1', toolName: 'weatherTool', args: { location: 'NYC' } }],
+      response: { messages: [{ role: 'assistant', content: [] }] },
+      usage: { totalTokens: 2 },
+    };
+    (global.fetch as any).mockImplementationOnce(async () => {
+      controller.abort();
+      return new Response(JSON.stringify(firstResponse), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const executeWeather = vi.fn(async () => ({ ok: true }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      execute: executeWeather,
+    });
+
+    await expect(
+      agent.generateLegacy({
+        messages: [{ role: 'user', content: 'weather?' }],
+        clientTools: { weatherTool },
+        abortSignal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = (global.fetch as any).mock.calls[0];
+    expect(url).toContain('/generate-legacy');
+    expect(init.signal.aborted).toBe(true);
+    expect(JSON.parse(init.body)).not.toHaveProperty('abortSignal');
+    expect(executeWeather).not.toHaveBeenCalled();
+  });
+
   it('streamLegacy: re-invokes the resolver for each continuation round', async () => {
     // Regression test: legacy-stream continuations must refresh clientTools from the
     // resolver (matching the newer stream path) instead of reusing round-1's map forever.

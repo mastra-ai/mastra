@@ -197,12 +197,25 @@ export function mergeAbortSignals(...signals: Array<AbortSignal | undefined>): A
   }
 
   const controller = new AbortController();
-  for (const signal of defined) {
-    if (signal.aborted) {
-      controller.abort(signal.reason);
-      break;
+  const alreadyAborted = defined.find(signal => signal.aborted);
+  if (alreadyAborted) {
+    controller.abort(alreadyAborted.reason);
+    return controller.signal;
+  }
+
+  // Detach from every source on the first abort so long-lived signals (e.g. the
+  // client-wide one) don't retain a listener + controller per merged request.
+  const cleanup = () => {
+    for (const signal of defined) {
+      signal.removeEventListener('abort', onAbort);
     }
-    signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
+  };
+  function onAbort(this: AbortSignal) {
+    cleanup();
+    controller.abort(this.reason);
+  }
+  for (const signal of defined) {
+    signal.addEventListener('abort', onAbort);
   }
   return controller.signal;
 }
