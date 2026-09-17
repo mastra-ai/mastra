@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MainSidebar } from './main-sidebar';
 import { MainSidebarProvider } from './main-sidebar-provider';
-import { SidebarNew, useSidebarNew } from '@/ds/new/sidebar';
+import { SidebarNew, useSidebarNew, type SidebarNewSection } from '@/ds/new/sidebar';
+import type { LinkComponentProps } from '@/ds/types/link-component';
 
 const mockMatchMedia = (matches: boolean) => {
   Object.defineProperty(window, 'matchMedia', {
@@ -37,6 +38,12 @@ const pointerEvent = (type: string, init: MouseEventInit & { pointerId: number }
   const event = new MouseEvent(type, { bubbles: true, cancelable: true, ...init });
   Object.assign(event, { pointerId: init.pointerId });
   return event;
+};
+
+const getSidebarScope = () => {
+  const scope = document.querySelector<HTMLElement>('[data-sidebar-scope]');
+  if (!scope) throw new Error('Sidebar scope was not rendered');
+  return scope;
 };
 
 describe('MainSidebar resize handle gesture', () => {
@@ -170,8 +177,10 @@ describe('MainSidebar mobile drawer', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }));
 
-    expect(screen.getByRole('dialog', { name: 'Navigation' })).toBeDefined();
-    expect(document.querySelector('[data-slot="drawer-popup"]')?.getAttribute('data-swipe-direction')).toBe('left');
+    const dialog = screen.getByRole('dialog', { name: 'Navigation' });
+    expect(dialog).toBeDefined();
+    expect(dialog.getAttribute('data-mobile-mode')).toBe('drawer');
+    expect(dialog.getAttribute('data-swipe-direction')).toBe('left');
     expect(screen.getByRole('link', { name: 'Agents' })).toBeDefined();
   });
 });
@@ -195,8 +204,7 @@ describe('MainSidebar resize handle keyboard', () => {
         </MainSidebar>
       </MainSidebarProvider>,
     );
-    const scope = document.querySelector('[data-sidebar-scope]') as HTMLElement;
-    return { scope, separator: screen.getByRole('separator') };
+    return { scope: getSidebarScope(), separator: screen.getByRole('separator') };
   };
 
   const widthOf = (scope: HTMLElement) => scope.style.getPropertyValue('--sidebar-width');
@@ -374,8 +382,7 @@ describe('MainSidebar dragging the resize handle', () => {
         </MainSidebar>
       </MainSidebarProvider>,
     );
-    const scope = document.querySelector('[data-sidebar-scope]') as HTMLElement;
-    return { ...view, scope, separator: screen.getByRole('separator') };
+    return { ...view, scope: getSidebarScope(), separator: screen.getByRole('separator') };
   };
 
   const widthOf = (scope: HTMLElement) => scope.style.getPropertyValue('--sidebar-width');
@@ -410,9 +417,9 @@ describe('MainSidebar dragging the resize handle', () => {
 
   it('measures the width from the sidebar’s own left edge', () => {
     const { scope, separator } = renderSidebar();
-    const sidebar = separator.parentElement as HTMLElement;
-    sidebar.getBoundingClientRect = () =>
-      ({ left: 40, top: 0, right: 340, bottom: 0, width: 300, height: 0, x: 40, y: 0, toJSON: () => ({}) }) as DOMRect;
+    const sidebar = separator.parentElement;
+    if (!sidebar) throw new Error('Sidebar was not rendered');
+    sidebar.getBoundingClientRect = () => new DOMRect(40, 0, 300, 0);
 
     press(separator, 300);
     move(350);
@@ -611,7 +618,7 @@ describe('MainSidebar dragging the resize handle', () => {
 
     mockMatchMedia(false);
     const { rerender } = render(panel(100));
-    const scope = document.querySelector('[data-sidebar-scope]') as HTMLElement;
+    const scope = getSidebarScope();
 
     rerender(panel(280));
 
@@ -801,6 +808,44 @@ function SidebarNewStackFixture() {
   );
 }
 
+const sidebarNewMoreStorageKey = 'sidebar-new-more-links-test';
+
+const sidebarNewSections: SidebarNewSection[] = [
+  {
+    key: 'infrastructure',
+    title: 'Infrastructure',
+    links: [{ name: 'Deploys', url: '/deploys' }],
+    moreLinks: [
+      { name: 'Tools', url: '/tools' },
+      { name: 'Workspaces', url: '/workspaces' },
+    ],
+  },
+];
+
+function SidebarNewTestLink({ onClick, ...props }: LinkComponentProps) {
+  return (
+    <a
+      {...props}
+      onClick={event => {
+        event.preventDefault();
+        onClick?.(event);
+      }}
+    />
+  );
+}
+
+function renderSidebarNewSections(sections = sidebarNewSections) {
+  return render(
+    <SidebarNew.Provider storageKey="sidebar-new-sections-test" LinkComponent={SidebarNewTestLink}>
+      <SidebarNew>
+        <SidebarNew.Nav>
+          <SidebarNew.Sections sections={sections} recentItemsStorageKey={sidebarNewMoreStorageKey} />
+        </SidebarNew.Nav>
+      </SidebarNew>
+    </SidebarNew.Provider>,
+  );
+}
+
 describe('SidebarNew', () => {
   it('composes a header, navigation body, and single footer', () => {
     mockMatchMedia(false);
@@ -834,7 +879,127 @@ describe('SidebarNew', () => {
     expect(screen.getByText('Grouped navigation')).toBeDefined();
   });
 
-  it('keeps group titles visible and hides the desktop trigger in the mobile drawer', () => {
+  it('closes an active takeover with Escape and returns focus', async () => {
+    mockMatchMedia(false);
+    render(
+      <SidebarNew.Provider storageKey="sidebar-new-escape-test">
+        <SidebarNewStackFixture />
+      </SidebarNew.Provider>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Open account settings' });
+
+    fireEvent.click(trigger);
+    await screen.findByRole('button', { name: 'Back to main navigation: Account settings' });
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(screen.getByText('Grouped navigation').closest('[aria-hidden]')?.getAttribute('aria-hidden')).toBe('false');
+  });
+
+  it('keeps an active takeover open when Escape is already handled', async () => {
+    mockMatchMedia(false);
+    render(
+      <SidebarNew.Provider storageKey="sidebar-new-handled-escape-test">
+        <SidebarNewStackFixture />
+      </SidebarNew.Provider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open account settings' }));
+    const back = await screen.findByRole('button', { name: 'Back to main navigation: Account settings' });
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    escape.preventDefault();
+    document.dispatchEvent(escape);
+
+    expect(document.activeElement).toBe(back);
+    expect(screen.getByText('Account navigation').closest('[aria-hidden]')?.getAttribute('aria-hidden')).toBe('false');
+  });
+
+  describe('when multiple links are folded', () => {
+    it('toggles the folded links from the More row', () => {
+      mockMatchMedia(false);
+      renderSidebarNewSections();
+
+      expect(screen.getByRole('link', { name: 'Deploys' })).toBeTruthy();
+      expect(screen.queryByRole('link', { name: 'Tools' })).toBeNull();
+      const more = screen.getByRole('button', { name: 'More' });
+      fireEvent.click(more);
+
+      expect(more.getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByRole('link', { name: 'Tools' })).toBeTruthy();
+      expect(screen.getByRole('link', { name: 'Workspaces' })).toBeTruthy();
+
+      fireEvent.click(more);
+
+      expect(more.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByRole('link', { name: 'Tools' })).toBeNull();
+      expect(screen.queryByRole('link', { name: 'Workspaces' })).toBeNull();
+    });
+
+    it('surfaces a clicked link for seven days', () => {
+      mockMatchMedia(false);
+      const firstRender = renderSidebarNewSections();
+      fireEvent.click(screen.getByRole('button', { name: 'More' }));
+      fireEvent.click(screen.getByRole('link', { name: 'Tools' }));
+      firstRender.unmount();
+
+      renderSidebarNewSections();
+
+      expect(screen.getByRole('link', { name: 'Tools' })).toBeTruthy();
+      expect(screen.queryByRole('link', { name: 'Workspaces' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'More' })).toBeTruthy();
+    });
+
+    it('keeps an active folded link visible', () => {
+      mockMatchMedia(false);
+      render(
+        <SidebarNew.Provider storageKey="sidebar-new-active-link-test">
+          <SidebarNew>
+            <SidebarNew.Nav>
+              <SidebarNew.Sections
+                sections={sidebarNewSections}
+                recentItemsStorageKey={sidebarNewMoreStorageKey}
+                isActive={link => link.url === '/tools'}
+              />
+            </SidebarNew.Nav>
+          </SidebarNew>
+        </SidebarNew.Provider>,
+      );
+
+      expect(screen.getByRole('link', { name: 'Tools' })).toBeTruthy();
+      expect(screen.queryByRole('link', { name: 'Workspaces' })).toBeNull();
+    });
+
+    it('hides an expired recent link', () => {
+      mockMatchMedia(false);
+      window.localStorage.setItem(
+        sidebarNewMoreStorageKey,
+        JSON.stringify({ Tools: Date.now() - 8 * 24 * 60 * 60 * 1000 }),
+      );
+
+      renderSidebarNewSections();
+
+      expect(screen.queryByRole('link', { name: 'Tools' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'More' })).toBeTruthy();
+    });
+  });
+
+  describe('when only one link can fold', () => {
+    it('shows the link without a More row', () => {
+      mockMatchMedia(false);
+      renderSidebarNewSections([
+        {
+          key: 'infrastructure',
+          links: [{ name: 'Deploys', url: '/deploys' }],
+          moreLinks: [{ name: 'Workspaces', url: '/workspaces' }],
+        },
+      ]);
+
+      expect(screen.getByRole('link', { name: 'Workspaces' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'More' })).toBeNull();
+    });
+  });
+
+  it('keeps group titles visible and hides the page trigger while the mobile drawer is present', async () => {
     mockMatchMedia(true);
     render(
       <SidebarNew.Provider storageKey="sidebar-new-mobile-test">
@@ -850,10 +1015,19 @@ describe('SidebarNew', () => {
       </SidebarNew.Provider>,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }));
+    const mobileTrigger = screen.getByRole('button', { name: 'Open navigation menu' });
+    fireEvent.click(mobileTrigger);
 
-    expect(screen.getByRole('dialog', { name: 'Navigation' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Navigation' }).getAttribute('data-mobile-mode')).toBe('takeover');
     expect(screen.getByText('Observability')).toBeDefined();
     expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).toBeNull();
+    expect(document.querySelector('[data-sidebar-scope]')?.getAttribute('data-sidebar-mobile-present')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    await waitFor(() =>
+      expect(document.querySelector('[data-sidebar-scope]')?.getAttribute('data-sidebar-mobile-present')).toBe('false'),
+    );
+    expect(screen.getByRole('button', { name: 'Open navigation menu' })).toBe(mobileTrigger);
   });
 });

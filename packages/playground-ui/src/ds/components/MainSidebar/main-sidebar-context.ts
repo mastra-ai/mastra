@@ -14,6 +14,7 @@ type MainSidebarContextValue = {
   isMobile: boolean;
   openMobile: boolean;
   setOpenMobile: (open: boolean) => void;
+  setMobileDrawerPresent: (present: boolean) => void;
   toggleSidebar: () => void;
   setWidth: (width: number) => void;
   collapse: () => void;
@@ -28,9 +29,13 @@ type MainSidebarContextValue = {
 export type MobileDrawerContextValue = {
   openMobile: boolean;
   setOpenMobile: (open: boolean) => void;
+  setMobileDrawerPresent: (present: boolean) => void;
 };
 
-export type MainSidebarStateContextValue = Omit<MainSidebarContextValue, 'openMobile' | 'setOpenMobile'>;
+export type MainSidebarStateContextValue = Omit<
+  MainSidebarContextValue,
+  'openMobile' | 'setOpenMobile' | 'setMobileDrawerPresent'
+>;
 
 export const MainSidebarContext = React.createContext<MainSidebarStateContextValue | null>(null);
 export const MobileDrawerContext = React.createContext<MobileDrawerContextValue | null>(null);

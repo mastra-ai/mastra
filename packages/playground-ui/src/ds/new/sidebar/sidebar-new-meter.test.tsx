@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { Search } from 'lucide-react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SidebarNewMeter } from './sidebar-new-meter';
 import { SidebarNew } from '.';
 
@@ -135,11 +136,97 @@ describe('SidebarNew colors', () => {
     expect(screen.getByText('Mastra').className).toContain('text-foreground');
     expect(screen.getByText('Project').className).toContain('text-muted-foreground');
     expect(
-      [...container.querySelectorAll<HTMLElement>('[class]')].some(element => element.className.includes('bg-border')),
+      [...container.querySelectorAll<HTMLElement>('[class]')].some(element =>
+        element.getAttribute('class')?.includes('bg-sidebar-divider'),
+      ),
     ).toBe(true);
 
     const back = screen.getByRole('button', { name: 'Back to main navigation: Settings' });
     expect(back.className).toContain('text-muted-foreground');
     expect(back.className).toContain('hover:text-foreground');
+  });
+});
+
+describe('SidebarNew command header', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: () => ({
+        matches: false,
+        media: '',
+        onchange: null,
+        addListener() {},
+        removeListener() {},
+        addEventListener() {},
+        removeEventListener() {},
+        dispatchEvent() {
+          return true;
+        },
+      }),
+    });
+  });
+
+  function renderCommandHeader(onSearch = vi.fn()) {
+    return render(
+      <SidebarNew.Provider storageKey="sidebar-new-command-header-test">
+        <SidebarNew>
+          <SidebarNew.CommandHeader>
+            <SidebarNew.Brand title="Mastra" />
+            <SidebarNew.SearchTrigger aria-label="Search" shortcut="⌘ K" onClick={onSearch}>
+              <Search />
+            </SidebarNew.SearchTrigger>
+          </SidebarNew.CommandHeader>
+          <SidebarNew.Nav>Navigation</SidebarNew.Nav>
+          <SidebarNew.Footer>
+            <SidebarNew.FooterMeta action={<SidebarNew.Trigger />}>Mastra v0.24.6</SidebarNew.FooterMeta>
+          </SidebarNew.Footer>
+        </SidebarNew>
+      </SidebarNew.Provider>,
+    );
+  }
+
+  it('renders optional search and footer metadata with semantic colors', () => {
+    const { container } = renderCommandHeader();
+
+    expect(container.querySelector('[data-slot="sidebar-new-command-header"]')?.className).not.toContain('border-b');
+    expect(container.querySelector('[data-slot="sidebar-new-search-trigger"]')?.className).toContain(
+      'hover:bg-sidebar-nav-hover',
+    );
+    expect(container.querySelector('[data-slot="sidebar-new-search-trigger"]')?.className).toContain('rounded-full');
+    expect(container.querySelector('[data-slot="sidebar-new-search-trigger"]')?.className).toContain('h-form-md');
+    expect(container.querySelector('[data-slot="sidebar-new-footer-meta"]')?.className).toContain(
+      'border-sidebar-divider',
+    );
+    expect(screen.getByText('Mastra')).toBeDefined();
+    expect(screen.getByText('⌘ K').className).toContain('bg-surface-overlay-soft');
+    expect(screen.getByText('⌘ K').className).toContain('border-border');
+    expect(screen.getByText('Mastra v0.24.6')).toBeDefined();
+  });
+
+  it('forwards search interactions', () => {
+    const onSearch = vi.fn();
+    renderCommandHeader(onSearch);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    expect(onSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it('supports a command header without search', () => {
+    render(
+      <SidebarNew.Provider storageKey="sidebar-new-command-header-without-search-test">
+        <SidebarNew>
+          <SidebarNew.CommandHeader>
+            <SidebarNew.Brand title="Mastra" />
+          </SidebarNew.CommandHeader>
+          <SidebarNew.Footer>
+            <SidebarNew.FooterMeta action={<SidebarNew.Trigger />}>Mastra v0.24.6</SidebarNew.FooterMeta>
+          </SidebarNew.Footer>
+        </SidebarNew>
+      </SidebarNew.Provider>,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Search' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Toggle sidebar' })).toBeDefined();
   });
 });

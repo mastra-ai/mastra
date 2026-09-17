@@ -31,6 +31,7 @@ export function MainSidebarMobileTrigger({
         'new-theme inline-flex size-10 items-center justify-center rounded-md',
         // compound selector, not `in-*` — its `:where()` ties with a consumer's later `.inline-flex`
         "[[data-sidebar-mobile='false']_&]:hidden",
+        "[[data-sidebar-mobile-present='true']_&]:invisible",
         'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
         'focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
         className,

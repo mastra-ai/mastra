@@ -13,6 +13,16 @@ const SIDEBAR_WIDTH_KEY = 'sidebar:width';
 
 const SIDEBAR_WIDTH_VAR = '--sidebar-width';
 
+type InitialSidebarState = {
+  state: SidebarState;
+  width: number;
+};
+
+type SidebarScopeStyle = CSSProperties & {
+  '--sidebar-width': string;
+  '--sidebar-width-mobile': string;
+};
+
 export type MainSidebarProviderProps = {
   children: React.ReactNode;
   /** Initial state before localStorage hydrates. Defaults to `'default'`. */
@@ -72,7 +82,7 @@ export function MainSidebarProvider({
 
   // Hydrate synchronously from localStorage so first paint is already at the correct width.
   // Falls back to clamped defaults during SSR or when storage is unavailable.
-  const readInitial = (): { state: SidebarState; width: number } => {
+  const readInitial = (): InitialSidebarState => {
     if (typeof window === 'undefined') return { state: defaultState, width: safeDefault };
     try {
       let nextState: SidebarState = defaultState;
@@ -89,14 +99,16 @@ export function MainSidebarProvider({
       return { state: defaultState, width: safeDefault };
     }
   };
-  const initialRef = React.useRef<{ state: SidebarState; width: number } | null>(null);
+  const initialRef = React.useRef<InitialSidebarState | null>(null);
   if (initialRef.current === null) initialRef.current = readInitial();
   const initial = initialRef.current;
 
   const [state, setState] = React.useState<SidebarState>(initial.state);
   const [width, setWidthState] = React.useState<number>(initial.width);
   const [isMobile, setIsMobile] = React.useState(false);
-  const [openMobile, setOpenMobile] = React.useState(false);
+  const [openMobile, setOpenMobileState] = React.useState(false);
+  const [mobileDrawerPresent, setMobileDrawerPresent] = React.useState(false);
+  const openMobileRef = React.useRef(false);
   const widthRef = React.useRef<number>(initial.width);
   const stateRef = React.useRef<SidebarState>(initial.state);
   stateRef.current = state;
@@ -113,10 +125,19 @@ export function MainSidebarProvider({
     return () => mq.removeEventListener('change', update);
   }, [mobileBreakpoint]);
 
+  const setOpenMobile = React.useCallback((open: boolean) => {
+    openMobileRef.current = open;
+    if (open) setMobileDrawerPresent(true);
+    setOpenMobileState(open);
+  }, []);
+
   // Close mobile drawer when crossing back to desktop.
   React.useEffect(() => {
-    if (!isMobile && openMobile) setOpenMobile(false);
-  }, [isMobile, openMobile]);
+    if (!isMobile && openMobile) {
+      setOpenMobile(false);
+      setMobileDrawerPresent(false);
+    }
+  }, [isMobile, openMobile, setOpenMobile]);
 
   const writeCssVar = React.useCallback((px: number) => {
     const el = scopeRef.current;
@@ -139,7 +160,7 @@ export function MainSidebarProvider({
 
   const toggleSidebar = React.useCallback(() => {
     if (isMobile) {
-      setOpenMobile(prev => !prev);
+      setOpenMobile(!openMobileRef.current);
       return;
     }
     setState(prev => {
@@ -150,7 +171,7 @@ export function MainSidebarProvider({
       persistState(next);
       return next;
     });
-  }, [isMobile, persistState]);
+  }, [isMobile, persistState, setOpenMobile]);
 
   const setWidth = React.useCallback(
     (next: number) => {
@@ -195,11 +216,10 @@ export function MainSidebarProvider({
       if (ev.code !== 'KeyB') return;
       if (!(ev.metaKey || ev.ctrlKey)) return;
       if (ev.altKey || ev.shiftKey) return;
-      const target = ev.target as HTMLElement | null;
-      if (target) {
-        const tag = target.tagName;
+      if (ev.target instanceof HTMLElement) {
+        const tag = ev.target.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-        if (target.isContentEditable) return;
+        if (ev.target.isContentEditable) return;
       }
       ev.preventDefault();
       toggleSidebar();
@@ -247,15 +267,18 @@ export function MainSidebarProvider({
     ],
   );
 
-  const drawerValue = React.useMemo<MobileDrawerContextValue>(() => ({ openMobile, setOpenMobile }), [openMobile]);
+  const drawerValue = React.useMemo<MobileDrawerContextValue>(
+    () => ({ openMobile, setOpenMobile, setMobileDrawerPresent }),
+    [openMobile, setOpenMobile],
+  );
 
   // CSS var owned exclusively by writeCssVar (single source of truth).
   // SSR seeds the initial value here; post-mount writeCssVar takes over.
-  const scopeStyle: CSSProperties = {
+  const scopeStyle: SidebarScopeStyle = {
     [SIDEBAR_WIDTH_VAR]: `${initial.state === 'collapsed' ? safeCollapsed : initial.width}px`,
-    ['--sidebar-width-mobile' as string]: `${mobileWidth}px`,
+    '--sidebar-width-mobile': `${mobileWidth}px`,
     display: 'contents',
-  } as CSSProperties;
+  };
 
   return (
     <div
@@ -263,6 +286,7 @@ export function MainSidebarProvider({
       data-sidebar-scope
       data-sidebar-state={state}
       data-sidebar-mobile={isMobile ? 'true' : 'false'}
+      data-sidebar-mobile-present={mobileDrawerPresent ? 'true' : 'false'}
       style={scopeStyle}
       suppressHydrationWarning
     >

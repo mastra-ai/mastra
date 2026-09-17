@@ -1,8 +1,9 @@
 import '../../../../new-theme.css';
+import { MenuIcon } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
-import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from '@/ds/components/Drawer';
+import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerTitle } from '@/ds/components/Drawer';
 import { ResizeHandleIndicator } from '@/ds/primitives/resize-handle-indicator';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
@@ -10,12 +11,13 @@ import { cn } from '@/lib/utils';
 export type MainSidebarRootProps = {
   children: React.ReactNode;
   className?: string;
+  mobileMode?: 'drawer' | 'takeover';
 };
 
 const KEYBOARD_STEP = 10;
 const DRAG_THRESHOLD = 5;
 
-export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
+export function MainSidebarRoot({ children, className, mobileMode = 'drawer' }: MainSidebarRootProps) {
   const {
     state,
     width,
@@ -26,6 +28,7 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
     isMobile,
     openMobile,
     setOpenMobile,
+    setMobileDrawerPresent,
     setWidth,
     collapse,
     expand,
@@ -165,7 +168,8 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
   // Client-side routers preventDefault but should still close the drawer.
   const closeOnAnchor = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
-      const anchor = (event.target as HTMLElement).closest('a');
+      if (!(event.target instanceof Element)) return;
+      const anchor = event.target.closest<HTMLAnchorElement>('a');
       if (!anchor || !anchor.hasAttribute('href')) return;
 
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -178,20 +182,51 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
 
   if (isMobile) {
     return (
-      <Drawer side="left" open={openMobile} onOpenChange={setOpenMobile}>
+      <Drawer
+        side="left"
+        open={openMobile}
+        onOpenChange={setOpenMobile}
+        onOpenChangeComplete={open => {
+          if (!open) setMobileDrawerPresent(false);
+        }}
+      >
         <DrawerContent
+          data-mobile-mode={mobileMode}
+          showCloseButton={mobileMode === 'drawer'}
           className={cn(
-            'new-theme w-3/4 max-w-(--sidebar-width-mobile) overflow-hidden rounded-none border-0 bg-sidebar text-foreground shadow-xl',
+            'new-theme border-0 bg-sidebar text-foreground',
+            mobileMode === 'takeover'
+              ? 'w-[calc(100%-3.5rem)] max-w-none overflow-visible rounded-l-none rounded-r-3xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-xl'
+              : 'w-3/4 max-w-(--sidebar-width-mobile) overflow-hidden rounded-none shadow-xl',
             className,
           )}
         >
+          {mobileMode === 'takeover' ? (
+            <DrawerClose asChild>
+              <button
+                type="button"
+                aria-label="Close"
+                className="group duration-fast absolute top-2 -right-12 z-10 inline-flex size-11 touch-manipulation items-center justify-center transition-opacity group-data-[ending-style]/popup:opacity-0 focus-visible:outline-hidden motion-reduce:duration-0"
+              >
+                <span className="border-border bg-card/95 text-muted-foreground group-hover:bg-card group-hover:text-foreground group-focus-visible:ring-accent1 inline-flex size-9 items-center justify-center rounded-full border shadow-lg backdrop-blur-sm group-focus-visible:ring-1">
+                  <MenuIcon className="size-4" />
+                </span>
+              </button>
+            </DrawerClose>
+          ) : null}
           <VisuallyHidden asChild>
             <DrawerTitle>Navigation</DrawerTitle>
           </VisuallyHidden>
           <VisuallyHidden asChild>
             <DrawerDescription>Primary site navigation drawer</DrawerDescription>
           </VisuallyHidden>
-          <div onClick={closeOnAnchor} className="flex h-full min-h-0 flex-col overflow-hidden px-3 py-2">
+          <div
+            onClick={closeOnAnchor}
+            className={cn(
+              'flex h-full min-h-0 flex-col overflow-hidden py-2',
+              mobileMode === 'takeover' ? 'px-4' : 'px-3',
+            )}
+          >
             {children}
           </div>
         </DrawerContent>
