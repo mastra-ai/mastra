@@ -17,7 +17,7 @@ type InputShared_Auxiliary_21 =
       [key: string]: InputShared_Auxiliary_21;
     };
 
-type InputShared_Auxiliary_201 =
+type InputShared_Auxiliary_203 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -52,41 +52,41 @@ type InputShared_Auxiliary_201 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_201[];
+      args: InputShared_Auxiliary_203[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_201;
+      arg: InputShared_Auxiliary_203;
     }
   | {
       spans:
         | {
-            some: InputShared_Auxiliary_219;
+            some: InputShared_Auxiliary_221;
           }
         | {
-            none: InputShared_Auxiliary_219;
+            none: InputShared_Auxiliary_221;
           };
     }
   | {
       scores:
         | {
-            some: InputShared_Auxiliary_219;
+            some: InputShared_Auxiliary_221;
           }
         | {
-            none: InputShared_Auxiliary_219;
+            none: InputShared_Auxiliary_221;
           };
     }
   | {
       feedback:
         | {
-            some: InputShared_Auxiliary_219;
+            some: InputShared_Auxiliary_221;
           }
         | {
-            none: InputShared_Auxiliary_219;
+            none: InputShared_Auxiliary_221;
           };
     };
 
-type InputShared_Auxiliary_219 =
+type InputShared_Auxiliary_221 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -121,33 +121,33 @@ type InputShared_Auxiliary_219 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_219[];
+      args: InputShared_Auxiliary_221[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_219;
+      arg: InputShared_Auxiliary_221;
     };
 
-type InputShared_Auxiliary_246 =
+type InputShared_Auxiliary_248 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_246[];
+      args: InputShared_Auxiliary_248[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_246;
+      arg: InputShared_Auxiliary_248;
     }
   | {
       traces:
         | {
-            some: InputShared_Auxiliary_201;
+            some: InputShared_Auxiliary_203;
           }
         | {
-            none: InputShared_Auxiliary_201;
+            none: InputShared_Auxiliary_203;
           };
     };
 
-type InputShared_Auxiliary_662 =
+type InputShared_Auxiliary_650 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -192,27 +192,27 @@ type InputShared_Auxiliary_662 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_662[];
+      args: InputShared_Auxiliary_650[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_662;
+      arg: InputShared_Auxiliary_650;
     };
 
-type InputShared_Auxiliary_736 = {
+type InputShared_Auxiliary_724 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_736[] | undefined;
+  children?: InputShared_Auxiliary_724[] | undefined;
 };
 
-type Shared_Auxiliary_745 = {
+type Shared_Auxiliary_735 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_745[] | undefined;
+  children?: Shared_Auxiliary_735[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -1725,7 +1725,7 @@ type InputShared_Type_86 = {
       }
     | undefined;
   steps: InputShared_Type_81[];
-  predicates: InputShared_Auxiliary_662[];
+  predicates: InputShared_Auxiliary_650[];
 };
 
 type InputShared_Type_87 = {
@@ -1739,7 +1739,7 @@ type InputShared_Type_87 = {
     | undefined;
   step: InputShared_Type_81;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_662;
+  predicate: InputShared_Auxiliary_650;
 };
 
 type InputShared_Type_88 =
@@ -3203,6 +3203,16 @@ type Shared_Type_52 = {
 };
 
 type Shared_Type_53 = {
+  thread: Shared_Type_50;
+  branch: {
+    parentThreadId: string;
+    branchPointMessageId: string;
+    branchPointCreatedAt: Date;
+    branchCreatedAt: Date;
+  };
+};
+
+type Shared_Type_54 = {
   config: {
     id: string;
     name?: string | undefined;
@@ -3212,8 +3222,8 @@ type Shared_Type_53 = {
   };
 };
 
-type Shared_Type_54 = {
-  scorer: Shared_Type_53;
+type Shared_Type_55 = {
+  scorer: Shared_Type_54;
   sampling?: {} | undefined;
   agentIds: string[];
   agentNames: string[];
@@ -3222,7 +3232,7 @@ type Shared_Type_54 = {
   source: 'code' | 'stored' | 'fs';
 };
 
-type Shared_Type_55 = {
+type Shared_Type_56 = {
   /** Total number of items available */
   total: number;
   /** Current page */
@@ -3233,14 +3243,14 @@ type Shared_Type_55 = {
   hasMore: boolean;
 };
 
-type Shared_Type_56 = {
+type Shared_Type_57 = {
   /** Maximum number of updates requested for this delta poll */
   limit: number;
   /** True when more matching updates remain after this response */
   hasMore: boolean;
 };
 
-type Shared_Type_57 =
+type Shared_Type_58 =
   | 'agent_run'
   | 'scorer_run'
   | 'scorer_step'
@@ -3274,7 +3284,7 @@ type Shared_Type_57 =
   | 'skill_action'
   | 'agent_signal';
 
-type Shared_Type_58 =
+type Shared_Type_59 =
   | 'agent'
   | 'scorer'
   | 'rag_ingestion'
@@ -3289,7 +3299,7 @@ type Shared_Type_58 =
   | 'workflow_run'
   | 'memory';
 
-type Shared_Type_59 = {
+type Shared_Type_60 = {
   /** Unique trace identifier */
   traceId: string;
   /** Unique span identifier within a trace */
@@ -3297,19 +3307,19 @@ type Shared_Type_59 = {
   /** Human-readable span name */
   name: string;
   /** Span type (e.g., WORKFLOW_RUN, AGENT_RUN, TOOL_CALL, etc.) */
-  spanType: Shared_Type_57;
+  spanType: Shared_Type_58;
   /** Whether this is an event (point-in-time) vs a span (duration) */
   isEvent: boolean;
   /** When the span started */
   startedAt: Date;
   parentSpanId?: (string | null) | undefined;
-  entityType?: (Shared_Type_58 | null) | undefined;
+  entityType?: (Shared_Type_59 | null) | undefined;
   entityId?: (string | null) | undefined;
   entityName?: (string | null) | undefined;
-  parentEntityType?: (Shared_Type_58 | null) | undefined;
+  parentEntityType?: (Shared_Type_59 | null) | undefined;
   parentEntityId?: (string | null) | undefined;
   parentEntityName?: (string | null) | undefined;
-  rootEntityType?: (Shared_Type_58 | null) | undefined;
+  rootEntityType?: (Shared_Type_59 | null) | undefined;
   rootEntityId?: (string | null) | undefined;
   rootEntityName?: (string | null) | undefined;
   userId?: (string | null) | undefined;
@@ -3362,7 +3372,7 @@ type Shared_Type_59 = {
   status: 'success' | 'error' | 'running';
 };
 
-type Shared_Type_60 = {
+type Shared_Type_61 = {
   /** Unique trace identifier */
   traceId: string;
   /** Unique span identifier within a trace */
@@ -3370,7 +3380,7 @@ type Shared_Type_60 = {
   /** Human-readable span name */
   name: string;
   /** Span type (e.g., WORKFLOW_RUN, AGENT_RUN, TOOL_CALL, etc.) */
-  spanType: Shared_Type_57;
+  spanType: Shared_Type_58;
   /** Whether this is an event (point-in-time) vs a span (duration) */
   isEvent: boolean;
   /** When the span started */
@@ -3379,7 +3389,7 @@ type Shared_Type_60 = {
   endedAt?: (Date | null) | undefined;
   error?: (unknown | null) | undefined;
   status?: (('success' | 'error' | 'running') | null) | undefined;
-  entityType?: (Shared_Type_58 | null) | undefined;
+  entityType?: (Shared_Type_59 | null) | undefined;
   entityId?: (string | null) | undefined;
   entityName?: (string | null) | undefined;
   metadata?:
@@ -3394,7 +3404,7 @@ type Shared_Type_60 = {
   updatedAt: Date | null;
 };
 
-type Shared_Type_61 = {
+type Shared_Type_62 = {
   /** Unique trace identifier */
   traceId: string;
   /** Unique span identifier within a trace */
@@ -3402,19 +3412,19 @@ type Shared_Type_61 = {
   /** Human-readable span name */
   name: string;
   /** Span type (e.g., WORKFLOW_RUN, AGENT_RUN, TOOL_CALL, etc.) */
-  spanType: Shared_Type_57;
+  spanType: Shared_Type_58;
   /** Whether this is an event (point-in-time) vs a span (duration) */
   isEvent: boolean;
   /** When the span started */
   startedAt: Date;
   parentSpanId?: (string | null) | undefined;
-  entityType?: (Shared_Type_58 | null) | undefined;
+  entityType?: (Shared_Type_59 | null) | undefined;
   entityId?: (string | null) | undefined;
   entityName?: (string | null) | undefined;
-  parentEntityType?: (Shared_Type_58 | null) | undefined;
+  parentEntityType?: (Shared_Type_59 | null) | undefined;
   parentEntityId?: (string | null) | undefined;
   parentEntityName?: (string | null) | undefined;
-  rootEntityType?: (Shared_Type_58 | null) | undefined;
+  rootEntityType?: (Shared_Type_59 | null) | undefined;
   rootEntityId?: (string | null) | undefined;
   rootEntityName?: (string | null) | undefined;
   userId?: (string | null) | undefined;
@@ -3465,27 +3475,6 @@ type Shared_Type_61 = {
   updatedAt: Date | null;
 };
 
-type Shared_Type_62 = {
-  traceId: string;
-  rootSpanId: string;
-  name: string;
-  entityId: string | null;
-  parentSpanId: string | null;
-  createdAt: string;
-  metadata: {
-    [key: string]: unknown;
-  } | null;
-  inputPreview: string | null;
-  threadId: string | null;
-  resourceId: string | null;
-  startedAt: string;
-  endedAt: string;
-  entityName: string | null;
-  entityType: string | null;
-  environment: string | null;
-  status: 'success' | 'error';
-};
-
 type Shared_Type_63 = {
   /** Unique id for this score event */
   scoreId?: (string | null) | undefined;
@@ -3504,13 +3493,13 @@ type Shared_Type_63 = {
   /** Score value (range defined by scorer) */
   score: number;
   reason?: (string | null) | undefined;
-  entityType?: (Shared_Type_58 | null) | undefined;
+  entityType?: (Shared_Type_59 | null) | undefined;
   entityId?: (string | null) | undefined;
   entityName?: (string | null) | undefined;
-  parentEntityType?: (Shared_Type_58 | null) | undefined;
+  parentEntityType?: (Shared_Type_59 | null) | undefined;
   parentEntityId?: (string | null) | undefined;
   parentEntityName?: (string | null) | undefined;
-  rootEntityType?: (Shared_Type_58 | null) | undefined;
+  rootEntityType?: (Shared_Type_59 | null) | undefined;
   rootEntityId?: (string | null) | undefined;
   rootEntityName?: (string | null) | undefined;
   userId?: (string | null) | undefined;
@@ -4047,7 +4036,7 @@ type Shared_Type_79 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_745[] | undefined;
+  files?: Shared_Auxiliary_735[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -8784,13 +8773,167 @@ export interface PostMemoryThreadsThreadIdClone_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /memory/threads/:threadId/branch
+// ============================================================================
+export type PostMemoryThreadsThreadIdBranch_PathParams = GetMemoryThreadsThreadId_PathParams;
+
+export type PostMemoryThreadsThreadIdBranch_QueryParams = {
+  agentId?: string | undefined;
+};
+
+export type PostMemoryThreadsThreadIdBranch_Body = {
+  branchPointMessageId: string;
+  title?: string | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+export type PostMemoryThreadsThreadIdBranch_Response = Shared_Type_53;
+
+export type PostMemoryThreadsThreadIdBranch_Request = Simplify<
+  (PostMemoryThreadsThreadIdBranch_PathParams extends never
+    ? {}
+    : { params: PostMemoryThreadsThreadIdBranch_PathParams }) &
+    (PostMemoryThreadsThreadIdBranch_QueryParams extends never
+      ? {}
+      : {} extends PostMemoryThreadsThreadIdBranch_QueryParams
+        ? { query?: PostMemoryThreadsThreadIdBranch_QueryParams }
+        : { query: PostMemoryThreadsThreadIdBranch_QueryParams }) &
+    (PostMemoryThreadsThreadIdBranch_Body extends never
+      ? {}
+      : {} extends PostMemoryThreadsThreadIdBranch_Body
+        ? { body?: PostMemoryThreadsThreadIdBranch_Body }
+        : { body: PostMemoryThreadsThreadIdBranch_Body })
+>;
+
+export interface PostMemoryThreadsThreadIdBranch_RouteContract {
+  pathParams: PostMemoryThreadsThreadIdBranch_PathParams;
+  queryParams: PostMemoryThreadsThreadIdBranch_QueryParams;
+  body: PostMemoryThreadsThreadIdBranch_Body;
+  request: PostMemoryThreadsThreadIdBranch_Request;
+  response: PostMemoryThreadsThreadIdBranch_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /memory/threads/:threadId/parent
+// ============================================================================
+export type GetMemoryThreadsThreadIdParent_PathParams = GetMemoryThreadsThreadId_PathParams;
+
+export type GetMemoryThreadsThreadIdParent_QueryParams = PostMemoryThreadsThreadIdBranch_QueryParams;
+
+export type GetMemoryThreadsThreadIdParent_Response = Shared_Type_50 | null;
+
+export type GetMemoryThreadsThreadIdParent_Request = Simplify<
+  (GetMemoryThreadsThreadIdParent_PathParams extends never
+    ? {}
+    : { params: GetMemoryThreadsThreadIdParent_PathParams }) &
+    (GetMemoryThreadsThreadIdParent_QueryParams extends never
+      ? {}
+      : {} extends GetMemoryThreadsThreadIdParent_QueryParams
+        ? { query?: GetMemoryThreadsThreadIdParent_QueryParams }
+        : { query: GetMemoryThreadsThreadIdParent_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetMemoryThreadsThreadIdParent_RouteContract {
+  pathParams: GetMemoryThreadsThreadIdParent_PathParams;
+  queryParams: GetMemoryThreadsThreadIdParent_QueryParams;
+  body: never;
+  request: GetMemoryThreadsThreadIdParent_Request;
+  response: GetMemoryThreadsThreadIdParent_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /memory/threads/:threadId/branches
+// ============================================================================
+export type GetMemoryThreadsThreadIdBranches_PathParams = GetMemoryThreadsThreadId_PathParams;
+
+export type GetMemoryThreadsThreadIdBranches_QueryParams = {
+  agentId?: string | undefined;
+  page?: number | undefined;
+  perPage?: (false | number) | undefined;
+};
+
+export type GetMemoryThreadsThreadIdBranches_Response = {
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+  branches: Shared_Type_53[];
+};
+
+export type GetMemoryThreadsThreadIdBranches_Request = Simplify<
+  (GetMemoryThreadsThreadIdBranches_PathParams extends never
+    ? {}
+    : { params: GetMemoryThreadsThreadIdBranches_PathParams }) &
+    (GetMemoryThreadsThreadIdBranches_QueryParams extends never
+      ? {}
+      : {} extends GetMemoryThreadsThreadIdBranches_QueryParams
+        ? { query?: GetMemoryThreadsThreadIdBranches_QueryParams }
+        : { query: GetMemoryThreadsThreadIdBranches_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetMemoryThreadsThreadIdBranches_RouteContract {
+  pathParams: GetMemoryThreadsThreadIdBranches_PathParams;
+  queryParams: GetMemoryThreadsThreadIdBranches_QueryParams;
+  body: never;
+  request: GetMemoryThreadsThreadIdBranches_Request;
+  response: GetMemoryThreadsThreadIdBranches_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /memory/threads/:threadId/branch-history
+// ============================================================================
+export type GetMemoryThreadsThreadIdBranchHistory_PathParams = GetMemoryThreadsThreadId_PathParams;
+
+export type GetMemoryThreadsThreadIdBranchHistory_QueryParams = PostMemoryThreadsThreadIdBranch_QueryParams;
+
+export type GetMemoryThreadsThreadIdBranchHistory_Response = {
+  history: {
+    thread: Shared_Type_50;
+    branch: {
+      parentThreadId: string;
+      branchPointMessageId: string;
+      branchPointCreatedAt: Date;
+      branchCreatedAt: Date;
+    } | null;
+  }[];
+};
+
+export type GetMemoryThreadsThreadIdBranchHistory_Request = Simplify<
+  (GetMemoryThreadsThreadIdBranchHistory_PathParams extends never
+    ? {}
+    : { params: GetMemoryThreadsThreadIdBranchHistory_PathParams }) &
+    (GetMemoryThreadsThreadIdBranchHistory_QueryParams extends never
+      ? {}
+      : {} extends GetMemoryThreadsThreadIdBranchHistory_QueryParams
+        ? { query?: GetMemoryThreadsThreadIdBranchHistory_QueryParams }
+        : { query: GetMemoryThreadsThreadIdBranchHistory_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetMemoryThreadsThreadIdBranchHistory_RouteContract {
+  pathParams: GetMemoryThreadsThreadIdBranchHistory_PathParams;
+  queryParams: GetMemoryThreadsThreadIdBranchHistory_QueryParams;
+  body: never;
+  request: GetMemoryThreadsThreadIdBranchHistory_Request;
+  response: GetMemoryThreadsThreadIdBranchHistory_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /memory/threads/:threadId/transfer
 // ============================================================================
 export type PostMemoryThreadsThreadIdTransfer_PathParams = GetMemoryThreadsThreadId_PathParams;
 
-export type PostMemoryThreadsThreadIdTransfer_QueryParams = {
-  agentId?: string | undefined;
-};
+export type PostMemoryThreadsThreadIdTransfer_QueryParams = PostMemoryThreadsThreadIdBranch_QueryParams;
 
 export type PostMemoryThreadsThreadIdTransfer_Body = {
   resourceId: string;
@@ -9256,7 +9399,7 @@ export interface PostMemoryNetworkMessagesDelete_RouteContract {
 // Route: GET /scores/scorers
 // ============================================================================
 export type GetScoresScorers_Response = {
-  [key: string]: Shared_Type_54;
+  [key: string]: Shared_Type_55;
 };
 
 export type GetScoresScorers_Request = Simplify<
@@ -9282,7 +9425,7 @@ export type GetScoresScorersScorerId_PathParams = {
   scorerId: string;
 };
 
-export type GetScoresScorersScorerId_Response = Shared_Type_54 | null;
+export type GetScoresScorersScorerId_Response = Shared_Type_55 | null;
 
 export type GetScoresScorersScorerId_Request = Simplify<
   (GetScoresScorersScorerId_PathParams extends never ? {} : { params: GetScoresScorersScorerId_PathParams }) &
@@ -9508,12 +9651,12 @@ export type GetObservabilityTraces_QueryParams = {
 };
 
 export type GetObservabilityTraces_Response = {
-  pagination?: Shared_Type_55 | undefined;
+  pagination?: Shared_Type_56 | undefined;
   /** Incremental polling metadata */
-  delta?: Shared_Type_56 | undefined;
+  delta?: Shared_Type_57 | undefined;
   /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
-  spans: Shared_Type_59[];
+  spans: Shared_Type_60[];
 };
 
 export type GetObservabilityTraces_Request = Simplify<
@@ -9541,12 +9684,12 @@ export interface GetObservabilityTraces_RouteContract {
 export type GetObservabilityTracesLight_QueryParams = GetObservabilityTraces_QueryParams;
 
 export type GetObservabilityTracesLight_Response = {
-  pagination?: Shared_Type_55 | undefined;
+  pagination?: Shared_Type_56 | undefined;
   /** Incremental polling metadata */
-  delta?: Shared_Type_56 | undefined;
+  delta?: Shared_Type_57 | undefined;
   /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
-  spans: Shared_Type_60[];
+  spans: Shared_Type_61[];
 };
 
 export type GetObservabilityTracesLight_Request = Simplify<
@@ -9637,12 +9780,12 @@ export type GetObservabilityBranches_QueryParams = {
 };
 
 export type GetObservabilityBranches_Response = {
-  pagination?: Shared_Type_55 | undefined;
+  pagination?: Shared_Type_56 | undefined;
   /** Incremental polling metadata */
-  delta?: Shared_Type_56 | undefined;
+  delta?: Shared_Type_57 | undefined;
   /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
-  branches: Shared_Type_59[];
+  branches: Shared_Type_60[];
 };
 
 export type GetObservabilityBranches_Request = Simplify<
@@ -9682,7 +9825,7 @@ export type GetObservabilityTracesTraceIdBranchesSpanId_QueryParams = {
 export type GetObservabilityTracesTraceIdBranchesSpanId_Response = {
   /** Unique trace identifier */
   traceId: string;
-  spans: Shared_Type_61[];
+  spans: Shared_Type_62[];
 };
 
 export type GetObservabilityTracesTraceIdBranchesSpanId_Request = Simplify<
@@ -9717,7 +9860,7 @@ export type GetObservabilityTracesTraceId_PathParams = {
 export type GetObservabilityTracesTraceId_Response = {
   /** Unique trace identifier */
   traceId: string;
-  spans: Shared_Type_59[];
+  spans: Shared_Type_60[];
 };
 
 export type GetObservabilityTracesTraceId_Request = Simplify<
@@ -9743,7 +9886,7 @@ export type GetObservabilityTracesTraceIdLight_PathParams = GetObservabilityTrac
 export type GetObservabilityTracesTraceIdLight_Response = {
   /** Unique trace identifier */
   traceId: string;
-  spans: Shared_Type_60[];
+  spans: Shared_Type_61[];
 };
 
 export type GetObservabilityTracesTraceIdLight_Request = Simplify<
@@ -9771,7 +9914,7 @@ export type GetObservabilityTracesTraceIdSpansSpanId_PathParams =
 
 export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
   /** Span record data */
-  span: Shared_Type_61;
+  span: Shared_Type_62;
 };
 
 export type GetObservabilityTracesTraceIdSpansSpanId_Request = Simplify<
@@ -9903,7 +10046,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_QueryParams = {
 };
 
 export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
-  pagination: Shared_Type_55;
+  pagination: Shared_Type_56;
   scores: {
     id: string;
     scorerId: string;
@@ -10043,7 +10186,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_201 | undefined;
+  where?: InputShared_Auxiliary_203 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -10055,33 +10198,37 @@ export type PostObservabilityTracesQuery_Body = {
         direction: 'asc' | 'desc';
       }[]
     | undefined;
-  page?:
-    | {
-        limit?: number;
-        after?: (string | null) | undefined;
-      }
-    | undefined;
-  /** Pagination options for list queries */
-  pagination?:
-    | {
-        /** Zero-indexed page number */
-        page?: number | undefined;
-        /** Number of items per page */
-        perPage?: number | undefined;
-      }
-    | undefined;
+  page?: {
+    limit?: number;
+    after?: (string | null) | undefined;
+  };
 };
 
 export type PostObservabilityTracesQuery_Response =
   | {
-      traces: Shared_Type_62[];
+      traces: {
+        traceId: string;
+        rootSpanId: string;
+        name: string;
+        entityId: string | null;
+        parentSpanId: string | null;
+        createdAt: string;
+        metadata: {
+          [key: string]: unknown;
+        } | null;
+        inputPreview: string | null;
+        threadId: string | null;
+        resourceId: string | null;
+        startedAt: string;
+        endedAt: string;
+        entityName: string | null;
+        entityType: string | null;
+        environment: string | null;
+        status: 'success' | 'error';
+      }[];
       page: {
         next: string | null;
       };
-    }
-  | {
-      traces: Shared_Type_62[];
-      pagination: Shared_Type_55;
     }
   | {
       groups: {
@@ -10120,9 +10267,9 @@ export type PostObservabilityThreadsQuery_Body = {
       from: string;
       to: string;
     };
-    where?: InputShared_Auxiliary_201 | undefined;
+    where?: InputShared_Auxiliary_203 | undefined;
   };
-  where?: InputShared_Auxiliary_246 | undefined;
+  where?: InputShared_Auxiliary_248 | undefined;
   page?: {
     limit?: number;
     after?: (string | null) | undefined;
@@ -10154,96 +10301,6 @@ export interface PostObservabilityThreadsQuery_RouteContract {
   body: PostObservabilityThreadsQuery_Body;
   request: PostObservabilityThreadsQuery_Request;
   response: PostObservabilityThreadsQuery_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: POST /observability/traces/query/fields
-// ============================================================================
-export type PostObservabilityTracesQueryFields_Body = {
-  timeRange: {
-    from: string;
-    to: string;
-  };
-  predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
-  search?: string | undefined;
-  limit?: number;
-};
-
-export type PostObservabilityTracesQueryFields_Response = {
-  canonicalFields: {
-    path: string;
-    valueKind: 'string' | 'number' | 'stringOrNumber' | 'timestamp' | 'presence';
-    operators: ('eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte' | 'in' | 'notIn' | 'exists' | 'notExists')[];
-    valueSuggestions: boolean;
-  }[];
-  observedFields: {
-    path: string;
-    valueKind: 'string';
-    operators: ('eq' | 'ne' | 'in' | 'notIn' | 'exists' | 'notExists')[];
-    valueSuggestions: true;
-    occurrences: number;
-  }[];
-  observedFieldsTruncated: boolean;
-};
-
-export type PostObservabilityTracesQueryFields_Request = Simplify<
-  (never extends never ? {} : { params: never }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostObservabilityTracesQueryFields_Body extends never
-      ? {}
-      : {} extends PostObservabilityTracesQueryFields_Body
-        ? { body?: PostObservabilityTracesQueryFields_Body }
-        : { body: PostObservabilityTracesQueryFields_Body })
->;
-
-export interface PostObservabilityTracesQueryFields_RouteContract {
-  pathParams: never;
-  queryParams: never;
-  body: PostObservabilityTracesQueryFields_Body;
-  request: PostObservabilityTracesQueryFields_Request;
-  response: PostObservabilityTracesQueryFields_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: POST /observability/traces/query/values
-// ============================================================================
-export type PostObservabilityTracesQueryValues_Body = {
-  timeRange: {
-    from: string;
-    to: string;
-  };
-  predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
-  path: string;
-  search?: string | undefined;
-  limit?: number;
-};
-
-export type PostObservabilityTracesQueryValues_Response = {
-  values: {
-    value: string;
-    count: number;
-  }[];
-  valuesTruncated: boolean;
-};
-
-export type PostObservabilityTracesQueryValues_Request = Simplify<
-  (never extends never ? {} : { params: never }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostObservabilityTracesQueryValues_Body extends never
-      ? {}
-      : {} extends PostObservabilityTracesQueryValues_Body
-        ? { body?: PostObservabilityTracesQueryValues_Body }
-        : { body: PostObservabilityTracesQueryValues_Body })
->;
-
-export interface PostObservabilityTracesQueryValues_RouteContract {
-  pathParams: never;
-  queryParams: never;
-  body: PostObservabilityTracesQueryValues_Body;
-  request: PostObservabilityTracesQueryValues_Request;
-  response: PostObservabilityTracesQueryValues_Response;
   responseType: 'json';
 }
 
@@ -10308,9 +10365,9 @@ export type GetObservabilityMetrics_QueryParams = {
 };
 
 export type GetObservabilityMetrics_Response = {
-  pagination?: Shared_Type_55 | undefined;
+  pagination?: Shared_Type_56 | undefined;
   /** Incremental polling metadata */
-  delta?: Shared_Type_56 | undefined;
+  delta?: Shared_Type_57 | undefined;
   /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
   metrics: {
@@ -10324,13 +10381,13 @@ export type GetObservabilityMetrics_Response = {
     value: number;
     traceId?: (string | null) | undefined;
     spanId?: (string | null) | undefined;
-    entityType?: (Shared_Type_58 | null) | undefined;
+    entityType?: (Shared_Type_59 | null) | undefined;
     entityId?: (string | null) | undefined;
     entityName?: (string | null) | undefined;
-    parentEntityType?: (Shared_Type_58 | null) | undefined;
+    parentEntityType?: (Shared_Type_59 | null) | undefined;
     parentEntityId?: (string | null) | undefined;
     parentEntityName?: (string | null) | undefined;
-    rootEntityType?: (Shared_Type_58 | null) | undefined;
+    rootEntityType?: (Shared_Type_59 | null) | undefined;
     rootEntityId?: (string | null) | undefined;
     rootEntityName?: (string | null) | undefined;
     userId?: (string | null) | undefined;
@@ -10453,9 +10510,9 @@ export type GetObservabilityLogs_QueryParams = {
 };
 
 export type GetObservabilityLogs_Response = {
-  pagination?: Shared_Type_55 | undefined;
+  pagination?: Shared_Type_56 | undefined;
   /** Incremental polling metadata */
-  delta?: Shared_Type_56 | undefined;
+  delta?: Shared_Type_57 | undefined;
   /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
   logs: {
@@ -10474,13 +10531,13 @@ export type GetObservabilityLogs_Response = {
       | undefined;
     traceId?: (string | null) | undefined;
     spanId?: (string | null) | undefined;
-    entityType?: (Shared_Type_58 | null) | undefined;
+    entityType?: (Shared_Type_59 | null) | undefined;
     entityId?: (string | null) | undefined;
     entityName?: (string | null) | undefined;
-    parentEntityType?: (Shared_Type_58 | null) | undefined;
+    parentEntityType?: (Shared_Type_59 | null) | undefined;
     parentEntityId?: (string | null) | undefined;
     parentEntityName?: (string | null) | undefined;
-    rootEntityType?: (Shared_Type_58 | null) | undefined;
+    rootEntityType?: (Shared_Type_59 | null) | undefined;
     rootEntityId?: (string | null) | undefined;
     rootEntityName?: (string | null) | undefined;
     userId?: (string | null) | undefined;
@@ -10592,9 +10649,9 @@ export type GetObservabilityScores_QueryParams = {
 };
 
 export type GetObservabilityScores_Response = {
-  pagination?: Shared_Type_55 | undefined;
+  pagination?: Shared_Type_56 | undefined;
   /** Incremental polling metadata */
-  delta?: Shared_Type_56 | undefined;
+  delta?: Shared_Type_57 | undefined;
   /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
   scores: Shared_Type_63[];
@@ -10997,9 +11054,9 @@ export type GetObservabilityFeedback_QueryParams = {
 };
 
 export type GetObservabilityFeedback_Response = {
-  pagination?: Shared_Type_55 | undefined;
+  pagination?: Shared_Type_56 | undefined;
   /** Incremental polling metadata */
-  delta?: Shared_Type_56 | undefined;
+  delta?: Shared_Type_57 | undefined;
   /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
   feedback: {
@@ -11019,13 +11076,13 @@ export type GetObservabilityFeedback_Response = {
     value: number | string;
     comment?: (string | null) | undefined;
     feedbackUserId?: (string | null) | undefined;
-    entityType?: (Shared_Type_58 | null) | undefined;
+    entityType?: (Shared_Type_59 | null) | undefined;
     entityId?: (string | null) | undefined;
     entityName?: (string | null) | undefined;
-    parentEntityType?: (Shared_Type_58 | null) | undefined;
+    parentEntityType?: (Shared_Type_59 | null) | undefined;
     parentEntityId?: (string | null) | undefined;
     parentEntityName?: (string | null) | undefined;
-    rootEntityType?: (Shared_Type_58 | null) | undefined;
+    rootEntityType?: (Shared_Type_59 | null) | undefined;
     rootEntityId?: (string | null) | undefined;
     rootEntityName?: (string | null) | undefined;
     userId?: (string | null) | undefined;
@@ -11231,13 +11288,13 @@ export type PatchObservabilityFeedbackFeedbackIdReviewStatus_Response = {
   value: number | string;
   comment?: (string | null) | undefined;
   feedbackUserId?: (string | null) | undefined;
-  entityType?: (Shared_Type_58 | null) | undefined;
+  entityType?: (Shared_Type_59 | null) | undefined;
   entityId?: (string | null) | undefined;
   entityName?: (string | null) | undefined;
-  parentEntityType?: (Shared_Type_58 | null) | undefined;
+  parentEntityType?: (Shared_Type_59 | null) | undefined;
   parentEntityId?: (string | null) | undefined;
   parentEntityName?: (string | null) | undefined;
-  rootEntityType?: (Shared_Type_58 | null) | undefined;
+  rootEntityType?: (Shared_Type_59 | null) | undefined;
   rootEntityId?: (string | null) | undefined;
   rootEntityName?: (string | null) | undefined;
   userId?: (string | null) | undefined;
@@ -11758,7 +11815,7 @@ export interface GetObservabilityDiscoveryMetricLabelValues_RouteContract {
 // ============================================================================
 export type GetObservabilityDiscoveryEntityTypes_Response = {
   /** Distinct entity types */
-  entityTypes: Shared_Type_58[];
+  entityTypes: Shared_Type_59[];
 };
 
 export type GetObservabilityDiscoveryEntityTypes_Request = Simplify<
@@ -12240,108 +12297,56 @@ export interface GetEmbedders_RouteContract {
 // ============================================================================
 export type GetWellKnownAgentIdAgentCardJson_PathParams = GetAgentsAgentId_PathParams;
 
-export type GetWellKnownAgentIdAgentCardJson_Response =
-  | {
-      additionalInterfaces?: unknown[] | undefined;
-      name: string;
-      description: string;
-      url: string;
-      protocolVersion: string;
-      provider?:
-        | {
-            organization: string;
-            url: string;
-          }
-        | undefined;
-      security?:
-        | {
-            [key: string]: string[];
-          }[]
-        | undefined;
-      securitySchemes?:
-        | {
-            [key: string]: unknown;
-          }
-        | undefined;
-      version: string;
-      capabilities: {
-        extensions?: unknown[] | undefined;
-        streaming?: boolean | undefined;
-        pushNotifications?: boolean | undefined;
-        stateTransitionHistory?: boolean | undefined;
-      };
-      defaultInputModes: string[];
-      defaultOutputModes: string[];
-      supportsAuthenticatedExtendedCard?: boolean | undefined;
-      signatures?:
-        | {
-            protected: string;
-            signature: string;
-            header?:
-              | {
-                  [key: string]: unknown;
-                }
-              | undefined;
-          }[]
-        | undefined;
-      skills: {
-        id: string;
-        name: string;
-        description: string;
-        tags?: string[] | undefined;
-      }[];
-    }
-  | {
-      name: string;
-      description?: string | undefined;
-      provider?:
-        | {
-            organization: string;
-            url: string;
-          }
-        | undefined;
-      securitySchemes?:
-        | {
-            [key: string]: unknown;
-          }
-        | undefined;
-      version: string;
-      capabilities: {
-        streaming?: boolean | undefined;
-        pushNotifications?: boolean | undefined;
-        extendedAgentCard?: boolean | undefined;
-        extensions?: unknown[] | undefined;
-      };
-      defaultInputModes?: string[] | undefined;
-      defaultOutputModes?: string[] | undefined;
-      signatures?:
-        | {
-            protected: string;
-            signature: string;
-            header?:
-              | {
-                  [key: string]: unknown;
-                }
-              | undefined;
-          }[]
-        | undefined;
-      skills?:
-        | {
-            id: string;
-            name: string;
-            description?: string | undefined;
-            tags?: string[] | undefined;
-            examples?: string[] | undefined;
-            inputModes?: string[] | undefined;
-            outputModes?: string[] | undefined;
-          }[]
-        | undefined;
-      supportedInterfaces: {
+export type GetWellKnownAgentIdAgentCardJson_Response = {
+  additionalInterfaces?: unknown[] | undefined;
+  name: string;
+  description: string;
+  url: string;
+  protocolVersion: string;
+  provider?:
+    | {
+        organization: string;
         url: string;
-        protocolBinding: 'JSONRPC';
-        protocolVersion: '0.3' | '1.0';
-      }[];
-    };
+      }
+    | undefined;
+  security?:
+    | {
+        [key: string]: string[];
+      }[]
+    | undefined;
+  securitySchemes?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  version: string;
+  capabilities: {
+    extensions?: unknown[] | undefined;
+    streaming?: boolean | undefined;
+    pushNotifications?: boolean | undefined;
+    stateTransitionHistory?: boolean | undefined;
+  };
+  defaultInputModes: string[];
+  defaultOutputModes: string[];
+  supportsAuthenticatedExtendedCard?: boolean | undefined;
+  signatures?:
+    | {
+        protected: string;
+        signature: string;
+        header?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      }[]
+    | undefined;
+  skills: {
+    id: string;
+    name: string;
+    description: string;
+    tags?: string[] | undefined;
+  }[];
+};
 
 export type GetWellKnownAgentIdAgentCardJson_Request = Simplify<
   (GetWellKnownAgentIdAgentCardJson_PathParams extends never
@@ -12357,7 +12362,7 @@ export interface GetWellKnownAgentIdAgentCardJson_RouteContract {
   body: never;
   request: GetWellKnownAgentIdAgentCardJson_Request;
   response: GetWellKnownAgentIdAgentCardJson_Response;
-  responseType: 'datastream-response';
+  responseType: 'json';
 }
 
 // ============================================================================
@@ -12369,19 +12374,19 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'message/send' | 'SendMessage';
+      method: 'message/send';
       params: InputShared_Type_30;
     }
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'message/stream' | 'SendStreamingMessage';
+      method: 'message/stream';
       params: InputShared_Type_30;
     }
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/get' | 'GetTask';
+      method: 'tasks/get';
       params: {
         /** Task id */
         id: string;
@@ -12397,7 +12402,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/list' | 'ListTasks';
+      method: 'tasks/list';
       params: {
         tenant?: string | undefined;
         contextId?: string | undefined;
@@ -12412,7 +12417,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/cancel' | 'CancelTask';
+      method: 'tasks/cancel';
       params: {
         /** Task id */
         id: string;
@@ -12426,7 +12431,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/resubscribe' | 'SubscribeToTask';
+      method: 'tasks/resubscribe';
       params: {
         /** Task id */
         id: string;
@@ -12450,23 +12455,6 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'CreateTaskPushNotificationConfig';
-      params: {
-        /** URL for sending the push notifications */
-        url: string;
-        /** Push Notification ID - created by server to support multiple callbacks */
-        id?: string | undefined;
-        /** Token unique to this task/session */
-        token?: string | undefined;
-        authentication?: InputShared_Type_27 | undefined;
-        /** Task id */
-        taskId: string;
-        tenant?: string | undefined;
-      };
-    }
-  | {
-      jsonrpc: '2.0';
-      id: string | number;
       method: 'tasks/pushNotificationConfig/get';
       params: {
         /** Task id */
@@ -12483,16 +12471,6 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'GetTaskPushNotificationConfig';
-      params: {
-        tenant?: string | undefined;
-        taskId: string;
-        id: string;
-      };
-    }
-  | {
-      jsonrpc: '2.0';
-      id: string | number;
       method: 'tasks/pushNotificationConfig/list';
       params: {
         /** Task id */
@@ -12502,17 +12480,6 @@ export type PostA2aAgentId_Body =
               [key: string]: unknown;
             }
           | undefined;
-      };
-    }
-  | {
-      jsonrpc: '2.0';
-      id: string | number;
-      method: 'ListTaskPushNotificationConfigs';
-      params: {
-        tenant?: string | undefined;
-        taskId: string;
-        pageSize?: number | undefined;
-        pageToken?: string | undefined;
       };
     }
   | {
@@ -12534,17 +12501,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'DeleteTaskPushNotificationConfig';
-      params: {
-        tenant?: string | undefined;
-        taskId: string;
-        id: string;
-      };
-    }
-  | {
-      jsonrpc: '2.0';
-      id: string | number;
-      method: 'agent/getAuthenticatedExtendedCard' | 'GetExtendedAgentCard';
+      method: 'agent/getAuthenticatedExtendedCard';
     };
 
 export type PostA2aAgentId_Response = PostAgentsAgentIdGenerate_Response;
@@ -17943,7 +17900,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_736[] | undefined;
+  files?: InputShared_Auxiliary_724[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -18001,7 +17958,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_736[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_724[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -18802,7 +18759,6 @@ export type GetSystemPackages_Response = {
     | {
         metrics: boolean;
         logs: boolean;
-        traceQueryDiscovery: boolean;
       }
     | undefined;
   observabilityRuntimeStrategy?: ('realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced') | undefined;
@@ -23492,6 +23448,10 @@ export interface RouteTypes {
   'PATCH /memory/threads/:threadId': PatchMemoryThreadsThreadId_RouteContract;
   'DELETE /memory/threads/:threadId': DeleteMemoryThreadsThreadId_RouteContract;
   'POST /memory/threads/:threadId/clone': PostMemoryThreadsThreadIdClone_RouteContract;
+  'POST /memory/threads/:threadId/branch': PostMemoryThreadsThreadIdBranch_RouteContract;
+  'GET /memory/threads/:threadId/parent': GetMemoryThreadsThreadIdParent_RouteContract;
+  'GET /memory/threads/:threadId/branches': GetMemoryThreadsThreadIdBranches_RouteContract;
+  'GET /memory/threads/:threadId/branch-history': GetMemoryThreadsThreadIdBranchHistory_RouteContract;
   'POST /memory/threads/:threadId/transfer': PostMemoryThreadsThreadIdTransfer_RouteContract;
   'POST /memory/threads/:threadId/working-memory': PostMemoryThreadsThreadIdWorkingMemory_RouteContract;
   'POST /memory/messages/delete': PostMemoryMessagesDelete_RouteContract;
@@ -23524,8 +23484,6 @@ export interface RouteTypes {
   'GET /observability/traces/:traceId/:spanId/scores': GetObservabilityTracesTraceIdSpanIdScores_RouteContract;
   'POST /observability/traces/query': PostObservabilityTracesQuery_RouteContract;
   'POST /observability/threads/query': PostObservabilityThreadsQuery_RouteContract;
-  'POST /observability/traces/query/fields': PostObservabilityTracesQueryFields_RouteContract;
-  'POST /observability/traces/query/values': PostObservabilityTracesQueryValues_RouteContract;
   'GET /observability/metrics': GetObservabilityMetrics_RouteContract;
   'GET /observability/logs': GetObservabilityLogs_RouteContract;
   'GET /observability/scores': GetObservabilityScores_RouteContract;
@@ -24356,11 +24314,23 @@ export interface Client {
     GET: GetMemoryThreadsThreadId_RouteContract;
     PATCH: PatchMemoryThreadsThreadId_RouteContract;
   };
+  '/memory/threads/:threadId/branch': {
+    POST: PostMemoryThreadsThreadIdBranch_RouteContract;
+  };
+  '/memory/threads/:threadId/branch-history': {
+    GET: GetMemoryThreadsThreadIdBranchHistory_RouteContract;
+  };
+  '/memory/threads/:threadId/branches': {
+    GET: GetMemoryThreadsThreadIdBranches_RouteContract;
+  };
   '/memory/threads/:threadId/clone': {
     POST: PostMemoryThreadsThreadIdClone_RouteContract;
   };
   '/memory/threads/:threadId/messages': {
     GET: GetMemoryThreadsThreadIdMessages_RouteContract;
+  };
+  '/memory/threads/:threadId/parent': {
+    GET: GetMemoryThreadsThreadIdParent_RouteContract;
   };
   '/memory/threads/:threadId/transfer': {
     POST: PostMemoryThreadsThreadIdTransfer_RouteContract;
@@ -24486,12 +24456,6 @@ export interface Client {
   };
   '/observability/traces/query': {
     POST: PostObservabilityTracesQuery_RouteContract;
-  };
-  '/observability/traces/query/fields': {
-    POST: PostObservabilityTracesQueryFields_RouteContract;
-  };
-  '/observability/traces/query/values': {
-    POST: PostObservabilityTracesQueryValues_RouteContract;
   };
   '/observability/traces/score': {
     POST: PostObservabilityTracesScore_RouteContract;
