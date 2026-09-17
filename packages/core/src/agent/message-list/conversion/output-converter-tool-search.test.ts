@@ -486,7 +486,8 @@ describe('aiV5UIMessagesToAIV5ModelMessages — hosted tool_search replay', () =
     const dbMessage = AIV5Adapter.fromModelMessage(modelMessage, 'input');
 
     const part = dbMessage.content.parts.find(p => p.type === 'tool-invocation') as
-      { providerMetadata?: Record<string, unknown>; providerExecuted?: boolean } | undefined;
+      | { providerMetadata?: Record<string, unknown>; providerExecuted?: boolean }
+      | undefined;
     expect(part?.providerMetadata).toEqual({ openai: { itemId: 'tsc_1', resultItemId: 'tso_1' } });
     // Provider-executed must survive the round-trip, or the replayed result is
     // moved to a `tool` role message and re-serialized as a broken client-mode
