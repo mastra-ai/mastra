@@ -26,6 +26,7 @@ export type WorkflowRuntime = ((startArgs?: {
 }) => Promise<WorkflowExecutionResult>) & {
   then(stepId: string): WorkflowRuntime;
   thenWorkflow(workflowType: string): WorkflowRuntime;
+  map(mappingId: string, options?: unknown): WorkflowRuntime;
   sleep(durationOrFnId: number | string): WorkflowRuntime;
   sleepUntil(dateOrFnId: Date | number | string): WorkflowRuntime;
   parallel(entries: ParallelEntry[]): WorkflowRuntime;
