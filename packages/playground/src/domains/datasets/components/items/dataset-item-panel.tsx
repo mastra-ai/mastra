@@ -3,7 +3,6 @@
 import type { DatasetItem, DatasetItemToolMock, UpdateDatasetItemParams } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -70,7 +69,9 @@ export function DatasetItemPanel({ item, itemId, fallback, onClose, ...bodyProps
             <DataPanel.Heading>
               Item <b>#{itemId}</b>
             </DataPanel.Heading>
-            <DataPanel.CloseButton onClick={onClose} tooltip="Close detail panel" />
+            <DataPanel.HeaderActions>
+              <DataPanel.CloseButton onClick={onClose} tooltip="Close detail panel" />
+            </DataPanel.HeaderActions>
           </DataPanel.Header>
           {fallback}
         </>
@@ -282,7 +283,7 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
         <DataPanel.Heading>
           Item <b># {item.id.length > 12 ? `${item.id.slice(0, 12)}…` : item.id}</b>
         </DataPanel.Heading>
-        <ButtonsGroup className="ml-auto shrink-0">
+        <DataPanel.HeaderActions>
           <DataPanel.NextPrevNav
             onPrevious={onPrevious}
             onNext={onNext}
@@ -294,7 +295,7 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
               <Button
                 as={Link}
                 href={`/datasets/${datasetId}/items/${item.id}/versions?version=${item.datasetVersion}`}
-                size="md"
+                size="sm"
                 variant="ghost"
                 tooltip="Go to item versions history"
                 aria-label="Go to item versions history"
@@ -304,7 +305,7 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
 
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button size="md" variant="ghost" aria-label="Actions menu">
+                  <Button size="sm" variant="ghost" aria-label="Actions menu">
                     <EllipsisVerticalIcon />
                   </Button>
                 </DropdownMenu.Trigger>
@@ -325,7 +326,7 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
             </>
           )}
           <DataPanel.CloseButton onClick={onClose} tooltip="Close detail panel" />
-        </ButtonsGroup>
+        </DataPanel.HeaderActions>
       </DataPanel.Header>
 
       <DataPanel.Content>

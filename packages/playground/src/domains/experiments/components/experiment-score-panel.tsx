@@ -2,7 +2,6 @@
 
 import type { ClientScoreRowData } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { GaugeIcon, ReceiptText } from 'lucide-react';
@@ -56,7 +55,7 @@ function ExperimentScorePanelBody({
         <DataPanel.Heading>
           Score <b>{score.scorerId}</b>
         </DataPanel.Heading>
-        <ButtonsGroup className="ml-auto shrink-0">
+        <DataPanel.HeaderActions>
           {(onPrevious || onNext) && (
             <DataPanel.NextPrevNav
               onPrevious={onPrevious}
@@ -66,12 +65,12 @@ function ExperimentScorePanelBody({
             />
           )}
           {onShowTrace && score.traceId && (
-            <Button size="md" variant="ghost" onClick={onShowTrace} icon={<TraceIcon />}>
+            <Button size="sm" variant="ghost" onClick={onShowTrace} icon={<TraceIcon />}>
               Trace
             </Button>
           )}
           <DataPanel.CloseButton onClick={onClose} tooltip="Close score panel" />
-        </ButtonsGroup>
+        </DataPanel.HeaderActions>
       </DataPanel.Header>
 
       <DataPanel.Content>

@@ -2,12 +2,11 @@ import type { FeedbackItem } from '@mastra/client-js';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useTraceOrBranchSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-or-branch-spans';
 import { format } from 'date-fns/format';
-import { Check } from 'lucide-react';
+import { CalendarClock, Check } from 'lucide-react';
 import { useState } from 'react';
 
 import { feedbackDisplayValue } from '@/domains/inbox/utils/feedback-display-value';
@@ -91,9 +90,9 @@ function FeedbackSummary({ feedback, onMarkReviewed, isMarkingReviewed }: Feedba
   return (
     <section aria-label="Feedback" className="border-border1 flex max-h-[33vh] shrink-0 flex-col border-b">
       <DataPanel.Header>
-        <div className="flex min-w-0 flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <DataPanel.Heading>Feedback</DataPanel.Heading>
+        <DataPanel.HeaderContent>
+          <DataPanel.Heading>
+            Feedback
             <Badge variant="neutral" emphasis="muted">
               {feedback.feedbackType}
             </Badge>
@@ -102,29 +101,29 @@ function FeedbackSummary({ feedback, onMarkReviewed, isMarkingReviewed }: Feedba
                 {feedback.feedbackSource}
               </Badge>
             )}
-          </div>
-          <div className="flex items-center gap-2">
+          </DataPanel.Heading>
+          <DataPanel.Metadata>
             {author && (
-              <>
-                <Avatar name={author} src={feedback.author?.avatarUrl} size="sm" />
-                <Txt as="span" variant="ui-sm" className="text-neutral5 truncate">
-                  {author}
-                </Txt>
-                <Txt as="span" variant="ui-sm" className="text-neutral3">
-                  ·
-                </Txt>
-              </>
+              <DataPanel.Meta
+                icon={<Avatar name={author} src={feedback.author?.avatarUrl} size="sm" />}
+                tooltip="Author"
+              >
+                {author}
+              </DataPanel.Meta>
             )}
-            <Txt as="span" variant="ui-sm" className="text-neutral3">
-              {format(new Date(feedback.timestamp), 'MMM dd, yyyy HH:mm:ss')}
-            </Txt>
-          </div>
-        </div>
-        <ButtonsGroup className="ml-auto shrink-0">
+            <DataPanel.Meta
+              icon={<CalendarClock />}
+              tooltip={`Submitted at ${format(new Date(feedback.timestamp), 'MMM dd, yyyy HH:mm:ss')}`}
+            >
+              {format(new Date(feedback.timestamp), 'MMM dd, yyyy HH:mm')}
+            </DataPanel.Meta>
+          </DataPanel.Metadata>
+        </DataPanel.HeaderContent>
+        <DataPanel.HeaderActions>
           <Button variant="primary" size="sm" onClick={onMarkReviewed} disabled={isMarkingReviewed} icon={<Check />}>
             Mark as reviewed
           </Button>
-        </ButtonsGroup>
+        </DataPanel.HeaderActions>
       </DataPanel.Header>
       <div className="min-h-0 overflow-y-auto p-3">
         <Txt as="p" variant="ui-md" className="text-neutral5 whitespace-pre-wrap">

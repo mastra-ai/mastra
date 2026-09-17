@@ -17,7 +17,7 @@ export function DataPanelCloseButton({
 }: DataPanelCloseButtonProps) {
   return (
     <Button
-      size="md"
+      size="sm"
       variant={variant}
       onClick={onClick}
       aria-label="Close Panel"

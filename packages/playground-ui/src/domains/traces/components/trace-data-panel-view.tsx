@@ -20,7 +20,6 @@ import { TraceSpanTimeline } from './trace-span-timeline';
 import { TraceSpanTree } from './trace-span-tree';
 import { TraceSummaryDescription } from './trace-summary-description';
 import { Button } from '@/ds/components/Button';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
 import type { DataPanelProps } from '@/ds/components/DataPanel';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
@@ -223,7 +222,7 @@ export function TraceDataPanelView({
     <DropdownMenu>
       <DropdownMenu.Trigger
         render={
-          <Button size="md" variant="ghost" tooltip="Trace actions" aria-label="Trace actions">
+          <Button size="sm" variant="ghost" tooltip="Trace actions" aria-label="Trace actions">
             <MoreHorizontalIcon />
           </Button>
         }
@@ -270,11 +269,11 @@ export function TraceDataPanelView({
             {isOnTracePage ? (
               <>
                 <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
-                <ButtonsGroup className="ml-auto shrink-0">{traceActionsMenu}</ButtonsGroup>
+                <DataPanel.HeaderActions>{traceActionsMenu}</DataPanel.HeaderActions>
               </>
             ) : (
               <>
-                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <DataPanel.HeaderContent>
                   <DataPanel.Heading>
                     Trace
                     <TraceIdButton id={traceId} />
@@ -287,10 +286,10 @@ export function TraceDataPanelView({
                       LinkComponent={LinkComponent}
                     />
                   )}
-                </div>
-                <ButtonsGroup className="ml-auto shrink-0 self-start">
+                </DataPanel.HeaderContent>
+                <DataPanel.HeaderActions>
                   {onEvaluateTrace && (
-                    <Button variant="primary" size="md" onClick={onEvaluateTrace} disabled={!rootSpan}>
+                    <Button variant="primary" size="sm" onClick={onEvaluateTrace} disabled={!rootSpan}>
                       <CircleGaugeIcon />
                       Score trace
                     </Button>
@@ -305,7 +304,7 @@ export function TraceDataPanelView({
                     />
                   )}
                   <DataPanel.CloseButton onClick={onClose} />
-                </ButtonsGroup>
+                </DataPanel.HeaderActions>
               </>
             )}
           </DataPanel.Header>

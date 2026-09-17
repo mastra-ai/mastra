@@ -19,13 +19,15 @@ export function TraceThreadPanel({ threadId, onBack, onClose, title }: TraceThre
   return (
     <DataPanel open onClose={onClose} title={title ?? `Thread ${threadId}`} size="full">
       <DataPanel.Header>
-        <Button size="md" variant="ghost" onClick={onBack} aria-label="Back to trace" tooltip="Back to trace">
+        <Button size="sm" variant="ghost" onClick={onBack} aria-label="Back to trace" tooltip="Back to trace">
           <ArrowLeftIcon />
         </Button>
         <DataPanel.Heading>
           Thread <b className="truncate">{threadId}</b>
         </DataPanel.Heading>
-        <DataPanel.CloseButton onClick={onClose} />
+        <DataPanel.HeaderActions>
+          <DataPanel.CloseButton onClick={onClose} />
+        </DataPanel.HeaderActions>
       </DataPanel.Header>
       {/* Inside the framed panel the turns' details columns read as one strip: no top rounding, no horizontal borders. */}
       <div className="min-h-0 flex-1 [&_[data-slot=thread-trace-details]]:rounded-t-none [&_[data-slot=thread-trace-details]]:border-y-0">
