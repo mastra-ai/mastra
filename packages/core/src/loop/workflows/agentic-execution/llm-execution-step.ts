@@ -1467,8 +1467,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // a retry re-entering the step as a fresh invocation — so this is the single place
         // a dead attempt's finished tool work is written into the conversation the new
         // attempt will see. Before the request, so the model gets it, and after the
-        // pre-run signal drain above, so the id it is recorded under is the id this
-        // attempt actually streams into rather than one rotated out from under it.
+        // pre-run signal drain above, so it is not recorded under an id that drain is
+        // about to rotate away. A later rotation — an input processor can still call
+        // rotateResponseMessageId — is harmless for a different reason: rotation seals
+        // the committed message, so the attempt streams into a fresh one and a removal
+        // of that fresh id cannot take the committed record with it.
         commitCarriedEagerWork(currentMessageId);
 
         const currentStep: {
@@ -2823,12 +2826,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // disappearing with the rejected response.
         eagerCoordinator?.recarryCommittedWork(outputStream.messageId);
         messageList.removeByIds([outputStream.messageId]);
-        // A processor retry throws this attempt away like the error paths do. Most retries
-        // cannot reach here with eager work in flight, because a `processOutputStep`
-        // processor switches eager dispatch off for the whole turn — but a `processToolResult`
-        // hook can raise a retrying tripwire without being one, and that hook only runs
-        // because a tool already produced a result. Cancel what is still running, and keep
-        // what finished so the retry is not charged for the same side effect twice.
+        // A processor retry throws this attempt away like the error paths do, so it gets
+        // the same treatment: cancel what is still running, keep what finished.
+        //
+        // No path currently reaches here holding eager work, and both halves of that were
+        // checked rather than assumed. A `processOutputStep` processor switches eager
+        // dispatch off for the whole turn, and the other producer of a retrying tripwire —
+        // a `processToolResult` hook firing on a provider-executed result mid-stream —
+        // bails the attempt at the tripwire return above (see the
+        // `toolResultTripwireFromStream` bail) before this retry is ever considered. These
+        // two lines are therefore insurance against that arrangement changing, not a live
+        // path: cheap, and the thing they prevent is a second real side effect.
         discardAttemptEagerWork();
       }
 
