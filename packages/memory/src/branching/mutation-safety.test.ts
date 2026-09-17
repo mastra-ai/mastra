@@ -35,6 +35,47 @@ describe('branch mutation integrity', () => {
     await memory.saveMessages({ messages: [message('fork', 'root', forkTime)] });
   });
 
+  it('does not serialize mutations for unrelated branch trees', async () => {
+    await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' });
+    await memory.createThread({ threadId: 'unrelated', resourceId: 'unrelated-resource' });
+
+    const originalPatchThread = store.patchThread.bind(store);
+    let releaseRoot!: () => void;
+    let rootReachedPatch!: () => void;
+    let unrelatedReachedPatch!: () => void;
+    const rootAtPatch = new Promise<void>(resolve => {
+      rootReachedPatch = resolve;
+    });
+    const unrelatedAtPatch = new Promise<void>(resolve => {
+      unrelatedReachedPatch = resolve;
+    });
+    const continueRoot = new Promise<void>(resolve => {
+      releaseRoot = resolve;
+    });
+    vi.spyOn(store, 'patchThread').mockImplementation(async input => {
+      if (input.id === 'root') {
+        rootReachedPatch();
+        await continueRoot;
+      } else if (input.id === 'unrelated') {
+        unrelatedReachedPatch();
+      }
+      return originalPatchThread(input);
+    });
+
+    const rootUpdate = memory.updateThread({ id: 'root', title: 'updated root' });
+    await rootAtPatch;
+    const concurrentMemory = new Memory({ storage: memory.storage });
+    const unrelatedUpdate = concurrentMemory.updateThread({ id: 'unrelated', title: 'updated unrelated' });
+
+    const unrelatedProgressed = await Promise.race([
+      unrelatedAtPatch.then(() => true),
+      new Promise<boolean>(resolve => setTimeout(() => resolve(false), 250)),
+    ]);
+    releaseRoot();
+    expect(unrelatedProgressed).toBe(true);
+    await expect(Promise.all([rootUpdate, unrelatedUpdate])).resolves.toHaveLength(2);
+  });
+
   it('creates missing threads inside the validated persistence lock without deleting a concurrent writer', async () => {
     const originalSaveMessages = store.saveMessages.bind(store);
     let releaseFirst!: () => void;

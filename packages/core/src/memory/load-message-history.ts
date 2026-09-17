@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '../agent/message-list';
 import { isTransientSignalMessage } from '../agent/signals';
-import type { MemoryStorage, StorageListMessagesInput } from '../storage';
+import type { MemoryStorage, StorageListMessagesInput, StorageListMessagesOutput } from '../storage';
 import type { MemoryTokenBoundary } from './message-history-config';
 import { isAfterMemoryTokenBoundary } from './message-history-config';
 
@@ -26,6 +26,8 @@ export type LoadMessageHistoryArgs = HistoryLimits & {
   initialTokens?: number;
   includeOverflow?: boolean;
   pageSize?: number;
+  /** @internal Memory-level reader used to preserve logical history semantics. */
+  listMessages?: (input: StorageListMessagesInput) => Promise<StorageListMessagesOutput>;
 };
 
 export type LoadMessageHistoryResult = {
@@ -162,7 +164,7 @@ export async function loadMessageHistory(args: LoadMessageHistoryArgs): Promise<
               configuredEnd?.getTime() === rangeEnd?.getTime() ? args.filter?.dateRange?.endExclusive : false,
           }
         : undefined;
-    const result = await args.storage.listMessages({
+    const result = await (args.listMessages ?? (input => args.storage.listMessages(input)))({
       threadId: args.threadId,
       resourceId: args.resourceId,
       page,

@@ -9,7 +9,7 @@ import { SpanType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
 import { MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY } from '../../request-context';
 import type { RequestContext } from '../../request-context';
-import type { MemoryStorage } from '../../storage';
+import type { MemoryStorage, StorageListMessagesInput, StorageListMessagesOutput } from '../../storage';
 
 // Bounds the newest-first scan for continuation tool-call messages that fall outside the history window.
 const CONTINUATION_SCAN_PAGE_SIZE = 100;
@@ -23,6 +23,8 @@ export interface MessageHistoryOptions {
   lastMessages?: number | false;
   tokenLimit?: { maxTokens: number; atMaxRemoveTokens: number };
   tokenCounter?: { countMessage(message: MastraDBMessage): number | Promise<number> };
+  /** @internal Memory-level reader used to preserve logical history semantics. */
+  listMessages?: (input: StorageListMessagesInput) => Promise<StorageListMessagesOutput>;
   /** @internal Framework persistence hook used to preserve Memory-level mutation guarantees. */
   persistMessages?: (
     input: { messages: MastraDBMessage[]; thread?: StorageThreadType },
@@ -74,6 +76,7 @@ export class MessageHistory implements Processor {
   private lastMessages?: number | false;
   private tokenLimit?: MessageHistoryOptions['tokenLimit'];
   private tokenCounter?: MessageHistoryOptions['tokenCounter'];
+  private listMessagesHook?: MessageHistoryOptions['listMessages'];
   private persistMessagesHook?: MessageHistoryOptions['persistMessages'];
   private persistMessagesCreatesThread: boolean;
 
@@ -82,6 +85,7 @@ export class MessageHistory implements Processor {
     this.lastMessages = options.lastMessages;
     this.tokenLimit = options.tokenLimit;
     this.tokenCounter = options.tokenCounter;
+    this.listMessagesHook = options.listMessages;
     this.persistMessagesHook = options.persistMessages;
     this.persistMessagesCreatesThread = options.persistMessagesCreatesThread ?? false;
   }

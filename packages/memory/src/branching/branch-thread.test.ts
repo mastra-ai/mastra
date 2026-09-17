@@ -122,6 +122,13 @@ describe('Memory.branchThread', () => {
       memory.branchThread({
         threadId: 'root',
         branchPointMessageId: 'm1',
+        metadata: { memoryTokenLimiter: { timestamp: 'forged' } },
+      }),
+    ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
+    await expect(
+      memory.branchThread({
+        threadId: 'root',
+        branchPointMessageId: 'm1',
         metadata: { workingMemory: 'forged' },
       }),
     ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });

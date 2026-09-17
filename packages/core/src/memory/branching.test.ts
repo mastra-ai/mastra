@@ -52,16 +52,19 @@ describe('MastraMemory thread branching contract', () => {
     expect(historyOutput).toBeNull();
   });
 
-  it('rejects caller-authored lineage metadata before createThread writes', async () => {
-    const memory = new MockMemory();
+  it.each([MASTRA_THREAD_BRANCH_METADATA_KEY, 'memoryTokenLimiter'])(
+    'rejects caller-authored reserved metadata key %s before createThread writes',
+    async reservedKey => {
+      const memory = new MockMemory();
 
-    await expect(
-      memory.createThread({
-        resourceId: 'resource',
-        metadata: { [MASTRA_THREAD_BRANCH_METADATA_KEY]: {} },
-      }),
-    ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
+      await expect(
+        memory.createThread({
+          resourceId: 'resource',
+          metadata: { [reservedKey]: {} },
+        }),
+      ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
 
-    expect((await memory.listThreads({ perPage: false })).threads).toHaveLength(0);
-  });
+      expect((await memory.listThreads({ perPage: false })).threads).toHaveLength(0);
+    },
+  );
 });

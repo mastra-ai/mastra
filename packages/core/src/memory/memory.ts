@@ -24,6 +24,7 @@ import type { RequestContext } from '../request-context';
 import type {
   MastraCompositeStore,
   StorageListMessagesInput,
+  StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
   StorageCloneThreadInput,
@@ -876,6 +877,12 @@ https://mastra.ai/en/docs/memory/overview`,
     return undefined;
   }
 
+  protected getMessageHistoryReader():
+    | ((input: StorageListMessagesInput) => Promise<StorageListMessagesOutput>)
+    | undefined {
+    return undefined;
+  }
+
   protected getSemanticRecallMessageRetriever(
     _semanticRecall: MemoryConfigInternal['semanticRecall'],
   ): ((args: { query: string; threadId: string; resourceId?: string }) => Promise<MastraDBMessage[]>) | undefined {
@@ -1010,6 +1017,7 @@ https://mastra.ai/en/docs/memory/overview`,
                     atMaxRemoveTokens: lastMessages.atMaxRemoveTokens!,
                   },
             tokenCounter: messageTokenCounter,
+            listMessages: this.getMessageHistoryReader(),
           }),
         );
       }
