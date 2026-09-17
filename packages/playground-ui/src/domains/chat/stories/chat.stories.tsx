@@ -5,11 +5,24 @@ import { ChatConversation } from '../../../../.storybook/fixtures/chat/conversat
 const meta = {
   title: 'AI/Chat',
   component: ChatConversation,
-  args: { scenario: 'complete' },
+  args: { scenario: 'complete', presentation: 'studio', tone: 'green' },
   argTypes: {
+    presentation: { control: 'inline-radio', options: ['studio', 'factory'] },
+    tone: { control: 'select', options: ['green', 'purple', 'orange', 'default'] },
     scenario: {
       control: 'select',
-      options: ['complete', 'empty', 'streaming', 'stopped', 'question', 'approval', 'declined', 'error', 'long'],
+      options: [
+        'complete',
+        'empty',
+        'streaming',
+        'stopped',
+        'question',
+        'approval',
+        'declined',
+        'error',
+        'tool-error',
+        'long',
+      ],
     },
   },
   parameters: {
@@ -17,7 +30,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'An interactive conversation assembled from playground-ui components: ChatShell, message renderers, grouped tools, plan, edit, question, approvals, tasks, timeline, attachments, and Composer. Type / for fixture commands, send a message, or attach a local file. ComposerSuggestions and useComposerCommands provide the shared command interaction; command selection submits a fixture message. A deterministic fixture produces incoming chunks, and useRevealedParts paces the displayed text. Reset restores the selected scenario. Transport, persistence, model selection, and application-specific message wrappers remain owned by Studio and Factory.',
+          'A design workbench using the same playground-ui components as Studio and Factory. Choose the presentation and scenario in Controls. Both include the production Message envelope, attachments, reasoning, grouped tools, edits, plan, question, approvals, tasks, timeline and composer. Studio shows signal cards and notification metadata; Factory shows lane-change notifications, phase signals, skill activation, reminders, time gaps and GitHub links. Factory tool rows include timestamps and command lines; Studio keeps argument data. Approvals use the corresponding inline or standalone presentation. Sending, stopping, retrying, answering and approving run locally against deterministic fixtures. The fixture does not connect to an agent or reproduce application routing, model selection, voice, dataset actions, or controller steering. Component stories cover additional states. Streaming snapshots stay running for design review; sending a message or approving an edit plays incoming chunks. Reset restores the selected scenario.',
       },
     },
   },
@@ -27,12 +40,19 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Conversation: Story = {};
+export const Studio: Story = {};
+export const Factory: Story = { args: { presentation: 'factory' } };
+export const FactoryAwaitingApproval: Story = { args: { presentation: 'factory', scenario: 'approval' } };
+export const FactoryStreaming: Story = { args: { presentation: 'factory', scenario: 'streaming' } };
+export const FactoryLongConversation: Story = { args: { presentation: 'factory', scenario: 'long' } };
+export const FactoryLight: Story = { args: { presentation: 'factory' }, globals: { backgrounds: { value: 'light' } } };
 export const Empty: Story = { args: { scenario: 'empty' } };
 export const Streaming: Story = { args: { scenario: 'streaming' } };
 export const Stopped: Story = { args: { scenario: 'stopped' } };
 export const AwaitingAnswer: Story = { args: { scenario: 'question' } };
 export const AwaitingApproval: Story = { args: { scenario: 'approval' } };
 export const Declined: Story = { args: { scenario: 'declined' } };
+export const ToolFailed: Story = { args: { scenario: 'tool-error' } };
 export const Error: Story = { args: { scenario: 'error' } };
 export const LongConversation: Story = { args: { scenario: 'long' } };
 
@@ -128,5 +148,33 @@ export const RetryResponse: Story = {
     });
     await expect(canvas.getAllByRole('region', { name: /^Turn / })).toHaveLength(1);
     await expect(canvas.queryByRole('button', { name: 'Retry response' })).not.toBeInTheDocument();
+  },
+};
+
+export const FactoryEventsAndApproval: Story = {
+  args: { presentation: 'factory', scenario: 'approval' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const notification = within(canvas.getByRole('group', { name: 'Notification: factory' }));
+    const trigger = notification.getByRole('button');
+    trigger.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await userEvent.keyboard('{Enter}');
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    const skill = within(canvas.getByRole('group', { name: 'Skill: factory-build' }));
+    await userEvent.click(skill.getByRole('button'));
+    await expect(await skill.findByText('Implement the approved plan.')).toBeVisible();
+    const approval = within(canvas.getByRole('group', { name: 'Tool approval for edit_file' }));
+    await userEvent.click(approval.getByRole('button', { name: 'Approve edit_file' }));
+    await waitFor(() => expect(canvas.getByText('The conversation is ready for another review.')).toBeVisible(), {
+      timeout: 8000,
+    });
+    const github = within(canvas.getByRole('group', { name: 'Notification: github' }));
+    await userEvent.click(github.getByRole('button'));
+    await expect(await github.findByRole('link')).toHaveAttribute(
+      'href',
+      'https://github.com/mastra-ai/mastra/pull/24263',
+    );
   },
 };

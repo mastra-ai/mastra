@@ -1,13 +1,15 @@
-import { ArrowUp, Paperclip, Square, X } from 'lucide-react';
+import { ArrowUp, ImagePlus, Paperclip, Square } from 'lucide-react';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { reviewCommands } from './commands';
-import type { ChatFile, Phase } from './data';
+import type { ChatFile, ChatPresentation, Phase } from './data';
+import { ComposerAttachment } from '@/domains/chat/attachments/composer-attachment';
+import { ComposerAttachmentList } from '@/domains/chat/attachments/composer-attachment-list';
 import { UserFilePartRenderer } from '@/domains/chat/messages/renderers/user-file-part-renderer';
 import { Button } from '@/ds/components/Button';
+import type { ComposerTone } from '@/ds/components/Composer';
 import {
   Composer,
   ComposerActions,
-  ComposerAttachments,
   ComposerBox,
   ComposerInput,
   ComposerRing,
@@ -25,6 +27,7 @@ const composerStatus: Record<Phase, string> = {
   approval: 'Waiting for approval',
   declined: 'Ready',
   error: 'Reply failed',
+  'tool-error': 'Tool failed',
 };
 
 interface DraftFile {
@@ -36,12 +39,14 @@ interface DraftFile {
 
 interface ConversationComposerProps {
   phase?: Phase;
+  presentation: ChatPresentation;
+  tone: ComposerTone;
   busy: boolean;
   onSend: (text: string, files: ChatFile[]) => void;
   onStop: () => void;
 }
 
-export function ConversationComposer({ phase, busy, onSend, onStop }: ConversationComposerProps) {
+export function ConversationComposer({ phase, presentation, tone, busy, onSend, onStop }: ConversationComposerProps) {
   const [text, setText] = useState('');
   const [files, setFiles] = useState<DraftFile[]>([]);
   const [sentCount, setSentCount] = useState(0);
@@ -135,6 +140,7 @@ export function ConversationComposer({ phase, busy, onSend, onStop }: Conversati
         ref={fileInput}
         type="file"
         multiple
+        accept={presentation === 'factory' ? 'image/*' : undefined}
         hidden
         aria-label="Attach files"
         onChange={event => {
@@ -142,13 +148,18 @@ export function ConversationComposer({ phase, busy, onSend, onStop }: Conversati
           event.target.value = '';
         }}
       />
-      <ComposerRing busy={phase === 'streaming'}>
+      <ComposerRing busy={phase === 'streaming'} tone={tone}>
         <ComposerBox sendingPulseKey={sentCount}>
           <ComposerSuggestions {...commands.suggestionsProps} />
           {files.length > 0 && (
-            <ComposerAttachments aria-label="Draft attachments" className="flex flex-wrap gap-2 px-3 pt-3">
+            <ComposerAttachmentList>
               {files.map(file => (
-                <div key={file.id} className="flex min-w-0 items-center gap-1">
+                <ComposerAttachment
+                  key={file.id}
+                  name={file.filename}
+                  variant={file.part?.mimeType.startsWith('image/') ? 'thumbnail' : 'inline'}
+                  onRemove={() => removeFile(file.id)}
+                >
                   {file.part ? (
                     <UserFilePartRenderer part={file.part} />
                   ) : (
@@ -162,18 +173,9 @@ export function ConversationComposer({ phase, busy, onSend, onStop }: Conversati
                       <Notice.Message>{file.error}</Notice.Message>
                     </Notice>
                   )}
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    aria-label={`Remove ${file.filename}`}
-                    onClick={() => removeFile(file.id)}
-                  >
-                    <X />
-                  </Button>
-                </div>
+                </ComposerAttachment>
               ))}
-            </ComposerAttachments>
+            </ComposerAttachmentList>
           )}
           <ComposerInput
             {...commands.inputProps}
@@ -186,12 +188,12 @@ export function ConversationComposer({ phase, busy, onSend, onStop }: Conversati
             <Button
               type="button"
               size="icon-sm"
-              variant="ghost"
+              variant={presentation === 'factory' ? 'outline' : 'ghost'}
               aria-label="Add attachments"
               tooltip="Add attachments"
               onClick={() => fileInput.current?.click()}
             >
-              <Paperclip />
+              {presentation === 'factory' ? <ImagePlus /> : <Paperclip />}
             </Button>
             <Txt variant="ui-xs" role="status" aria-live="polite">
               {reading ? 'Reading attachments…' : composerStatus[phase ?? 'complete']}
