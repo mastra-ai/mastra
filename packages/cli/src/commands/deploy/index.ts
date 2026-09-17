@@ -1063,7 +1063,7 @@ export async function resolveEnvironment(
 /*  Upload to environment deploy endpoint                             */
 /* ------------------------------------------------------------------ */
 
-async function uploadToEnvironment(
+export async function uploadToEnvironment(
   token: string,
   orgId: string,
   projectId: string,
@@ -1075,9 +1075,29 @@ async function uploadToEnvironment(
     envVars?: Record<string, string>;
     mastraVersion?: string;
     disablePlatformObservability?: boolean;
+    dedicatedWorkersEnabled?: boolean;
   },
 ): Promise<{ id: string; uploadUrl: string }> {
   const apiUrl = process.env.MASTRA_PLATFORM_API_URL || 'https://platform.mastra.ai';
+
+  if (opts.dedicatedWorkersEnabled) {
+    const workersResp = await fetch(`${apiUrl}/v1/projects/${projectId}/workers`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        'x-organization-id': orgId,
+      },
+      body: JSON.stringify({ workersEnabled: true }),
+    });
+
+    if (!workersResp.ok) {
+      const err = await workersResp.json().catch(() => ({}));
+      throw new Error(
+        `Failed to enable dedicated workers: ${(err as { detail?: string }).detail || workersResp.statusText}`,
+      );
+    }
+  }
 
   // Create deploy via environment endpoint.
   //
@@ -1829,6 +1849,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     envVars: envCount > 0 ? envVars : undefined,
     mastraVersion: mastraVersion ?? undefined,
     disablePlatformObservability: projectConfig?.disablePlatformObservability === true,
+    dedicatedWorkersEnabled: workersMode === 'dedicated' && workersEnabled,
   });
   s.stop(`Uploaded (${elapsed(performance.now() - t)})`);
 

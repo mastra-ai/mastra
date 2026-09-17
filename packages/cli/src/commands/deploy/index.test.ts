@@ -60,6 +60,7 @@ import {
   resolveEnvironment,
   resolveProject,
   resolveWorkersDeployMode,
+  uploadToEnvironment,
   WorkersRedisRequirementError,
   zipOutput,
 } from './index.js';
@@ -149,6 +150,99 @@ describe('project creation', () => {
     await createDeployProject('token', 'org-1', 'Factory', { projectType: 'factory', region: 'ap-southeast' });
 
     expect(createServerProjectMock).toHaveBeenCalledWith('token', 'org-1', 'Factory', { factoryEnabled: true });
+  });
+});
+
+describe('environment deploy upload', () => {
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    process.env.MASTRA_PLATFORM_API_URL = 'https://platform.example.com';
+    fetchMock.mockReset();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    delete process.env.MASTRA_PLATFORM_API_URL;
+    vi.unstubAllGlobals();
+  });
+
+  it('enables project workers before uploading a dedicated workers deploy', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify({ workersEnabled: true }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ deploy: { id: 'deploy-1', uploadUrl: 'https://uploads.example.com/deploy-1' } }),
+          {
+            status: 200,
+          },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    await uploadToEnvironment('token', 'org-1', 'project-1', 'environment-1', Buffer.from('zip'), {
+      projectName: 'Worker App',
+      dedicatedWorkersEnabled: true,
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://platform.example.com/v1/projects/project-1/workers', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token',
+        'x-organization-id': 'org-1',
+      },
+      body: JSON.stringify({ workersEnabled: true }),
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://platform.example.com/v1/projects/project-1/environments/environment-1/deploy',
+      expect.any(Object),
+    );
+  });
+
+  it('does not create the deploy when workers cannot be enabled', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ detail: 'workers setting unavailable' }), {
+        status: 503,
+        statusText: 'Unavailable',
+      }),
+    );
+
+    await expect(
+      uploadToEnvironment('token', 'org-1', 'project-1', 'environment-1', Buffer.from('zip'), {
+        projectName: 'Worker App',
+        dedicatedWorkersEnabled: true,
+      }),
+    ).rejects.toThrow('Failed to enable dedicated workers: workers setting unavailable');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not change the project workers flag for an in-process deploy', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ deploy: { id: 'deploy-1', uploadUrl: 'https://uploads.example.com/deploy-1' } }),
+          {
+            status: 200,
+          },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    await uploadToEnvironment('token', 'org-1', 'project-1', 'environment-1', Buffer.from('zip'), {
+      projectName: 'Worker App',
+      dedicatedWorkersEnabled: false,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      'https://platform.example.com/v1/projects/project-1/workers',
+      expect.anything(),
+    );
   });
 });
 
