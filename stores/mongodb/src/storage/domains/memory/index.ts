@@ -1821,7 +1821,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         pendingMessageTokens: 0,
         observationTokenCount: safeTokenCount,
         observedMessageIds: input.observedMessageIds ?? null,
-        observationGroups: input.observationGroups ?? null,
+        // Omitted observationGroups preserves the stored sidecars (matching InMemory),
+        // so turning archive mode off cannot erase persisted group metadata.
+        ...(input.observationGroups ? { observationGroups: input.observationGroups } : {}),
         updatedAt: now,
       };
 

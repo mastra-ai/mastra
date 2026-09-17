@@ -3492,6 +3492,30 @@ describe('om-tools', () => {
       expect((result as any).source).not.toHaveProperty('messageCursorStart');
     });
 
+    it('returns hashed thread ids and no raw identifier when obscureThreadIds is enabled', async () => {
+      const fixture = createArchive();
+      const { memory } = createMemoryFixture(fixture);
+      const tool = recallTool(undefined, {
+        retrievalScope: 'resource',
+        observationsEnabled: true,
+        obscureThreadIds: true,
+      });
+
+      const result = (await tool.execute?.({ mode: 'observations' }, {
+        memory,
+        agent: { threadId, resourceId },
+      } as any)) as any;
+
+      const xxhash = await import('xxhash-wasm');
+      const hasher = await xxhash.default();
+      const hashed = hasher.h32ToString(threadId);
+      expect(result.source.threadId).toBe(hashed);
+      expect(result.archives[0].groups[0].source.threadId).toBe(hashed);
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toContain(threadId);
+      expect(serialized).toContain(hashed);
+    });
+
     it('maps at most 20 semantic group hits through scope-safe archive lookup', async () => {
       const fixture = createArchive();
       const { memory, getObservationArchivesByGroupIds, listObservationArchives } = createMemoryFixture(fixture);

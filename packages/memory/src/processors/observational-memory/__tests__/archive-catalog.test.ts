@@ -215,4 +215,34 @@ describe('archived observation catalog loading', () => {
     expect(listSpy).not.toHaveBeenCalled();
     expect(parts!.some(part => part.startsWith('<archived-observations>'))).toBe(false);
   });
+
+  it('hashes thread ids in the catalog when obscureThreadIds is enabled', async () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'resource',
+      obscureThreadIds: true,
+      model: 'openai/gpt-4o',
+      observation: {
+        archive: { afterTokens: 40_000, keepTokens: 8_000, maxCatalogTokens: 2_000 },
+      },
+    });
+    const record = await om.getOrCreateRecord('thread-9', 'resource-1');
+    const archive = createArchive(0);
+    archive.groups[0]!.sourceThreadId = 'thread-9';
+    vi.spyOn(storage, 'listObservationArchives').mockResolvedValue({ archives: [archive] });
+
+    const parts = await om.buildContextSystemMessages({
+      threadId: 'thread-9',
+      resourceId: 'resource-1',
+      record: { ...record, activeObservations: 'live observation' },
+    });
+
+    const catalog = parts!.find(part => part.startsWith('<archived-observations>'));
+    expect(catalog).toBeDefined();
+    const xxhash = await import('xxhash-wasm');
+    const hasher = await xxhash.default();
+    expect(catalog).toContain(`thread-id="${hasher.h32ToString('thread-9')}"`);
+    expect(catalog).not.toContain('thread-9');
+  });
 });

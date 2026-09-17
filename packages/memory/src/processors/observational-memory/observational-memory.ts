@@ -2782,6 +2782,12 @@ ${formattedMessages}
       return undefined;
     }
 
+    let representThreadId: ((threadId: string) => string) | undefined;
+    if (this.shouldObscureThreadIds) {
+      const hasher = await this.hasher;
+      representThreadId = (threadId: string) => hasher.h32ToString(threadId);
+    }
+
     const limits = [20, 20, 10] as const;
     const archives: ObservationArchiveEntry[] = [];
     let cursor: string | undefined;
@@ -2801,6 +2807,7 @@ ${formattedMessages}
         hasMore: Boolean(page.nextCursor),
         maxTokens: archiveConfig.maxCatalogTokens,
         countTokens,
+        representThreadId,
       });
       if (rendered.budgetFull || !page.nextCursor) {
         return rendered.text;
@@ -2813,6 +2820,7 @@ ${formattedMessages}
       hasMore: Boolean(cursor),
       maxTokens: archiveConfig.maxCatalogTokens,
       countTokens,
+      representThreadId,
     }).text;
   }
 

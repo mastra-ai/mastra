@@ -136,6 +136,7 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
     activateOnProviderChange?: ObservationalMemoryConfig['activateOnProviderChange'];
     temporalMarkers?: boolean;
     hooks?: ObservationalMemoryConfig['hooks'];
+    obscureThreadIds?: ObservationalMemoryConfig['obscureThreadIds'];
   };
 
 type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
@@ -2143,6 +2144,7 @@ ${workingMemory}`;
       memory: this,
       scope: omConfig.scope,
       retrieval: omConfig.retrieval,
+      obscureThreadIds: omConfig.obscureThreadIds,
       activateAfterIdle: omConfig.activateAfterIdle,
       activateOnProviderChange: omConfig.activateOnProviderChange,
       shareTokenBudget: omConfig.shareTokenBudget,
@@ -2795,6 +2797,7 @@ Notes:
         retrievalScope,
         searchEnabled: this.hasRetrievalSearch(omConfig?.retrieval),
         observationsEnabled: archiveEnabled,
+        obscureThreadIds: omConfig?.obscureThreadIds === true,
       });
     }
     if (

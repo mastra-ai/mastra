@@ -11,6 +11,12 @@ export interface RenderObservationArchiveCatalogInput {
   hasMore: boolean;
   maxTokens: number;
   countTokens: (text: string) => number;
+  /**
+   * Maps a source thread id to the id shown to the actor. Observational memory
+   * passes its xxhash representation when `obscureThreadIds` is enabled so the
+   * catalog never exposes the raw identifier.
+   */
+  representThreadId?: (threadId: string) => string;
 }
 
 export interface RenderObservationArchiveCatalogResult {
@@ -21,6 +27,7 @@ export interface RenderObservationArchiveCatalogResult {
 type CatalogRow = {
   archive: ObservationArchiveEntry;
   group: ObservationArchiveEntry['groups'][number];
+  displayThreadId?: string;
 };
 
 function escapeAttribute(value: string): string {
@@ -39,7 +46,6 @@ function dateSpan(row: CatalogRow): string {
 }
 
 function formatRow(row: CatalogRow, summary = row.group.summary): string {
-  const sourceThreadId = row.group.sourceThreadId ?? row.archive.threadId ?? undefined;
   const messageRange = row.group.sourceUnavailable ? 'unavailable' : (row.group.messageRange ?? 'unavailable');
   const attributes = [
     `archive-id="${escapeAttribute(row.archive.archiveId)}"`,
@@ -47,7 +53,7 @@ function formatRow(row: CatalogRow, summary = row.group.summary): string {
     `group-id="${escapeAttribute(row.group.groupId)}"`,
     `archived-at="${row.archive.archivedAt.toISOString()}"`,
     `date-span="${dateSpan(row)}"`,
-    sourceThreadId ? `thread-id="${escapeAttribute(sourceThreadId)}"` : undefined,
+    row.displayThreadId ? `thread-id="${escapeAttribute(row.displayThreadId)}"` : undefined,
     `observation-range="${row.group.textStart}:${row.group.textEnd}"`,
     `message-range="${escapeAttribute(messageRange)}"`,
   ].filter(Boolean);
@@ -103,7 +109,7 @@ function truncateRowToFit(
 export function renderObservationArchiveCatalog(
   input: RenderObservationArchiveCatalogInput,
 ): RenderObservationArchiveCatalogResult {
-  const { archives, hasMore, maxTokens, countTokens } = input;
+  const { archives, hasMore, maxTokens, countTokens, representThreadId } = input;
   if (!canRenderObservationArchiveCatalog(maxTokens, countTokens)) {
     return { budgetFull: true };
   }
@@ -111,7 +117,20 @@ export function renderObservationArchiveCatalog(
     return { budgetFull: false };
   }
 
-  const rows: CatalogRow[] = archives.flatMap(archive => archive.groups.map(group => ({ archive, group })));
+  const rows: CatalogRow[] = archives.flatMap(archive =>
+    archive.groups.map(group => {
+      const sourceThreadId = group.sourceThreadId ?? archive.threadId ?? undefined;
+      return {
+        archive,
+        group,
+        displayThreadId: sourceThreadId
+          ? representThreadId
+            ? representThreadId(sourceThreadId)
+            : sourceThreadId
+          : undefined,
+      };
+    }),
+  );
   if (rows.length === 0) {
     return { budgetFull: false };
   }

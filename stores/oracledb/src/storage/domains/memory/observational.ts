@@ -380,13 +380,18 @@ export async function updateActiveObservations(
   ctx: MemoryContext,
   input: UpdateActiveObservationsInput,
 ): Promise<void> {
+  // Omitted observationGroups preserves the stored sidecars (matching InMemory),
+  // so turning archive mode off cannot erase persisted group metadata. The SET
+  // fragment is conditional because COALESCE cannot mix a bound string with the
+  // JSON-typed column.
+  const groupsSet = input.observationGroups ? `${OM_OBSERVATION_GROUPS} = :observationGroups,` : '';
   try {
     await ctx.db.tx(async (_client, connection) => {
       const result = await connection.execute(
         `
           UPDATE ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
           SET ${OM_ACTIVE_OBSERVATIONS} = :activeObservations,
-              ${OM_OBSERVATION_GROUPS} = :observationGroups,
+              ${groupsSet}
               ${OM_LAST_OBSERVED_AT} = :lastObservedAt,
               ${OM_PENDING_MESSAGE_TOKENS} = 0,
               ${OM_OBSERVATION_TOKEN_COUNT} = :tokenCount,
@@ -401,7 +406,7 @@ export async function updateActiveObservations(
           id: input.id,
           expectedWriteEpoch: input.expectedWriteEpoch ?? 0,
           activeObservations: nullableClobBind(input.observations),
-          observationGroups: nullableJsonBind(input.observationGroups),
+          ...(input.observationGroups ? { observationGroups: nullableJsonBind(input.observationGroups) } : {}),
           lastObservedAt: input.lastObservedAt,
           // Moving observations to active memory consumes pending tokens and
           // advances the cumulative observed-token counter atomically.

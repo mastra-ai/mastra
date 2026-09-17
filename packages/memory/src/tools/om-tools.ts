@@ -1236,12 +1236,14 @@ export const recallTool = (
     retrievalScope?: 'thread' | 'resource';
     searchEnabled?: boolean;
     observationsEnabled?: boolean;
+    obscureThreadIds?: boolean;
   },
 ) => {
   const retrievalScope = options?.retrievalScope ?? 'thread';
   const isResourceScope = retrievalScope === 'resource';
   const searchEnabled = options?.searchEnabled ?? true;
   const observationsEnabled = options?.observationsEnabled ?? false;
+  const obscureThreadIds = options?.obscureThreadIds ?? false;
   const observationDescription = observationsEnabled
     ? ' Use mode="observations" to retrieve retired observation text and raw-message source pointers.'
     : '';
@@ -1454,6 +1456,7 @@ export const recallTool = (
           currentThreadId,
           resourceId,
           searchEnabled,
+          obscureThreadIds,
           abortSignal: (context as any)?.abortSignal,
           archiveId,
           groupId,

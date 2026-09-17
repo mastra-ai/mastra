@@ -302,6 +302,25 @@ describe('handleObservationalMemoryOperation', () => {
     });
   });
 
+  it('omUpdateActive without observationGroups preserves the stored sidecars', async () => {
+    const storedGroups = JSON.stringify([{ groupId: 'group-1', summary: 'Kept summary' }]);
+    const { ctx, docs } = createFakeOMDb([storedOMDoc({ observationGroups: storedGroups })]);
+
+    const result = await handleObservationalMemoryOperation(ctx, OM_TABLE, {
+      op: 'omUpdateActive',
+      tableName: OM_TABLE,
+      id: 'om-1',
+      observations: 'archive mode is now off',
+      tokenCount: 300,
+      lastObservedAt: '2026-06-05T00:00:00.000Z',
+      observedMessageIds: null,
+      updatedAt: '2026-06-05T00:00:00.000Z',
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(docs[0].observationGroups).toBe(storedGroups);
+  });
+
   it('throws a not-found error for updates against missing records', async () => {
     const { ctx } = createFakeOMDb([]);
     await expect(

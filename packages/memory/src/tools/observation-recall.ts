@@ -8,11 +8,15 @@ import type {
   ObservationArchiveScopeInput,
 } from '@mastra/core/storage';
 import { estimateTokenCount } from 'tokenx';
+import xxhash from 'xxhash-wasm';
 
 import { safeSlice } from '../processors/observational-memory/string-utils';
 
 const DEFAULT_MAX_RESULT_TOKENS = 2_000;
 const MAX_RESULTS = 20;
+
+/** Module-level xxhash singleton — loaded once, shared across recall executions. */
+const hasherPromise = xxhash();
 
 export interface ObservationRecallInput {
   mode: 'observations';
@@ -107,6 +111,8 @@ export interface ExecuteObservationRecallInput extends Omit<ObservationRecallInp
   currentThreadId?: string;
   resourceId?: string;
   searchEnabled: boolean;
+  /** When true, returned thread ids are xxhash representations, never raw identifiers. */
+  obscureThreadIds?: boolean;
   abortSignal?: AbortSignal;
   maxTokens?: number;
 }
@@ -132,17 +138,25 @@ function parseMessageRange(
   };
 }
 
-function toSource(group: ArchivedObservationGroup, archive: ObservationArchiveEntry): ObservationRecallSource {
+function toSource(
+  group: ArchivedObservationGroup,
+  archive: ObservationArchiveEntry,
+  representThreadId?: (threadId: string) => string,
+): ObservationRecallSource {
   const messageCursors = parseMessageRange(group.messageRange);
+  const sourceThreadId = group.sourceThreadId ?? archive.threadId ?? undefined;
   return {
-    threadId: group.sourceThreadId ?? archive.threadId ?? undefined,
+    threadId: sourceThreadId ? (representThreadId ? representThreadId(sourceThreadId) : sourceThreadId) : undefined,
     messageRange: group.messageRange,
     ...messageCursors,
     sourceUnavailable: group.sourceUnavailable === true || !group.messageRange,
   };
 }
 
-function toArchiveResult(archive: ObservationArchiveEntry): ObservationRecallArchive {
+function toArchiveResult(
+  archive: ObservationArchiveEntry,
+  representThreadId?: (threadId: string) => string,
+): ObservationRecallArchive {
   return {
     archiveId: archive.archiveId,
     archivedAt: archive.archivedAt.toISOString(),
@@ -154,7 +168,7 @@ function toArchiveResult(archive: ObservationArchiveEntry): ObservationRecallArc
       observedAt: group.observedAt
         ? { from: group.observedAt.from.toISOString(), to: group.observedAt.to.toISOString() }
         : undefined,
-      source: toSource(group, archive),
+      source: toSource(group, archive, representThreadId),
     })),
   };
 }
@@ -370,6 +384,12 @@ export async function recallObservations(input: ExecuteObservationRecallInput): 
   const store = await input.memory.getMemoryStore();
   input.abortSignal?.throwIfAborted();
 
+  let representThreadId: ((threadId: string) => string) | undefined;
+  if (input.obscureThreadIds) {
+    const hasher = await hasherPromise;
+    representThreadId = (threadId: string) => hasher.h32ToString(threadId);
+  }
+
   let archives: ObservationArchiveEntry[];
   let nextCursor: string | undefined;
 
@@ -464,8 +484,8 @@ export async function recallObservations(input: ExecuteObservationRecallInput): 
     charOffset: chunk.charOffset,
     nextCharOffset: chunk.nextCharOffset,
     truncated: chunk.truncated,
-    source: toSource(selectedGroup, selectedArchive),
-    archives: archives.map(toArchiveResult),
+    source: toSource(selectedGroup, selectedArchive, representThreadId),
+    archives: archives.map(archive => toArchiveResult(archive, representThreadId)),
     count: archives.length,
     nextCursor,
   };
