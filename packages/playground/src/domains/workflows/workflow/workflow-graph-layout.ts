@@ -5,8 +5,8 @@ import type { WorkflowGraphNode, WorkflowGraphEdge } from './utils';
 const getNodeSize = (node: WorkflowGraphNode): { width: number; height: number } => {
   if (node.type === WORKFLOW_BOUNDARY_NODE_TYPE) {
     return {
-      width: node.measured?.width ?? 56,
-      height: node.measured?.height ?? 56,
+      width: node.measured?.width ?? 112,
+      height: node.measured?.height ?? 38,
     };
   }
 
