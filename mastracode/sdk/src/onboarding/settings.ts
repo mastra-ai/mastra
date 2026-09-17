@@ -1128,11 +1128,13 @@ export function loadSettings(filePath?: string): GlobalSettings {
   const legacyPath = getLegacySettingsPath();
   safelyMigrateFromAuth(legacyPath, join(dirname(legacyPath), 'auth.json'));
 
+  const configExists = existsSync(configPath);
+  const stateExists = existsSync(statePath);
   const storedConfig = readSettingsRecord(configPath);
   const storedState = readSettingsRecord(statePath);
-  const legacy = !storedConfig || !storedState ? readSettingsRecord(legacyPath) : undefined;
-  const config = storedConfig ?? legacy;
-  const state = storedState ?? legacy;
+  const legacy = !configExists || !stateExists ? readSettingsRecord(legacyPath) : undefined;
+  const config = storedConfig ?? (!configExists ? legacy : undefined);
+  const state = storedState ?? (!stateExists ? legacy : undefined);
 
   if (!config && !state) {
     const hasUnreadableSplitStore = existsSync(configPath) || existsSync(statePath);

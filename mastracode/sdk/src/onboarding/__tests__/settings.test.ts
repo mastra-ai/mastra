@@ -313,6 +313,42 @@ describe('default config and state storage', () => {
     });
   });
 
+  it('does not restore legacy config over an unreadable config file', () => {
+    withTempDefaultSettings(() => {
+      writeFileSync(getSettingsPath(), '{invalid', 'utf-8');
+      writeFileSync(
+        getLegacySettingsPath(),
+        JSON.stringify({
+          preferences: { theme: 'dark' },
+          onboarding: { completedAt: 'legacy', quietModePreferenceSelected: true },
+        }),
+        'utf-8',
+      );
+
+      const settings = loadSettings();
+
+      expect(settings.preferences.theme).toBe('auto');
+      expect(settings.onboarding.completedAt).toBe('legacy');
+    });
+  });
+
+  it('does not restore legacy state over an unreadable state file', () => {
+    withTempDefaultSettings(() => {
+      writeFileSync(getSettingsPath(), JSON.stringify({ preferences: { theme: 'dark' } }), 'utf-8');
+      writeFileSync(getStatePath(), '{invalid', 'utf-8');
+      writeFileSync(
+        getLegacySettingsPath(),
+        JSON.stringify({ onboarding: { completedAt: 'legacy', quietModePreferenceSelected: true } }),
+        'utf-8',
+      );
+
+      const settings = loadSettings();
+
+      expect(settings.preferences.theme).toBe('dark');
+      expect(settings.onboarding.completedAt).toBeNull();
+    });
+  });
+
   it('keeps explicit settings paths as combined files', () => {
     withTempSettingsFile(filePath => {
       const settings = createSettings();
