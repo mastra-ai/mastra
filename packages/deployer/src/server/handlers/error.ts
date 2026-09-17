@@ -13,6 +13,15 @@ export function handleError(error: unknown, defaultMessage: string): Promise<Res
   });
 }
 export function errorHandler(err: Error, c: Context, isDev?: boolean): Response {
+  // An HTTPException (Hono's or @mastra/server's own class) may carry a
+  // deliberately structured public response, such as the stable version-label
+  // error envelope. Serve it verbatim so typed error contracts survive the
+  // HTTP layer instead of being collapsed into `{ error: message }`.
+  const structured = (err as { res?: unknown; getResponse?: () => Response }).res;
+  if (structured instanceof Response) {
+    const getResponse = (err as { getResponse?: () => Response }).getResponse;
+    return typeof getResponse === 'function' ? getResponse.call(err) : structured;
+  }
   if (err instanceof HTTPException) {
     if (isDev) {
       return c.json({ error: err.message, cause: err.cause, stack: err.stack }, err.status);

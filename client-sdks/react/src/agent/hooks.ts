@@ -25,7 +25,14 @@ import {
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import { mergeHistoryIntoConversation } from './merge-history';
 import { convertSignalDataToBase64String } from './signal-data';
-import type { ClientToolsInput, ClientToolsResolver, ModelSettings } from './types';
+import type {
+  AgentRunVersionIdentity,
+  ClientToolsInput,
+  ClientToolsResolver,
+  ModelSettings,
+  VersionOverrides,
+  VersionSelector,
+} from './types';
 
 const extractPendingToolApprovalIdsFromMessages = (messages: MastraDBMessage[], runId?: string) => {
   const pendingToolApprovalIds = new Set<string>();
@@ -172,6 +179,7 @@ type SignalContinuationOptions = {
   providerOptions?: ModelSettings['providerOptions'];
   requireToolApproval?: boolean;
   tracingOptions?: TracingOptions;
+  versions?: VersionOverrides;
 };
 
 type ActiveContinuation = {
@@ -179,11 +187,24 @@ type ActiveContinuation = {
   requestContext?: RequestContext;
 };
 
+type PendingGenerateContinuation = {
+  runId: string;
+  continuation: ActiveContinuation;
+};
+
+type RunVersionResolution = {
+  requested?: VersionSelector;
+  identity?: AgentRunVersionIdentity;
+  published?: boolean;
+};
+
 export interface MastraChatProps {
   agentId: string;
   resourceId?: string;
   threadId?: string;
   initialMessages?: MastraDBMessage[];
+  /** Canonical version policy used when this hook starts a new run. */
+  versions?: VersionOverrides;
   /** Persistent request context used for tool approval/decline calls (e.g. agentVersionId). */
   requestContext?: RequestContext;
   /**
@@ -195,6 +216,8 @@ export interface MastraChatProps {
   onSignalSent?: (signalId: string, preview: string) => void;
   onSignalEcho?: (signalId: string) => void;
   onThreadSignalsUnsupported?: () => void;
+  /** Called once when the server resolves the current run's requested root selector to an immutable version. */
+  onRunVersionIdentity?: (identity: AgentRunVersionIdentity) => void;
   /**
    * Use the agent-signals streaming path (sendSignal + subscribeToThread).
    * Defaults to `false`; set to `true` to opt into thread signals.
@@ -214,6 +237,8 @@ interface SharedArgs {
   coreUserMessages: CoreUserMessage[];
   model?: string;
   requestContext?: RequestContext;
+  /** Overrides the hook-level version policy for this new run only. */
+  versions?: VersionOverrides;
   threadId?: string;
   modelSettings?: ModelSettings;
   signal?: AbortSignal;
@@ -251,12 +276,47 @@ export type NetworkArgs = SharedArgs & {
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
+const isResolvedVersionOverridesChunk = (value: unknown): boolean =>
+  isObject(value) && value.type === 'resolved-version-overrides';
+
+const getResolvedRootVersionId = (value: unknown): string | undefined => {
+  if (!isObject(value)) return undefined;
+
+  const metadata = value.type === 'resolved-version-overrides' ? value.payload : value.resolvedVersionOverrides;
+  if (!isObject(metadata) || !isObject(metadata.self)) return undefined;
+
+  const versionId = metadata.self.versionId;
+  return typeof versionId === 'string' && versionId.length > 0 ? versionId : undefined;
+};
+
+const copyVersionSelector = (selector: VersionSelector): VersionSelector => {
+  if (selector.versionId !== undefined) return { versionId: selector.versionId };
+  if (selector.label !== undefined) return { label: selector.label };
+  return { status: selector.status };
+};
+
 const getErrorName = (error: unknown) => (isObject(error) && typeof error.name === 'string' ? error.name : undefined);
 
 const isAbortError = (error: unknown) => getErrorName(error) === 'AbortError';
 
+const RUN_VERSION_SELECTOR_ERROR_CODES = new Set([
+  'INVALID_VERSION_SELECTOR',
+  'ENTITY_NOT_FOUND',
+  'VERSION_NOT_FOUND',
+  'LABEL_NOT_FOUND',
+  'VERSION_LABELS_UNSUPPORTED',
+]);
+
+const isRunVersionSelectorError = (error: Record<string, unknown>) => {
+  const body = error.body;
+  if (!isObject(body)) return false;
+  const envelope = body.error;
+  return isObject(envelope) && typeof envelope.code === 'string' && RUN_VERSION_SELECTOR_ERROR_CODES.has(envelope.code);
+};
+
 const isThreadSignalUnsupportedError = (error: unknown) => {
   if (!isObject(error)) return false;
+  if (isRunVersionSelectorError(error)) return false;
 
   const status = error.status;
   if (status === 404 || status === 405 || status === 501) {
@@ -304,17 +364,28 @@ export const useChat = ({
   resourceId,
   threadId,
   initialMessages,
+  versions: propsVersions,
   requestContext: propsRequestContext,
   clientTools: hookClientTools,
   onSignalSent,
   onSignalEcho,
   onThreadSignalsUnsupported,
+  onRunVersionIdentity,
   enableThreadSignals = false,
   streamPath,
   withInitialHistory,
 }: MastraChatProps) => {
   const threadSignalsDisabled = enableThreadSignals === false;
   const _currentRunId = useRef<string | undefined>(undefined);
+  // A thread subscription can outlive multiple runs. Keep the currently active
+  // run separate from the last run used by legacy/generate continuations so a
+  // terminal thread event cannot leave a stale run id on the next idle start.
+  const _activeThreadRunId = useRef<string | undefined>(undefined);
+  // A very short run can publish its terminal event before the HTTP start
+  // acknowledgement resolves. Remember that terminal id so the late ACK does
+  // not resurrect it as an active continuation target. Late ACKs consume their
+  // entry; remaining entries are reset when the thread session changes or cancels.
+  const _terminalThreadRunIds = useRef(new Set<string>());
   const _onChunk = useRef<((chunk: ChunkType) => Promise<void>) | undefined>(undefined);
   const _networkRunId = useRef<string | undefined>(undefined);
   const _onNetworkChunk = useRef<((chunk: NetworkChunkType) => Promise<void>) | undefined>(undefined);
@@ -332,6 +403,9 @@ export const useChat = ({
   const _threadSubscriptionKeyRef = useRef<string | undefined>(undefined);
   const _threadSubscriptionPromiseRef = useRef<Promise<void> | null>(null);
   const _threadSignalsUnsupportedRef = useRef(false);
+  const _runVersionResolutionRef = useRef<RunVersionResolution | undefined>(undefined);
+  const _pendingThreadVersionResolutionRef = useRef<RunVersionResolution | undefined>(undefined);
+  const _onRunVersionIdentityRef = useRef(onRunVersionIdentity);
   const [messages, setMessages] = useState<MastraDBMessage[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const liveTasks = useRef<TaskItem[] | undefined>(undefined);
@@ -342,6 +416,7 @@ export const useChat = ({
     [toolName: string]: { status: 'approved' | 'declined' };
   }>({});
   const pendingToolApprovalIdsRef = useRef(new Set<string>());
+  const pendingGenerateContinuationsRef = useRef(new Map<string, PendingGenerateContinuation>());
   const liveApprovalIds = useRef(new Set<string>());
   const liveRunId = useRef<string | undefined>(undefined);
   const liveRunFinished = useRef(false);
@@ -355,6 +430,99 @@ export const useChat = ({
   const historyKey = `${agentId}:${resourceId ?? ''}:${threadId ?? ''}`;
   const hydratedMessages =
     withInitialHistory && subscriptionHistory?.key === historyKey ? subscriptionHistory.messages : initialMessages;
+  const [runVersionIdentity, setRunVersionIdentity] = useState<AgentRunVersionIdentity | undefined>(undefined);
+
+  _onRunVersionIdentityRef.current = onRunVersionIdentity;
+
+  const createRunVersionResolution = (versions?: VersionOverrides): RunVersionResolution => ({
+    ...(versions?.self ? { requested: copyVersionSelector(versions.self) } : {}),
+  });
+
+  const publishCapturedRunVersionIdentity = (resolution: RunVersionResolution) => {
+    if (!resolution.identity || resolution.published) return;
+
+    resolution.published = true;
+    setRunVersionIdentity(resolution.identity);
+    _onRunVersionIdentityRef.current?.(resolution.identity);
+  };
+
+  const activateRunVersionResolution = (resolution: RunVersionResolution) => {
+    _pendingThreadVersionResolutionRef.current = undefined;
+    _runVersionResolutionRef.current = resolution;
+    if (resolution.identity) {
+      publishCapturedRunVersionIdentity(resolution);
+    } else {
+      setRunVersionIdentity(undefined);
+    }
+  };
+
+  const beginRunVersionResolution = (versions?: VersionOverrides): RunVersionResolution => {
+    const resolution = createRunVersionResolution(versions);
+    activateRunVersionResolution(resolution);
+    return resolution;
+  };
+
+  const stageThreadRunVersionResolution = (versions?: VersionOverrides): RunVersionResolution => {
+    const resolution = createRunVersionResolution(versions);
+    _pendingThreadVersionResolutionRef.current = resolution;
+    return resolution;
+  };
+
+  const settleThreadRunVersionResolution = (resolution: RunVersionResolution) => {
+    if (_pendingThreadVersionResolutionRef.current !== resolution) return;
+    activateRunVersionResolution(resolution);
+  };
+
+  const discardThreadRunVersionResolution = (resolution: RunVersionResolution) => {
+    if (_pendingThreadVersionResolutionRef.current === resolution) {
+      _pendingThreadVersionResolutionRef.current = undefined;
+    }
+  };
+
+  const acceptThreadRunId = (runId: string) => {
+    if (_terminalThreadRunIds.current.delete(runId)) {
+      if (_currentRunId.current === runId) _currentRunId.current = undefined;
+      if (_activeThreadRunId.current === runId) _activeThreadRunId.current = undefined;
+      return;
+    }
+    _currentRunId.current = runId;
+    _activeThreadRunId.current = runId;
+  };
+
+  const publishRunVersionIdentityRef = useRef<(value: unknown, resolution?: RunVersionResolution) => void>(() => {});
+  publishRunVersionIdentityRef.current = (
+    value,
+    resolution = _pendingThreadVersionResolutionRef.current ?? _runVersionResolutionRef.current,
+  ) => {
+    if (
+      !resolution?.requested ||
+      resolution.identity ||
+      (resolution !== _pendingThreadVersionResolutionRef.current && resolution !== _runVersionResolutionRef.current)
+    ) {
+      return;
+    }
+
+    const resolvedVersionId = getResolvedRootVersionId(value);
+    if (!resolvedVersionId) return;
+
+    const identity: AgentRunVersionIdentity = { requested: resolution.requested, resolvedVersionId };
+    resolution.identity = identity;
+    if (resolution === _runVersionResolutionRef.current) {
+      publishCapturedRunVersionIdentity(resolution);
+    }
+  };
+
+  useEffect(() => {
+    _currentRunId.current = undefined;
+    _activeThreadRunId.current = undefined;
+    _terminalThreadRunIds.current.clear();
+    _pendingThreadVersionResolutionRef.current = undefined;
+    _runVersionResolutionRef.current = undefined;
+    pendingGenerateContinuationsRef.current.clear();
+    pendingToolApprovalIdsRef.current.clear();
+    setIsAwaitingToolApproval(false);
+    setRunVersionIdentity(undefined);
+  }, [agentId, resourceId, threadId]);
 
   const lastHydration = useRef<
     | {
@@ -406,6 +574,7 @@ export const useChat = ({
     pendingToolApprovalIdsRef.current = pendingApprovals;
     setIsAwaitingToolApproval(pendingApprovals.size > 0);
     _currentRunId.current = liveRunId.current ?? extractRunIdFromMessages(formattedMessages);
+    _activeThreadRunId.current = liveRunId.current ?? (pendingApprovals.size > 0 ? _currentRunId.current : undefined);
   }, [agentId, resourceId, threadId, hydratedMessages, isRunning, isAwaitingToolApproval]);
 
   useEffect(() => {
@@ -496,8 +665,18 @@ export const useChat = ({
   }, []);
 
   const processStreamChunk = useCallback(
-    async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
+    async (
+      chunk: ChunkType,
+      onChunk?: (chunk: ChunkType) => Promise<void>,
+      versionResolution?: RunVersionResolution,
+    ) => {
+      if (isResolvedVersionOverridesChunk(chunk)) {
+        publishRunVersionIdentityRef.current(chunk, versionResolution);
+        return;
+      }
+
       const isTerminal = chunk.type === 'finish' || chunk.type === 'abort' || chunk.type === 'error';
+      if (isTerminal && typeof chunk.runId === 'string') _terminalThreadRunIds.current.add(chunk.runId);
       // A delayed terminal event must not finish another run's message, clear
       // its approvals, or trigger its completion callback.
       if (isTerminal && liveRunId.current && chunk.runId !== liveRunId.current) return;
@@ -532,6 +711,8 @@ export const useChat = ({
         onSignalEcho?.(chunk.data.id);
       }
 
+      const chunkRunId = 'runId' in chunk && typeof chunk.runId === 'string' ? chunk.runId : undefined;
+
       if (chunk.type === 'start') {
         setIsRunning(true);
         if ('runId' in chunk && typeof chunk.runId === 'string') {
@@ -539,6 +720,7 @@ export const useChat = ({
           liveRunFinished.current = false;
           liveRunId.current = chunk.runId;
           _currentRunId.current = chunk.runId;
+          _activeThreadRunId.current = chunk.runId;
         }
       }
 
@@ -558,6 +740,7 @@ export const useChat = ({
           }
           if (liveRunId.current === runId) {
             _currentRunId.current = runId;
+            _activeThreadRunId.current = runId;
           }
         }
         setIsRunning(false);
@@ -566,9 +749,18 @@ export const useChat = ({
       if (isTerminal) {
         if (chunk.runId === liveRunId.current) liveRunFinished.current = true;
         for (const toolCallId of pendingToolApprovalIdsRef.current) liveApprovalIds.current.add(toolCallId);
-        pendingToolApprovalIdsRef.current.clear();
-        setIsAwaitingToolApproval(false);
-        setIsRunning(false);
+        if (chunkRunId) _terminalThreadRunIds.current.add(chunkRunId);
+        const endsCurrentThreadRun =
+          !chunkRunId || !_activeThreadRunId.current || _activeThreadRunId.current === chunkRunId;
+        if (endsCurrentThreadRun) {
+          _activeThreadRunId.current = undefined;
+          if (chunkRunId && _currentRunId.current === chunkRunId) {
+            _currentRunId.current = undefined;
+          }
+          pendingToolApprovalIdsRef.current.clear();
+          setIsAwaitingToolApproval(false);
+          setIsRunning(false);
+        }
       }
 
       void (onChunk ?? _onChunk.current)?.(chunk);
@@ -701,6 +893,7 @@ export const useChat = ({
     coreUserMessages,
     model,
     requestContext,
+    versions,
     threadId,
     modelSettings,
     signal,
@@ -724,11 +917,14 @@ export const useChat = ({
       requireToolApproval,
     } = modelSettings || {};
     const resolvedRequestContext = requestContext ?? propsRequestContext;
+    const resolvedVersions = versions ?? propsVersions;
+    const versionResolution = beginRunVersionResolution(resolvedVersions);
     const resolvedClientTools = clientTools ?? hookClientTools;
-    _activeContinuation.current = {
+    const activeContinuation = {
       model,
       requestContext: resolvedRequestContext,
     };
+    _activeContinuation.current = activeContinuation;
     setIsRunning(true);
 
     const clientWithAbort = new MastraClient({
@@ -757,6 +953,7 @@ export const useChat = ({
       instructions,
       system,
       requestContext: resolvedRequestContext,
+      versions: resolvedVersions,
       ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       providerOptions,
       tracingOptions,
@@ -765,9 +962,18 @@ export const useChat = ({
       clientToolsResolver,
     });
 
+    publishRunVersionIdentityRef.current(response, versionResolution);
+
     // Check if suspended for tool approval
     if (response.finishReason === 'suspended' && response.suspendPayload) {
       const { toolCallId, toolName, args } = response.suspendPayload;
+
+      pendingToolApprovalIdsRef.current.add(toolCallId);
+      pendingGenerateContinuationsRef.current.set(toolCallId, {
+        runId,
+        continuation: { ...activeContinuation },
+      });
+      setIsAwaitingToolApproval(true);
 
       // Add uiMessages with requireApprovalMetadata so UI shows approval buttons
       if (response.response?.uiMessages) {
@@ -800,6 +1006,7 @@ export const useChat = ({
     coreUserMessages,
     model,
     requestContext,
+    versions,
     threadId,
     onChunk,
     modelSettings,
@@ -826,6 +1033,7 @@ export const useChat = ({
     } = modelSettings || {};
 
     const resolvedRequestContext = requestContext ?? propsRequestContext;
+    const resolvedVersions = versions ?? propsVersions;
     const resolvedClientTools = clientTools ?? hookClientTools;
     const signalContinuationOptions: SignalContinuationOptions = {
       model,
@@ -844,6 +1052,7 @@ export const useChat = ({
       providerOptions,
       requireToolApproval,
       tracingOptions,
+      versions: resolvedVersions,
     };
     _activeContinuation.current = {
       model,
@@ -867,7 +1076,7 @@ export const useChat = ({
 
     const agent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
-    const streamWithLegacyRoute = async () => {
+    const streamWithLegacyRoute = async (versionResolution: RunVersionResolution) => {
       const runId = uuid();
       const response = await agent.stream(coreUserMessages, {
         model,
@@ -886,6 +1095,7 @@ export const useChat = ({
         instructions,
         system,
         requestContext: resolvedRequestContext,
+        versions: resolvedVersions,
         ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
         providerOptions,
         requireToolApproval,
@@ -898,7 +1108,7 @@ export const useChat = ({
       _currentRunId.current = runId;
 
       await response.processDataStream({
-        onChunk: chunk => processStreamChunk(chunk, onChunk),
+        onChunk: chunk => processStreamChunk(chunk, onChunk, versionResolution),
       });
 
       if (_streamAbortRef.current === internalAbort) {
@@ -908,7 +1118,7 @@ export const useChat = ({
     };
 
     if (!threadId || _threadSignalsUnsupportedRef.current || threadSignalsDisabled) {
-      await streamWithLegacyRoute();
+      await streamWithLegacyRoute(beginRunVersionResolution(resolvedVersions));
       return;
     }
 
@@ -917,10 +1127,12 @@ export const useChat = ({
     await ensureThreadSubscription({ threadId, resourceId: resourceId || agentId });
 
     if (_threadSignalsUnsupportedRef.current) {
-      await streamWithLegacyRoute();
+      await streamWithLegacyRoute(beginRunVersionResolution(resolvedVersions));
       return;
     }
 
+    const activeThreadRunId = _activeThreadRunId.current;
+    const versionResolution = activeThreadRunId ? undefined : stageThreadRunVersionResolution(resolvedVersions);
     const resolvedSignalId = signalId ?? uuid();
     const messageContents = getSignalContents(coreUserMessages);
     // RequestContext serializes to a plain record via its toJSON(), but the class has no
@@ -944,26 +1156,39 @@ export const useChat = ({
       providerOptions: providerOptions as any,
       requireToolApproval,
       tracingOptions,
+      versions: resolvedVersions,
       clientTools: resolvedClientTools,
       clientToolsResolver,
     };
 
     try {
-      const result = await agent.sendMessage({
-        message: clientMessageId
-          ? { contents: messageContents, metadata: { [CLIENT_MESSAGE_ID_KEY]: clientMessageId } }
-          : messageContents,
-        resourceId: resourceId || agentId,
-        threadId,
-        ifIdle: {
-          streamOptions: {
-            ...signalContinuationOptions,
-            requestContext: requestContextRecord,
-            clientTools: resolvedClientTools,
-            clientToolsResolver,
-          },
-        },
-      });
+      const message = clientMessageId
+        ? { contents: messageContents, metadata: { [CLIENT_MESSAGE_ID_KEY]: clientMessageId } }
+        : messageContents;
+      const result = activeThreadRunId
+        ? await agent.sendMessage({
+            message,
+            runId: activeThreadRunId,
+            resourceId: resourceId || agentId,
+            threadId,
+          })
+        : await agent.sendMessage({
+            message,
+            resourceId: resourceId || agentId,
+            threadId,
+            ifIdle: {
+              streamOptions: {
+                ...signalContinuationOptions,
+                requestContext: requestContextRecord,
+                clientTools: resolvedClientTools,
+                clientToolsResolver,
+              },
+            },
+          });
+      if (versionResolution) {
+        settleThreadRunVersionResolution(versionResolution);
+      }
+      acceptThreadRunId(result.runId);
       const echoedSignalId =
         result.signal &&
         typeof result.signal === 'object' &&
@@ -978,29 +1203,50 @@ export const useChat = ({
     } catch (error) {
       if (isThreadSignalUnsupportedError(error)) {
         try {
-          await agent.sendSignal({
-            signal: {
-              id: resolvedSignalId,
-              type: 'user-message',
-              contents: messageContents,
-            },
-            resourceId: resourceId || agentId,
-            threadId,
-            ifIdle: { streamOptions },
-          });
+          const signal = {
+            id: resolvedSignalId,
+            type: 'user-message' as const,
+            contents: messageContents,
+          };
+          const result = activeThreadRunId
+            ? await agent.sendSignal({
+                signal,
+                runId: activeThreadRunId,
+                resourceId: resourceId || agentId,
+                threadId,
+              })
+            : await agent.sendSignal({
+                signal,
+                resourceId: resourceId || agentId,
+                threadId,
+                ifIdle: { streamOptions },
+              });
+          if (versionResolution) {
+            settleThreadRunVersionResolution(versionResolution);
+          }
+          acceptThreadRunId(result.runId);
           onSignalSent?.(resolvedSignalId, getSignalPreview(coreUserMessages));
           return;
         } catch (signalError) {
           onSignalEcho?.(resolvedSignalId);
           if (isThreadSignalUnsupportedError(signalError)) {
             markThreadSignalsUnsupported();
+            if (activeThreadRunId) {
+              throw signalError;
+            }
+            if (!versionResolution) {
+              throw signalError;
+            }
             setMessages(prev => [...prev, fromCoreUserMessagesToMastraDBMessage(coreUserMessages)]);
-            await streamWithLegacyRoute();
+            activateRunVersionResolution(versionResolution);
+            await streamWithLegacyRoute(versionResolution);
             return;
           }
+          if (versionResolution) discardThreadRunVersionResolution(versionResolution);
           throw signalError;
         }
       }
+      if (versionResolution) discardThreadRunVersionResolution(versionResolution);
       throw error;
     }
 
@@ -1013,6 +1259,7 @@ export const useChat = ({
     coreUserMessages,
     model,
     requestContext,
+    versions,
     threadId,
     onNetworkChunk,
     modelSettings,
@@ -1023,6 +1270,8 @@ export const useChat = ({
       modelSettings || {};
 
     const resolvedRequestContext = requestContext ?? propsRequestContext;
+    const resolvedVersions = versions ?? propsVersions;
+    const versionResolution = beginRunVersionResolution(resolvedVersions);
     _activeContinuation.current = {
       model,
       requestContext: resolvedRequestContext,
@@ -1053,6 +1302,7 @@ export const useChat = ({
       },
       runId,
       requestContext: resolvedRequestContext,
+      versions: resolvedVersions,
       ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       tracingOptions,
     });
@@ -1065,6 +1315,10 @@ export const useChat = ({
     // consumer for side-effects (OM, working memory, thread list, errors).
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
+        if (isResolvedVersionOverridesChunk(chunk)) {
+          publishRunVersionIdentityRef.current(chunk, versionResolution);
+          return;
+        }
         setMessages(prev =>
           accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network', runId } }),
         );
@@ -1087,19 +1341,42 @@ export const useChat = ({
     setMessages(prev => finishStreamingAssistantMessage(prev));
     liveRunFinished.current = true;
     pendingToolApprovalIdsRef.current.clear();
+    pendingGenerateContinuationsRef.current.clear();
     setIsAwaitingToolApproval(false);
     setIsRunning(false);
     _currentRunId.current = undefined;
+    _activeThreadRunId.current = undefined;
+    _terminalThreadRunIds.current.clear();
     _onChunk.current = undefined;
     _networkRunId.current = undefined;
     _onNetworkChunk.current = undefined;
     _activeContinuation.current = {};
+    _pendingThreadVersionResolutionRef.current = undefined;
+    _runVersionResolutionRef.current = undefined;
+  };
+
+  const clearToolCallApproval = (toolCallId: string) => {
+    setToolCallApprovals(prev => {
+      const next = { ...prev };
+      delete next[toolCallId];
+      return next;
+    });
+  };
+
+  const clearNetworkToolCallApproval = (toolName: string, runId?: string) => {
+    const approvalKey = runId ? `${runId}-${toolName}` : toolName;
+    setNetworkToolCallApprovals(prev => {
+      const next = { ...prev };
+      delete next[approvalKey];
+      return next;
+    });
   };
 
   const approveToolCall = async (toolCallId: string, resumeData?: unknown) => {
     const onChunk = _onChunk.current;
     const currentRunId = _currentRunId.current;
     const continuation = _activeContinuation.current;
+    const versionResolution = _runVersionResolutionRef.current;
 
     if (!currentRunId)
       return console.info('[approveToolCall] approveToolCall can only be called after a stream has started');
@@ -1111,6 +1388,7 @@ export const useChat = ({
     if (_threadSubscriptionKeyRef.current && threadId) {
       try {
         await agent.sendToolApproval({
+          runId: currentRunId,
           resourceId: resourceId || agentId,
           threadId,
           toolCallId,
@@ -1125,11 +1403,7 @@ export const useChat = ({
         setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
         setIsRunning(false);
       } catch (error) {
-        setToolCallApprovals(prev => {
-          const next = { ...prev };
-          delete next[toolCallId];
-          return next;
-        });
+        clearToolCallApproval(toolCallId);
         setIsRunning(false);
         throw error;
       }
@@ -1152,16 +1426,12 @@ export const useChat = ({
 
       await response.processDataStream({
         onChunk: async (chunk: ChunkType) => {
-          await processStreamChunk(chunk, onChunk);
+          await processStreamChunk(chunk, onChunk, versionResolution);
         },
       });
       setIsRunning(false);
     } catch (error) {
-      setToolCallApprovals(prev => {
-        const next = { ...prev };
-        delete next[toolCallId];
-        return next;
-      });
+      clearToolCallApproval(toolCallId);
       setIsRunning(false);
       throw error;
     }
@@ -1171,6 +1441,7 @@ export const useChat = ({
     const onChunk = _onChunk.current;
     const currentRunId = _currentRunId.current;
     const continuation = _activeContinuation.current;
+    const versionResolution = _runVersionResolutionRef.current;
 
     if (!currentRunId)
       return console.info('[declineToolCall] declineToolCall can only be called after a stream has started');
@@ -1181,6 +1452,7 @@ export const useChat = ({
     if (_threadSubscriptionKeyRef.current && threadId) {
       try {
         await agent.sendToolApproval({
+          runId: currentRunId,
           resourceId: resourceId || agentId,
           threadId,
           toolCallId,
@@ -1194,34 +1466,37 @@ export const useChat = ({
         setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
         setIsRunning(false);
       } catch (error) {
-        setToolCallApprovals(prev => {
-          const next = { ...prev };
-          delete next[toolCallId];
-          return next;
-        });
+        clearToolCallApproval(toolCallId);
         setIsRunning(false);
         throw error;
       }
       return;
     }
 
-    const response = await agent.declineToolCall({
-      runId: currentRunId,
-      toolCallId,
-      ...continuation,
-    });
+    try {
+      const response = await agent.declineToolCall({
+        runId: currentRunId,
+        toolCallId,
+        ...continuation,
+      });
 
-    await response.processDataStream({
-      onChunk: async (chunk: ChunkType) => {
-        await processStreamChunk(chunk, onChunk);
-      },
-    });
-    setIsRunning(false);
+      await response.processDataStream({
+        onChunk: async (chunk: ChunkType) => {
+          await processStreamChunk(chunk, onChunk, versionResolution);
+        },
+      });
+      setIsRunning(false);
+    } catch (error) {
+      clearToolCallApproval(toolCallId);
+      setIsRunning(false);
+      throw error;
+    }
   };
 
   const approveToolCallGenerate = async (toolCallId: string) => {
-    const currentRunId = _currentRunId.current;
-    const continuation = _activeContinuation.current;
+    const pendingContinuation = pendingGenerateContinuationsRef.current.get(toolCallId);
+    const currentRunId = pendingContinuation?.runId ?? _currentRunId.current;
+    const continuation = pendingContinuation?.continuation ?? _activeContinuation.current;
 
     if (!currentRunId)
       return console.info(
@@ -1232,23 +1507,33 @@ export const useChat = ({
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
 
     const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
-    const response = await agent.approveToolCallGenerate({
-      runId: currentRunId,
-      toolCallId,
-      ...continuation,
-    });
+    try {
+      const response = await agent.approveToolCallGenerate({
+        runId: currentRunId,
+        toolCallId,
+        ...continuation,
+      });
 
-    if (response && 'uiMessages' in response.response && response.response.uiMessages) {
-      const dbMessages = dbFromServerUiMessages(response.response.uiMessages, { mode: 'generate' });
-      setMessages(prev => [...prev, ...dbMessages]);
+      if (response && 'uiMessages' in response.response && response.response.uiMessages) {
+        const dbMessages = dbFromServerUiMessages(response.response.uiMessages, { mode: 'generate' });
+        setMessages(prev => [...prev, ...dbMessages]);
+      }
+
+      pendingGenerateContinuationsRef.current.delete(toolCallId);
+      pendingToolApprovalIdsRef.current.delete(toolCallId);
+      setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
+      setIsRunning(false);
+    } catch (error) {
+      clearToolCallApproval(toolCallId);
+      setIsRunning(false);
+      throw error;
     }
-
-    setIsRunning(false);
   };
 
   const declineToolCallGenerate = async (toolCallId: string) => {
-    const currentRunId = _currentRunId.current;
-    const continuation = _activeContinuation.current;
+    const pendingContinuation = pendingGenerateContinuationsRef.current.get(toolCallId);
+    const currentRunId = pendingContinuation?.runId ?? _currentRunId.current;
+    const continuation = pendingContinuation?.continuation ?? _activeContinuation.current;
 
     if (!currentRunId)
       return console.info(
@@ -1259,24 +1544,34 @@ export const useChat = ({
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
 
     const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
-    const response = await agent.declineToolCallGenerate({
-      runId: currentRunId,
-      toolCallId,
-      ...continuation,
-    });
+    try {
+      const response = await agent.declineToolCallGenerate({
+        runId: currentRunId,
+        toolCallId,
+        ...continuation,
+      });
 
-    if (response && 'uiMessages' in response.response && response.response.uiMessages) {
-      const dbMessages = dbFromServerUiMessages(response.response.uiMessages, { mode: 'generate' });
-      setMessages(prev => [...prev, ...dbMessages]);
+      if (response && 'uiMessages' in response.response && response.response.uiMessages) {
+        const dbMessages = dbFromServerUiMessages(response.response.uiMessages, { mode: 'generate' });
+        setMessages(prev => [...prev, ...dbMessages]);
+      }
+
+      pendingGenerateContinuationsRef.current.delete(toolCallId);
+      pendingToolApprovalIdsRef.current.delete(toolCallId);
+      setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
+      setIsRunning(false);
+    } catch (error) {
+      clearToolCallApproval(toolCallId);
+      setIsRunning(false);
+      throw error;
     }
-
-    setIsRunning(false);
   };
 
   const approveNetworkToolCall = async (toolName: string, runId?: string) => {
     const onNetworkChunk = _onNetworkChunk.current;
     const networkRunId = runId || _networkRunId.current;
     const continuation = _activeContinuation.current;
+    const versionResolution = _runVersionResolutionRef.current;
 
     if (!networkRunId)
       return console.info(
@@ -1291,28 +1586,39 @@ export const useChat = ({
     }));
 
     const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
-    const response = await agent.approveNetworkToolCall({
-      runId: networkRunId,
-      ...continuation,
-    });
+    try {
+      const response = await agent.approveNetworkToolCall({
+        runId: networkRunId,
+        ...continuation,
+      });
 
-    await response.processDataStream({
-      onChunk: async (chunk: NetworkChunkType) => {
-        setMessages(prev =>
-          accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network', runId: networkRunId } }),
-        );
-        void onNetworkChunk?.(chunk);
-      },
-    });
+      await response.processDataStream({
+        onChunk: async (chunk: NetworkChunkType) => {
+          if (isResolvedVersionOverridesChunk(chunk)) {
+            publishRunVersionIdentityRef.current(chunk, versionResolution);
+            return;
+          }
+          setMessages(prev =>
+            accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network', runId: networkRunId } }),
+          );
+          void onNetworkChunk?.(chunk);
+        },
+      });
 
-    setMessages(prev => finishStreamingAssistantMessage(prev));
-    setIsRunning(false);
+      setMessages(prev => finishStreamingAssistantMessage(prev));
+      setIsRunning(false);
+    } catch (error) {
+      clearNetworkToolCallApproval(toolName, runId);
+      setIsRunning(false);
+      throw error;
+    }
   };
 
   const declineNetworkToolCall = async (toolName: string, runId?: string) => {
     const onNetworkChunk = _onNetworkChunk.current;
     const networkRunId = runId || _networkRunId.current;
     const continuation = _activeContinuation.current;
+    const versionResolution = _runVersionResolutionRef.current;
 
     if (!networkRunId)
       return console.info(
@@ -1327,22 +1633,32 @@ export const useChat = ({
     }));
 
     const agent = baseClient.getAgent(agentId, undefined, { stream: streamPath });
-    const response = await agent.declineNetworkToolCall({
-      runId: networkRunId,
-      ...continuation,
-    });
+    try {
+      const response = await agent.declineNetworkToolCall({
+        runId: networkRunId,
+        ...continuation,
+      });
 
-    await response.processDataStream({
-      onChunk: async (chunk: NetworkChunkType) => {
-        setMessages(prev =>
-          accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network', runId: networkRunId } }),
-        );
-        void onNetworkChunk?.(chunk);
-      },
-    });
+      await response.processDataStream({
+        onChunk: async (chunk: NetworkChunkType) => {
+          if (isResolvedVersionOverridesChunk(chunk)) {
+            publishRunVersionIdentityRef.current(chunk, versionResolution);
+            return;
+          }
+          setMessages(prev =>
+            accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network', runId: networkRunId } }),
+          );
+          void onNetworkChunk?.(chunk);
+        },
+      });
 
-    setMessages(prev => finishStreamingAssistantMessage(prev));
-    setIsRunning(false);
+      setMessages(prev => finishStreamingAssistantMessage(prev));
+      setIsRunning(false);
+    } catch (error) {
+      clearNetworkToolCallApproval(toolName, runId);
+      setIsRunning(false);
+      throw error;
+    }
   };
 
   const sendMessage = async ({ mode = 'stream', ...args }: SendMessageArgs) => {
@@ -1414,5 +1730,6 @@ export const useChat = ({
     approveNetworkToolCall,
     declineNetworkToolCall,
     networkToolCallApprovals,
+    runVersionIdentity,
   };
 };

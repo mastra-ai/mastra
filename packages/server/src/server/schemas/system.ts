@@ -53,6 +53,23 @@ export const observabilityStorageCapabilitiesSchema = z.object({
     ),
 });
 
+export const versionLabelEntityCapabilitiesSchema = z.object({
+  read: z.boolean(),
+  write: z.boolean(),
+  compareAndSwap: z.boolean(),
+  retentionProtection: z.boolean(),
+});
+
+export const storageCapabilitiesSchema = z.object({
+  versionLabels: z
+    .object({
+      entityTypes: z.object({
+        agent: versionLabelEntityCapabilitiesSchema.optional(),
+      }),
+    })
+    .optional(),
+});
+
 export const editorSourceSchema = z.enum(['code', 'db']);
 
 export const editorSourceCapabilitiesSchema = z.object({
@@ -84,6 +101,7 @@ export const systemPackagesResponseSchema = z.object({
   editorSourceCapabilities: editorSourceCapabilitiesSchema.optional(),
   observabilityEnabled: z.boolean(),
   storageType: z.string().optional(),
+  storageCapabilities: storageCapabilitiesSchema.optional(),
   observabilityStorageType: z.string().optional(),
   observabilityStorageCapabilities: observabilityStorageCapabilitiesSchema.optional(),
   observabilityRuntimeStrategy: observabilityRuntimeStrategySchema.optional(),

@@ -225,4 +225,54 @@ describe('onError hook integration tests', () => {
       expect(result.errorType).toBe('Error');
     });
   });
+
+  describe('Default Error Handler', () => {
+    it('lets errorHandler serve a structured HTTPException response without re-serializing it', async () => {
+      const { createVersionLabelApiError } = await import('@mastra/server/handlers/version-label-errors');
+      const { errorHandler } = await import('../handlers/error');
+
+      const error = createVersionLabelApiError('VERSION_LABELS_UNSUPPORTED', 'Version labels are unsupported.');
+      const response = errorHandler(error as unknown as Error, {} as never, false);
+
+      expect(response.status).toBe(501);
+      await expect(response.json()).resolves.toEqual({
+        error: { code: 'VERSION_LABELS_UNSUPPORTED', message: 'Version labels are unsupported.' },
+      });
+    });
+
+    it('serves the structured response attached to a thrown HTTPException verbatim', async () => {
+      const { createVersionLabelApiError } = await import('@mastra/server/handlers/version-label-errors');
+
+      const mastra = new Mastra({
+        logger: false,
+        server: {
+          apiRoutes: [
+            registerApiRoute('/test/label-conflict', {
+              method: 'GET',
+              handler: () => {
+                throw createVersionLabelApiError('LABEL_MOVE_CONFLICT', 'The label moved after it was read.', {
+                  label: 'pr-101',
+                  currentVersionId: 'version-2',
+                });
+              },
+              requiresAuth: false,
+            }),
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra, { tools: {} });
+
+      const response = await app.request(new Request('http://localhost/test/label-conflict'));
+
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toEqual({
+        error: {
+          code: 'LABEL_MOVE_CONFLICT',
+          message: 'The label moved after it was read.',
+          details: { label: 'pr-101', currentVersionId: 'version-2' },
+        },
+      });
+    });
+  });
 });
