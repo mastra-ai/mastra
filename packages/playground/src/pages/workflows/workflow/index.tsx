@@ -33,7 +33,7 @@ const WorkflowContent = ({ workflowId, workflow, isLoading }: WorkflowContentPro
           <WorkflowStepDetailContent />
         </div>
       )}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 left-[var(--workflow-left-panel-width,0px)] z-20">
+      <div className="pointer-events-none absolute right-0 bottom-0 left-[var(--workflow-left-panel-width,0px)] z-20">
         <WorkflowTimeline />
       </div>
     </div>

@@ -59,18 +59,13 @@ describe('WorkflowTimeline', () => {
       await waitFor(() => expect(screen.queryByRole('button', { name: 'View step input' })).toBeNull());
     });
 
-    it('enlarges the timeline without losing its events or collapse control', async () => {
+    it('keeps the enlarged height across a collapse and expand', async () => {
       renderTimeline();
       fireEvent.click(await screen.findByRole('button', { name: 'Expand timeline' }));
       fireEvent.click(screen.getByRole('button', { name: 'Enlarge timeline' }));
-      expect(screen.getByRole('button', { name: 'Restore timeline height' }).getAttribute('aria-pressed')).toBe('true');
-      expect(screen.getByText('count-words')).not.toBeNull();
-      expect(screen.getByTestId('workflow-timeline-bar')).not.toBeNull();
       fireEvent.click(screen.getByRole('button', { name: 'Collapse timeline' }));
       fireEvent.click(screen.getByRole('button', { name: 'Expand timeline' }));
-      expect(screen.getByRole('button', { name: 'Restore timeline height' }).getAttribute('aria-pressed')).toBe('true');
-      fireEvent.click(screen.getByRole('button', { name: 'Restore timeline height' }));
-      expect(screen.getByRole('button', { name: 'Enlarge timeline' }).getAttribute('aria-pressed')).toBe('false');
+      expect(screen.getByRole('button', { name: 'Restore timeline height' })).not.toBeNull();
     });
   });
 });

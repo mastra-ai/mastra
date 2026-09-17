@@ -79,7 +79,7 @@ export function WorkflowGraphCanvas<NodeType extends Node, EdgeType extends Edge
       duration,
       zoom: 1,
     });
-  }, [canvasWidth, canvasHeight, nodesInitialized, focusNodeId, getNodes, setCenter, fitView, leftInset, isInline]);
+  }, [canvasWidth, canvasHeight, nodesInitialized, focusNodeId, getNodes, setCenter, fitView, leftInset]);
 
   return (
     <div
