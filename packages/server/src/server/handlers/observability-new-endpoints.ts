@@ -105,11 +105,12 @@ function createNewRoute<
     onValidationError?: ValidationErrorHook;
     maxBodySize?: number;
     preserveHttpExceptions?: boolean;
+    isCoreSupported?: () => boolean;
     onUnsupportedCore?: () => never;
     handler: ServerRouteHandler<InferParams<TPathSchema, TQuerySchema, TBodySchema>>;
   },
 ) {
-  const { handler, preserveHttpExceptions, onUnsupportedCore, ...schemas } = config;
+  const { handler, preserveHttpExceptions, isCoreSupported, onUnsupportedCore, ...schemas } = config;
   return createRoute({
     ...def,
     ...schemas,
@@ -118,7 +119,7 @@ function createNewRoute<
     requiresAuth: true,
     handler: (async (params: InferParams<TPathSchema, TQuerySchema, TBodySchema> & ServerContext) => {
       try {
-        if (!coreFeatures.has('observability:v1.13.2')) {
+        if (!coreFeatures.has('observability:v1.13.2') || (isCoreSupported && !isCoreSupported())) {
           if (onUnsupportedCore) onUnsupportedCore();
           throw new HTTPException(501, {
             message: 'New observability endpoints require @mastra/core >= 1.13.2, please upgrade.',
@@ -237,6 +238,25 @@ function throwTraceQueryError(status: 400 | 409 | 413 | 422 | 501 | 503 | 504, b
   });
 }
 
+function supportsTraceQueryDiscoveryCore() {
+  return (
+    coreStorage.getTraceQueryFieldsArgsSchema !== undefined &&
+    coreStorage.getTraceQueryFieldsResponseSchema !== undefined &&
+    coreStorage.getTraceQueryValuesArgsSchema !== undefined &&
+    coreStorage.getTraceQueryValuesResponseSchema !== undefined &&
+    typeof coreStorage.planTraceQueryObservedFields === 'function' &&
+    typeof coreStorage.planTraceQueryValues === 'function' &&
+    typeof coreStorage.getTraceQueryCanonicalFieldDescriptors === 'function' &&
+    typeof coreStorage.TraceQueryResourceLimitError === 'function'
+  );
+}
+
+const throwTraceQueryDiscoveryCoreUnsupported = () =>
+  throwTraceQueryError(501, {
+    code: 'TRACE_QUERY_DISCOVERY_UNSUPPORTED',
+    message: 'Trace query discovery requires a newer @mastra/core. Please upgrade.',
+  });
+
 export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
   bodySchema: coreStorage.traceQueryRequestSchema,
   responseSchema: coreStorage.traceQueryResponseSchema,
@@ -319,6 +339,8 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
   onValidationError: traceQueryValidationError,
   maxBodySize: 256 * 1024,
   preserveHttpExceptions: true,
+  isCoreSupported: supportsTraceQueryDiscoveryCore,
+  onUnsupportedCore: throwTraceQueryDiscoveryCoreUnsupported,
   handler: async ({ mastra, timeRange, predicateScope, search, limit }) => {
     const args = { timeRange, predicateScope, search, limit };
     const plan = coreStorage.planTraceQueryObservedFields(args);
@@ -357,6 +379,8 @@ export const GET_TRACE_QUERY_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
   onValidationError: traceQueryValidationError,
   maxBodySize: 256 * 1024,
   preserveHttpExceptions: true,
+  isCoreSupported: supportsTraceQueryDiscoveryCore,
+  onUnsupportedCore: throwTraceQueryDiscoveryCoreUnsupported,
   handler: async ({ mastra, timeRange, predicateScope, path, search, limit }) => {
     const plan = coreStorage.planTraceQueryValues({ timeRange, predicateScope, path, search, limit });
     let observabilityStore: Awaited<ReturnType<typeof getObservabilityStore>>;
