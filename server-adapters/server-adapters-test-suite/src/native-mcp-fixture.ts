@@ -1,9 +1,9 @@
+import type { ToolsInput } from '@mastra/core/agent';
 import { MCPServerBase } from '@mastra/core/mcp';
 import type { MCPServerHTTPOptions, MCPToolExecutionResultV2 } from '@mastra/core/mcp';
 import { RequestContext } from '@mastra/core/request-context';
 import { standardSchemaToJSONSchema } from '@mastra/core/schema';
 import { createTool, isValidationError } from '@mastra/core/tools';
-import type { ToolsInput } from '@mastra/core/agent';
 import type { InternalCoreTool, MCPToolExecutionContext } from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
 import { z } from 'zod/v4';

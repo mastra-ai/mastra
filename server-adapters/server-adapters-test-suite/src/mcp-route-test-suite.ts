@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest';
 import { Mastra } from '@mastra/core/mastra';
 import { MCPServer } from '@mastra/mcp';
-import { AdapterTestContext, AdapterTestSuiteConfig, createDefaultTestContext } from './test-helpers';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { type AdapterTestContext, type AdapterTestSuiteConfig, createDefaultTestContext } from './test-helpers';
 
 /**
  * Creates a standardized integration test suite for MCP registry routes

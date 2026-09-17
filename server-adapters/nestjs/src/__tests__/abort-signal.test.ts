@@ -1,7 +1,7 @@
-import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
-import type { AdapterTestContext } from '@internal/server-adapter-test-utils';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { SERVER_ROUTES } from '@mastra/server/server-adapter';
+import { createDefaultTestContext } from '@mastra/server-adapters-test-suite';
+import type { AdapterTestContext } from '@mastra/server-adapters-test-suite';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { Application } from 'express';
