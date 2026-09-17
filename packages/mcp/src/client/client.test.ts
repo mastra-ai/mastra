@@ -471,6 +471,106 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     expect(result).toEqual(callToolResult);
   });
 
+  it('should preserve a valid input property named required', async () => {
+    const sdkClient = (client as any).client as Client;
+    const inputSchema = {
+      type: 'object' as const,
+      properties: { required: { type: 'string' as const } },
+      required: ['required'],
+    };
+    const original = structuredClone(inputSchema);
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'required_field', inputSchema }],
+    });
+
+    const tools = await client.tools();
+    const storedSchema = tools.required_field.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-07' });
+
+    expect(storedSchema).toMatchObject(original);
+    expect(inputSchema).toEqual(original);
+  });
+
+  // topLevel=undefined: server sent no top-level required list. topLevel=['other']: server also
+  // declared a valid top-level list, which must win over the hoisted one.
+  it.each([undefined, ['other']])('should normalize misplaced required without mutating input (%j)', async topLevel => {
+    const sdkClient = (client as any).client as Client;
+    const inputSchema = {
+      type: 'object' as const,
+      properties: { coin: { type: 'string' as const }, other: { type: 'string' as const }, required: ['coin'] },
+      ...(topLevel ? { required: topLevel } : {}),
+    };
+    const original = structuredClone(inputSchema);
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      // Deliberately malformed server data: required is not a property schema.
+      tools: [{ name: 'malformed_tool', inputSchema: inputSchema as any }],
+    });
+
+    const tools = await client.tools();
+    const storedSchema = tools.malformed_tool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-07' });
+    expect(storedSchema).toMatchObject({
+      properties: { coin: { type: 'string' }, other: { type: 'string' } },
+      required: topLevel ?? ['coin'],
+    });
+    expect(storedSchema).not.toHaveProperty('properties.required');
+    expect(inputSchema).toEqual(original);
+  });
+
+  it('should normalize cached input schemas without changing the cached definition', () => {
+    const inputSchema = {
+      type: 'object' as const,
+      properties: { coin: { type: 'string' as const }, required: ['coin'] },
+    };
+    const original = structuredClone(inputSchema);
+    const definition = {
+      name: 'cached_tool',
+      inputSchema: inputSchema as any,
+      server: { name: 'cached-server' },
+    };
+    const tool = client.toolFromDefinition({ definition });
+    const storedSchema = tool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-07' });
+    expect(storedSchema).toMatchObject({ properties: { coin: { type: 'string' } }, required: ['coin'] });
+    expect(storedSchema).not.toHaveProperty('properties.required');
+    expect(definition.inputSchema).toEqual(original);
+  });
+
+  it('should leave mixed-type required arrays untouched', async () => {
+    const sdkClient = (client as any).client as Client;
+    const inputSchema = {
+      type: 'object' as const,
+      properties: { coin: { type: 'string' as const }, required: ['coin', 42] },
+    };
+    const original = structuredClone(inputSchema);
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'mixed_tool', inputSchema: inputSchema as any }],
+    });
+
+    const tools = await client.tools();
+    const storedSchema = tools.mixed_tool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-07' });
+    expect(storedSchema).toMatchObject(original);
+    expect(storedSchema).not.toHaveProperty('required');
+    expect(inputSchema).toEqual(original);
+  });
+
+  it('should normalize misplaced required behind a jsonSchema wrapper', async () => {
+    const sdkClient = (client as any).client as Client;
+    const wrapped = {
+      jsonSchema: { type: 'object' as const, properties: { coin: { type: 'string' as const }, required: ['coin'] } },
+    };
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'wrapped_tool', inputSchema: wrapped as any }],
+    });
+
+    const tools = await client.tools();
+    const storedSchema = tools.wrapped_tool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-07' });
+    expect(storedSchema).toMatchObject({ properties: { coin: { type: 'string' } }, required: ['coin'] });
+    expect(storedSchema).not.toHaveProperty('properties.required');
+    expect(wrapped.jsonSchema).toEqual({
+      type: 'object',
+      properties: { coin: { type: 'string' }, required: ['coin'] },
+    });
+  });
+
   it('should preserve recursive $ref input schemas when creating tools', async () => {
     const sdkClient = (client as any).client as Client;
     const recursiveInputSchema = {

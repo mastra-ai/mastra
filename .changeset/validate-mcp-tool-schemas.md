@@ -2,6 +2,4 @@
 "@mastra/mcp": patch
 ---
 
-Validate and sanitize MCP tool input schemas before passing to `createTool()`. Some MCP servers send malformed JSON schemas (e.g., `required` nested inside `properties` instead of at object level), which causes LLM providers to reject the entire tools array with a 400 error.
-
-This fix adds basic schema validation that catches common issues and provides helpful error messages, preventing one bad tool from breaking an entire conversation.
+Normalize misplaced string-array `required` lists in MCP tool input schemas before creating tools. Preserve valid properties named `required` and existing top-level requirements without mutating server-supplied or cached schemas. This handles the misplaced-list case only; it does not provide general schema validation or invalid-tool isolation.

@@ -1248,11 +1248,13 @@ export class InternalMastraMCPClient extends MastraBase {
     // Should be:
     //   { "properties": { "coin": { "type": "string" } }, "required": ["coin"] }
     if (schema && typeof schema === 'object' && 'properties' in schema) {
-      const props = (schema as any).properties;
-      if (props && typeof props === 'object' && 'required' in props) {
-        const required = props.required;
-        delete props.required;
-        schema.required = Array.isArray(required) ? required : [];
+      const props = schema.properties;
+      const required: unknown = props?.required;
+      if (props && Array.isArray(required) && required.every((value: unknown) => typeof value === 'string')) {
+        this.log('debug', 'Normalizing misplaced required list in MCP tool input schema');
+        const properties = { ...props };
+        delete properties.required;
+        return { ...schema, properties, required: schema.required ?? required };
       }
     }
 
