@@ -2,17 +2,19 @@
  * Browser-side helpers for the Jira intake source.
  *
  * All requests go to the server's `/web/jira/*` routes, which sit behind the
- * WorkOS auth gate and are scoped to the caller's organization. The server
- * discovers the organization's Jira connections through Mastra Platform and
- * sends provider requests through the integrations v2 proxy.
+ * WorkOS auth gate and scope stored intake selections to the caller's
+ * organization. Provider requests use visible Platform connections discovered
+ * by filtering for the `jira` provider configuration key.
  */
 
 export type JiraStatusReason = 'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready';
 
 export interface JiraStatus {
   enabled: boolean;
-  /** True when the organization has at least one active Jira connection. */
+  /** True when the deployment has Jira credentials or a Platform connection configured. */
   configured: boolean;
+  /** Identifies how Jira credentials are supplied without exposing a Platform connection ID. */
+  mode?: 'direct' | 'platform';
   /** First connected Jira Cloud site host, retained for older consumers. */
   site?: string | null;
   /** All connected Jira Cloud site hosts. */
@@ -43,6 +45,8 @@ export interface JiraIssue {
   labels: string[];
   createdAt: string;
   updatedAt: string;
+  /** Jira project the issue was read from; matches an intake binding's `sourceId`. */
+  sourceId?: string | null;
 }
 
 export interface JiraIssuePage {

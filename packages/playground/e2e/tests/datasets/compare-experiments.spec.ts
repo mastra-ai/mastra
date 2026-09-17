@@ -71,8 +71,8 @@ test.afterEach(async () => {
 /**
  * FEATURE: Dataset experiment comparison
  * USER STORY: As a user, I want to select two experiments from a dataset so I can compare their results.
- * BEHAVIOR UNDER TEST: Selecting compare checkboxes must keep me on the dataset page until I explicitly trigger comparison,
- * then navigate to the comparison view with both experiment IDs encoded in the URL.
+ * BEHAVIOR UNDER TEST: Selecting compare checkboxes must keep me on the experiments page until I explicitly trigger
+ * comparison, then navigate to the comparison view with the dataset and both experiment IDs encoded in the URL.
  */
 test.describe('Dataset experiment comparison', () => {
   test.describe('when two experiments are selected in compare mode', () => {
@@ -80,9 +80,9 @@ test.describe('Dataset experiment comparison', () => {
       const { datasetId, experimentIds } = await seedDatasetWithExperiments();
       const [baselineId, contenderId] = experimentIds;
 
-      await page.goto(`/datasets/${datasetId}?tab=experiments`);
+      await page.goto(`/experiments?dataset=${datasetId}`);
 
-      await expect(page.getByText('weather-agent')).toHaveCount(2);
+      await expect(page.getByText('Weather Agent')).toHaveCount(2);
 
       await page.getByRole('button', { name: 'Compare' }).click();
 
@@ -91,7 +91,7 @@ test.describe('Dataset experiment comparison', () => {
       const compareButton = page.getByRole('button', { name: 'Compare Experiments' });
 
       await baselineCheckbox.click();
-      await expect(page).toHaveURL(`${BASE_URL}/datasets/${datasetId}?tab=experiments`);
+      await expect(page).toHaveURL(`${BASE_URL}/experiments?dataset=${datasetId}`);
       await expect(baselineCheckbox).toBeChecked();
       await expect(compareButton).toBeDisabled();
 
@@ -102,7 +102,7 @@ test.describe('Dataset experiment comparison', () => {
       await compareButton.click();
 
       await expect(page).toHaveURL(
-        `${BASE_URL}/datasets/${datasetId}/experiments?baseline=${baselineId}&contender=${contenderId}`,
+        `${BASE_URL}/experiments/compare?dataset=${datasetId}&baseline=${baselineId}&contender=${contenderId}`,
       );
       await expect(page.getByRole('table', { name: 'Experiments comparison' })).toBeVisible();
     });

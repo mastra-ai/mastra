@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp",
-  "version": "1.17.3-alpha.1",
+  "version": "1.18.1-alpha.0",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -28,6 +28,7 @@
     "test:client": "vitest run ./src/client/client.test.ts ./src/client/configuration.test.ts ./src/client/error-utils.test.ts ./src/client/oauth.test.ts ./src/client/oauth-callback-server.test.ts ./src/client/oauth-flow.test.ts ./src/client/url-policy.test.ts ./src/client/stdio-env.test.ts",
     "test:server": "vitest run ./src/server",
     "test:integration": "cd integration-tests && pnpm test:mcp",
+    "test:compat": "bash integration-tests/compat.sh",
     "test": "pnpm test:server && pnpm test:client && pnpm test:integration",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix ."
@@ -60,6 +61,7 @@
     "@mastra/observability": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
     "@mendable/firecrawl-js": "^1.29.3",
+    "@modelcontextprotocol/server-filesystem": "2026.8.31",
     "@types/node": "22.20.1",
     "@types/semver": "^7.7.1",
     "@vitest/coverage-v8": "catalog:",
@@ -67,7 +69,7 @@
     "ai": "^5.0.221",
     "eslint": "^10.7.0",
     "get-port": "^7.1.0",
-    "hono": "^4.12.8",
+    "hono": "^4.13.7",
     "hono-mcp-server-sse-transport": "0.0.7",
     "semver": "^7.8.5",
     "tsdown": "0.22.9",

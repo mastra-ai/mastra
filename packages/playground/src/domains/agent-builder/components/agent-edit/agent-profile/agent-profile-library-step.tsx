@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { ArrowRightIcon, CheckIcon, LibraryIcon } from 'lucide-react';
+import { ArrowRightIcon, CheckIcon, LibraryIcon, Plus } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { AgentStepContainer } from './agent-step-container';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
@@ -41,7 +41,7 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
       }
     >
       <div
-        className="relative flex h-full w-full flex-col items-center justify-center gap-4 px-6 py-6 text-center"
+        className="relative flex h-full w-full flex-col items-center justify-center gap-4 px-4 py-4 text-center"
         data-testid="agent-builder-library-step"
       >
         <Icon size="lg" className="text-neutral4">
@@ -56,6 +56,7 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
           </p>
         ) : (
           <Button
+            icon={<Plus />}
             variant="primary"
             onClick={() => requestChange('public')}
             disabled={isStreaming}

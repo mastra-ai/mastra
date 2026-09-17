@@ -345,6 +345,23 @@ describe('bundled Factory skill assets', () => {
     expect(rereview).toContain('.artifacts/factory-rereview/pr-<number>.md');
     expect(rereview).toContain('.artifacts/factory-rereview/follow-up-pr-<number>.md');
     expect(rereview).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
+    for (const instructions of [review, rereview]) {
+      expect(instructions).toContain('approve adds `status:auto-approved` and removes `status:changes-requested`');
+      expect(instructions).toContain(
+        'request changes adds `status:changes-requested` and removes `status:auto-approved`',
+      );
+    }
+  });
+
+  it('guards the initial triage label when any status label is present', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const triage = await fs.readFile(path.join(assetRoot, 'factory-triage', 'SKILL.md'), 'utf8');
+    const phase1 = triage.slice(triage.indexOf('## Phase 1'), triage.indexOf('## Phase 2'));
+
+    expect(phase1).toContain('add `status: needs triage` only if no `status:` label is present');
+    expect(phase1).toContain('gh issue edit "$ISSUE" --add-label "status: needs triage"');
+    expect(phase1).toContain('For Linear issues, skip this GitHub-only label mutation.');
+    expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
   });
 
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
@@ -420,11 +437,12 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('Remove only conflicting alternatives from these explicit labels');
     expect(triage).toContain('On every initial run and refresh, keep exactly the selected effort label');
     expect(triage).toContain('Do not add, remove, or derive any `trio-*` labels');
-    expect(triage).toContain("gh label list --repo mastra-ai/mastra --limit 1000 --json name --jq '.[].name'");
-    expect(triage).toContain("gh label create '@mastra/core' --repo mastra-ai/mastra");
-    expect(triage).toContain('gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label \'@mastra/core\'');
-    expect(triage.indexOf("gh label create '@mastra/core'")).toBeLessThan(
-      triage.indexOf('gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label \'@mastra/core\''),
+    expect(triage).toContain('gh label create "$LABEL" --repo mastra-ai/mastra');
+    expect(triage).toContain(
+      'gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label \'<comma-separated labels selected in Phase 4>\'',
+    );
+    expect(triage.indexOf('gh label create "$LABEL"')).toBeLessThan(
+      triage.indexOf('gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label'),
     );
     expect(triage).toContain('Apply only these label mutations.');
     expect(triage).toContain(
@@ -870,6 +888,28 @@ describe('GitHub session workspace preparation', () => {
       warnSpy.mockRestore();
     }
     expect(sandbox.executeCommand).toHaveBeenCalled();
+  });
+
+  it('authorizes a workspace-free supervisor session before controller session creation', async () => {
+    const projects = { get: vi.fn().mockResolvedValue({ id: 'project-1', orgId: 'org-1' }) };
+    const resolver = createWorkspaceFactory({ projects: projects as any });
+    const requestContext = createGithubRequestContext('project-1', 'factory-supervisor:project-1');
+
+    await expect(resolver({ requestContext } as any)).resolves.toBeUndefined();
+    expect(projects.get).toHaveBeenCalledWith({ orgId: 'org-1', id: 'project-1' });
+  });
+
+  it('refuses a workspace-free supervisor session outside the caller organization', async () => {
+    const projects = { get: vi.fn().mockResolvedValue(null) };
+    const resolver = createWorkspaceFactory({ projects: projects as any });
+    const requestContext = createGithubRequestContext('project-1', 'factory-supervisor:project-1', {
+      organizationId: 'org-2',
+      workosId: 'user-1',
+    });
+
+    await expect(resolver({ requestContext } as any)).rejects.toThrow(
+      'Factory supervisor project-1 is not available to the current user',
+    );
   });
 
   it('opens the session for a session-shaped auth user, whose org lives on the session half', async () => {
@@ -1434,6 +1474,55 @@ describe('GitHub session workspace preparation', () => {
     expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
   });
 
+  it('keeps refresh authority with the current context across a sandbox reconnect', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const workerContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({ requestContext: workerContext });
+    expect(lastGhToken()).toBe('ghp_worker');
+
+    // The active binding flips to review and the same cached workspace is
+    // reused, so reconciliation switches the live sandbox to the reviewer PAT
+    // and authorizes the reviewer context.
+    mocks.runBindingRole = 'review';
+    mocks.setEnv.mockClear();
+    const reviewerContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({
+      requestContext: reviewerContext,
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+    expect(lastGhToken()).toBe('ghp_reviewer');
+
+    // Reconnect: the memoized sandbox starts again and re-runs the onStart
+    // hook bound at construction (worker context). It must not reauthorize the
+    // stale worker context nor reject the current reviewer context.
+    const sandbox = mocks.createSandbox.mock.results[0]!.value;
+    await sandbox.start();
+
+    expect(() => injectGithubToken(reviewerContext, 'fresh-reviewer-token')).not.toThrow();
+    expect(() => injectGithubToken(workerContext, 'stale-worker-token')).toThrow(/no longer matches/);
+  });
+
+  it('keeps a same-role context usable across a sandbox reconnect', async () => {
+    mocks.githubPat = 'ghp_worker';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const workerContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({ requestContext: workerContext });
+    expect(lastGhToken()).toBe('ghp_worker');
+
+    const sandbox = mocks.createSandbox.mock.results[0]!.value;
+    await sandbox.start();
+
+    expect(() => injectGithubToken(workerContext, 'rotated-worker-token')).not.toThrow();
+  });
+
   it('replaces reviewer credentials with repository access when no worker PAT is configured', async () => {
     mocks.githubReviewerPat = 'ghp_reviewer';
     mocks.runBindingRole = 'review';
@@ -1842,6 +1931,121 @@ describe('GitHub session workspace preparation', () => {
     const result = await resolver({ requestContext: createRequestContext(projectPath) });
 
     expect(result).toBeUndefined();
+  });
+
+  describe('sandboxStart', () => {
+    async function createFactory(sandboxStart?: 'lazy' | 'eager') {
+      const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-sandbox-start-'));
+      tempDirs.push(root);
+      mocks.localRoot = root;
+      return createWorkspaceFactory({
+        sandbox: mocks.createSandbox as any,
+        github: fakeGithubIntegration() as any,
+        workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+        ...(sandboxStart !== undefined ? { sandboxStart } : {}),
+      });
+    }
+
+    const constructedSandbox = () => mocks.createSandbox.mock.results[0]!.value as { start: ReturnType<typeof vi.fn> };
+
+    /** The eager path is fire-and-forget; give its microtasks a chance to run. */
+    const settle = () => new Promise(resolve => setTimeout(resolve, 20));
+
+    it("starts the sandbox right after resolution when set to 'eager'", async () => {
+      const resolver = await createFactory('eager');
+      addProject();
+      addSession({ id: 'session-1' });
+
+      const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-1') });
+
+      expect(workspace?.id).toContain('project-1-session-1');
+      await vi.waitFor(() => expect(constructedSandbox().start).toHaveBeenCalledTimes(1));
+      // The eager start ran the full session setup, so the first command
+      // finds a prepared checkout, not just a booted VM.
+      await vi.waitFor(() => expect(mocks.materializeRepo).toHaveBeenCalledTimes(1));
+    });
+
+    it.each([undefined, 'lazy'] as const)('leaves the sandbox lazy when sandboxStart is %s', async sandboxStart => {
+      const resolver = await createFactory(sandboxStart);
+      addProject();
+      addSession({ id: 'session-1' });
+
+      await resolver({ requestContext: createGithubRequestContext('project-1', 'session-1') });
+      await settle();
+
+      expect(constructedSandbox().start).not.toHaveBeenCalled();
+      expect(mocks.materializeRepo).not.toHaveBeenCalled();
+    });
+
+    it('starts only after the resolver finished, even when pinning state is slow', async () => {
+      const resolver = await createFactory('eager');
+      addProject();
+      addSession({ id: 'session-1' });
+      const requestContext = createGithubRequestContext('project-1', 'session-1');
+      const controller = requestContext.get('controller') as {
+        setState: (u: Record<string, unknown>) => Promise<void>;
+      };
+      const pinned = controller.setState;
+      let releasePin!: () => void;
+      let pinEntered!: () => void;
+      const pinEnteredPromise = new Promise<void>(resolve => {
+        pinEntered = resolve;
+      });
+      controller.setState = async updates => {
+        pinEntered();
+        await new Promise<void>(resolve => {
+          releasePin = resolve;
+        });
+        await pinned(updates);
+      };
+
+      const resolving = resolver({ requestContext });
+      await pinEnteredPromise;
+      await settle();
+      // The sandbox is constructed by now, but must not have started.
+      expect(constructedSandbox().start).not.toHaveBeenCalled();
+
+      releasePin();
+      const workspace = await resolving;
+
+      expect(workspace?.id).toContain('project-1-session-1');
+      await vi.waitFor(() => expect(constructedSandbox().start).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(mocks.materializeRepo).toHaveBeenCalledTimes(1));
+    });
+
+    it('starts once per constructed instance, not per resolution', async () => {
+      const resolver = await createFactory('eager');
+      addProject();
+      addSession({ id: 'session-1' });
+
+      await resolver({ requestContext: createGithubRequestContext('project-1', 'session-1') });
+      await resolver({ requestContext: createGithubRequestContext('project-1', 'session-1') });
+      await settle();
+
+      expect(constructedSandbox().start).toHaveBeenCalledTimes(1);
+    });
+
+    it('surfaces a failed eager start as a warning while the lazy path stays intact', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        // First start (the eager one) fails inside setup; the record it leaves
+        // must not stop a later lazy start from retrying materialization.
+        mocks.materializeRepo.mockRejectedValueOnce(new MaterializeError('exec', 'clone flaked'));
+        const resolver = await createFactory('eager');
+        addProject();
+        addSession({ id: 'session-1' });
+
+        const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-1') });
+        await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+
+        expect(workspace?.id).toContain('project-1-session-1');
+        // The lazy path retries in full and succeeds.
+        await (workspace as any).sandbox.getInfo();
+        expect(mocks.materializeRepo).toHaveBeenCalledTimes(2);
+      } finally {
+        warn.mockRestore();
+      }
+    });
   });
 
   // The factory used to construct a Workspace and return it without ever

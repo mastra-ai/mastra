@@ -11,6 +11,7 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { Check, Upload, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import type { ColumnMapping, FieldType } from '../../hooks/use-column-mapping';
 import { useColumnMapping } from '../../hooks/use-column-mapping';
@@ -335,7 +336,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'preview':
         return parsedCSV ? (
           <div className="flex flex-col gap-4">
-            <div className="text-neutral4 text-sm">Preview of your CSV data. Click Next to map columns.</div>
+            <div className="text-neutral4 text-ui-md">Preview of your CSV data. Click Next to map columns.</div>
             <CSVPreviewTable headers={parsedCSV.headers} data={parsedCSV.data} maxRows={5} />
           </div>
         ) : null;
@@ -353,7 +354,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
             {/* Compact preview */}
             <div className="border-border1 border-t pt-4">
-              <div className="text-neutral4 mb-2 text-xs">Data Preview</div>
+              <div className="text-neutral4 text-ui-sm mb-2">Data Preview</div>
               <CSVPreviewTable headers={parsedCSV.headers} data={parsedCSV.data} maxRows={3} />
             </div>
           </div>
@@ -362,7 +363,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'validation':
         return schemaValidation ? (
           <div className="flex flex-col gap-4">
-            <div className="text-neutral4 text-sm">
+            <div className="text-neutral4 text-ui-md">
               {dataset?.inputSchema || dataset?.groundTruthSchema
                 ? 'Rows have been validated against the dataset schema.'
                 : 'Ready to import. No schema validation required.'}
@@ -372,17 +373,17 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
             {schemaValidation.invalidCount > 0 ? (
               <div className="bg-warning/10 border-warning/30 rounded-md border p-3">
                 <div className="text-warning flex items-center gap-2 font-medium">
-                  <span className="text-lg">⚠</span>
+                  <span className="text-header-sm">⚠</span>
                   {schemaValidation.invalidCount} row{schemaValidation.invalidCount !== 1 ? 's' : ''} will be skipped
                 </div>
-                <p className="text-muted-foreground mt-1 text-sm">
+                <p className="text-muted-foreground text-ui-md mt-1">
                   {schemaValidation.validCount} of {schemaValidation.totalRows} rows will be imported
                 </p>
               </div>
             ) : (
               <div className="bg-success/10 border-success/30 rounded-md border p-3">
                 <div className="text-success flex items-center gap-2 font-medium">
-                  <span className="text-lg">✓</span>
+                  <span className="text-header-sm">✓</span>
                   All {schemaValidation.totalRows} row{schemaValidation.totalRows !== 1 ? 's are' : ' is'} valid
                 </div>
               </div>
@@ -390,7 +391,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
             {/* No valid rows warning */}
             {schemaValidation.validCount === 0 && (
-              <p className="text-destructive text-sm">
+              <p className="text-destructive text-ui-md">
                 No valid rows to import. Please fix the data or adjust the schema.
               </p>
             )}
@@ -402,11 +403,11 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
       case 'importing':
         return (
-          <div className="flex flex-col items-center gap-4 py-8">
+          <div className="flex flex-col items-center gap-4 py-5">
             <Spinner />
             <div className="text-center">
-              <div className="text-neutral1 text-lg font-medium">Importing items...</div>
-              <div className="text-neutral4 mt-1 text-sm">
+              <div className="text-neutral1 text-header-sm font-medium">Importing items...</div>
+              <div className="text-neutral4 text-ui-md mt-1">
                 {importProgress.current} of {importProgress.total}
               </div>
             </div>
@@ -415,11 +416,11 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
       case 'complete':
         return (
-          <div className="flex flex-col items-center gap-4 py-8">
-            <div className="text-4xl">{importResult && importResult.errors === 0 ? '✓' : '⚠'}</div>
+          <div className="flex flex-col items-center gap-4 py-5">
+            <div className="text-header-xl">{importResult && importResult.errors === 0 ? '✓' : '⚠'}</div>
             <div className="text-center">
-              <div className="text-neutral1 text-lg font-medium">Import Complete</div>
-              <div className="text-neutral4 mt-1 text-sm">
+              <div className="text-neutral1 text-header-sm font-medium">Import Complete</div>
+              <div className="text-neutral4 text-ui-md mt-1">
                 {importResult?.success ?? 0} item{importResult?.success !== 1 ? 's' : ''} imported
                 {importResult && importResult.errors > 0 && (
                   <span className="text-accent2">
@@ -438,13 +439,19 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
   const renderFooter = () => {
     switch (step) {
       case 'upload':
-        return <Button onClick={handleClose}>Cancel</Button>;
+        return (
+          <Button icon={<X />} onClick={handleClose}>
+            Cancel
+          </Button>
+        );
 
       case 'preview':
         return (
           <>
-            <Button onClick={() => setStep('upload')}>Back</Button>
-            <Button variant="primary" onClick={() => setStep('mapping')}>
+            <Button icon={<ChevronLeft />} onClick={() => setStep('upload')}>
+              Back
+            </Button>
+            <Button icon={<ChevronRight />} variant="primary" onClick={() => setStep('mapping')}>
               Next
             </Button>
           </>
@@ -453,8 +460,15 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'mapping':
         return (
           <>
-            <Button onClick={() => setStep('preview')}>Back</Button>
-            <Button variant="primary" onClick={handleValidateMapping} disabled={!columnMapping.isInputMapped}>
+            <Button icon={<ChevronLeft />} onClick={() => setStep('preview')}>
+              Back
+            </Button>
+            <Button
+              icon={<ChevronRight />}
+              variant="primary"
+              onClick={handleValidateMapping}
+              disabled={!columnMapping.isInputMapped}
+            >
               {dataset?.inputSchema || dataset?.groundTruthSchema ? 'Validate' : 'Next'}
             </Button>
           </>
@@ -463,8 +477,11 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'validation':
         return (
           <>
-            <Button onClick={() => setStep('mapping')}>Back</Button>
+            <Button icon={<ChevronLeft />} onClick={() => setStep('mapping')}>
+              Back
+            </Button>
             <Button
+              icon={<Upload />}
               variant="primary"
               onClick={handleImport}
               disabled={!schemaValidation || schemaValidation.validCount === 0}
@@ -481,7 +498,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
       case 'complete':
         return (
-          <Button variant="primary" onClick={handleDone}>
+          <Button icon={<Check />} variant="primary" onClick={handleDone}>
             Done
           </Button>
         );
@@ -508,7 +525,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
         <DialogBody className="max-h-[50vh] min-h-[200px] overflow-y-auto">{renderStepContent()}</DialogBody>
 
-        <DialogFooter className="flex justify-end gap-2 px-6 pt-4">{renderFooter()}</DialogFooter>
+        <DialogFooter className="flex justify-end gap-2 px-4 pt-4">{renderFooter()}</DialogFooter>
       </DialogContent>
     </Dialog>
   );

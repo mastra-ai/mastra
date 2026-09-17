@@ -104,6 +104,8 @@ describe('ChatShell', () => {
     // A sticky direct child of the scroller is clamped to the scroller's own box.
     expect(screen.getByTestId('dock').parentElement).toBe(track);
     expect(track?.className).toContain('min-h-full');
+    // An overlay pinned to the scroller itself spans one screen, not the transcript.
+    expect(track?.className).toContain('relative');
   });
 
   it('ramps the veil in over its own band of air, never past full strength', () => {
@@ -142,5 +144,34 @@ describe('ChatShell', () => {
     // The panel floats inside the stage, below the bars: insetting a bar only
     // notches the top edge of the page.
     expect(screen.getByTestId('bar').className).not.toContain('pe-(--chat-inset-end)');
+  });
+});
+
+describe('ChatShell.Turn', () => {
+  afterEach(cleanup);
+
+  it('reserves the reply room only while the turn holds it, and lets a restored turn skip the opening', () => {
+    render(
+      <>
+        <ChatShell.Turn data-testid="settled" opensTurn />
+        <ChatShell.Turn data-testid="live" opensTurn holdsRoom />
+        <ChatShell.Turn data-testid="restored" opensTurn holdsRoom restored />
+        <ChatShell.Turn data-testid="orphan" />
+      </>,
+    );
+
+    const settled = screen.getByTestId('settled').className;
+    expect(settled).toContain('min-h-0');
+    expect(settled).toContain('duration-[1500ms]');
+    expect(settled).not.toContain('70cqh');
+
+    const live = screen.getByTestId('live').className;
+    expect(live).toContain('min-h-[70cqh]');
+    expect(live).toContain('starting:min-h-0');
+    expect(live).toContain('duration-[440ms]');
+    expect(live).not.toContain('duration-[1500ms]');
+
+    expect(screen.getByTestId('restored').className).toContain('transition-none');
+    expect(screen.getByTestId('orphan').className).not.toContain('min-h');
   });
 });

@@ -36,11 +36,13 @@ import { useObservabilityStorageCapabilities } from '@/domains/configuration/hoo
 import { AddTraceMocksToItemDialog } from '@/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
+import { NeedsReviewDot } from '@/domains/traces/components/needs-review-dot';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
 import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceScoresTab } from '@/domains/traces/components/trace-scores-tab';
 import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
+import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
 import { useSpanFeedback } from '@/domains/traces/hooks/use-span-feedback';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 
@@ -52,8 +54,10 @@ type TracesPageProps = {
 export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesPageProps = {}) {
   const isScoped = !!scopedEntityId;
   const [searchParams, setSearchParams] = useSearchParams();
-  const url = useTraceUrlState(searchParams, setSearchParams);
 
+  // Must run before `useTraceFilterPersistence` hydrates: react-router resolves functional
+  // `setSearchParams` updates against the render-time params, so within one commit the last
+  // call wins. Scoping first lets hydration (which re-runs only once) land on top of it.
   useEffect(() => {
     if (!scopedEntityId) return;
     const currentRoot = searchParams.get('rootEntityType');
@@ -71,6 +75,11 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       { replace: true },
     );
   }, [scopedEntityId, scopedEntityType, searchParams, setSearchParams]);
+
+  const setPersistedSearchParams = useTraceFilterPersistence(searchParams, setSearchParams, {
+    storageKey: isScoped ? `mastra:traces:saved-filters:${scopedEntityType}:${scopedEntityId}` : undefined,
+  });
+  const url = useTraceUrlState(searchParams, setPersistedSearchParams);
 
   const lockedFieldIds = useMemo<readonly string[]>(() => (isScoped ? ['rootEntityType', 'entityId'] : []), [isScoped]);
   const hiddenCreatorFieldIds = useMemo<readonly string[]>(
@@ -91,6 +100,9 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     rootSpanId: string | undefined;
   } | null>(null);
   const [addMocksTarget, setAddMocksTarget] = useState<{ traceId: string } | null>(null);
+  // Trace whose side panel currently shows the full thread. Keyed by trace id so selecting
+  // another trace (row click, prev/next) falls back to the trace panel without an effect.
+  const [fullThreadTraceId, setFullThreadTraceId] = useState<string | null>(null);
 
   // Counts for the tab badges. The tab bodies own their pagination and re-use these
   // first-page queries through React Query's cache.
@@ -125,9 +137,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     traceId: url.traceIdParam,
     spanId: anchorSpan?.spanId,
   });
-
-  const anchorSpanEntityType =
-    anchorSpan?.entityType === 'agent' ? 'Agent' : anchorSpan?.entityType === 'workflow_run' ? 'Workflow' : undefined;
 
   // Derived from URL + query data — no local state, so a span change (which clears scoreIdParam
   // in the URL) or a direct URL edit always resyncs ScoreDataPanel.
@@ -237,10 +246,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     if (url.listMode === 'branches') url.handleListModeChange('traces');
   }, [tracesError, branchesUnsupported, url]);
 
-  const persistence = useTraceFilterPersistence(searchParams, setSearchParams, {
-    storageKey: isScoped ? `mastra:traces:saved-filters:${scopedEntityType}:${scopedEntityId}` : undefined,
-  });
-
   const handleClear = useCallback(
     () => url.applyFilterTokens(neutralizeFilterTokens(filterFields, url.filterTokens)),
     [filterFields, url],
@@ -269,6 +274,17 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // Tool mocks only make sense for agent runs — gate the "Add tool mocks to item" action
   // on the displayed root/anchor span being an agent.
   const isAgentTrace = anchorSpan?.entityType === 'agent';
+  // The side panel widens per column shown: Messages (agent turn) and/or span detail.
+  const hasMessagesColumn = !!getTraceThreadId(anchorSpan, anchorSpanId ?? undefined);
+  const hasDetailColumn = !!url.spanIdParam || !!featuredScore;
+  // The full thread view embeds its own columns (messages, spans, span detail), so it takes the whole frame.
+  const isFullThreadOpen = !!url.traceIdParam && fullThreadTraceId === url.traceIdParam;
+  const sidePanelWidth =
+    isFullThreadOpen || (hasMessagesColumn && hasDetailColumn)
+      ? 'full'
+      : hasMessagesColumn || hasDetailColumn
+        ? 'wide'
+        : 'half';
 
   const filtersApplied =
     !!url.selectedEntityOption ||
@@ -296,7 +312,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         onStartTextFilter={setAutoFocusFilterFieldId}
         hiddenFieldIds={hiddenCreatorFieldIds}
       />
-      <div className="min-h-form-default ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
+      <div className="min-h-form-md ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
         <TraceColumnsMenu
           preferences={traceColumns.preferences}
           usageDisabledReason={usageDisabledReason}
@@ -361,8 +377,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         onFilterTokensChange={url.handleFilterTokensChange}
         onClear={handleClear}
         onRemoveAll={url.handleRemoveAll}
-        onSave={persistence.handleSave}
-        onRemoveSaved={persistence.hasSavedFilters ? persistence.handleRemoveSaved : undefined}
         autoFocusFilterFieldId={autoFocusFilterFieldId}
         lockedFieldIds={lockedFieldIds}
         lockedTooltipContent={lockedTooltipContent}
@@ -403,7 +417,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       {pageTopArea}
 
       <TracesLayout
-        sidePanelWide={!!url.spanIdParam}
+        sidePanelWidth={sidePanelWidth}
         listSlot={
           <TracesListView
             // Remount on mode switch: the virtualizer caches measurements / scroll state from
@@ -451,7 +465,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               usage={selectedTraceUsageSummary}
               isLoadingSpans={isLoadingTraceSpans}
               selectedSpanId={url.spanIdParam ?? null}
-              onClose={url.handleTraceClose}
+              onClose={() => {
+                setFullThreadTraceId(null);
+                url.handleTraceClose();
+              }}
+              isFullThreadOpen={isFullThreadOpen}
+              onFullThreadOpenChange={open => setFullThreadTraceId(open ? (url.traceIdParam ?? null) : null)}
               onSpanSelect={id => url.handleSpanChange(id ?? null)}
               onSpanClose={url.handleSpanClose}
               onSaveAsDatasetItem={args => setDatasetDialogTarget(args)}
@@ -459,32 +478,35 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               initialSpanId={url.spanIdParam}
               onPrevious={handlePreviousTrace}
               onNext={handleNextTrace}
-              feedbackTabBadge={traceFeedbackData?.pagination?.total ?? undefined}
+              showPartialThread
+              featuredSpanIds={url.highlightSpanIdsParam}
+              onHighlightSpans={url.handleHighlightSpans}
+              feedbackTabBadge={<NeedsReviewDot feedback={traceFeedbackData?.feedback} />}
               feedbackTabSlot={({ traceId: tid }) => <TraceFeedbackTab traceId={tid} />}
+              scorePanelSlot={
+                featuredScore ? (
+                  <ScoreDataPanel
+                    className="rounded-none border-0 bg-transparent"
+                    score={featuredScore}
+                    onClose={() => url.handleScoreChange(null)}
+                  />
+                ) : undefined
+              }
               scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
               scoresTabSlot={({ traceId: tid, rootSpanId }) =>
                 rootSpanId ? (
-                  <TraceScoresTab
-                    traceId={tid}
-                    spanId={rootSpanId}
-                    isTopLevelSpan={!anchorSpan?.parentSpanId}
-                    entityType={anchorSpanEntityType}
-                    onScoreSelect={url.handleScoreChange}
-                  />
+                  <TraceScoresTab traceId={tid} spanId={rootSpanId} onScoreSelect={url.handleScoreChange} />
                 ) : null
               }
               spanActiveTab={url.spanTabParam ?? 'details'}
               onSpanTabChange={tab => url.handleSpanTabChange(tab as SpanTab)}
-              spanFeedbackTabBadge={spanFeedbackData?.pagination?.total ?? undefined}
+              spanFeedbackTabBadge={<NeedsReviewDot feedback={spanFeedbackData?.feedback} />}
               spanFeedbackTabSlot={({ traceId: tid, spanId: sid }) =>
                 tid && sid ? <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} /> : null
               }
               spanPanelClassName="rounded-none border-0 bg-transparent"
             />
           ) : null
-        }
-        scorePanelSlot={
-          featuredScore ? <ScoreDataPanel score={featuredScore} onClose={() => url.handleScoreChange(null)} /> : null
         }
       />
 

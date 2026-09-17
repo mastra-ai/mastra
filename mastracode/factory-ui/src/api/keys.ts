@@ -19,6 +19,7 @@ export const queryKeys = {
   serverFeatures: () => ['server-features'] as const,
   factoryAuth: () => ['factory-auth'] as const,
   factories: () => ['factories'] as const,
+  boardCatalog: (factoryProjectId: string | undefined) => ['factory', 'boards', factoryProjectId ?? null] as const,
   persistedFactories: () => ['factories', 'persisted'] as const,
   factoryCreateFlow: () => ['factories', 'create-flow'] as const,
   factoryProject: (factoryProjectId: string | undefined) => ['factory', 'project', factoryProjectId ?? null] as const,
@@ -38,18 +39,22 @@ export const queryKeys = {
     ['github', 'commits', projectRepositoryId ?? null, limit] as const,
   linearStatus: () => ['linear', 'status'] as const,
   linearProjects: () => ['linear', 'projects'] as const,
+  linearTeams: () => ['linear', 'teams'] as const,
   linearIssuesAll: () => ['linear', 'issues'] as const,
   linearIssues: (githubProjectId: string | undefined) =>
     [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
-  linearIssue: (factoryProjectId: string | undefined, identifier: string | undefined) =>
-    ['linear', 'issue', factoryProjectId ?? null, identifier ?? null] as const,
+  linearIssue: (factoryProjectId: string | undefined, identifier: string | undefined, issueId: string | undefined) =>
+    ['linear', 'issue', factoryProjectId ?? null, identifier ?? null, issueId ?? null] as const,
   jiraStatus: () => ['jira', 'status'] as const,
+  platformConnections: (provider: string) => ['platform-connections', provider] as const,
   jiraProjects: () => ['jira', 'projects'] as const,
   jiraIssuesAll: () => ['jira', 'issues'] as const,
   jiraIssues: (factoryProjectId: string | undefined) =>
     [...queryKeys.jiraIssuesAll(), factoryProjectId ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   intakeBindings: () => ['intake', 'bindings'] as const,
+  intakeLabelRoutes: (factoryProjectId: string | undefined) =>
+    ['intake', 'label-routes', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   /** Every comment read, all work items — the catch-up target after a stream drop. */
@@ -74,8 +79,10 @@ export const queryKeys = {
     ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
   factoryAttentionRoot: (factoryProjectId: string | undefined) =>
     ['factory', 'attention', factoryProjectId ?? null] as const,
-  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number, tier = 'all') =>
-    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit, tier] as const,
+  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number, group = 'all') =>
+    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit, group] as const,
+  factorySupervisorHealth: (factoryProjectId: string | undefined) =>
+    ['factory', 'supervisor', 'health', factoryProjectId ?? null] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
     ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
   factoryAuditPortal: () => ['factory', 'audit-portal'] as const,

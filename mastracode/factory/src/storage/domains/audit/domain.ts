@@ -7,7 +7,12 @@ import type { Context } from 'hono';
 import { getFactoryAuthUser } from '../../../auth.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../projects/base.js';
+import { auditActionsInNamespaces, isAuditNamespace } from './actions.js';
+import type { AuditAction } from './actions.js';
+import { isHumanActorId } from './actors.js';
+import { ACTOR_PROFILE_METADATA_KEY, auditActorProfile, auditAgentName } from './base.js';
 import type {
+  AuditActorProfileInput,
   AuditContext,
   AuditEventPage,
   AuditEventRow,
@@ -16,9 +21,11 @@ import type {
   ListAuditEventsInput,
   RecordAuditEventInput,
 } from './base.js';
+import { toWireAuditEvent } from './wire.js';
+import type { WireAuditActor, WireAuditPage } from './wire.js';
 
 export interface EmitAuditInput {
-  action: string;
+  action: AuditAction;
   factoryProjectId?: string;
   projectRepositoryId?: string;
   targets: AuditTarget[];
@@ -26,7 +33,7 @@ export interface EmitAuditInput {
 }
 
 export interface EmitAgentAuditInput {
-  action: string;
+  action: AuditAction;
   targets: AuditTarget[];
   metadata?: Record<string, unknown>;
 }
@@ -39,6 +46,9 @@ export interface AuditAgentEmitter {
   emitAgent(args: { requestContext: RequestContext; input: EmitAgentAuditInput }): Promise<void>;
 }
 
+/** Records with an explicit actor, for the paths that have no request: rule transitions, run starts, run ends, supervisor tools. */
+export type AuditRecorder = Pick<AuditDomain, 'record'>;
+
 /** Best-effort destination for locally persisted audit events (e.g. an integration's audit log). */
 export interface AuditSink {
   id: string;
@@ -50,28 +60,7 @@ interface FactorySessionState {
   projectRepositoryId?: string;
 }
 
-export interface AuditActorProfile {
-  id: string;
-  name: string;
-  avatarUrl?: string;
-}
-
-/**
- * Reserved metadata key on `AuditEventRow.metadata` that carries the acting
- * human user's display name and avatar captured from the auth context at
- * record time. Read back by `#resolveActorProfiles` so names/avatars work
- * for every auth provider without requiring an `IUserProvider.getUser(id)`
- * implementation — the Studio provider proxies through the shared API and
- * cannot resolve arbitrary users by id.
- */
-const ACTOR_PROFILE_METADATA_KEY = '__actorProfile';
-
-interface StoredActorProfile {
-  name?: string;
-  avatarUrl?: string;
-}
-
-function readStoredActorProfile(metadata: Record<string, unknown> | undefined): StoredActorProfile | undefined {
+function readStoredActorProfile(metadata: Record<string, unknown> | undefined): AuditActorProfileInput | undefined {
   if (!metadata) return undefined;
   const raw = metadata[ACTOR_PROFILE_METADATA_KEY];
   if (!raw || typeof raw !== 'object') return undefined;
@@ -79,17 +68,6 @@ function readStoredActorProfile(metadata: Record<string, unknown> | undefined): 
   const name = typeof profile.name === 'string' && profile.name.trim() ? profile.name.trim() : undefined;
   const avatarUrl =
     typeof profile.avatarUrl === 'string' && profile.avatarUrl.trim() ? profile.avatarUrl.trim() : undefined;
-  if (!name && !avatarUrl) return undefined;
-  return { ...(name ? { name } : {}), ...(avatarUrl ? { avatarUrl } : {}) };
-}
-
-function buildActorProfileMetadata(user: {
-  name?: string;
-  email?: string;
-  avatarUrl?: string;
-}): StoredActorProfile | undefined {
-  const name = user.name?.trim() || user.email?.trim();
-  const avatarUrl = user.avatarUrl?.trim();
   if (!name && !avatarUrl) return undefined;
   return { ...(name ? { name } : {}), ...(avatarUrl ? { avatarUrl } : {}) };
 }
@@ -109,33 +87,21 @@ export interface AuditDomainOptions {
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_ACTION_FILTERS = 16;
 const MAX_ACTOR_PROFILES = 100;
-const AUTOMATION_ACTORS = new Set([
-  'factory',
-  'system',
-  'automation',
-  'factory-rule-dispatcher',
-  'factory-tool-result-rule',
-]);
 
 function loose(c: unknown): Context {
   return c as Context;
 }
 
-function parseActionsParam(raw: string | undefined): string[] | undefined {
+/** The actions a `namespaces=` query names: none when it names only unknown ones, `undefined` when it names nothing. */
+function actionsInRequestedNamespaces(raw: string | undefined): string[] | undefined {
   if (!raw) return undefined;
-  const actions = raw
-    .split(',')
-    .map(action => action.trim())
-    .filter(Boolean)
-    .slice(0, MAX_ACTION_FILTERS);
-  return actions.length > 0 ? actions : undefined;
-}
-
-function isHumanActorId(actorId: string | undefined): actorId is string {
-  if (!actorId) return false;
-  return !AUTOMATION_ACTORS.has(actorId) && !actorId.startsWith('agent:') && !actorId.startsWith('github:');
+  return auditActionsInNamespaces(
+    raw
+      .split(',')
+      .map(namespace => namespace.trim())
+      .filter(isAuditNamespace),
+  );
 }
 
 function parseActorIdsParam(raw: string | undefined): string[] {
@@ -165,6 +131,14 @@ export function auditRequestContext(c: Context): AuditContext {
   };
 }
 
+/** Who a browser request is and where it came from: the pair every funnel row carries. */
+export function auditRequestOrigin(c: Context): {
+  actorProfile: AuditActorProfileInput | undefined;
+  context: AuditContext;
+} {
+  return { actorProfile: auditActorProfile(getFactoryAuthUser(c)), context: auditRequestContext(c) };
+}
+
 /** Factory-owned audit behavior backed by the audit storage domain. */
 export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
   readonly #auth: RouteAuth;
@@ -190,10 +164,13 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
     }
   }
 
-  async record(input: RecordAuditEventInput): Promise<AuditEventRow | null> {
+  async record(input: RecordAuditEventInput<AuditAction>): Promise<AuditEventRow | null> {
     try {
       await this.#audit.ensureReady();
-      const row = await this.#audit.record(input);
+      const { event: row, created } = input.idempotencyKey
+        ? await this.#audit.recordOnce(input)
+        : { event: await this.#audit.record(input), created: true };
+      if (!created) return row;
       for (const sink of this.#sinks) {
         if (!sink.audit) continue;
         void Promise.resolve()
@@ -225,17 +202,13 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
     try {
       const tenant = this.#auth.tenant(context);
       if (!tenant?.orgId) return;
-      const user = getFactoryAuthUser(context);
-      const actorProfile = user ? buildActorProfileMetadata(user) : undefined;
-      const metadata = actorProfile
-        ? { ...input.metadata, [ACTOR_PROFILE_METADATA_KEY]: actorProfile }
-        : input.metadata;
       await this.record({
         orgId: tenant.orgId,
         actorId: tenant.userId,
+        actorProfile: auditActorProfile(getFactoryAuthUser(context)),
         action: input.action,
         targets: input.targets,
-        metadata,
+        metadata: input.metadata,
         factoryProjectId: input.factoryProjectId,
         projectRepositoryId: input.projectRepositoryId,
         context: auditRequestContext(context),
@@ -277,7 +250,7 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
         metadata: {
           ...input.metadata,
           startedBy: userId,
-          ...(modeId ? { agentName: `${modeId} agent` } : {}),
+          ...(modeId ? { agentName: auditAgentName(modeId) } : {}),
           ...(modelId ? { modelId } : {}),
         },
         factoryProjectId: state.factoryProjectId,
@@ -295,7 +268,7 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
   async #resolveActorProfiles(
     events: AuditEventRow[],
     requestedActorIds: string[] = [],
-  ): Promise<Record<string, AuditActorProfile>> {
+  ): Promise<Record<string, WireAuditActor>> {
     const humanActorIds = [
       ...new Set(
         [
@@ -310,7 +283,7 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
     // regardless of the auth provider's ability to resolve a user by id
     // (MastraAuthStudio's getUser() always returns null, WorkOS looks up by
     // id but every provider stamps here uniformly).
-    const profiles: Record<string, AuditActorProfile> = {};
+    const profiles: Record<string, WireAuditActor> = {};
     for (const event of events) {
       if (event.actorType !== 'human') continue;
       if (!isHumanActorId(event.actorId)) continue;
@@ -364,16 +337,24 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
           const project = await this.#projects.get({ orgId: tenant.orgId, id: projectId });
           if (!project) return c.json({ error: 'Project not found' }, 404);
 
+          const actions = actionsInRequestedNamespaces(c.req.query('namespaces'));
+          if (actions?.length === 0) return c.json({ error: 'unknown_namespaces' }, 400);
+
           const page = await this.list({
             orgId: tenant.orgId,
             factoryProjectId: projectId,
-            actions: parseActionsParam(c.req.query('actions')),
+            actions,
             actorId: c.req.query('actor') || undefined,
             before: c.req.query('before') || undefined,
             limit: parseLimitParam(c.req.query('limit')),
           });
           const actors = await this.#resolveActorProfiles(page.events, parseActorIdsParam(c.req.query('actorIds')));
-          return c.json({ ...page, actors });
+          const body: WireAuditPage = {
+            events: page.events.map(toWireAuditEvent),
+            actors,
+            ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
+          };
+          return c.json(body);
         },
       }),
     ];

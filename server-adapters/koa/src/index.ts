@@ -9,6 +9,7 @@ import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-ada
 import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
+  getCustomHTTPExceptionResponse,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
@@ -407,7 +408,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       }
     }
 
-    if (params.body) {
+    if (params.body !== undefined || route.bodySchema) {
       try {
         params.body = await this.parseBody(route, params.body);
       } catch (error) {
@@ -513,6 +514,14 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           method: route.method,
         });
       }
+      const customResponse = getCustomHTTPExceptionResponse(error);
+      if (customResponse) {
+        ctx.status = customResponse.status;
+        customResponse.headers.forEach((value, name) => ctx.set(name, value));
+        ctx.body = Buffer.from(await customResponse.arrayBuffer());
+        return;
+      }
+
       // Attach status code to the error for upstream middleware
       if (error && typeof error === 'object') {
         if (!('status' in error)) {

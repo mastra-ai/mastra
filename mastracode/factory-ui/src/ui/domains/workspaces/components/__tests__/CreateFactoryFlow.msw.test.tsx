@@ -6,7 +6,7 @@
  * and quitting halfway leaves nothing on the server — until the model step
  * commits the whole thing.
  */
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
@@ -43,7 +43,6 @@ const repo = {
   private: false,
   installationId: 7,
   installationStorageId: 'inst-7',
-  repositoryStorageId: 'repo-99',
   sandboxProvider: 'local',
   sandboxWorkdir: '/workspace/hello',
 };
@@ -147,6 +146,38 @@ describe('Create Factory wizard', () => {
     expect(screen.queryByLabelText('Loading repositories')).not.toBeInTheDocument();
   });
 
+  it('debounces repository searches before requesting filtered results', async () => {
+    const queries: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, ({ request }) => {
+        queries.push(new URL(request.url).searchParams.get('q') ?? '');
+        return HttpResponse.json({ repos: [repo] });
+      }),
+    );
+    const user = userEvent.setup();
+
+    const { client } = renderFlow();
+
+    await screen.findByRole('heading', { name: 'Name your new Factory' });
+    await waitForMutationsIdle(client);
+    expect(queries).toEqual(['']);
+    await user.type(await screen.findByLabelText('Factory name'), 'Mastra{Enter}');
+    const search = await screen.findByLabelText('Search repositories');
+    await waitForMutationsIdle(client);
+    expect(queries.length).toBeGreaterThanOrEqual(2);
+    queries.splice(0);
+
+    const deliberateUser = userEvent.setup({ delay: 350 });
+    await deliberateUser.type(search, 'jal');
+
+    expect(queries).toEqual([]);
+    await act(() => new Promise(resolve => setTimeout(resolve, 800)));
+    await waitForMutationsIdle(client);
+    expect(queries).toEqual(['jal']);
+  });
+
   it('submits the typed name with Enter', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
@@ -214,7 +245,11 @@ describe('Create Factory wizard', () => {
     expect(patchedBodies).toEqual([{ defaultModelId: 'anthropic/claude-sonnet-4-5' }]);
     // The picked repository feeds Work intake without a trip to Settings.
     expect(intakeConfigs).toEqual([
-      { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: false, sourceIds: null } },
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        linear: { enabled: false, sourceIds: null },
+        jira: { enabled: false, sourceIds: null },
+      },
     ]);
     expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1');
     expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
@@ -420,10 +455,19 @@ describe('Create Factory wizard', () => {
     await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
 
     await waitForMutationsIdle(client);
-    expect(bindings).toEqual([{ integrationId: 'linear', sourceId: 'lin-1', factoryProjectId: 'fp-1' }]);
-    // Both picks land in one config write, each selected and switched on.
+    expect(bindings).toEqual([{ integrationId: 'linear', sourceId: 'lin-1', factoryProjectId: 'fp-1', board: 'work' }]);
+    // The link feeds the repository first; the Linear pick lands on top of it.
     expect(intakeConfigs).toEqual([
-      { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: true, sourceIds: ['lin-1'] } },
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        linear: { enabled: false, sourceIds: null },
+        jira: { enabled: false, sourceIds: null },
+      },
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        linear: { enabled: true, sourceIds: ['lin-1'] },
+        jira: { enabled: false, sourceIds: null },
+      },
     ]);
   });
 
@@ -452,7 +496,11 @@ describe('Create Factory wizard', () => {
     // No Linear routing without a picked project; only the repository feeds intake.
     expect(bindings).toEqual([]);
     expect(intakeConfigs).toEqual([
-      { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: false, sourceIds: null } },
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        linear: { enabled: false, sourceIds: null },
+        jira: { enabled: false, sourceIds: null },
+      },
     ]);
   });
 
@@ -538,14 +586,16 @@ const linkedRepository = {
 
 /**
  * Stub the intake config the last step reads and writes, collecting every
- * saved config body.
+ * saved config body. Stateful: each PUT becomes what the next GET returns.
  */
-function stubIntakeConfig(config: Record<string, unknown> = {}) {
+function stubIntakeConfig(initial: Record<string, unknown> = {}) {
+  let config = initial;
   const savedConfigs: unknown[] = [];
   server.use(
     http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config })),
-    http.put(`${TEST_BASE_URL}/web/intake/config`, async ({ request }) => {
-      savedConfigs.push(await request.json());
+    http.put<never, Record<string, unknown>>(`${TEST_BASE_URL}/web/intake/config`, async ({ request }) => {
+      config = await request.json();
+      savedConfigs.push(config);
       return HttpResponse.json({ config });
     }),
   );
@@ -584,7 +634,10 @@ function stubModelStepEndpoints(calls: string[], intakeConfig: Record<string, un
       `${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`,
       async ({ request }) => {
         calls.push('link');
-        expect(await request.json()).toMatchObject({ repositoryId: 'repo-99', branch: 'main' });
+        expect(await request.json()).toMatchObject({
+          repository: { externalId: '99', slug: 'octo/hello' },
+          branch: 'main',
+        });
         return HttpResponse.json({ projectRepository: linkedRepository });
       },
     ),

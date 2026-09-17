@@ -48,7 +48,7 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
   }
 
   authFailureMessage(): string {
-    return 'GitLab rejected the connected account. Reconnect it in Mastra Platform.';
+    return 'GitLab rejected the connected account. Reconnect it in Factory settings.';
   }
 
   protected async activeContexts(): Promise<PlatformGitLabContext[]> {

@@ -1,6 +1,7 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import type { BoardKind } from '../boardStages';
+import { stageLabel } from '../stages';
 import type { BoardStageId } from '../stages';
 
 interface BoardColumnEmptyCopy {
@@ -66,6 +67,11 @@ function boardColumnEmptyCopy(stage: BoardStageId, kind: BoardKind, hasIntakeSou
         title: 'Nothing canceled',
         description: 'Drag work here when it should leave the active flow.',
       };
+    default:
+      return {
+        title: `Nothing in ${stageLabel(stage)}`,
+        description: 'Drag work here when it reaches this stage.',
+      };
   }
 }
 
@@ -74,20 +80,28 @@ export function BoardColumnEmptyState({
   kind,
   hasIntakeSource,
   filtersExcludeAll = false,
+  alreadyMaterialized = 0,
 }: {
   stage: BoardStageId;
   kind: BoardKind;
   hasIntakeSource: boolean;
   filtersExcludeAll?: boolean;
+  /** Feed items withheld because their card sits on another board in this Factory. */
+  alreadyMaterialized?: number;
 }) {
   const copy = filtersExcludeAll
     ? {
         title: kind === 'review' ? 'No pull requests match filters' : 'No work items match filters',
         description: 'Try another teammate or relevance type.',
       }
-    : boardColumnEmptyCopy(stage, kind, hasIntakeSource);
+    : alreadyMaterialized > 0
+      ? {
+          title: boardColumnEmptyCopy(stage, kind, hasIntakeSource).title,
+          description: `${alreadyMaterialized} ${alreadyMaterialized === 1 ? 'item from this source already has' : 'items from this source already have'} a card on another board, so the feed only offers new ones.`,
+        }
+      : boardColumnEmptyCopy(stage, kind, hasIntakeSource);
   return (
-    <div className="border-border1 flex min-h-24 flex-col justify-center rounded-3xl border border-dashed px-4 py-4">
+    <div className="border-border1 rounded-card flex min-h-24 flex-col justify-center border border-dashed px-4 py-4">
       <Txt as="p" variant="ui-sm" className="text-icon4 m-0 font-medium">
         {copy.title}
       </Txt>

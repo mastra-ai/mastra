@@ -32,12 +32,13 @@ import type {
   SandboxCloneOptions,
   SandboxStartResult,
 } from '@mastra/core/workspace';
-import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
+import { MastraSandbox, SandboxNotReadyError, assertModesUnsupported } from '@mastra/core/workspace';
 
 import { compact } from '../utils/compact';
 import { shellQuote } from '../utils/shell-quote';
 import { mountS3, mountGCS, mountAzure, LOG_PREFIX, runCommand } from './mounts';
 import type { DaytonaMountConfig, MountContext } from './mounts';
+import { cleanupS3Credentials } from './mounts/s3-credentials';
 import { DaytonaProcessManager } from './process-manager';
 import type { DaytonaResources } from './types';
 
@@ -686,8 +687,12 @@ export class DaytonaSandbox extends MastraSandbox {
 
   /**
    * Bulk-write files into the sandbox filesystem via the SDK's native upload.
+   *
+   * Per-file permission modes are not supported; an explicit `mode` is
+   * rejected rather than silently discarded.
    */
   async writeFiles(files: SandboxFileInput[]): Promise<void> {
+    assertModesUnsupported(files, 'Daytona');
     await this.ensureRunning();
     await this.daytona.fs.uploadFiles(
       files.map(file => ({
@@ -945,13 +950,22 @@ export class DaytonaSandbox extends MastraSandbox {
         `${LOG_PREFIX} Error mounting "${filesystem.provider}" (${filesystem.id}) at "${mountPath}":`,
         error,
       );
+      if (config.type === 's3') {
+        // The daemon may have mounted successfully before its readiness check failed.
+        // Detach it before retrying, otherwise the missing marker makes it look unmanaged.
+        try {
+          await this.unmount(mountPath);
+        } catch (cleanupError) {
+          this.logger.warn(`${LOG_PREFIX} Could not unmount failed S3 mount at ${mountPath}:`, cleanupError);
+        }
+      }
+      // unmount() removes the registry entry; retain the original failure for callers.
       this.mounts.set(mountPath, { filesystem, state: 'error', config, error: errorToString(error) });
-
-      // Clean up the directory we created since mount failed
-      await runCommand(sandbox, `sudo rmdir ${shellQuote(mountPath)} 2>/dev/null || true`, {
-        timeout: MOUNT_COMMAND_TIMEOUT_MS,
-      });
-      this.logger.debug(`${LOG_PREFIX} Cleaned up directory after failed mount: ${mountPath}`);
+      if (config.type !== 's3') {
+        await runCommand(sandbox, `sudo rmdir ${shellQuote(mountPath)} 2>/dev/null || true`, {
+          timeout: MOUNT_COMMAND_TIMEOUT_MS,
+        });
+      }
       return { success: false, mountPath, error: errorToString(error) };
     }
 
@@ -982,16 +996,26 @@ export class DaytonaSandbox extends MastraSandbox {
     // Do NOT pkill the FUSE daemon — a killed daemon leaves a stale mount
     // (ENOTCONN) that blocks subsequent mkdir/stat on the path.
     const quotedPath = shellQuote(mountPath);
+    // Validation rejects repeated slashes, so at most one trailing slash remains.
+    const normalizedMountPath = mountPath.endsWith('/') ? mountPath.slice(0, -1) : mountPath;
     await runCommand(
       sandbox,
       `sudo fusermount -u ${quotedPath} 2>/dev/null; ` +
         `sudo umount -l ${quotedPath} 2>/dev/null; ` +
-        // Last resort: move a stuck FUSE mount aside so the directory can be cleaned up.
-        `mountpoint -q ${quotedPath} 2>/dev/null && ` +
+        // Dead FUSE mounts can make mountpoint fail with ENOTCONN. Read the kernel table
+        // instead so the existing move-aside fallback also handles disconnected mounts.
+        `grep -Fq -- ${shellQuote(` ${normalizedMountPath || '/'} `)} /proc/mounts && ` +
         `{ _p="/tmp/.mastra-defunct-$$"; sudo mkdir -p "$_p" && sudo mount --move ${quotedPath} "$_p" 2>/dev/null; sudo umount -l "$_p" 2>/dev/null; sudo rmdir "$_p" 2>/dev/null; }`,
       { timeout: MOUNT_COMMAND_TIMEOUT_MS },
     );
 
+    await cleanupS3Credentials(mountPath, {
+      run: async (cmd, timeout) => {
+        const result = await runCommand(sandbox, cmd, { timeout: timeout ?? MOUNT_COMMAND_TIMEOUT_MS });
+        return { exitCode: result.exitCode, stdout: result.output, stderr: '' };
+      },
+      logger: this.logger,
+    });
     this.mounts.delete(mountPath);
 
     // Clean up marker file and mount directory in one round-trip.

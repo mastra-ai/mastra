@@ -34,7 +34,7 @@ export function BrowserViewHeader({
       )}
     >
       <div className="mr-3 min-w-0 flex-1">
-        <span className={cn('text-sm text-neutral4 truncate block', !url && 'text-neutral3 italic')}>
+        <span className={cn('text-ui-md text-neutral4 truncate block', !url && 'text-neutral3 italic')}>
           {url || 'No URL'}
         </span>
       </div>

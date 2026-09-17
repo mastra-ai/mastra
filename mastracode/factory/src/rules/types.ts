@@ -1,12 +1,33 @@
 import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
 
-export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'manual';
+export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'jira-issue' | 'manual';
+
+/** The source label that holds an issue at rest until a maintainer decides; compared lowercased. */
+export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
+export const AUTO_TRIAGED_LABEL = 'status: auto-triaged';
+
+// The label only holds a card at rest: once a person accepted it, or it sits in a working
+// lane only a person could have moved it into, the label is stale until the source catches up.
+export function needsApproval(item: {
+  metadata: Record<string, unknown> | null;
+  stages?: readonly string[];
+  acceptedAt?: Date | string | null;
+}): boolean {
+  const labels = item.metadata?.labels;
+  if (!Array.isArray(labels)) return false;
+  return (
+    labels.some(label => typeof label === 'string' && label.toLowerCase() === NEEDS_APPROVAL_LABEL) &&
+    !item.acceptedAt &&
+    (item.stages ?? ['intake']).every(stage => stage === 'intake' || stage === 'triage')
+  );
+}
 
 export function workItemSource(source: ExternalWorkItemSource | null): WorkItemSource {
   if (!source) return 'manual';
   if (source.integrationId === 'linear') return 'linear-issue';
-  // Only GitHub and Linear have provider-specific rules; anything else (a Slack
-  // thread, say) is a plain work item, not a mislabeled GitHub issue.
+  if (source.integrationId === 'jira') return 'jira-issue';
+  // Only GitHub, Linear, and Jira have provider-specific rules; anything else
+  // (a Slack thread, say) is a plain work item, not a mislabeled GitHub issue.
   if (source.integrationId !== 'github') return 'manual';
   return source.type === 'pull-request' ? 'github-pr' : 'github-issue';
 }
@@ -32,7 +53,7 @@ export function externallyAuthoredWorkItem(item: {
 }
 
 export const FACTORY_RULE_STAGES = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'] as const;
-export type FactoryRuleStage = (typeof FACTORY_RULE_STAGES)[number];
+export type FactoryRuleStage = (typeof FACTORY_RULE_STAGES)[number] | (string & {});
 
 // Each role and the working stage its run holds the card in. Key order is the
 // seat pipeline order — Resume depth derives from it.
@@ -73,7 +94,7 @@ export function isFactoryRuleStage(value: unknown): value is FactoryRuleStage {
 
 export function factoryRuleStage(stages: readonly string[]): FactoryRuleStage | undefined {
   const stage = stages.length === 1 ? stages[0] : undefined;
-  return isFactoryRuleStage(stage) ? stage : undefined;
+  return typeof stage === 'string' && stage.length > 0 ? stage : undefined;
 }
 
 export function isTerminalFactoryRuleStage(stages: readonly string[]): boolean {
@@ -93,9 +114,9 @@ export function factoryLaneForRole(role: string): FactoryRuleStage | undefined {
 }
 
 export const FACTORY_RULE_BOARDS = ['work', 'review'] as const;
-export type FactoryRuleBoard = (typeof FACTORY_RULE_BOARDS)[number];
+export type FactoryRuleBoard = (typeof FACTORY_RULE_BOARDS)[number] | (string & {});
 
-export const FACTORY_RULE_SOURCES = ['issue', 'pullRequest', 'linearIssue', 'manual'] as const;
+export const FACTORY_RULE_SOURCES = ['issue', 'pullRequest', 'linearIssue', 'jiraIssue', 'manual'] as const;
 export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
 
 export const FACTORY_GITHUB_EVENTS = [
@@ -134,6 +155,7 @@ export interface FactoryRuleItemContext {
   title: string;
   url: string | null;
   stages: readonly string[];
+  acceptedAt: Date | null;
   /** Intake-stamped facts about the source — repository id, reporter login, labels. */
   metadata: Record<string, unknown> | null;
 }
@@ -160,7 +182,7 @@ export interface FactoryRuleContextBase {
   ingress: FactoryRuleIngressIdentity;
   cause: string;
   causalChain: readonly FactoryRuleCausalEntry[];
-  ruleSetVersion: string;
+  configVersion: string;
 }
 
 export interface FactoryBoundRuleContext extends FactoryRuleContextBase {
@@ -191,6 +213,11 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
+  /**
+   * Board an issue's labels route it to, when the project has a matching label route and that board
+   * is installed. Absent for pull requests and for issues whose labels select nothing.
+   */
+  intake?: FactoryRuleIntakeTarget;
   event: FactoryGithubEventName;
   deliveryId: string;
   factory: { createdAt: string };
@@ -228,19 +255,34 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
     assignees?: string[];
     requestedReviewers?: string[];
     labels?: string[];
+    author?: string;
+    factoryAuthored: boolean;
     headBranch: string;
     baseBranch: string;
   };
   /** Present on `pullRequestReviewRequested`: who review was (re-)requested from. */
   reviewRequest?: { reviewer: string; factoryReviewer: boolean };
+  /** Present when a PR comment uses Factory's exact review command. */
+  reviewCommand?: { command: 'review' | 're-review'; target: string };
   /** Present on `pullRequestReviewSubmitted`: the review that was just posted. */
   review?: { id: number; state: string; url: string };
+}
+
+/**
+ * Where an intake source binding says new items from this source should land.
+ * Absent when the source is unbound or bound without a board (built-in routing).
+ */
+export interface FactoryRuleIntakeTarget {
+  board: string;
+  initialPhase: string;
 }
 
 export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
+  /** Bound board for the source this issue came from, when one is configured and installed. */
+  intake?: FactoryRuleIntakeTarget;
   event: FactoryLinearEventName;
   issue: {
     id: string;
@@ -266,39 +308,6 @@ export type FactoryRuleHandler<TContext> = (
 export interface FactoryBoardRuleLeaf {
   onEnter?: FactoryRuleHandler<FactoryStageRuleContext>;
   onExit?: FactoryRuleHandler<FactoryStageRuleContext>;
-}
-
-export interface FactoryToolRuleLeaf {
-  onResult?: FactoryRuleHandler<FactoryToolResultRuleContext>;
-}
-
-export interface FactoryGithubRuleLeaf {
-  onEvent?: FactoryRuleHandler<FactoryGithubRuleContext>;
-}
-
-export interface FactoryLinearRuleLeaf {
-  onEvent?: FactoryRuleHandler<FactoryLinearRuleContext>;
-}
-
-export type FactoryBoardRules = Partial<
-  Record<FactoryRuleStage, Partial<Record<FactoryRuleSource, FactoryBoardRuleLeaf>>>
->;
-
-export interface FactoryRules {
-  version: string;
-  work: FactoryBoardRules;
-  review: FactoryBoardRules;
-  tools: Record<string, FactoryToolRuleLeaf>;
-  github: Partial<Record<FactoryGithubEventName, FactoryGithubRuleLeaf>>;
-  linear: Partial<Record<FactoryLinearEventName, FactoryLinearRuleLeaf>>;
-}
-
-export interface FactoryRulesOverrides {
-  work?: FactoryBoardRules;
-  review?: FactoryBoardRules;
-  tools?: Record<string, FactoryToolRuleLeaf>;
-  github?: Partial<Record<FactoryGithubEventName, FactoryGithubRuleLeaf>>;
-  linear?: Partial<Record<FactoryLinearEventName, FactoryLinearRuleLeaf>>;
 }
 
 export type FactoryRuleRejectionCode =
@@ -347,6 +356,13 @@ export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisi
   board: FactoryRuleBoard;
   source: WorkItemSource;
   sourceKey: string;
+  /**
+   * Org-wide ownership key for the external record, when one Factory at a time
+   * may hold a live card for it (a stable Linear issue id, for instance). The
+   * store enforces it with a unique index, so a second project's materialization
+   * is refused rather than duplicated.
+   */
+  claimKey?: string;
   title: string;
   url: string | null;
   stage: FactoryRuleStage;
@@ -369,7 +385,20 @@ interface FactoryInvokeSkillDecisionBase extends FactoryCommitDecisionBase {
  * instead of an otherwise empty skill.
  */
 export type FactoryInvokeSkillDecision = FactoryInvokeSkillDecisionBase &
-  ({ skillName: string; prompt?: never } | { prompt: string; skillName?: never });
+  (
+    | {
+        skillName: string;
+        prompt?: never;
+        /**
+         * Same-stage re-entry: the skill is already active in the card's live session,
+         * so deliver a compact continuation that references it by name and carries only
+         * the fresh arguments, instead of re-pasting the whole skill document. Only valid
+         * for named-skill decisions — a plain prompt run has no active skill to resume.
+         */
+        resume?: boolean;
+      }
+    | { prompt: string; skillName?: never; resume?: never }
+  );
 
 export interface FactorySendMessageDecision extends FactoryCommitDecisionBase {
   type: 'sendMessage';
@@ -424,6 +453,8 @@ export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRul
       return 'pullRequest';
     case 'linear-issue':
       return 'linearIssue';
+    case 'jira-issue':
+      return 'jiraIssue';
     case 'manual':
       return 'manual';
   }

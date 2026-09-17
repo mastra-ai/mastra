@@ -162,7 +162,7 @@ describe('LibSQLStore local performance initialization', () => {
     expect(createTableCountAfterThirdInit).toBe(createTableCount);
   });
 
-  it('does not cache in-memory DB init', async () => {
+  it('caches in-memory DB init like any other local DB', async () => {
     const { client, statements } = createMockClient();
     mockCreateClient.mockReturnValueOnce(client as any);
 
@@ -174,7 +174,7 @@ describe('LibSQLStore local performance initialization', () => {
     const secondCreateTableCount = sqls(statements).filter(sql => /^CREATE TABLE/i.test(sql)).length;
 
     expect(firstCreateTableCount).toBeGreaterThan(0);
-    expect(secondCreateTableCount).toBeGreaterThan(firstCreateTableCount);
+    expect(secondCreateTableCount).toBe(firstCreateTableCount);
   });
 
   it('coalesces concurrent local file DB init', async () => {
@@ -189,5 +189,31 @@ describe('LibSQLStore local performance initialization', () => {
     await store.init();
     const createTableCountAfterCachedInit = sqls(statements).filter(sql => /^CREATE TABLE/i.test(sql)).length;
     expect(createTableCountAfterCachedInit).toBe(createTableCount);
+  });
+});
+
+describe('LibSQLStore single-connection gating', () => {
+  const rawClientOf = (store: LibSQLStore) => (store as unknown as { client: unknown }).client;
+
+  it('uses the pooled libsql client as-is for local file DBs', () => {
+    const { client } = createMockClient();
+    mockCreateClient.mockReturnValueOnce(client as any);
+
+    const store = new LibSQLStore({ id: 'gate-file', url: 'file:gate.db' });
+    expect(rawClientOf(store)).toBe(client);
+  });
+
+  it('gates :memory: and embedded-replica clients', () => {
+    for (const config of [
+      { id: 'gate-memory', url: ':memory:' },
+      { id: 'gate-shared-memory', url: 'file::memory:?cache=shared' },
+      { id: 'gate-replica', url: 'file:replica.db', syncUrl: 'libsql://db.turso.io', authToken: 't' },
+    ]) {
+      const { client } = createMockClient();
+      mockCreateClient.mockReturnValueOnce(client as any);
+
+      const store = new LibSQLStore(config);
+      expect(rawClientOf(store), config.url).not.toBe(client);
+    }
   });
 });

@@ -476,6 +476,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/infer',
+          label: 'Infer by Flow7',
+        },
+        {
+          type: 'doc',
           id: 'providers/inference',
           label: 'Inference',
         },
@@ -591,6 +596,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/melious',
+          label: 'Melious',
+        },
+        {
+          type: 'doc',
           id: 'providers/meta',
           label: 'Meta',
         },
@@ -658,6 +668,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/morph',
           label: 'Morph',
+        },
+        {
+          type: 'doc',
+          id: 'providers/nan',
+          label: 'NaN',
         },
         {
           type: 'doc',
@@ -986,6 +1001,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/vispark',
+          label: 'Vispark',
+        },
+        {
+          type: 'doc',
           id: 'providers/vivgrid',
           label: 'Vivgrid',
         },
@@ -1008,6 +1028,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/wafer.ai',
           label: 'Wafer',
+        },
+        {
+          type: 'doc',
+          id: 'providers/wallaby',
+          label: 'Wallaby',
         },
         {
           type: 'doc',

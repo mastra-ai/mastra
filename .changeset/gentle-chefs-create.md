@@ -2,10 +2,17 @@
 '@mastra/factory': minor
 ---
 
-Added platform-managed Jira intake. Factory deployments with Platform credentials now discover Jira connections for the caller's organization and proxy Jira requests through the Integrations API. An explicitly configured `jira` integration continues to take precedence for self-hosted deployments.
+Added platform-managed Jira intake for Factory deployments. With `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY` configured, Factory automatically discovers visible Platform connections by filtering for the `factory-jira` provider configuration key and routes Jira Cloud requests through them.
+
+An explicitly configured `JiraIntegration` continues to take precedence, so self-hosted Jira credentials and Platform-managed connections use the same Jira client behavior without conflicting.
+
+```bash
+MASTRA_PLATFORM_ACCESS_TOKEN=platform-access-token
+```
 
 ```ts
-import { PlatformJiraIntegration } from '@mastra/factory/integrations/platform/jira/integration';
+import { MastraFactory } from '@mastra/factory';
 
-const jira = new PlatformJiraIntegration();
+// Platform Jira is registered automatically when Platform credentials are set.
+export const factory = new MastraFactory({ storage });
 ```

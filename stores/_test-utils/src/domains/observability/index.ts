@@ -3,7 +3,13 @@ import type { ObservabilityStorage, SpanRecord, TraceSpan } from '@mastra/core/s
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createSpan, createChildSpan, createFeedbackRecord, SpanType, EntityType, DEFAULT_BASE_DATE } from './data';
 
-export function createObservabilityTests({ storage }: { storage: MastraStorage }) {
+export function createObservabilityTests({
+  storage,
+  capabilities = {},
+}: {
+  storage: MastraStorage;
+  capabilities?: { scopedTraceDeletion?: boolean };
+}) {
   // Skip tests if storage doesn't have observability domain
   const describeObservability = storage.stores?.observability ? describe : describe.skip;
 
@@ -547,6 +553,19 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
       it('should handle deleting non-existent traces gracefully', async () => {
         await expect(observabilityStorage.batchDeleteTraces({ traceIds: ['non-existent'] })).resolves.not.toThrow();
+      });
+
+      // Adapters without tenant columns must reject scoped deletes instead of
+      // silently performing an unscoped (cross-tenant-hazard) delete.
+      const itScoped = capabilities.scopedTraceDeletion ? it.skip : it;
+      itScoped('should reject tenant-scoped deletion when scope is not supported', async () => {
+        await expect(
+          observabilityStorage.batchDeleteTraces({ traceIds: ['trace-1'], organizationId: 'org-1' }),
+        ).rejects.toThrow(/tenant-scoped trace deletion/);
+
+        await expect(
+          observabilityStorage.batchDeleteTraces({ traceIds: ['trace-1'], resourceId: 'res-1' }),
+        ).rejects.toThrow(/tenant-scoped trace deletion/);
       });
     });
 

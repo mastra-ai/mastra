@@ -9,10 +9,11 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useQueryClient } from '@tanstack/react-query';
-import { Play, Sparkles, Clock, ChevronRight, ChevronDown, Pencil, Save, X, Trash2 } from 'lucide-react';
+import { Play, Sparkles, Clock, ChevronRight, ChevronDown, Pencil, Save, X, Trash2, Paperclip } from 'lucide-react';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { formatVersionLabel } from './format-version-label';
 import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
@@ -249,10 +250,7 @@ export function DatasetDetailView({
             )}
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={onGenerate}>
-              <Icon size="sm">
-                <Sparkles />
-              </Icon>
+            <Button variant="ghost" size="sm" onClick={onGenerate} icon={<Sparkles />}>
               Generate
             </Button>
             <Button
@@ -350,7 +348,12 @@ export function DatasetDetailView({
               </button>
               {unattachedScorerEntries.length > 0 && (
                 <div className="pr-2">
-                  <Button variant="ghost" size="sm" onClick={() => setShowAttachScorerDialog(true)}>
+                  <Button
+                    icon={<Paperclip />}
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAttachScorerDialog(true)}
+                  >
                     Attach
                   </Button>
                 </div>
@@ -364,7 +367,12 @@ export function DatasetDetailView({
                   </Txt>
                   {unattachedScorerEntries.length > 0 && (
                     <div className="mt-2">
-                      <Button variant="outline" size="sm" onClick={() => setShowAttachScorerDialog(true)}>
+                      <Button
+                        icon={<ScorersIcon />}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowAttachScorerDialog(true)}
+                      >
                         Attach a scorer
                       </Button>
                     </div>
@@ -416,7 +424,7 @@ export function DatasetDetailView({
             </button>
             {!itemsCollapsed &&
               (items.length === 0 ? (
-                <div className="px-4 py-6 text-center">
+                <div className="px-4 py-4 text-center">
                   <Txt variant="ui-xs" className="text-neutral3">
                     No items yet. Use Generate to create test data.
                   </Txt>
@@ -544,7 +552,7 @@ export function DatasetDetailView({
                   placeholder="Search scorers..."
                   value={attachScorerSearch}
                   onChange={e => setAttachScorerSearch(e.target.value)}
-                  className="border-border1 bg-surface2 text-text1 placeholder:text-neutral3 focus:ring-accent1 w-full rounded border px-3 py-1.5 text-sm focus:ring-1 focus:outline-none"
+                  className="border-border1 bg-surface2 text-text1 placeholder:text-neutral3 focus:ring-accent1 text-ui-md w-full rounded border px-3 py-1.5 focus:ring-1 focus:outline-none"
                 />
                 {unattachedScorerEntries
                   .filter(([id, scorer]) => {
@@ -675,7 +683,7 @@ function ExpandedItemEditor({
           <Textarea
             value={inputValue}
             onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInputValue(e.target.value)}
-            className="mt-1 font-mono text-xs"
+            className="text-ui-sm mt-1 font-mono"
             rows={4}
           />
         </div>
@@ -686,7 +694,7 @@ function ExpandedItemEditor({
           <Textarea
             value={groundTruthValue}
             onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setGroundTruthValue(e.target.value)}
-            className="mt-1 font-mono text-xs"
+            className="text-ui-sm mt-1 font-mono"
             rows={3}
             placeholder="Optional"
           />
@@ -698,7 +706,7 @@ function ExpandedItemEditor({
           <Textarea
             value={trajectoryValue}
             onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTrajectoryValue(e.target.value)}
-            className="mt-1 font-mono text-xs"
+            className="text-ui-sm mt-1 font-mono"
             rows={3}
             placeholder="Optional — JSON trajectory expectation"
           />
@@ -714,10 +722,7 @@ function ExpandedItemEditor({
             )}
             Save
           </Button>
-          <Button variant="ghost" size="sm" onClick={cancelEditing}>
-            <Icon size="sm">
-              <X />
-            </Icon>
+          <Button variant="ghost" size="sm" onClick={cancelEditing} icon={<X />}>
             Cancel
           </Button>
         </div>
@@ -731,7 +736,7 @@ function ExpandedItemEditor({
         <Txt variant="ui-xs" className="text-neutral3 font-medium">
           Input
         </Txt>
-        <pre className="text-neutral5 bg-surface1 mt-1 max-h-48 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 text-xs wrap-break-word whitespace-pre-wrap">
+        <pre className="text-neutral5 bg-surface1 text-ui-sm mt-1 max-h-48 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 wrap-break-word whitespace-pre-wrap">
           {formatValue(item.input)}
         </pre>
       </div>
@@ -740,7 +745,7 @@ function ExpandedItemEditor({
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
             Ground Truth
           </Txt>
-          <pre className="text-neutral5 bg-surface1 mt-1 max-h-48 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 text-xs wrap-break-word whitespace-pre-wrap">
+          <pre className="text-neutral5 bg-surface1 text-ui-sm mt-1 max-h-48 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 wrap-break-word whitespace-pre-wrap">
             {formatValue(item.groundTruth)}
           </pre>
         </div>
@@ -750,16 +755,13 @@ function ExpandedItemEditor({
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
             Expected Trajectory
           </Txt>
-          <pre className="text-neutral5 bg-surface1 mt-1 max-h-48 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 text-xs break-words whitespace-pre-wrap">
+          <pre className="text-neutral5 bg-surface1 text-ui-sm mt-1 max-h-48 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 break-words whitespace-pre-wrap">
             {formatValue(item.expectedTrajectory)}
           </pre>
         </div>
       )}
       <div className="flex items-center gap-2 pt-1">
-        <Button variant="ghost" size="sm" onClick={startEditing}>
-          <Icon size="sm">
-            <Pencil />
-          </Icon>
+        <Button variant="ghost" size="sm" onClick={startEditing} icon={<Pencil />}>
           Edit
         </Button>
         {isConfirmingDelete ? (
@@ -776,7 +778,7 @@ function ExpandedItemEditor({
             >
               {deleteItem.isPending ? <Spinner className="h-3 w-3" /> : 'Yes'}
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setIsConfirmingDelete(false)}>
+            <Button icon={<X />} variant="ghost" size="sm" onClick={() => setIsConfirmingDelete(false)}>
               No
             </Button>
           </>
@@ -786,10 +788,8 @@ function ExpandedItemEditor({
             size="sm"
             onClick={() => setIsConfirmingDelete(true)}
             className="text-neutral2 hover:text-negative1"
+            icon={<Trash2 />}
           >
-            <Icon size="sm">
-              <Trash2 />
-            </Icon>
             Delete
           </Button>
         )}

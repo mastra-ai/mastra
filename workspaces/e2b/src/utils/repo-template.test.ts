@@ -145,8 +145,7 @@ describe('createRepoTemplate', () => {
 
   it('clones relative to the build cwd, pins the sha, and runs the setup command in the checkout', async () => {
     const steps = await serializedSteps(await resolve(BASE));
-    // Serialized as JSON, so the shell double quotes appear escaped.
-    expect(steps).toContain('git clone https://github.com/octocat/hello \\"hello\\"');
+    expect(steps).toContain("git clone --depth=1 --single-branch 'https://github.com/octocat/hello' 'hello'");
     expect(steps).toContain(`checkout ${SHA}`);
     expect(steps).toContain('cd \\"hello\\" && pnpm install');
   });
@@ -190,7 +189,7 @@ describe('createRepoTemplate', () => {
     expect(ordered.slice(start, start + 3)).toEqual([
       'RUN mkdir -p "/workspace"',
       'WORKDIR /workspace',
-      'RUN git clone https://github.com/octocat/hello "hello"',
+      "RUN git clone --depth=1 --single-branch 'https://github.com/octocat/hello' 'hello'",
     ]);
     expect(ordered).toContain('RUN cd "hello" && pnpm install');
   });
@@ -275,7 +274,7 @@ describe('createRepoTemplate', () => {
       const resolved = await resolve(BASE);
       expect(resolved.ref).toBe(repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP }));
       const steps = await serializedSteps(resolved);
-      expect(steps).toContain('git clone https://github.com/octocat/hello');
+      expect(steps).toContain("git clone --depth=1 --single-branch 'https://github.com/octocat/hello'");
       expect(steps).not.toContain('checkout');
     }
   });
@@ -318,7 +317,7 @@ describe('createRepoTemplate', () => {
       expect(serialized).toContain('$GH_TOKEN');
       expect(serialized).toContain('http.extraheader');
       expect(serialized).not.toContain('@github.com');
-      expect(serialized).toContain('clone https://github.com/octocat/hello');
+      expect(serialized).toContain("clone --depth=1 --single-branch 'https://github.com/octocat/hello'");
     });
 
     it('names the credential GH_TOKEN, the same variable a session installs before setup', async () => {

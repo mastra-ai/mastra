@@ -1,6 +1,7 @@
 import type { PlanResume } from '@mastra/client-js';
 import { AskUser } from '@mastra/playground-ui/components/ai/ask-user';
 import type { AskUserAnswer, AskUserOption, AskUserPayload } from '@mastra/playground-ui/components/ai/ask-user';
+import { isTaskTool } from '@mastra/playground-ui/components/ai/tool-call';
 import { memo } from 'react';
 import type { ReactNode } from 'react';
 
@@ -20,12 +21,6 @@ export interface ToolFactoryProps {
   isSubmitting?: boolean;
   onRespond?: (response: ToolResponse) => void;
   fallback: () => ReactNode;
-}
-
-const hiddenTranscriptTools = new Set(['task_write', 'task_update', 'task_complete', 'task_check']);
-
-export function isTranscriptToolVisible(toolName: string) {
-  return !hiddenTranscriptTools.has(toolName);
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -99,7 +94,7 @@ function ToolFactoryComponent({
     );
   }
 
-  if (!isTranscriptToolVisible(toolName)) return null;
+  if (isTaskTool(toolName)) return null;
 
   if (toolName === 'skill') {
     const name = stringValue(record(input)?.name);

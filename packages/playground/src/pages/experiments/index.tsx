@@ -13,9 +13,14 @@ import {
   getExperimentDatasetOptions,
   NoExperimentsInfo,
 } from '@/domains/experiments';
-import { useExperimentsForDatasetFilter } from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
+import { useInfiniteExperiments } from '@/domains/experiments/hooks/use-infinite-experiments';
 import { useReviewSummary } from '@/domains/review';
 import { buildReviewByExperimentMap } from '@/domains/review/review-maps';
+import {
+  TARGET_ID_PARAM,
+  TARGET_TYPE_PARAM,
+  useTargetFilterParams,
+} from '@/domains/shared/hooks/use-target-filter-params';
 
 export default function Experiments() {
   const [search, setSearch] = useState('');
@@ -45,16 +50,21 @@ export default function Experiments() {
     [setSearchParams],
   );
 
+  const { targetType, targetId, setTargetType, setTargetId } = useTargetFilterParams();
+
   const { data: datasetsData, isLoading: isLoadingDatasets, error: errorDatasets } = useDatasets();
   const {
     data: experimentsData,
     isLoading: isLoadingExperiments,
     error: errorExperiments,
-  } = useExperimentsForDatasetFilter(datasetFilter === 'all' ? undefined : datasetFilter);
+    isFetchingNextPage,
+    hasNextPage,
+    setEndOfListElement,
+  } = useInfiniteExperiments(datasetFilter === 'all' ? undefined : datasetFilter, { targetType, targetId });
   const { data: reviewSummary } = useReviewSummary();
 
   const datasets = useMemo(() => datasetsData?.datasets ?? [], [datasetsData?.datasets]);
-  const experiments = useMemo(() => experimentsData?.experiments ?? [], [experimentsData?.experiments]);
+  const experiments = useMemo(() => experimentsData ?? [], [experimentsData]);
   const experimentDatasetOptions = useMemo(() => getExperimentDatasetOptions(datasets), [datasets]);
   const reviewByExperiment = useMemo(() => buildReviewByExperimentMap(reviewSummary), [reviewSummary]);
 
@@ -82,9 +92,7 @@ export default function Experiments() {
     return { selectedIds: ids, selectedDatasetIds: new Set(ids.map(id => datasetByExperimentId.get(id))) };
   }, [experiments, selectedExperimentIds]);
   const compareDisabledReason =
-    selectedIds.length === 2 && selectedDatasetIds.size !== 1
-      ? 'experiments must belong to the same dataset'
-      : undefined;
+    selectedIds.length === 2 && selectedDatasetIds.size !== 1 ? 'not the same dataset' : undefined;
 
   const executeCompare = () => {
     if (selectedIds.length !== 2 || compareDisabledReason) return;
@@ -135,8 +143,8 @@ export default function Experiments() {
     />
   );
 
-  // With a dataset filter active, keep the toolbar so the user can reset it.
-  if (experiments.length === 0 && !isLoading && datasetFilter === 'all') {
+  // With a dataset or target filter active, keep the toolbar so the user can reset it.
+  if (experiments.length === 0 && !isLoading && datasetFilter === 'all' && !targetType) {
     return (
       <NoDataPageLayout>
         <NoExperimentsInfo onRunExperiment={() => setRunDialogOpen(true)} />
@@ -145,16 +153,26 @@ export default function Experiments() {
     );
   }
 
-  const hasFilters = statusFilter !== 'all' || datasetFilter !== 'all' || search !== '';
+  const hasFilters = statusFilter !== 'all' || datasetFilter !== 'all' || search !== '' || targetType !== '';
 
   const resetFilters = () => {
     setSearch('');
     setStatusFilter('all');
-    setDatasetFilter('all');
+    // Single URL update: consecutive functional setSearchParams calls would overwrite each other.
+    setSearchParams(
+      prev => {
+        const next = new URLSearchParams(prev);
+        next.delete('dataset');
+        next.delete(TARGET_TYPE_PARAM);
+        next.delete(TARGET_ID_PARAM);
+        return next;
+      },
+      { replace: true },
+    );
   };
 
   return (
-    <PageLayout>
+    <PageLayout height="full">
       <PageLayout.TopArea>
         <ExperimentsToolbar
           search={search}
@@ -164,6 +182,10 @@ export default function Experiments() {
           datasetFilter={datasetFilter}
           onDatasetFilterChange={setDatasetFilter}
           datasetOptions={experimentDatasetOptions}
+          targetType={targetType}
+          onTargetTypeChange={setTargetType}
+          targetId={targetId}
+          onTargetIdChange={setTargetId}
           onReset={resetFilters}
           hasActiveFilters={hasFilters}
           onRunClick={() => setRunDialogOpen(true)}
@@ -189,6 +211,9 @@ export default function Experiments() {
         search={search}
         statusFilter={statusFilter}
         datasetFilter={datasetFilter}
+        isFetchingNextPage={isFetchingNextPage}
+        hasNextPage={hasNextPage}
+        setEndOfListElement={setEndOfListElement}
         selection={
           isSelectionActive
             ? { selectedExperimentIds: selectedIds, onToggleSelection: toggleExperimentSelection }

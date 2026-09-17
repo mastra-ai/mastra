@@ -1,8 +1,8 @@
 ---
-title: "Studio"
-description: "Use Mastra Studio to build, test, and manage agents, workflows, processors, tools, and MCP servers while inspecting traces and runtime behavior."
+title: 'Studio'
+description: 'Use Mastra Studio to build, test, and manage agents, workflows, processors, tools, and MCP servers while inspecting traces and runtime behavior.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # Studio
@@ -42,6 +42,10 @@ Chat with your agent directly, switch [models](/models), and tweak settings like
 
 When you interact with your agent, you can follow its reasoning and view tool call outputs. You can also [observe](#observability) traces and logs to see how responses are generated.
 
+For a markdown table in a response, select **Copy table as markdown** above the table to copy it without the surrounding message. The copied table preserves markdown formatting and includes any link and footnote definitions it uses. To download the table as CSV, open the arrow beside the copy button and select **Download CSV**. Both actions become available once the text segment containing the table finishes streaming and displaying. The agent may still be running tools or writing later segments.
+
+CSV exports contain plain cell text, including link labels rather than URLs. Footnote markers are preserved, but their definitions aren't included in the CSV. Values that could be interpreted as spreadsheet formulas receive a leading apostrophe so spreadsheet apps treat them as text. Ordinary signed numbers are preserved.
+
 You can also attach [scorers](#scorers) to measure and compare response quality over time.
 
 You can send a follow-up message in the same thread during an agent response stream. Studio shows the message as pending until the stream confirms it, then continues the response below that follow-up. Other Studio tabs that have the same thread open can observe the active stream.
@@ -54,7 +58,7 @@ Use [Agent Builder](https://agent-builder.mastra.ai) to create and manage fully 
 
 Visualize your workflow as a graph and run it step by step with a custom input. During execution, the interface updates in real time to show the active step and the path taken.
 
-When running a workflow, you can also view detailed traces showing tool calls and raw JSON outputs, plus any errors that might have occurred along the way.
+Workflow traces show tool calls and raw JSON outputs, along with any execution errors.
 
 ### Processors
 

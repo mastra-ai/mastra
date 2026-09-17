@@ -1,4 +1,4 @@
-import type { Server } from 'node:http';
+import { request as createHttpRequest, type Server } from 'node:http';
 import type {
   AdapterTestContext,
   AdapterSetupOptions,
@@ -43,11 +43,12 @@ async function waitFor(assertion: () => boolean, timeout = 500): Promise<void> {
 describe('Express Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Express Adapter Integration Tests',
+    emptyBodyNormalization: { withoutContentType: 'undefined', withJsonContentType: 'empty-object' },
 
     setupAdapter: async (context: AdapterTestContext, options?: AdapterSetupOptions) => {
       // Create Express app
       const app = express();
-      app.use(express.json());
+      app.use(express.json({ strict: false }));
 
       // Create adapter
       const adapter = new MastraServer({
@@ -98,13 +99,13 @@ describe('Express Server Adapter', () => {
         const fetchOptions: RequestInit = {
           method: httpRequest.method,
           headers: {
-            'Content-Type': 'application/json',
+            ...(httpRequest.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
             ...(httpRequest.headers || {}),
           },
         };
 
         // Add body for POST/PUT/PATCH/DELETE
-        if (httpRequest.body && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpRequest.method)) {
+        if (httpRequest.body !== undefined && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpRequest.method)) {
           fetchOptions.body = JSON.stringify(httpRequest.body);
         }
 
@@ -1370,6 +1371,42 @@ describe('Express Server Adapter', () => {
           ...(options.body ? { body: options.body } : {}),
         });
         return { status: response.status };
+      } finally {
+        await new Promise<void>(resolve => server.close(() => resolve()));
+      }
+    },
+
+    executeRequestWithoutContentLength: async (app, method, url, options = {}) => {
+      const server: Server = await new Promise(resolve => {
+        const started = app.listen(0, () => resolve(started));
+      });
+
+      try {
+        const address = server.address();
+        if (!address || typeof address === 'string') {
+          throw new Error('Failed to get server address');
+        }
+        const parsedUrl = new URL(url);
+        return await new Promise<{ status: number }>((resolve, reject) => {
+          const request = createHttpRequest(
+            {
+              hostname: 'localhost',
+              port: address.port,
+              path: parsedUrl.pathname + parsedUrl.search,
+              method,
+              headers: { ...options.headers, 'Transfer-Encoding': 'chunked' },
+            },
+            response => {
+              response.resume();
+              response.on('end', () => resolve({ status: response.statusCode ?? 0 }));
+            },
+          );
+          request.on('error', reject);
+          const body = options.body ?? '';
+          const midpoint = Math.floor(body.length / 2);
+          request.write(body.slice(0, midpoint));
+          request.end(body.slice(midpoint));
+        });
       } finally {
         await new Promise<void>(resolve => server.close(() => resolve()));
       }

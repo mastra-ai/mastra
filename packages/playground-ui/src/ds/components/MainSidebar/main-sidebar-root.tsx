@@ -204,7 +204,7 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
           <VisuallyHidden asChild>
             <DrawerDescription>Primary site navigation drawer</DrawerDescription>
           </VisuallyHidden>
-          <div onClick={closeOnAnchor} className="flex h-full min-h-0 flex-col overflow-hidden px-4 py-2">
+          <div onClick={closeOnAnchor} className="flex h-full min-h-0 flex-col overflow-hidden px-3 py-2">
             {children}
           </div>
         </DrawerContent>

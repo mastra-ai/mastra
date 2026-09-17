@@ -105,6 +105,9 @@ type RequestContextOptions = {
 type GeneratedRequest<T> = OptionalizeUndefined<T>;
 type GeneratedResponse<T extends RouteKey> = Serialized<RouteResponse<T>>;
 
+export type ListFeedbackResponse = GeneratedResponse<'GET /observability/feedback'>;
+export type FeedbackItem = ListFeedbackResponse['feedback'][number];
+
 export interface ClientOptions {
   /** Base URL for API requests */
   baseUrl: string;
@@ -557,6 +560,8 @@ export interface GetAgentBrowserSessionResponse {
   screencastAvailable: boolean;
 }
 
+export type ClientToolsResolver = () => ToolsInput | undefined;
+
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   model?: string;
@@ -564,6 +569,7 @@ export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined =
   experimental_output?: T;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
   Omit<
@@ -579,6 +585,7 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
   experimental_output?: T;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
   Omit<
@@ -598,6 +605,7 @@ export type StreamParamsBase<OUTPUT = undefined> = {
   tracingOptions?: TracingOptions;
   requestContext?: RequestContext;
   clientTools?: ToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
 } & WithoutMethods<
   Omit<
     AgentExecutionOptions<OUTPUT>,
@@ -845,6 +853,11 @@ export type CloneMemoryThreadResponse = {
   clonedMessages: MastraDBMessage[];
 };
 
+export type TransferMemoryThreadParams = GeneratedRequest<
+  Body<'POST /memory/threads/:threadId/transfer'> & QueryParams<'POST /memory/threads/:threadId/transfer'>
+> &
+  RequestContextOptions;
+
 export type GetLogsParams = GeneratedRequest<QueryParams<'GET /logs'>>;
 
 export interface GetLogParams {
@@ -944,6 +957,12 @@ export interface McpToolInfo {
 export interface McpServerToolListResponse {
   tools: McpToolInfo[];
 }
+
+/**
+ * `{ result }` for a completed tool, or the suspended shape a 2026-07-28 server reports
+ * when the tool asked for input (answer with `resumeData` and the echoed `suspendPayload`).
+ */
+export type McpToolExecuteResponse = RouteResponse<'POST /mcp/:serverId/tools/:toolId/execute'>;
 
 /**
  * Client version of ScoreRowData with dates serialized as strings (from JSON)
@@ -2771,9 +2790,24 @@ export interface ExperimentGrouping {
   trialIndex?: number;
 }
 
+export type ExperimentTargetType = 'agent' | 'workflow' | 'scorer' | 'processor';
+
 export interface ListExperimentsParams extends ExperimentGrouping {
   page?: number;
   perPage?: number;
+  /** Only return experiments run against targets of this type */
+  targetType?: ExperimentTargetType;
+  /** Only return experiments run against this target ID */
+  targetId?: string;
+}
+
+export interface ListDatasetsParams {
+  page?: number;
+  perPage?: number;
+  /** Only return datasets attached to targets of this type */
+  targetType?: ExperimentTargetType;
+  /** Only return datasets attached to at least one of these target IDs */
+  targetIds?: string[];
 }
 
 export interface DatasetExperiment {
@@ -2943,6 +2977,14 @@ export interface GeneratedItem {
   groundTruth?: unknown;
 }
 
+export interface UpdateDatasetExperimentParams {
+  datasetId: string;
+  experimentId: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface TriggerDatasetExperimentParams {
   datasetId: string;
   targetType: 'agent' | 'workflow' | 'scorer';
@@ -3062,6 +3104,7 @@ export interface DatasetItemVersionResponse {
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
   scorerIds?: string[];
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   validTo: number | null;
   isDeleted: boolean;
@@ -3577,6 +3620,8 @@ export type PermissionPattern = string;
 /**
  * Response from GET /auth/permission-patterns.
  */
+export type WorkflowBuilderSettingsResponse = GeneratedResponse<'GET /editor/workflow-builder/settings'>;
+
 export type PermissionPatternsResponse = GeneratedResponse<'GET /auth/permission-patterns'>;
 
 /**

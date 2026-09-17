@@ -1,6 +1,12 @@
 import type { GetScorerResponse } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import {
+  DialogAction,
+  DialogBody,
+  DialogCancel,
+  DialogDescription,
+  DialogFooter,
+} from '@mastra/playground-ui/components/Dialog';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -15,6 +21,7 @@ export interface SpanScoringProps {
   isTopLevelSpan?: boolean;
   scorers?: Record<string, GetScorerResponse>;
   isLoadingScorers?: boolean;
+  onSuccess?: () => void;
 }
 
 export function SpanScoring({
@@ -24,6 +31,7 @@ export function SpanScoring({
   isTopLevelSpan,
   scorers,
   isLoadingScorers,
+  onSuccess,
 }: SpanScoringProps) {
   const [selectedScorer, setSelectedScorer] = useState<string | null>(null);
   const { mutate: triggerScorer, isPending } = useTriggerScorer();
@@ -50,10 +58,12 @@ export function SpanScoring({
       triggerScorer(
         { scorerName: selectedScorer, traceId, spanId },
         {
-          onSuccess: () =>
+          onSuccess: () => {
             toast.info('Scorer triggered', {
               description: 'Results will appear once scoring completes.',
-            }),
+            });
+            onSuccess?.();
+          },
         },
       );
     }
@@ -62,20 +72,38 @@ export function SpanScoring({
   const selectedScorerDescription = scorerList.find(s => s.id === selectedScorer)?.description || '';
 
   if (scorers === undefined && !isLoadingScorers) {
-    return <Notice variant="destructive">Failed to load scorers.</Notice>;
+    return (
+      <>
+        <DialogBody>
+          <Notice variant="destructive">Failed to load scorers.</Notice>
+        </DialogBody>
+        <DialogFooter>
+          <DialogCancel>Cancel</DialogCancel>
+        </DialogFooter>
+      </>
+    );
   }
 
   if (!isLoadingScorers && scorerList.length === 0) {
-    return <Notice variant="info">No eligible scorers have been defined to run.</Notice>;
+    return (
+      <>
+        <DialogBody>
+          <Notice variant="info">No eligible scorers have been defined to run.</Notice>
+        </DialogBody>
+        <DialogFooter>
+          <DialogCancel>Cancel</DialogCancel>
+        </DialogFooter>
+      </>
+    );
   }
 
   return (
-    <div className="grid grid-cols-[3fr_1fr] items-start gap-4">
-      <div className="grid gap-2">
-        <SelectFieldBlock
-          name="select-scorer"
-          label="Select scorer"
-          labelIsHidden={true}
+    <>
+      <DialogBody>
+        <DialogDescription>Select a scorer to evaluate this trace.</DialogDescription>
+        <Combobox
+          aria-label="Select scorer"
+          searchPlaceholder="Search scorers..."
           placeholder="Select a scorer..."
           options={scorerList.map(scorer => ({
             label: scorer.name || scorer.id,
@@ -83,7 +111,7 @@ export function SpanScoring({
           }))}
           onValueChange={setSelectedScorer}
           value={selectedScorer || ''}
-          className="min-w-80"
+          className="w-full"
           disabled={isWaiting}
         />
         {selectedScorerDescription && (
@@ -91,11 +119,13 @@ export function SpanScoring({
             <InfoIcon /> {selectedScorerDescription}
           </TextAndIcon>
         )}
-      </div>
-
-      <Button disabled={!selectedScorer || isWaiting} onClick={handleStartScoring}>
-        {isPending ? 'Starting...' : 'Start Scoring'}
-      </Button>
-    </div>
+      </DialogBody>
+      <DialogFooter>
+        <DialogCancel disabled={isPending}>Cancel</DialogCancel>
+        <DialogAction disabled={!selectedScorer || isWaiting} onConfirm={handleStartScoring}>
+          {isPending ? 'Starting...' : 'Start Scoring'}
+        </DialogAction>
+      </DialogFooter>
+    </>
   );
 }

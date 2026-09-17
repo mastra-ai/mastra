@@ -25,6 +25,7 @@ import type {
   ThresholdConfig,
 } from '../thresholds';
 import { extractTrajectory, extractTrajectoryFromTrace, extractWorkflowTrajectory } from '../types';
+import type { Trajectory } from '../types';
 import { ScoreAccumulator } from './scorerAccumulator';
 
 export type { ThresholdConfig } from '../thresholds';
@@ -342,22 +343,41 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
 
       // Run gates first
       if (gates) {
+        // A scorer created with `type: 'trajectory'` is typed by
+        // `ScorerTypeShortcuts` as receiving `output: Trajectory`, and the
+        // `scorers.trajectory` branch below honours that. Gates must too, or a
+        // trajectory scorer used as a gate is handed a shape its own type says
+        // it will not receive. Extract once per item, only when needed.
+        const gateTrajectory = gates.some(gate => gate.type === 'trajectory')
+          ? await resolveTrajectory(
+              storage,
+              targetResult.traceId,
+              targetResult.spanId,
+              targetResult.scoringData,
+              isWorkflow(target),
+            )
+          : undefined;
+
         for (const gate of gates) {
+          const isTrajectoryGate = gate.type === 'trajectory';
           try {
             const gateScore = await gate.run({
               input: targetResult.scoringData?.input,
-              output: targetResult.scoringData?.output,
+              output: isTrajectoryGate ? gateTrajectory : targetResult.scoringData?.output,
               groundTruth: item.groundTruth,
+              ...(isTrajectoryGate ? { expectedTrajectory: item.expectedTrajectory } : {}),
               requestContext: item.requestContext,
               scoreSource: 'experiment',
-              targetScope: 'span',
+              targetScope: isTrajectoryGate ? 'trajectory' : 'span',
               targetEntityType: targetResult.entityType,
               targetTraceId: targetResult.traceId,
               targetSpanId: targetResult.spanId,
             });
             gateScoresByGateId[gate.id]!.push(gateScore.score as number);
-          } catch {
-            // Gate failure = score 0
+          } catch (error) {
+            // Gate failure = score 0. The contract stays, but the cause is
+            // logged so a broken scorer is distinguishable from a real 0.
+            warnGateFailure(mastra, gate.id, error);
             gateScoresByGateId[gate.id]!.push(0);
           }
         }
@@ -382,7 +402,7 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
         for (let ti = 0; ti < turns.length; ti++) {
           const record = perTurn[ti];
           if (!record) continue;
-          const { rawResults, ...scored } = await scoreTurn(turns[ti]!, record, item);
+          const { rawResults, ...scored } = await scoreTurn(turns[ti]!, record, item, storage, mastra);
           itemTurnResults.push({ index: ti, ...scored });
 
           if (storage) {
@@ -498,6 +518,43 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
   return result;
 }
 
+/**
+ * Resolves the `Trajectory` a trajectory-typed scorer expects, using the same
+ * precedence as the `scorers.trajectory` branch: the hierarchical trace when a
+ * trace store and id are available, otherwise flat extraction from the output
+ * messages.
+ */
+async function resolveTrajectory(
+  storage: MastraCompositeStore | undefined,
+  traceId: string | undefined,
+  spanId: string | undefined,
+  scoringData: { output?: any; stepResults?: any; stepExecutionPath?: string[] } | undefined,
+  isWorkflowTarget: boolean,
+): Promise<Trajectory> {
+  const traceTrajectory = await extractTrajectoryFromTraceStore(storage, traceId, spanId);
+  if (traceTrajectory) return traceTrajectory;
+
+  // A workflow's `scoringData.output` is the workflow's own result, not an
+  // iterable of agent messages, so it must be reconstructed from step results —
+  // the same fallback the workflow branch of `scorers.trajectory` uses.
+  if (isWorkflowTarget) {
+    const stepResults = scoringData?.stepResults;
+    return stepResults ? extractWorkflowTrajectory(stepResults, scoringData?.stepExecutionPath) : { steps: [] };
+  }
+
+  const rawOutput = scoringData?.output;
+  return rawOutput ? extractTrajectory(rawOutput) : { steps: [] };
+}
+
+/**
+ * A gate that throws still scores 0 — that contract is deliberate and pinned by
+ * tests. Logging the cause is what makes a broken or misconfigured scorer
+ * distinguishable from a gate that legitimately scored 0.
+ */
+function warnGateFailure(mastra: any, gateId: string, error: unknown): void {
+  mastra?.getLogger?.()?.warn?.(`Gate "${gateId}" threw and was scored 0:`, error);
+}
+
 function average(scores: number[]): number {
   return scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
 }
@@ -510,6 +567,8 @@ async function scoreTurn(
   turn: EvalTurn,
   record: PerTurnRecord,
   item: RunEvalsDataItem<any>,
+  storage?: MastraCompositeStore,
+  mastra?: any,
 ): Promise<Omit<ScoredTurn, 'index'> & { rawResults: Record<string, any> }> {
   const gates: Array<{ id: string; score: number }> = [];
   const thresholds: Array<{ id: string; score: number; threshold: ThresholdConfig }> = [];
@@ -517,23 +576,33 @@ async function scoreTurn(
   const rawResults: Record<string, any> = {};
 
   if (turn.gates) {
+    // Same trajectory contract as the top-level gate loop above.
+    const gateTrajectory = turn.gates.some(gate => gate.type === 'trajectory')
+      ? // Per-turn records are produced only by the agent turn runner, never by
+        // `executeWorkflow`, so the agent fallback is the only reachable one here.
+        await resolveTrajectory(storage, record.traceId, record.spanId, { output: record.output }, false)
+      : undefined;
+
     for (const gate of turn.gates) {
+      const isTrajectoryGate = gate.type === 'trajectory';
       let score = 0;
       try {
         const gateScore = await gate.run({
           input: record.input,
-          output: record.output,
+          output: isTrajectoryGate ? gateTrajectory : record.output,
           groundTruth: item.groundTruth,
+          ...(isTrajectoryGate ? { expectedTrajectory: item.expectedTrajectory } : {}),
           requestContext: item.requestContext,
           scoreSource: 'experiment',
-          targetScope: 'span',
+          targetScope: isTrajectoryGate ? 'trajectory' : 'span',
           targetEntityType: record.entityType,
           targetTraceId: record.traceId,
           targetSpanId: record.spanId,
         });
         score = gateScore.score as number;
         rawResults[gate.id] = gateScore;
-      } catch {
+      } catch (error) {
+        warnGateFailure(mastra, gate.id, error);
         score = 0;
       }
       gates.push({ id: gate.id, score });

@@ -802,6 +802,72 @@ export function createExperimentsTests({
         );
       });
 
+      it('listExperimentResults filters by tags (all must match)', async () => {
+        const now = Date.now();
+        const seeds: Array<{ itemId: string; tags: string[] | null; status?: 'reviewed' }> = [
+          { itemId: 'only-a', tags: ['a'], status: 'reviewed' },
+          { itemId: 'a-and-b', tags: ['a', 'b'] },
+          { itemId: 'only-b', tags: ['b'] },
+          { itemId: 'untagged', tags: null },
+        ];
+        for (const [i, seed] of seeds.entries()) {
+          await experimentsStorage.addExperimentResult({
+            experimentId: exp.id,
+            itemId: seed.itemId,
+            itemDatasetVersion: null,
+            input: { q: seed.itemId },
+            output: null,
+            groundTruth: null,
+            error: null,
+            startedAt: new Date(now + i * 1000),
+            completedAt: new Date(now + i * 1000 + 500),
+            retryCount: 0,
+            tags: seed.tags,
+            status: seed.status ?? null,
+          });
+        }
+
+        const both = await experimentsStorage.listExperimentResults({
+          experimentId: exp.id,
+          tags: ['a', 'b'],
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(both.results.map(r => r.itemId)).toEqual(['a-and-b']);
+        expect(both.pagination.total).toBe(1);
+
+        const onlyA = await experimentsStorage.listExperimentResults({
+          experimentId: exp.id,
+          tags: ['a'],
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(onlyA.results.map(r => r.itemId)).toEqual(['only-a', 'a-and-b']);
+        expect(onlyA.pagination.total).toBe(2);
+
+        const withStatus = await experimentsStorage.listExperimentResults({
+          experimentId: exp.id,
+          tags: ['a'],
+          status: 'reviewed',
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(withStatus.results.map(r => r.itemId)).toEqual(['only-a']);
+        expect(withStatus.pagination.total).toBe(1);
+
+        const empty = await experimentsStorage.listExperimentResults({
+          experimentId: exp.id,
+          tags: [],
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(empty.pagination.total).toBe(4);
+
+        const missing = await experimentsStorage.listExperimentResults({
+          experimentId: exp.id,
+          tags: ['nope'],
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(missing.results).toHaveLength(0);
+        expect(missing.pagination.total).toBe(0);
+      });
+
       it('deleteExperimentResults removes all results for experimentId', async () => {
         await experimentsStorage.addExperimentResult({
           experimentId: exp.id,

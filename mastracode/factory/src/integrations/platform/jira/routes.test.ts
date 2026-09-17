@@ -5,8 +5,7 @@ import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
 import type { TestAuthUser } from '../../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../../../storage/test-utils.js';
-import { PlatformApiClient } from '../api-client.js';
-import { PlatformJiraApiError } from './api.js';
+import { JiraApiError } from '../../jira/api.js';
 import { PlatformJiraIntegration } from './integration.js';
 import { buildPlatformJiraRoutes } from './routes.js';
 
@@ -59,7 +58,6 @@ function buildApp(
       jira: (options.withJira ?? true) ? jira : undefined,
       auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
       intake: (options.withIntake ?? true) ? seed.intake : undefined,
-      projects: seed.projects,
       appDbConfigured: options.appDbConfigured ?? true,
     }),
   );
@@ -71,16 +69,20 @@ const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
 beforeEach(async () => {
   seed = await createFactoryStorageForTests();
   jira = new PlatformJiraIntegration({
-    client: new PlatformApiClient({ baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' }),
+    clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
   });
   vi.spyOn(jira, 'listConnections').mockResolvedValue([
-    { id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' },
+    {
+      id: 'a1b_acme',
+      integrationId: 'jira',
+      status: 'active',
+      accountLabel: 'acme.atlassian.net',
+    },
   ]);
   vi.spyOn(jira.intake, 'listSources').mockImplementation(listJiraSources);
   vi.spyOn(jira, 'listActiveIssues').mockImplementation(listActiveJiraIssues as never);
   await seed.intake.saveConfig({
     orgId: 'org1',
-    userId: 'u1',
     config: { jira: { enabled: true, sourceIds: ['1'] } },
   });
   vi.clearAllMocks();
@@ -121,16 +123,36 @@ describe('status route', () => {
     });
   });
 
-  it('reports ready with the site host when configured', async () => {
+  it('reports ready with discovered Platform Jira connections', async () => {
     const res = await buildApp(org1()).request('/web/jira/status');
     expect(await res.json()).toEqual({
       enabled: true,
       configured: true,
+      mode: 'platform',
       site: 'acme.atlassian.net',
       sites: ['acme.atlassian.net'],
-      connections: [{ id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' }],
+      connections: [
+        {
+          id: 'a1b_acme',
+          integrationId: 'jira',
+          status: 'active',
+          accountLabel: 'acme.atlassian.net',
+        },
+      ],
       reason: 'ready',
       diagnostics: { jiraConfigured: true, factoryAuthEnabled: true, appDbConfigured: true },
+    });
+  });
+
+  it('reports not connected when no active Platform Jira connection is discovered', async () => {
+    vi.mocked(jira.listConnections).mockResolvedValueOnce([]);
+    const res = await buildApp(org1()).request('/web/jira/status');
+    expect(await res.json()).toMatchObject({
+      enabled: true,
+      configured: false,
+      mode: 'platform',
+      connections: [],
+      reason: 'not_connected',
     });
   });
 
@@ -169,7 +191,7 @@ describe('projects route', () => {
   });
 
   it('409s with jira_auth_failed when Jira rejects the credentials', async () => {
-    listJiraSources.mockRejectedValueOnce(new PlatformJiraApiError('Jira API request failed (401)', 401));
+    listJiraSources.mockRejectedValueOnce(new JiraApiError('Jira API request failed (401)', 401));
     const res = await buildApp(org1()).request('/web/jira/projects');
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: 'jira_auth_failed' });
@@ -207,7 +229,6 @@ describe('issues route', () => {
   it('404s when Jira intake is disabled in settings', async () => {
     await seed.intake.saveConfig({
       orgId: 'org1',
-      userId: 'u1',
       config: { jira: { enabled: false, sourceIds: null } },
     });
     const res = await buildApp(org1()).request('/web/jira/issues');
@@ -219,7 +240,6 @@ describe('issues route', () => {
   it('returns an empty page without calling Jira when no projects are selected', async () => {
     await seed.intake.saveConfig({
       orgId: 'org1',
-      userId: 'u1',
       config: { jira: { enabled: true, sourceIds: null } },
     });
     const res = await buildApp(org1()).request('/web/jira/issues');
@@ -238,14 +258,14 @@ describe('issues route', () => {
   });
 
   it('409s with jira_auth_failed when Jira rejects the credentials', async () => {
-    listActiveJiraIssues.mockRejectedValueOnce(new PlatformJiraApiError('Jira API request failed (403)', 403));
+    listActiveJiraIssues.mockRejectedValueOnce(new JiraApiError('Jira API request failed (403)', 403));
     const res = await buildApp(org1()).request('/web/jira/issues');
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: 'jira_auth_failed' });
   });
 
   it('502s when the Jira API fails', async () => {
-    listActiveJiraIssues.mockRejectedValueOnce(new PlatformJiraApiError('Jira API request failed (500)', 500));
+    listActiveJiraIssues.mockRejectedValueOnce(new JiraApiError('Jira API request failed (500)', 500));
     const res = await buildApp(org1()).request('/web/jira/issues');
     expect(res.status).toBe(502);
     expect(await res.json()).toMatchObject({ error: 'jira_fetch_failed' });
@@ -274,13 +294,12 @@ describe('issues route — Factory source bindings', () => {
     }
   };
 
-  const bind = (sourceId: string, factoryProjectId: string) =>
-    seed.intake.setBinding({ orgId: 'org1', integrationId: 'jira', sourceId, factoryProjectId });
+  const bind = (sourceId: string, factoryProjectId: string, board = 'work') =>
+    seed.intake.setBinding({ orgId: 'org1', integrationId: 'jira', sourceId, factoryProjectId, board });
 
   beforeEach(async () => {
     await seed.intake.saveConfig({
       orgId: 'org1',
-      userId: 'u1',
       config: { jira: { enabled: true, sourceIds: ['1', '2'] } },
     });
   });
@@ -316,13 +335,30 @@ describe('issues route — Factory source bindings', () => {
     expect(listActiveJiraIssues).not.toHaveBeenCalled();
   });
 
-  it('falls back to the full selection for a single-Factory org with no bindings', async () => {
+  it('withholds the selection from a single-Factory org with no bindings', async () => {
     await seedProjects(1);
 
     const res = await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}`);
 
     expect(res.status).toBe(200);
-    expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, ['1', '2']);
+    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
+    expect(listActiveJiraIssues).not.toHaveBeenCalled();
+  });
+
+  it('withholds a source routed to the Factory without a board', async () => {
+    await seedProjects(2);
+    await seed.intake.setBinding({
+      orgId: 'org1',
+      integrationId: 'jira',
+      sourceId: '1',
+      factoryProjectId: projectA,
+    });
+
+    const res = await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}`);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
+    expect(listActiveJiraIssues).not.toHaveBeenCalled();
   });
 
   it('forwards the pagination cursor together with the scoped selection', async () => {

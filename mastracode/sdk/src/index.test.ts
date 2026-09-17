@@ -40,6 +40,14 @@ vi.mock('@mastra/core/agent-controller', () => ({
 
     async init() {}
 
+    onSessionCreated() {
+      return () => {};
+    }
+
+    onSessionDeleted() {
+      return () => {};
+    }
+
     getMastra() {
       return undefined;
     }
@@ -84,9 +92,6 @@ vi.mock('./agents/model.js', () => ({
   resolveModel: vi.fn(),
 }));
 
-vi.mock('./agents/subagents/execute.js', () => ({ executeSubagent: {} }));
-vi.mock('./agents/subagents/explore.js', () => ({ exploreSubagent: {} }));
-vi.mock('./agents/subagents/plan.js', () => ({ planSubagent: {} }));
 vi.mock('./agents/tools.js', () => ({ createDynamicTools: vi.fn(), createToolHooks: vi.fn() }));
 vi.mock('./agents/workspace.js', () => ({ getDynamicWorkspace: vi.fn(), getGoalJudgeTools: vi.fn() }));
 

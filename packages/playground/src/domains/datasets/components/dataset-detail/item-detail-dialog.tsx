@@ -8,10 +8,21 @@ import { Sections } from '@mastra/playground-ui/components/Sections';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { format } from 'date-fns/format';
-import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, RouteIcon, BracesIcon, Pencil, Trash2 } from 'lucide-react';
+import {
+  HashIcon,
+  FileInputIcon,
+  FileOutputIcon,
+  TagIcon,
+  RouteIcon,
+  BracesIcon,
+  Pencil,
+  Trash2,
+  Eraser,
+  Check,
+  X,
+} from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 
@@ -38,7 +49,7 @@ export function ItemDetailDialog({
   onItemChange,
   dialogLevel = 1,
 }: ItemDetailDialogProps) {
-  const { updateItem, deleteItem } = useDatasetMutations();
+  const { updateItem, deleteItem, purgeItem } = useDatasetMutations();
 
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
@@ -48,8 +59,9 @@ export function ItemDetailDialog({
   const [trajectoryValue, setTrajectoryValue] = useState('');
   const [requestContextValue, setRequestContextValue] = useState('');
 
-  // Delete confirmation state
+  // Destructive action confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
 
   // Reset form state when item changes (navigation or prop update)
   useEffect(() => {
@@ -60,7 +72,8 @@ export function ItemDetailDialog({
       setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
       setRequestContextValue(item.requestContext ? JSON.stringify(item.requestContext, null, 2) : '');
       setIsEditing(false); // Exit edit mode on item change
-      setShowDeleteConfirm(false); // Reset delete state on item change
+      setShowDeleteConfirm(false); // Reset destructive action state on item change
+      setShowPurgeConfirm(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item?.id]);
@@ -186,6 +199,17 @@ export function ItemDetailDialog({
     }
   };
 
+  const handlePurgeConfirm = async () => {
+    try {
+      await purgeItem.mutateAsync({ datasetId, itemId: item.id });
+      toast.success('Item data purged successfully');
+      setShowPurgeConfirm(false);
+      onClose();
+    } catch (error) {
+      toast.error(`Failed to purge item data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   return (
     <SideDialog
       dialogTitle="Dataset Item"
@@ -202,17 +226,14 @@ export function ItemDetailDialog({
         <SideDialog.Nav onNext={toNextItem()} onPrevious={toPreviousItem()} />
         {!isEditing && (
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleEdit}>
-              <Icon>
-                <Pencil />
-              </Icon>
+            <Button variant="outline" size="sm" onClick={handleEdit} icon={<Pencil />}>
               Edit
             </Button>
-            <Button variant="outline" size="sm" onClick={handleDelete}>
-              <Icon>
-                <Trash2 />
-              </Icon>
+            <Button variant="outline" size="sm" onClick={handleDelete} icon={<Trash2 />}>
               Delete
+            </Button>
+            <Button variant="destructive" size="sm" onClick={() => setShowPurgeConfirm(true)} icon={<Eraser />}>
+              Purge Data
             </Button>
           </div>
         )}
@@ -254,6 +275,34 @@ export function ItemDetailDialog({
             <AlertDialog.Action onClick={handleDeleteConfirm}>
               {deleteItem.isPending ? 'Deleting...' : 'Yes, Delete'}
             </AlertDialog.Action>
+          </AlertDialog.Footer>
+        </AlertDialog.Content>
+      </AlertDialog>
+
+      <AlertDialog open={showPurgeConfirm} onOpenChange={setShowPurgeConfirm}>
+        <AlertDialog.Content>
+          <AlertDialog.Header>
+            <AlertDialog.Title>Purge Item Data</AlertDialog.Title>
+            <AlertDialog.Description>
+              Permanently scrub this item's data from every dataset version and linked experiment result? The item
+              history remains for reproducibility, but its stored data cannot be recovered.
+            </AlertDialog.Description>
+          </AlertDialog.Header>
+          <AlertDialog.Footer>
+            <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+            {/* Deliberately a Button rather than AlertDialog.Action: Action is a
+                Close that dismisses the dialog on click regardless of
+                preventDefault, which would hide the pending state and a failed
+                purge behind a toast. */}
+            <Button
+              icon={<Trash2 />}
+              variant="primary"
+              size="lg"
+              onClick={() => void handlePurgeConfirm()}
+              disabled={purgeItem.isPending}
+            >
+              {purgeItem.isPending ? 'Purging...' : 'Purge Data'}
+            </Button>
           </AlertDialog.Footer>
         </AlertDialog.Content>
       </AlertDialog>
@@ -413,10 +462,10 @@ function EditModeContent({
         </div>
 
         <div className="flex justify-end gap-2 pt-4">
-          <Button onClick={onCancel} disabled={isSaving}>
+          <Button icon={<X />} onClick={onCancel} disabled={isSaving}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={onSave} disabled={isSaving}>
+          <Button icon={<Check />} variant="primary" onClick={onSave} disabled={isSaving}>
             {isSaving ? 'Saving...' : 'Save Changes'}
           </Button>
         </div>

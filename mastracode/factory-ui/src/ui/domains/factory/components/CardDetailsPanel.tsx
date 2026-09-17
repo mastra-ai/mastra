@@ -78,7 +78,7 @@ export function CardDetailsPanel({
           ref={morph.panelRef}
           className="board-card-details flex flex-col p-0"
         >
-          <div className="board-card-copy group border-border1 bg-surface3 shadow-dialog relative z-10 flex min-h-36 shrink-0 flex-col gap-3 rounded-3xl border p-2.5">
+          <div className="board-card-copy group border-border1 bg-surface3 shadow-dialog rounded-card relative z-10 flex min-h-36 shrink-0 flex-col gap-3 border p-2">
             {header}
           </div>
           <div className="board-card-tray border-border1 bg-surface3 shadow-dialog relative flex flex-col overflow-hidden rounded-xl border">

@@ -288,6 +288,27 @@ export class PosthogAnalytics {
     }
   }
 
+  /**
+   * Evaluate a PostHog feature flag. Platform flags can override the CLI's
+   * anonymous telemetry id with the authenticated platform identity while
+   * retaining organization group context. Fails closed on any error.
+   */
+  async isFeatureEnabled(
+    flag: string,
+    options?: { distinctId?: string; groups?: Record<string, string> },
+  ): Promise<boolean> {
+    if (!this.client) return false;
+    try {
+      const flags = await this.client.evaluateFlags(options?.distinctId ?? this.distinctId, {
+        groups: options?.groups,
+        flagKeys: [flag],
+      });
+      return flags.getFlag(flag) === true;
+    } catch {
+      return false;
+    }
+  }
+
   // Ensure PostHog client is shutdown properly
   async shutdown(timeoutMs?: number): Promise<void> {
     if (!this.client) {

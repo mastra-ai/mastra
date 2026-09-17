@@ -9,7 +9,7 @@ packages:
 
 # PubSub
 
-Mastra uses a publish/subscribe (pub/sub) system as its internal event bus. Components publish events to topics, and other components subscribe to those topics to react. The backend you configure decides how far those events travel: within one process or across processes on one host, or alternatively across separate instances.
+Mastra uses a publish/subscribe (pub/sub) system as its internal event bus. Components publish events to topics, and other components subscribe to those topics to react. The backend determines whether events are delivered within a single process, between processes on one host, or across separate instances.
 
 Set the backend once on the `Mastra` instance for use throughout the system. The default is an in-process backend that requires no setup.
 

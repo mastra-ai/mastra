@@ -1,23 +1,10 @@
-import { BaseEdge, EdgeLabelRenderer, getBezierPath } from '@xyflow/react';
-import type { Edge, EdgeProps } from '@xyflow/react';
+import { WorkflowDataEdgeView } from '@mastra/playground-ui/components/Workflow';
+import type { WorkflowDataEdgeModel } from '@mastra/playground-ui/components/Workflow';
+import type { EdgeProps } from '@xyflow/react';
 import { memo, useContext } from 'react';
 
 import { useCurrentRun } from '../context/use-current-run';
 import { WorkflowRunContext } from '../context/workflow-run-context';
-import { WorkflowEdgeDataButton } from './components/workflow-edge-data-button';
-
-export const WORKFLOW_DATA_EDGE_TYPE = 'workflow-data-edge';
-
-export interface WorkflowDataEdgeData {
-  [key: string]: unknown;
-  previousStepId?: string;
-  nextStepId?: string;
-  conditionNode?: boolean;
-  boundaryPayload?: 'workflow-input' | 'workflow-output';
-  edgeStatus?: 'success' | 'idle';
-}
-
-export type WorkflowDataEdgeModel = Edge<WorkflowDataEdgeData, typeof WORKFLOW_DATA_EDGE_TYPE>;
 
 export interface WorkflowDataEdgeProps extends EdgeProps<WorkflowDataEdgeModel> {
   parentWorkflowName?: string;
@@ -48,37 +35,7 @@ const WorkflowDataEdgeComponent = (props: WorkflowDataEdgeProps) => {
       : data?.boundaryPayload === 'workflow-output'
         ? 'Workflow output'
         : undefined;
-  const [edgePath, labelX, labelY] = getBezierPath(props);
-
-  return (
-    <>
-      <BaseEdge
-        id={props.id}
-        path={edgePath}
-        markerEnd={props.markerEnd}
-        style={props.style}
-        data-edge-status={data?.edgeStatus ?? 'idle'}
-        data-edge-from={data?.previousStepId}
-        data-edge-to={data?.nextStepId}
-      />
-      <EdgeLabelRenderer>
-        <div
-          className="nodrag nopan"
-          style={{
-            position: 'absolute',
-            pointerEvents: 'all',
-            transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-          }}
-        >
-          <WorkflowEdgeDataButton
-            previousStepId={data?.boundaryPayload ? undefined : data?.previousStepId}
-            output={output}
-            label={outputLabel}
-          />
-        </div>
-      </EdgeLabelRenderer>
-    </>
-  );
+  return <WorkflowDataEdgeView {...props} output={output} label={outputLabel} />;
 };
 
-export const WorkflowDataEdge = memo(WorkflowDataEdgeComponent) as typeof WorkflowDataEdgeComponent;
+export const WorkflowDataEdge = memo(WorkflowDataEdgeComponent);

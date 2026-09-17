@@ -9,7 +9,7 @@ packages:
 
 `buildBasePrompt()` builds the shared base system prompt for a coding agent: the behavioral instructions that make the agent a good coding assistant. It takes a `PromptContext` describing the current environment (project, platform, git branch, mode, model) and returns the prompt as a string.
 
-Product-specific strings are parameterized through `productName`, `coAuthorName`, and `coAuthorEmail`, so you can rebrand the prompt and commit trailer without forking it. They default to `"Mastra Code"` / `"noreply@mastra.ai"`, so existing callers keep identical output.
+Product-specific strings are parameterized through `productName`, `coAuthorName`, and `coAuthorEmail`, so you can rebrand the prompt and commit trailer without forking it. The co-author defaults to `"mastra-platform[bot]"` and `"284800079+mastra-platform[bot]@users.noreply.github.com"`.
 
 Use this with [`createCodingAgent()`](/reference/coding-agent/create-coding-agent) when you build runtime-defined instructions for the agent.
 
@@ -89,7 +89,7 @@ const prompt = buildBasePrompt({
   {
     name: 'modelId',
     type: 'string',
-    description: 'Identifier of the active model, included in the commit Co-Authored-By line when provided.',
+    description: 'Identifier of the active model. It is not included in the commit Co-Authored-By line.',
     isOptional: true,
   },
   {
@@ -115,14 +115,14 @@ const prompt = buildBasePrompt({
     type: 'string',
     description: 'Name used in the commit Co-Authored-By line.',
     isOptional: true,
-    defaultValue: 'Mastra Code',
+    defaultValue: 'mastra-platform[bot]',
   },
   {
     name: 'coAuthorEmail',
     type: 'string',
     description: 'Email used in the commit Co-Authored-By line.',
     isOptional: true,
-    defaultValue: 'noreply@mastra.ai',
+    defaultValue: '284800079+mastra-platform[bot]@users.noreply.github.com',
   },
 ]}
 />

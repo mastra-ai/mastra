@@ -1,5 +1,25 @@
 # @mastra/auth-better-auth
 
+## 1.1.6-alpha.0
+
+### Patch Changes
+
+- Fixed Better Auth so attackers cannot tell whether an account exists or send requests as a signed-in user from another site. Updated better-auth to 1.7.4. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
+## 1.1.5
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+## 1.1.5-alpha.1
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
 ## 1.1.5-alpha.0
 
 ### Patch Changes

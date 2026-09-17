@@ -53,6 +53,7 @@ export function LogsListView({
     count: logs.length,
     containerRef: scrollRef,
     onNavigate: index => virtualizer.scrollToIndex(index),
+    global: true,
   });
 
   // Reset scroll to top whenever a fresh query resolves (filter / date range change).
@@ -84,7 +85,7 @@ export function LogsListView({
     virtualItems.length > 0 ? Math.max(0, totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0)) : 0;
 
   return (
-    <LogsDataList columns={COLUMNS} variant="striped" scrollRef={scrollRef} className="min-w-0">
+    <LogsDataList columns={COLUMNS} scrollRef={scrollRef} className="min-w-0">
       <LogsDataList.Top>
         <LogsDataList.TopCell>Date</LogsDataList.TopCell>
         <LogsDataList.TopCell>Time</LogsDataList.TopCell>

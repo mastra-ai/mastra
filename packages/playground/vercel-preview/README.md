@@ -1,6 +1,6 @@
 # Studio Preview
 
-This app is the Vercel target for PR previews of Mastra Studio. It deploys Studio and a minimal Mastra API together, so reviewers can open the preview URL and test a working agent page.
+This app is the Vercel target for PR previews of Mastra Studio. It deploys Studio and a minimal Mastra API together, so reviewers can test agents and workflows with populated demo data.
 
 It lives inside `packages/playground` because previewing Studio is its whole point, but it is internal preview infrastructure, not part of the published package: its own `pnpm-workspace.yaml` makes this directory its own workspace root, so it keeps its own lockfile without ever being installed as part of the monorepo, and its monorepo-only patterns (`link:` dependencies, a root turbo build) must not be copied into user-facing examples. Edits here count as playground changes for turbo and the changeset-bot; that is accepted noise since the app rarely changes, and no changeset is needed for preview-only edits.
 
@@ -9,6 +9,7 @@ The app is intentionally serverless-friendly:
 - in-memory storage only — no file-backed storage, no LibSQL or DuckDB dependency
 - one deterministic tool
 - one memory-enabled agent that can be opened at `/agents/studio-preview-agent/chat/new`
+- three deterministic workflows with seeded run history
 - deterministic demo data seeded on startup so most Studio surfaces render populated
 
 ## Seeded demo data
@@ -20,8 +21,19 @@ On startup the app seeds a shared in-memory store (`src/mastra/store.ts`, popula
 - **Metrics** — token usage, model cost, agent/tool latency, and active threads/resources, all within the default 24h window (Model Usage & Cost, Token usage by agent, Traces volume, Latency, Memory cards)
 - **Scores** — two deterministic scorers (`answer-relevance`, `tone-quality`) with score rows and aggregates
 - **Datasets** — two datasets with items
+- **Workflows** — approval runs in completed, suspended, and failed states, plus completed batch and loop runs
 
 The data is deterministic and free to produce (no model calls, no provider key needed for the seed itself). Because the store is in-memory, it is **not durable**: every cold start re-seeds its own process, so the demo data is always present but anything created live in a preview session may not survive across serverless instances. This is intentional for a preview.
+
+## Workflow examples
+
+The workflows under `src/mastra/workflows/` run without API keys or external services. Input schemas include defaults so reviewers can start a run immediately:
+
+- **request-review** — requests up to 1,000 follow the automatic approval branch. Larger requests suspend at `review-request`; resume with `approved: true` to complete or `approved: false` to inspect a failed run. Its history includes both approval paths, a declined request, and a request awaiting review.
+- **document-batch** — processes three sample documents with foreach and a nested workflow. Open the nested graph to inspect parallel word-count and excerpt steps, then inspect the mapped report.
+- **countdown** — repeats a step until the remaining count reaches zero. Inputs are bounded from 0 to 10.
+
+`src/mastra/seed/workflow-runs.ts` generates the history by executing these workflows through Mastra, including suspend/resume. Startup awaits this seed so the first workflow request sees populated history. Repeated seed calls reuse the same promise and preserve live review decisions within the process.
 
 ## Local usage
 
@@ -80,5 +92,6 @@ Recommended preview URLs:
 - `/metrics` for seeded usage, cost, latency, and memory metrics
 - `/scorers` for seeded scorers and scores
 - `/datasets` for seeded datasets and items
+- `/workflows` for runnable examples and seeded run history
 
 Protect the project with Vercel Deployment Protection or Studio auth before exposing previews broadly. Studio has access to the agents, tools, and workflows exposed by the Mastra server.

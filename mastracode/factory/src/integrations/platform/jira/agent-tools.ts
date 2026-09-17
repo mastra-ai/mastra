@@ -16,14 +16,15 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
-import { PlatformJiraApiError } from './api.js';
+import { JIRA_UNTRUSTED_CONTENT_NOTICE } from '../../jira/agent-tools.js';
+import { JiraApiError } from '../../jira/api.js';
 import type { PlatformJiraIntegration } from './integration.js';
 
 /** The `Intake` contract requires a connection argument; the Platform adapter resolves the real connection. */
 const PLATFORM_CONNECTION: IntegrationConnection = { type: 'oauth', accessToken: 'platform-managed' };
 
 function toolError(action: string, err: unknown): { error: string } {
-  if (err instanceof PlatformJiraApiError && err.code === 'jira_auth_failed') {
+  if (err instanceof JiraApiError && err.code === 'jira_auth_failed') {
     return { error: 'Jira rejected the connected account. Reconnect it in Mastra Platform.' };
   }
   return { error: `${action}: ${err instanceof Error ? err.message : String(err)}` };
@@ -41,12 +42,12 @@ function createJiraGetIssueTool(jira: PlatformJiraIntegration) {
       try {
         const detail = await jira.intake.getIssue({
           connection: PLATFORM_CONNECTION,
-          issueId: issue.trim(),
+          issueId: issue,
         });
         if (!detail) {
           return { error: `Jira issue "${issue}" was not found on this site.` };
         }
-        return detail;
+        return { notice: JIRA_UNTRUSTED_CONTENT_NOTICE, ...detail };
       } catch (err) {
         return toolError('Failed to fetch Jira issue', err);
       }

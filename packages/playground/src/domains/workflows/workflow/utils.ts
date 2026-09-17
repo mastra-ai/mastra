@@ -1,8 +1,8 @@
 import Dagre from '@dagrejs/dagre';
 import type { Workflow, SerializedStepFlowEntry } from '@mastra/core/workflows';
+import type { WorkflowDataEdgeModel } from '@mastra/playground-ui/components/Workflow';
 import type { Node } from '@xyflow/react';
 import { MarkerType } from '@xyflow/react';
-import type { WorkflowDataEdgeModel } from './workflow-data-edge';
 import {
   resolveWorkflowGraphStep,
   unwrapInnerEntry,
@@ -59,31 +59,6 @@ const getNodeSize = (node: WorkflowGraphNode): { width: number; height: number }
     height: node.measured?.height ?? (node?.data?.isLarge ? 260 : 100),
   };
 };
-
-export type ConditionConditionType = 'if' | 'else' | 'when' | 'until' | 'while' | 'dountil' | 'dowhile';
-
-export type Condition =
-  | {
-      type: ConditionConditionType;
-      ref: {
-        step:
-          | {
-              id: string;
-            }
-          | 'trigger';
-        path: string;
-      };
-      query: Record<string, any>;
-      conj?: 'and' | 'or' | 'not';
-      fnString?: never;
-    }
-  | {
-      type: ConditionConditionType;
-      fnString: string;
-      ref?: never;
-      query?: never;
-      conj?: never;
-    };
 
 const formatMappingLabel = (stepId: string, prevStepIds: string[], nextStepIds: string[]): string => {
   // If not a mapping node, return original ID
@@ -181,7 +156,9 @@ export type WStep = {
 
 /** Resolves the id of a single step-like serialized entry (step / agent / tool / mapping). */
 const getSingleStepFlowId = (flow: SerializedStepFlowEntry): string => {
-  if ('id' in flow) return flow.id;
+  // Container entries also carry an optional `id` now, so guard for presence,
+  // not just for the key existing on the variant.
+  if ('id' in flow && flow.id !== undefined) return flow.id;
   if ('step' in flow) {
     const inner = flow.step;
     if ('id' in inner) return inner.id;
@@ -342,7 +319,7 @@ const getStepNodeAndEdge = ({
     const stepId = stepFlow.id;
     const rawNodeId = allPrevNodeIds.has(getWorkflowNodeId(stepId)) ? `${stepId}-${yIndex}` : stepId;
     const nodeId = getWorkflowNodeId(rawNodeId);
-    const description = stepFlow.type === 'mapping' ? undefined : stepFlow.description;
+    const description = stepFlow.description;
     const label = stepFlow.type === 'mapping' ? formatMappingLabel(stepId, prevStepIds, nextStepIds) : stepId;
     const conditionNodes: WorkflowStepNode[] = condition
       ? [
@@ -375,6 +352,7 @@ const getStepNodeAndEdge = ({
           workflowStep: resolveWorkflowGraphStep(stepFlow),
           stepId,
           description,
+          metadata: stepFlow.type === 'mapping' ? stepFlow.metadata : undefined,
           withoutTopHandle: condition ? false : !prevNodeIds.length,
           withoutBottomHandle: !nextNodeIds.length,
           mapConfig: stepFlow.type === 'mapping' ? stepFlow.mapConfig : undefined,
@@ -455,6 +433,8 @@ const getStepNodeAndEdge = ({
           label: stepFlow.id,
           workflowStep: resolveWorkflowGraphStep(stepFlow),
           stepId: stepFlow.id,
+          description: stepFlow.description,
+          metadata: stepFlow.metadata,
           withoutTopHandle: condition ? false : !prevNodeIds.length,
           withoutBottomHandle: !nextNodeIds.length,
           ...(stepFlow.type === 'sleepUntil' ? { date: stepFlow.date } : { duration: stepFlow.duration }),

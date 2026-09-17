@@ -1,5 +1,31 @@
 # @mastra/auth-clerk
 
+## 1.2.5-alpha.0
+
+### Patch Changes
+
+- Fixed a stored XSS advisory in Clerk by updating @clerk/backend to 3.17.2. `createClerkClient` and the rest of the Mastra Clerk auth API are unchanged. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
+## 1.2.4
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74), [`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/auth@1.1.3
+
+## 1.2.4-alpha.1
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74)]:
+  - @mastra/auth@1.1.3-alpha.1
+
 ## 1.2.4-alpha.0
 
 ### Patch Changes

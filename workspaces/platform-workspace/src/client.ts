@@ -38,7 +38,7 @@ const REGIONAL_PROXY_URLS: Record<'us' | 'eu', string> = {
  * default. Unknown region values fall through to the global default.
  */
 function resolveProxyUrl(): string {
-  const override = process.env.MASTRA_WORKSPACE_PROXY_URL;
+  const override = process.env.MASTRA_WORKSPACE_PROXY_URL?.trim();
   if (override) return override;
   const region = process.env.MASTRA_PLATFORM_REGION?.trim().toLowerCase();
   if (region === 'us' || region === 'eu') return REGIONAL_PROXY_URLS[region];
@@ -70,7 +70,11 @@ export function resolvePlatformOptions(options: PlatformClientOptions) {
   const configuredSandboxProvider = options.sandboxProvider ?? environmentSandboxProvider;
 
   return {
-    accessToken: requireOption(options.accessToken ?? process.env.MASTRA_PLATFORM_ACCESS_TOKEN, 'accessToken'),
+    accessToken: requireOption(
+      options.accessToken ??
+        (process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim()),
+      'accessToken',
+    ),
     projectId: requireOption(options.projectId ?? process.env.MASTRA_PROJECT_ID, 'projectId'),
     actingUserId: options.actingUserId?.trim() || undefined,
     proxyUrl: resolveProxyUrl().replace(/\/$/, ''),

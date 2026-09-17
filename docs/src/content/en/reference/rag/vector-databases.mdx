@@ -273,6 +273,34 @@ After generating embeddings, you need to store them in a database that supports 
     ```
   </TabItem>
 
+  <TabItem value="weaviate" label="Weaviate">
+    ```ts title="vector-store.ts"
+    import { WeaviateVector } from '@mastra/weaviate'
+
+    const store = new WeaviateVector({
+      id: 'weaviate-vector',
+      httpHost: process.env.WEAVIATE_HOST,
+      httpPort: 443,
+      httpSecure: true,
+      grpcHost: process.env.WEAVIATE_GRPC_HOST,
+      grpcPort: 443,
+      grpcSecure: true,
+      apiKey: process.env.WEAVIATE_API_KEY,
+    })
+
+    await store.createIndex({
+      indexName: 'myCollection',
+      dimension: 1536,
+    })
+
+    await store.upsert({
+      indexName: 'myCollection',
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    })
+    ```
+  </TabItem>
+
   <TabItem value="cloudflare" label="Cloudflare">
     ```ts title="vector-store.ts"
     import { CloudflareVector } from '@mastra/vectorize'
@@ -550,6 +578,17 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Example: `_namespace` isn't valid (starts with underscore)
   </TabItem>
 
+  <TabItem value="weaviate" label="Weaviate">
+    Index names map to Weaviate collections, which:
+
+    - Are capitalized by Weaviate (the first letter is upper-cased)
+    - Should contain only letters, numbers, and the `_` character
+    - Must start with a letter, since only the first character is upper-cased (a leading digit or symbol stays invalid)
+    - Preserve the original Mastra index name in the collection description, so `listIndexes()` and `describeIndex()` return the name you supplied
+    - Example: `my_collection` is stored as `My_collection` and returned as `my_collection`
+    - Example: `123_collection` isn't valid (starts with a digit)
+  </TabItem>
+
   <TabItem value="cloudflare" label="Cloudflare">
     Index names must:
 
@@ -669,7 +708,7 @@ Key metadata considerations:
 
 ## Deleting vectors
 
-When building RAG applications, you often need to clean up stale vectors when documents are deleted or updated. Mastra provides the `deleteVectors` method that supports deleting vectors by metadata filters, making it straightforward to remove all embeddings associated with a specific document.
+Use `deleteVectors` with a metadata filter to remove embeddings associated with a document. This is useful for cleaning up stale vectors after a document is deleted or updated.
 
 ### Delete by Metadata Filter
 

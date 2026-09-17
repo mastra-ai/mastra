@@ -366,7 +366,7 @@ describe('suggestionsAction', () => {
     await expect(suggestionsAction()).rejects.toThrow('process.exit');
 
     expect(mockClackLogError).toHaveBeenCalledWith(
-      'No deploys found for linked Studio project App 2. The suggestions command helps debug failed deployments, and you can run it after a deployment fails with `mastra studio deploy suggestions <deploy-id>` or `mastra studio deploy suggestions`.',
+      'No deploys found for linked Studio project App 2. The diagnosis command helps debug failed deployments, and you can run it after a deployment fails with `mastra studio deploy diagnosis <deploy-id>` or `mastra studio deploy diagnosis`.',
     );
     expect(mockFetchDeployDiagnosis).not.toHaveBeenCalled();
     mockExit.mockRestore();

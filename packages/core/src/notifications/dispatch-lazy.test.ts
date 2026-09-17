@@ -2,6 +2,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
+import { EventEmitterPubSub } from '../events/event-emitter';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createStep, createWorkflow } from '../workflows/evented';
@@ -76,8 +77,8 @@ function makeAgent(id: string, options?: { deferBy?: number }): Agent {
   });
 }
 
-describe('notification dispatch — lazy schedule registration (#18864)', () => {
-  it('does not create a dispatcher schedule row in an idle worker', async () => {
+describe('notification dispatch — lazy scheduler activation (#18864)', () => {
+  it('does not start the scheduler or create a dispatcher schedule row in an idle worker', async () => {
     const storage = new MockStore();
     const mastra = track(
       new Mastra({
@@ -92,18 +93,20 @@ describe('notification dispatch — lazy schedule registration (#18864)', () => 
     const listDueSpy = vi.spyOn(schedulesStore, 'listDueSchedules');
 
     await mastra.startWorkers();
-    await waitForScheduler(mastra);
+    await flushAsyncInit();
 
-    // The scheduler is part of the default worker set, but notification
-    // dispatch remains lazy and does not create its internal schedule row.
-    expect(mastra.scheduler).toBeDefined();
+    // Nothing has deferred a notification, so neither the scheduler nor the
+    // dispatcher row should exist.
+    expect(mastra.scheduler).toBeUndefined();
     await expect(schedulesStore.getSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID)).resolves.toBeNull();
 
+    // The reported symptom: constant `listDueSchedules` polling. Give a poll
+    // window a chance to elapse and assert storage was never polled.
     await new Promise(resolve => setTimeout(resolve, 200));
-    expect(listDueSpy).toHaveBeenCalled();
+    expect(listDueSpy).not.toHaveBeenCalled();
   });
 
-  it('lazily creates the dispatcher schedule row on the first deferred notification', async () => {
+  it('lazily creates the dispatcher schedule row and starts the scheduler on the first deferred notification', async () => {
     const storage = new MockStore();
     const agent = makeAgent('defer-agent', { deferBy: 250 });
     const mastra = track(
@@ -117,8 +120,8 @@ describe('notification dispatch — lazy schedule registration (#18864)', () => 
     );
 
     await mastra.startWorkers();
-    await waitForScheduler(mastra);
-    expect(mastra.scheduler).toBeDefined();
+    await flushAsyncInit();
+    expect(mastra.scheduler).toBeUndefined();
 
     const result = await agent.sendNotificationSignal(
       { source: 'calendar', kind: 'event-reminder', summary: 'Planning starts tomorrow' },
@@ -126,8 +129,9 @@ describe('notification dispatch — lazy schedule registration (#18864)', () => 
     );
     expect(result.decision.action).toBe('defer');
 
-    // The deferred notification must upsert the imperative dispatcher row
-    // into the already-running scheduler.
+    // The deferred notification must have activated the scheduler and
+    // upserted the imperative dispatcher schedule row.
+    await waitForScheduler(mastra);
     const schedulesStore = (await storage.getStore('schedules'))!;
     const row = (await schedulesStore.getSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID))!;
     expect(row).toMatchObject({
@@ -143,6 +147,45 @@ describe('notification dispatch — lazy schedule registration (#18864)', () => 
       return record?.status === 'delivered';
     }, 10_000);
   }, 15_000);
+
+  it('wakes the scheduler in a worker process when the API process defers its first notification', async () => {
+    const storage = new MockStore();
+    const pubsub = new EventEmitterPubSub();
+    const workerMastra = track(
+      new Mastra({
+        logger: false,
+        storage,
+        pubsub,
+        agents: { 'remote-defer': makeAgent('remote-defer') },
+        scheduler: { tickIntervalMs: 50 },
+      }),
+    );
+    const apiAgent = makeAgent('remote-defer', { deferBy: 60_000 });
+    const apiMastra = track(
+      new Mastra({
+        logger: false,
+        storage,
+        pubsub,
+        workers: false,
+        scheduler: { enabled: false },
+        agents: { 'remote-defer': apiAgent },
+      }),
+    );
+
+    await workerMastra.startWorkers();
+    await flushAsyncInit();
+    expect(workerMastra.scheduler).toBeUndefined();
+
+    const result = await apiAgent.sendNotificationSignal(
+      { source: 'calendar', kind: 'event-reminder', summary: 'Planning starts tomorrow' },
+      { resourceId: 'user-1', threadId: 'thread-1' },
+    );
+    expect(result.decision.action).toBe('defer');
+
+    // Local scheduler opt-outs must not prevent a separate worker from waking.
+    await waitForScheduler(workerMastra);
+    expect(apiMastra.scheduler).toBeUndefined();
+  });
 
   it('starts the scheduler on boot when a dispatcher schedule row was persisted by a previous process', async () => {
     const storage = new MockStore();
@@ -163,7 +206,7 @@ describe('notification dispatch — lazy schedule registration (#18864)', () => 
     await waitForScheduler(mastra);
   });
 
-  it('does not create the row when dispatch is disabled, even after a deferred notification', async () => {
+  it('does not create the row or start the scheduler when dispatch is disabled, even after a deferred notification', async () => {
     const storage = new MockStore();
     const agent = makeAgent('opt-out-agent', { deferBy: 60_000 });
     const mastra = track(
@@ -184,7 +227,7 @@ describe('notification dispatch — lazy schedule registration (#18864)', () => 
     expect(result.decision.action).toBe('defer');
     await flushAsyncInit();
 
-    expect(mastra.scheduler).toBeDefined();
+    expect(mastra.scheduler).toBeUndefined();
     const schedulesStore = (await storage.getStore('schedules'))!;
     await expect(schedulesStore.getSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID)).resolves.toBeNull();
   });

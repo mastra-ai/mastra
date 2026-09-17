@@ -4,6 +4,10 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
 
 import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
+import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
+import { PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
+import type { PlatformConnectProviderId, PlatformProviderConnection } from '../../factory/services/platformConnect';
+import { ProviderConnectControl } from '../../settings/components/PlatformProviderConnections';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 export interface ProjectManagementFactoryStepProps {
@@ -11,8 +15,51 @@ export interface ProjectManagementFactoryStepProps {
   onContinue: () => void;
 }
 
+function providerSummary(meta: { displayName: string }, connections: PlatformProviderConnection[]): string {
+  const active = connections.filter(connection => connection.status === 'active');
+  if (active.length === 1) return active[0]?.accountLabel ?? `${meta.displayName} connected`;
+  return `${active.length} accounts connected`;
+}
+
+/**
+ * One optional tracker row in onboarding. Providers connect headlessly in
+ * place (no redirect), so the wizard state survives the whole flow.
+ */
+function PlatformProviderOption({
+  provider,
+  connections,
+}: {
+  provider: PlatformConnectProviderId;
+  connections: PlatformProviderConnection[];
+}) {
+  const meta = PLATFORM_CONNECT_PROVIDERS[provider];
+  const hasActive = connections.some(connection => connection.status === 'active');
+  return (
+    <li className="flex items-center justify-between gap-2 py-1">
+      <Txt as="span" variant="ui-sm" className="text-icon5">
+        {meta.displayName}
+      </Txt>
+      {hasActive ? (
+        <span className="flex items-center gap-2">
+          <Txt as="span" variant="ui-sm" className="text-icon3">
+            {providerSummary(meta, connections)}
+          </Txt>
+          <ProviderConnectControl provider={provider} label="Connect another" size="xs" variant="ghost" />
+        </span>
+      ) : (
+        <ProviderConnectControl provider={provider} label="Connect" size="xs" variant="ghost" />
+      )}
+    </li>
+  );
+}
+
 export function ProjectManagementFactoryStep({ onConnect, onContinue }: ProjectManagementFactoryStepProps) {
   const linearStatus = useLinearStatusQuery();
+  const jiraConnections = usePlatformConnectionsQuery('jira');
+  // Only providers whose connect routes are mounted (queries succeed) are
+  // offered; a server without Platform credentials shows the Linear-only step.
+  const platformProviders: Array<{ provider: PlatformConnectProviderId; connections: PlatformProviderConnection[] }> =
+    jiraConnections.isSuccess ? [{ provider: 'jira', connections: jiraConnections.data }] : [];
 
   return (
     <section aria-label="Linear connection" className="border-border1 bg-surface2/80 max-w-xl rounded-2xl border p-5">
@@ -48,6 +95,18 @@ export function ProjectManagementFactoryStep({ onConnect, onContinue }: ProjectM
             </div>
           }
         />
+      )}
+      {platformProviders.length > 0 && (
+        <div className="border-border1 mt-4 border-t pt-4">
+          <Txt as="p" variant="ui-sm" className="text-icon3 m-0">
+            Also sync issues from
+          </Txt>
+          <ul className="mt-2 flex flex-col">
+            {platformProviders.map(({ provider, connections }) => (
+              <PlatformProviderOption key={provider} provider={provider} connections={connections} />
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );

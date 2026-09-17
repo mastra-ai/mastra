@@ -83,10 +83,10 @@ describe('Elysia Server Adapter', () => {
       const req = new Request(url, {
         method: request.method,
         headers: {
-          'Content-Type': 'application/json',
+          ...(request.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
           ...(request.headers || {}),
         },
-        body: request.body ? JSON.stringify(request.body) : undefined,
+        body: request.body !== undefined ? JSON.stringify(request.body) : undefined,
       });
 
       // Execute request through Elysia - app.fetch() always returns Promise<Response>
@@ -1229,6 +1229,17 @@ describe('Elysia Server Adapter', () => {
           ...(options.body ? { body: options.body } : {}),
         }),
       );
+      return { status: response.status };
+    },
+
+    executeRequestWithoutContentLength: async (app, method, url, options = {}) => {
+      const request = new Request(url, {
+        method,
+        headers: options.headers,
+        ...(options.body ? { body: options.body } : {}),
+      });
+      expect(request.headers.has('content-length')).toBe(false);
+      const response = await app.fetch(request);
       return { status: response.status };
     },
   });

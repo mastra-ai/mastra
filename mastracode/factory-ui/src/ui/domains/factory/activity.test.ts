@@ -33,6 +33,8 @@ function makeItem(stageHistory: WorkItemStageEntry[], overrides: Partial<WorkIte
     stageHistory,
     sessions: { work: { sessionId: `session-${nextId}`, branch: 'b', threadId: 't', startedBy: 'u1' } },
     metadata: {},
+    triageType: null,
+    acceptedAt: null,
     commentCount: 0,
     feedActivityAt: null,
     revision: 1,

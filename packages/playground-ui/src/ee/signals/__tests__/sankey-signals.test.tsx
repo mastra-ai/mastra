@@ -465,18 +465,55 @@ describe('SankeySignals', () => {
   });
 
   describe('when no theme snapshot exists', () => {
-    it('shows the Signals onboarding empty state', async () => {
+    it('shows the Signals onboarding empty state with the effective catalog', async () => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
-          HttpResponse.json(emptyThemeSnapshotsResponse),
+          HttpResponse.json({
+            ...emptyThemeSnapshotsResponse,
+            signalCatalog: [
+              {
+                name: 'tool_usage',
+                label: 'Tool usage',
+                description: 'How effectively the agent uses tools.',
+                order: 0,
+                builtIn: false,
+                enabled: true,
+                status: 'collecting',
+              },
+              {
+                name: 'response_quality',
+                label: 'Response quality',
+                description: 'How useful the final answer is.',
+                order: 1,
+                builtIn: false,
+                enabled: true,
+                status: 'collecting',
+              },
+            ],
+          }),
         ),
       );
 
-      renderSankeySignals();
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <SankeySignals
+            entityId="support-agent"
+            signalNames={['tool_usage', 'response_quality']}
+            selectedThemeId={undefined}
+            onSelectedThemeIdChange={() => {}}
+            selectedFrameId="missing-snapshot"
+            onFrameIdChange={() => {}}
+          />
+        </QueryClientProvider>,
+      );
 
       expect(
         await screen.findByRole('heading', { name: 'Understand what drives every agent interaction' }),
       ).not.toBeNull();
+      expect(screen.getAllByText('Tool usage')).not.toHaveLength(0);
+      expect(screen.getByText('How effectively the agent uses tools.')).not.toBeNull();
+      expect(screen.queryByText('Goal')).toBeNull();
     });
   });
 

@@ -80,6 +80,37 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
     inspectors = [];
   });
 
+  describe('shutdown batch drainage', () => {
+    it.each([true, false])('delivers the acquired batch and preserves ACK ownership (ack=%s)', async shouldAck => {
+      const prefix = `shutdown-${randomUUID()}`;
+      const ps = createPubSub({ keyPrefix: prefix, reclaimIntervalMs: 0 });
+      const inspector = await createInspector();
+      for (let i = 0; i < 10; i++) {
+        await ps.publish('topic', makeEvent({ runId: String(i) }));
+      }
+      const delivered: string[] = [];
+      const acks: Promise<void>[] = [];
+      let stop: Promise<void> | undefined;
+      const cb: EventCallback = (event, ack) => {
+        delivered.push(event.runId);
+        if (shouldAck) acks.push(ack());
+        if (delivered.length === 1) stop = ps.unsubscribe('topic', cb);
+      };
+      try {
+        await ps.subscribe('topic', cb, { group: 'workers' });
+        await expect.poll(() => stop !== undefined).toBe(true);
+        await stop;
+        expect(delivered).toEqual(Array.from({ length: 10 }, (_, i) => String(i)));
+        await Promise.all(acks);
+        const pending = await inspector.xPending(`${prefix}:topic`, 'workers');
+        expect(pending.pending).toBe(shouldAck ? 0 : 10);
+      } finally {
+        await ps.close();
+        await inspector.del(`${prefix}:topic`);
+      }
+    });
+  });
+
   describe('connection drops', () => {
     it('survives a server-side socket close: no unhandled error, publish recovers', async () => {
       const proxy = makeSeverableProxy(REDIS_URL);

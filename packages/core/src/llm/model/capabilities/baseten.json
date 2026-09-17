@@ -1,5 +1,6 @@
 {
   "attachment": [
+    "deepseek-ai/DeepSeek-V4.1-Flash",
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
@@ -8,6 +9,8 @@
     "thinkingmachines/inkling-small",
     "zai-org/GLM-5.2",
     "zai-org/GLM-5.2-Fast",
+    "zai-org/GLM-5.3",
+    "zai-org/GLM-5.3-Fast",
     "zai-org/GLM-5.3-Flash"
   ],
   "temperature": [
@@ -16,6 +19,7 @@
     "deepseek-ai/DeepSeek-V4-Flash-0731",
     "deepseek-ai/DeepSeek-V4-Pro",
     "deepseek-ai/DeepSeek-V4-Pro-0813",
+    "deepseek-ai/DeepSeek-V4.1-Flash",
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
@@ -31,12 +35,14 @@
     "zai-org/GLM-5.2",
     "zai-org/GLM-5.2-Fast",
     "zai-org/GLM-5.3",
+    "zai-org/GLM-5.3-Fast",
     "zai-org/GLM-5.3-Flash"
   ],
   "structuredOutput": [
     "deepseek-ai/DeepSeek-V4-Flash-0731",
     "deepseek-ai/DeepSeek-V4-Pro",
     "deepseek-ai/DeepSeek-V4-Pro-0813",
+    "deepseek-ai/DeepSeek-V4.1-Flash",
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
@@ -52,6 +58,7 @@
     "zai-org/GLM-5.2",
     "zai-org/GLM-5.2-Fast",
     "zai-org/GLM-5.3",
+    "zai-org/GLM-5.3-Fast",
     "zai-org/GLM-5.3-Flash"
   ]
 }
