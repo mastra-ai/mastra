@@ -36,6 +36,7 @@ describe('resolveFrameworkSuspendedToolRunId', () => {
   it('prefers the framework suspend payload and preserves custom id formats', () => {
     expect(
       resolve({
+        resumeSource: 'framework',
         suspendData: { suspendedToolRunId: ' custom/run:id ' },
         modelSuppliedSuspendedToolRunId: 'foreign-run',
       }),
@@ -84,7 +85,13 @@ describe('resolveFrameworkSuspendedToolRunId', () => {
     ];
 
     expect(resolve({ resumeSource: 'framework', messages })).toBe('inner-run');
-    expect(resolve({ messages, modelSuppliedSuspendedToolRunId: 'inner-run' })).toBeUndefined();
+    expect(
+      resolve({
+        messages,
+        modelSuppliedSuspendedToolCallId: 'call-1',
+        modelSuppliedSuspendedToolRunId: 'inner-run',
+      }),
+    ).toBeUndefined();
   });
 
   it('does not treat an outer approval run as delegated identity', () => {
@@ -107,7 +114,7 @@ describe('resolveFrameworkSuspendedToolRunId', () => {
     ).toBeUndefined();
   });
 
-  it('accepts a model claim only when it matches an active suspension for the same tool', () => {
+  it('derives the run id from the exact suspended tool call selected by the model', () => {
     const messages = [
       assistantMessage({
         suspendedTools: {
@@ -122,13 +129,19 @@ describe('resolveFrameworkSuspendedToolRunId', () => {
       }),
     ];
 
-    expect(resolve({ messages, modelSuppliedSuspendedToolRunId: 'inner-run' })).toBe('inner-run');
-    expect(resolve({ messages, modelSuppliedSuspendedToolRunId: 'foreign-run' })).toBeUndefined();
+    expect(resolve({ messages, modelSuppliedSuspendedToolCallId: 'old-call' })).toBe('inner-run');
+    expect(
+      resolve({
+        messages,
+        modelSuppliedSuspendedToolCallId: 'old-call',
+        modelSuppliedSuspendedToolRunId: 'foreign-run',
+      }),
+    ).toBeUndefined();
     expect(
       resolve({
         toolName: 'agent-writer',
         messages,
-        modelSuppliedSuspendedToolRunId: 'inner-run',
+        modelSuppliedSuspendedToolCallId: 'old-call',
       }),
     ).toBeUndefined();
   });
@@ -136,6 +149,7 @@ describe('resolveFrameworkSuspendedToolRunId', () => {
   it('falls back to an unresumed suspension part', () => {
     expect(
       resolve({
+        modelSuppliedSuspendedToolCallId: 'old-call',
         modelSuppliedSuspendedToolRunId: 'part-run',
         messages: [
           assistantMessage({
@@ -167,6 +181,7 @@ describe('resolveFrameworkSuspendedToolRunId', () => {
   it('uses a unique same-tool suspension when a legacy resume omitted the id', () => {
     expect(
       resolve({
+        resumeSource: 'framework',
         messages: [
           assistantMessage({
             suspendedTools: {
@@ -181,7 +196,7 @@ describe('resolveFrameworkSuspendedToolRunId', () => {
     ).toBe('legacy-inner-run');
   });
 
-  it('rejects ambiguous same-tool suspensions', () => {
+  it('rejects a sibling run id that does not belong to the claimed suspended call', () => {
     const messages = [
       assistantMessage({
         suspendedTools: {
@@ -202,10 +217,23 @@ describe('resolveFrameworkSuspendedToolRunId', () => {
     ];
 
     expect(resolve({ messages })).toBeUndefined();
-    expect(resolve({ messages, modelSuppliedSuspendedToolRunId: 'inner-a' })).toBe('inner-a');
+    expect(
+      resolve({
+        messages,
+        modelSuppliedSuspendedToolCallId: 'call-b',
+        modelSuppliedSuspendedToolRunId: 'inner-a',
+      }),
+    ).toBeUndefined();
+    expect(
+      resolve({
+        messages,
+        modelSuppliedSuspendedToolCallId: 'call-b',
+        modelSuppliedSuspendedToolRunId: 'inner-b',
+      }),
+    ).toBe('inner-b');
   });
 
-  it('rejects a repeated id shared by ambiguous sibling suspensions', () => {
+  it('uses the claimed tool call to disambiguate repeated run ids', () => {
     const messages = [
       assistantMessage({
         suspendedTools: {
@@ -223,6 +251,7 @@ describe('resolveFrameworkSuspendedToolRunId', () => {
       }),
     ];
 
-    expect(resolve({ messages, modelSuppliedSuspendedToolRunId: 'repeated-run' })).toBeUndefined();
+    expect(resolve({ messages, modelSuppliedSuspendedToolCallId: 'call-b' })).toBe('repeated-run');
+    expect(resolve({ messages, modelSuppliedSuspendedToolCallId: 'unknown-call' })).toBeUndefined();
   });
 });

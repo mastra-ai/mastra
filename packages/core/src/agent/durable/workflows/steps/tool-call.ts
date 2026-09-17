@@ -826,7 +826,9 @@ export function createDurableToolCallStep() {
       }
 
       const modelSuppliedSuspendedToolRunId = cleanedArgs.suspendedToolRunId;
+      const modelSuppliedSuspendedToolCallId = cleanedArgs.suspendedToolCallId;
       delete cleanedArgs.suspendedToolRunId;
+      delete cleanedArgs.suspendedToolCallId;
 
       // Delegated identity is trusted only after it is tied to framework-persisted
       // suspension state. The suspend payload remains the primary per-tool-call source.
@@ -837,7 +839,10 @@ export function createDurableToolCallStep() {
             toolCallId,
             toolName,
             resumeSource: resumeDataFromArgs !== undefined ? 'model' : 'framework',
-            modelSuppliedSuspendedToolRunId,
+            modelSuppliedSuspendedToolCallId:
+              resumeDataFromArgs !== undefined ? modelSuppliedSuspendedToolCallId : undefined,
+            modelSuppliedSuspendedToolRunId:
+              resumeDataFromArgs !== undefined ? modelSuppliedSuspendedToolRunId : undefined,
             suspendData,
             messages: messageList?.get.all.db() ?? [],
           })

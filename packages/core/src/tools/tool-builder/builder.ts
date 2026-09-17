@@ -326,6 +326,11 @@ export class CoreToolBuilder extends MastraBase {
           }
           if (this.isResumableTool) {
             nextSchema = safeExtendZodObject(nextSchema, {
+              suspendedToolCallId: z
+                .string()
+                .describe('The toolCallId of the suspended tool to resume')
+                .nullable()
+                .optional(),
               suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
               resumeData: z
                 .any()
@@ -348,8 +353,10 @@ export class CoreToolBuilder extends MastraBase {
               injectedKeys.push('_background');
             }
             if (this.isResumableTool) {
-              // Match the pre-PR JSON Schema shape so existing provider compat
-              // layers + LLM recordings collapse it identically.
+              properties.suspendedToolCallId = {
+                type: ['string', 'null'],
+                description: 'The toolCallId of the suspended tool to resume',
+              };
               properties.suspendedToolRunId = {
                 type: ['string', 'null'],
                 description: 'The runId of the suspended tool',
@@ -357,7 +364,7 @@ export class CoreToolBuilder extends MastraBase {
               properties.resumeData = {
                 description: 'The resumeData object created from the resumeSchema of suspended tool',
               };
-              injectedKeys.push('suspendedToolRunId', 'resumeData');
+              injectedKeys.push('suspendedToolCallId', 'suspendedToolRunId', 'resumeData');
             }
 
             // Preserve the original schema's runtime validator (Zod v3
@@ -655,7 +662,11 @@ export class CoreToolBuilder extends MastraBase {
           const resumeSchema = this.getResumeSchema();
           let executionArgs = args;
           if (this.isResumableTool && args && typeof args === 'object' && !Array.isArray(args)) {
-            const { suspendedToolRunId: _modelAuthoredRunId, ...cleanedArgs } = args as Record<string, unknown>;
+            const {
+              suspendedToolCallId: _modelAuthoredToolCallId,
+              suspendedToolRunId: _modelAuthoredRunId,
+              ...cleanedArgs
+            } = args as Record<string, unknown>;
             executionArgs = execOptions.suspendedToolRunId
               ? { ...cleanedArgs, suspendedToolRunId: execOptions.suspendedToolRunId }
               : cleanedArgs;

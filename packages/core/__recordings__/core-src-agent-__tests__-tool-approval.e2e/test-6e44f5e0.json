@@ -9,7 +9,7 @@
   },
   "recordings": [
     {
-      "hash": "9a0c03aaf33af304",
+      "hash": "5e48f6e44b7940c2",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -51,6 +51,17 @@
                     ],
                     "additionalProperties": false
                   },
+                  "suspendedToolCallId": {
+                    "description": "The toolCallId of the suspended tool to resume",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "suspendedToolRunId": {
                     "description": "The runId of the suspended tool",
                     "anyOf": [
@@ -75,12 +86,14 @@
                 },
                 "required": [
                   "inputData",
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#",
                 "x-optional": [
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ]
@@ -266,7 +279,7 @@
       }
     },
     {
-      "hash": "e9f29673a2379584",
+      "hash": "d5f39edcc6d1d5ab",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -275,7 +288,7 @@
           "input": [
             {
               "role": "system",
-              "content": "You are an agent that can get list of users using findUserWorkflow.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"call_ny2Aigfh9FwywimtSIYdmzNN\",\"toolName\":\"workflow-findUserWorkflow\",\"args\":{\"inputData\":{\"name\":\"Dero Israel\"},\"suspendedToolRunId\":null},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000057\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
+              "content": "You are an agent that can get list of users using findUserWorkflow.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"call_ny2Aigfh9FwywimtSIYdmzNN\",\"toolName\":\"workflow-findUserWorkflow\",\"args\":{\"inputData\":{\"name\":\"Dero Israel\"}},\"type\":\"suspension\",\"runId\":\"NORMALIZED\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the toolCallId of the suspended tool as suspendedToolCallId to the tool call arguments/input. This identifies the exact framework-persisted suspension to resume.\n                      You may also add the runId as suspendedToolRunId for compatibility, but it does not select the suspension and must match the runId associated with suspendedToolCallId.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolCallId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
             },
             {
               "role": "user",
@@ -317,6 +330,17 @@
                     ],
                     "additionalProperties": false
                   },
+                  "suspendedToolCallId": {
+                    "description": "The toolCallId of the suspended tool to resume",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "suspendedToolRunId": {
                     "description": "The runId of the suspended tool",
                     "anyOf": [
@@ -341,12 +365,14 @@
                 },
                 "required": [
                   "inputData",
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#",
                 "x-optional": [
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ]
@@ -407,7 +433,7 @@
               "id": "fc_041768c84c963b76006a7d0903e76081988bba38dec58560a8",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"inputData\":{\"name\":\"Dero Israel\"},\"suspendedToolRunId\":\"00000000-0000-4000-8000-000000000057\",\"resumeData\":{\"age\":25}}",
+              "arguments": "{\"inputData\":{\"name\":\"Dero Israel\"},\"suspendedToolCallId\":\"call_ny2Aigfh9FwywimtSIYdmzNN\",\"resumeData\":{\"age\":25}}",
               "call_id": "call_vMniec79lCNQMpsOEiV889OH",
               "name": "workflow-findUserWorkflow"
             }
@@ -532,7 +558,7 @@
       }
     },
     {
-      "hash": "7adbd9c3a8d4ec69",
+      "hash": "c0f52be452dff84f",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -568,7 +594,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_vMniec79lCNQMpsOEiV889OH",
-              "output": "{\"result\":{\"name\":\"Dero Israel\",\"email\":\"test@test.com\",\"age\":25},\"runId\":\"00000000-0000-4000-8000-000000000057\"}"
+              "output": "{\"result\":{\"name\":\"Dero Israel\",\"email\":\"test@test.com\",\"age\":25},\"runId\":\"NORMALIZED\"}"
             }
           ],
           "tools": [
@@ -591,6 +617,17 @@
                       "name"
                     ],
                     "additionalProperties": false
+                  },
+                  "suspendedToolCallId": {
+                    "description": "The toolCallId of the suspended tool to resume",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "suspendedToolRunId": {
                     "description": "The runId of the suspended tool",
@@ -616,12 +653,14 @@
                 },
                 "required": [
                   "inputData",
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#",
                 "x-optional": [
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ]

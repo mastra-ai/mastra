@@ -256,7 +256,7 @@ describe('CoreToolBuilder background override injection', () => {
   });
 
   describe('Resumable tools (agent-/workflow- prefixed ids)', () => {
-    it('injects suspendedToolRunId and resumeData for agent- tools', () => {
+    it('injects suspendedToolCallId, suspendedToolRunId, and resumeData for agent- tools', () => {
       const tool = createTool({
         id: 'agent-foo',
         description: 'Agent-as-tool',
@@ -271,11 +271,14 @@ describe('CoreToolBuilder background override injection', () => {
 
       const properties = extractJsonProperties(builder);
       expect(properties).toHaveProperty('message');
+      expect(properties).toHaveProperty('suspendedToolCallId');
       expect(properties).toHaveProperty('suspendedToolRunId');
       expect(properties).toHaveProperty('resumeData');
 
-      // The injected JSON Schema must match the pre-PR shape so existing
-      // provider-compat layers and LLM-recording hashes stay stable.
+      expect(properties.suspendedToolCallId).toEqual({
+        type: ['string', 'null'],
+        description: 'The toolCallId of the suspended tool to resume',
+      });
       expect(properties.suspendedToolRunId).toEqual({
         type: ['string', 'null'],
         description: 'The runId of the suspended tool',
@@ -299,6 +302,7 @@ describe('CoreToolBuilder background override injection', () => {
       });
 
       const properties = extractJsonProperties(builder);
+      expect(properties).toHaveProperty('suspendedToolCallId');
       expect(properties).toHaveProperty('suspendedToolRunId');
       expect(properties).toHaveProperty('resumeData');
     });
@@ -357,6 +361,7 @@ describe('CoreToolBuilder background override injection', () => {
       const properties = extractJsonProperties(builder);
       expect(properties).toHaveProperty('message');
       expect(properties).toHaveProperty('_background');
+      expect(properties).toHaveProperty('suspendedToolCallId');
       expect(properties).toHaveProperty('suspendedToolRunId');
       expect(properties).toHaveProperty('resumeData');
     });
@@ -538,7 +543,7 @@ describe('CoreToolBuilder background override injection', () => {
     it.each([
       ['zod v4', z4.object({ message: z4.string() })],
       ['zod v3 fallback', z3.object({ message: z3.string() })],
-    ])('strips model-authored suspendedToolRunId before agent- tool execution (%s)', async (_label, inputSchema) => {
+    ])('strips model-authored resume identity before agent- tool execution (%s)', async (_label, inputSchema) => {
       const execute = vi.fn().mockResolvedValue({ done: true });
       const tool = createTool({
         id: 'agent-child',
@@ -552,10 +557,17 @@ describe('CoreToolBuilder background override injection', () => {
         options: { ...baseOptions(), name: 'agent-child', backgroundConfig: undefined },
       }).build();
 
-      await built.execute!({ message: 'hi', suspendedToolRunId: 'model-authored-run' } as any, {
-        toolCallId: 'call-1',
-        messages: [],
-      });
+      await built.execute!(
+        {
+          message: 'hi',
+          suspendedToolCallId: 'model-authored-call',
+          suspendedToolRunId: 'model-authored-run',
+        } as any,
+        {
+          toolCallId: 'call-1',
+          messages: [],
+        },
+      );
 
       expect(execute).toHaveBeenCalledWith(
         { message: 'hi' },
@@ -580,11 +592,18 @@ describe('CoreToolBuilder background override injection', () => {
         options: { ...baseOptions(), name: 'agent-child', backgroundConfig: undefined },
       }).build();
 
-      await built.execute!({ message: 'hi', suspendedToolRunId: 'model-authored-run' } as any, {
-        toolCallId: 'call-1',
-        messages: [],
-        suspendedToolRunId: 'framework-run',
-      });
+      await built.execute!(
+        {
+          message: 'hi',
+          suspendedToolCallId: 'model-authored-call',
+          suspendedToolRunId: 'model-authored-run',
+        } as any,
+        {
+          toolCallId: 'call-1',
+          messages: [],
+          suspendedToolRunId: 'framework-run',
+        },
+      );
 
       expect(execute).toHaveBeenCalledWith(
         { message: 'hi', suspendedToolRunId: 'framework-run' },

@@ -855,8 +855,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             : {}),
         };
 
+        const modelSuppliedSuspendedToolCallId = args?.suspendedToolCallId;
         const modelSuppliedSuspendedToolRunId = args?.suspendedToolRunId;
         if (args && typeof args === 'object') {
+          delete args.suspendedToolCallId;
           delete args.suspendedToolRunId;
         }
 
@@ -868,7 +870,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             toolCallId: inputData.toolCallId,
             toolName: inputData.toolName,
             resumeSource: isResumeToolCall ? 'model' : 'framework',
-            modelSuppliedSuspendedToolRunId,
+            modelSuppliedSuspendedToolCallId: isResumeToolCall ? modelSuppliedSuspendedToolCallId : undefined,
+            modelSuppliedSuspendedToolRunId: isResumeToolCall ? modelSuppliedSuspendedToolRunId : undefined,
             suspendData,
             messages: messageList.get.all.db(),
           });

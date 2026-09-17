@@ -14,6 +14,7 @@ export type ResolveSuspendedToolRunIdOptions = {
   toolCallId: string;
   toolName: string;
   resumeSource: ResumeSource;
+  modelSuppliedSuspendedToolCallId?: unknown;
   modelSuppliedSuspendedToolRunId?: unknown;
   suspendData?: unknown;
   messages: ReadonlyArray<MastraDBMessage>;
@@ -107,13 +108,14 @@ function uniqueCandidate(candidates: SuspendedToolCandidate[]): SuspendedToolCan
 
 /**
  * Resolves delegated run identity only from framework-persisted suspension state.
- * A model-authored id is treated as a claim and is returned only when it uniquely
- * matches an active suspension for the same generated tool.
+ * Model-driven resumes identify an original suspended tool call; the framework
+ * derives its delegated run ID from the matching persisted suspension.
  */
 export function resolveFrameworkSuspendedToolRunId({
   toolCallId,
   toolName,
   resumeSource,
+  modelSuppliedSuspendedToolCallId,
   modelSuppliedSuspendedToolRunId,
   suspendData,
   messages,
@@ -123,25 +125,27 @@ export function resolveFrameworkSuspendedToolRunId({
       ? (suspendData as { suspendedToolRunId?: unknown }).suspendedToolRunId
       : undefined,
   );
-  if (suspendPayloadRunId) return suspendPayloadRunId;
+  if (resumeSource === 'framework' && suspendPayloadRunId) return suspendPayloadRunId;
 
   const candidates = collectCandidates(messages).filter(candidate => candidate.toolName === toolName);
 
   if (resumeSource === 'framework') {
     const exactCandidate = uniqueCandidate(candidates.filter(candidate => candidate.toolCallId === toolCallId));
     if (exactCandidate) return exactCandidate.runId;
+
+    return uniqueCandidate(candidates)?.runId;
   }
 
-  const modelClaim = resolveSuspendedToolRunId(modelSuppliedSuspendedToolRunId);
-  if (modelClaim) {
-    const matchingClaim = uniqueCandidate(
-      candidates.filter(candidate => candidate.type === 'suspension' && candidate.runId === modelClaim),
-    );
-    return matchingClaim?.runId;
-  }
+  const suspendedToolCallId = resolveSuspendedToolRunId(modelSuppliedSuspendedToolCallId)?.trim();
+  if (!suspendedToolCallId) return undefined;
 
-  const eligibleCandidates = candidates.filter(
-    candidate => resumeSource === 'framework' || candidate.type === 'suspension',
+  const matchingSuspension = uniqueCandidate(
+    candidates.filter(candidate => candidate.type === 'suspension' && candidate.toolCallId === suspendedToolCallId),
   );
-  return uniqueCandidate(eligibleCandidates)?.runId;
+  if (!matchingSuspension) return undefined;
+
+  const modelRunIdClaim = resolveSuspendedToolRunId(modelSuppliedSuspendedToolRunId);
+  if (modelRunIdClaim && modelRunIdClaim !== matchingSuspension.runId) return undefined;
+
+  return matchingSuspension.runId;
 }

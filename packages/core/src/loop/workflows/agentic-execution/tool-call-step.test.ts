@@ -43,7 +43,7 @@ const makeBaseExecuteParams = (suspend: Mock, overrides: any = {}) => ({
 });
 
 describe('createToolCallStep delegated run identity provenance', () => {
-  it('does not forward an unverified model-authored run id without persisted suspension state', async () => {
+  it('does not forward unverified model-authored resume identity without persisted suspension state', async () => {
     const execute = vi.fn(async () => ({ ok: true }));
     const toolCallStep = createToolCallStep({
       tools: { 'workflow-test': { execute } },
@@ -61,6 +61,7 @@ describe('createToolCallStep delegated run identity provenance', () => {
           args: {
             inputData: { value: 'fresh' },
             resumeData: { approved: true },
+            suspendedToolCallId: 'hallucinated-call-id',
             suspendedToolRunId: 'hallucinated-run-id',
           },
         },
@@ -68,8 +69,77 @@ describe('createToolCallStep delegated run identity provenance', () => {
     );
 
     expect(execute).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        suspendedToolCallId: expect.anything(),
+        suspendedToolRunId: expect.anything(),
+      }),
+      expect.not.objectContaining({ suspendedToolRunId: expect.anything() }),
+    );
+  });
+
+  it('derives the delegated run from the claimed suspended call instead of a sibling run claim', async () => {
+    const runResume = async (suspendedToolCallId: string, suspendedToolRunId: string) => {
+      const execute = vi.fn(async () => ({ ok: true }));
+      const messages = [
+        {
+          role: 'assistant',
+          content: {
+            metadata: {
+              suspendedTools: {
+                'call-a': {
+                  toolCallId: 'call-a',
+                  toolName: 'workflow-test',
+                  delegatedRunId: 'inner-a',
+                },
+                'call-b': {
+                  toolCallId: 'call-b',
+                  toolName: 'workflow-test',
+                  delegatedRunId: 'inner-b',
+                },
+              },
+            },
+            parts: [],
+          },
+        },
+      ];
+      const messageList = createMessageList();
+      messageList.get.all.db = () => messages as any;
+      const toolCallStep = createToolCallStep({
+        tools: { 'workflow-test': { execute } },
+        messageList,
+        controller: { enqueue: vi.fn() },
+        runId: 'outer-run',
+        streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+      } as any);
+
+      await toolCallStep.execute(
+        makeBaseExecuteParams(vi.fn(), {
+          inputData: {
+            toolCallId: 'new-resume-call',
+            toolName: 'workflow-test',
+            args: {
+              inputData: { value: 'resume' },
+              resumeData: { approved: true },
+              suspendedToolCallId,
+              suspendedToolRunId,
+            },
+          },
+        }),
+      );
+
+      return execute;
+    };
+
+    const mismatchedExecute = await runResume('call-b', 'inner-a');
+    expect(mismatchedExecute).toHaveBeenCalledWith(
       expect.not.objectContaining({ suspendedToolRunId: expect.anything() }),
       expect.not.objectContaining({ suspendedToolRunId: expect.anything() }),
+    );
+
+    const matchedExecute = await runResume('call-b', 'inner-b');
+    expect(matchedExecute).toHaveBeenCalledWith(
+      expect.objectContaining({ suspendedToolRunId: 'inner-b' }),
+      expect.objectContaining({ suspendedToolRunId: 'inner-b' }),
     );
   });
 });
