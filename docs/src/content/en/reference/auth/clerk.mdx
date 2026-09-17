@@ -13,8 +13,8 @@ The `MastraAuthClerk` class verifies Clerk-issued JWT tokens and supports Studio
 ## Usage example
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { MastraAuthClerk } from '@mastra/auth-clerk'
+import { Mastra } from '@mastra/core';
+import { MastraAuthClerk } from '@mastra/auth-clerk';
 
 export const mastra = new Mastra({
   server: {
@@ -24,7 +24,27 @@ export const mastra = new Mastra({
       secretKey: process.env.CLERK_SECRET_KEY,
     }),
   },
-})
+});
+```
+
+## Restricting login to a single organization
+
+Set `organizationId` or `organizationSlug` to only allow members of a specific Clerk organization to sign in. Non-members are rejected during authorization. Configure only one of the two. Setting both throws at startup, so login can't be granted to two different organizations.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+import { MastraAuthClerk } from '@mastra/auth-clerk';
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthClerk({
+      jwksUri: process.env.CLERK_JWKS_URI,
+      publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+      secretKey: process.env.CLERK_SECRET_KEY,
+      organizationId: process.env.CLERK_ORGANIZATION_ID,
+    }),
+  },
+});
 ```
 
 ## Constructor parameters
@@ -126,6 +146,22 @@ export const mastra = new Mastra({
     ],
   },
   {
+    name: 'organizationId',
+    type: 'string',
+    description:
+      'Restrict login to members of a single Clerk organization, identified by its ID. Users who are not members of this organization are denied access.',
+    isOptional: true,
+    defaultValue: 'process.env.CLERK_ORGANIZATION_ID',
+  },
+  {
+    name: 'organizationSlug',
+    type: 'string',
+    description:
+      'Restrict login to members of a single Clerk organization, identified by its slug. Users who are not members of this organization are denied access.',
+    isOptional: true,
+    defaultValue: 'process.env.CLERK_ORGANIZATION_SLUG',
+  },
+  {
     name: 'name',
     type: 'string',
     description: 'Custom name for the auth provider instance.',
@@ -135,7 +171,7 @@ export const mastra = new Mastra({
     name: 'authorizeUser',
     type: '(user: User, request: HonoRequest) => Promise<boolean> | boolean',
     description:
-      'Custom authorization function to determine if a user should be granted access. Called after token verification. By default, allows all authenticated users.',
+      'Custom authorization function to determine if a user should be granted access. Called after token verification. By default, allows all authenticated users, unless `organizationId` or `organizationSlug` is set, in which case only members of that organization are allowed.',
     isOptional: true,
   },
 ]}

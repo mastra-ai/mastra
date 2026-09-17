@@ -449,6 +449,28 @@ LIMIT ?`,
 
   const orderField = plan.orderBy.field;
   const direction = plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
+  if (plan.paginationMode === 'page') {
+    values.push(plan.perPage, plan.page * plan.perPage);
+    return {
+      sql: `${candidates},
+  page_rows AS (
+    SELECT *, row_number() OVER (ORDER BY ${orderField} ${direction}, traceId ASC) AS __row_position
+    FROM candidates
+    ORDER BY ${orderField} ${direction}, traceId ASC
+    LIMIT ? OFFSET ?
+  ),
+  page_total AS (
+    SELECT COUNT(*) AS total
+    FROM candidates
+  )
+SELECT page_rows.*, page_total.total
+FROM page_total
+LEFT JOIN page_rows ON TRUE
+ORDER BY page_rows.__row_position ASC NULLS LAST`,
+      values,
+    };
+  }
+
   let pageCondition = '';
   if (plan.cursor) {
     const comparison = plan.orderBy.direction === 'asc' ? '>' : '<';
@@ -591,13 +613,29 @@ LIMIT ?`,
   };
 }
 
+function isDuckDBResourceLimit(error: unknown): boolean {
+  return error instanceof Error && error.message.toLowerCase().includes('out of memory');
+}
+
+async function runDuckDBDiscoveryQuery(
+  db: DuckDBConnection,
+  query: CompiledDuckDBTraceQuery,
+): Promise<Record<string, unknown>[]> {
+  try {
+    return await db.query<Record<string, unknown>>(query.sql, query.values);
+  } catch (error) {
+    if (isDuckDBResourceLimit(error)) throw new coreStorage.TraceQueryResourceLimitError();
+    throw error;
+  }
+}
+
 export async function getTraceQueryObservedFields(
   db: DuckDBConnection,
   plan: TrustedTraceQueryObservedFieldsPlan,
 ): Promise<TraceQueryObservedFieldsResult> {
   if (plan.predicateScope !== 'trace') return { observedFields: [], observedFieldsTruncated: false };
   const query = compileDuckDBTraceQueryObservedFields(plan);
-  const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
+  const rows = await runDuckDBDiscoveryQuery(db, query);
   return {
     observedFields: rows
       .slice(0, plan.limit)
@@ -611,7 +649,7 @@ export async function getTraceQueryValues(
   plan: TrustedTraceQueryValuesPlan,
 ): Promise<GetTraceQueryValuesResponse> {
   const query = compileDuckDBTraceQueryValues(plan);
-  const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
+  const rows = await runDuckDBDiscoveryQuery(db, query);
   return coreStorage.getTraceQueryValuesResponseSchema.parse({
     values: rows.slice(0, plan.limit).map(row => ({ value: String(row.value), count: Number(row.count) })),
     valuesTruncated: rows.length > plan.limit,
@@ -623,6 +661,41 @@ function asIsoTimestamp(value: unknown): string {
 }
 
 export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
+  if (plan.paginationMode === 'page') {
+    const query = compileDuckDBTraceQuery(plan);
+    const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
+    const total = Number(rows[0]?.total ?? 0);
+    const traces = rows
+      .filter(row => row.traceId != null)
+      .map(row => ({
+        traceId: String(row.traceId),
+        rootSpanId: String(row.rootSpanId),
+        name: row.name,
+        entityId: row.entityId ?? null,
+        parentSpanId: row.parentSpanId ?? null,
+        createdAt: asIsoTimestamp(row.startedAt),
+        metadata: parseJson(row.metadata) ?? null,
+        inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+        threadId: row.threadId == null ? null : String(row.threadId),
+        resourceId: row.resourceId == null ? null : String(row.resourceId),
+        startedAt: asIsoTimestamp(row.startedAt),
+        endedAt: asIsoTimestamp(row.endedAt),
+        entityName: row.entityName == null ? null : String(row.entityName),
+        entityType: row.entityType == null ? null : String(row.entityType),
+        environment: row.environment == null ? null : String(row.environment),
+        status: row.status,
+      }));
+    return coreStorage.traceQueryResponseSchema.parse({
+      traces,
+      pagination: {
+        total,
+        page: plan.page,
+        perPage: plan.perPage,
+        hasMore: (plan.page + 1) * plan.perPage < total,
+      },
+    });
+  }
+
   const query = compileDuckDBTraceQuery(plan);
   const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
   const visibleRows = rows.slice(0, plan.limit);

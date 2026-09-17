@@ -2336,6 +2336,62 @@ describe('Agent signals', () => {
     claim.unsubscribe();
   });
 
+  it('updates advertised peer metadata without replacing thread ownership', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const ownerAgent = new Agent({
+      id: 'updatable-peer-agent',
+      name: 'Updatable Peer Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('owner response'),
+      pubsub,
+    });
+    const discoveryAgent = new Agent({
+      id: 'peer-discovery-agent',
+      name: 'Peer Discovery Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('discovery response'),
+      pubsub,
+    });
+    const target = { resourceId: 'updatable-resource', threadId: 'updatable-thread' };
+    const claim = await ownerAgent.claimThreadOwnership({
+      ...target,
+      peer: { label: 'Mastra', title: 'Initial title', metadata: { mode: 'build' } },
+    });
+
+    expect(
+      ownerAgent.updateThreadPeerAdvertisement({
+        ...target,
+        peer: { title: 'Renamed thread', metadata: { mode: 'review' } },
+      }),
+    ).toBe(true);
+    expect(discoveryAgent.updateThreadPeerAdvertisement({ ...target, peer: { title: 'Unauthorized rename' } })).toBe(
+      false,
+    );
+
+    await expect(discoveryAgent.discoverThreadPeers()).resolves.toEqual([
+      expect.objectContaining({
+        id: 'updatable-peer-agent:updatable-resource:updatable-thread',
+        label: 'Mastra',
+        title: 'Renamed thread',
+        metadata: { mode: 'review' },
+      }),
+    ]);
+
+    expect(ownerAgent.updateThreadPeerAdvertisement({ ...target, peer: { metadata: undefined } })).toBe(true);
+    const peersAfterClearingMetadata = await discoveryAgent.discoverThreadPeers();
+    expect(peersAfterClearingMetadata).toEqual([
+      expect.objectContaining({
+        id: 'updatable-peer-agent:updatable-resource:updatable-thread',
+        label: 'Mastra',
+        title: 'Renamed thread',
+      }),
+    ]);
+    expect(peersAfterClearingMetadata[0]?.metadata).toBeUndefined();
+
+    claim.unsubscribe();
+    await expect(discoveryAgent.discoverThreadPeers({ timeoutMs: 10 })).resolves.toEqual([]);
+  });
+
   it('settles peer discovery without waiting for pubsub unsubscribe', async () => {
     const pubsub = new HangingUnsubscribePubSub();
     const agent = new Agent({
@@ -6932,6 +6988,71 @@ describe('Agent signals', () => {
       );
 
       run.finish();
+    });
+
+    it('keeps blocking a same-agent contender during a partial resume with sibling suspensions', async () => {
+      const runtime = new AgentThreadStreamRuntime();
+      const pubsub = new EventEmitterPubSub();
+      const publish = vi.spyOn(pubsub, 'publish');
+      const agent = { id: 'same-agent-partial-resume-agent' } as Agent<any, any, any, any>;
+      const runId = 'same-agent-partial-resume-run';
+      const options = { memory: { thread: threadId, resource: resourceId } } as any;
+
+      let finishRun!: () => void;
+      const finished = new Promise<void>(resolve => {
+        finishRun = resolve;
+      });
+      let parts!: ReadableStreamDefaultController<unknown>;
+      const output = {
+        runId,
+        status: 'running',
+        fullStream: new ReadableStream({
+          start(controller) {
+            parts = controller;
+          },
+        }),
+        _waitUntilFinished: () => finished,
+      } as any;
+      await runtime.registerRun(agent, output, options, pubsub, { continuation: 'across-suspension' });
+
+      // Two sibling tool calls suspend within the same segment.
+      parts.enqueue({ type: 'tool-call-approval', runId, payload: { toolCallId: 'call-1', toolName: 'one' } });
+      parts.enqueue({ type: 'tool-call-approval', runId, payload: { toolCallId: 'call-2', toolName: 'two' } });
+      await vi.waitFor(() =>
+        expect(
+          publish.mock.calls.filter(([, event]) => (event as any).data?.part?.type === 'tool-call-approval'),
+        ).toHaveLength(2),
+      );
+      output.status = 'suspended';
+
+      // Fully suspended: a same-agent contender must not wait on human input.
+      await withTimeout(
+        runtime.waitForCrossAgentThreadRun(agent, options, pubsub),
+        'Fully suspended wait should resolve immediately',
+      );
+
+      // Resume only call-1. call-2 stays suspended, but the resumed segment is
+      // actively executing — a new same-agent run must wait for it.
+      const resumed = {
+        runId,
+        status: 'running',
+        consumeStream: async () => {},
+      } as any;
+      expect(runtime.continueRun(agent, resumed, { ...options, toolCallId: 'call-1' }, pubsub)).toBe(true);
+
+      let resolved = false;
+      const wait = runtime.waitForCrossAgentThreadRun(agent, options, pubsub).then(() => {
+        resolved = true;
+      });
+      await new Promise(resolve => setTimeout(resolve, 25));
+      expect(resolved).toBe(false);
+
+      // The resumed segment settles; the contender is released.
+      resumed.status = 'success';
+      output.status = 'success';
+      finishRun();
+      await withTimeout(wait, 'Timed out waiting for the partial-resume wait to release');
+      expect(resolved).toBe(true);
     });
 
     it('still waits on a different-agent running record', async () => {

@@ -7,7 +7,7 @@ import type {
   MastraToolInvocationPart,
 } from '@mastra/core/agent/message-list';
 import type { AgentChunkType, ChunkType, NetworkChunkType } from '@mastra/core/stream';
-import type { WorkflowStreamResult, StepResult } from '@mastra/core/workflows';
+import type { StepResult, WorkflowStreamResult } from '@mastra/core/workflows';
 import { uint8ArrayToBase64, encodeFilePartDataForStorage } from '../../agent/signal-data';
 import { formatCompletionFeedback, formatStreamCompletionFeedback } from './formatCompletionFeedback';
 import { CLIENT_MESSAGE_ID_KEY } from './types';
@@ -252,27 +252,27 @@ const mergeBgTaskMetadata = (
  * `mapWorkflowStreamChunkToWatchResult` from the previous accumulator.
  */
 export const mapWorkflowStreamChunkToWatchResult = (
-  prev: WorkflowStreamResult<any, any, any, any>,
+  prev: WorkflowStreamResult<any, any, any, any> | undefined,
   chunk: StreamChunk,
 ): WorkflowStreamResult<any, any, any, any> => {
+  const previous = prev ?? { status: 'running', input: undefined, steps: {} };
   if (chunk.type === 'workflow-start') {
-    return {
-      input: prev?.input,
-      status: 'running',
-      steps: prev?.steps || {},
-    };
+    return { input: previous.input, status: 'running', steps: previous.steps };
   }
 
   if (chunk.type === 'workflow-canceled') {
-    return { ...prev, status: 'canceled' };
+    return { ...previous, status: 'canceled' };
+  }
+
+  if (chunk.type === 'workflow-paused') {
+    return { ...previous, status: 'paused' };
   }
 
   if (chunk.type === 'workflow-finish') {
     const finalStatus = chunk.payload.workflowStatus;
-    const prevSteps = prev?.steps ?? {};
-    const lastStep = Object.values(prevSteps).pop();
+    const lastStep = Object.values(previous.steps).pop();
     return {
-      ...prev,
+      ...previous,
       status: chunk.payload.workflowStatus,
       ...(finalStatus === 'success' && lastStep?.status === 'success'
         ? { result: lastStep?.output }
@@ -286,14 +286,14 @@ export const mapWorkflowStreamChunkToWatchResult = (
 
   const { stepCallId: _stepCallId, stepName: _stepName, ...newPayload } = chunk.payload ?? {};
   const newSteps = {
-    ...prev?.steps,
+    ...previous.steps,
     [chunk.payload.id]: {
-      ...prev?.steps?.[chunk.payload.id],
+      ...previous.steps[chunk.payload.id],
       ...newPayload,
     },
   };
 
-  if (chunk.type === 'workflow-step-start') return { ...prev, steps: newSteps };
+  if (chunk.type === 'workflow-step-start') return { ...previous, steps: newSteps };
 
   if (chunk.type === 'workflow-step-suspended') {
     const suspendedStepIds = Object.entries(newSteps as Record<string, StepResult<any, any, any, any>>).flatMap(
@@ -305,24 +305,26 @@ export const mapWorkflowStreamChunkToWatchResult = (
         return [];
       },
     );
+    // A suspended chunk contributes at least its own step path.
+    const suspended = suspendedStepIds as [string[], ...string[][]];
     return {
-      ...prev,
+      ...previous,
       status: 'suspended',
       steps: newSteps,
       suspendPayload: chunk.payload.suspendPayload,
-      suspended: suspendedStepIds as any,
+      suspended,
     };
   }
 
-  if (chunk.type === 'workflow-step-waiting') return { ...prev, status: 'waiting', steps: newSteps };
+  if (chunk.type === 'workflow-step-waiting') return { ...previous, status: 'waiting', steps: newSteps };
 
   if (chunk.type === 'workflow-step-progress') {
     return {
-      ...prev,
+      ...previous,
       steps: {
-        ...prev?.steps,
+        ...previous.steps,
         [chunk.payload.id]: {
-          ...prev?.steps?.[chunk.payload.id],
+          ...previous.steps[chunk.payload.id],
           foreachProgress: {
             completedCount: chunk.payload.completedCount,
             totalCount: chunk.payload.totalCount,
@@ -335,9 +337,9 @@ export const mapWorkflowStreamChunkToWatchResult = (
     };
   }
 
-  if (chunk.type === 'workflow-step-result') return { ...prev, steps: newSteps };
+  if (chunk.type === 'workflow-step-result') return { ...previous, steps: newSteps };
 
-  return prev;
+  return previous;
 };
 
 const signalContentsToUserMessages = (contents: unknown, metadata: MastraDBMessageMetadata): MastraDBMessage[] => {
@@ -1267,9 +1269,9 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
 
       // Workflow stream output: accumulate into watch-result state
       if (payloadOutput?.type?.startsWith('workflow-')) {
-        const existingWorkflowState =
-          ((toolPart.toolInvocation as any).result as WorkflowStreamResult<any, any, any, any>) ||
-          ({} as WorkflowStreamResult<any, any, any, any>);
+        const existingWorkflowState = (toolPart.toolInvocation as any).result as
+          | WorkflowStreamResult<any, any, any, any>
+          | undefined;
         const updated = mapWorkflowStreamChunkToWatchResult(existingWorkflowState, payloadOutput);
 
         parts[toolPartIndex] = {
@@ -1589,7 +1591,6 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     case 'network-validation-end':
     case 'network-object':
     case 'network-object-result':
-    case 'tool-output-denied':
       return result;
 
     default:

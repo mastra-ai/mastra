@@ -1,8 +1,16 @@
 import { EntityType, SpanType } from '@mastra/core/observability';
-import type { TraceQueryGroupResponse, TraceQueryTraceResponse } from '@mastra/core/storage';
+import type {
+  GetTraceQueryFieldsArgs,
+  GetTraceQueryFieldsResponse,
+  GetTraceQueryValuesArgs,
+  GetTraceQueryValuesResponse,
+  TraceQueryGroupResponse,
+  TraceQueryPaginatedTraceResponse,
+  TraceQueryTraceResponse,
+} from '@mastra/core/storage';
 import { describe, expect, expectTypeOf, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
-import type { QueryTraceThreadsResult } from './observability';
+import type { QueryTraceThreadsResult, QueryTracesInput } from './observability';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -481,7 +489,15 @@ describe('Observability Methods', () => {
   });
 
   describe('queryTraces()', () => {
-    it('should post the advanced query body unchanged with a trace-only result type', async () => {
+    it('should reject mixed pagination modes at the type boundary', () => {
+      expectTypeOf<{
+        timeRange: { from: string; to: string };
+        page: { limit: number };
+        pagination: { page: number; perPage: number };
+      }>().not.toMatchTypeOf<QueryTracesInput>();
+    });
+
+    it('should post the advanced query body unchanged with trace result types', async () => {
       mockSuccessfulResponse();
       const request = {
         timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
@@ -501,7 +517,7 @@ describe('Observability Methods', () => {
 
       const result = await client.queryTraces(request);
 
-      expectTypeOf(result).toEqualTypeOf<TraceQueryTraceResponse>();
+      expectTypeOf(result).toEqualTypeOf<TraceQueryTraceResponse | TraceQueryPaginatedTraceResponse>();
       expectTypeOf(result).not.toEqualTypeOf<TraceQueryGroupResponse>();
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/observability/traces/query`,
@@ -511,6 +527,85 @@ describe('Observability Methods', () => {
           body: JSON.stringify(request),
         }),
       );
+    });
+
+    it('should expose paginated trace responses for page-mode queries', async () => {
+      mockSuccessfulResponse();
+      const request = {
+        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+        pagination: { page: 0, perPage: 25 },
+      };
+
+      const result = await client.queryTraces(request);
+
+      expectTypeOf(result).toEqualTypeOf<TraceQueryTraceResponse | TraceQueryPaginatedTraceResponse>();
+      if ('pagination' in result) {
+        expectTypeOf(result.pagination).toEqualTypeOf<TraceQueryPaginatedTraceResponse['pagination']>();
+      }
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/query`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ ...clientOptions.headers, 'content-type': 'application/json' }),
+          body: JSON.stringify(request),
+        }),
+      );
+    });
+  });
+
+  describe('trace-query discovery', () => {
+    const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+
+    it('should post field discovery requests unchanged and propagate a per-call abort signal', async () => {
+      mockSuccessfulResponse();
+      const controller = new AbortController();
+      const request: GetTraceQueryFieldsArgs = { timeRange, predicateScope: 'trace', search: 'region', limit: 10 };
+
+      const result = await client.getTraceQueryFields(request, { signal: controller.signal });
+
+      expectTypeOf(result).toEqualTypeOf<GetTraceQueryFieldsResponse>();
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/query/fields`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(request),
+          signal: controller.signal,
+        }),
+      );
+    });
+
+    it('should post value discovery requests unchanged and use the configured abort signal as a fallback', async () => {
+      mockSuccessfulResponse();
+      const controller = new AbortController();
+      const clientWithSignal = new MastraClient({ ...clientOptions, abortSignal: controller.signal });
+      const request: GetTraceQueryValuesArgs = {
+        timeRange,
+        predicateScope: 'spans',
+        path: 'model',
+        search: 'claude',
+      };
+
+      const result = await clientWithSignal.getTraceQueryValues(request);
+
+      expectTypeOf(result).toEqualTypeOf<GetTraceQueryValuesResponse>();
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/query/values`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(request),
+          signal: controller.signal,
+        }),
+      );
+    });
+
+    it('should not retry discovery requests', async () => {
+      const errorResponse = new Response('Unavailable', { status: 503, statusText: 'Unavailable' });
+      vi.mocked(global.fetch).mockResolvedValue(errorResponse);
+      const retryingClient = new MastraClient({ ...clientOptions, retries: 2, backoffMs: 0 });
+
+      await expect(retryingClient.getTraceQueryFields({ timeRange, predicateScope: 'feedback' })).rejects.toThrow();
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
     });
   });
 

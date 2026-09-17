@@ -76,6 +76,10 @@
                         "required": ["input"],
                         "additionalProperties": false
                       },
+                      "suspendedToolCallId": {
+                        "type": ["string", "null"],
+                        "description": "The toolCallId of the suspended tool to resume"
+                      },
                       "suspendedToolRunId": {
                         "type": ["string", "null"],
                         "description": "The runId of the suspended tool"

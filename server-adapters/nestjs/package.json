@@ -1,6 +1,6 @@
 {
   "name": "@mastra/nestjs",
-  "version": "0.2.27-alpha.2",
+  "version": "0.2.27-alpha.4",
   "description": "Mastra NestJS adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -33,7 +33,7 @@
   "devDependencies": {
     "@ai-sdk/openai": "^2.0.115",
     "@internal/lint": "workspace:*",
-    "@internal/server-adapter-test-utils": "workspace:*",
+    "@mastra/server-adapters-test-suite": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",

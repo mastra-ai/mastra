@@ -4,6 +4,7 @@ import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-re
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ReasoningPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/reasoning-part-renderer';
+import { UserFilePartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/user-file-part-renderer';
 import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
 
@@ -17,7 +18,6 @@ import { ToolCard } from './tool/ToolCard';
 import { ToolGroup } from './tool/ToolGroup';
 import { ToolFactory } from './ToolFactory';
 import { collectToolGroups, draws, messageText, renderableParts, toolFromInvocationPart } from './transcript-parts';
-import { resultBlock, stringify } from './transcript-shared';
 import {
   isSkillNotificationSignal,
   notificationMetadata,
@@ -173,7 +173,7 @@ export function MessageBubble({
         </Arriving>
       );
     },
-    File: (part: FilePart) => <FileAttachment part={part} />,
+    File: (part: FilePart) => <UserFilePartRenderer part={part} />,
   };
 
   const skillActivation =
@@ -231,16 +231,6 @@ export function MessageBubble({
   if (!hasRenderablePart) return null;
 
   return <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />;
-}
-
-function FileAttachment({ part }: { part: FilePart }) {
-  if (part.mimeType?.startsWith('image/')) {
-    const src = part.data.startsWith('data:') ? part.data : `data:${part.mimeType};base64,${part.data}`;
-    return (
-      <img src={src} alt="Attached image" className="border-border1 my-1.5 max-h-80 max-w-full rounded-md border" />
-    );
-  }
-  return <pre className={resultBlock}>{stringify(part)}</pre>;
 }
 
 interface StatusMetadata {

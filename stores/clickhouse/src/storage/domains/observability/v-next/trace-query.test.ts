@@ -8,6 +8,7 @@ import {
   planTraceQuery,
   planTraceQueryObservedFields,
   TraceQueryExecutionError,
+  TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
 import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
@@ -19,6 +20,7 @@ import {
   compileClickHouseTraceQueryObservedFields,
   queryThreads,
   queryTraces,
+  runWithClickHouseTraceQueryTimeout,
 } from './trace-query';
 import { ObservabilityStorageClickhouseVNext } from '.';
 
@@ -38,9 +40,114 @@ describe('ClickHouse advanced trace query', () => {
       () =>
         new ObservabilityStorageClickhouseVNext({
           client: {} as ClickHouseClient,
-          traceQueryTimeoutMs: 0,
+          traceQuery: { timeoutMs: 0 },
         }),
     ).toThrow('traceQueryTimeoutMs must be an integer between');
+  });
+
+  it('rejects invalid discovery execution budget configuration at construction', () => {
+    expect(
+      () =>
+        new ObservabilityStorageClickhouseVNext({
+          client: {} as ClickHouseClient,
+          traceQuery: { discovery: { timeoutMs: 0 } },
+        }),
+    ).toThrow('traceQueryTimeoutMs must be an integer between');
+    expect(
+      () =>
+        new ObservabilityStorageClickhouseVNext({
+          client: {} as ClickHouseClient,
+          traceQuery: { discovery: { memoryLimitBytes: 0 } },
+        }),
+    ).toThrow('traceQuery.discovery.memoryLimitBytes must be a positive safe integer');
+  });
+
+  it('uses conservative discovery defaults and supports nested and legacy configuration', async () => {
+    const query = vi.fn().mockResolvedValue({ json: async () => [] });
+    const client = { query } as unknown as ClickHouseClient;
+    const discoveryPlan = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+
+    const defaultStorage = new ObservabilityStorageClickhouseVNext({ client });
+    await defaultStorage.getTraceQueryObservedFields(discoveryPlan);
+    expect(query).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clickhouse_settings: expect.objectContaining({
+          max_execution_time: 5,
+          max_memory_usage: String(256 * 1024 * 1024),
+        }),
+      }),
+    );
+
+    const configuredStorage = new ObservabilityStorageClickhouseVNext({
+      client,
+      traceQuery: {
+        timeoutMs: 3_000,
+        discovery: { timeoutMs: 1_000, memoryLimitBytes: 128 * 1024 * 1024 },
+      },
+    });
+    await configuredStorage.queryTraces(plan());
+    expect(query).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clickhouse_settings: expect.objectContaining({ max_execution_time: 3 }),
+      }),
+    );
+    await configuredStorage.getTraceQueryObservedFields(discoveryPlan);
+    expect(query).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clickhouse_settings: expect.objectContaining({
+          max_execution_time: 1,
+          max_memory_usage: String(128 * 1024 * 1024),
+        }),
+      }),
+    );
+
+    const legacyStorage = new ObservabilityStorageClickhouseVNext({ client, traceQueryTimeoutMs: 2_500 });
+    await legacyStorage.getTraceQueryObservedFields(discoveryPlan);
+    expect(query).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clickhouse_settings: expect.objectContaining({
+          max_execution_time: 2.5,
+          max_memory_usage: String(256 * 1024 * 1024),
+        }),
+      }),
+    );
+  });
+
+  it('applies discovery execution budgets and normalizes memory exhaustion', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ json: async () => [] })
+      .mockRejectedValueOnce({ code: '241', type: 'MEMORY_LIMIT_EXCEEDED' });
+    const client = { query } as unknown as ClickHouseClient;
+    const compiled = { query: 'SELECT 1', query_params: {} };
+
+    await expect(
+      runWithClickHouseTraceQueryTimeout(client, { timeoutMs: 5_000, memoryLimitBytes: 256 * 1024 * 1024 }, compiled),
+    ).resolves.toEqual([]);
+    expect(query).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clickhouse_settings: expect.objectContaining({
+          max_execution_time: 5,
+          max_memory_usage: String(256 * 1024 * 1024),
+        }),
+      }),
+    );
+
+    await expect(
+      runWithClickHouseTraceQueryTimeout(client, { timeoutMs: 5_000, memoryLimitBytes: 1 }, compiled),
+    ).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
+  });
+
+  it('preserves resource-limit errors through public trace and thread queries', async () => {
+    const query = vi.fn().mockRejectedValue({ code: '241', type: 'MEMORY_LIMIT_EXCEEDED' });
+    const storage = new ObservabilityStorageClickhouseVNext({
+      client: { query } as unknown as ClickHouseClient,
+    });
+
+    await expect(storage.queryTraces(plan())).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
+    await expect(storage.queryThreads(threadPlan())).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
   });
 
   it('decodes each observed metadata value from the expanded JSON entry', () => {
@@ -321,6 +428,43 @@ describe('ClickHouse advanced trace query', () => {
     expect(Object.values(compiled.query_params).at(-1)).toBe(5);
   });
 
+  it('compiles list-compatible rows and metadata into one typed query', () => {
+    const compiled = compileClickHouseTraceQuery(
+      plan({
+        orderBy: [{ field: 'endedAt', direction: 'asc' }],
+        pagination: { page: 2, perPage: 25 },
+      }),
+    );
+
+    expect(compiled.query).toContain('page_rows AS');
+    expect(compiled.query).toContain('ORDER BY endedAt ASC, traceId ASC');
+    expect(compiled.query).toContain('LIMIT {trace_query_3:UInt64} OFFSET {trace_query_4:UInt64}');
+    expect(compiled.query).toContain('SELECT count() AS total\n  FROM candidates');
+    expect(compiled.query).toContain('UNION ALL');
+    expect(compiled.query).toContain("'' AS name");
+    expect(compiled.query).toContain("CAST(NULL, 'Nullable(String)') AS metadata");
+    expect(compiled.query).toContain("CAST(NULL, 'Nullable(String)') AS input");
+    expect(compiled.query).toContain('1 AS __metadata');
+
+    const candidatesProjection = /candidates AS \(\n\s*SELECT ([\s\S]*?)\n\s*FROM root_scope r/.exec(
+      compiled.query,
+    )?.[1];
+    const metadataProjection = /UNION ALL\nSELECT\n([\s\S]*?)\nFROM page_total/.exec(compiled.query)?.[1];
+    expect(candidatesProjection).toBeDefined();
+    expect(metadataProjection).toBeDefined();
+    const aliases = (projection: string | undefined) =>
+      Array.from(projection?.matchAll(/\bAS\s+([A-Za-z_][A-Za-z0-9_]*)/g) ?? [], match => match[1]);
+    expect(aliases(metadataProjection)).toEqual([
+      ...aliases(candidatesProjection),
+      '__row_position',
+      'total',
+      '__metadata',
+    ]);
+
+    expect(compiled.query_params).toMatchObject({ trace_query_3: 25, trace_query_4: 50 });
+    expect(compiled.sharedSnapshot).toBe(true);
+  });
+
   it('compiles thread qualification over full eligible roots with dependencies from both scopes', () => {
     const metadataKey = ` actor'role `;
     const metadataValue = `clinician' OR TRUE`;
@@ -485,6 +629,53 @@ describe('ClickHouse advanced trace query', () => {
       inputPreview: null,
     });
     expect(response.page.next).toBeNull();
+  });
+
+  it('returns exact list-compatible pagination metadata from one shared-snapshot query', async () => {
+    const json = vi.fn().mockResolvedValue([
+      { ...traceRow('trace-c', '2026-01-01T10:00:00.000Z'), total: '3', __metadata: 0 },
+      { total: '3', __metadata: 1 },
+    ]);
+    const query = vi.fn().mockResolvedValue({ json });
+    const response = await queryTraces(
+      { query } as unknown as ClickHouseClient,
+      plan({ pagination: { page: 1, perPage: 2 } }),
+      15_000,
+    );
+
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clickhouse_settings: expect.objectContaining({
+          max_execution_time: 15,
+          enable_shared_storage_snapshot_in_query: 1,
+        }),
+      }),
+    );
+    expect(response).toMatchObject({
+      traces: [{ traceId: 'trace-c' }],
+      pagination: { total: 3, page: 1, perPage: 2, hasMore: false },
+    });
+    expect(response).not.toHaveProperty('page');
+  });
+
+  it.each([
+    ['empty', 0, 0],
+    ['out-of-range', 3, 7],
+  ])('preserves totals for %s pages without trace rows', async (_case, page, total) => {
+    const json = vi.fn().mockResolvedValue([{ total: String(total), __metadata: 1 }]);
+    const query = vi.fn().mockResolvedValue({ json });
+
+    const response = await queryTraces(
+      { query } as unknown as ClickHouseClient,
+      plan({ pagination: { page, perPage: 2 } }),
+      15_000,
+    );
+
+    expect(response).toEqual({
+      traces: [],
+      pagination: { total, page, perPage: 2, hasMore: false },
+    });
   });
 
   it('reuses the execution timeout and returns fixed thread identities with a next cursor', async () => {

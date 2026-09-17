@@ -9,7 +9,7 @@
   },
   "recordings": [
     {
-      "hash": "16fdf8601e8ee188",
+      "hash": "50b117f094035672",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -51,6 +51,17 @@
                     ],
                     "additionalProperties": false
                   },
+                  "suspendedToolCallId": {
+                    "description": "The toolCallId of the suspended tool to resume",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "suspendedToolRunId": {
                     "description": "The runId of the suspended tool",
                     "anyOf": [
@@ -75,12 +86,14 @@
                 },
                 "required": [
                   "inputData",
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#",
                 "x-optional": [
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ]
@@ -266,7 +279,7 @@
       }
     },
     {
-      "hash": "7ae46a79bab42937",
+      "hash": "0b8b979c8044a1b5",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -317,6 +330,17 @@
                     ],
                     "additionalProperties": false
                   },
+                  "suspendedToolCallId": {
+                    "description": "The toolCallId of the suspended tool to resume",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "suspendedToolRunId": {
                     "description": "The runId of the suspended tool",
                     "anyOf": [
@@ -341,12 +365,14 @@
                 },
                 "required": [
                   "inputData",
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#",
                 "x-optional": [
+                  "suspendedToolCallId",
                   "suspendedToolRunId",
                   "resumeData"
                 ]

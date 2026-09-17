@@ -22,7 +22,8 @@
     "qwen3.6-plus",
     "qwen3.7-plus",
     "qwen3.8-flash",
-    "qwen3.8-max"
+    "qwen3.8-max",
+    "union-alpha"
   ],
   "temperature": [
     "deepseek-v4-flash",

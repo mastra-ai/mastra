@@ -5,7 +5,6 @@
  * semantic (vector), and combined hybrid search across indexed content.
  */
 
-import { pMap } from '../../utils/p-map';
 import type { MastraVector, VectorFilter } from '../../vector';
 import type { LineRange } from '../line-utils';
 
@@ -421,6 +420,7 @@ export class SearchEngine {
     // already batches at flush time, and a single-text embedder gains nothing from grouping.
     const embedder = this.#vectorConfig?.embedder;
     if (!embedder || this.#lazyVectorIndex || !isBatchEmbedder(embedder)) {
+      const pMap = (await import('p-map')).default;
       await pMap(docs, doc => this.index(doc), { stopOnError, concurrency });
       return;
     }
@@ -460,6 +460,7 @@ export class SearchEngine {
     // and upserts against an index that may still be under construction.
     await runGroup(groups[0]!);
     if (groups.length > 1) {
+      const pMap = (await import('p-map')).default;
       await pMap(groups.slice(1), runGroup, { stopOnError, concurrency });
     }
 
@@ -702,6 +703,7 @@ export class SearchEngine {
     }
     if (texts.length === 0) return [];
 
+    const pMap = (await import('p-map')).default;
     const { embedder } = this.#vectorConfig;
 
     if (isBatchEmbedder(embedder)) {
@@ -711,6 +713,7 @@ export class SearchEngine {
       if (texts.length <= max) {
         return embedder(texts);
       }
+
       // Chunk by maxBatchSize and run chunks in parallel up to DEFAULT_INDEX_MANY_CONCURRENCY.
       const results = await pMap(chunkItems(texts, max), chunk => embedder(chunk), {
         concurrency: DEFAULT_INDEX_MANY_CONCURRENCY,
@@ -776,6 +779,7 @@ export class SearchEngine {
   async #flushVectorBatch(docs: IndexDocument[]): Promise<void> {
     if (!this.#vectorConfig || docs.length === 0) return;
 
+    const pMap = (await import('p-map')).default;
     const { embedder } = this.#vectorConfig;
 
     if (!isBatchEmbedder(embedder)) {

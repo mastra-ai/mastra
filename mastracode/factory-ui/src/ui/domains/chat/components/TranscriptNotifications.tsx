@@ -1,16 +1,13 @@
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ChatNotification } from '@mastra/playground-ui/components/ai/chat-event';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Bell, CircleDot, ExternalLink } from 'lucide-react';
+import { Bell, CircleDot } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import type { MessageEntry, NotificationEntry, NotificationSummaryEntry } from '../services/transcript';
 import { parseSkillActivation } from './SkillMessage';
-import { isRecord, truncate } from './transcript-shared';
+import { isRecord } from './transcript-shared';
 import { signalPartsText } from './TranscriptSignals';
-import { ROW_RAIL, ROW_TRIGGER, TranscriptRow } from './TranscriptRow';
 
 function notificationUrl(entry: NotificationEntry): string | undefined {
   const targetUrl = entry.metadata?.targetUrl;
@@ -39,76 +36,22 @@ function notificationPresentation(entry: NotificationEntry): { state: string; ic
   return { state: 'notification', icon: <Bell size={13} />, className: 'text-warning1' };
 }
 
-/** Collapsible row mirroring the ToolCard shape: chevron + label + preview + state icon. */
-function NotificationRow({
-  state,
-  label,
-  message,
-  icon,
-  url,
-}: {
-  state: string;
-  label: string;
-  message: string;
-  icon: ReactNode;
-  url?: string;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <Collapsible
-      open={expanded}
-      onOpenChange={setExpanded}
-      className="max-w-full min-w-0"
-      data-notification-state={state}
-      role="group"
-      aria-label={`Notification: ${label}`}
-    >
-      <CollapsibleTrigger className={ROW_TRIGGER}>
-        <TranscriptRow icon={icon} label={label} detail={truncate(message, 72)} expanded={expanded} />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="max-w-full min-w-0">
-        <div className={cn(ROW_RAIL, 'flex flex-col gap-2')}>
-          <Txt variant="ui-sm">{message}</Txt>
-          {url && (
-            <a
-              href={url}
-              target="_blank"
-              rel="noreferrer"
-              aria-label={`Open notification target: ${message}`}
-              className="text-ui-xs text-icon3 hover:text-icon5 flex w-fit items-center gap-1"
-            >
-              Open on GitHub
-              <ExternalLink size={12} aria-hidden />
-            </a>
-          )}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
 export function NotificationCard({ entry }: { entry: NotificationEntry }) {
   const presentation = notificationPresentation(entry);
+  const url = notificationUrl(entry);
   return (
-    <NotificationRow
+    <ChatNotification
       state={presentation.state}
       label={entry.source ?? 'notification'}
       message={entry.message}
       icon={<span className={cn('flex items-center', presentation.className)}>{presentation.icon}</span>}
-      url={notificationUrl(entry)}
+      link={url ? { href: url, label: 'Open on GitHub' } : undefined}
     />
   );
 }
 
 export function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry }) {
-  return (
-    <NotificationRow
-      state="summary"
-      label="Notification summary"
-      message={entry.message}
-      icon={<Bell size={13} className="text-warning1" />}
-    />
-  );
+  return <ChatNotification state="summary" label="Notification summary" message={entry.message} />;
 }
 
 export function notificationMetadata(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {
@@ -158,12 +101,6 @@ export function notificationMetadata(entry: MessageEntry): Array<NotificationEnt
   return notifications;
 }
 
-/**
- * Persisted notification signals are DB-native `role: 'signal'` rows whose
- * original signal payload lives under `content.metadata.signal` (see
- * `signalToDBMessage` in @mastra/core). Rebuild notification cards from it so
- * they survive transcript hydration.
- */
 export function isSkillNotificationSignal(entry: MessageEntry): boolean {
   if (entry.message.role !== 'signal') return false;
   const signal = entry.message.content.metadata?.signal;

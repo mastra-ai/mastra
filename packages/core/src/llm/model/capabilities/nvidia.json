@@ -124,6 +124,7 @@
     "thinkingmachines/inkling",
     "upstage/solar-10.7b-instruct",
     "z-ai/glm-5.2",
+    "z-ai/glm-5.3",
     "z-ai/glm-5.3-flash"
   ],
   "structuredOutput": [
@@ -157,6 +158,7 @@
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-397b-a17b",
     "z-ai/glm-5.2",
+    "z-ai/glm-5.3",
     "z-ai/glm-5.3-flash"
   ]
 }
