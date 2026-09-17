@@ -150,7 +150,7 @@
     "build:publish": "pnpm build && yalc push",
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006 --no-open",
-    "build-storybook": "storybook build"
+    "build-storybook": "pnpm -w build:core && storybook build"
   },
   "keywords": [
     "mastra",

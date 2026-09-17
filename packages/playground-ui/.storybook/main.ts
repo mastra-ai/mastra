@@ -18,21 +18,26 @@ const config: StorybookConfig = {
     reactDocgen: 'react-docgen-typescript',
   },
   viteFinal: config =>
-    mergeConfig(config, {
-      // Workspace-linked core dist files are otherwise served as source and fed to
-      // react-docgen, which cannot parse them; pre-bundling skips that transform.
-      optimizeDeps: {
-        include: ['@mastra/core/observability'],
+    mergeConfig(
+      {
+        ...config,
+        // Components are TypeScript: keep their docgen plugin, but skip the JS
+        // fallback, which otherwise parses workspace dependencies' generated dist.
+        plugins: config.plugins?.filter(
+          plugin => !plugin || !('name' in plugin) || plugin.name !== 'storybook:react-docgen-plugin',
+        ),
       },
-      resolve: {
-        alias: [
-          {
-            find: /^@mastra\/react$/,
-            replacement: fileURLToPath(new URL('./mocks/mastra-react.ts', import.meta.url)),
-          },
-        ],
+      {
+        resolve: {
+          alias: [
+            {
+              find: /^@mastra\/react$/,
+              replacement: fileURLToPath(new URL('./mocks/mastra-react.ts', import.meta.url)),
+            },
+          ],
+        },
       },
-    }),
+    ),
 };
 
 export default config;
