@@ -13,6 +13,7 @@ import { ProcessorRunner } from '../../../../processors/runner';
 import type { ChunkType } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
 import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
+import { ToolStream } from '../../../../tools/stream';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
 import { createStep } from '../../../../workflows/workflow';
@@ -898,6 +899,14 @@ export function createDurableToolCallStep() {
       // cancellation (mirrors the non-durable tool-call-step).
       const toolAbortSignal = registryEntry?.abortSignal;
 
+      // Provide outputWriter so context.writer.write() / context.writer.custom()
+      // emit chunks through pubsub (matching the regular agent's tool streaming).
+      const outputWriter = pubsub
+        ? async (chunk: any) => {
+            await emitChunkEvent(pubsub, runId, chunk as ChunkType);
+          }
+        : undefined;
+
       const toolOptions = {
         toolCallId,
         messages: [],
@@ -920,13 +929,12 @@ export function createDurableToolCallStep() {
           ? { suspendPayload: (suspendData as { toolCallSuspended?: unknown }).toolCallSuspended }
           : {}),
         ...(toolAbortSignal ? { abortSignal: toolAbortSignal } : {}),
-        // Provide outputWriter so context.writer.write() / context.writer.custom()
-        // emit chunks through pubsub (matching the regular agent's tool streaming).
-        outputWriter: pubsub
-          ? async (chunk: any) => {
-              await emitChunkEvent(pubsub, runId, chunk as ChunkType);
-            }
-          : undefined,
+        outputWriter,
+        // Raw `Tool` instances resolved from the Mastra registry (the cross-process
+        // fallback path) are not wrapped by CoreToolBuilder, so they only get a
+        // `writer` if we construct it here — mirrors the non-durable tool-call-step.
+        // Registry tools go through CoreToolBuilder, which builds its own ToolStream.
+        writer: new ToolStream({ prefix: 'tool', callId: toolCallId, name: toolName, runId }, outputWriter),
 
         // In-execution suspend callback — allows tools to suspend mid-execution
         suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions) => {

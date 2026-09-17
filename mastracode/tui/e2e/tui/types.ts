@@ -121,6 +121,7 @@ export type ScenarioName =
   | 'notification-inbox-crud-flow'
   | 'notification-inbox-reload'
   | 'notification-inbox-tool-flow'
+  | 'notification-signal-interrupt'
   | 'notification-signal-rendering'
   | 'notify-input-request-hook'
   | 'om-settings'

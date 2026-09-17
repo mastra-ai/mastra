@@ -361,7 +361,7 @@ describe('ThreadViewByTrace', () => {
 
       fireEvent.click(within(toolBadge).getAllByRole('button')[0]!);
 
-      expect(spanLabel('Recipe lookup').className).not.toContain('bg-surface4');
+      expect(spanLabel('Recipe lookup').getAttribute('aria-selected')).toBe('false');
       expect(screen.queryByRole('button', { name: /close/i })).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
@@ -386,8 +386,8 @@ describe('ThreadViewByTrace', () => {
       // Highlighting is a timeline-only affordance: no span is selected and the panel stays closed,
       // so opening a span remains the user's own click.
       expect(screen.queryByRole('button', { name: /close/i })).toBeNull();
-      expect(spanLabel('Recipe lookup').className).not.toContain('bg-surface4');
-      expect(spanLabel('Chef agent run').className).not.toContain('bg-surface4');
+      expect(spanLabel('Recipe lookup').getAttribute('aria-selected')).toBe('false');
+      expect(spanLabel('Chef agent run').getAttribute('aria-selected')).toBe('false');
       // The most specific span behind the message (last id, deepest in the tree) is brought into
       // view, since it is the one most likely to sit below the fold — not the root.
       expect(scrollIntoView).toHaveBeenCalledTimes(1);
@@ -441,7 +441,7 @@ describe('ThreadViewByTrace', () => {
       expect(spanLabel('Recipe lookup').className).toContain('opacity-30');
 
       // Highlighting does not open the panel, so open a span by hand and then close it.
-      fireEvent.click(within(spanLabel('Recipe lookup')).getByRole('button', { name: 'Recipe lookup' }));
+      fireEvent.click(spanLabel('Recipe lookup'));
       fireEvent.click(await screen.findByRole('button', { name: /close/i }));
       await waitFor(() => expect(spanLabel('Recipe lookup').className).not.toContain('opacity-30'));
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));

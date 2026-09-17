@@ -12,7 +12,7 @@ import fsExtra, { copy, ensureDir, emptyDir, readJSON } from 'fs-extra/esm';
 import type { InputOptions, OutputOptions } from 'rollup';
 import { glob } from 'tinyglobby';
 import { analyzeBundle } from '../build/analyze';
-import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
+import { createBundler as createBundlerUtil, getInputOptions, getUnresolvedWorkspaceImport } from '../build/bundler';
 import { getBundlerOptions } from '../build/bundlerOptions';
 import type { BundlerOptions, ExternalDependencyInfo } from '../build/types';
 import type { BundlerPlatform } from '../build/utils';
@@ -740,11 +740,21 @@ export abstract class Bundler extends MastraBundler {
         projectRoot,
       );
 
+      const unresolvedWorkspaceImports: Array<{ source: string }> = [];
+
       const bundler = await this.createBundler(
         {
           ...inputOptions,
           logLevel: inputOptions.logLevel === 'silent' ? 'warn' : inputOptions.logLevel,
           onwarn: warning => {
+            const unresolvedWorkspaceDep = getUnresolvedWorkspaceImport(
+              warning as { code: string; source?: string; id?: string },
+              analyzedBundleInfo.workspaceMap,
+            );
+            if (unresolvedWorkspaceDep) {
+              unresolvedWorkspaceImports.push({ source: unresolvedWorkspaceDep });
+            }
+
             if (warning.code === 'CIRCULAR_DEPENDENCY') {
               if (warning.ids?.[0]?.includes('node_modules')) {
                 return;
@@ -766,6 +776,16 @@ export abstract class Bundler extends MastraBundler {
       );
 
       await bundler.write();
+
+      if (unresolvedWorkspaceImports.length > 0) {
+        const importList = unresolvedWorkspaceImports.map(i => `  - ${i.source}`).join('\n');
+        throw new MastraError({
+          id: 'DEPLOYER_BUNDLER_UNRESOLVED_WORKSPACE_IMPORT',
+          text: `Workspace imports could not be resolved during bundling:\n${importList}\n\nThis means the analyzer did not capture these workspace subpath imports during the analysis phase. Try adding the package as a direct dependency of the app, or check the workspace configuration.`,
+          domain: ErrorDomain.DEPLOYER,
+          category: ErrorCategory.SYSTEM,
+        });
+      }
       const toolImports: string[] = [];
       const toolsExports: string[] = [];
       Array.from(Object.keys(inputOptions.input || {}))

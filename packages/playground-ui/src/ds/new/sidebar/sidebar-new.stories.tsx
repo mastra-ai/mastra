@@ -39,15 +39,15 @@ function SidebarNewStory() {
   }
 
   return (
-    <div className="bg-surface1 flex h-dvh w-dvw">
-      <SidebarNew className="border-border1 bg-surface2 border-r">
+    <div className="new-theme bg-background flex h-dvh w-dvw">
+      <SidebarNew className="border-border border-r">
         <SidebarNew.Header>
           {state === 'collapsed' ? (
             <SidebarNew.Trigger />
           ) : (
             <>
               <SidebarNew.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra" />
-              <span className="bg-surface4 text-ui-xs text-neutral4 inline-flex h-5 items-center rounded-full px-2">
+              <span className="bg-muted text-ui-xs text-muted-foreground inline-flex h-5 items-center rounded-full px-2">
                 Staging
               </span>
               <SidebarNew.Trigger />
@@ -125,15 +125,19 @@ function SidebarNewStory() {
                 }
               />
             </SidebarNew.NavList>
-            <DropdownMenu.Content align="start" sideOffset={8} className="w-64">
-              <div className="text-ui-xs text-neutral3 px-2 py-1">justin@mastra.ai</div>
+            <DropdownMenu.Content
+              align="start"
+              sideOffset={8}
+              className="new-theme border-border bg-popover text-foreground w-64"
+            >
+              <div className="text-ui-xs text-muted-foreground px-2 py-1">justin@mastra.ai</div>
               <DropdownMenu.Separator />
               <DropdownMenu.Item onSelect={() => openSettings('account-settings')}>
                 <Settings />
                 Account settings
               </DropdownMenu.Item>
               <DropdownMenu.Separator />
-              <div className="text-ui-xs text-neutral3 px-2 py-1">Mastra</div>
+              <div className="text-ui-xs text-muted-foreground px-2 py-1">Mastra</div>
               <DropdownMenu.Item onSelect={() => openSettings('organization-settings')}>
                 <Users />
                 Organization settings
@@ -145,8 +149,8 @@ function SidebarNewStory() {
 
       <main className="min-w-0 flex-1 p-6">
         <SidebarNew.MobileTrigger className="mb-4" />
-        <h1 className="text-header-md text-neutral6 font-medium">Main content</h1>
-        <p className="text-ui-md text-neutral4 mt-2">
+        <h1 className="text-header-md text-foreground font-medium">Main content</h1>
+        <p className="text-ui-md text-muted-foreground mt-2">
           Primary navigation remains grouped. Account and organization settings take over only the sidebar body.
         </p>
       </main>
