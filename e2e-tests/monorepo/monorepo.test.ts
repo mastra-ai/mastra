@@ -1171,12 +1171,7 @@ export const mastra = new Mastra({
             const result = cliPath ? await execaNode(cliPath, args, options) : await execa(pkgManager, args, options);
             expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
             const outputDigests = await getDirectoryDigests(outputRoot);
-            return Object.fromEntries(
-              Object.entries(outputDigests).filter(
-                ([path]) =>
-                  path === 'mastra.mjs' || path === 'tools.mjs' || (path.startsWith('tools/') && path.endsWith('.mjs')),
-              ),
-            );
+            return Object.fromEntries(Object.entries(outputDigests).filter(([path]) => path.endsWith('.mjs')));
           };
 
           const first = await build(appDir, ['build'], join(appDir, '.mastra', 'output'));
