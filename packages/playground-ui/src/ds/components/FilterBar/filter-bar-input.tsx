@@ -3,13 +3,13 @@ import type { BaseUIEvent } from '@base-ui/react/types';
 import { SearchIcon } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
+import { FilterBarPopup } from './animation/filter-bar-popup';
 import { FilterBarAddButton } from './filter-bar-add-button';
 import { FilterBarFieldLabel, formatValue } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
 import { FilterBarDraftChip } from './filter-bar-draft-chip';
 import { FilterBarOptionList } from './filter-bar-option-list';
 import { matchesQueryFilter } from './match-query';
-import { FilterBarPopup } from './motion/filter-bar-popup';
 import type { FilterBarField, FilterBarOperator, FilterBarOption, FilterBarValue } from './types';
 import { useValueStep } from './use-value-step';
 import { Button } from '@/ds/components/Button/Button';
@@ -296,7 +296,7 @@ export function FilterBarInput({
         ) : (
           inputControl
         )}
-        <FilterBarPopup open={open} inputRef={inputRef} buttonRef={buttonRef}>
+        <FilterBarPopup inputRef={inputRef} buttonRef={buttonRef}>
           {isButton && (
             <div className={comboboxStyles.searchContainer}>
               <SearchIcon aria-hidden className={comboboxStyles.searchIcon} />

@@ -1,12 +1,9 @@
 import { Combobox as ComboboxPrimitive } from '@base-ui/react/combobox';
 import { PlusIcon } from 'lucide-react';
-import { AnimatePresence, useReducedMotion } from 'motion/react';
-import * as m from 'motion/react-m';
 import type { CSSProperties, ReactNode, Ref } from 'react';
+import styles from './animation/filter-bar-animation.module.css';
 import { FilterBarFieldLabel, fieldSegmentAccentStyle, segmentClass } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
-import styles from './motion/filter-bar-motion.module.css';
-import { filterTransition } from './motion/transitions';
 import type { FilterBarField, FilterBarOperator } from './types';
 import { buttonVariants } from '@/ds/components/Button/Button';
 import { cn } from '@/lib/utils';
@@ -29,7 +26,6 @@ export function FilterBarAddButton({
   className,
 }: FilterBarAddButtonProps) {
   const ctx = useFilterBarContext();
-  const reduceMotion = useReducedMotion();
   const isCompact = ctx.items.length > 0 && !field;
 
   return (
@@ -52,16 +48,12 @@ export function FilterBarAddButton({
       }}
     >
       {isCompact ? (
-        <m.span
+        <span
           key="compact"
-          layout="position"
-          initial={reduceMotion ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={filterTransition}
-          className={cn(buttonVariants({ variant: 'ghost', size: 'icon-md' }), 'transition-colors')}
+          className={cn(buttonVariants({ variant: 'ghost', size: 'icon-md' }), 'transition-colors', styles.compact)}
         >
           <PlusIcon aria-hidden className="size-3" />
-        </m.span>
+        </span>
       ) : (
         <FilterBarAddSegments
           key="expanded"
@@ -86,36 +78,34 @@ function FilterBarAddSegments({
 
   return (
     <span className="h-form-md relative flex max-w-full items-stretch">
-      <AnimatePresence initial={false} mode="popLayout">
-        <FilterBarAddSegment key="field" style={fieldSegmentAccentStyle(field)}>
-          {field ? (
-            <FilterBarFieldLabel field={field} />
-          ) : (
-            <>
-              <span className="truncate">{label}</span>
-              <PlusIcon aria-hidden className="ml-1 size-3 shrink-0" />
-            </>
-          )}
+      <FilterBarAddSegment key="field" style={fieldSegmentAccentStyle(field)}>
+        {field ? (
+          <FilterBarFieldLabel field={field} />
+        ) : (
+          <>
+            <span className="truncate">{label}</span>
+            <PlusIcon aria-hidden className="ml-1 size-3 shrink-0" />
+          </>
+        )}
+      </FilterBarAddSegment>
+      {field && !operatorImplied && (
+        <FilterBarAddSegment
+          key="operator"
+          joined={operator !== undefined}
+          className={!operator ? 'text-neutral3' : undefined}
+        >
+          <span className="truncate">{operator?.label ?? 'Operator…'}</span>
         </FilterBarAddSegment>
-        {field && !operatorImplied && (
-          <FilterBarAddSegment
-            key="operator"
-            joined={operator !== undefined}
-            className={!operator ? 'text-neutral3' : undefined}
-          >
-            <span className="truncate">{operator?.label ?? 'Operator…'}</span>
-          </FilterBarAddSegment>
-        )}
-        {operator && (
-          <FilterBarAddSegment
-            key="value"
-            joined={selectedValueLabel !== undefined}
-            className={selectedValueLabel === undefined ? 'text-neutral3' : undefined}
-          >
-            <span className="truncate">{selectedValueLabel ?? 'Value…'}</span>
-          </FilterBarAddSegment>
-        )}
-      </AnimatePresence>
+      )}
+      {operator && (
+        <FilterBarAddSegment
+          key="value"
+          joined={selectedValueLabel !== undefined}
+          className={selectedValueLabel === undefined ? 'text-neutral3' : undefined}
+        >
+          <span className="truncate">{selectedValueLabel ?? 'Value…'}</span>
+        </FilterBarAddSegment>
+      )}
     </span>
   );
 }
@@ -124,23 +114,15 @@ function FilterBarAddSegment({
   children,
   className,
   style,
-  ref,
   joined = false,
 }: {
   children: ReactNode;
   className?: string;
   style?: CSSProperties;
-  ref?: Ref<HTMLSpanElement>;
   joined?: boolean;
 }) {
   return (
-    <m.span
-      ref={ref}
-      layout="position"
-      initial={false}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={filterTransition}
+    <span
       data-slot="filter-bar-add-segment"
       data-joined={joined || undefined}
       className={cn(
@@ -152,6 +134,6 @@ function FilterBarAddSegment({
       style={style}
     >
       {children}
-    </m.span>
+    </span>
   );
 }

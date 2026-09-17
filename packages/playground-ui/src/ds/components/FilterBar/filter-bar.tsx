@@ -1,20 +1,15 @@
 import { ListFilterIcon } from 'lucide-react';
-import { AnimatePresence, LayoutGroup, LazyMotion, MotionConfig } from 'motion/react';
-import * as m from 'motion/react-m';
 import type { ReactNode } from 'react';
+import { FilterBarAnimatedChips } from './animation/filter-bar-animated-chips';
+import styles from './animation/filter-bar-animation.module.css';
 import { FilterBarChip } from './filter-bar-chip';
 import { FilterBarClear } from './filter-bar-clear';
 import { FilterBarProvider, useFilterBarContext } from './filter-bar-context';
 import { FilterBarInput } from './filter-bar-input';
-import { FilterBarAnimatedChip } from './motion/filter-bar-animated-chip';
-import styles from './motion/filter-bar-motion.module.css';
-import { filterTransition } from './motion/transitions';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from './types';
 import { inputFocusBorderWithin, inputHoverBorderWithin } from '@/ds/primitives/form-element';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
-
-const loadFilterMotion = () => import('./motion/features').then(module => module.default);
 
 export type FilterBarProps = {
   fields: FilterBarField[];
@@ -40,8 +35,7 @@ function FilterBarSurface({
   const ctx = useFilterBarContext();
   const isButton = ctx.variant === 'button';
   return (
-    <m.div
-      layout={isButton ? 'size' : false}
+    <div
       role="group"
       aria-label={ctx.ariaLabel}
       data-slot="filter-bar"
@@ -79,7 +73,7 @@ function FilterBarSurface({
         </span>
       )}
       <VisuallyHidden aria-live="polite">{ctx.announcement}</VisuallyHidden>
-    </m.div>
+    </div>
   );
 }
 
@@ -94,11 +88,6 @@ export function FilterBar({
   className,
   children,
 }: FilterBarProps) {
-  const surface = (
-    <FilterBarSurface className={className} clearLabel={clearLabel}>
-      {children}
-    </FilterBarSurface>
-  );
   return (
     <FilterBarProvider
       fields={fields}
@@ -108,15 +97,9 @@ export function FilterBar({
       ariaLabel={ariaLabel}
       variant={variant}
     >
-      {variant === 'button' ? (
-        <LazyMotion features={loadFilterMotion} strict>
-          <MotionConfig reducedMotion="user" transition={filterTransition}>
-            <LayoutGroup>{surface}</LayoutGroup>
-          </MotionConfig>
-        </LazyMotion>
-      ) : (
-        surface
-      )}
+      <FilterBarSurface className={className} clearLabel={clearLabel}>
+        {children}
+      </FilterBarSurface>
     </FilterBarProvider>
   );
 }
@@ -124,13 +107,7 @@ export function FilterBar({
 export function FilterBarChips() {
   const ctx = useFilterBarContext();
   if (ctx.variant === 'button') {
-    return (
-      <AnimatePresence initial={false} mode="popLayout">
-        {ctx.items.map(item => (
-          <FilterBarAnimatedChip key={item.id} item={item} />
-        ))}
-      </AnimatePresence>
-    );
+    return <FilterBarAnimatedChips />;
   }
   return (
     <>

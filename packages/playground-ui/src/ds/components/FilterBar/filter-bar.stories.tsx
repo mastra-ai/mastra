@@ -128,7 +128,7 @@ export const Button: Story = {
     docs: {
       description: {
         story:
-          'Set `variant="button"` on `FilterBar` to use an **Add filter +** button. Keep the same `FilterBar.Chips` and `FilterBar.Input` children: search moves into the popover. Picking a field and operator advances automatically, revealing each segment. Applying a value returns focus to a compact ghost **+**. Filters are removed individually. Escape steps back; dismissing discards the draft. Quick spring transitions and staggered options respect reduced motion.',
+          'Set `variant="button"` on `FilterBar` to use an **Add filter +** button. Keep the same `FilterBar.Chips` and `FilterBar.Input` children: search moves into the popover. Picking a field and operator advances automatically, revealing each segment. Applying a value returns focus to a compact ghost **+**. Filters are removed individually. Escape steps back; dismissing discards the draft. Quick native transitions and staggered options respect reduced motion.',
       },
     },
   },
