@@ -1,5 +1,5 @@
 import { cn } from '@mastra/playground-ui/utils/cn';
-import type { VoiceAgentState, VoiceCallControls, VoiceCaptionSegment } from '../types';
+import type { VoiceCallControls, VoiceCallStatus, VoiceAgentState, VoiceCaptionSegment } from '../types';
 
 const AGENT_STATE_LABELS: Record<VoiceAgentState, string> = {
   initializing: 'Connecting…',
@@ -8,8 +8,10 @@ const AGENT_STATE_LABELS: Record<VoiceAgentState, string> = {
   speaking: 'Speaking…',
 };
 
-export interface VoiceCallPanelProps {
-  voiceCall: VoiceCallControls;
+export interface VoiceCallPanelViewProps {
+  status: VoiceCallStatus;
+  agentState: VoiceAgentState;
+  captions: VoiceCaptionSegment[];
 }
 
 const lastSegmentByRole = (segments: VoiceCaptionSegment[], role: 'user' | 'agent') => {
@@ -19,12 +21,12 @@ const lastSegmentByRole = (segments: VoiceCaptionSegment[], role: 'user' | 'agen
   return undefined;
 };
 
-export const VoiceCallPanel = ({ voiceCall }: VoiceCallPanelProps) => {
-  if (voiceCall.status === 'idle') return null;
+export const VoiceCallPanelView = ({ status, agentState, captions }: VoiceCallPanelViewProps) => {
+  if (status === 'idle') return null;
 
-  const lastUserCaption = lastSegmentByRole(voiceCall.captions, 'user');
-  const lastAgentCaption = lastSegmentByRole(voiceCall.captions, 'agent');
-  const stateLabel = voiceCall.status === 'connecting' ? 'Connecting…' : AGENT_STATE_LABELS[voiceCall.agentState];
+  const lastUserCaption = lastSegmentByRole(captions, 'user');
+  const lastAgentCaption = lastSegmentByRole(captions, 'agent');
+  const stateLabel = status === 'connecting' ? 'Connecting…' : AGENT_STATE_LABELS[agentState];
 
   return (
     <div
@@ -34,10 +36,10 @@ export const VoiceCallPanel = ({ voiceCall }: VoiceCallPanelProps) => {
       <div className="flex items-center gap-2">
         <span
           className={cn(
-            'h-2 w-2 rounded-full',
-            voiceCall.status === 'connecting' && 'bg-neutral3',
-            voiceCall.status === 'active' && voiceCall.agentState === 'speaking' && 'bg-accent1 animate-pulse',
-            voiceCall.status === 'active' && voiceCall.agentState !== 'speaking' && 'bg-green-500',
+            'size-2 rounded-full',
+            status === 'connecting' && 'bg-neutral3',
+            status === 'active' && agentState === 'speaking' && 'bg-accent1 motion-safe:animate-pulse',
+            status === 'active' && agentState !== 'speaking' && 'bg-accent1',
           )}
         />
         <span className="text-ui-sm text-neutral4">{stateLabel}</span>
@@ -55,3 +57,11 @@ export const VoiceCallPanel = ({ voiceCall }: VoiceCallPanelProps) => {
     </div>
   );
 };
+
+export interface VoiceCallPanelProps {
+  voiceCall: VoiceCallControls;
+}
+
+export const VoiceCallPanel = ({ voiceCall }: VoiceCallPanelProps) => (
+  <VoiceCallPanelView status={voiceCall.status} agentState={voiceCall.agentState} captions={voiceCall.captions} />
+);

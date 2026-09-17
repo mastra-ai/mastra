@@ -4,8 +4,10 @@
 @source './fixtures';
 
 @source '../../playground/.storybook';
-@source '../../playground/src/domains/agents/components/composer-model-picker-view.tsx';
+@source '../../playground/src/domains/voice/components';
+@source '../../playground/src/domains/agents/components';
 @source '../../playground/src/lib/ai-ui/composer-action-row.tsx';
+@source '../../playground/src/lib/ai-ui/attachments/attachment-picker.tsx';
 @source '../../../mastracode/factory-ui/.storybook';
 @source '../../../mastracode/factory-ui/src/ui/domains/chat/components/StatusLine';
 @source '../../../mastracode/factory-ui/src/ui/domains/chat/components/ComposerActionRow.tsx';
