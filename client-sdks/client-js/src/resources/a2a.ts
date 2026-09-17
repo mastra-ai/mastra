@@ -388,7 +388,7 @@ export class A2AV1 extends BaseResource {
   }
 
   async sendMessage(params: SendMessageRequestV1): Promise<SendMessageResponseV1> {
-    const result = await this.rpc<unknown>('message/send', SendMessageRequestV1Codec.toJSON(params));
+    const result = await this.rpc<unknown>('SendMessage', SendMessageRequestV1Codec.toJSON(params));
     return SendMessageResponseV1Codec.fromJSON(result);
   }
 
@@ -399,7 +399,7 @@ export class A2AV1 extends BaseResource {
       body: {
         jsonrpc: '2.0',
         id: crypto.randomUUID(),
-        method: 'message/stream',
+        method: 'SendStreamingMessage',
         params: SendMessageRequestV1Codec.toJSON(params),
       },
       stream: true,
@@ -411,17 +411,17 @@ export class A2AV1 extends BaseResource {
   }
 
   async getTask(params: GetTaskRequestV1): Promise<TaskV1> {
-    const result = await this.rpc<unknown>('tasks/get', GetTaskRequestV1Codec.toJSON(params));
+    const result = await this.rpc<unknown>('GetTask', GetTaskRequestV1Codec.toJSON(params));
     return TaskV1Codec.fromJSON(result);
   }
 
   async listTasks(params: ListTasksRequestV1): Promise<ListTasksResponseV1> {
-    const result = await this.rpc<unknown>('tasks/list', ListTasksRequestV1Codec.toJSON(params));
+    const result = await this.rpc<unknown>('ListTasks', ListTasksRequestV1Codec.toJSON(params));
     return ListTasksResponseV1Codec.fromJSON(result);
   }
 
   async cancelTask(params: CancelTaskRequestV1): Promise<TaskV1> {
-    const result = await this.rpc<unknown>('tasks/cancel', CancelTaskRequestV1Codec.toJSON(params));
+    const result = await this.rpc<unknown>('CancelTask', CancelTaskRequestV1Codec.toJSON(params));
     return TaskV1Codec.fromJSON(result);
   }
 
@@ -432,7 +432,7 @@ export class A2AV1 extends BaseResource {
       body: {
         jsonrpc: '2.0',
         id: crypto.randomUUID(),
-        method: 'tasks/resubscribe',
+        method: 'SubscribeToTask',
         params: SubscribeToTaskRequestV1Codec.toJSON(params),
       },
       stream: true,
