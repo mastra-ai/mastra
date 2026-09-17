@@ -44,7 +44,7 @@ export function ModelPickerTrigger({
     <PopoverTrigger
       type="button"
       disabled={busy}
-      aria-label={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
+      aria-label={`Session model, ${label}${notConfigured ? ' is not configured' : ''}`}
       aria-busy={busy}
       className={cn(buttonVariants({ variant: 'ghost', size: 'xs' }), notConfigured ? 'text-accent2' : 'text-neutral3')}
       title={title}

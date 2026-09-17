@@ -1,7 +1,7 @@
 import { Skeleton } from '@/ds/components/Skeleton';
 
 export function ModelPickerLoading() {
-  return <Skeleton aria-label="Loading model" className="h-3.5 w-24" />;
+  return <Skeleton role="status" aria-label="Loading model" className="h-3.5 w-24" />;
 }
 
 export function ModelPickerUnavailable({ error }: { error: string }) {

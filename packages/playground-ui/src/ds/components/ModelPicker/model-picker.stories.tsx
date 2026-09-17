@@ -50,14 +50,19 @@ export const Combined: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const screen = within(canvasElement.ownerDocument.body);
-    await userEvent.click(canvas.getByRole('button', { name: 'Session model' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Session model, GPT-4.1' }));
     await userEvent.type(screen.getByRole('combobox'), 'sonnet');
     await userEvent.keyboard('{ArrowDown}{Enter}');
-    await expect(canvas.getByRole('button', { name: 'Session model' })).toHaveTextContent('Claude Sonnet 4.5');
+    await expect(canvas.getByRole('button', { name: 'Session model, Claude Sonnet 4.5' })).toBeVisible();
     await waitFor(() => expect(screen.queryByRole('combobox')).not.toBeInTheDocument());
   },
 };
-export const Loading: Story = { render: () => <ModelPickerLoading /> };
+export const Loading: Story = {
+  render: () => <ModelPickerLoading />,
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).getByRole('status', { name: 'Loading model' })).toBeVisible();
+  },
+};
 export const Unavailable: Story = {
   render: () => <ModelPickerUnavailable error="The model catalog could not be loaded." />,
 };

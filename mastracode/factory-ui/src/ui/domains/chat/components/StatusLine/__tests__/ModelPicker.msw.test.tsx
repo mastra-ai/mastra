@@ -20,7 +20,6 @@ import { ChatSessionContext } from '../../../context/ChatSessionContext';
 import type { ChatSessionContextApi } from '../../../context/ChatSessionContext';
 import { ModelPicker } from '../ModelPicker';
 
-// cmdk scrolls the highlighted option into view; jsdom has no scrollIntoView.
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
@@ -221,7 +220,6 @@ describe('ModelPicker', () => {
 
   describe('when the draft model fails to resolve', () => {
     it('shows the failure instead of a "No model" label', async () => {
-      // 'ready' status: the skeleton must not mask the resolution failure.
       renderDraftPicker({ projectFails: true, status: 'ready' });
 
       expect(await screen.findByLabelText('Model unavailable')).toBeInTheDocument();
@@ -254,14 +252,15 @@ describe('ModelPicker', () => {
         defaultModelId: 'anthropic/claude-sonnet-4-5',
       });
 
-      const trigger = await screen.findByLabelText('Session model');
+      const trigger = await screen.findByLabelText(/^Session model/);
       await waitFor(() => expect(trigger).toHaveTextContent('Claude Sonnet 4.5'));
+      expect(trigger).toHaveAccessibleName('Session model, Claude Sonnet 4.5');
 
       await user.click(trigger);
       await user.click(await screen.findByRole('option', { name: 'gpt-5.6-sol' }));
 
-      // The draft holds the choice locally until the first prompt creates the session.
       await waitFor(() => expect(trigger).toHaveTextContent('GPT-5.6 Sol'));
+      expect(trigger).toHaveAccessibleName('Session model, GPT-5.6 Sol');
     });
   });
 
@@ -273,7 +272,7 @@ describe('ModelPicker', () => {
         modelIds: ['anthropic/claude-sonnet-4-5', 'openai/gpt-5.6-sol'],
       });
 
-      await user.click(await screen.findByLabelText('Session model'));
+      await user.click(await screen.findByLabelText(/^Session model/));
       await user.click(await screen.findByRole('option', { name: 'gpt-5.6-sol' }));
 
       await waitForMutationsIdle(client);
@@ -286,7 +285,6 @@ describe('ModelPicker', () => {
         modelId: 'anthropic/claude-sonnet-4-5',
         modelIds: ['anthropic/claude-sonnet-4-5', 'openai/gpt-5.6-sol'],
       });
-      // Hold the switch request open so the in-flight state is observable.
       let release: () => void = () => {};
       server.use(
         http.post(
@@ -298,7 +296,7 @@ describe('ModelPicker', () => {
         ),
       );
 
-      const trigger = await screen.findByLabelText('Session model');
+      const trigger = await screen.findByLabelText(/^Session model/);
       await user.click(trigger);
       await user.click(await screen.findByRole('option', { name: 'gpt-5.6-sol' }));
 
@@ -322,7 +320,7 @@ describe('ModelPicker', () => {
         ),
       );
 
-      const trigger = await screen.findByLabelText('Session model');
+      const trigger = await screen.findByLabelText(/^Session model/);
       await user.click(trigger);
       await user.click(await screen.findByRole('option', { name: 'gpt-5.6-sol' }));
 
@@ -343,7 +341,7 @@ describe('ModelPicker', () => {
         activePackId: 'balanced',
       });
 
-      await user.click(await screen.findByLabelText('Session model'));
+      await user.click(await screen.findByLabelText(/^Session model/));
 
       expect(await screen.findByRole('option', { name: 'claude-sonnet-4-5' })).toBeInTheDocument();
       expect(screen.getByText('anthropic')).toBeInTheDocument();
@@ -362,7 +360,7 @@ describe('ModelPicker', () => {
         activePackId: 'balanced',
       });
 
-      await user.click(await screen.findByLabelText('Session model'));
+      await user.click(await screen.findByLabelText(/^Session model/));
 
       const defaultPack = await screen.findByRole('option', { name: /Model pack Balanced/ });
       expect(defaultPack).toHaveTextContent('Default');
@@ -387,12 +385,11 @@ describe('ModelPicker', () => {
         ),
       );
 
-      const trigger = await screen.findByLabelText('Session model');
+      const trigger = await screen.findByLabelText(/^Session model/);
       await user.click(trigger);
       await user.click(await screen.findByRole('option', { name: /Model pack Mine/ }));
 
       expect(await screen.findByText('Pack storage is unavailable')).toBeInTheDocument();
-      // pendingPackId must clear on failure so another attempt is possible.
       await waitFor(() => expect(trigger).toBeEnabled());
       expect(trigger).toHaveAttribute('aria-busy', 'false');
       expect(trigger).toHaveTextContent('Claude Sonnet 4.5');
@@ -426,7 +423,7 @@ describe('ModelPicker', () => {
         sessionPackId: 'mine',
       });
 
-      await user.click(await screen.findByLabelText('Session model'));
+      await user.click(await screen.findByLabelText(/^Session model/));
       await user.click(await screen.findByRole('option', { name: 'Reset to default pack' }));
 
       await waitForMutationsIdle(client);
@@ -442,7 +439,7 @@ describe('ModelPicker', () => {
         activePackId: 'balanced',
       });
 
-      await user.click(await screen.findByLabelText('Session model'));
+      await user.click(await screen.findByLabelText(/^Session model/));
 
       const manage = await screen.findByRole('option', { name: 'Manage model packs' });
       expect(screen.queryByRole('option', { name: 'Reset to default pack' })).not.toBeInTheDocument();
@@ -462,7 +459,7 @@ describe('ModelPicker', () => {
         activePackId: 'balanced',
       });
 
-      await user.click(await screen.findByLabelText('Session model'));
+      await user.click(await screen.findByLabelText(/^Session model/));
       await screen.findByRole('option', { name: 'gpt-4o-mini' });
       await screen.findByRole('option', { name: /Model pack Mine/ });
 
@@ -470,7 +467,6 @@ describe('ModelPicker', () => {
 
       expect(await screen.findByRole('option', { name: 'claude-sonnet-4-5' })).toBeInTheDocument();
       expect(screen.queryByRole('option', { name: 'gpt-4o-mini' })).not.toBeInTheDocument();
-      // The Balanced pack contains the sonnet model, so it stays; Mine does not.
       expect(screen.getByRole('option', { name: /Model pack Balanced/ })).toBeInTheDocument();
       expect(screen.queryByRole('option', { name: /Model pack Mine/ })).not.toBeInTheDocument();
     });
@@ -484,7 +480,7 @@ describe('ModelPicker', () => {
         activePackId: 'balanced',
       });
 
-      await user.click(await screen.findByLabelText('Session model'));
+      await user.click(await screen.findByLabelText(/^Session model/));
       await user.type(await screen.findByPlaceholderText('Search models and packs…'), 'zzz-nope');
 
       expect(await screen.findByText('No matching model.')).toBeInTheDocument();
@@ -501,7 +497,7 @@ describe('ModelPicker', () => {
         activePackId: 'balanced',
       });
 
-      await user.click(await screen.findByLabelText('Session model'));
+      await user.click(await screen.findByLabelText(/^Session model/));
       await screen.findByRole('option', { name: /Model pack Balanced/ });
 
       expect(await screen.findByText('anthropic')).toBeInTheDocument();
@@ -515,7 +511,7 @@ describe('ModelPicker', () => {
       const user = userEvent.setup();
       renderPicker({ modelId: 'anthropic/claude-sonnet-4-5', modelIds: ['anthropic/claude-sonnet-4-5'] });
 
-      await user.click(await screen.findByLabelText('Session model'));
+      await user.click(await screen.findByLabelText(/^Session model/));
 
       expect(await screen.findByText('Model choices apply to Build mode only.')).toBeInTheDocument();
       expect(screen.queryByText(/Packs set all three modes/)).not.toBeInTheDocument();
@@ -532,11 +528,9 @@ describe('ModelPicker', () => {
         activePackId: 'balanced',
       });
 
-      const trigger = await screen.findByLabelText('Session model');
+      const trigger = await screen.findByLabelText(/^Session model/);
       await waitFor(() => expect(trigger).toHaveAttribute('title', 'anthropic/claude-sonnet-4-5 · Balanced'));
 
-      // The effective model comes from the session-state query; seed it so we
-      // can prove activation invalidates it and the model refreshes.
       const stateKey = queryKeys.agentControllerConnectionState(AGENT_CONTROLLER_ID, 'session-1', undefined);
       client.setQueryData(stateKey, { modelId: 'anthropic/claude-sonnet-4-5' });
 
@@ -550,8 +544,6 @@ describe('ModelPicker', () => {
       );
       await waitForMutationsIdle(client);
       expect(trigger).toHaveAttribute('title', 'anthropic/claude-sonnet-4-5 · Mine');
-      // Activation must force the effective model to refetch — otherwise the
-      // picker would keep showing the pre-pack model indefinitely.
       expect(client.getQueryState(stateKey)?.isInvalidated).toBe(true);
     });
   });
