@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed CommonJS builds so Jest and other CommonJS consumers can load token counting, slug generation, and async mapping dependencies.
+CommonJS consumers can now use core token counting, slug generation, and workspace operations without ESM loading errors.

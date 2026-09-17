@@ -2,4 +2,4 @@
 '@mastra/memory': patch
 ---
 
-Fixed CommonJS builds so token counting no longer loads an ESM-only dependency at runtime.
+CommonJS consumers can now use memory token counting without ESM loading errors.
