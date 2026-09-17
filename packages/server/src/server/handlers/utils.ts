@@ -1,6 +1,7 @@
 import type { MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 import { MastraMemory } from '@mastra/core/memory';
+import { getFGAProvider } from '../auth/helpers';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, isReservedRequestContextKey } from '../constants';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
@@ -171,7 +172,7 @@ export async function enforceThreadAccess({
 }): Promise<void> {
   await validateThreadOwnership(thread, effectiveResourceId);
 
-  const fgaProvider = mastra?.getServer?.()?.fga;
+  const fgaProvider = getFGAProvider(mastra, requestContext);
   if (!fgaProvider) {
     return;
   }
@@ -188,6 +189,7 @@ export async function enforceThreadAccess({
     resourceId: thread?.resourceId ?? effectiveResourceId,
     requestContext,
     permission,
+    fgaProvider,
   });
 }
 
