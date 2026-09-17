@@ -978,7 +978,10 @@ export class MCPServer extends MCPServerBase {
 
   /**
    * Registers a request handler wrapped in an `MCP_SERVER_REQUEST` root span.
-   * The handler receives the span so nested runs can attach to it.
+   * The handler receives the span so nested runs can attach to it, plus the
+   * request context and `extra`. Handlers that gate on FGA resolve the mapped
+   * user themselves (`resolveMappedFGAUser`), so methods that never authorize a
+   * tool do not call `mapAuthInfoToUser` at all.
    */
   private setTracedHandler<M extends RequestMethod>(
     serverInstance: Server,
@@ -986,18 +989,22 @@ export class MCPServer extends MCPServerBase {
     handler: (
       request: RequestTypeMap[M],
       ctx: ServerContext,
-      trace: { requestSpan?: Span<SpanType.MCP_SERVER_REQUEST>; requestContext: RequestContext },
+      trace: {
+        requestSpan?: Span<SpanType.MCP_SERVER_REQUEST>;
+        requestContext: RequestContext;
+        extra: MCPRequestHandlerExtra;
+      },
     ) => Promise<HandlerResultTypeMap[M]>,
   ): void {
     serverInstance.setRequestHandler(method, async (request, ctx) => {
       const extra = toMCPRequestHandlerExtra(ctx);
-      const requestContext = await this.createProxiedRequestContext(extra);
+      const requestContext = this.createProxiedRequestContext(extra);
       const requestSpan = this.startRequestSpan(method, request.params as Record<string, unknown> | undefined, {
         extra,
         serverInstance,
         requestContext,
       });
-      return this.traceRequest(requestSpan, () => handler(request, ctx, { requestSpan, requestContext }));
+      return this.traceRequest(requestSpan, () => handler(request, ctx, { requestSpan, requestContext, extra }));
     });
   }
 
@@ -1085,40 +1092,45 @@ export class MCPServer extends MCPServerBase {
    */
   private registerHandlersOnServer(serverInstance: Server) {
     // List tools handler
-    this.setTracedHandler(serverInstance, 'tools/list', async (_request, _ctx, { requestContext: proxiedContext }) => {
-      const tools = await this.getAuthorizedConvertedToolEntries(proxiedContext);
-      return {
-        tools: tools.map(([, tool]) => {
-          const toolSpec: any = {
-            name: tool.id || 'unknown',
-            description: tool.description,
-            inputSchema: this.convertInputSchema(tool.parameters),
-          };
-          if (tool.outputSchema) {
-            toolSpec.outputSchema = this.convertSchema(tool.outputSchema);
-          }
-          // Include MCP tool annotations if present
-          if (tool.mcp?.annotations) {
-            toolSpec.annotations = tool.mcp.annotations;
-          }
-          const toolMeta = withMastraToolStrictMeta(tool.mcp?._meta, tool.strict);
-          if (toolMeta) {
-            // Normalize UI metadata for backward compatibility with older hosts:
-            // If _meta.ui.resourceUri is set, also set the legacy flat key and vice versa
-            const uiMeta = toolMeta.ui as { resourceUri?: string } | undefined;
-            const legacyUri = toolMeta[RESOURCE_URI_META_KEY] as string | undefined;
-            if (uiMeta?.resourceUri && !legacyUri) {
-              toolSpec._meta = { ...toolMeta, [RESOURCE_URI_META_KEY]: uiMeta.resourceUri };
-            } else if (legacyUri && !uiMeta?.resourceUri) {
-              toolSpec._meta = { ...toolMeta, ui: { ...((toolMeta.ui as object) ?? {}), resourceUri: legacyUri } };
-            } else {
-              toolSpec._meta = toolMeta;
+    this.setTracedHandler(
+      serverInstance,
+      'tools/list',
+      async (_request, _ctx, { requestContext: proxiedContext, extra }) => {
+        await this.resolveMappedFGAUser(proxiedContext, extra as unknown as Record<string, unknown>);
+        const tools = await this.getAuthorizedConvertedToolEntries(proxiedContext);
+        return {
+          tools: tools.map(([, tool]) => {
+            const toolSpec: any = {
+              name: tool.id || 'unknown',
+              description: tool.description,
+              inputSchema: this.convertInputSchema(tool.parameters),
+            };
+            if (tool.outputSchema) {
+              toolSpec.outputSchema = this.convertSchema(tool.outputSchema);
             }
-          }
-          return toolSpec;
-        }),
-      };
-    });
+            // Include MCP tool annotations if present
+            if (tool.mcp?.annotations) {
+              toolSpec.annotations = tool.mcp.annotations;
+            }
+            const toolMeta = withMastraToolStrictMeta(tool.mcp?._meta, tool.strict);
+            if (toolMeta) {
+              // Normalize UI metadata for backward compatibility with older hosts:
+              // If _meta.ui.resourceUri is set, also set the legacy flat key and vice versa
+              const uiMeta = toolMeta.ui as { resourceUri?: string } | undefined;
+              const legacyUri = toolMeta[RESOURCE_URI_META_KEY] as string | undefined;
+              if (uiMeta?.resourceUri && !legacyUri) {
+                toolSpec._meta = { ...toolMeta, [RESOURCE_URI_META_KEY]: uiMeta.resourceUri };
+              } else if (legacyUri && !uiMeta?.resourceUri) {
+                toolSpec._meta = { ...toolMeta, ui: { ...((toolMeta.ui as object) ?? {}), resourceUri: legacyUri } };
+              } else {
+                toolSpec._meta = toolMeta;
+              }
+            }
+            return toolSpec;
+          }),
+        };
+      },
+    );
 
     // Call tool handler
     this.setTracedHandler(serverInstance, 'tools/call', async (request, ctx, trace) => {
@@ -1186,6 +1198,7 @@ export class MCPServer extends MCPServerBase {
             };
 
         const proxiedContext = trace.requestContext;
+        await this.resolveMappedFGAUser(proxiedContext, trace.extra as unknown as Record<string, unknown>);
 
         // Session-aware log emission: sends notifications/message to the calling
         // client, honoring the minimum level it set via logging/setLevel.
@@ -2878,11 +2891,10 @@ export class MCPServer extends MCPServerBase {
     };
   }
 
-  private async createProxiedRequestContext(extra?: unknown): Promise<RequestContext> {
+  private createProxiedRequestContext(extra?: unknown): RequestContext {
     const proxiedContext = new RequestContext();
-    let extraRecord: Record<string, unknown> | undefined;
     if (extra && typeof extra === 'object') {
-      extraRecord = extra as Record<string, unknown>;
+      const extraRecord = extra as Record<string, unknown>;
       Object.entries(extraRecord).forEach(([key, value]) => {
         proxiedContext.set(key, value);
       });
@@ -2891,7 +2903,6 @@ export class MCPServer extends MCPServerBase {
         proxiedContext.set('authInfo', http.authInfo);
       }
     }
-    await this.resolveMappedFGAUser(proxiedContext, extraRecord);
     return proxiedContext;
   }
 

@@ -499,4 +499,72 @@ describe('MCP Server FGA checks', () => {
       }),
     );
   });
+
+  it('should surface a throwing authInfo mapper on tools/call as a tool error result', async () => {
+    const mapAuthInfoToUser = vi.fn(() => {
+      throw new Error('mapper exploded');
+    });
+    mcpServer = new MCPServer({
+      name: 'test-server',
+      version: '1.0.0',
+      tools: {
+        'test-tool': createTool({
+          id: 'test-tool',
+          description: 'A test tool',
+          inputSchema: z.object({}),
+          execute: vi.fn(),
+        }),
+      },
+      mapAuthInfoToUser,
+    });
+    mcpServer.__registerMastra(createMockMastra() as any);
+
+    const requestHandlers = (mcpServer.getServer() as any)._requestHandlers;
+    const result = await requestHandlers.get('tools/call')(
+      {
+        jsonrpc: '2.0',
+        id: 'test-call',
+        method: 'tools/call',
+        params: { name: 'test-tool', arguments: {} },
+      },
+      makeMockExtra({ authInfo: { subject: 'user-1' } }),
+    );
+
+    expect(mapAuthInfoToUser).toHaveBeenCalledTimes(1);
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain('mapper exploded');
+  });
+
+  it('should not map authInfo on methods that never authorize a tool', async () => {
+    const mapAuthInfoToUser = vi.fn(() => {
+      throw new Error('mapper exploded');
+    });
+    mcpServer = new MCPServer({
+      name: 'test-server',
+      version: '1.0.0',
+      tools: {},
+      resources: {
+        listResources: async () => [{ uri: 'test://doc', name: 'doc', mimeType: 'text/plain' }],
+        getResourceContent: async () => ({ text: 'contents' }),
+      },
+      mapAuthInfoToUser,
+    });
+    mcpServer.__registerMastra(createMockMastra() as any);
+
+    const requestHandlers = (mcpServer.getServer() as any)._requestHandlers;
+    const extra = makeMockExtra({ authInfo: { subject: 'user-1' } });
+
+    const listed = await requestHandlers.get('resources/list')(
+      { jsonrpc: '2.0', id: 'test-resources-list', method: 'resources/list' },
+      extra,
+    );
+    const read = await requestHandlers.get('resources/read')(
+      { jsonrpc: '2.0', id: 'test-resources-read', method: 'resources/read', params: { uri: 'test://doc' } },
+      extra,
+    );
+
+    expect(listed.resources.map((resource: { uri: string }) => resource.uri)).toEqual(['test://doc']);
+    expect(read.contents[0].text).toBe('contents');
+    expect(mapAuthInfoToUser).not.toHaveBeenCalled();
+  });
 });
