@@ -4,6 +4,7 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Check,
+  CircleSlash,
   CircleX,
   CornerDownRight,
   CircleHelp,
@@ -24,6 +25,7 @@ const statusPresentation = {
   paused: { label: 'Paused', icon: Pause, color: 'text-neutral3', bar: 'bg-neutral3/40' },
   skipped: { label: 'Skipped', icon: SkipForward, color: 'text-neutral3', bar: 'bg-neutral3/25' },
   running: { label: 'Running', icon: Loader2, color: 'text-accent6', bar: 'bg-accent6/60' },
+  canceled: { label: 'Canceled', icon: CircleSlash, color: 'text-neutral3', bar: 'bg-neutral3/40' },
 } satisfies Record<Step['status'], { label: string; icon: typeof Check; color: string; bar: string }>;
 
 const unknownStatus = { label: 'Status unavailable', icon: CircleHelp, color: 'text-neutral3', bar: 'bg-neutral3/25' };

@@ -464,8 +464,12 @@ export type ListWorkflowRunsResponse = Omit<WorkflowRunsRouteResponse, 'runs'> &
 };
 export type WorkflowRunCounts = GeneratedResponse<'GET /workflows/run-counts'>[string];
 export type ListWorkflowRunCountsResponse = GeneratedResponse<'GET /workflows/run-counts'>;
-export type GetWorkflowRunByIdResponse = GeneratedResponse<'GET /workflows/:workflowId/runs/:runId'> &
-  Serialized<WorkflowState>;
+export type GetWorkflowRunByIdResponse = Omit<
+  GeneratedResponse<'GET /workflows/:workflowId/runs/:runId'>,
+  'serializedStepGraph'
+> &
+  Omit<Serialized<WorkflowState>, 'serializedStepGraph'> &
+  Pick<WorkflowState, 'serializedStepGraph'>;
 
 export type ListDynamicWorkflowsParams = GeneratedRequest<QueryParams<'GET /stored/workflows'>>;
 export type ListDynamicWorkflowsResponse = GeneratedResponse<'GET /stored/workflows'>;

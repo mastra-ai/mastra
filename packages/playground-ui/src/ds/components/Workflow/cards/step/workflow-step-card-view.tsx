@@ -22,6 +22,7 @@ const statusLabels = {
   waiting: 'Waiting',
   paused: 'Paused',
   skipped: 'Skipped',
+  canceled: 'Canceled',
   tripwire: 'Tripwire blocked',
 } satisfies Record<ReportedStatus, string>;
 
