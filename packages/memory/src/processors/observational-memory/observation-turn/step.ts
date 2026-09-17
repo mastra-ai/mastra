@@ -94,9 +94,7 @@ export class ObservationStep {
       if (activation.activated) {
         activated = true;
         if (activation.activatedMessageIds?.length) {
-          messageList.removeByIds(
-            activation.activatedMessageIds.filter(id => !this.turn.inFlightInputMessageIds.has(id)),
-          );
+          messageList.removeByIds(activation.activatedMessageIds);
         }
         await om.resetBufferingState({
           threadId,
@@ -299,10 +297,11 @@ export class ObservationStep {
           observed = true;
           didThresholdCleanup = true;
 
-          // The just-observed messages can include the fresh prompt the model is about
-          // to answer. Preserve it by identity for the whole turn: the token-based
-          // retention floor may be zero, and a later step can activate a chunk that
-          // buffered the prompt at step 0.
+          // Cleanup after observation. At step 0 the just-observed messages include the
+          // fresh prompt the model is about to answer — preserve the in-flight messages
+          // by identity (the token-based retention floor resolves to 0 for sync-only,
+          // resource-scope, and explicit `bufferActivation: 1` configs, so it cannot be
+          // relied on to keep them). Step > 0 semantics are unchanged.
           const observedIds = obsResult.activatedMessageIds ?? obsResult.record.observedMessageIds ?? [];
           const minRemaining = resolveRetentionFloor(
             om.getObservationConfig().bufferActivation ?? 1,
@@ -315,7 +314,7 @@ export class ObservationStep {
             messages: messageList,
             observedMessageIds: observedIds,
             retentionFloor: minRemaining,
-            preserveMessageIds: [...this.turn.inFlightInputMessageIds, ...(step0PreserveIds ?? [])],
+            preserveMessageIds: step0PreserveIds,
           });
 
           if (statusSnapshot.asyncObservationEnabled) {
@@ -361,10 +360,9 @@ export class ObservationStep {
             ?.lastObservedMessageCursor
         : undefined;
 
-      const pendingMessageIds = new Set([
-        ...this.turn.inFlightInputMessageIds,
-        ...[...messageList.get.input.db(), ...messageList.get.response.db()].map(msg => msg.id).filter(Boolean),
-      ]);
+      const pendingMessageIds = new Set(
+        [...messageList.get.input.db(), ...messageList.get.response.db()].map(msg => msg.id).filter(Boolean),
+      );
 
       filterObservedMessages({
         messageList,
