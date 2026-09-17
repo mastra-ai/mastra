@@ -427,6 +427,15 @@ export class MessageList {
     return this.filterIncompleteToolCalls ? 'prompt' : 'prompt-with-suspended';
   }
 
+  /**
+   * Whether tool calls without a result are dropped from the prompt (the default) rather than
+   * paired with a pending placeholder result. Lets prompt-shape-aware processors reason about
+   * what a trailing assistant message will look like once converted.
+   */
+  get dropsIncompleteToolCalls(): boolean {
+    return this.filterIncompleteToolCalls;
+  }
+
   private getMessagesForModelPrompt(): MastraDBMessage[] {
     return this.messages.flatMap(message => {
       if ((message.role as string) !== 'signal') {

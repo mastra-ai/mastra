@@ -27,8 +27,8 @@ import { EntityType } from '../../../../observability';
 import { getRootExportSpan, getStepAvailableToolNames } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
-import { isMaybeAnthropicWithoutAssistantPrefill } from '../../../../processors/provider-history-compat';
 import { ProcessorRunner } from '../../../../processors/runner';
+import { needsTrailingAssistantGuard } from '../../../../processors/trailing-assistant-guard';
 import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput } from '../../../../stream/base/output';
 import type { ChunkType, TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
@@ -420,7 +420,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const stepInputProcessors = registryEntry?.prepareStep
               ? [...baseInputProcessors, new PrepareStepProcessor({ prepareStep: registryEntry.prepareStep })]
               : baseInputProcessors;
-            if (stepInputProcessors.length || isMaybeAnthropicWithoutAssistantPrefill(currentModel)) {
+            if (needsTrailingAssistantGuard(currentModel, stepInputProcessors)) {
               const inputStepWriter = pubsub
                 ? {
                     custom: async (data: { type: string }) => {

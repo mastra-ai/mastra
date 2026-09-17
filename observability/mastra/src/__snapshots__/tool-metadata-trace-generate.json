@@ -114,7 +114,16 @@
               "reasoning": [],
               "sources": [],
               "text": "Mock V2 generate response",
-              "warnings": []
+              "warnings": [],
+              "toolCalls": [
+                {
+                  "toolCallId": "call-metadata-1",
+                  "toolName": "metadataTool",
+                  "args": {
+                    "input": "some data"
+                  }
+                }
+              ]
             }
           },
           "children": [

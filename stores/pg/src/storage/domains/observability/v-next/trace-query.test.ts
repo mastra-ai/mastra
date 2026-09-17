@@ -306,6 +306,69 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.values.at(-1)).toBe(5);
   });
 
+  it('compiles list-compatible count and offset queries over the same candidates', () => {
+    const pagePlan = plan({
+      orderBy: [{ field: 'endedAt', direction: 'asc' }],
+      pagination: { page: 2, perPage: 25 },
+    });
+    const count = compilePostgresTraceQuery('public', pagePlan, 'count');
+    const data = compilePostgresTraceQuery('public', pagePlan);
+
+    expect(count.text).toContain('SELECT COUNT(*)::text AS count\nFROM candidates');
+    expect(data.text).toContain('ORDER BY "endedAt" ASC, "traceId" ASC');
+    expect(data.text).toContain('LIMIT $3 OFFSET $4');
+    expect(data.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 25, 50]);
+    expect(count.text.split('candidates AS')[0]).toBe(data.text.split('candidates AS')[0]);
+  });
+
+  it('returns exact list-compatible pagination metadata inside the timeout transaction', async () => {
+    const now = vi.spyOn(performance, 'now').mockReturnValueOnce(1_000).mockReturnValue(2_250.25);
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    const any = vi
+      .fn()
+      .mockResolvedValueOnce([{ count: '3' }])
+      .mockResolvedValueOnce([traceRow('trace-c', '2026-01-01T10:00:00.000Z')]);
+    const tx = vi.fn(async callback => callback({ query, any }));
+    const response = await queryTraces(
+      { tx } as unknown as DbClient,
+      'public',
+      plan({ pagination: { page: 1, perPage: 2 } }),
+      15_000,
+    );
+    now.mockRestore();
+
+    expect(query).toHaveBeenNthCalledWith(1, 'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+    expect(query).toHaveBeenNthCalledWith(2, `SELECT set_config('statement_timeout', $1, true)`, ['15000ms']);
+    expect(query).toHaveBeenNthCalledWith(3, `SELECT set_config('statement_timeout', $1, true)`, ['13749ms']);
+    expect(query.mock.invocationCallOrder[1]).toBeLessThan(any.mock.invocationCallOrder[0]!);
+    expect(any.mock.invocationCallOrder[0]).toBeLessThan(query.mock.invocationCallOrder[2]!);
+    expect(query.mock.invocationCallOrder[2]).toBeLessThan(any.mock.invocationCallOrder[1]!);
+    expect(any).toHaveBeenCalledTimes(2);
+    expect(response).toMatchObject({
+      traces: [{ traceId: 'trace-c' }],
+      pagination: { total: 3, page: 1, perPage: 2, hasMore: false },
+    });
+    expect(response).not.toHaveProperty('page');
+  });
+
+  it('does not execute the page query when the count exhausts the timeout budget', async () => {
+    const now = vi.spyOn(performance, 'now').mockReturnValueOnce(1_000).mockReturnValue(16_000);
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    const any = vi.fn().mockResolvedValueOnce([{ count: '3' }]);
+    const tx = vi.fn(async callback => callback({ query, any }));
+
+    await expect(
+      queryTraces({ tx } as unknown as DbClient, 'public', plan({ pagination: { page: 1, perPage: 2 } }), 15_000),
+    ).rejects.toMatchObject({
+      code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
+      message: 'The trace query exceeded its execution timeout',
+    });
+    now.mockRestore();
+
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(any).toHaveBeenCalledTimes(1);
+  });
+
   it('compiles thread qualification over full eligible roots with dependencies from both scopes', () => {
     const metadataKey = ` actor'role `;
     const metadataValue = `clinician' OR TRUE --`;
