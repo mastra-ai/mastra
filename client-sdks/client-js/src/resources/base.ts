@@ -33,6 +33,7 @@ export class BaseResource {
     if (!Number.isSafeInteger(retries) || retries < 0) {
       throw new RangeError('retries must be a non-negative safe integer');
     }
+    const signal = fetchOptions.signal ?? this.options.abortSignal;
     const fetchFn = customFetch || fetch;
 
     let delay = backoffMs;
@@ -57,7 +58,7 @@ export class BaseResource {
             // TODO: Bring this back once we figure out what we/users need to do to make this work with cross-origin requests
             // 'x-mastra-client-type': 'js',
           },
-          signal: fetchOptions.signal ?? this.options.abortSignal,
+          signal,
           credentials: fetchOptions.credentials ?? credentials,
           body:
             fetchOptions.body instanceof FormData
@@ -90,6 +91,10 @@ export class BaseResource {
         return data as T;
       } catch (error) {
         lastError = error as Error;
+
+        if (signal?.aborted) {
+          throw error;
+        }
 
         // Don't retry 4xx client errors - they won't resolve with retries
         const status = (error as Error & { status?: number }).status;

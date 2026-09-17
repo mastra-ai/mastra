@@ -115,6 +115,24 @@ describe('BaseResource', () => {
     expect(requestCount).toBe(0);
   });
 
+  it('should stop retrying when the selected request signal is aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let attempts = 0;
+    const customResource = new BaseResource({
+      baseUrl: serverUrl,
+      retries: 2,
+      backoffMs: 0,
+      fetch: async () => {
+        attempts++;
+        throw controller.signal.reason;
+      },
+    });
+
+    await expect(customResource.request('/test', { signal: controller.signal })).rejects.toBe(controller.signal.reason);
+    expect(attempts).toBe(1);
+  });
+
   it('should prefer a request abort signal over the client abort signal', async () => {
     const clientSignal = new AbortController().signal;
     const requestSignal = new AbortController().signal;
