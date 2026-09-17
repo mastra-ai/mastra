@@ -135,7 +135,7 @@ export const packFallbackScenario: McE2eScenario = {
     'candidates, then exhausts a single-account Kimi pack and asserts the turn hops to the Anthropic ' +
     'fallback pack, renders both notices, and the thread sticks across restart and abort/retrigger.',
   testName: 'hops to the fallback pack and preserves it across restart and abort/retrigger',
-  prepare({ appDataDir }) {
+  async prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = readMutableSettingsFixture(settingsPath);
     settings.onboarding = {
@@ -166,7 +166,7 @@ export const packFallbackScenario: McE2eScenario = {
 
     // One Kimi account — the pool exhausts on the first 429.
     const storage = new AuthStorage(join(appDataDir, 'auth.json'));
-    storage.addAccount(
+    await storage.addAccount(
       PROVIDER,
       {
         access: ACCOUNT_ACCESS,

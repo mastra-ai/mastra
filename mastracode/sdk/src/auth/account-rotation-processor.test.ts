@@ -92,8 +92,12 @@ async function makeTwoAccountStorage(): Promise<SeededStorage> {
   return { storage, authPath, accountA: { id: a.id, label: a.label }, accountB: { id: b.id, label: b.label } };
 }
 
-function addThirdAccount(storage: AuthStorage) {
-  storage.addAccount(PROVIDER, { access: 'token-c', refresh: 'refresh-c', expires: FUTURE }, { label: 'Account C' });
+async function addThirdAccount(storage: AuthStorage) {
+  await storage.addAccount(
+    PROVIDER,
+    { access: 'token-c', refresh: 'refresh-c', expires: FUTURE },
+    { label: 'Account C' },
+  );
   const account = storage.listAccounts(PROVIDER)[2]!;
   return { id: account.id, label: account.label };
 }
@@ -655,7 +659,7 @@ describe('AccountStartNoticeProcessor.processInput', () => {
   });
 
   it('selects the pack/model preferred account before the request and skips sticky exhausted accounts', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
     mkdirSync(appDataDir, { recursive: true });
     writeFileSync(
@@ -701,8 +705,8 @@ describe('AccountStartNoticeProcessor.processInput', () => {
   });
 
   it('tries a preferred account before the remaining accounts in insertion order', async () => {
-    const seeded = makeTwoAccountStorage();
-    const accountC = addThirdAccount(seeded.storage);
+    const seeded = await makeTwoAccountStorage();
+    const accountC = await addThirdAccount(seeded.storage);
     const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
     mkdirSync(appDataDir, { recursive: true });
     writeFileSync(
@@ -753,7 +757,7 @@ describe('AccountStartNoticeProcessor.processInput', () => {
   });
 
   it('fails before provider execution when every routed account is already exhausted', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
     mkdirSync(appDataDir, { recursive: true });
     writeFileSync(
@@ -784,7 +788,7 @@ describe('AccountStartNoticeProcessor.processInput', () => {
   });
 
   it('applies sticky exhaustion when subscription routing is Automatic', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
     mkdirSync(appDataDir, { recursive: true });
     writeFileSync(
@@ -862,7 +866,7 @@ describe('pack-fallback parts', () => {
   }
 
   it('emits a pack-fallback part (and live info event) when the exhausted pool has a fallback pack', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     seedSettingsWithFallbacks({ anthropic: 'openai' });
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeControllerArgs('anthropic/claude-fable-5');
@@ -903,13 +907,13 @@ describe('pack-fallback parts', () => {
   });
 
   it('re-evaluates subscription routing when a fallback pack lands', async () => {
-    const seeded = makeTwoAccountStorage();
-    seeded.storage.addAccount(
+    const seeded = await makeTwoAccountStorage();
+    await seeded.storage.addAccount(
       'openai-codex',
       { access: 'openai-a', refresh: 'openai-refresh-a', expires: FUTURE },
       { label: 'OpenAI A' },
     );
-    seeded.storage.addAccount(
+    await seeded.storage.addAccount(
       'openai-codex',
       { access: 'openai-b', refresh: 'openai-refresh-b', expires: FUTURE },
       { label: 'OpenAI B' },
@@ -937,13 +941,13 @@ describe('pack-fallback parts', () => {
   });
 
   it('does not activate the target pack preferred account when the hop transcript write fails', async () => {
-    const seeded = makeTwoAccountStorage();
-    seeded.storage.addAccount(
+    const seeded = await makeTwoAccountStorage();
+    await seeded.storage.addAccount(
       'openai-codex',
       { access: 'openai-a', refresh: 'openai-refresh-a', expires: FUTURE },
       { label: 'OpenAI A' },
     );
-    seeded.storage.addAccount(
+    await seeded.storage.addAccount(
       'openai-codex',
       { access: 'openai-b', refresh: 'openai-refresh-b', expires: FUTURE },
       { label: 'OpenAI B' },
@@ -971,13 +975,13 @@ describe('pack-fallback parts', () => {
   });
 
   it('re-arms the start notice on a hop so the retried request re-applies target-pack routing', async () => {
-    const seeded = makeTwoAccountStorage();
-    seeded.storage.addAccount(
+    const seeded = await makeTwoAccountStorage();
+    await seeded.storage.addAccount(
       'openai-codex',
       { access: 'openai-a', refresh: 'openai-refresh-a', expires: FUTURE },
       { label: 'OpenAI A' },
     );
-    seeded.storage.addAccount(
+    await seeded.storage.addAccount(
       'openai-codex',
       { access: 'openai-b', refresh: 'openai-refresh-b', expires: FUTURE },
       { label: 'OpenAI B' },
@@ -1032,7 +1036,7 @@ describe('pack-fallback parts', () => {
   });
 
   it('does not reuse exhausted accounts when the fallback pack uses the same provider', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
     mkdirSync(appDataDir, { recursive: true });
     writeFileSync(
@@ -1058,7 +1062,7 @@ describe('pack-fallback parts', () => {
   });
 
   it('persists exhausted accounts per pack/model so later requests do not retry the preference', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     seedSettingsWithFallbacks(
       {},
       {
@@ -1107,7 +1111,7 @@ describe('pack-fallback parts', () => {
   });
 
   it('serializes concurrent sticky-exhaustion merges for the same thread', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     seedSettingsWithFallbacks({});
     let persisted: unknown;
     const makeConcurrentArgs = (accountId: string) => {
@@ -1141,7 +1145,7 @@ describe('pack-fallback parts', () => {
   });
 
   it('does not notify live fallback state when the transcript hop cannot be written', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     seedSettingsWithFallbacks({ anthropic: 'openai' });
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeControllerArgs('anthropic/claude-fable-5');
@@ -1164,7 +1168,7 @@ describe('pack-fallback parts', () => {
   });
 
   it('attributes the hop to the explicit active pack when packs share a model', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     seedSettingsWithFallbacks({ 'custom:Shared Model': 'openai' });
     const settingsPath = join(process.env.MASTRA_APP_DATA_DIR!, 'settings.json');
     const raw = JSON.parse(readFileSync(settingsPath, 'utf-8'));
@@ -1192,7 +1196,7 @@ describe('pack-fallback parts', () => {
   });
 
   it('advances the cascade position on a second hop in the same request', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     seedSettingsWithFallbacks({ anthropic: 'openai', openai: 'github-copilot' });
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeControllerArgs('anthropic/claude-fable-5');
@@ -1219,7 +1223,7 @@ describe('pack-fallback parts', () => {
   });
 
   it('attributes an error without request metadata to the cascade model after a hop', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     seedSettingsWithFallbacks({ anthropic: 'openai', openai: 'github-copilot' });
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeControllerArgs('anthropic/claude-fable-5');
@@ -1247,8 +1251,8 @@ describe('pack-fallback parts', () => {
   });
 
   it('does not fall back to the original session provider on an unattributable custom-pack error', async () => {
-    const seeded = makeTwoAccountStorage();
-    seeded.storage.addAccount('github-copilot', {
+    const seeded = await makeTwoAccountStorage();
+    await seeded.storage.addAccount('github-copilot', {
       access: 'copilot-token',
       refresh: 'copilot-refresh',
       expires: FUTURE,
@@ -1281,7 +1285,7 @@ describe('pack-fallback parts', () => {
   });
 
   it('emits no pack part when the active pack has no fallback configured', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     seedSettingsWithFallbacks({});
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeControllerArgs('anthropic/claude-fable-5');
@@ -1295,7 +1299,7 @@ describe('pack-fallback parts', () => {
   });
 
   it('announces the hop even when the failing provider has no account registry', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     seedSettingsWithFallbacks({ anthropic: 'openai' });
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeControllerArgs('anthropic/claude-fable-5');
@@ -1345,7 +1349,7 @@ describe('Q14 chain gate (400/unknown never hop packs)', () => {
   }
 
   it('throws TripWire on a 400 when the session pack has an active fallback chain', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     seedSettingsWithFallbacks({ anthropic: 'openai' });
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeControllerArgs('anthropic/claude-fable-5');
@@ -1361,7 +1365,7 @@ describe('Q14 chain gate (400/unknown never hop packs)', () => {
   });
 
   it('surfaces a 400 with retry:false (no TripWire) when no chain is configured', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     seedSettingsWithFallbacks({});
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeControllerArgs('anthropic/claude-fable-5');
@@ -1371,7 +1375,7 @@ describe('Q14 chain gate (400/unknown never hop packs)', () => {
   });
 
   it('throws TripWire on an unknown error when a chain is active', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     seedSettingsWithFallbacks({ anthropic: 'openai' });
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeControllerArgs('anthropic/claude-fable-5');
@@ -1382,7 +1386,7 @@ describe('Q14 chain gate (400/unknown never hop packs)', () => {
   });
 
   it('throws TripWire at retry-budget exhaustion when a chain is active', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     seedSettingsWithFallbacks({ anthropic: 'openai' });
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 3 });
     const args = makeControllerArgs('anthropic/claude-fable-5');
@@ -1395,7 +1399,7 @@ describe('Q14 chain gate (400/unknown never hop packs)', () => {
   });
 
   it('returns retry:false at retry-budget exhaustion when no chain is configured', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     seedSettingsWithFallbacks({});
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 3 });
     const args = makeControllerArgs('anthropic/claude-fable-5');
@@ -1405,7 +1409,7 @@ describe('Q14 chain gate (400/unknown never hop packs)', () => {
   });
 
   it('returns retry:false on a 400 when the request is already on the last chain entry', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     seedSettingsWithFallbacks({ anthropic: 'openai' });
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeControllerArgs('anthropic/claude-fable-5');
@@ -1424,7 +1428,7 @@ describe('Q14 chain gate (400/unknown never hop packs)', () => {
   });
 
   it('still hops on pool exhaustion with a chain active (gate only covers never-classified errors)', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     seedSettingsWithFallbacks({ anthropic: 'openai' });
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeControllerArgs('anthropic/claude-fable-5');
@@ -1469,14 +1473,14 @@ describe('cross-provider cascades', () => {
   }
 
   it('scopes the tried-set per provider: the landed pack pool still rotates after a hop', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     // Second provider pool: two Codex accounts.
-    seeded.storage.addAccount(
+    await seeded.storage.addAccount(
       'openai-codex',
       { access: 'token-c', refresh: 'refresh-c', expires: FUTURE },
       { label: 'Codex C' },
     );
-    seeded.storage.addAccount(
+    await seeded.storage.addAccount(
       'openai-codex',
       { access: 'token-d', refresh: 'refresh-d', expires: FUTURE },
       { label: 'Codex D' },
@@ -1504,7 +1508,7 @@ describe('cross-provider cascades', () => {
   });
 
   it('hops (no TripWire) on a persistent outage from a provider outside the OAuth registry', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     // Active pack is a custom pack on an unattributable provider (cerebras,
     // served through the models.dev router) with anthropic as its fallback.
     seedSettingsWithFallbacks({ 'custom:cere': 'anthropic' });
@@ -1529,7 +1533,7 @@ describe('cross-provider cascades', () => {
   });
 
   it('still TripWires a 400 from a provider outside the OAuth registry', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     seedSettingsWithFallbacks({ 'custom:cere': 'anthropic' });
     const raw = JSON.parse(readFileSync(join(process.env.MASTRA_APP_DATA_DIR!, 'settings.json'), 'utf-8'));
     raw.customModelPacks = [{ name: 'cere', models: { build: 'cerebras/llama-3.3-70b' } }];

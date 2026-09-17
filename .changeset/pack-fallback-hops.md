@@ -14,3 +14,16 @@ Configure both from `/models` — select a pack, then:
 ```
 
 Custom packs can also define an observational memory model. When set, the OM observer and reflector resolve from the active pack and its fallback chain — so OM keeps working when a pack's provider is down. Packs without an OM model keep using your standalone OM configuration, and explicit `/om` overrides still win.
+
+Both settings live in `settings.json` if you prefer to edit them directly:
+
+```json
+{
+  "models": {
+    "packFallbacks": { "custom:Daily": "anthropic" },
+    "packAccountPreferences": {
+      "custom:Daily": { "anthropic/claude-sonnet-4-6": "anthropic:a1b2c3d4" }
+    }
+  }
+}
+```
