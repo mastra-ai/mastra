@@ -683,7 +683,7 @@ export function subscribeToAgentController(state: TUIState, handleEvent: (event:
     // receipt too, before the event is chained onto the serial queue.
     runPermissionHooksForEvent(state, event);
     eventQueue = eventQueue.then(async () => {
-      if (event.type === 'tool_suspended') {
+      if (state.options.backgroundToolsEnabled && event.type === 'tool_suspended') {
         // Start interactive prompts in event order, but don't park the finite
         // rendering queue on the user's response. Thread switches wait on this
         // queue and must remain available while a prior thread awaits input.
