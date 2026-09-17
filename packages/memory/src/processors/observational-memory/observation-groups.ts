@@ -73,7 +73,12 @@ function scanObservationGroupTags(observations: string): ObservationGroupScan {
     if (openEnd === -1) break;
 
     const closeStart = observations.indexOf(OBSERVATION_GROUP_CLOSE, Math.max(openEnd + 1, closeFloor));
-    if (closeStart === -1) break;
+    if (closeStart === -1) {
+      // The opening never closes. Its content stays unattributed, but the tag text is metadata and
+      // must still be dropped so it cannot leak into reflection prompts as stray XML.
+      incompleteOpenings.push({ start, end: openEnd + 1 });
+      break;
+    }
 
     // Only a line-started opening can be a nested group: the producer always writes tags on their
     // own lines, so anything else is observation content that happens to mention the tag name.
@@ -303,11 +308,6 @@ function getContentLines(content: string): string[] {
     .filter(Boolean);
 }
 
-function contributesFactsNotIn(group: ObservationGroup, other: ObservationGroup): boolean {
-  const otherLines = new Set(getContentLines(other.content));
-  return getContentLines(group.content).some(line => !otherLines.has(line));
-}
-
 export function deriveObservationGroupProvenance(content: string, groups: ObservationGroup[]): ObservationGroup[] {
   const sections = parseReflectionObservationGroupSections(content);
   if (sections.length === 0 || groups.length === 0) {
@@ -323,14 +323,23 @@ export function deriveObservationGroupProvenance(content: string, groups: Observ
 
     const fallbackGroup = groups[Math.min(index, groups.length - 1)];
     // A heading id pins the section to its own group, which is what keeps duplicate-content groups
-    // distinct. Any other matched group that carries facts the identified group does not still
-    // contributes provenance, so it is unioned in rather than dropped.
+    // distinct. Another matched group only contributes provenance when it carries a line the section
+    // actually reflects and the identified group does not, so sharing a line alone cannot widen the
+    // persisted range to facts the reflection never carried.
+    const identifiedLines = new Set(getContentLines(identifiedGroup?.content ?? ''));
     const contributingGroups = identifiedGroup
-      ? matchingGroups.filter(group => group.id !== identifiedGroup.id && contributesFactsNotIn(group, identifiedGroup))
+      ? matchingGroups.filter(
+          group =>
+            group.id !== identifiedGroup.id &&
+            getContentLines(group.content).some(line => bodyLines.has(line) && !identifiedLines.has(line)),
+        )
       : [];
 
+    // Source order is preserved: opaque segments are spanned positionally from the first start to
+    // the last end, so leading with the heading's group would invert the span whenever the heading
+    // names a later source group whose section also carries an earlier one.
     const resolvedGroups = identifiedGroup
-      ? [identifiedGroup, ...contributingGroups]
+      ? groups.filter(group => group === identifiedGroup || contributingGroups.includes(group))
       : matchingGroups.length > 0
         ? matchingGroups
         : fallbackGroup

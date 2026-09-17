@@ -103,6 +103,27 @@ _range: \`3:4\`_
 
 Complete`);
   });
+
+  it('drops an opening tag that never closes so no raw metadata leaks into stripped output', () => {
+    const observations = `<observation-group id="complete" range="1:2">
+Complete
+</observation-group>
+<observation-group id="truncated" range="3:4">
+Truncated text`;
+
+    expect(parseObservationGroups(observations)).toEqual([
+      { id: 'complete', range: '1:2', kind: undefined, content: 'Complete' },
+    ]);
+    expect(stripObservationGroups(observations)).not.toContain('<observation-group');
+    expect(stripObservationGroups(observations)).toContain('Truncated text');
+  });
+
+  it('drops a lone unterminated opening tag and keeps its text', () => {
+    const observations = `<observation-group id="only" range="1:2">
+Lone text`;
+
+    expect(stripObservationGroups(observations)).toBe('Lone text');
+  });
 });
 
 describe('combineObservationGroupRanges', () => {
@@ -207,6 +228,30 @@ describe('deriveObservationGroupProvenance', () => {
         parseObservationGroups(source),
       ),
     ).toEqual([{ id: 'merged-project', range: '1:4', kind: 'reflection', content: '- Fact A\n- Fact B' }]);
+  });
+
+  it('spans opaque ranges in source order regardless of which group the heading names', () => {
+    const opaque = `<observation-group id="g1" range="m1:m2">- Fact A</observation-group>
+<observation-group id="g2" range="m3:m4">- Fact B</observation-group>`;
+    const sourceGroups = parseObservationGroups(opaque);
+
+    expect(deriveObservationGroupProvenance(`## Group \`g1\`\n\n- Fact A\n- Fact B`, sourceGroups)).toEqual([
+      { id: 'g1', range: 'm1:m4', kind: 'reflection', content: '- Fact A\n- Fact B' },
+    ]);
+    expect(deriveObservationGroupProvenance(`## Group \`g2\`\n\n- Fact A\n- Fact B`, sourceGroups)).toEqual([
+      { id: 'g2', range: 'm1:m4', kind: 'reflection', content: '- Fact A\n- Fact B' },
+    ]);
+  });
+
+  it('does not widen to a group whose only shared line is already covered by the identified group', () => {
+    const overlapping = `<observation-group id="A" range="1:2">- Shared
+- Only A</observation-group>
+<observation-group id="B" range="3:4">- Shared
+- Only B</observation-group>`;
+
+    expect(
+      deriveObservationGroupProvenance(`## Group \`A\`\n\n- Shared\n- Only A`, parseObservationGroups(overlapping)),
+    ).toEqual([{ id: 'A', range: '1:2', kind: 'reflection', content: '- Shared\n- Only A' }]);
   });
 });
 
