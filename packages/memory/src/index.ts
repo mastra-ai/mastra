@@ -1607,69 +1607,66 @@ export class Memory extends MastraMemory {
   }): Promise<StorageThreadType> {
     assertNoReservedThreadBranchMetadata(metadata);
     const memoryStore = await this.getMemoryStore();
-    return this.withBranchMutationLocks(
-      await this.getBranchMutationThreadLockKeys(memoryStore, [id]),
-      async () => {
-        const existing = await memoryStore.getThreadById({ threadId: id });
-        const existingBranch = existing ? parseThreadBranchMetadata(existing) : null;
-        if (existingBranch?.state === 'pending') {
-          throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
-        }
-        const persistedMetadata =
-          metadata === undefined
-            ? undefined
-            : {
-                ...metadata,
-                ...(existingBranch
-                  ? { [MASTRA_THREAD_BRANCH_METADATA_KEY]: serializeThreadBranchMetadata(existingBranch) }
-                  : {}),
-              };
-        const previousResource =
-          typeof metadata?.workingMemory === 'string' && existing?.resourceId
-            ? await memoryStore.getResourceById({ resourceId: existing.resourceId })
-            : null;
-        try {
-          const updatedThread = await memoryStore.patchThread({
-            id,
-            title,
-            metadata: persistedMetadata,
+    return this.withBranchMutationLocks(await this.getBranchMutationThreadLockKeys(memoryStore, [id]), async () => {
+      const existing = await memoryStore.getThreadById({ threadId: id });
+      const existingBranch = existing ? parseThreadBranchMetadata(existing) : null;
+      if (existingBranch?.state === 'pending') {
+        throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
+      }
+      const persistedMetadata =
+        metadata === undefined
+          ? undefined
+          : {
+              ...metadata,
+              ...(existingBranch
+                ? { [MASTRA_THREAD_BRANCH_METADATA_KEY]: serializeThreadBranchMetadata(existingBranch) }
+                : {}),
+            };
+      const previousResource =
+        typeof metadata?.workingMemory === 'string' && existing?.resourceId
+          ? await memoryStore.getResourceById({ resourceId: existing.resourceId })
+          : null;
+      try {
+        const updatedThread = await memoryStore.patchThread({
+          id,
+          title,
+          metadata: persistedMetadata,
+        });
+        if (typeof metadata?.workingMemory === 'string' && updatedThread.resourceId) {
+          await this.handleWorkingMemoryFromMetadata({
+            workingMemory: metadata.workingMemory,
+            resourceId: updatedThread.resourceId,
+            memoryConfig,
           });
-          if (typeof metadata?.workingMemory === 'string' && updatedThread.resourceId) {
-            await this.handleWorkingMemoryFromMetadata({
-              workingMemory: metadata.workingMemory,
-              resourceId: updatedThread.resourceId,
-              memoryConfig,
-            });
-          }
-          return sanitizeThread(updatedThread);
-        } catch (error) {
-          const cleanupErrors: unknown[] = [];
-          if (existing) {
-            try {
-              await memoryStore.saveThread({ thread: existing });
-            } catch (cleanupError) {
-              cleanupErrors.push(cleanupError);
-            }
-          }
-          if (previousResource && existing?.resourceId) {
-            try {
-              await memoryStore.updateResource({
-                resourceId: existing.resourceId,
-                workingMemory: previousResource.workingMemory,
-              });
-            } catch (cleanupError) {
-              cleanupErrors.push(cleanupError);
-            }
-          }
-          if (cleanupErrors.length > 0) {
-            throw new Error(`Thread update failed and could not be fully rolled back: ${String(error)}`, {
-              cause: error,
-            });
-          }
-          throw error;
         }
-      },
-    );
+        return sanitizeThread(updatedThread);
+      } catch (error) {
+        const cleanupErrors: unknown[] = [];
+        if (existing) {
+          try {
+            await memoryStore.saveThread({ thread: existing });
+          } catch (cleanupError) {
+            cleanupErrors.push(cleanupError);
+          }
+        }
+        if (previousResource && existing?.resourceId) {
+          try {
+            await memoryStore.updateResource({
+              resourceId: existing.resourceId,
+              workingMemory: previousResource.workingMemory,
+            });
+          } catch (cleanupError) {
+            cleanupErrors.push(cleanupError);
+          }
+        }
+        if (cleanupErrors.length > 0) {
+          throw new Error(`Thread update failed and could not be fully rolled back: ${String(error)}`, {
+            cause: error,
+          });
+        }
+        throw error;
+      }
+    });
   }
 
   /**
