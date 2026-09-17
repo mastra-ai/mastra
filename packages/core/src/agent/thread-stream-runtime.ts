@@ -11,13 +11,14 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context
 import type { MastraModelOutput } from '../stream/base/output';
 import { readPositiveIntEnv } from '../utils';
 import type { Agent } from './agent';
-import type { AgentExecutionOptions, AgentExecutionOptionsBase } from './agent.types';
+import type { AgentExecutionOptions } from './agent.types';
 import type { MessageListInput } from './message-list';
 import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
 import type {
   AgentSignal,
+  AgentSignalIfIdleOptions,
   AgentSubscribeToThreadOptions,
   AgentThreadSubscription,
   QueueAgentMessageOptions,
@@ -123,9 +124,9 @@ function sanitizeBroadcastPart(part: unknown): unknown {
   return part;
 }
 
-async function resolveSignalStreamOptions<Options extends AgentExecutionOptionsBase<any>>(
-  streamOptions: Options | (() => Promise<Options>) | undefined,
-) {
+type AgentSignalStreamOptions<OUTPUT> = NonNullable<AgentSignalIfIdleOptions<OUTPUT>['streamOptions']>;
+
+async function resolveSignalStreamOptions<OUTPUT>(streamOptions: AgentSignalStreamOptions<OUTPUT> | undefined) {
   return typeof streamOptions === 'function' ? streamOptions() : streamOptions;
 }
 
@@ -174,7 +175,7 @@ type PendingIdleSignal<OUTPUT = unknown> = {
   runId: string;
   resourceId: string;
   threadId: string;
-  streamOptions?: AgentExecutionOptionsBase<OUTPUT> | (() => Promise<AgentExecutionOptionsBase<OUTPUT>>);
+  streamOptions?: AgentSignalStreamOptions<OUTPUT>;
 };
 
 type PendingContinuation<OUTPUT = unknown> = {
@@ -2687,7 +2688,14 @@ export class AgentThreadStreamRuntime {
 
     if (activeRecord) {
       const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
-      idleQueue.push({ agent, signal, runId: queuedRunId, resourceId, threadId, streamOptions: queuedStreamOptions });
+      idleQueue.push({
+        agent,
+        signal,
+        runId: queuedRunId,
+        resourceId,
+        threadId,
+        streamOptions: queuedStreamOptions as PendingIdleSignal['streamOptions'],
+      });
       state.pendingIdleSignalsByThread.set(key, idleQueue);
       this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
       return {
@@ -2989,7 +2997,14 @@ export class AgentThreadStreamRuntime {
       // Another run owns the thread. Queue this idle-start request and let the watcher
       // launch it only after the active run clears the thread reservation.
       const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
-      idleQueue.push({ agent, signal, runId, resourceId, threadId, streamOptions: target.ifIdle?.streamOptions });
+      idleQueue.push({
+        agent,
+        signal,
+        runId,
+        resourceId,
+        threadId,
+        streamOptions: target.ifIdle?.streamOptions as PendingIdleSignal['streamOptions'],
+      });
       state.pendingIdleSignalsByThread.set(key, idleQueue);
       if (activeRecord) {
         this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);

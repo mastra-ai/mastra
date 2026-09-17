@@ -1769,6 +1769,32 @@ describe('Agent signals', () => {
     );
   });
 
+  it('resolves state-signal stream options exactly once before persistence', async () => {
+    const memory = new MockMemory();
+    const threadId = 'lazy-state-thread';
+    const resourceId = 'lazy-state-user';
+    await memory.createThread({ threadId, resourceId });
+    const agent = new Agent({
+      id: 'lazy-state-agent',
+      name: 'Lazy State Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('unused'),
+      memory,
+    });
+    const requestContext = new RequestContext();
+    const streamOptions = vi.fn(async () => ({ requestContext }));
+
+    const result = await agent.sendStateSignal(
+      { id: 'browser', cacheKey: 'browser:lazy', contents: 'Browser state' },
+      { resourceId, threadId, ifIdle: { behavior: 'persist', streamOptions } },
+    );
+
+    if (result.skipped) throw new Error('expected state signal to be persisted');
+    await expect(result.accepted).resolves.toEqual({ action: 'persist' });
+    await result.persisted;
+    expect(streamOptions).toHaveBeenCalledTimes(1);
+  });
+
   it('delivers medium-priority notification records while idle', async () => {
     const notifications = new InMemoryNotificationsStorage();
     const storage = new MastraCompositeStore({ id: 'notification-storage', domains: { notifications } });
@@ -3768,6 +3794,29 @@ describe('Agent signals', () => {
     }
   });
 
+  it('resolves lazy stream options for a direct idle wake', async () => {
+    const requestContext = new RequestContext();
+    const streamOptions = vi.fn(async () => ({ requestContext }));
+    const agent = new Agent({
+      id: 'lazy-direct-wake',
+      name: 'Lazy direct wake',
+      instructions: 'Test',
+      model: createTextStreamModel('woken'),
+    });
+    const streamSpy = vi.spyOn(agent, 'stream');
+
+    const accepted = await agent.sendSignal(
+      { type: 'user-message', contents: 'wake' },
+      { resourceId: 'lazy-wake-user', threadId: 'lazy-wake-thread', ifIdle: { streamOptions } },
+    ).accepted;
+
+    expect(accepted.action).toBe('wake');
+    if (accepted.action !== 'wake') throw new Error('Expected a fresh run');
+    expect(streamOptions).toHaveBeenCalledTimes(1);
+    expect(streamSpy.mock.calls[0]?.[1]?.requestContext).toBe(requestContext);
+    await expect(accepted.output.text).resolves.toBe('woken');
+  });
+
   it.each([false, true])('resolves lazy persistence context with active=%s', async active => {
     const { model, releaseFirst } = createBlockingFirstTextStreamModel('first', 'later');
     const memory = new MockMemory();
@@ -3804,13 +3853,48 @@ describe('Agent signals', () => {
     }
   });
 
-  it('releases the idle reservation when lazy stream setup fails', async () => {
+  it.each([false, true])('reports lazy persistence failures after acceptance with active=%s', async active => {
+    const { model, releaseFirst } = createBlockingFirstTextStreamModel('first', 'unused');
+    const memory = new MockMemory();
+    const threadId = `lazy-persist-failure-${active}`;
+    const resourceId = 'lazy-persist-failure-user';
+    await memory.createThread({ threadId, resourceId });
+    const agent = new Agent({ id: threadId, name: 'Lazy persistence failure', instructions: 'Test', model, memory });
+    const stream = active
+      ? await agent.stream('first', { memory: { thread: threadId, resource: resourceId } })
+      : undefined;
+    const streamOptions = vi.fn(async () => {
+      throw new Error('persistence options failed');
+    });
+    try {
+      const result = agent.sendSignal(
+        { type: 'user-message', contents: 'persist lazily' },
+        {
+          resourceId,
+          threadId,
+          ifActive: { behavior: 'persist' },
+          ifIdle: { behavior: 'persist', streamOptions },
+        },
+      );
+      await expect(result.accepted).resolves.toEqual({ action: 'persist' });
+      await expect(result.persisted).rejects.toThrow('persistence options failed');
+      expect(streamOptions).toHaveBeenCalledTimes(1);
+    } finally {
+      releaseFirst();
+      if (stream) await stream.text;
+    }
+  });
+
+  it('releases the direct idle reservation and lease when lazy stream setup fails', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const releaseLease = vi.spyOn(pubsub, 'releaseLease');
     const agent = new Agent({
       id: 'lazy-setup-failure',
       name: 'Lazy setup failure',
       instructions: 'Test',
       model: createTextStreamModel('recovered'),
     });
+    new Mastra({ agents: { lazySetupFailure: agent }, logger: false, pubsub });
     const target = { resourceId: 'lazy-failure-user', threadId: 'lazy-failure-thread' };
     const streamOptions = vi.fn(async () => {
       throw new Error('options failed');
@@ -3821,10 +3905,54 @@ describe('Agent signals', () => {
     );
     await expect(failed.accepted).rejects.toThrow('options failed');
     expect(streamOptions).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(releaseLease).toHaveBeenCalledTimes(1));
+    expect(pubsub.owners.size).toBe(0);
+
     const recovered = await agent.sendSignal({ type: 'user-message', contents: 'retry' }, target).accepted;
     expect(recovered.action).toBe('wake');
     if (recovered.action !== 'wake') throw new Error('Expected a fresh run');
     await expect(recovered.output.text).resolves.toBe('recovered');
+  });
+
+  it('releases queued idle ownership and lease when lazy stream setup fails', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const releaseLease = vi.spyOn(pubsub, 'releaseLease');
+    const { model, releaseFirst } = createBlockingFirstTextStreamModel('first', 'recovered');
+    const agent = new Agent({
+      id: 'lazy-queued-failure',
+      name: 'Lazy queued failure',
+      instructions: 'Test',
+      model,
+    });
+    new Mastra({ agents: { lazyQueuedFailure: agent }, logger: false, pubsub });
+    const target = { resourceId: 'lazy-queued-user', threadId: 'lazy-queued-thread' };
+    const first = await agent.stream('first', { memory: { resource: target.resourceId, thread: target.threadId } });
+    const streamOptions = vi.fn(async () => {
+      throw new Error('queued options failed');
+    });
+
+    try {
+      const queued = agent.queueMessage('queued', { ...target, ifIdle: { streamOptions } });
+      const queuedAccepted = await queued.accepted;
+      expect(queuedAccepted.action).toBe('deliver');
+      if (queuedAccepted.action !== 'deliver') throw new Error('Expected queued delivery');
+      expect(streamOptions).not.toHaveBeenCalled();
+      releaseFirst();
+      await first.text;
+      await vi.waitFor(() => expect(streamOptions).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() =>
+        expect(releaseLease).toHaveBeenCalledWith(expect.stringContaining(target.threadId), queuedAccepted.runId),
+      );
+      expect(pubsub.owners.size).toBe(0);
+
+      const recovered = await agent.sendSignal({ type: 'user-message', contents: 'retry' }, target).accepted;
+      expect(recovered.action).toBe('wake');
+      if (recovered.action !== 'wake') throw new Error('Expected a fresh run');
+      await expect(recovered.output.text).resolves.toBe('recovered');
+    } finally {
+      releaseFirst();
+      await first.text;
+    }
   });
 
   it.each(['discard', 'persist'] as const)('does not resolve lazy options for transient idle %s', async behavior => {

@@ -8,7 +8,12 @@ import { AgentController } from '../agent-controller';
 import { createMockWorkspace } from '../test-utils';
 
 describe('session signal context at run completion', () => {
-  it.each(['user', 'notification'] as const)('keeps active %s delivery free of idle setup', async kind => {
+  it.each([
+    { kind: 'user', behavior: 'deliver' },
+    { kind: 'user', behavior: 'discard' },
+    { kind: 'notification', behavior: 'deliver' },
+    { kind: 'notification', behavior: 'discard' },
+  ] as const)('keeps active $kind $behavior free of idle setup', async ({ kind, behavior }) => {
     let finishFirst!: () => void;
     const firstFinished = new Promise<void>(resolve => {
       finishFirst = resolve;
@@ -53,19 +58,25 @@ describe('session signal context at run completion', () => {
       const syncModel = vi.spyOn(session.model, 'syncFromPersisted');
       const clearAbort = vi.spyOn(session.run, 'clearAbortRequested');
       if (kind === 'user') {
-        await expect(session.sendSignal({ content: 'second' }, { requireDelivery: true }).accepted).resolves.toEqual({
+        await expect(
+          session.sendSignal(
+            { content: 'second', ifActive: { behavior } } as Parameters<typeof session.sendSignal>[0],
+            { requireDelivery: true },
+          ).accepted,
+        ).resolves.toEqual({
           accepted: true,
-          action: 'deliver',
-          runId,
+          action: behavior,
+          ...(behavior === 'deliver' && { runId }),
         });
       } else {
-        const result = await session.sendNotificationSignal({
-          source: 'factory',
-          kind: 'manual',
-          priority: 'high',
-          summary: 'second',
+        const result = await session.sendNotificationSignal(
+          { source: 'factory', kind: 'manual', priority: 'high', summary: 'second' },
+          { ifActive: { behavior } },
+        );
+        await expect(result.accepted).resolves.toEqual({
+          action: behavior,
+          ...(behavior === 'deliver' && { runId }),
         });
-        await expect(result.accepted).resolves.toEqual({ action: 'deliver', runId });
       }
       expect(buildStreamOptions).not.toHaveBeenCalled();
       expect(syncModel).not.toHaveBeenCalled();
@@ -73,7 +84,11 @@ describe('session signal context at run completion', () => {
       expect(session.run.getRunId()).toBe(runId);
       finishFirst();
       await first;
-      await vi.waitFor(() => expect(calls).toBe(2));
+      if (behavior === 'deliver') {
+        await vi.waitFor(() => expect(calls).toBe(2));
+      } else {
+        expect(calls).toBe(1);
+      }
     } finally {
       finishFirst();
       await first;
@@ -130,6 +145,7 @@ describe('session signal context at run completion', () => {
       });
       await controller.init();
       const session = await controller.createSession({ id: 'context-session', ownerId: 'owner' });
+      const stream = vi.spyOn(agent, 'stream');
       const first = session.sendMessage({ content: 'first' });
       try {
         await vi.waitFor(() => expect(calls).toBe(1));
@@ -151,15 +167,23 @@ describe('session signal context at run completion', () => {
         contexts.length = 0;
         const requestContext = new RequestContext();
         requestContext.set('caller', 'factory');
+        const tracingContext = {};
         if (kind === 'user') {
-          await session.sendSignal({ content: 'second' }, { requestContext, requireDelivery: true }).accepted;
+          await session.sendSignal({ content: 'second' }, { requestContext, tracingContext, requireDelivery: true })
+            .accepted;
         } else {
           await session.sendNotificationSignal(
             { source: 'factory', kind: 'manual', priority: 'high', summary: 'second' },
-            { requestContext },
+            { requestContext, tracingContext },
           );
         }
         await vi.waitFor(() => expect(calls).toBe(2));
+        expect(
+          stream.mock.calls.some(call => {
+            const options = (call as unknown[])[1] as { tracingContext?: unknown } | undefined;
+            return options?.tracingContext === tracingContext;
+          }),
+        ).toBe(true);
         await vi.waitFor(() => expect(session.run.isRunning()).toBe(false));
         const threadId = session.thread.requireId();
         await session.sendMessage({ content: 'third', requestContext });

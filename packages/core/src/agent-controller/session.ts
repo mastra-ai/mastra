@@ -1,4 +1,5 @@
 import type { Agent } from '../agent';
+import type { AgentExecutionOptions, InnerAgentExecutionOptions } from '../agent/agent.types';
 import type { MastraDBMessage, MastraProviderMetadata } from '../agent/message-list/state/types';
 import { createSignal, resolveDeliveryAttributes } from '../agent/signals';
 import type {
@@ -265,6 +266,8 @@ export interface ThreadDataStore {
  * This is the formalized DI boundary: the Session receives exactly the
  * capabilities it is allowed to use, nothing more.
  */
+type SessionStreamOptions = AgentExecutionOptions & Pick<InnerAgentExecutionOptions, 'outputWriter'>;
+
 export interface SessionMachinery {
   /** Resolve the agent that should answer for the session's current mode/model. */
   getAgent(): Agent;
@@ -281,7 +284,7 @@ export interface SessionMachinery {
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
-  }): Promise<Record<string, unknown>>;
+  }): Promise<SessionStreamOptions>;
   /** The run budget every initial stream and resume must carry (maxSteps, provider fallbacks, …). */
   buildSharedRunOptions(): Record<string, unknown>;
   /** Resolve the toolset (built-in controller  tools + user/subagent tools) for a run. */
@@ -3442,7 +3445,7 @@ export class Session<TState = unknown> {
           resourceId: this.identity.getResourceId(),
           threadId,
           ifActive,
-          ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
+          ifIdle: { ...ifIdle, streamOptions },
         });
         if (requireDelivery) {
           const settled = await result.accepted;
@@ -3477,7 +3480,7 @@ export class Session<TState = unknown> {
         resourceId: this.identity.getResourceId(),
         threadId,
         ifActive,
-        ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
+        ifIdle: { ...ifIdle, streamOptions },
       });
       if (requireDelivery) {
         // Delivery-guaranteed path: surface the real acceptance decision and
@@ -3532,7 +3535,7 @@ export class Session<TState = unknown> {
       resourceId: this.identity.getResourceId(),
       threadId,
       ifActive,
-      ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
+      ifIdle: { ...ifIdle, streamOptions },
     });
   }
 
@@ -3635,7 +3638,7 @@ export class Session<TState = unknown> {
         const result = agent.queueMessage(this.createMessageInput({ content: next.content }), {
           resourceId: this.identity.getResourceId(),
           threadId,
-          ifIdle: { streamOptions: streamOptions as any },
+          ifIdle: { streamOptions },
         });
         // Let a rejected `accepted` propagate: `next` is already dequeued, so a
         // setup/misconfig failure must reach the outer catch to requeue it

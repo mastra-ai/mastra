@@ -7,7 +7,7 @@ import type { PublicSchema } from '../schema';
 import { createTool, webSearchTool } from '../tools';
 import { Agent } from './agent';
 import type { AgentExecutionOptions, PublicAgentExecutionOptions } from './agent.types';
-import type { AgentConfig } from './types';
+import type { AgentConfig, AgentSignalIfIdleOptions, SendAgentSignalAccepted, SendAgentSignalOptions } from './types';
 
 /**
  * Type tests for Agent configuration types
@@ -428,6 +428,40 @@ describe('Agent Type Tests', () => {
         tools: () => ({ myTool: realTool }),
       };
       assertType<string>(config.name!);
+    });
+  });
+
+  describe('signal stream options', () => {
+    type SignalOutput = { answer: string };
+
+    it('preserves the output type for direct and deferred stream options', () => {
+      const schema = z.object({ answer: z.string() });
+      const direct: SendAgentSignalOptions<SignalOutput> = {
+        resourceId: 'resource',
+        threadId: 'thread',
+        ifIdle: { streamOptions: { structuredOutput: { schema } } },
+      };
+      const deferred: SendAgentSignalOptions<SignalOutput> = {
+        resourceId: 'resource',
+        threadId: 'thread',
+        ifIdle: { streamOptions: async () => ({ structuredOutput: { schema } }) },
+      };
+      const agent = {} as Agent;
+
+      expectTypeOf(
+        agent.sendSignal<SignalOutput>({ type: 'user-message', contents: 'direct' }, direct).accepted,
+      ).toEqualTypeOf<Promise<SendAgentSignalAccepted<SignalOutput>>>();
+      expectTypeOf(
+        agent.sendSignal<SignalOutput>({ type: 'user-message', contents: 'deferred' }, deferred).accepted,
+      ).toEqualTypeOf<Promise<SendAgentSignalAccepted<SignalOutput>>>();
+    });
+
+    it('rejects invalid deferred stream options', () => {
+      const options: AgentSignalIfIdleOptions<SignalOutput> = {
+        // @ts-expect-error - maxSteps must remain numeric inside a deferred factory
+        streamOptions: async () => ({ maxSteps: 'invalid' }),
+      };
+      assertType<AgentSignalIfIdleOptions<SignalOutput>>(options);
     });
   });
 });

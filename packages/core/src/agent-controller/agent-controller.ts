@@ -23,7 +23,7 @@ import type { DynamicArgument } from '../types';
 import { Workspace } from '../workspace/workspace';
 
 import { Session } from './session';
-import type { ThreadDataStore } from './session';
+import type { SessionMachinery, ThreadDataStore } from './session';
 import {
   askUserTool,
   createSubagentTool,
@@ -1888,7 +1888,7 @@ export class AgentController<TState = {}> {
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
-  }): Promise<Record<string, unknown>> {
+  }) {
     const runThreadId = session.thread.getId();
     if (!runThreadId) {
       throw new Error('Cannot build stream options without a current thread');
@@ -1921,7 +1921,7 @@ export class AgentController<TState = {}> {
       // uses its own getInstructions() naturally.
     }
 
-    const streamOptions: Record<string, unknown> = {
+    const streamOptions: Awaited<ReturnType<SessionMachinery['buildStreamOptions']>> = {
       ...this.buildSharedRunOptions(session),
       memory: {
         thread: runThreadId,
