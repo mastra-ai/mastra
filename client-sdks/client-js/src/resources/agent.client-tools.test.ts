@@ -2243,6 +2243,85 @@ describe('Agent stream cancellation', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('generate: client-wide abortSignal aborted after the tool-call response suppresses client-tool execution', async () => {
+    const executeSpy = vi.fn(async () => ({ ok: true }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      execute: executeSpy,
+    });
+
+    const clientAc = new AbortController();
+    const scopedClient = new MastraClient({ baseUrl: 'http://localhost:4111', abortSignal: clientAc.signal });
+    const scopedAgent = scopedClient.getAgent('agent-1');
+
+    // The HTTP request completes, then the client-wide signal fires before tools run.
+    (global.fetch as any).mockImplementationOnce(async () => {
+      const response = new Response(
+        JSON.stringify({
+          finishReason: 'tool-calls',
+          toolCalls: [{ toolCallId: 'call_1', toolName: 'weatherTool', args: { location: 'NYC' } }],
+          messages: [],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+      clientAc.abort();
+      return response;
+    });
+
+    await expect(scopedAgent.generate('weather?', { clientTools: { weatherTool } })).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    expect(executeSpy).not.toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('stream: aborting during the first client tool stops the remaining tools in the same step', async () => {
+    const abortDuringFirst = new AbortController();
+    const firstSpy = vi.fn(async () => {
+      abortDuringFirst.abort();
+      return { ok: 1 };
+    });
+    const secondSpy = vi.fn(async () => ({ ok: 2 }));
+    const toolA = createTool({ id: 'toolA', description: 'A', inputSchema: z.object({}), execute: firstSpy });
+    const toolB = createTool({ id: 'toolB', description: 'B', inputSchema: z.object({}), execute: secondSpy });
+
+    (global.fetch as any).mockImplementationOnce(async () => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const push = (c: object) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(c)}\n\n`));
+          push({ type: 'step-start', payload: { messageId: 'm1' } });
+          push({ type: 'tool-call', payload: { toolCallId: 'call_a', toolName: 'toolA', args: {} } });
+          push({ type: 'tool-call', payload: { toolCallId: 'call_b', toolName: 'toolB', args: {} } });
+          push({ type: 'step-finish', payload: { stepResult: { isContinued: false } } });
+          push({ type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } });
+          controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+          controller.close();
+        },
+      });
+      return new Response(stream as unknown as ReadableStream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    });
+
+    const resp = await agent.stream('go', { clientTools: { toolA, toolB }, abortSignal: abortDuringFirst.signal });
+    const reader = resp.body!.getReader();
+    try {
+      while (!(await reader.read()).done) {
+        /* drain */
+      }
+    } catch {
+      // aborted mid-stream
+    }
+    await flush();
+
+    expect(firstSpy).toHaveBeenCalledTimes(1);
+    expect(secondSpy).not.toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
   it('streamLegacy: body.cancel() aborts the request and suppresses client-tool continuations', async () => {
     const executeSpy = vi.fn(async () => ({ ok: true }));
     const weatherTool = createTool({
@@ -2330,7 +2409,7 @@ describe('Agent stream cancellation', () => {
   });
 
   it.each([
-    ['streamUntilIdle', (a: typeof agent) => a.streamUntilIdle('hi'), '/stream'],
+    ['streamUntilIdle', (a: typeof agent) => a.streamUntilIdle('hi'), '/stream-until-idle'],
     [
       'approveToolCall',
       (a: typeof agent) => a.approveToolCall({ runId: 'r1', toolCallId: 't1' }),
@@ -2345,7 +2424,7 @@ describe('Agent stream cancellation', () => {
     [
       'resumeStreamUntilIdle',
       (a: typeof agent) => a.resumeStreamUntilIdle({}, { runId: 'r1' } as any),
-      '/resume-stream',
+      '/resume-stream-until-idle',
     ],
   ])('%s: body.cancel() aborts the underlying request', async (_name, call, urlPart) => {
     let captured: ReturnType<typeof hangingSseResponse> | undefined;
@@ -2355,7 +2434,7 @@ describe('Agent stream cancellation', () => {
     });
 
     const resp = await call(agent);
-    expect((global.fetch as any).mock.calls[0][0]).toContain(urlPart);
+    expect(new URL((global.fetch as any).mock.calls[0][0]).pathname.endsWith(urlPart)).toBe(true);
     expect(captured!.signal!.aborted).toBe(false);
 
     const reader = resp.body!.getReader();

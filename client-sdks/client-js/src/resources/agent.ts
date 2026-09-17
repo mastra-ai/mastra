@@ -1157,7 +1157,9 @@ export class Agent extends BaseResource {
     _StructuredOutput extends JSONSchema7 | ZodSchema | undefined = undefined,
   >(params: GenerateLegacyParams<Output>): Promise<GenerateReturn<any, any, any>> {
     // `abortSignal` is forwarded to fetch and must never be serialized into the request body
-    const { abortSignal, ...bodyParams } = params;
+    const { abortSignal: perCallSignal, ...bodyParams } = params;
+    // Continuation guards must honor the client-wide signal too, not just the per-call one.
+    const abortSignal = mergeAbortSignals(this.options.abortSignal, perCallSignal);
     const processedParams = {
       ...bodyParams,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
@@ -1262,7 +1264,8 @@ export class Agent extends BaseResource {
     } as StreamParams<OUTPUT>;
     const resolvedClientTools = params.clientToolsResolver?.() ?? params.clientTools;
     // `abortSignal` is forwarded to fetch and must never be serialized into the request body
-    const abortSignal = params.abortSignal;
+    // Continuation guards must honor the client-wide signal too, not just the per-call one.
+    const abortSignal = mergeAbortSignals(this.options.abortSignal, params.abortSignal);
     const processedParams = {
       ...params,
       abortSignal: undefined,
@@ -1723,7 +1726,7 @@ export class Agent extends BaseResource {
     // Wrap the readable so cancelling it aborts the underlying request and any
     // client-tool continuations, instead of only detaching the consumer.
     const abortController = new AbortController();
-    const signal = mergeAbortSignals(abortController.signal, params.abortSignal);
+    const signal = mergeAbortSignals(abortController.signal, params.abortSignal, this.options.abortSignal);
     const innerReader = innerReadable.getReader();
     const readable = new ReadableStream<Uint8Array>({
       async pull(controller) {
@@ -2193,7 +2196,7 @@ export class Agent extends BaseResource {
     return {
       readable,
       controller: readableController!,
-      signal: mergeAbortSignals(abortController.signal, externalSignal)!,
+      signal: mergeAbortSignals(abortController.signal, externalSignal, this.options.abortSignal)!,
     };
   }
 
@@ -2396,6 +2399,10 @@ export class Agent extends BaseResource {
               const toolResultContents: Array<Record<string, unknown>> = [];
 
               for (const toolCall of executableToolCalls) {
+                // Re-check between tools so an abort mid-batch stops the remaining executions.
+                if (isAborted()) {
+                  return;
+                }
                 const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
 
                 const runId: string = streamRunId ?? toolCall.toolCallId;
