@@ -59,7 +59,12 @@ import type {
 } from './search';
 import { SearchEngine, splitIntoChunks } from './search';
 import type { WorkspaceSkills, SkillsResolver, SkillSource } from './skills';
-import { WorkspaceSkillsImpl, ResolvedSourceWorkspaceSkills, LocalSkillSource } from './skills';
+import {
+  WorkspaceSkillsImpl,
+  ResolvedSourceWorkspaceSkills,
+  LocalSkillSource,
+  SKILL_SCOPE_DOCUMENT_PREFIX,
+} from './skills';
 import type { WorkspaceToolsConfig } from './tools';
 import type { WorkspaceStatus } from './types';
 
@@ -528,6 +533,8 @@ export interface WorkspaceInfo {
  * (`batchReadFiles`).
  */
 const FS_READ_CONCURRENCY = 8;
+/** Mirrors SearchEngine.search default when no topK is supplied. */
+const DEFAULT_SEARCH_TOP_K = 10;
 
 /**
  * Parse the user-facing `bm25` config union into the `BM25SearchConfig` shape
@@ -1085,12 +1092,20 @@ export class Workspace<
       throw new SearchNotAvailableError();
     }
     this.lastAccessedAt = new Date();
-    const results = await this._searchEngine.search(query, options);
+
     // Documents tagged with `skillScope` belong to request-scoped skill views
     // (dynamic paths or resolver-backed filesystems). They are only meaningful
     // through `skills.getScoped(...).search()`; exposing them here would leak
-    // one request's skills into another's unscoped workspace search.
-    return results.filter(result => result.metadata?.skillScope === undefined);
+    // one request's skills into another's unscoped workspace search. The engine
+    // ranks and truncates to topK before we can filter, so over-fetch by the
+    // number of scoped documents to keep topK meaningful for unscoped content.
+    const scopedCount = this._searchEngine.countByPrefix(SKILL_SCOPE_DOCUMENT_PREFIX);
+    if (scopedCount === 0) {
+      return this._searchEngine.search(query, options);
+    }
+    const topK = options?.topK ?? DEFAULT_SEARCH_TOP_K;
+    const results = await this._searchEngine.search(query, { ...options, topK: topK + scopedCount });
+    return results.filter(result => result.metadata?.skillScope === undefined).slice(0, topK);
   }
 
   /**

@@ -50,6 +50,9 @@ interface SharedSearchState {
   documentIds: Set<string>;
 }
 
+/** @internal Prefix of every search document ID owned by a request-scoped skills view. */
+export const SKILL_SCOPE_DOCUMENT_PREFIX = 'skill-scope:';
+
 // =============================================================================
 // WorkspaceSkillsImpl
 // =============================================================================
@@ -84,6 +87,11 @@ export interface WorkspaceSkillsImplConfig {
   searchNamespace?: string;
   /** @internal Search document registry shared by request-scoped views. */
   sharedSearchState?: SharedSearchState;
+  /**
+   * @internal Called before this view re-indexes after `releaseSearchIndex()`,
+   * so the owner can re-admit it into its bounded cache first.
+   */
+  onIndexReadmit?: () => Promise<void>;
 }
 
 /**
@@ -98,6 +106,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   readonly #checkSkillFileMtime: boolean;
   readonly #searchNamespace?: string;
   readonly #sharedSearchState: SharedSearchState;
+  readonly #onIndexReadmit?: () => Promise<void>;
+
+  /** Search documents were released by the owner; re-index on next search use. */
+  #indexReleased = false;
+  #readmitPromise: Promise<void> | null = null;
 
   /** Request-scoped views for dynamic resolvers, cached by request and canonical path set. */
   readonly #scopedByRequest = new WeakMap<object, Promise<WorkspaceSkills>>();
@@ -147,6 +160,49 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     this.#checkSkillFileMtime = config.checkSkillFileMtime ?? false;
     this.#searchNamespace = config.searchNamespace;
     this.#sharedSearchState = config.sharedSearchState ?? { documentIds: new Set() };
+    this.#onIndexReadmit = config.onIndexReadmit;
+  }
+
+  /**
+   * @internal Drop every search document this view (and its path-scoped
+   * children) indexed. The catalog stays intact; the next search-dependent
+   * operation re-admits the view via `onIndexReadmit` and re-indexes.
+   */
+  async releaseSearchIndex(): Promise<void> {
+    if (!this.#searchEngine) return;
+    this.#indexReleased = true;
+    for (const candidates of this.#skills.values()) {
+      for (const skill of candidates) {
+        await this.#removeSkillFromIndex(skill);
+      }
+    }
+    for (const child of this.#scopedByPaths.values()) {
+      const scoped = await child.catch(() => null);
+      if (scoped instanceof WorkspaceSkillsImpl) {
+        await scoped.releaseSearchIndex();
+      }
+    }
+  }
+
+  /**
+   * Re-index the current catalog if the search documents were released.
+   * Returns true when a re-index happened (the index is then fully current).
+   */
+  async #readmitIndexIfReleased(): Promise<boolean> {
+    if (!this.#indexReleased || !this.#searchEngine) return false;
+    this.#readmitPromise ??= (async () => {
+      await this.#onIndexReadmit?.();
+      this.#indexReleased = false;
+      for (const candidates of this.#skills.values()) {
+        for (const skill of candidates) {
+          await this.#indexSkill(skill);
+        }
+      }
+    })().finally(() => {
+      this.#readmitPromise = null;
+    });
+    await this.#readmitPromise;
+    return true;
   }
 
   async getScoped(context?: SkillsContext): Promise<WorkspaceSkills> {
@@ -190,6 +246,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
           ? `${this.#searchNamespace}/${encodeURIComponent(key)}`
           : encodeURIComponent(key),
         sharedSearchState: this.#sharedSearchState,
+        onIndexReadmit: this.#onIndexReadmit,
       }),
     );
     this.#scopedByPaths.set(key, scoped);
@@ -448,6 +505,9 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     oldSkills: Map<string, InternalSkill[]>,
     newSkills: Map<string, InternalSkill[]>,
   ): Promise<void> {
+    // A released view re-indexes the whole (already swapped) catalog instead.
+    if (await this.#readmitIndexIfReleased()) return;
+
     const flatten = (map: Map<string, InternalSkill[]>): Map<string, InternalSkill> => {
       const byPath = new Map<string, InternalSkill>();
       for (const candidates of map.values()) {
@@ -521,6 +581,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
   async addSkill(skillPath: string): Promise<void> {
     await this.#ensureInitialized();
+    await this.#readmitIndexIfReleased();
 
     // Determine SKILL.md path and dirName
     let skillFilePath: string;
@@ -610,6 +671,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       // Fall back to simple text matching if no search engine
       return this.#simpleSearch(query, options);
     }
+    await this.#readmitIndexIfReleased();
 
     const { topK = 5, minScore, skillNames, includeReferences = true, mode } = options;
 
@@ -1331,7 +1393,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
   #searchDocumentId(skillPath: string, source: string): string {
     const id = `skill:${skillPath}:${source}`;
-    return this.#searchNamespace ? `skill-scope:${this.#searchNamespace}:${id}` : id;
+    return this.#searchNamespace ? `${SKILL_SCOPE_DOCUMENT_PREFIX}${this.#searchNamespace}:${id}` : id;
   }
 
   /**
@@ -1550,8 +1612,10 @@ const DEFAULT_MAX_CACHED_SOURCES = 16;
  * The per-source cache is a bounded LRU: when a source is evicted, every
  * document it indexed into the shared search engine is removed, so a resolver
  * that returns a new filesystem on every request cannot grow the index
- * without bound. Resolvers that return a stable instance per tenant keep
- * that tenant's discovery cache warm across requests.
+ * without bound. An evicted view that is still in use re-admits itself (and
+ * re-indexes) on its next search, so callers never observe missing results.
+ * Resolvers that return a stable instance per tenant keep that tenant's
+ * discovery cache warm across requests.
  *
  * Calls made directly on this instance (without `getScoped`) resolve the
  * source with an empty context, mirroring how workspace tools resolve the
@@ -1565,14 +1629,17 @@ export class ResolvedSourceWorkspaceSkills implements WorkspaceSkills {
 
   readonly #scopedByRequest = new WeakMap<object, Promise<WorkspaceSkills>>();
   /** Map insertion order doubles as LRU order; hits re-insert. */
-  readonly #bySource = new Map<SkillSourceInterface, { impl: WorkspaceSkillsImpl; namespace: string }>();
+  readonly #bySource = new Map<SkillSourceInterface, WorkspaceSkillsImpl>();
   #nextSourceId = 0;
 
   constructor(config: ResolvedSourceWorkspaceSkillsConfig) {
     const { source, maxCachedSources, ...rest } = config;
     this.#resolver = source;
     this.#config = rest;
-    this.#maxCachedSources = Math.max(1, maxCachedSources ?? DEFAULT_MAX_CACHED_SOURCES);
+    this.#maxCachedSources =
+      typeof maxCachedSources === 'number' && Number.isFinite(maxCachedSources) && maxCachedSources >= 1
+        ? Math.floor(maxCachedSources)
+        : DEFAULT_MAX_CACHED_SOURCES;
   }
 
   async getScoped(context?: SkillsContext): Promise<WorkspaceSkills> {
@@ -1595,54 +1662,35 @@ export class ResolvedSourceWorkspaceSkills implements WorkspaceSkills {
   async #createScoped(context: SkillsContext): Promise<WorkspaceSkills> {
     const source = await this.#resolver(context);
 
-    let entry = this.#bySource.get(source);
-    if (entry) {
-      // Refresh LRU position
-      this.#bySource.delete(source);
-      this.#bySource.set(source, entry);
+    let impl = this.#bySource.get(source);
+    if (impl) {
+      await this.#admit(source, impl);
     } else {
-      const namespace = `source-${this.#nextSourceId++}`;
-      entry = {
-        namespace,
-        impl: new WorkspaceSkillsImpl({
-          ...this.#config,
-          source,
-          searchNamespace: namespace,
-          sharedSearchState: this.#sharedSearchState,
-        }),
-      };
-      this.#bySource.set(source, entry);
-      await this.#evictOverflow();
+      impl = new WorkspaceSkillsImpl({
+        ...this.#config,
+        source,
+        searchNamespace: `source-${this.#nextSourceId++}`,
+        sharedSearchState: this.#sharedSearchState,
+        // A view evicted from the LRU may still be held by a caller (or by a
+        // request-context cache). When it next needs its search documents it
+        // re-admits itself here before re-indexing, so the bound still holds
+        // and live views never silently lose search.
+        onIndexReadmit: () => this.#admit(source, impl!),
+      });
+      await this.#admit(source, impl);
     }
 
-    return entry.impl.getScoped(context);
+    return impl.getScoped(context);
   }
 
-  async #evictOverflow(): Promise<void> {
+  /** Insert or bump a source to most-recently-used, evicting overflow. */
+  async #admit(source: SkillSourceInterface, impl: WorkspaceSkillsImpl): Promise<void> {
+    this.#bySource.delete(source);
+    this.#bySource.set(source, impl);
     while (this.#bySource.size > this.#maxCachedSources) {
-      const [key, entry] = this.#bySource.entries().next().value!;
-      this.#bySource.delete(key);
-      await this.#removeNamespaceFromIndex(entry.namespace);
-    }
-  }
-
-  /**
-   * Drop every search document indexed under a source namespace (including
-   * its path-scoped child namespaces, which are nested as `${namespace}/…`).
-   */
-  async #removeNamespaceFromIndex(namespace: string): Promise<void> {
-    const remove = this.#config.searchEngine?.remove;
-    if (!remove) return;
-
-    const prefixes = [`skill-scope:${namespace}:`, `skill-scope:${namespace}/`];
-    const ids = [...this.#sharedSearchState.documentIds].filter(id => prefixes.some(p => id.startsWith(p)));
-    for (const id of ids) {
-      try {
-        await remove.call(this.#config.searchEngine, id);
-      } catch {
-        // Best-effort removal; entry may already be gone
-      }
-      this.#sharedSearchState.documentIds.delete(id);
+      const [evictedSource, evicted] = this.#bySource.entries().next().value!;
+      this.#bySource.delete(evictedSource);
+      await evicted.releaseSearchIndex();
     }
   }
 

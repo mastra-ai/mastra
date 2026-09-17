@@ -961,6 +961,84 @@ Line 3 conclusion`;
         const scoped = await skills.getScoped({ requestContext: new RequestContext() });
         expect((await scoped.search('demo')).map(r => r.skillName)).toEqual(['demo']);
       });
+
+      it('keeps search working on a view that was evicted while still in use', async () => {
+        const searchEngine = new SearchEngine({ bm25: true });
+        const skills = new ResolvedSourceWorkspaceSkills({
+          source: () => new LocalFilesystem({ basePath: remoteDir }),
+          skills: ['skills'],
+          searchEngine,
+          maxCachedSources: 1,
+        });
+
+        const ctxA = new RequestContext();
+        const viewA = await skills.getScoped({ requestContext: ctxA });
+        await viewA.list();
+        expect((await viewA.search('demo')).map(r => r.skillName)).toEqual(['demo']);
+
+        // A second source evicts A and releases its search documents
+        const viewB = await skills.getScoped({ requestContext: new RequestContext() });
+        await viewB.list();
+        expect(searchEngine.countByPrefix('skill-scope:')).toBe(1);
+
+        // A retained view (and the request-context cache) still searches correctly…
+        expect((await viewA.search('demo')).map(r => r.skillName)).toEqual(['demo']);
+        const viewAAgain = await skills.getScoped({ requestContext: ctxA });
+        expect((await viewAAgain.search('demo')).map(r => r.skillName)).toEqual(['demo']);
+        // …and re-admission evicted B instead of growing the index
+        expect(searchEngine.countByPrefix('skill-scope:')).toBe(1);
+
+        // A refresh on the now-evicted B must not repopulate its namespace without re-admitting
+        await viewB.refresh();
+        expect(searchEngine.countByPrefix('skill-scope:')).toBe(1);
+        expect((await viewB.search('demo')).map(r => r.skillName)).toEqual(['demo']);
+        expect(searchEngine.countByPrefix('skill-scope:')).toBe(1);
+      });
+
+      it('falls back to the default cache bound for invalid maxCachedSources', async () => {
+        for (const maxCachedSources of [Number.NaN, Number.POSITIVE_INFINITY, 0, -3]) {
+          const searchEngine = new SearchEngine({ bm25: true });
+          const skills = new ResolvedSourceWorkspaceSkills({
+            source: () => new LocalFilesystem({ basePath: remoteDir }),
+            skills: ['skills'],
+            searchEngine,
+            maxCachedSources,
+          });
+          for (let i = 0; i < 20; i++) {
+            await (await skills.getScoped({ requestContext: new RequestContext() })).list();
+          }
+          expect(searchEngine.countByPrefix('skill-scope:')).toBe(16);
+        }
+      });
+    });
+
+    it('honors topK for unscoped documents when scoped skill documents outrank them', async () => {
+      const tenantDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-topk-'));
+      await fs.mkdir(path.join(tenantDir, 'skills'), { recursive: true });
+      for (let i = 0; i < 5; i++) {
+        await fs.mkdir(path.join(tenantDir, 'skills', `zebra-${i}`), { recursive: true });
+        await fs.writeFile(
+          path.join(tenantDir, 'skills', `zebra-${i}`, 'SKILL.md'),
+          `---\nname: zebra-${i}\ndescription: zebra zebra zebra\n---\n\nzebra zebra zebra zebra\n`,
+        );
+      }
+      try {
+        const workspace = new Workspace({
+          filesystem: () => new LocalFilesystem({ basePath: tenantDir }),
+          skills: ['skills'],
+          bm25: true,
+        });
+        // Index scoped skill documents that strongly match the query
+        await (await workspace.skills!.getScoped!({ requestContext: new RequestContext() })).list();
+        // Two plain workspace documents that match more weakly
+        await workspace.index('doc-1', 'a zebra note');
+        await workspace.index('doc-2', 'another zebra note');
+
+        const results = await workspace.search('zebra', { topK: 2 });
+        expect(results.map(r => r.id).sort()).toEqual(['doc-1', 'doc-2']);
+      } finally {
+        await fs.rm(tenantDir, { recursive: true, force: true });
+      }
     });
 
     it('should de-duplicate symlinked skill aliases when workspace skills use LocalFilesystem as the source', async () => {
