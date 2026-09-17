@@ -41,8 +41,8 @@ npm install @mastra/auth-clerk@latest
 ## Usage example
 
 ```typescript {2,6-10} title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { MastraAuthClerk } from '@mastra/auth-clerk';
+import { Mastra } from '@mastra/core'
+import { MastraAuthClerk } from '@mastra/auth-clerk'
 
 export const mastra = new Mastra({
   server: {
@@ -52,7 +52,7 @@ export const mastra = new Mastra({
       jwksUri: process.env.CLERK_JWKS_URI,
     }),
   },
-});
+})
 ```
 
 :::note
@@ -82,8 +82,8 @@ Use a stable, random cookie password of at least 32 characters. If omitted, Mast
 Configure Clerk under `studio.auth` to require sign-in for Studio without adding authentication to ordinary API requests:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { MastraAuthClerk } from '@mastra/auth-clerk';
+import { Mastra } from '@mastra/core'
+import { MastraAuthClerk } from '@mastra/auth-clerk'
 
 export const mastra = new Mastra({
   studio: {
@@ -98,7 +98,7 @@ export const mastra = new Mastra({
       },
     }),
   },
-});
+})
 ```
 
 Open Studio in a signed-out browser session and select **Sign in with Clerk**. After signing in, confirm that Clerk redirects to the Mastra callback and that Mastra sets an encrypted session cookie before returning you to Studio. You don't need to manually pass an API token for this login flow. Follow [Verify authentication](/docs/studio/auth#verify-authentication) to check signed-out requests and direct API access too.
@@ -118,18 +118,18 @@ For direct API requests protected by `server.auth`, retrieve the access token fr
 Use the Clerk React hooks to authenticate users and retrieve their access token:
 
 ```typescript title="lib/auth.ts"
-import { useAuth } from '@clerk/nextjs';
+import { useAuth } from '@clerk/nextjs'
 
 export const useClerkAuth = () => {
-  const { getToken } = useAuth();
+  const { getToken } = useAuth()
 
   const getAccessToken = async () => {
-    const token = await getToken();
-    return token;
-  };
+    const token = await getToken()
+    return token
+  }
 
-  return { getAccessToken };
-};
+  return { getAccessToken }
+}
 ```
 
 Refer to the [Clerk documentation](https://clerk.com/docs) for more information.
@@ -139,14 +139,14 @@ Refer to the [Clerk documentation](https://clerk.com/docs) for more information.
 When Clerk is configured under `server.auth`, requests to protected API routes made with `MastraClient` must include a valid Clerk access token in the `Authorization` header:
 
 ```typescript {6} title="lib/mastra/mastra-client.ts"
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient } from '@mastra/client-js'
 
 export const mastraClient = new MastraClient({
   baseUrl: 'https://<mastra-api-url>',
   headers: {
     Authorization: `Bearer ${accessToken}`,
   },
-});
+})
 ```
 
 :::note
@@ -164,30 +164,30 @@ Once `MastraClient` is configured with the Clerk access token, you can send auth
 <Tabs>
   <TabItem value="react" label="React">
     ```tsx title="src/components/test-agent.tsx"
-    'use client';
+    'use client'
 
-    import { useAuth } from '@clerk/nextjs';
-    import { MastraClient } from '@mastra/client-js';
+    import { useAuth } from '@clerk/nextjs'
+    import { MastraClient } from '@mastra/client-js'
 
     export const TestAgent = () => {
-      const { getToken } = useAuth();
+      const { getToken } = useAuth()
 
       async function handleClick() {
-        const token = await getToken();
+        const token = await getToken()
 
         const client = new MastraClient({
           baseUrl: 'http://localhost:4111',
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        });
+        })
 
-        const weatherAgent = client.getAgent('weatherAgent');
-        const response = await weatherAgent.generate("What's the weather like in New York");
+        const weatherAgent = client.getAgent('weatherAgent')
+        const response = await weatherAgent.generate("What's the weather like in New York")
 
-        console.log({ response });
+        console.log({ response })
       }
 
-      return <button onClick={handleClick}>Test Agent</button>;
-    };
+      return <button onClick={handleClick}>Test Agent</button>
+    }
     ```
   </TabItem>
 

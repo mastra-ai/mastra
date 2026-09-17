@@ -13,8 +13,8 @@ The `MastraAuthClerk` class verifies Clerk-issued JWT tokens and supports Studio
 ## Usage example
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { MastraAuthClerk } from '@mastra/auth-clerk';
+import { Mastra } from '@mastra/core'
+import { MastraAuthClerk } from '@mastra/auth-clerk'
 
 export const mastra = new Mastra({
   server: {
@@ -24,7 +24,7 @@ export const mastra = new Mastra({
       secretKey: process.env.CLERK_SECRET_KEY,
     }),
   },
-});
+})
 ```
 
 ## Restricting login to a single organization
@@ -32,8 +32,8 @@ export const mastra = new Mastra({
 Set `organizationId` or `organizationSlug` to only allow members of a specific Clerk organization to sign in. Non-members are rejected during authorization. Configure only one of the two. Setting both throws at startup, so login can't be granted to two different organizations.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { MastraAuthClerk } from '@mastra/auth-clerk';
+import { Mastra } from '@mastra/core'
+import { MastraAuthClerk } from '@mastra/auth-clerk'
 
 export const mastra = new Mastra({
   server: {
@@ -44,7 +44,7 @@ export const mastra = new Mastra({
       organizationId: process.env.CLERK_ORGANIZATION_ID,
     }),
   },
-});
+})
 ```
 
 ## Constructor parameters
