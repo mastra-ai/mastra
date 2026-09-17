@@ -1,6 +1,8 @@
 import { EntityType, SpanType } from '@mastra/core/observability';
 import type {
+  GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
+  GetTraceQueryValuesArgs,
   GetTraceQueryValuesResponse,
   TraceQueryGroupResponse,
   TraceQueryTraceResponse,
@@ -525,7 +527,7 @@ describe('Observability Methods', () => {
     it('should post field discovery requests unchanged and propagate a per-call abort signal', async () => {
       mockSuccessfulResponse();
       const controller = new AbortController();
-      const request = { timeRange, predicateScope: 'trace' as const, search: 'region', limit: 10 };
+      const request: GetTraceQueryFieldsArgs = { timeRange, predicateScope: 'trace', search: 'region', limit: 10 };
 
       const result = await client.getTraceQueryFields(request, { signal: controller.signal });
 
@@ -544,7 +546,12 @@ describe('Observability Methods', () => {
       mockSuccessfulResponse();
       const controller = new AbortController();
       const clientWithSignal = new MastraClient({ ...clientOptions, abortSignal: controller.signal });
-      const request = { timeRange, predicateScope: 'spans' as const, path: 'model', search: 'claude' };
+      const request: GetTraceQueryValuesArgs = {
+        timeRange,
+        predicateScope: 'spans',
+        path: 'model',
+        search: 'claude',
+      };
 
       const result = await clientWithSignal.getTraceQueryValues(request);
 
@@ -561,7 +568,7 @@ describe('Observability Methods', () => {
 
     it('should not retry discovery requests', async () => {
       const errorResponse = new Response('Unavailable', { status: 503, statusText: 'Unavailable' });
-      (global.fetch as any).mockResolvedValue(errorResponse);
+      vi.mocked(global.fetch).mockResolvedValue(errorResponse);
       const retryingClient = new MastraClient({ ...clientOptions, retries: 2, backoffMs: 0 });
 
       await expect(retryingClient.getTraceQueryFields({ timeRange, predicateScope: 'feedback' })).rejects.toThrow();
