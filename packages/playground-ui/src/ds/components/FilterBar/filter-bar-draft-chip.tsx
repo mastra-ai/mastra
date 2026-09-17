@@ -19,7 +19,7 @@ export function FilterBarDraftChip({ field, operator }: FilterBarDraftChipProps)
       aria-hidden
       data-slot="filter-bar-draft-chip"
       className={cn(
-        'flex h-form-sm max-w-full items-stretch divide-x divide-border1 rounded-full border border-border1 bg-surface4 text-neutral5',
+        'flex h-form-sm max-w-full items-stretch divide-x divide-border1 rounded-md border border-border1 bg-surface4 text-neutral5',
         'rounded-r-none',
       )}
     >

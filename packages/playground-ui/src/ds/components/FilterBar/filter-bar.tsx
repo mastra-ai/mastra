@@ -40,7 +40,7 @@ function FilterBarSurface({ className, children }: { className?: string; childre
       )}
       onClick={ctx.focusInput}
     >
-      <ListFilterIcon aria-hidden className="text-neutral3 mr-1 ml-2.5 size-3.5 shrink-0" />
+      <ListFilterIcon aria-hidden className="text-neutral3 mx-1.5 size-3 shrink-0" />
       {children}
       <VisuallyHidden aria-live="polite">{ctx.announcement}</VisuallyHidden>
     </div>
