@@ -35,7 +35,7 @@ const PROJECT_GLOBS = [
   'browser/*/vitest.config.ts',
   'workspaces/*/vitest.config.ts',
   'agent-sdks/*/vitest.config.ts',
-  'mastracode/vitest.config.ts',
+  'mastracode/*/vitest.config.ts',
 ];
 
 /**
@@ -47,7 +47,13 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
   const projects: TestProjectConfiguration[] = [];
 
   // Find all vitest.config.ts files
-  const configPaths = PROJECT_GLOBS.flatMap(pattern => globSync(pattern));
+  const configPaths = PROJECT_GLOBS.flatMap(pattern => {
+    const matches = globSync(pattern);
+    if (matches.length === 0) {
+      throw new Error(`Vitest project glob matched no configs: ${pattern}`);
+    }
+    return matches;
+  });
 
   for (const configPath of configPaths) {
     const projectDir = dirname(configPath);
