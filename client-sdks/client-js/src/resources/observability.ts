@@ -126,10 +126,22 @@ export interface LegacyGetTracesResponse {
 
 export type ListScoresBySpanParams = SpanIds & PaginationArgs;
 
-export type QueryTracesInput = Omit<TraceQueryRequest, 'group' | 'where'> & {
+type QueryTracesBaseInput = Omit<TraceQueryRequest, 'group' | 'where' | 'page' | 'pagination'> & {
   where?: TraceQueryPredicate;
   group?: never;
 };
+
+type QueryTracesKeysetInput = QueryTracesBaseInput & {
+  page?: TraceQueryRequest['page'];
+  pagination?: never;
+};
+
+type QueryTracesPaginatedInput = QueryTracesBaseInput & {
+  page?: never;
+  pagination: NonNullable<TraceQueryRequest['pagination']>;
+};
+
+export type QueryTracesInput = QueryTracesKeysetInput | QueryTracesPaginatedInput;
 export type QueryTraceThreadsInput = QueryThreadsInput;
 export type QueryTraceThreadsResult = QueryThreadsResult;
 
