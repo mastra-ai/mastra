@@ -1,4 +1,4 @@
-import type { FilePart } from '@mastra/react';
+import type { FilePart } from '@mastra/react/ui';
 
 import { isTextMimeType } from '../../attachments/attachment-kind';
 import { InMessageAttachment } from './in-message-attachment';

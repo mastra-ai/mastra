@@ -22,6 +22,7 @@ import { RenderScheduler } from '../../render-scheduler.js';
 import type { TUIState } from '../../state.js';
 import { handleGoalEvaluation } from '../agent-lifecycle.js';
 import { handleMessageEnd, handleMessageStart, handleMessageUpdate } from '../message.js';
+import { handleToolInputStart } from '../tool.js';
 import type { EventHandlerContext } from '../types.js';
 
 function visibleChildren(state: TUIState) {
@@ -386,6 +387,32 @@ describe('handleMessageStart signals', () => {
     );
     expect(stripAnsi((children[2] as AssistantMessageComponent).render(100).join('\n'))).toContain('after plugin');
     expect(state.streamingComponent).toBe(children[2]);
+  });
+
+  it('preserves streamed text when subagent tool input precedes its message part', () => {
+    const firstTool = toolPart({ toolCallId: 'tool-1', toolName: 'background_probe', result: { ok: false } });
+    const secondTool = toolPart({ toolCallId: 'tool-2', toolName: 'subagent', args: { task: 'Continue' } });
+    const failureText = { type: 'text', text: 'AWAITED_FAILURE_SURFACED' } as Part;
+
+    handleMessageStart(ctx, assistantMessage([firstTool]));
+    handleMessageUpdate(ctx, assistantMessage([firstTool, failureText]));
+    handleToolInputStart(ctx, 'tool-2', 'subagent');
+    handleMessageUpdate(ctx, assistantMessage([firstTool, failureText, secondTool]));
+    handleMessageUpdate(
+      ctx,
+      assistantMessage([
+        firstTool,
+        failureText,
+        secondTool,
+        { type: 'text', text: 'DEEP_DELEGATION_FOREGROUND' } as Part,
+      ]),
+    );
+
+    const rendered = visibleChildren(state)
+      .map(child => stripAnsi(child.render(100).join('\n')))
+      .join('\n');
+    expect(rendered).toContain('AWAITED_FAILURE_SURFACED');
+    expect(rendered).toContain('DEEP_DELEGATION_FOREGROUND');
   });
 
   it('deduplicates repeated streamed reminders by message id', () => {

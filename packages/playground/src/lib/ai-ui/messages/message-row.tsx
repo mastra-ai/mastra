@@ -25,8 +25,8 @@ import {
 import { badgeStatus, isSettledState } from '@mastra/playground-ui/domains/chat/tools/tool-card-kind';
 import type { ToolCardContext } from '@mastra/playground-ui/domains/chat/tools/tool-card-kind';
 import { collectToolGroups } from '@mastra/playground-ui/domains/chat/tools/tool-groups';
-import { MessageFactory } from '@mastra/react';
-import type { MessageRenderers } from '@mastra/react';
+import { MessageFactory } from '@mastra/react/ui';
+import type { MessageRenderers } from '@mastra/react/ui';
 import { memo, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { ToolCallEffects } from '../tools/tool-call-effects';

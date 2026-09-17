@@ -16,14 +16,14 @@ export function DataPanelNextPrevNav({
   onNext,
   previousLabel = 'Previous',
   nextLabel = 'Next',
-  variant,
+  variant = 'ghost',
 }: DataPanelNextPrevNavProps) {
   return (
     <ButtonsGroup spacing="close">
-      <Button size="md" variant={variant} tooltip={previousLabel} onClick={onPrevious} disabled={!onPrevious}>
+      <Button size="sm" variant={variant} tooltip={previousLabel} onClick={onPrevious} disabled={!onPrevious}>
         <ArrowUpIcon />
       </Button>
-      <Button size="md" variant={variant} tooltip={nextLabel} onClick={onNext} disabled={!onNext}>
+      <Button size="sm" variant={variant} tooltip={nextLabel} onClick={onNext} disabled={!onNext}>
         <ArrowDownIcon />
       </Button>
     </ButtonsGroup>

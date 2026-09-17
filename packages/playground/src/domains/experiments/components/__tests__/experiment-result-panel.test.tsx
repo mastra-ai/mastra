@@ -68,6 +68,7 @@ function renderPanel(
     <Wrapper>
       <TestLinkProvider>
         <ExperimentResultPanel
+          open
           result={result}
           onClose={() => {}}
           onTagsChange={onTagsChange}

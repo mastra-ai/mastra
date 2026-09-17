@@ -1,5 +1,55 @@
 # mastra
 
+## 1.31.0-alpha.4
+
+### Minor Changes
+
+- Added read-back verification and reports for trace imports. ([#23859](https://github.com/mastra-ai/mastra/pull/23859))
+
+### Patch Changes
+
+- Added check and cross icons to Factory's Approve and Decline buttons, while keeping tool details and keyboard focus available. ([#24263](https://github.com/mastra-ai/mastra/pull/24263))
+
+- Fixed `mastra build` so an explicit `bundler.externals` array is respected as the complete custom external list, in addition to Mastra's global externals. Workspace packages listed in the array now remain external runtime dependencies instead of being bundled. ([#24212](https://github.com/mastra-ai/mastra/pull/24212))
+
+- Fixed workflow inputs losing edits when switching between Form, JSON, and Simple views. Preserved multiline strings, schema defaults, array edits, and processor metadata across input views. Blank optional fields inside union and intersection groups no longer block submission, and the Run button looks the same in every view. ([#24170](https://github.com/mastra-ai/mastra/pull/24170))
+
+- Fixed build dependency resolution so bundled output stays consistent when a project is built from its app directory or from a monorepo root. ([#24212](https://github.com/mastra-ai/mastra/pull/24212))
+
+- Fixed Factory tool groups to report successful and failed calls from their recorded outcomes, including empty results. Preserved Studio and Factory tool output and approval behavior while sharing their presentation. ([#24259](https://github.com/mastra-ai/mastra/pull/24259))
+
+- Fixed Studio workflow results being overwritten by stale streams or saved snapshots, and kept run, resume, debug, and cancel controls aligned with the active run. ([#24184](https://github.com/mastra-ai/mastra/pull/24184))
+
+- Updated dependencies [[`697fecc`](https://github.com/mastra-ai/mastra/commit/697feccaa4ad5df913c22e47bf16f493dd7956a8), [`0bf287c`](https://github.com/mastra-ai/mastra/commit/0bf287c36ec14b45f5a4fdd0d279698694f592dd), [`6249741`](https://github.com/mastra-ai/mastra/commit/6249741f8463bdc5a05ded2b35b143f92f33afbf), [`2480359`](https://github.com/mastra-ai/mastra/commit/248035940aa048c7bcd8cfe7845915dc4734b571), [`d2a3f94`](https://github.com/mastra-ai/mastra/commit/d2a3f94f634301ebc9ac3acc3be0ffa125ee5454), [`8616fda`](https://github.com/mastra-ai/mastra/commit/8616fda3acfe1dbff85a00c00eb31d1362a1a1b5), [`b26e528`](https://github.com/mastra-ai/mastra/commit/b26e5288891641044a3c26a498c06259985fed10), [`2480359`](https://github.com/mastra-ai/mastra/commit/248035940aa048c7bcd8cfe7845915dc4734b571), [`b2f412a`](https://github.com/mastra-ai/mastra/commit/b2f412ae77fa5379471d103ebcc1ba69b22dd353)]:
+  - @mastra/core@1.68.0-alpha.4
+  - @mastra/deployer@1.68.0-alpha.4
+
+## 1.31.0-alpha.3
+
+### Patch Changes
+
+- Switched Studio traces and thread views to trace queries with cursor pagination. Removed unsupported filters, Running status, and Subtraces controls; unsupported stores now surface query errors instead of falling back to legacy lists. The default window is seven days, and query-backed lists refresh every 10 seconds without new-row highlighting. ([#23958](https://github.com/mastra-ai/mastra/pull/23958))
+
+- Fixed the deploy failure output to link to the correct deploy logs page on projects.mastra.ai instead of studio.mastra.ai ([#24185](https://github.com/mastra-ai/mastra/pull/24185))
+
+- Added root span details to queryTraces results: name, entityId, parentSpanId, createdAt, metadata, and inputPreview. Trace lists can display these fields without fetching each full trace. createdAt uses the root span start time; inputPreview contains a shortened input preview rather than the full input. ([#23958](https://github.com/mastra-ai/mastra/pull/23958))
+
+  ```ts
+  const { traces } = await client.queryTraces({
+    timeRange: { from: '2026-09-01T00:00:00Z', to: '2026-09-15T00:00:00Z' },
+  });
+  // Previously required fetching the full trace:
+  console.log(traces[0]?.name, traces[0]?.inputPreview, traces[0]?.metadata);
+  ```
+
+- Improved the Studio agent Config panel with clearer capability sections, readable memory settings, and Read/Source views for system prompts. ([#23928](https://github.com/mastra-ai/mastra/pull/23928))
+
+- Fixed mastra dev and mastra build crashing with an "Invalid Version" error when an installed @mastra package version could not be resolved. Unresolved workspace:, catalog:, or range specifiers are now skipped by the peer dependency check (#23302). ([#23607](https://github.com/mastra-ai/mastra/pull/23607))
+
+- Updated dependencies [[`b246a1b`](https://github.com/mastra-ai/mastra/commit/b246a1ba0cec1ca2781c661a6b90c777520b64c7), [`548c7ce`](https://github.com/mastra-ai/mastra/commit/548c7ce16e3095e49379af58f07e8bbefa71ffa4), [`13b0f30`](https://github.com/mastra-ai/mastra/commit/13b0f304533a43df7a7c486b6f37c9dca2187ecf), [`b2942c0`](https://github.com/mastra-ai/mastra/commit/b2942c0f3c99dd1edba9dc8c2c17bfa55c851ae8), [`99fab39`](https://github.com/mastra-ai/mastra/commit/99fab399c35952ae15427ea64845d4762e9ec144), [`d65d4d4`](https://github.com/mastra-ai/mastra/commit/d65d4d40a24a482d5b0ee83d9bab6042702ca1be), [`4fb5ae9`](https://github.com/mastra-ai/mastra/commit/4fb5ae9e2cba9b14ba6c5cef0894e49bccf6f607), [`e581e66`](https://github.com/mastra-ai/mastra/commit/e581e66e14bb1b2863698aecca7324fbf1ec4ff5), [`c42e2a6`](https://github.com/mastra-ai/mastra/commit/c42e2a6e47e987796513bbf2db1da19094ef5b62), [`a3f8f05`](https://github.com/mastra-ai/mastra/commit/a3f8f05ecb60c52056c590325e3821ecfc85afe3), [`13b0f30`](https://github.com/mastra-ai/mastra/commit/13b0f304533a43df7a7c486b6f37c9dca2187ecf), [`9cd9b4e`](https://github.com/mastra-ai/mastra/commit/9cd9b4eca69a3db0a0c415d0dcedf266cc7d5ec6), [`3589cde`](https://github.com/mastra-ai/mastra/commit/3589cde4ea8dd210df6b9a2355a3e568210965fc), [`783e48a`](https://github.com/mastra-ai/mastra/commit/783e48aba82489a085230f6b8539a9fb338c326b), [`07a81c8`](https://github.com/mastra-ai/mastra/commit/07a81c8be0cbdb5413ffa5c289d32765d80f4ea4), [`07ff1b8`](https://github.com/mastra-ai/mastra/commit/07ff1b8eafbd9c7786ef77decc6be3b63497cfd9), [`0ca5d6d`](https://github.com/mastra-ai/mastra/commit/0ca5d6d58a24e73a364451660a5a8696883eba45)]:
+  - @mastra/core@1.68.0-alpha.3
+  - @mastra/deployer@1.68.0-alpha.3
+
 ## 1.31.0-alpha.2
 
 ### Patch Changes

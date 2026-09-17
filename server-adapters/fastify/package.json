@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastify",
-  "version": "1.5.12-alpha.2",
+  "version": "1.5.12-alpha.4",
   "description": "Mastra Fastify adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -35,7 +35,7 @@
     "@fastify/swagger": "^9.7.0",
     "@fastify/swagger-ui": "^6.1.1",
     "@internal/lint": "workspace:*",
-    "@internal/server-adapter-test-utils": "workspace:*",
+    "@mastra/server-adapters-test-suite": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",

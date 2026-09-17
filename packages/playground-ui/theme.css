@@ -65,6 +65,8 @@
   --neutral6: oklch(0.985 0 0);
 
   --error: oklch(0.637 0.237 25.331);
+  /* Lightness for hue-only generated accents (e.g. per-filter colors) — legible on each theme. */
+  --generated-accent-lightness: 72%;
   --overlay: oklch(0% 0 0deg / 75%);
   --border1: oklch(100% 0 0deg / 7%);
   --border2: oklch(100% 0 0deg / 11%);
@@ -206,6 +208,7 @@ html.light {
   --neutral6: oklch(0.13 0 0);
 
   --error: oklch(0.577 0.245 27.325);
+  --generated-accent-lightness: 38%;
   --overlay: oklch(20.8% 0 0deg / 45%);
   --border1: oklch(20.8% 0 0deg / 10%);
   --border2: oklch(20.8% 0 0deg / 16%);
@@ -408,6 +411,8 @@ html.light {
   --max-height-avatar-md: 32px;
   --max-height-avatar-lg: 40px;
   --max-height-dropdown-max-height: 300px;
+
+  --min-height-header-default: 40px;
 
   --width-icon-default: 16px;
   --width-icon-lg: 20px;

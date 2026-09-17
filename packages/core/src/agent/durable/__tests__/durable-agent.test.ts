@@ -713,7 +713,7 @@ describe('createDurableAgentStream', () => {
     const runId = 'test-run-456';
     const receivedChunks: any[] = [];
 
-    const { output, cleanup } = createDurableAgentStream({
+    const { output, cleanup, ready } = createDurableAgentStream({
       pubsub,
       runId,
       messageId: 'msg-123',
@@ -727,10 +727,33 @@ describe('createDurableAgentStream', () => {
       },
     });
 
+    await ready;
     expect(output).toBeDefined();
 
-    // Clean up
     cleanup();
+  });
+
+  it('should terminate when subscription setup fails', async () => {
+    const { createDurableAgentStream } = await import('../stream-adapter');
+    const subscribeError = new Error('subscription failed');
+    vi.spyOn(pubsub, 'subscribeWithReplay').mockRejectedValueOnce(subscribeError);
+
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId: 'test-subscription-failure',
+      messageId: 'msg-subscription-failure',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+    });
+    const onError = vi.fn();
+    const consumption = output.consumeStream({ onError });
+
+    await expect(ready).rejects.toBe(subscribeError);
+    await consumption;
+    expect(onError).toHaveBeenCalledWith(subscribeError);
+    expect(() => {
+      cleanup();
+      cleanup();
+    }).not.toThrow();
   });
 
   it('should live-tail when resuming with a pubsub that does not support offsets', async () => {

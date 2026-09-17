@@ -13,6 +13,9 @@ import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-navigation.js';
 import { automatedChatUnixPubSubScenario } from './automated-chat-unix-pubsub.js';
 import { automatedChatScenario } from './automated-chat.js';
+import { backgroundPlaceholderOptOutScenario } from './background-placeholder-opt-out.js';
+import { backgroundSubagentsScenario } from './background-subagents.js';
+import { backgroundToolsSettingsScenario } from './background-tools-settings.js';
 import { bedrockModelDiscoveryScenario } from './bedrock-model-discovery.js';
 import { branchContextLongNameScenario } from './branch-context-long-name.js';
 import { browserActivePendingStatusScenario } from './browser-active-pending-status.js';
@@ -211,6 +214,9 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
   'automated-chat': automatedChatScenario,
   'automated-chat-unix-pubsub': automatedChatUnixPubSubScenario,
+  'background-placeholder-opt-out': backgroundPlaceholderOptOutScenario,
+  'background-subagents': backgroundSubagentsScenario,
+  'background-tools-settings': backgroundToolsSettingsScenario,
   'browser-active-pending-status': browserActivePendingStatusScenario,
   'browser-profile-provider-mismatch': browserProfileProviderMismatchScenario,
   'browser-model-picker': browserModelPickerScenario,

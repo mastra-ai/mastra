@@ -829,6 +829,29 @@ describe('LocalSandbox', () => {
       ).toThrow(IsolationUnavailableError);
     });
 
+    it('should throw a clear error when seatbelt is requested on Windows', () => {
+      const platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+
+      try {
+        expect(
+          () =>
+            new LocalSandbox({
+              workingDirectory: tempDir,
+              isolation: 'seatbelt',
+            }),
+        ).toThrowError(
+          expect.objectContaining({
+            name: 'IsolationUnavailableError',
+            code: 'ISOLATION_UNAVAILABLE',
+            backend: 'seatbelt',
+            reason: 'Seatbelt isolation is only supported on macOS, not Windows.',
+          }),
+        );
+      } finally {
+        platformSpy.mockRestore();
+      }
+    });
+
     it('should include isolation in getInfo', async () => {
       await sandbox._start();
       const info = await sandbox.getInfo();

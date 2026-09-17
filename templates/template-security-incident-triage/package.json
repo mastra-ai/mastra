@@ -1,0 +1,79 @@
+{
+  "name": "template-security-incident-triage",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Investigate security alerts with evidence and runbooks, review response plans, and execute approved containment with human oversight.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": "^22.22.0 || >=24.12.0"
+  },
+  "scripts": {
+    "demo:local": "node --import tsx scripts/demo-local.ts",
+    "eval:run": "node --import tsx scripts/evals.ts run",
+    "eval:report": "node --import tsx scripts/evals.ts report",
+    "eval:check": "node --import tsx scripts/evals.ts check",
+    "analytics:report": "node --import tsx scripts/analytics-report.ts",
+    "dev": "node --env-file-if-exists=.env --import tsx scripts/dev.ts",
+    "dev:server": "node --env-file-if-exists=.env --import tsx src/start.ts",
+    "dev:studio": "node --env-file-if-exists=.env --import tsx scripts/check-studio-config.ts && mastra dev",
+    "fixture:sign": "node --env-file-if-exists=.env --import tsx scripts/sign-webhook.ts scripts/fixtures/security-alert.json",
+    "fixture:print": "node --env-file-if-exists=.env --import tsx scripts/local-fixture.ts --print",
+    "fixture:send": "node --env-file-if-exists=.env --import tsx scripts/local-fixture.ts",
+    "trigger:privilege": "node --env-file-if-exists=.env --import tsx scripts/trigger.ts privilege",
+    "trigger:country": "node --env-file-if-exists=.env --import tsx scripts/trigger.ts country",
+    "trigger:device": "node --env-file-if-exists=.env --import tsx scripts/trigger.ts device",
+    "retention:sweep": "node --env-file-if-exists=.env --import tsx scripts/retention-sweep.ts",
+    "build": "npm run runbooks:validate && node --import tsx scripts/build.ts",
+    "start": "node --env-file-if-exists=.env dist/start.js",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "runbooks:validate": "node --import tsx scripts/runbooks.ts validate",
+    "runbooks:index": "node --env-file-if-exists=.env --import tsx scripts/runbooks.ts index",
+    "runbooks:inspect": "node --env-file-if-exists=.env --import tsx scripts/runbooks.ts inspect",
+    "runbooks:rollback": "node --env-file-if-exists=.env --import tsx scripts/runbooks.ts rollback",
+    "runbooks:cleanup": "node --env-file-if-exists=.env --import tsx scripts/runbooks.ts cleanup",
+    "audit": "npm audit --audit-level=high"
+  },
+  "dependencies": {
+    "@duckdb/node-api": "1.5.5-r.4",
+    "@hono/node-server": "2.1.1",
+    "@libsql/client": "0.17.4",
+    "@linear/sdk": "92.0.0",
+    "@mastra/core": "latest",
+    "@mastra/fastembed": "latest",
+    "@mastra/hono": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/observability": "latest",
+    "@mastra/rag": "latest",
+    "@workos-inc/node": "8.13.0",
+    "hono": "4.13.5",
+    "tsx": "4.23.12",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.20.1",
+    "eslint": "10.9.1",
+    "mastra": "latest",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.68.0",
+    "vitest": "4.1.11",
+    "oxfmt": "0.59.0"
+  },
+  "overrides": {
+    "adm-zip": "0.6.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mastra-ai/mastra.git",
+    "directory": "templates/template-security-incident-triage"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "homepage": "https://mastra.ai/templates/security-incident-triage-and-response"
+}

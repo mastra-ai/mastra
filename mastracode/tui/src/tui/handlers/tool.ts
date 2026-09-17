@@ -12,6 +12,7 @@ import { safeStringify } from '@mastra/core/utils';
 import { parse as parseJsonRiver } from 'jsonriver';
 
 import { ensureAssistantRenderSegment } from '../assistant-render-registry.js';
+import { parseBackgroundToolTaskId } from '../background-tool-result.js';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
@@ -317,6 +318,14 @@ function isToolResultError(result: unknown): boolean {
   return typeof result === 'object' && result !== null && (result as Record<string, unknown>).isError === true;
 }
 
+export function getBackgroundToolTaskId(result: unknown): string | undefined {
+  return parseBackgroundToolTaskId(formatToolResult(result));
+}
+
+export function isBackgroundToolPlaceholder(result: unknown): boolean {
+  return getBackgroundToolTaskId(result) !== undefined;
+}
+
 export function formatToolResult(result: unknown): string {
   if (result === null || result === undefined) {
     return '';
@@ -585,6 +594,9 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     createPostToolAssistantComponent(ctx, toolCallId);
 
     flushRender(state);
+  } else if (toolName === 'subagent') {
+    createPostToolAssistantComponent(ctx, toolCallId);
+    flushRender(state);
   } else if (isTaskMutationTool(toolName)) {
     // Record position so task_updated can place inline completed/cleared display here
     state.taskToolInsertIndex = state.chatContainer.children.length;
@@ -763,10 +775,17 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
   if (subagentComponent) {
     const resultText = formatToolResult(result);
     if (pluginSubagentToolCallIds.has(toolCallId)) {
-      subagentComponent.finish(isError, 0, resultText);
-      state.pendingSubagents.delete(toolCallId);
-      pluginSubagentToolCallIds.delete(toolCallId);
-      flushRender(state);
+      const backgroundTaskId =
+        state.options?.backgroundToolsEnabled && !isError ? getBackgroundToolTaskId(result) : undefined;
+      if (backgroundTaskId) {
+        subagentComponent.setBackgroundTaskId(backgroundTaskId);
+        flushRender(state);
+      } else {
+        subagentComponent.finish(isError, 0, resultText);
+        state.pendingSubagents.delete(toolCallId);
+        pluginSubagentToolCallIds.delete(toolCallId);
+        flushRender(state);
+      }
     } else {
       // We'll need to wait for subagent_end to set this
       // Store it temporarily
@@ -793,15 +812,22 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
       state.allToolComponents.push(component);
     }
 
+    const resultText = formatToolResult(result);
+    const backgroundTaskId =
+      state.options?.backgroundToolsEnabled && !effectiveIsError ? getBackgroundToolTaskId(result) : undefined;
+    const isBackgroundPlaceholder = backgroundTaskId !== undefined;
+    if (backgroundTaskId) component.setBackgroundTaskId?.(backgroundTaskId);
     const toolResult: ToolResult = {
-      content: [{ type: 'text', text: formatToolResult(result) }],
+      content: [{ type: 'text', text: resultText }],
       isError: effectiveIsError,
     };
-    component.updateResult(toolResult, false);
+    component.updateResult(toolResult, isBackgroundPlaceholder);
     reconcileToolBoundaries(ctx);
 
-    state.pendingTools.delete(toolCallId);
-    state.pendingTaskToolIds?.delete(toolCallId);
+    if (!isBackgroundPlaceholder) {
+      state.pendingTools.delete(toolCallId);
+      state.pendingTaskToolIds?.delete(toolCallId);
+    }
     flushRender(state);
   }
 }

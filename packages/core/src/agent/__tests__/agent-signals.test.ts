@@ -6990,6 +6990,71 @@ describe('Agent signals', () => {
       run.finish();
     });
 
+    it('keeps blocking a same-agent contender during a partial resume with sibling suspensions', async () => {
+      const runtime = new AgentThreadStreamRuntime();
+      const pubsub = new EventEmitterPubSub();
+      const publish = vi.spyOn(pubsub, 'publish');
+      const agent = { id: 'same-agent-partial-resume-agent' } as Agent<any, any, any, any>;
+      const runId = 'same-agent-partial-resume-run';
+      const options = { memory: { thread: threadId, resource: resourceId } } as any;
+
+      let finishRun!: () => void;
+      const finished = new Promise<void>(resolve => {
+        finishRun = resolve;
+      });
+      let parts!: ReadableStreamDefaultController<unknown>;
+      const output = {
+        runId,
+        status: 'running',
+        fullStream: new ReadableStream({
+          start(controller) {
+            parts = controller;
+          },
+        }),
+        _waitUntilFinished: () => finished,
+      } as any;
+      await runtime.registerRun(agent, output, options, pubsub, { continuation: 'across-suspension' });
+
+      // Two sibling tool calls suspend within the same segment.
+      parts.enqueue({ type: 'tool-call-approval', runId, payload: { toolCallId: 'call-1', toolName: 'one' } });
+      parts.enqueue({ type: 'tool-call-approval', runId, payload: { toolCallId: 'call-2', toolName: 'two' } });
+      await vi.waitFor(() =>
+        expect(
+          publish.mock.calls.filter(([, event]) => (event as any).data?.part?.type === 'tool-call-approval'),
+        ).toHaveLength(2),
+      );
+      output.status = 'suspended';
+
+      // Fully suspended: a same-agent contender must not wait on human input.
+      await withTimeout(
+        runtime.waitForCrossAgentThreadRun(agent, options, pubsub),
+        'Fully suspended wait should resolve immediately',
+      );
+
+      // Resume only call-1. call-2 stays suspended, but the resumed segment is
+      // actively executing — a new same-agent run must wait for it.
+      const resumed = {
+        runId,
+        status: 'running',
+        consumeStream: async () => {},
+      } as any;
+      expect(runtime.continueRun(agent, resumed, { ...options, toolCallId: 'call-1' }, pubsub)).toBe(true);
+
+      let resolved = false;
+      const wait = runtime.waitForCrossAgentThreadRun(agent, options, pubsub).then(() => {
+        resolved = true;
+      });
+      await new Promise(resolve => setTimeout(resolve, 25));
+      expect(resolved).toBe(false);
+
+      // The resumed segment settles; the contender is released.
+      resumed.status = 'success';
+      output.status = 'success';
+      finishRun();
+      await withTimeout(wait, 'Timed out waiting for the partial-resume wait to release');
+      expect(resolved).toBe(true);
+    });
+
     it('still waits on a different-agent running record', async () => {
       const runtime = new AgentThreadStreamRuntime();
       const owner = { id: 'other-agent-owner' } as Agent<any, any, any, any>;
