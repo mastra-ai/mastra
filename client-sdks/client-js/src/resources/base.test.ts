@@ -1,7 +1,7 @@
 import type { Server } from 'node:http';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { describe, it, beforeEach, afterEach, expect } from 'vitest';
+import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import { BaseResource } from './base';
 
 interface RetryTestConfig {
@@ -130,5 +130,55 @@ describe('BaseResource', () => {
 
     // Assert: Verify request succeeded using global fetch
     expect(result).toEqual({ success: true });
+  });
+
+  describe('abort signals', () => {
+    const okResponse = () => new Response(JSON.stringify({ ok: true }), { status: 200 });
+
+    it('passes a per-call signal through to fetch', async () => {
+      const customFetch = vi.fn(async () => okResponse());
+      const controller = new AbortController();
+      const customResource = new BaseResource({ baseUrl: serverUrl, retries: 0, fetch: customFetch });
+
+      await customResource.request('/test', { signal: controller.signal });
+
+      const passedSignal = (customFetch.mock.calls[0] as unknown as [string, RequestInit])[1].signal!;
+      expect(passedSignal.aborted).toBe(false);
+      controller.abort();
+      expect(passedSignal.aborted).toBe(true);
+    });
+
+    it('merges the client-wide abortSignal with the per-call signal', async () => {
+      const customFetch = vi.fn(async () => okResponse());
+      const clientController = new AbortController();
+      const callController = new AbortController();
+      const customResource = new BaseResource({
+        baseUrl: serverUrl,
+        retries: 0,
+        fetch: customFetch,
+        abortSignal: clientController.signal,
+      });
+
+      await customResource.request('/test', { signal: callController.signal });
+
+      const passedSignal = (customFetch.mock.calls[0] as unknown as [string, RequestInit])[1].signal!;
+      expect(passedSignal.aborted).toBe(false);
+      clientController.abort();
+      expect(passedSignal.aborted).toBe(true);
+    });
+
+    it('does not retry when the request was aborted', async () => {
+      const controller = new AbortController();
+      const customFetch = vi.fn(async (_url: string, init: RequestInit) => {
+        controller.abort();
+        throw init.signal!.reason;
+      });
+      const customResource = new BaseResource({ baseUrl: serverUrl, retries: 3, backoffMs: 0, fetch: customFetch });
+
+      await expect(customResource.request('/test', { signal: controller.signal })).rejects.toMatchObject({
+        name: 'AbortError',
+      });
+      expect(customFetch).toHaveBeenCalledTimes(1);
+    });
   });
 });

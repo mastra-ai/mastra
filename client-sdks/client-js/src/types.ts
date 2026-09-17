@@ -197,6 +197,8 @@ export interface RequestOptions {
   stream?: boolean;
   /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
   credentials?: 'omit' | 'same-origin' | 'include';
+  /** Per-request abort signal. Merged with the client-wide `abortSignal` from `ClientOptions`. */
+  signal?: AbortSignal;
 }
 
 type ResponseInput = Body<'POST /v1/responses'>['input'];
@@ -390,10 +392,7 @@ export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined =
   clientToolsResolver?: ClientToolsResolver;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
-  Omit<
-    AgentGenerateOptions<any>,
-    'model' | 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'
-  >
+  Omit<AgentGenerateOptions<any>, 'model' | 'output' | 'experimental_output' | 'requestContext' | 'clientTools'>
 >;
 
 export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -406,10 +405,7 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
   clientToolsResolver?: ClientToolsResolver;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
-  Omit<
-    AgentStreamOptions<any>,
-    'model' | 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'
-  >
+  Omit<AgentStreamOptions<any>, 'model' | 'output' | 'experimental_output' | 'requestContext' | 'clientTools'>
 >;
 
 export type StructuredOutputOptions<OUTPUT = undefined> = Omit<
@@ -424,11 +420,13 @@ export type StreamParamsBase<OUTPUT = undefined> = {
   requestContext?: RequestContext;
   clientTools?: ToolsInput;
   clientToolsResolver?: ClientToolsResolver;
+  /**
+   * Per-call abort signal. Aborting it (or cancelling the returned stream) aborts the
+   * underlying request and stops any client-tool continuations.
+   */
+  abortSignal?: AbortSignal;
 } & WithoutMethods<
-  Omit<
-    AgentExecutionOptions<OUTPUT>,
-    'model' | 'requestContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
-  >
+  Omit<AgentExecutionOptions<OUTPUT>, 'model' | 'requestContext' | 'clientTools' | 'options' | 'structuredOutput'>
 >;
 export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = StreamParamsBase<OUTPUT>;
 export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {

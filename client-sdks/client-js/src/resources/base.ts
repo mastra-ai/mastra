@@ -1,6 +1,6 @@
 import type { RequestOptions, ClientOptions } from '../types';
 import { MastraClientError } from '../types';
-import { normalizeRoutePath } from '../utils';
+import { mergeAbortSignals, normalizeRoutePath } from '../utils';
 
 export class BaseResource {
   readonly options: ClientOptions;
@@ -29,6 +29,7 @@ export class BaseResource {
       fetch: customFetch,
     } = this.options;
     const fetchFn = customFetch || fetch;
+    const signal = mergeAbortSignals(this.options.abortSignal, options.signal);
 
     let delay = backoffMs;
 
@@ -52,7 +53,7 @@ export class BaseResource {
             // TODO: Bring this back once we figure out what we/users need to do to make this work with cross-origin requests
             // 'x-mastra-client-type': 'js',
           },
-          signal: this.options.abortSignal,
+          signal,
           credentials: options.credentials ?? credentials,
           body:
             options.body instanceof FormData ? options.body : options.body ? JSON.stringify(options.body) : undefined,
@@ -81,6 +82,11 @@ export class BaseResource {
         return data as T;
       } catch (error) {
         lastError = error as Error;
+
+        // Aborted requests must not be retried
+        if (signal?.aborted || (error as Error)?.name === 'AbortError') {
+          throw error;
+        }
 
         // Don't retry 4xx client errors - they won't resolve with retries
         const status = (error as Error & { status?: number }).status;
