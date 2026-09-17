@@ -302,6 +302,8 @@ export interface MastraCodeConfig {
   disableMcp?: boolean;
   /** Disable hooks. Default: false */
   disableHooks?: boolean;
+  /** Skip loading cwd/.env into the process environment. Useful for multi-session hosts. */
+  disableEnvFile?: boolean;
   /** Disable plugin discovery/loading. Default: false */
   disablePlugins?: boolean;
   /** Disable the polling-based GitHub signal provider even when enabled in global settings. Default: false */
@@ -441,10 +443,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   }
 
   // Load .env file from cwd if present (for observability API keys, etc.)
-  try {
-    process.loadEnvFile(path.join(cwd, '.env'));
-  } catch {
-    // No .env file — that's fine, keys may be in shell environment
+  if (!config?.disableEnvFile) {
+    try {
+      process.loadEnvFile(path.join(cwd, '.env'));
+    } catch {
+      // No .env file — that's fine, keys may be in shell environment
+    }
   }
 
   // Auth storage (shared with Claude Max / OpenAI providers and AgentController)

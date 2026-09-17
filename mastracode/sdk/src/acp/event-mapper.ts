@@ -1,16 +1,5 @@
 import type { SessionNotification, RequestPermissionRequest, AgentSideConnection } from '@agentclientprotocol/sdk';
-import type { AgentControllerEvent, MastraDBMessage, Session, TokenUsage } from '@mastra/core/agent-controller';
-import { mastraDBMessageToSignal } from '@mastra/core/signals';
-
-function getSignalText(message: MastraDBMessage): string {
-  const contents = mastraDBMessageToSignal(message).contents;
-  if (typeof contents === 'string') return contents;
-  if (!Array.isArray(contents)) return '';
-  return contents
-    .filter((part): part is Extract<(typeof contents)[number], { type: 'text' }> => part.type === 'text')
-    .map(part => part.text)
-    .join('\n');
-}
+import type { AgentControllerEvent, Session, TokenUsage } from '@mastra/core/agent-controller';
 
 let autoApprove = false;
 
@@ -55,6 +44,12 @@ export interface PromptState {
   activeAssistantMessageId?: string;
   lastTextLength: number;
   usage: TokenUsage;
+  error?: Error;
+  stopReason?: 'max_tokens' | 'refusal';
+  finished?: boolean;
+  cancelled?: boolean;
+  suspended?: boolean;
+  cancelSuspensions?: Map<string, () => Promise<void>>;
   resolve: (reason: 'complete' | 'aborted' | 'error' | 'suspended') => void;
 }
 
@@ -69,11 +64,14 @@ export function handleAgentControllerEvent(
   connection: AgentSideConnection,
   session: Session,
 ): void {
-  if (!state) return;
+  if (!state || state.finished) return;
 
   switch (event.type) {
     case 'agent_start':
+      state.suspended = false;
       state.lastTextLength = 0;
+      // Startup can arm its controller after cancel first called abort().
+      if (state.cancelled && !state.cancelSuspensions?.size) session.completeDeferredAbort();
       break;
 
     case 'message_start': {
@@ -81,14 +79,6 @@ export function handleAgentControllerEvent(
         state.activeAssistantMessageId = event.message.id;
         state.lastTextLength = 0;
         break;
-      }
-      if (event.message.role !== 'signal') break;
-      const text = getSignalText(event.message);
-      if (text) {
-        sendUpdate(connection, state.sessionId, {
-          sessionUpdate: 'agent_message_chunk',
-          content: { type: 'text', text },
-        });
       }
       break;
     }
@@ -132,13 +122,13 @@ export function handleAgentControllerEvent(
 
     case 'tool_approval_required':
       void handleToolApproval(state, connection, session, event).catch(err => {
-        process.stderr.write(`[acp] handleToolApproval error: ${err}\n`);
+        failTurn(state, session, err);
       });
       break;
 
     case 'tool_suspended':
       void handleToolSuspended(state, connection, session, event).catch(err => {
-        process.stderr.write(`[acp] handleToolSuspended error: ${err}\n`);
+        failTurn(state, session, err);
       });
       break;
 
@@ -146,7 +136,23 @@ export function handleAgentControllerEvent(
       accumulateUsage(state.usage, event.usage);
       break;
 
+    case 'error':
+      state.error = event.error;
+      if (event.finishReason === 'length') state.stopReason = 'max_tokens';
+      else if (event.finishReason === 'content-filter') state.stopReason = 'refusal';
+      break;
+
     case 'agent_end':
+      // A suspended run continues after the client answers the permission request.
+      if (event.reason === 'suspended') {
+        state.suspended = true;
+        if (state.cancelled && !state.cancelSuspensions?.size) {
+          session.stream.detach();
+          state.resolve('aborted');
+        }
+        break;
+      }
+      state.finished = true;
       state.resolve(event.reason ?? 'complete');
       break;
 
@@ -168,9 +174,13 @@ async function handleToolApproval(
   session: Session,
   event: Extract<AgentControllerEvent, { type: 'tool_approval_required' }>,
 ): Promise<void> {
+  if (state.cancelled) {
+    session.respondToToolApproval({ decision: 'decline', toolCallId: event.toolCallId });
+    return;
+  }
   // Auto-approve if --dangerous-auto-approve flag is set
   if (autoApprove) {
-    session.respondToToolApproval({ decision: 'approve' });
+    session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId });
     return;
   }
 
@@ -189,15 +199,17 @@ async function handleToolApproval(
 
   try {
     const resp = await connection.requestPermission(req);
+    if (state.finished || state.cancelled) return;
     if (resp.outcome.outcome === 'selected') {
       const decision = resp.outcome.optionId === 'approve' ? 'approve' : 'decline';
-      session.respondToToolApproval({ decision });
+      session.respondToToolApproval({ decision, toolCallId: event.toolCallId });
     } else {
-      session.respondToToolApproval({ decision: 'decline' });
+      session.respondToToolApproval({ decision: 'decline', toolCallId: event.toolCallId });
     }
   } catch (err) {
+    if (state.finished || state.cancelled) return;
     process.stderr.write(`[acp] requestPermission error: ${err}\n`);
-    session.respondToToolApproval({ decision: 'decline' });
+    session.respondToToolApproval({ decision: 'decline', toolCallId: event.toolCallId });
   }
 }
 
@@ -209,9 +221,54 @@ async function handleToolSuspended(
 ): Promise<void> {
   const { toolCallId, toolName, args, suspendPayload } = event;
 
-  // Auto-resolve certain suspensions (mirrors headless.ts autoResolve)
-  if (toolName === 'request_access' || (suspendPayload as any)?.kind === 'sandbox_access_request') {
-    void session.respondToToolSuspension({ toolCallId, resumeData: 'Yes' });
+  const isSandboxAccess =
+    toolName === 'request_access' ||
+    (typeof suspendPayload === 'object' &&
+      suspendPayload !== null &&
+      'kind' in suspendPayload &&
+      suspendPayload.kind === 'sandbox_access_request');
+  if (isSandboxAccess || toolName === 'submit_plan') {
+    state.cancelSuspensions ??= new Map();
+    state.cancelSuspensions.set(toolCallId, () =>
+      session.resumeToolCall({
+        toolCallId,
+        resumeData: isSandboxAccess ? 'No' : { action: 'rejected' },
+        resolveOnToolEnd: true,
+      }),
+    );
+  }
+  if (state.cancelled) {
+    try {
+      await state.cancelSuspensions?.get(toolCallId)?.();
+    } finally {
+      state.cancelSuspensions?.delete(toolCallId);
+      if (!state.finished) {
+        session.completeDeferredAbort();
+        state.resolve('aborted');
+      }
+    }
+    return;
+  }
+  if (isSandboxAccess) {
+    let approved = autoApprove;
+    if (!autoApprove) {
+      try {
+        const response = await connection.requestPermission({
+          sessionId: state.sessionId,
+          toolCall: { toolCallId, title: toolName, rawInput: JSON.stringify(args) },
+          options: [
+            { optionId: 'approve', name: 'Allow access', kind: 'allow_once' },
+            { optionId: 'reject', name: 'Deny access', kind: 'reject_once' },
+          ],
+        });
+        approved = response.outcome.outcome === 'selected' && response.outcome.optionId === 'approve';
+      } catch {
+        approved = false;
+      }
+    }
+    if (state.finished || state.cancelled) return;
+    state.cancelSuspensions?.delete(toolCallId);
+    await session.respondToToolSuspension({ toolCallId, resumeData: approved ? 'Yes' : 'No' });
     return;
   }
 
@@ -230,22 +287,28 @@ async function handleToolSuspended(
       ],
     };
 
+    let action: 'approved' | 'rejected' = 'rejected';
     try {
       const resp = await connection.requestPermission(req);
-      const action =
-        resp.outcome.outcome === 'selected' && resp.outcome.optionId === 'approve' ? 'approved' : 'rejected';
-      void session.respondToToolSuspension({ toolCallId, resumeData: { action } });
+      if (resp.outcome.outcome === 'selected' && resp.outcome.optionId === 'approve') action = 'approved';
     } catch {
-      void session.respondToToolSuspension({ toolCallId, resumeData: { action: 'rejected' } });
+      // A missing answer never grants permission.
     }
+    if (state.finished || state.cancelled) return;
+    state.cancelSuspensions?.delete(toolCallId);
+    await session.respondToToolSuspension({ toolCallId, resumeData: { action } });
     return;
   }
 
-  // For ask_user and other suspensions, auto-resolve
-  void session.respondToToolSuspension({
-    toolCallId,
-    resumeData: 'Proceed with your best judgment. Do not ask further questions.',
-  });
+  throw new Error(`Tool "${toolName}" requires an interaction that this ACP server does not support`);
+}
+
+function failTurn(state: PromptState, session: Session, error: unknown): void {
+  if (state.finished || state.cancelled) return;
+  state.error = error instanceof Error ? error : new Error(String(error));
+  state.finished = true;
+  state.resolve('error');
+  session.abort();
 }
 
 function accumulateUsage(target: TokenUsage, usage: TokenUsage): void {
