@@ -1,14 +1,19 @@
 import type { EntityType } from '@mastra/core/observability';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
+import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
+import type { FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
 import { NoTracesInfo } from '@mastra/playground-ui/domains/traces/components/no-traces-info';
 import { TraceColumnsMenu } from '@mastra/playground-ui/domains/traces/components/trace-columns-menu';
+import {
+  TRACE_TIME_RANGE_FIELD,
+  TRACE_TIME_RANGE_FIELD_ID,
+  TRACE_TIME_RANGE_ITEM,
+  TraceTimeRangeChip,
+} from '@mastra/playground-ui/domains/traces/components/trace-time-range-chip';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
 import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
-import { TracesToolbar } from '@mastra/playground-ui/domains/traces/components/traces-toolbar';
 import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
 import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
 import { useTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/hooks/use-trace-column-preferences';
@@ -18,8 +23,10 @@ import { useTraceOrBranchSpans } from '@mastra/playground-ui/domains/traces/hook
 import { useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
 import { useTraceUsage } from '@mastra/playground-ui/domains/traces/hooks/use-trace-usage';
 import {
-  createTracePropertyFilterFields,
-  neutralizeFilterTokens,
+  createTraceFilterBarFields,
+  filterBarItemsToTraceTokens,
+  TRACE_FILTER_BAR_OPERATORS,
+  traceTokensToFilterBarItems,
 } from '@mastra/playground-ui/domains/traces/trace-filters';
 import { hasTraceUsageColumn, isTraceUsageColumn } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import {
@@ -80,21 +87,20 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const querySearchParams = new URLSearchParams(searchParams);
   querySearchParams.delete('listMode');
   if (querySearchParams.get('status') === 'running') querySearchParams.delete('status');
+  // Drop params the query API can't run on, so no chip ever advertises a filter
+  // that has no effect on the list.
   for (const field of TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS) {
     querySearchParams.delete(`filter${field[0]?.toUpperCase()}${field.slice(1)}`);
   }
   const url = useTraceUrlState(querySearchParams, setPersistedSearchParams);
 
-  const lockedFieldIds = useMemo<readonly string[]>(() => (isScoped ? ['rootEntityType', 'entityId'] : []), [isScoped]);
-  const hiddenCreatorFieldIds = useMemo<readonly string[]>(
+  // Scope fields live in the URL (set by the scoping effect above) but never surface as chips.
+  const scopedFieldIds = useMemo(() => new Set(isScoped ? ['rootEntityType', 'entityId'] : []), [isScoped]);
+  const hiddenFieldIds = useMemo<readonly string[]>(
     () => (isScoped ? ['rootEntityType', 'entityId', 'entityName'] : []),
     [isScoped],
   );
-  const lockedTooltipContent = isScoped
-    ? 'This filter is scoped to the current agent. Open the global Traces view to change it.'
-    : undefined;
 
-  const [autoFocusFilterFieldId, setAutoFocusFilterFieldId] = useState<string | undefined>();
   const [datasetDialogTarget, setDatasetDialogTarget] = useState<{
     traceId: string;
     rootSpanId: string | undefined;
@@ -135,31 +141,40 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // in the URL) or a direct URL edit always resyncs ScoreDataPanel.
   const featuredScore = url.scoreIdParam ? spanScoresData?.scores?.find(s => s.id === url.scoreIdParam) : undefined;
 
-  const { data: rootEntityNameSuggestions = [], isPending: isEntityNamesLoading } = useEntityNames({
+  const { data: rootEntityNameSuggestions = [] } = useEntityNames({
     entityType: url.selectedEntityOption?.entityType as EntityType | undefined,
     rootOnly: true,
   });
-  const { data: discoveredEnvironments = [], isPending: isEnvironmentsLoading } = useEnvironments();
+  const { data: discoveredEnvironments = [] } = useEnvironments();
 
-  const filterFields = useMemo(
-    () =>
-      createTracePropertyFilterFields({
-        availableTags: [],
-        availableServiceNames: [],
+  const filterBarFields = useMemo(
+    () => [
+      TRACE_TIME_RANGE_FIELD,
+      ...createTraceFilterBarFields({
         availableRootEntityNames: rootEntityNameSuggestions,
         availableEnvironments: discoveredEnvironments,
-        loading: {
-          entityNames: isEntityNamesLoading,
-          environments: isEnvironmentsLoading,
-        },
-      })
-        .filter(field => !TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(field.id))
-        .map(field =>
-          field.id === 'status' && field.kind === 'pick-multi'
-            ? { ...field, options: field.options.filter(option => option.value !== 'running') }
-            : field,
-        ),
-    [rootEntityNameSuggestions, discoveredEnvironments, isEntityNamesLoading, isEnvironmentsLoading],
+        hiddenFieldIds,
+      }),
+    ],
+    [rootEntityNameSuggestions, discoveredEnvironments, hiddenFieldIds],
+  );
+  const allFilterBarItems = useMemo(() => traceTokensToFilterBarItems(url.filterTokens), [url.filterTokens]);
+  const filterBarItems = useMemo(
+    () => allFilterBarItems.filter(item => !scopedFieldIds.has(item.fieldId)),
+    [allFilterBarItems, scopedFieldIds],
+  );
+  // The time-range chip is a synthetic, always-present item so it takes part in keyboard
+  // navigation; it never round-trips to filter tokens (its state lives in the date params).
+  const filterBarValue = useMemo(() => [TRACE_TIME_RANGE_ITEM, ...filterBarItems], [filterBarItems]);
+  // Re-inject the hidden scope items so the FilterBar clear button (which drops every removable item) and any other
+  // edit can never drop the scope from the URL.
+  const handleFilterBarChange = useCallback(
+    (items: FilterBarItem[]) => {
+      const scoped = allFilterBarItems.filter(item => scopedFieldIds.has(item.fieldId));
+      const rest = items.filter(item => item.fieldId !== TRACE_TIME_RANGE_FIELD_ID);
+      url.handleFilterTokensChange(filterBarItemsToTraceTokens([...scoped, ...rest]));
+    },
+    [allFilterBarItems, scopedFieldIds, url],
   );
 
   const {
@@ -213,11 +228,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const selectedTraceUsageSummary = url.traceIdParam
     ? (traceUsage.data?.get(url.traceIdParam) ?? selectedTraceUsage.data?.get(url.traceIdParam))
     : undefined;
-  const handleClear = useCallback(
-    () => url.applyFilterTokens(neutralizeFilterTokens(filterFields, url.filterTokens)),
-    [filterFields, url],
-  );
-
   const { handlePreviousTrace, handleNextTrace } = useTraceListNavigation(
     traces,
     url.traceIdParam,
@@ -246,23 +256,29 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   const toolbarControls = (
     <>
-      <DateTimeRangePicker
-        preset={url.datePreset}
-        onPresetChange={url.handleDatePresetChange}
-        dateFrom={url.selectedDateFrom}
-        dateTo={url.selectedDateTo}
-        onDateChange={url.handleDateChange}
-        disabled={isTracesLoading}
-        presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
-      />
-      <PropertyFilterCreator
-        fields={filterFields}
-        tokens={url.filterTokens}
-        onTokensChange={url.handleFilterTokensChange}
-        disabled={isTracesLoading}
-        onStartTextFilter={setAutoFocusFilterFieldId}
-        hiddenFieldIds={hiddenCreatorFieldIds}
-      />
+      <FilterBar
+        fields={filterBarFields}
+        operators={TRACE_FILTER_BAR_OPERATORS}
+        value={filterBarValue}
+        onValueChange={handleFilterBarChange}
+        aria-label="Trace filters"
+        className="min-w-64 flex-1"
+      >
+        <TraceTimeRangeChip
+          preset={url.datePreset}
+          onPresetChange={url.handleDatePresetChange}
+          dateFrom={url.selectedDateFrom}
+          dateTo={url.selectedDateTo}
+          onDateChange={url.handleDateChange}
+          onDateRangeChange={url.handleDateRangeChange}
+          disabled={isTracesLoading}
+          presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+        />
+        {filterBarItems.map(item => (
+          <FilterBar.Chip key={item.id} item={item} />
+        ))}
+        <FilterBar.Input placeholder="Filter traces…" />
+      </FilterBar>
       <div className="min-h-form-md ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
         <TraceColumnsMenu
           preferences={traceColumns.preferences}
@@ -292,18 +308,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
           {toolbarControls}
         </PageLayout.Column>
       </PageLayout.Row>
-
-      <TracesToolbar
-        isLoading={isTracesLoading}
-        filterFields={filterFields}
-        filterTokens={url.filterTokens}
-        onFilterTokensChange={url.handleFilterTokensChange}
-        onClear={handleClear}
-        onRemoveAll={url.handleRemoveAll}
-        autoFocusFilterFieldId={autoFocusFilterFieldId}
-        lockedFieldIds={lockedFieldIds}
-        lockedTooltipContent={lockedTooltipContent}
-      />
     </PageLayout.TopArea>
   );
 

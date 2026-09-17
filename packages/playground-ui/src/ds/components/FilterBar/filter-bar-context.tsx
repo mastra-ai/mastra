@@ -5,6 +5,9 @@ import type { FilterBarField, FilterBarItem, FilterBarOperator, FilterBarSegment
 
 type SegmentKey = `${string}:${FilterBarSegment}`;
 
+const SEGMENTS_LEFT_TO_RIGHT: FilterBarSegment[] = ['field', 'operator', 'value', 'remove'];
+const SEGMENTS_RIGHT_TO_LEFT: FilterBarSegment[] = [...SEGMENTS_LEFT_TO_RIGHT].reverse();
+
 export type FilterBarContextValue = {
   fields: FilterBarField[];
   operators: FilterBarOperator[];
@@ -12,7 +15,12 @@ export type FilterBarContextValue = {
   addItem: (item: Omit<FilterBarItem, 'id'>) => void;
   updateItem: (id: string, patch: Partial<Omit<FilterBarItem, 'id'>>) => void;
   removeItem: (id: string) => void;
+  /** Removes every removable item (chips rendered with `removable={false}` stay). */
   clear: () => void;
+  /** Whether at least one item can be removed, i.e. whether Clear has anything to do. */
+  hasRemovableItems: boolean;
+  /** Called by chips so `clear` and the Clear button know which items are pinned. */
+  registerNonRemovable: (itemId: string, nonRemovable: boolean) => void;
   getField: (fieldId: string) => FilterBarField | undefined;
   getOperator: (operatorId: string) => FilterBarOperator | undefined;
   /** Operators allowed for a field (`field.operators` or every root operator). */
@@ -74,6 +82,7 @@ export function FilterBarProvider({
   const itemsRef = useRef(value);
   itemsRef.current = value;
   const [announcement, setAnnouncement] = useState('');
+  const [nonRemovableIds, setNonRemovableIds] = useState<ReadonlySet<string>>(() => new Set());
 
   const getField = useCallback((fieldId: string) => fields.find(f => f.id === fieldId), [fields]);
   const getOperator = useCallback((operatorId: string) => operators.find(o => o.id === operatorId), [operators]);
@@ -112,9 +121,21 @@ export function FilterBarProvider({
   );
 
   const clear = useCallback(() => {
-    onValueChange([]);
+    onValueChange(itemsRef.current.filter(item => nonRemovableIds.has(item.id)));
     announce('All filters removed');
-  }, [onValueChange, announce]);
+  }, [onValueChange, announce, nonRemovableIds]);
+
+  const hasRemovableItems = value.some(item => !nonRemovableIds.has(item.id));
+
+  const registerNonRemovable = useCallback((itemId: string, nonRemovable: boolean) => {
+    setNonRemovableIds(prev => {
+      if (prev.has(itemId) === nonRemovable) return prev;
+      const next = new Set(prev);
+      if (nonRemovable) next.add(itemId);
+      else next.delete(itemId);
+      return next;
+    });
+  }, []);
 
   const registerSegment = useCallback((itemId: string, segment: FilterBarSegment, el: HTMLElement | null) => {
     const key: SegmentKey = `${itemId}:${segment}`;
@@ -132,13 +153,19 @@ export function FilterBarProvider({
 
   const focusChip = useCallback((fromIndex: number, direction: -1 | 1, segment: FilterBarSegment) => {
     const items = itemsRef.current;
+    // Custom chips may register only some segments (e.g. just `value`): when the
+    // requested one is missing, land on the chip's outermost segment on the side
+    // we arrive from.
+    const fallbacks: FilterBarSegment[] = direction === -1 ? SEGMENTS_RIGHT_TO_LEFT : SEGMENTS_LEFT_TO_RIGHT;
     for (let i = fromIndex; i >= 0 && i < items.length; i += direction) {
       const item = items[i];
       if (!item) break;
-      const el = segments.current.get(`${item.id}:${segment}`) ?? segments.current.get(`${item.id}:field`);
-      if (el) {
-        el.focus();
-        return true;
+      for (const candidate of [segment, ...fallbacks]) {
+        const el = segments.current.get(`${item.id}:${candidate}`);
+        if (el) {
+          el.focus();
+          return true;
+        }
       }
     }
     return false;
@@ -170,6 +197,8 @@ export function FilterBarProvider({
       updateItem,
       removeItem,
       clear,
+      hasRemovableItems,
+      registerNonRemovable,
       getField,
       getOperator,
       getFieldOperators,
@@ -190,6 +219,8 @@ export function FilterBarProvider({
       updateItem,
       removeItem,
       clear,
+      hasRemovableItems,
+      registerNonRemovable,
       getField,
       getOperator,
       getFieldOperators,
