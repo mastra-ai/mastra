@@ -1,4 +1,4 @@
-import { segmentClass } from './filter-bar-chip';
+import { FilterBarFieldLabel, fieldSegmentAccentStyle, segmentClass } from './filter-bar-chip';
 import type { FilterBarField, FilterBarOperator } from './types';
 import { cn } from '@/lib/utils';
 
@@ -19,11 +19,13 @@ export function FilterBarDraftChip({ field, operator }: FilterBarDraftChipProps)
       aria-hidden
       data-slot="filter-bar-draft-chip"
       className={cn(
-        'flex h-form-sm max-w-full items-stretch divide-x divide-border1 rounded-full border border-border1 bg-surface3 text-neutral5',
+        'flex max-w-full items-stretch divide-x divide-border1 rounded-lg border border-border1 bg-surface5 text-neutral5',
         'rounded-r-none',
       )}
     >
-      <span className={cn(segmentClass, 'last:rounded-r-none')}>{field.label}</span>
+      <span className={cn(segmentClass, 'text-neutral6 last:rounded-r-none')} style={fieldSegmentAccentStyle(field)}>
+        <FilterBarFieldLabel field={field} />
+      </span>
       {operator && <span className={cn(segmentClass, 'last:rounded-r-none')}>{operator.label}</span>}
     </div>
   );

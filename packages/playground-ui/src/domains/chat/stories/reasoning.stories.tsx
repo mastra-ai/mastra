@@ -1,4 +1,4 @@
-import type { ReasoningPart } from '@mastra/react';
+import type { ReasoningPart } from '@mastra/react/ui';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { ReasoningPartRenderer } from '../messages/renderers/reasoning-part-renderer';

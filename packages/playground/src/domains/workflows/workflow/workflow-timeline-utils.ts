@@ -24,6 +24,10 @@ export function formatTimelineDuration(durationMs: number) {
   return `${Number((durationMs / 1000).toPrecision(3))}s`;
 }
 
+type StartedStep = Step & { startedAt: number };
+
+const hasStarted = (entry: [string, Step]): entry is [string, StartedStep] => entry[1].startedAt !== undefined;
+
 /**
  * Build positioned timeline rows from the current run's steps.
  *
@@ -34,6 +38,7 @@ export function formatTimelineDuration(durationMs: number) {
 export function buildTimeline(steps: Record<string, Step>, now: number): TimelineRow[] {
   const entries = Object.entries(steps)
     .filter(([key]) => !isInputKey(key))
+    .filter(hasStarted)
     .sort(([aId, a], [bId, b]) => a.startedAt - b.startedAt || aId.localeCompare(bId));
 
   if (entries.length === 0) {
