@@ -147,7 +147,7 @@ type InputShared_Auxiliary_246 =
           };
     };
 
-type InputShared_Auxiliary_657 =
+type InputShared_Auxiliary_662 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -192,27 +192,27 @@ type InputShared_Auxiliary_657 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_657[];
+      args: InputShared_Auxiliary_662[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_657;
+      arg: InputShared_Auxiliary_662;
     };
 
-type InputShared_Auxiliary_731 = {
+type InputShared_Auxiliary_736 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_731[] | undefined;
+  children?: InputShared_Auxiliary_736[] | undefined;
 };
 
-type Shared_Auxiliary_739 = {
+type Shared_Auxiliary_744 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_739[] | undefined;
+  children?: Shared_Auxiliary_744[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -1725,7 +1725,7 @@ type InputShared_Type_86 = {
       }
     | undefined;
   steps: InputShared_Type_81[];
-  predicates: InputShared_Auxiliary_657[];
+  predicates: InputShared_Auxiliary_662[];
 };
 
 type InputShared_Type_87 = {
@@ -1739,7 +1739,7 @@ type InputShared_Type_87 = {
     | undefined;
   step: InputShared_Type_81;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_657;
+  predicate: InputShared_Auxiliary_662;
 };
 
 type InputShared_Type_88 =
@@ -4026,7 +4026,7 @@ type Shared_Type_78 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_739[] | undefined;
+  files?: Shared_Auxiliary_744[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -10137,6 +10137,96 @@ export interface PostObservabilityThreadsQuery_RouteContract {
   body: PostObservabilityThreadsQuery_Body;
   request: PostObservabilityThreadsQuery_Request;
   response: PostObservabilityThreadsQuery_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /observability/traces/query/fields
+// ============================================================================
+export type PostObservabilityTracesQueryFields_Body = {
+  timeRange: {
+    from: string;
+    to: string;
+  };
+  predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
+  search?: string | undefined;
+  limit?: number;
+};
+
+export type PostObservabilityTracesQueryFields_Response = {
+  canonicalFields: {
+    path: string;
+    valueKind: 'string' | 'number' | 'stringOrNumber' | 'timestamp' | 'presence';
+    operators: ('eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte' | 'in' | 'notIn' | 'exists' | 'notExists')[];
+    valueSuggestions: boolean;
+  }[];
+  observedFields: {
+    path: string;
+    valueKind: 'string';
+    operators: ('eq' | 'ne' | 'in' | 'notIn' | 'exists' | 'notExists')[];
+    valueSuggestions: true;
+    occurrences: number;
+  }[];
+  observedFieldsTruncated: boolean;
+};
+
+export type PostObservabilityTracesQueryFields_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostObservabilityTracesQueryFields_Body extends never
+      ? {}
+      : {} extends PostObservabilityTracesQueryFields_Body
+        ? { body?: PostObservabilityTracesQueryFields_Body }
+        : { body: PostObservabilityTracesQueryFields_Body })
+>;
+
+export interface PostObservabilityTracesQueryFields_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostObservabilityTracesQueryFields_Body;
+  request: PostObservabilityTracesQueryFields_Request;
+  response: PostObservabilityTracesQueryFields_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /observability/traces/query/values
+// ============================================================================
+export type PostObservabilityTracesQueryValues_Body = {
+  timeRange: {
+    from: string;
+    to: string;
+  };
+  predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
+  path: string;
+  search?: string | undefined;
+  limit?: number;
+};
+
+export type PostObservabilityTracesQueryValues_Response = {
+  values: {
+    value: string;
+    count: number;
+  }[];
+  valuesTruncated: boolean;
+};
+
+export type PostObservabilityTracesQueryValues_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostObservabilityTracesQueryValues_Body extends never
+      ? {}
+      : {} extends PostObservabilityTracesQueryValues_Body
+        ? { body?: PostObservabilityTracesQueryValues_Body }
+        : { body: PostObservabilityTracesQueryValues_Body })
+>;
+
+export interface PostObservabilityTracesQueryValues_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostObservabilityTracesQueryValues_Body;
+  request: PostObservabilityTracesQueryValues_Request;
+  response: PostObservabilityTracesQueryValues_Response;
   responseType: 'json';
 }
 
@@ -17836,7 +17926,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_731[] | undefined;
+  files?: InputShared_Auxiliary_736[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -17894,7 +17984,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_731[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_736[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -18695,6 +18785,7 @@ export type GetSystemPackages_Response = {
     | {
         metrics: boolean;
         logs: boolean;
+        traceQueryDiscovery: boolean;
       }
     | undefined;
   observabilityRuntimeStrategy?: ('realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced') | undefined;
@@ -23416,6 +23507,8 @@ export interface RouteTypes {
   'GET /observability/traces/:traceId/:spanId/scores': GetObservabilityTracesTraceIdSpanIdScores_RouteContract;
   'POST /observability/traces/query': PostObservabilityTracesQuery_RouteContract;
   'POST /observability/threads/query': PostObservabilityThreadsQuery_RouteContract;
+  'POST /observability/traces/query/fields': PostObservabilityTracesQueryFields_RouteContract;
+  'POST /observability/traces/query/values': PostObservabilityTracesQueryValues_RouteContract;
   'GET /observability/metrics': GetObservabilityMetrics_RouteContract;
   'GET /observability/logs': GetObservabilityLogs_RouteContract;
   'GET /observability/scores': GetObservabilityScores_RouteContract;
@@ -24376,6 +24469,12 @@ export interface Client {
   };
   '/observability/traces/query': {
     POST: PostObservabilityTracesQuery_RouteContract;
+  };
+  '/observability/traces/query/fields': {
+    POST: PostObservabilityTracesQueryFields_RouteContract;
+  };
+  '/observability/traces/query/values': {
+    POST: PostObservabilityTracesQueryValues_RouteContract;
   };
   '/observability/traces/score': {
     POST: PostObservabilityTracesScore_RouteContract;

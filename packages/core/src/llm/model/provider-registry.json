@@ -1864,6 +1864,7 @@
         "glm-5",
         "glm-5.1",
         "glm-5.2",
+        "glm-5.3",
         "happyhorse-1.1-i2v",
         "happyhorse-1.1-r2v",
         "happyhorse-1.1-t2v",
@@ -3590,18 +3591,7 @@
       "apiKeyEnvVar": "ZHIPU_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Zhipu AI Coding Plan",
-      "models": [
-        "glm-4.6v",
-        "glm-4.7",
-        "glm-5-turbo",
-        "glm-5.1",
-        "glm-5.2",
-        "glm-5.2-highspeed",
-        "glm-5.3",
-        "glm-5.3-flash",
-        "glm-5.3-highspeed",
-        "glm-5v-turbo"
-      ],
+      "models": ["glm-4.6v", "glm-5.3", "glm-5.3-flash", "glm-5.3-highspeed"],
       "docUrl": "https://docs.bigmodel.cn/cn/coding-plan/overview",
       "gateway": "models.dev"
     },
@@ -4535,6 +4525,7 @@
         "tencent/hy4-preview",
         "thinkingmachines/inkling",
         "thinkingmachines/inkling-small",
+        "typesafe-ai/jev",
         "voyage/rerank-2.5",
         "voyage/rerank-2.5-lite",
         "voyage/voyage-3-large",
@@ -7401,6 +7392,7 @@
         "bailian/qwen3.7-max",
         "bailian/qwen3.7-plus",
         "bailian/qwen3.8-27b",
+        "bailian/qwen3.8-flash",
         "bailian/qwen3.8-max",
         "bailian/qwen3.8-max-0902",
         "deepseek/deepseek-v3.2",
@@ -7918,6 +7910,7 @@
         "DeepSeek-V4-Flash-0731",
         "DeepSeek-V4-Pro",
         "DeepSeek-V4-Pro-0813",
+        "DeepSeek-V4.1-Flash",
         "GLM-5",
         "GLM-5.1",
         "GLM-5.2",
@@ -9199,6 +9192,15 @@
       "docUrl": "https://wallabytoken.com/docs",
       "gateway": "models.dev"
     },
+    "ainetcafe": {
+      "url": "https://microquickjs.com/v1",
+      "apiKeyEnvVar": "AINETCAFE_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "ainetcafe",
+      "models": ["Kimi-K3"],
+      "docUrl": "https://ainetcafe.com/k3/guides/",
+      "gateway": "models.dev"
+    },
     "hpc-ai": {
       "url": "https://api.hpc-ai.com/inference/v1",
       "apiKeyEnvVar": "HPC_AI_API_KEY",
@@ -9288,6 +9290,7 @@
         "glm-5",
         "glm-5.1",
         "glm-5.2",
+        "glm-5.3",
         "happyhorse-1.1-i2v",
         "happyhorse-1.1-r2v",
         "happyhorse-1.1-t2v",
@@ -10047,6 +10050,7 @@
         "openrouter/qwen/qwen3.6-35b-a3b",
         "openrouter/qwen/qwen3.8-2.4t-a95b",
         "openrouter/qwen/qwen3.8-27b",
+        "openrouter/qwen/qwen3.8-27b:free",
         "openrouter/rekaai/reka-edge",
         "openrouter/rekaai/reka-flash-3",
         "openrouter/relace/relace-apply-3",
@@ -10093,7 +10097,10 @@
         "openrouter/~moonshotai/kimi-latest",
         "openrouter/~x-ai/grok-latest",
         "openrouter/~z-ai/glm-flash-latest",
-        "openrouter/~z-ai/glm-latest"
+        "openrouter/~z-ai/glm-latest",
+        "typesafe/jev-1.13.0",
+        "typesafe/jev-latest",
+        "typesafe/jev-preview"
       ],
       "docUrl": "https://docs.netlify.com/build/ai-gateway/overview/"
     }
@@ -11661,6 +11668,7 @@
       "glm-5",
       "glm-5.1",
       "glm-5.2",
+      "glm-5.3",
       "happyhorse-1.1-i2v",
       "happyhorse-1.1-r2v",
       "happyhorse-1.1-t2v",
@@ -13001,18 +13009,7 @@
       "zai-org/GLM-5.3",
       "zai-org/GLM-5.3-Flash"
     ],
-    "zhipuai-coding-plan": [
-      "glm-4.6v",
-      "glm-4.7",
-      "glm-5-turbo",
-      "glm-5.1",
-      "glm-5.2",
-      "glm-5.2-highspeed",
-      "glm-5.3",
-      "glm-5.3-flash",
-      "glm-5.3-highspeed",
-      "glm-5v-turbo"
-    ],
+    "zhipuai-coding-plan": ["glm-4.6v", "glm-5.3", "glm-5.3-flash", "glm-5.3-highspeed"],
     "daoxe": [
       "claude-haiku-4-5-20251001",
       "claude-opus-4-8",
@@ -13826,6 +13823,7 @@
       "tencent/hy4-preview",
       "thinkingmachines/inkling",
       "thinkingmachines/inkling-small",
+      "typesafe-ai/jev",
       "voyage/rerank-2.5",
       "voyage/rerank-2.5-lite",
       "voyage/voyage-3-large",
@@ -15951,6 +15949,7 @@
       "bailian/qwen3.7-max",
       "bailian/qwen3.7-plus",
       "bailian/qwen3.8-27b",
+      "bailian/qwen3.8-flash",
       "bailian/qwen3.8-max",
       "bailian/qwen3.8-max-0902",
       "deepseek/deepseek-v3.2",
@@ -16155,6 +16154,7 @@
       "DeepSeek-V4-Flash-0731",
       "DeepSeek-V4-Pro",
       "DeepSeek-V4-Pro-0813",
+      "DeepSeek-V4.1-Flash",
       "GLM-5",
       "GLM-5.1",
       "GLM-5.2",
@@ -16936,6 +16936,7 @@
       "voxtral-small-2507"
     ],
     "wallaby": ["moonshotai/kimi-k3"],
+    "ainetcafe": ["Kimi-K3"],
     "hpc-ai": [
       "anthropic/claude-opus-4.7",
       "deepseek/deepseek-v4-flash",
@@ -16972,6 +16973,7 @@
       "glm-5",
       "glm-5.1",
       "glm-5.2",
+      "glm-5.3",
       "happyhorse-1.1-i2v",
       "happyhorse-1.1-r2v",
       "happyhorse-1.1-t2v",
@@ -17589,6 +17591,7 @@
       "openrouter/qwen/qwen3.6-35b-a3b",
       "openrouter/qwen/qwen3.8-2.4t-a95b",
       "openrouter/qwen/qwen3.8-27b",
+      "openrouter/qwen/qwen3.8-27b:free",
       "openrouter/rekaai/reka-edge",
       "openrouter/rekaai/reka-flash-3",
       "openrouter/relace/relace-apply-3",
@@ -17635,7 +17638,10 @@
       "openrouter/~moonshotai/kimi-latest",
       "openrouter/~x-ai/grok-latest",
       "openrouter/~z-ai/glm-flash-latest",
-      "openrouter/~z-ai/glm-latest"
+      "openrouter/~z-ai/glm-latest",
+      "typesafe/jev-1.13.0",
+      "typesafe/jev-latest",
+      "typesafe/jev-preview"
     ]
   },
   "version": "1.0.0"

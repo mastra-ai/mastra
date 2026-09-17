@@ -21,13 +21,19 @@ export class BaseResource {
     let lastError: Error | null = null;
     const {
       baseUrl,
-      retries = 3,
+      retries: defaultRetries = 3,
       backoffMs = 100,
       maxBackoffMs = 1000,
       headers = {},
       credentials,
       fetch: customFetch,
     } = this.options;
+    const { retries: requestRetries, ...fetchOptions } = options;
+    const retries = requestRetries ?? defaultRetries;
+    if (!Number.isSafeInteger(retries) || retries < 0) {
+      throw new RangeError('retries must be a non-negative safe integer');
+    }
+    const signal = fetchOptions.signal ?? this.options.abortSignal;
     const fetchFn = customFetch || fetch;
 
     let delay = backoffMs;
@@ -37,25 +43,29 @@ export class BaseResource {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         const response = await fetchFn(`${baseUrl.replace(/\/$/, '')}${fullPath}`, {
-          ...options,
+          ...fetchOptions,
           headers: {
-            ...(options.body &&
-            !(options.body instanceof FormData) &&
-            (options.method === 'POST' ||
-              options.method === 'PUT' ||
-              options.method === 'PATCH' ||
-              options.method === 'DELETE')
+            ...(fetchOptions.body &&
+            !(fetchOptions.body instanceof FormData) &&
+            (fetchOptions.method === 'POST' ||
+              fetchOptions.method === 'PUT' ||
+              fetchOptions.method === 'PATCH' ||
+              fetchOptions.method === 'DELETE')
               ? { 'content-type': 'application/json' }
               : {}),
             ...headers,
-            ...options.headers,
+            ...fetchOptions.headers,
             // TODO: Bring this back once we figure out what we/users need to do to make this work with cross-origin requests
             // 'x-mastra-client-type': 'js',
           },
-          signal: this.options.abortSignal,
-          credentials: options.credentials ?? credentials,
+          signal,
+          credentials: fetchOptions.credentials ?? credentials,
           body:
-            options.body instanceof FormData ? options.body : options.body ? JSON.stringify(options.body) : undefined,
+            fetchOptions.body instanceof FormData
+              ? fetchOptions.body
+              : fetchOptions.body
+                ? JSON.stringify(fetchOptions.body)
+                : undefined,
         });
 
         if (!response.ok) {
@@ -81,6 +91,10 @@ export class BaseResource {
         return data as T;
       } catch (error) {
         lastError = error as Error;
+
+        if (signal?.aborted) {
+          throw error;
+        }
 
         // Don't retry 4xx client errors - they won't resolve with retries
         const status = (error as Error & { status?: number }).status;
