@@ -33,14 +33,16 @@ function buildDialogTitle(sectionTitle: string, icon: React.ReactNode, score: Cl
 }
 
 export interface ScoreDataPanelProps {
-  score: ClientScoreRowData;
+  /** Always mount the panel and pass `undefined` to close it, so the drawer can animate out. */
+  score?: ClientScoreRowData;
   onClose: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
   className?: string;
+  depth?: 1 | 2 | 3;
 }
 
-export function ScoreDataPanel({ score, onClose, onPrevious, onNext, className }: ScoreDataPanelProps) {
+export function ScoreDataPanel({ score, onClose, onPrevious, onNext, className, depth }: ScoreDataPanelProps) {
   const { Link } = useLinkComponent();
   const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
   const isCodeBased = isCodeBasedScorer(score);
@@ -48,129 +50,143 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, className }
 
   return (
     <>
-      <DataPanel className={className}>
-        {/* Matches SpanDataPanelView's header height so neighbouring panel headers stay level. */}
-        <DataPanel.Header className="min-h-16 py-2">
-          <DataPanel.Heading className="items-center whitespace-nowrap">
-            Score <b># {score.id}</b>
-          </DataPanel.Heading>
-          <ButtonsGroup className="ml-auto shrink-0 self-start">
-            <DataPanel.NextPrevNav
-              onPrevious={onPrevious}
-              onNext={onNext}
-              previousLabel="Previous score"
-              nextLabel="Next score"
-            />
-            <DataPanel.CloseButton onClick={onClose} />
-          </ButtonsGroup>
-        </DataPanel.Header>
+      <DataPanel
+        open={!!score}
+        onClose={onClose}
+        title={score ? `Score ${score.id}` : 'Score'}
+        depth={depth}
+        className={className}
+      >
+        {score && (
+          <>
+            <DataPanel.Header>
+              <DataPanel.Heading className="items-center whitespace-nowrap">
+                Score <b># {score.id}</b>
+              </DataPanel.Heading>
+              <ButtonsGroup className="ml-auto shrink-0 self-start">
+                <DataPanel.NextPrevNav
+                  onPrevious={onPrevious}
+                  onNext={onNext}
+                  previousLabel="Previous score"
+                  nextLabel="Next score"
+                />
+                <DataPanel.CloseButton onClick={onClose} />
+              </ButtonsGroup>
+            </DataPanel.Header>
 
-        <DataPanel.Content>
-          <DataKeysAndValues>
-            {score.scorer?.name != null && (
-              <>
-                <DataKeysAndValues.Key>Scorer</DataKeysAndValues.Key>
-                <DataKeysAndValues.Value>{String(score.scorer.name)}</DataKeysAndValues.Value>
-              </>
-            )}
-            {score.createdAt && (
-              <>
-                <DataKeysAndValues.Key>Created</DataKeysAndValues.Key>
-                <DataKeysAndValues.Value>
-                  {format(new Date(score.createdAt), 'MMM dd, HH:mm:ss.SSS')}
-                </DataKeysAndValues.Value>
-              </>
-            )}
-            {score.traceId && (
-              <>
-                <DataKeysAndValues.Key>Trace Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueLink href={`/traces?traceId=${encodeURIComponent(score.traceId)}`} as={Link}>
-                  {score.traceId}
-                </DataKeysAndValues.ValueLink>
-              </>
-            )}
-            {score.spanId && score.traceId && (
-              <>
-                <DataKeysAndValues.Key>Span Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueLink
-                  href={`/traces?traceId=${encodeURIComponent(score.traceId)}&spanId=${encodeURIComponent(score.spanId)}`}
-                  as={Link}
+            <DataPanel.Content>
+              <DataKeysAndValues>
+                {score.scorer?.name != null && (
+                  <>
+                    <DataKeysAndValues.Key>Scorer</DataKeysAndValues.Key>
+                    <DataKeysAndValues.Value>{String(score.scorer.name)}</DataKeysAndValues.Value>
+                  </>
+                )}
+                {score.createdAt && (
+                  <>
+                    <DataKeysAndValues.Key>Created</DataKeysAndValues.Key>
+                    <DataKeysAndValues.Value>
+                      {format(new Date(score.createdAt), 'MMM dd, HH:mm:ss.SSS')}
+                    </DataKeysAndValues.Value>
+                  </>
+                )}
+                {score.traceId && (
+                  <>
+                    <DataKeysAndValues.Key>Trace Id</DataKeysAndValues.Key>
+                    <DataKeysAndValues.ValueLink
+                      href={`/traces?traceId=${encodeURIComponent(score.traceId)}`}
+                      as={Link}
+                    >
+                      {score.traceId}
+                    </DataKeysAndValues.ValueLink>
+                  </>
+                )}
+                {score.spanId && score.traceId && (
+                  <>
+                    <DataKeysAndValues.Key>Span Id</DataKeysAndValues.Key>
+                    <DataKeysAndValues.ValueLink
+                      href={`/traces?traceId=${encodeURIComponent(score.traceId)}&spanId=${encodeURIComponent(score.spanId)}`}
+                      as={Link}
+                    >
+                      {score.spanId}
+                    </DataKeysAndValues.ValueLink>
+                  </>
+                )}
+              </DataKeysAndValues>
+
+              <div className="mt-6 mb-6 flex justify-end">
+                <Button size="sm" onClick={() => setDatasetDialogOpen(true)} icon={<SaveIcon />}>
+                  Save as Dataset Item
+                </Button>
+              </div>
+
+              <div className="text-neutral4 mb-6">
+                <div
+                  className={cn(
+                    'text-neutral2 text-ui-md flex gap-2 items-baseline',
+                    '[&>svg]:w-5 [&>svg]:h-5 [&>svg]:translate-y-1',
+                  )}
                 >
-                  {score.spanId}
-                </DataKeysAndValues.ValueLink>
-              </>
-            )}
-          </DataKeysAndValues>
+                  <GaugeIcon />
+                  <span className="">Score:</span>
+                  <b className="text-neutral3 font-mono">{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</b>
+                </div>
+                <div className="text-ui-smd mt-2 font-mono">
+                  {score.reason ||
+                    (isCodeBased ? 'N/A — code-based scorer does not generate a reason' : 'N/A — step not configured')}
+                </div>
+              </div>
 
-          <div className="mt-6 mb-6 flex justify-end">
-            <Button size="sm" onClick={() => setDatasetDialogOpen(true)} icon={<SaveIcon />}>
-              Save as Dataset Item
-            </Button>
-          </div>
-
-          <div className="text-neutral4 mb-6">
-            <div
-              className={cn(
-                'text-neutral2 text-ui-md flex gap-2 items-baseline',
-                '[&>svg]:w-5 [&>svg]:h-5 [&>svg]:translate-y-1',
-              )}
-            >
-              <GaugeIcon />
-              <span className="">Score:</span>
-              <b className="text-neutral3 font-mono">{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</b>
-            </div>
-            <div className="text-ui-smd mt-2 font-mono">
-              {score.reason ||
-                (isCodeBased ? 'N/A — code-based scorer does not generate a reason' : 'N/A — step not configured')}
-            </div>
-          </div>
-
-          <div className="grid gap-4">
-            <DataPanel.CodeSection
-              title="Input"
-              dialogTitle={buildDialogTitle('Input', <FileInputIcon />, score)}
-              icon={<FileInputIcon />}
-              codeStr={JSON.stringify(score.input ?? null, null, 2)}
-            />
-            <DataPanel.CodeSection
-              title="Output"
-              dialogTitle={buildDialogTitle('Output', <FileOutputIcon />, score)}
-              icon={<FileOutputIcon />}
-              codeStr={JSON.stringify(score.output ?? null, null, 2)}
-            />
-            <DataPanel.CodeSection
-              title="Preprocess Prompt"
-              dialogTitle={buildDialogTitle('Preprocess Prompt', <ReceiptText />, score)}
-              icon={<ReceiptText />}
-              codeStr={score.preprocessPrompt || naText}
-              simplified={true}
-            />
-            <DataPanel.CodeSection
-              title="Analyze Prompt"
-              dialogTitle={buildDialogTitle('Analyze Prompt', <ReceiptText />, score)}
-              icon={<ReceiptText />}
-              codeStr={score.analyzePrompt || naText}
-              simplified={true}
-            />
-            <DataPanel.CodeSection
-              title="Generate Score Prompt"
-              dialogTitle={buildDialogTitle('Generate Score Prompt', <ReceiptText />, score)}
-              icon={<ReceiptText />}
-              codeStr={score.generateScorePrompt || naText}
-              simplified={true}
-            />
-            <DataPanel.CodeSection
-              title="Generate Reason Prompt"
-              dialogTitle={buildDialogTitle('Generate Reason Prompt', <ReceiptText />, score)}
-              icon={<ReceiptText />}
-              codeStr={score.generateReasonPrompt || naText}
-              simplified={true}
-            />
-          </div>
-        </DataPanel.Content>
+              <div className="grid gap-4">
+                <DataPanel.CodeSection
+                  title="Input"
+                  dialogTitle={buildDialogTitle('Input', <FileInputIcon />, score)}
+                  icon={<FileInputIcon />}
+                  codeStr={JSON.stringify(score.input ?? null, null, 2)}
+                />
+                <DataPanel.CodeSection
+                  title="Output"
+                  dialogTitle={buildDialogTitle('Output', <FileOutputIcon />, score)}
+                  icon={<FileOutputIcon />}
+                  codeStr={JSON.stringify(score.output ?? null, null, 2)}
+                />
+                <DataPanel.CodeSection
+                  title="Preprocess Prompt"
+                  dialogTitle={buildDialogTitle('Preprocess Prompt', <ReceiptText />, score)}
+                  icon={<ReceiptText />}
+                  codeStr={score.preprocessPrompt || naText}
+                  simplified={true}
+                />
+                <DataPanel.CodeSection
+                  title="Analyze Prompt"
+                  dialogTitle={buildDialogTitle('Analyze Prompt', <ReceiptText />, score)}
+                  icon={<ReceiptText />}
+                  codeStr={score.analyzePrompt || naText}
+                  simplified={true}
+                />
+                <DataPanel.CodeSection
+                  title="Generate Score Prompt"
+                  dialogTitle={buildDialogTitle('Generate Score Prompt', <ReceiptText />, score)}
+                  icon={<ReceiptText />}
+                  codeStr={score.generateScorePrompt || naText}
+                  simplified={true}
+                />
+                <DataPanel.CodeSection
+                  title="Generate Reason Prompt"
+                  dialogTitle={buildDialogTitle('Generate Reason Prompt', <ReceiptText />, score)}
+                  icon={<ReceiptText />}
+                  codeStr={score.generateReasonPrompt || naText}
+                  simplified={true}
+                />
+              </div>
+            </DataPanel.Content>
+          </>
+        )}
       </DataPanel>
 
-      <ScoreAsItemDialog score={score} isOpen={datasetDialogOpen} onClose={() => setDatasetDialogOpen(false)} />
+      {score && (
+        <ScoreAsItemDialog score={score} isOpen={datasetDialogOpen} onClose={() => setDatasetDialogOpen(false)} />
+      )}
     </>
   );
 }
