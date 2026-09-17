@@ -47,6 +47,8 @@ const COLLAPSED_LINES = 15;
 export interface SubagentExecutionOptions {
   /** When true, auto-collapse to a single summary line on completion. Default false. */
   collapseOnComplete?: boolean;
+  /** When "unknown", omit the duration from the completed footer. Default measures elapsed time. */
+  durationMode?: 'unknown';
   /** True when this subagent is running on a forked copy of the parent thread. */
   forked?: boolean;
   /** When true, show full completed content including the final result. Default false. */
@@ -82,10 +84,11 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
   private done = false;
   private isError = false;
   private startTime = Date.now();
-  private durationMs = 0;
+  private durationMs?: number;
   private finalResult?: string;
   private expanded = false;
   private collapseOnComplete: boolean;
+  private durationMode: SubagentExecutionOptions['durationMode'];
   private expandOnComplete: boolean;
   private forked: boolean;
   private label: string;
@@ -101,6 +104,7 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
     this.modelId = modelId;
     this.ui = ui;
     this.collapseOnComplete = options?.collapseOnComplete ?? false;
+    this.durationMode = options?.durationMode;
     this.expandOnComplete = options?.expandOnComplete ?? false;
     this.forked = options?.forked ?? false;
     this.label = options?.label ?? 'subagent';
@@ -167,10 +171,15 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
     this.rebuild();
   }
 
-  finish(isError: boolean, durationMs: number, result?: string): void {
+  finish(isError: boolean, durationMs?: number, result?: string): void {
+    const wasDone = this.done;
     this.done = true;
     this.isError = isError;
-    this.durationMs = durationMs;
+    if (durationMs !== undefined) {
+      this.durationMs = durationMs;
+    } else if (!wasDone && this.durationMode !== 'unknown') {
+      this.durationMs = Date.now() - this.startTime;
+    }
     this.finalResult = isDuplicateFinalResult(result, this.activity, this.lastTextSnapshot) ? undefined : result;
     if (this.expandOnComplete) {
       this.expanded = true;
@@ -218,7 +227,8 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
         ? colorText(this.colors.icon, ` ${this.icons.error}`, (text: string) => theme.fg('error', text))
         : colorText(this.colors.icon, ` ${this.icons.success}`, (text: string) => theme.fg('success', text))
       : colorText(this.colors.icon, ` ${this.icons.running}`, (text: string) => theme.fg('muted', text));
-    const durationStr = this.done ? theme.fg('muted', ` ${formatDuration(this.durationMs)}`) : '';
+    const durationStr =
+      this.done && this.durationMs !== undefined ? theme.fg('muted', ` ${formatDuration(this.durationMs)}`) : '';
     const footerText = `${theme.bold(colorText(this.colors.label, this.label, (text: string) => theme.fg('toolTitle', text)))} ${typeLabel}${modelLabel}${durationStr}${statusIcon}`;
 
     // When collapse-on-complete is enabled, render only the single-line footer summary.
