@@ -1,10 +1,10 @@
 ---
-title: 'Reference: Agents API | Client SDK'
-description: 'The Agents API provides methods to interact with Mastra AI agents, including generating responses and streaming interactions.'
+title: "Reference: Agents API | Client SDK"
+description: "The Agents API provides methods to interact with Mastra AI agents, including generating responses and streaming interactions."
 packages:
-  - '@mastra/ai-sdk'
-  - '@mastra/client-js'
-  - '@mastra/core'
+  - "@mastra/ai-sdk"
+  - "@mastra/client-js"
+  - "@mastra/core"
 ---
 
 # Agents API
@@ -713,7 +713,11 @@ response.processDataStream({
       console.log(chunk.payload.text)
     } else if (chunk.type === 'tool-call') {
       console.log(
-        `calling tool ${chunk.payload.toolName} with args ${JSON.stringify(chunk.payload.args, null, 2)}`,
+        `calling tool ${chunk.payload.toolName} with args ${JSON.stringify(
+          chunk.payload.args,
+          null,
+          2,
+        )}`,
       )
     }
   },

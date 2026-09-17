@@ -1156,8 +1156,10 @@ export class Agent extends BaseResource {
     Output extends JSONSchema7 | ZodSchema | undefined = undefined,
     _StructuredOutput extends JSONSchema7 | ZodSchema | undefined = undefined,
   >(params: GenerateLegacyParams<Output>): Promise<GenerateReturn<any, any, any>> {
+    // `abortSignal` is consumed locally and must never be serialized into the request body
+    const { abortSignal, ...serializableParams } = params;
     const processedParams = {
-      ...params,
+      ...serializableParams,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       requestContext: parseClientRequestContext(params.requestContext),
@@ -1169,6 +1171,7 @@ export class Agent extends BaseResource {
     const response: GenerateReturn<any, any, any> = await this.request(`/agents/${this.agentId}/generate-legacy`, {
       method: 'POST',
       body: processedParams,
+      signal: abortSignal,
     });
 
     if (response.finishReason === 'tool-calls') {
@@ -1255,8 +1258,10 @@ export class Agent extends BaseResource {
       messages: messages,
     } as StreamParams<OUTPUT>;
     const resolvedClientTools = params.clientToolsResolver?.() ?? params.clientTools;
+    // `abortSignal` is consumed locally and must never be serialized into the request body
+    const { abortSignal, ...serializableParams } = params;
     const processedParams = {
-      ...params,
+      ...serializableParams,
       requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(resolvedClientTools),
       structuredOutput: params.structuredOutput
@@ -1267,7 +1272,7 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    const { memory, requestContext } = processedParams as StreamParams;
+    const { memory, requestContext } = params as StreamParams;
     const { resource, thread } = memory ?? {};
     const resourceId = resource;
     const threadId = typeof thread === 'string' ? thread : thread?.id;
@@ -1277,6 +1282,7 @@ export class Agent extends BaseResource {
       {
         method: 'POST',
         body: processedParams,
+        signal: abortSignal,
       },
     );
 

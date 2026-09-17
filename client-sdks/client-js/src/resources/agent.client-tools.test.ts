@@ -2108,6 +2108,32 @@ describe('Agent stream cancellation', () => {
     ).rejects.toBeDefined();
   });
 
+  it.each([
+    ['generate', (a: ReturnType<typeof client.getAgent>, s: AbortSignal) => a.generate('hi', { abortSignal: s })],
+    [
+      'generateLegacy',
+      (a: ReturnType<typeof client.getAgent>, s: AbortSignal) =>
+        a.generateLegacy({ messages: 'hi', abortSignal: s } as any),
+    ],
+  ])('%s: abortSignal reaches fetch and is stripped from the body', async (_name, call) => {
+    let captured: RequestInit | undefined;
+    (global.fetch as any).mockImplementationOnce(async (_url: string, init: RequestInit) => {
+      captured = init;
+      return new Response(JSON.stringify({ text: 'ok', finishReason: 'stop' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const ac = new AbortController();
+    await call(agent, ac.signal);
+
+    expect(JSON.parse(captured!.body as string)).not.toHaveProperty('abortSignal');
+    expect((captured!.signal as AbortSignal).aborted).toBe(false);
+    ac.abort();
+    expect((captured!.signal as AbortSignal).aborted).toBe(true);
+  });
+
   it('cancelling before finish suppresses client-tool execution and the recursive request', async () => {
     const executeSpy = vi.fn(async () => ({ ok: true }));
     const weatherTool = createTool({

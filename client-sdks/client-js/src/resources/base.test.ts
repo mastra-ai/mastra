@@ -133,22 +133,24 @@ describe('BaseResource', () => {
     expect(attempts).toBe(1);
   });
 
-  it('should prefer a request abort signal over the client abort signal', async () => {
-    const clientSignal = new AbortController().signal;
-    const requestSignal = new AbortController().signal;
+  it('should abort when either the request or the client abort signal fires', async () => {
+    const clientController = new AbortController();
+    const requestController = new AbortController();
     let receivedSignal: AbortSignal | null | undefined;
     const customResource = new BaseResource({
       baseUrl: serverUrl,
-      abortSignal: clientSignal,
+      abortSignal: clientController.signal,
       fetch: async (_input, init) => {
         receivedSignal = init?.signal;
         return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
       },
     });
 
-    await customResource.request('/test', { signal: requestSignal });
+    await customResource.request('/test', { signal: requestController.signal });
 
-    expect(receivedSignal).toBe(requestSignal);
+    expect(receivedSignal?.aborted).toBe(false);
+    requestController.abort();
+    expect(receivedSignal?.aborted).toBe(true);
   });
 
   it('should use the client abort signal when the request does not provide one', async () => {
