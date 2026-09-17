@@ -68,7 +68,7 @@ export function ComposerAttachmentButton({ appearance = 'round', ...props }: Act
       {appearance === 'outline' ? (
         <ImagePlus size={14} />
       ) : (
-        <Plus className="size-5 text-neutral3 hover:text-neutral6" />
+        <Plus className="text-neutral3 hover:text-neutral6 size-5" />
       )}
     </Button>
   );
@@ -84,7 +84,7 @@ export function ComposerModelSettingsButton(props: Omit<ActionProps, 'appearance
       data-testid="composer-model-settings-trigger"
       {...props}
     >
-      <Sliders className="size-5 text-neutral3 hover:text-neutral6" />
+      <Sliders className="text-neutral3 hover:text-neutral6 size-5" />
     </Button>
   );
 }
