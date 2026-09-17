@@ -11,7 +11,13 @@ import type {
   TaskPushNotificationConfig,
 } from '@mastra/core/a2a/client';
 import { MastraA2AError } from '@mastra/core/a2a/client';
-import { ListTasksRequest as ListTasksRequestV1 } from '@mastra/core/a2a/v1';
+import {
+  CancelTaskRequest,
+  GetTaskRequest,
+  ListTasksRequest as ListTasksRequestV1,
+  SendMessageRequest,
+  SubscribeToTaskRequest,
+} from '@mastra/core/a2a/v1';
 import canonicalize from 'canonicalize';
 import { CompactSign, base64url, exportJWK } from 'jose';
 import { describe, it, beforeEach, afterEach, expect, expectTypeOf } from 'vitest';
@@ -657,6 +663,79 @@ describe('A2AV1', () => {
     await new Promise<void>(resolve => server.close(() => resolve()));
   });
 
+  const messageParams = { message: { messageId: 'message-1', role: 'ROLE_USER', parts: [{ text: 'Hello' }] } };
+  const task = { id: 'task-1', contextId: 'context-1' };
+
+  it.each([
+    {
+      method: 'SendMessage',
+      params: messageParams,
+      response: { task },
+      invoke: (a2a: A2AV1) => a2a.sendMessage(SendMessageRequest.fromJSON(messageParams)),
+    },
+    {
+      method: 'GetTask',
+      params: { id: 'task-1', historyLength: 2 },
+      response: task,
+      invoke: (a2a: A2AV1) => a2a.getTask(GetTaskRequest.fromJSON({ id: 'task-1', historyLength: 2 })),
+    },
+    {
+      method: 'CancelTask',
+      params: { id: 'task-1' },
+      response: task,
+      invoke: (a2a: A2AV1) => a2a.cancelTask(CancelTaskRequest.fromJSON({ id: 'task-1' })),
+    },
+    {
+      method: 'SendStreamingMessage',
+      params: messageParams,
+      response: { task },
+      invoke: (a2a: A2AV1) => collectStream(a2a.sendMessageStream(SendMessageRequest.fromJSON(messageParams))),
+    },
+    {
+      method: 'SubscribeToTask',
+      params: { id: 'task-1' },
+      response: { task },
+      invoke: (a2a: A2AV1) => collectStream(a2a.resubscribeTask(SubscribeToTaskRequest.fromJSON({ id: 'task-1' }))),
+    },
+  ])('sends the v1 $method wire method and decodes its response', async ({ method, params, response, invoke }) => {
+    const streaming = method === 'SendStreamingMessage' || method === 'SubscribeToTask';
+    let receivedBody: Record<string, unknown> | undefined;
+    let receivedHeader: string | string[] | undefined;
+    let receivedUrl: string | undefined;
+    let receivedMethod: string | undefined;
+
+    server.on('request', (req, res) => {
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk;
+      });
+      req.on('end', () => {
+        receivedBody = JSON.parse(body);
+        receivedHeader = req.headers['a2a-version'];
+        receivedUrl = req.url;
+        receivedMethod = req.method;
+        const envelope = JSON.stringify({
+          jsonrpc: '2.0',
+          id: receivedBody?.id,
+          ...(receivedBody?.method === method
+            ? { result: response }
+            : { error: { code: -32601, message: 'Method not found' } }),
+        });
+        res.writeHead(200, { 'Content-Type': streaming ? 'text/event-stream' : 'application/json' });
+        res.end(streaming ? `data: ${envelope}\n\n` : envelope);
+      });
+    });
+
+    const result = await invoke(new A2AV1({ baseUrl: serverUrl }, 'test-agent'));
+
+    expect(receivedUrl).toBe('/api/a2a/test-agent');
+    expect(receivedMethod).toBe('POST');
+    expect(receivedHeader).toBe('1.0');
+    expect(receivedBody).toMatchObject({ jsonrpc: '2.0', id: expect.any(String), method, params });
+    const expectedResult = 'task' in response ? { payload: { $case: 'task', value: task } } : task;
+    expect(result).toMatchObject(streaming ? [expectedResult] : expectedResult);
+  });
+
   const config = {
     tenant: 'tenant-1',
     id: 'config-1',
@@ -797,7 +876,7 @@ describe('A2AV1', () => {
     expect(receivedHeader).toBe('1.0');
     expect(receivedBody).toMatchObject({
       jsonrpc: '2.0',
-      method: 'tasks/list',
+      method: 'ListTasks',
       params: { contextId: 'context-1', pageSize: 10 },
     });
     expect(result.tasks).toEqual([]);
