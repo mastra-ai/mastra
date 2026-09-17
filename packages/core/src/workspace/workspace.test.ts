@@ -995,6 +995,37 @@ Line 3 conclusion`;
         expect(searchEngine.countByPrefix('skill-scope:')).toBe(1);
       });
 
+      it('returns to the cache bound after concurrent live views re-admit each other', async () => {
+        // Multiple skills so a readmit loop can be interrupted by another view's eviction
+        for (const name of ['alpha', 'beta', 'gamma']) {
+          await fs.mkdir(path.join(remoteDir, 'skills', name), { recursive: true });
+          await fs.writeFile(
+            path.join(remoteDir, 'skills', name, 'SKILL.md'),
+            `---\nname: ${name}\ndescription: ${name} skill\n---\n# ${name}\nzebra`,
+          );
+        }
+        const searchEngine = new SearchEngine({ bm25: true });
+        const skills = new ResolvedSourceWorkspaceSkills({
+          source: () => new LocalFilesystem({ basePath: remoteDir }),
+          skills: ['skills'],
+          searchEngine,
+          maxCachedSources: 1,
+        });
+
+        const views = await Promise.all(
+          [1, 2, 3].map(() => skills.getScoped({ requestContext: new RequestContext() })),
+        );
+        await Promise.all(views.map(view => view.list()));
+        const skillsPerSource = (await views[0]!.list()).length;
+
+        for (let round = 0; round < 3; round++) {
+          await Promise.all(views.map(view => view.search('zebra')));
+        }
+
+        // Only one source may hold documents once everything settles
+        expect(searchEngine.countByPrefix('skill-scope:')).toBe(skillsPerSource);
+      });
+
       it('rejects invalid maxCachedSources', () => {
         for (const maxCachedSources of [Number.NaN, Number.POSITIVE_INFINITY, 0, -3, 1.5]) {
           expect(

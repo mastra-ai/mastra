@@ -191,11 +191,24 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   async #readmitIndexIfReleased(): Promise<boolean> {
     if (!this.#indexReleased || !this.#searchEngine) return false;
     this.#readmitPromise ??= (async () => {
-      await this.#onIndexReadmit?.();
+      // Clear before admitting so an eviction that lands while admission is in
+      // flight is not overwritten and short-circuits the loop below.
       this.#indexReleased = false;
+      await this.#onIndexReadmit?.();
       for (const candidates of this.#skills.values()) {
         for (const skill of candidates) {
+          if (this.#indexReleased) break;
           await this.#indexSkill(skill);
+        }
+      }
+      // Evicted again while re-indexing: a skill that was mid-index when
+      // release ran may have landed after release removed it. Sweep so the
+      // evicted namespace holds no documents.
+      if (this.#indexReleased) {
+        for (const candidates of this.#skills.values()) {
+          for (const skill of candidates) {
+            await this.#removeSkillFromIndex(skill);
+          }
         }
       }
     })().finally(() => {
