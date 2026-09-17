@@ -1948,7 +1948,7 @@ describe('PIIDetector', () => {
       expect((flushed as any)?.payload.text).toBe('Contact [EMAIL] now');
     });
 
-    it('merges overlapping PII detections for every redaction method', () => {
+    it('merges overlapping PII detections for every redaction method', async () => {
       const content = 'before abcdefghijklmnop after';
       const detections: PIIDetection[] = [
         { type: 'email', value: 'abcdefghijkl', confidence: 1, start: 7, end: 19, redacted_value: null },
@@ -1965,7 +1965,7 @@ describe('PIIDetector', () => {
           model: setupMockModel(createMockPIIResult()),
           redactionMethod,
         });
-        expect((detector as any).applyRedactionMethod(content, detections)).toEqual(expected);
+        await expect((detector as any).applyRedactionMethod(content, detections)).resolves.toEqual(expected);
       }
     });
 
