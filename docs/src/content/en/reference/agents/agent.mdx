@@ -280,10 +280,10 @@ Sends a user message to an active run or memory thread. Use this when the active
                   },
                   {
                     name: 'streamOptions',
-                    type: 'AgentExecutionOptions | (() => Promise<AgentExecutionOptions>)',
+                    type: 'AgentExecutionOptions<Output> | (() => Promise<AgentExecutionOptions<Output>>)',
                     isOptional: true,
                     description:
-                      'Options for a new stream, or request context for persistence. An async factory defers setup until Mastra starts the stream or persists the input; active delivery and discard do not evaluate it. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
+                      'Options for a new stream, or request context for persistence. Pass an async factory to defer setup until Mastra wakes the thread or persists the message. Active delivery and discard do not evaluate the factory. The top-level `resourceId` and `threadId` still control memory identity.',
                   },
                   {
                     name: 'attributes',
@@ -303,17 +303,20 @@ Sends a user message to an active run or memory thread. Use this when the active
 ]}
 />
 
-Set `ifIdle.behavior` to `wake` and pass `ifIdle.streamOptions` when an idle thread should start a new stream with custom execution options:
+Set `ifIdle.behavior` to `wake` and pass an async `ifIdle.streamOptions` factory when stream setup requires deferred work:
 
 ```typescript title="src/mastra/signals.ts"
+import { RequestContext } from '@mastra/core/request-context'
+
 agent.sendMessage('Continue with the next step.', {
   resourceId: 'user-123',
   threadId: 'thread-abc',
   ifIdle: {
     behavior: 'wake',
-    streamOptions: {
+    streamOptions: async () => ({
       maxSteps: 3,
-    },
+      requestContext: new RequestContext([['locale', 'en-US']]),
+    }),
   },
 })
 ```
@@ -415,10 +418,10 @@ Sends a signal to an active run or memory thread.
                   },
                   {
                     name: 'streamOptions',
-                    type: 'AgentExecutionOptions | (() => Promise<AgentExecutionOptions>)',
+                    type: 'AgentExecutionOptions<Output> | (() => Promise<AgentExecutionOptions<Output>>)',
                     isOptional: true,
                     description:
-                      'Options for a new stream, or request context for persistence. An async factory defers setup until Mastra starts the stream or persists the input; active delivery and discard do not evaluate it. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
+                      'Options for a new stream, or request context for persistence and state work. Pass an async factory to defer setup until wake, persistence, or state processing wins delivery policy. Active delivery and discard do not evaluate the factory. The top-level `resourceId` and `threadId` still control memory identity.',
                   },
                   {
                     name: 'attributes',
@@ -662,10 +665,10 @@ const result = await agent.sendNotificationSignal(
                 parameters: [
                   {
                     name: 'streamOptions',
-                    type: 'AgentExecutionOptions | (() => Promise<AgentExecutionOptions>)',
+                    type: 'AgentExecutionOptions<Output> | (() => Promise<AgentExecutionOptions<Output>>)',
                     isOptional: true,
                     description:
-                      'Options for the stream that starts when an immediate notification wakes an idle thread. An async factory defers setup until the stream starts, without running during active delivery.',
+                      'Options for an immediate notification signal to wake an idle thread or persist without waking. Pass an async factory to defer setup until wake or persistence wins delivery policy. Active delivery and discard do not evaluate the factory. The top-level `resourceId` and `threadId` still control memory identity.',
                   },
                 ],
               },
