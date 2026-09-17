@@ -7,7 +7,7 @@ import { presentTool } from '@/ds/components/ai/tool-call/tool-presentation';
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-export function SpanPayloadTool({ value }: { value: unknown }) {
+export function SpanPayloadTool({ value, showLabel = true }: { value: unknown; showLabel?: boolean }) {
   if (!isRecord(value)) return <SpanPayloadJson value={value} />;
   const call = value.type === 'tool-invocation' ? value.toolInvocation : value;
   if (!isRecord(call) || typeof call.toolName !== 'string' || !call.toolName) {
@@ -19,7 +19,7 @@ export function SpanPayloadTool({ value }: { value: unknown }) {
   const errorText = typeof call.errorText === 'string' ? call.errorText : undefined;
   return (
     <div data-slot="span-payload-tool" className="flex flex-col gap-2">
-      <SpanPayloadLabel>{value.type === 'tool-result' ? 'Tool result' : 'Tool call'}</SpanPayloadLabel>
+      {showLabel && <SpanPayloadLabel>{value.type === 'tool-result' ? 'Tool result' : 'Tool call'}</SpanPayloadLabel>}
       <BadgeWrapper
         status={error ? 'error' : 'idle'}
         header={<ToolCallPresentedHeader {...presentTool(call.toolName, input)} />}

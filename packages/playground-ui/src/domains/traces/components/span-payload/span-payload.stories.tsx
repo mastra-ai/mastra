@@ -45,7 +45,9 @@ export const InputRenderers: StoryObj = {
         const span = ALL_SPAN_FIXTURES[name];
         return (
           <Cell key={name} title={name} tag={describeSpanInput(asCoreSpan(span))?.type}>
-            <SpanInputRenderer span={span} />
+            <SpanPayloadSection title="Input" icon={<FileInputIcon />} raw={span.input}>
+              <SpanInputRenderer span={span} />
+            </SpanPayloadSection>
           </Cell>
         );
       })}
@@ -60,7 +62,9 @@ export const OutputRenderers: StoryObj = {
         const span = ALL_SPAN_FIXTURES[name];
         return (
           <Cell key={name} title={name} tag={describeSpanOutput(asCoreSpan(span))?.type}>
-            <SpanOutputRenderer span={span} />
+            <SpanPayloadSection title="Output" icon={<FileOutputIcon />} raw={span.output}>
+              <SpanOutputRenderer span={span} />
+            </SpanPayloadSection>
           </Cell>
         );
       })}
@@ -72,7 +76,9 @@ export const ErrorRenderer: StoryObj = {
   render: () => (
     <Grid>
       <Cell title="errorSpan" tag="error">
-        <SpanErrorRenderer span={ALL_SPAN_FIXTURES.errorSpan} />
+        <SpanPayloadSection title="Error" raw={ALL_SPAN_FIXTURES.errorSpan.error}>
+          <SpanErrorRenderer span={ALL_SPAN_FIXTURES.errorSpan} />
+        </SpanPayloadSection>
       </Cell>
       <Cell title="toolCallSpan (no error)" tag={undefined}>
         <SpanErrorRenderer span={ALL_SPAN_FIXTURES.toolCallSpan} />
@@ -90,7 +96,9 @@ function Both({ span }: { span: SpanRecord }) {
       <SpanPayloadSection title="Output" icon={<FileOutputIcon />} raw={span.output}>
         <SpanOutputRenderer span={span} />
       </SpanPayloadSection>
-      <SpanErrorRenderer span={span} />
+      <SpanPayloadSection title="Error" raw={span.error}>
+        <SpanErrorRenderer span={span} />
+      </SpanPayloadSection>
     </div>
   );
 }
