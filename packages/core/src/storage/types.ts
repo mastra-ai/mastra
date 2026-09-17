@@ -1115,11 +1115,18 @@ export type ObservationalMemoryScope = 'thread' | 'resource';
 /**
  * How the observational memory record was created.
  *
- * Note: the server API schema (`observationalMemoryRecordSchema`) accepts one
- * additional value, `'observation'`, as deliberate output tolerance for rows
- * persisted by older framework versions. Current framework code only emits
- * `'initial'`, `'reflection'`, and `'archive'`; do not narrow either side to
- * match the other without a migration for legacy `'observation'` rows.
+ * Note: the server API schema (`observationalMemoryRecordSchema`) and the
+ * generated client type (`client-sdks/client-js/src/route-types.generated.ts`)
+ * accept one additional value, `'observation'`. It is unreachable legacy: the
+ * member was hand-written into the API schema when that schema was introduced
+ * (#12599), no framework version has ever persisted it, and this union has
+ * never contained it — the only in-repo occurrences are playground fixtures
+ * and the schema's own output test. It survives as output tolerance rather
+ * than by design, and because no persisted row can hold it, narrowing either
+ * side is safe. Current framework code emits only `'initial'`, `'reflection'`,
+ * and `'archive'`; this union is the narrower source of truth, and the
+ * generated client union (which carries the legacy `'observation'` alongside
+ * `'archive'`) is an additive superset for clients.
  */
 export type ObservationalMemoryOriginType = 'initial' | 'reflection' | 'archive';
 
