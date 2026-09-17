@@ -123,7 +123,7 @@ export const accountRotationScenario: McE2eScenario = {
   name: 'account-rotation',
   description: 'Rotates to the next OAuth account on a 429 and shows the switch in the transcript.',
   testName: 'rotates a rate-limited OAuth account, renders the switch, and persists it across restart',
-  prepare({ appDataDir }) {
+  async prepare({ appDataDir }) {
     scenarioAppDataDir = appDataDir;
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = readMutableSettingsFixture(settingsPath);
@@ -146,7 +146,7 @@ export const accountRotationScenario: McE2eScenario = {
 
     // Seed the registry through the real storage so the on-disk shape is exact.
     const storage = new AuthStorage(join(appDataDir, 'auth.json'));
-    storage.addAccount(
+    await storage.addAccount(
       PROVIDER,
       {
         access: ACCOUNT_A_ACCESS,
@@ -156,7 +156,7 @@ export const accountRotationScenario: McE2eScenario = {
       },
       { label: 'Kimi Account A' },
     );
-    storage.addAccount(
+    await storage.addAccount(
       PROVIDER,
       {
         access: ACCOUNT_B_ACCESS,

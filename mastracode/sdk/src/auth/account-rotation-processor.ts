@@ -21,6 +21,8 @@
  */
 import type { ProcessAPIErrorArgs, ProcessInputArgs, ProcessInputResult, Processor } from '@mastra/core/processors';
 
+import { resolveCredentialStore } from '../agents/credential-resolver.js';
+
 import { ProviderAuthRequiredError, PROVIDER_AUTH_REQUIRED_ERROR } from './provider-auth-error.js';
 import { getOAuthProviders } from './storage.js';
 import type { CredentialStore } from './types.js';
@@ -287,7 +289,12 @@ const REASON_TEXT: Record<Exclude<AccountSwitchPartData['reason'], 'starting-on-
 
 /** Validates untrusted `reason` values (e.g. persisted message parts). */
 export function isAccountSwitchReason(value: unknown): value is AccountSwitchPartData['reason'] {
-  return value === 'starting-on-account' || (typeof value === 'string' && value in REASON_TEXT);
+  return (
+    value === 'starting-on-account' ||
+    // Own-property check: `in` would accept prototype names like 'toString',
+    // which would then interpolate the inherited function into the notice text.
+    (typeof value === 'string' && Object.prototype.hasOwnProperty.call(REASON_TEXT, value))
+  );
 }
 
 /**
@@ -372,7 +379,10 @@ export class AccountRotationProcessor implements Processor {
     const classification = classifyRotationError(error);
     if (classification.kind === 'never') return { retry: false };
 
-    const store = this.options.credentialStore;
+    // Deployed requests resolve the tenant-scoped store; local mode keeps the
+    // host storage. Reading the host registry here would rotate or announce
+    // host accounts for a tenant request.
+    const store = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
     const accounts = store.listAccounts?.(providerId) ?? [];
     const active = store.getActiveAccount?.(providerId) ?? accounts.find(account => account.active);
 
@@ -402,13 +412,22 @@ export class AccountRotationProcessor implements Processor {
 
     if (accounts.length < 2) return { retry: false };
 
+    // Count only this provider's instances: `tried` spans the whole request
+    // (a cascade can visit several providers), so comparing its raw size to
+    // this provider's account count would falsely report exhaustion when an
+    // earlier provider in the same request already used up accounts.
     const tried = getTriedInstances(state);
     if (active) tried.add(active.id);
-    if (tried.size >= accounts.length) {
+    const triedForProvider = accounts.filter(account => tried.has(account.id)).length;
+    if (triedForProvider >= accounts.length) {
       return this.declarePoolUnavailable(args, providerId, 'pool-exhausted');
     }
 
-    const next = store.activateAccount?.(providerId);
+    // Activate the first untried instance explicitly. Storage's own cursor
+    // rotation follows insertion order from wherever it currently sits, which
+    // can hand back an account this request already tried.
+    const candidate = accounts.find(account => !tried.has(account.id));
+    const next = candidate ? store.activateAccount?.(providerId, candidate.id) : undefined;
     if (!next) {
       return this.declarePoolUnavailable(args, providerId, 'pool-exhausted');
     }
@@ -442,14 +461,14 @@ export class AccountRotationProcessor implements Processor {
     providerId: string,
     reason: 'pool-exhausted' | 'persistent-outage',
   ): Promise<{ retry: boolean }> {
-    const accounts = this.options.credentialStore.listAccounts?.(providerId) ?? [];
+    const store = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
+    const accounts = store.listAccounts?.(providerId) ?? [];
     if (accounts.length === 0) return { retry: false };
 
     const tried = getTriedInstances(args.state);
     for (const account of accounts) tried.add(account.id);
 
-    const active =
-      this.options.credentialStore.getActiveAccount?.(providerId) ?? accounts.find(account => account.active);
+    const active = store.getActiveAccount?.(providerId) ?? accounts.find(account => account.active);
 
     await emitAccountSwitchPart(args, {
       provider: providerId,
@@ -483,10 +502,14 @@ export class AccountStartNoticeProcessor implements Processor {
     const providerId = providerFromSession(args);
     if (!providerId) return args.messageList;
 
-    const accounts = this.options.credentialStore.listAccounts?.(providerId) ?? [];
+    // Deployed requests resolve the tenant-scoped store so host accounts are
+    // never listed or announced for a tenant run.
+    const store = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
+
+    const accounts = store.listAccounts?.(providerId) ?? [];
     if (accounts.length < 2) return args.messageList;
 
-    const active = this.options.credentialStore.getActiveAccount?.(providerId);
+    const active = store.getActiveAccount?.(providerId);
     const first = accounts[0];
     if (!active || !first || active.id === first.id) return args.messageList;
 

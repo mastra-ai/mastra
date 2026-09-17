@@ -10,6 +10,7 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // Isolate the app data dir before any import that could read it.
@@ -18,16 +19,19 @@ vi.hoisted(() => {
   process.env.MASTRA_TELEMETRY_DISABLED = '1';
 });
 
+import { setCredentialStoreProvider } from '../agents/credential-resolver.js';
 import {
   AccountRotationProcessor,
   AccountStartNoticeProcessor,
   classifyRotationError,
+  isAccountSwitchReason,
   providerFromError,
   providerFromModelId,
 } from './account-rotation-processor.js';
 import { ProviderAuthRequiredError } from './provider-auth-error.js';
 import { anthropicOAuthProvider } from './providers/anthropic.js';
 import { AuthStorage } from './storage.js';
+import type { CredentialStore } from './types.js';
 
 const PROVIDER = 'anthropic';
 const FUTURE = Date.now() + 60 * 60 * 1000;
@@ -62,13 +66,21 @@ interface SeededStorage {
 }
 
 /** Two-account Anthropic registry, account A active, both tokens far-future. */
-function makeTwoAccountStorage(): SeededStorage {
+async function makeTwoAccountStorage(): Promise<SeededStorage> {
   const dir = mkdtempSync(join(tmpdir(), 'account-rotation-test-'));
   tempDirs.push(dir);
   const authPath = join(dir, 'auth.json');
   const storage = new AuthStorage(authPath);
-  storage.addAccount(PROVIDER, { access: 'token-a', refresh: 'refresh-a', expires: FUTURE }, { label: 'Account A' });
-  storage.addAccount(PROVIDER, { access: 'token-b', refresh: 'refresh-b', expires: FUTURE }, { label: 'Account B' });
+  await storage.addAccount(
+    PROVIDER,
+    { access: 'token-a', refresh: 'refresh-a', expires: FUTURE },
+    { label: 'Account A' },
+  );
+  await storage.addAccount(
+    PROVIDER,
+    { access: 'token-b', refresh: 'refresh-b', expires: FUTURE },
+    { label: 'Account B' },
+  );
   storage.activateAccount(PROVIDER, storage.listAccounts(PROVIDER)[0]!.id);
   const [a, b] = storage.listAccounts(PROVIDER);
   return { storage, authPath, accountA: { id: a.id, label: a.label }, accountB: { id: b.id, label: b.label } };
@@ -108,6 +120,12 @@ afterEach(() => {
 });
 
 describe('classifyRotationError (locked Q7 taxonomy)', () => {
+  it('rejects prototype-chain names as account-switch reasons', () => {
+    expect(isAccountSwitchReason('toString')).toBe(false);
+    expect(isAccountSwitchReason('constructor')).toBe(false);
+    expect(isAccountSwitchReason('pool-exhausted')).toBe(true);
+  });
+
   it('rotates immediately on 429 and 402', () => {
     expect(classifyRotationError(apiError(429))).toEqual({ kind: 'rotate', reason: 'rate-limit' });
     expect(classifyRotationError(apiError(402))).toEqual({ kind: 'rotate', reason: 'quota-exhausted' });
@@ -201,7 +219,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
   it.each([429, 402])(
     'rotates to the next account on %d, persists the switch part, swaps the slot',
     async statusCode => {
-      const seeded = makeTwoAccountStorage();
+      const seeded = await makeTwoAccountStorage();
       const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
       const args = makeArgs({ error: apiError(statusCode) });
 
@@ -235,7 +253,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
   );
 
   it('rotates on a usage-limit message error', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeArgs({
       error: apiError(400, { message: 'Usage limit reached for your Claude Max plan' }),
@@ -247,7 +265,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
   });
 
   it('retries the same account when a forced refresh succeeds on 401 (no part, no cursor move)', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     const refreshToken = vi
       .spyOn(anthropicOAuthProvider, 'refreshToken')
       .mockResolvedValue({ access: 'token-a-fresh', refresh: 'refresh-a-fresh', expires: FUTURE });
@@ -266,7 +284,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
   });
 
   it('rotates on 401 when the forced refresh also fails', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     vi.spyOn(anthropicOAuthProvider, 'refreshToken').mockRejectedValue(new Error('refresh rejected'));
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeArgs({ error: apiError(401) });
@@ -283,7 +301,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
     // ProviderAuthRequiredError is thrown by the fetch wrappers before any
     // HTTP request exists — no url, no modelId. The session modelId is the
     // only provider signal; without it this error could never rotate.
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     vi.spyOn(anthropicOAuthProvider, 'refreshToken').mockRejectedValue(new Error('refresh rejected'));
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const requestContext = {
@@ -299,7 +317,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
     expect(args.writer.custom.mock.calls[0][0].data).toMatchObject({ reason: 'auth-failed' });
 
     // Without any provider signal the same error is a no-op.
-    const seeded2 = makeTwoAccountStorage();
+    const seeded2 = await makeTwoAccountStorage();
     const processor2 = new AccountRotationProcessor({ credentialStore: seeded2.storage, maxProcessorRetries: 22 });
     const bare = makeArgs({ error: new ProviderAuthRequiredError('Not logged in to Anthropic.') });
     expect(await processor2.processAPIError(bare as any)).toEqual({ retry: false });
@@ -333,7 +351,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
     // Core discards retry:true when processorRetryCount >= maxProcessorRetries
     // (llm-execution-step canRetryError); rotating anyway would record a
     // switch that never happens.
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeArgs({ error: apiError(429), retryCount: 22 });
 
@@ -344,7 +362,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
   });
 
   it('forces the 401 refresh once per account in a request', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     const refreshToken = vi
       .spyOn(anthropicOAuthProvider, 'refreshToken')
       .mockResolvedValueOnce({ access: 'token-a-fresh', refresh: 'refresh-a-fresh', expires: FUTURE })
@@ -365,7 +383,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
   });
 
   it('declares the pool exhausted when every account has been tried', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const state: Record<string, unknown> = {};
 
@@ -381,7 +399,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
   });
 
   it('hops on a persistent outage (5xx that exhausted the transient budget)', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeArgs({ error: apiError(500) });
 
@@ -396,7 +414,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
   });
 
   it('does nothing on 400 and on unknown providers', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
 
     const badRequest = makeArgs({ error: apiError(400) });
@@ -410,7 +428,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
   });
 
   it('identifies the provider from the error url host and falls back to the model id', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
 
     const byModelId = makeArgs({ error: apiError(429, { url: null, modelId: 'mastracode/anthropic/claude-fable-5' }) });
@@ -420,6 +438,42 @@ describe('AccountRotationProcessor.processAPIError', () => {
     // A kimi host does not touch the anthropic registry.
     const kimi = makeArgs({ error: apiError(429, { url: 'https://api.kimi.com/coding/v1/chat/completions' }) });
     expect(await processor.processAPIError(kimi as any)).toEqual({ retry: false });
+  });
+
+  it('rotates through the request-scoped tenant store, never the host registry', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const tenantAccounts = [
+      { id: 'anthropic:tenant-a', label: 'Tenant A' },
+      { id: 'anthropic:tenant-b', label: 'Tenant B' },
+    ];
+    const tenantActivate = vi.fn(() => tenantAccounts[1]);
+    const tenantStore: CredentialStore = {
+      reload: () => {},
+      get: () => undefined,
+      getStoredApiKey: () => undefined,
+      getApiKey: async () => undefined,
+      listAccounts: () => tenantAccounts,
+      getActiveAccount: () => tenantAccounts[0],
+      activateAccount: tenantActivate,
+    };
+    setCredentialStoreProvider(() => tenantStore);
+    try {
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+      const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+      const args = makeArgs({ error: apiError(429), requestContext });
+
+      expect(await processor.processAPIError(args as any)).toEqual({ retry: true });
+      expect(tenantActivate).toHaveBeenCalledWith(PROVIDER, 'anthropic:tenant-b');
+      expect(args.writer.custom.mock.calls[0][0].data).toMatchObject({
+        to: { id: 'anthropic:tenant-b' },
+        reason: 'rate-limit',
+      });
+      // The host auth.json is untouched by the tenant run.
+      expect(readAuthJson(seeded.authPath)[PROVIDER]).toMatchObject({ access: 'token-a' });
+    } finally {
+      setCredentialStoreProvider(undefined);
+    }
   });
 
   it('no-ops with a store lacking registry methods (deployed mode)', async () => {
@@ -437,7 +491,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
   });
 
   it('clears tracking on a fresh request (tried-set is request-scoped)', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
 
     // Request 1: rotate A → B.
@@ -459,13 +513,54 @@ describe('AccountRotationProcessor.processAPIError', () => {
     const dir = mkdtempSync(join(tmpdir(), 'account-rotation-test-'));
     tempDirs.push(dir);
     const storage = new AuthStorage(join(dir, 'auth.json'));
-    storage.addAccount(PROVIDER, { access: 'only-token', refresh: 'only-refresh', expires: FUTURE }, { label: 'Solo' });
+    await storage.addAccount(
+      PROVIDER,
+      { access: 'only-token', refresh: 'only-refresh', expires: FUTURE },
+      { label: 'Solo' },
+    );
 
     const processor = new AccountRotationProcessor({ credentialStore: storage, maxProcessorRetries: 22 });
     const args = makeArgs({ error: apiError(429) });
     expect(await processor.processAPIError(args as any)).toEqual({ retry: false });
     expect(args.writer.custom).not.toHaveBeenCalled();
     expect(readAuthJson(join(dir, 'auth.json'))[PROVIDER]).toMatchObject({ access: 'only-token' });
+  });
+
+  it('does not treat another provider’s tried accounts as this pool being exhausted', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+    // Same request: an earlier provider already burned its two accounts.
+    const args = makeArgs({
+      error: apiError(429),
+      state: { triedInstances: new Set(['github-copilot:a', 'github-copilot:b']) },
+    });
+
+    expect(await processor.processAPIError(args as any)).toEqual({ retry: true });
+    expect(args.writer.custom.mock.calls[0][0].data).toMatchObject({
+      reason: 'rate-limit',
+      to: { id: seeded.accountB.id },
+    });
+  });
+
+  it('skips an already-tried instance when activating the next account', async () => {
+    const seeded = await makeTwoAccountStorage();
+    await seeded.storage.addAccount(
+      PROVIDER,
+      { access: 'token-c', refresh: 'refresh-c', expires: FUTURE },
+      { label: 'Account C' },
+    );
+    // The cursor sits on A while A and B were both already tried this request.
+    seeded.storage.activateAccount(PROVIDER, seeded.accountA.id);
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+    const args = makeArgs({
+      error: apiError(429),
+      state: { triedInstances: new Set([seeded.accountA.id, seeded.accountB.id]) },
+    });
+
+    expect(await processor.processAPIError(args as any)).toEqual({ retry: true });
+    const active = seeded.storage.getActiveAccount?.(PROVIDER);
+    expect(active?.id).not.toBe(seeded.accountA.id);
+    expect(active?.id).not.toBe(seeded.accountB.id);
   });
 });
 
@@ -486,7 +581,7 @@ describe('AccountStartNoticeProcessor.processInput', () => {
   }
 
   it('emits the start notice once when the active account is not the first entry', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     seeded.storage.activateAccount(PROVIDER, seeded.accountB.id);
     const processor = new AccountStartNoticeProcessor({ credentialStore: seeded.storage });
     const args = makeInputArgs();
@@ -509,7 +604,7 @@ describe('AccountStartNoticeProcessor.processInput', () => {
   });
 
   it('stays silent when the first account is active or the pool has one account', async () => {
-    const seeded = makeTwoAccountStorage();
+    const seeded = await makeTwoAccountStorage();
     const processor = new AccountStartNoticeProcessor({ credentialStore: seeded.storage });
     const args = makeInputArgs();
     await processor.processInput(args as any);
