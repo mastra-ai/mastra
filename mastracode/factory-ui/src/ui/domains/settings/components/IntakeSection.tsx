@@ -8,6 +8,9 @@ import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
 import { useJiraProjectsQuery, useJiraStatusQuery } from '../../../../hooks/useJiraData';
+import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
+import { PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
+import type { PlatformConnectProviderId } from '../../factory/services/platformConnect';
 import { ProviderConnectControl, ProviderConnectionsList } from './PlatformProviderConnections';
 import { useLinearProjectsQuery, useLinearStatusQuery, useLinearTeamsQuery } from '../../../../hooks/useLinearData';
 import { isJiraAuthError } from '../../factory/services/jira';
@@ -269,6 +272,51 @@ function JiraIntakeSection({
   );
 }
 
+/** Connection management for a Platform-managed provider without a source picker. */
+function PlatformProviderIntakeSection({
+  provider,
+  description,
+}: {
+  provider: PlatformConnectProviderId;
+  description: string;
+}) {
+  const meta = PLATFORM_CONNECT_PROVIDERS[provider];
+  const connectionsQuery = usePlatformConnectionsQuery(provider);
+  if (connectionsQuery.isError || connectionsQuery.isPending) return null;
+  const connections = connectionsQuery.data;
+  const active = connections.filter(connection => connection.status === 'active');
+  const needsReauth = connections.some(connection => connection.status === 'needs_reauth');
+
+  const action =
+    connections.length === 0 ? (
+      <ProviderConnectControl provider={provider} label={`Connect ${meta.displayName}`} />
+    ) : (
+      <span className="flex items-center gap-2">
+        <Txt as="span" variant="ui-sm" className="text-icon3">
+          {active.length === 1
+            ? (active[0]?.accountLabel ?? `${meta.displayName} connected`)
+            : `${active.length} ${meta.displayName} accounts connected`}
+        </Txt>
+        <ProviderConnectControl provider={provider} label="Connect another" size="xs" variant="ghost" />
+      </span>
+    );
+
+  return (
+    <SettingsSubsection
+      scope="org"
+      title={`${meta.displayName} issues`}
+      description={needsReauth ? `A ${meta.displayName} account needs to be reconnected to keep syncing.` : description}
+      action={action}
+    >
+      {connections.length > 0 && (
+        <SettingsContainer>
+          <ProviderConnectionsList provider={provider} connections={connections} />
+        </SettingsContainer>
+      )}
+    </SettingsSubsection>
+  );
+}
+
 export function IntakeSection() {
   const { baseUrl } = useApiConfig();
   const configQuery = useIntakeConfigQuery();
@@ -401,6 +449,10 @@ export function IntakeSection() {
           </SettingsContainer>
         </SettingsSubsection>
       )}
+      <PlatformProviderIntakeSection
+        provider="incident-io"
+        description="Incidents and follow-ups from connected incident.io accounts feed every member's board."
+      />
     </div>
   );
 }

@@ -404,10 +404,7 @@ export class MastraFactory {
       if (!integrations.some(integration => integration.id === 'github')) {
         integrations.push(new PlatformGithubIntegration({ slug: this.#config.platform?.githubAppSlug }));
       }
-      if (
-        process.env.MASTRA_INCIDENT_IO_CONNECTION_ID &&
-        !integrations.some(integration => integration.id === 'incidentio')
-      ) {
+      if (!integrations.some(integration => integration.id === 'incidentio')) {
         integrations.push(new PlatformIncidentioIntegration());
       }
       if (!integrations.some(integration => integration.id === 'jira')) {

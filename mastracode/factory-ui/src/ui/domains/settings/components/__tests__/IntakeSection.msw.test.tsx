@@ -768,6 +768,53 @@ describe('IntakeSection', () => {
     });
   });
 
+  describe('given the incident.io Platform connect route is mounted', () => {
+    it('collects an API key in a dialog and submits it without a popup', async () => {
+      useIntakeHandlers();
+      const connections: Array<{
+        id: string;
+        integrationId: string;
+        status: string;
+        accountLabel: string | null;
+      }> = [];
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/integrations/platform/incident-io/connections`, () =>
+          HttpResponse.json({ connections }),
+        ),
+        http.post(`${TEST_BASE_URL}/web/integrations/platform/incident-io/connect-session`, () => {
+          connections.push({ id: 'inc-1', integrationId: 'incident-io', status: 'active', accountLabel: 'Acme' });
+          return HttpResponse.json(
+            {
+              connectionId: 'inc-1',
+              integrationId: 'incident-io',
+              connectUrl: 'https://connect.nango.dev/session-token',
+              sessionToken: 'incident-session-token',
+              expiresAt: new Date(Date.now() + 60_000).toISOString(),
+            },
+            { status: 201 },
+          );
+        }),
+      );
+
+      renderIntakeSection();
+
+      const section = await screen.findByRole('region', { name: 'incident.io issues' });
+      await userEvent.click(within(section).getByRole('button', { name: 'Connect incident.io' }));
+
+      const dialog = await screen.findByRole('dialog');
+      await userEvent.type(within(dialog).getByLabelText('incident.io API key'), 'inc-api-key');
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Connect' }));
+
+      await waitFor(() => expect(nangoAuthCalls).toHaveLength(1));
+      expect(nangoConstructorOptions[0]).toEqual({ connectSessionToken: 'incident-session-token' });
+      expect(nangoAuthCalls[0]).toEqual({
+        integrationId: 'incident-io',
+        options: { credentials: { apiKey: 'inc-api-key' } },
+      });
+      expect(await screen.findByText('incident.io connected')).toBeInTheDocument();
+    });
+  });
+
   describe('given the server omits unregistered integrations', () => {
     // The server returns a dynamic map keyed by integration id and drops keys
     // for integrations that aren't registered, so the config can arrive as `{}`.
