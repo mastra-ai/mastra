@@ -1,4 +1,5 @@
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
@@ -38,6 +39,21 @@ import type {
   ToolsInput,
 } from '../types';
 import {
+  MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY,
+  MASTRA_AGENT_VERSION_PINS_KEY,
+  applySelectedLabelToResolvedAgent,
+  assertContinuationVersionOverrides,
+  exactVersionOverridesForPins,
+  getAgentVersionPins,
+  getResolvedAgentVersionSelection,
+  reconcileRootVersionOverrides,
+  recordAgentVersionPin,
+  scopeAgentVersionPins,
+  setAgentVersionPinDefaultStatus,
+  setAgentVersionPins,
+} from '../version-pins';
+import type { AgentVersionPins } from '../version-pins';
+import {
   applyClientToolModelOutput,
   fireClientToolOutputHooks,
 } from '../workflows/prepare-stream/client-tool-output-hooks';
@@ -63,17 +79,16 @@ function snapshotRequestContextEntries(
     // workflow input and hand the resumed run an object whose methods are gone; the
     // resumed agent resolves memory from its own config instead.
     if (key === MASTRA_INHERITED_MEMORY_KEY) continue;
+    if (key === MASTRA_AGENT_VERSION_PINS_KEY) continue;
+    if (key === MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY) continue;
     // Framework-managed per-run memory context is rebuilt from persisted run
     // state. A caller may carry a parent run's serializable value here.
     if (key === 'MastraMemory') continue;
     // Never persist the framework-managed bearer token in durable workflow
     // input; a resumed authenticated request supplies its own fresh token.
     if (key === MASTRA_AUTH_TOKEN_KEY) continue;
-    // The merged version overrides (Mastra defaults < requestContext <
-    // call-site) are framework state written during prep (step 3). Persisting
-    // the merged value would freeze the preparing process's defaults over the
-    // executing worker's. The caller's own versions entry is re-added at the
-    // call site.
+    // Version selectors are framework state. Persist only the immutable
+    // selections and dependency policy resolved before execution below.
     if (key === MASTRA_VERSIONS_KEY) continue;
     // Serialize each entry exactly once with a bounded pass: a shared-reference
     // graph would otherwise make JSON.stringify expand exponentially and wedge
@@ -159,6 +174,10 @@ interface DurablePreparationAgent {
   __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
   __getGoalConfig(): GoalConfig | undefined;
   __listLLMRequestProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
+  __resolveExplicitAgentVersionPins(opts: {
+    requestContext: RequestContext;
+    versions?: VersionOverrides;
+  }): Promise<void>;
 }
 
 /**
@@ -215,6 +234,10 @@ export interface PreparationOptions<OUTPUT = undefined> {
    * Falls back to `agent.name` if not provided.
    */
   durableAgentName?: string;
+  /** Agent identity used for root stored-version resolution (the durable wrapper when present). */
+  versionResolutionAgent?: Agent<string, any, OUTPUT>;
+  /** Persisted pins supplied only while rebuilding a continuation. */
+  versionPins?: AgentVersionPins;
 }
 
 /**
@@ -236,7 +259,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   options: PreparationOptions<OUTPUT>,
 ): Promise<PreparationResult<OUTPUT>> {
   const {
-    agent,
+    agent: configuredAgent,
     messages,
     options: rawExecOptions,
     optionsAreResolved = false,
@@ -247,7 +270,11 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     methodType = 'stream',
     durableAgentId,
     durableAgentName,
+    versionResolutionAgent = configuredAgent,
+    versionPins,
   } = options;
+
+  let agent = configuredAgent;
 
   // Public-facing identity: use the durable wrapper's ID/name for all
   // external-facing identification (spans, background tasks, scorers, Studio).
@@ -255,7 +282,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const publicAgentId = durableAgentId ?? agent.id;
   const publicAgentName = durableAgentName ?? agent.name ?? agent.id;
 
-  const typedAgent = agent as unknown as DurablePreparationAgent;
+  let typedAgent = agent as unknown as DurablePreparationAgent;
 
   // 1. Generate IDs
   const runId = providedRunId ?? crypto.randomUUID();
@@ -263,6 +290,20 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 2. Get request context
   const requestContext = providedRequestContext ?? new RequestContext();
+  const inheritedDelegationPins = requestContext.get(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY) === true;
+  requestContext.delete(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY);
+  const effectiveVersionPins =
+    versionPins ??
+    (inheritedDelegationPins ? scopeAgentVersionPins(getAgentVersionPins(requestContext), publicAgentId) : undefined);
+  if (inheritedDelegationPins) {
+    const inheritedVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+    const exactInheritedVersions = exactVersionOverridesForPins(effectiveVersionPins, inheritedVersions?.defaultStatus);
+    if (exactInheritedVersions) {
+      requestContext.set(MASTRA_VERSIONS_KEY, exactInheritedVersions);
+    } else {
+      requestContext.delete(MASTRA_VERSIONS_KEY);
+    }
+  }
 
   // 2a. Merge the wrapped agent's defaultOptions under the per-request options,
   // mirroring the non-durable Agent.stream()/generate() paths. Without this the
@@ -281,9 +322,98 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   if ((execOptions as any)?.versions) {
     mergedVersions = mergeVersionOverrides(mergedVersions, (execOptions as any).versions);
   }
+  mergedVersions = reconcileRootVersionOverrides(mergedVersions, publicAgentId);
   if (mergedVersions) {
     requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
   }
+
+  // 3a. Resolve the root exactly once, before instructions, processors, tools,
+  // or model behavior. A continuation supplies its serialized pins and may only
+  // repeat the same exact selector; labels, statuses, and different IDs fail.
+  if (effectiveVersionPins !== undefined) {
+    const rootPin = effectiveVersionPins.root;
+    if (rootPin) {
+      if (rootPin.agentId !== publicAgentId) {
+        throw new Error(
+          `Persisted agent version pin belongs to "${rootPin.agentId}", not durable agent "${publicAgentId}".`,
+        );
+      }
+    }
+    assertContinuationVersionOverrides((execOptions as any)?.versions, effectiveVersionPins, publicAgentId);
+    assertContinuationVersionOverrides(requestVersions, effectiveVersionPins, publicAgentId);
+    setAgentVersionPins(requestContext, effectiveVersionPins);
+    const frozenVersions = exactVersionOverridesForPins(effectiveVersionPins);
+    if (frozenVersions) {
+      requestContext.set(MASTRA_VERSIONS_KEY, frozenVersions);
+      mergedVersions = frozenVersions;
+    } else {
+      requestContext.delete(MASTRA_VERSIONS_KEY);
+      mergedVersions = undefined;
+    }
+  } else {
+    // RequestContext can be reused across independent calls; pins never can.
+    setAgentVersionPins(requestContext, undefined);
+  }
+
+  const rootPin = getAgentVersionPins(requestContext)?.root;
+  const currentRootSelection = getResolvedAgentVersionSelection(versionResolutionAgent);
+  if (effectiveVersionPins && !rootPin && currentRootSelection) {
+    throw new MastraError({
+      id: 'PINNED_VERSION_CONFLICT',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text: `Durable continuation was persisted without a root version and cannot run on resolved version "${currentRootSelection.versionId}".`,
+      details: { agentId: publicAgentId, resolvedVersionId: currentRootSelection.versionId },
+    });
+  }
+  const explicitRootSelector = mergedVersions?.self ?? mergedVersions?.agents?.[publicAgentId];
+  const rootSelector =
+    (rootPin ? { versionId: rootPin.versionId } : undefined) ??
+    explicitRootSelector ??
+    (!currentRootSelection && mergedVersions?.defaultStatus ? { status: mergedVersions.defaultStatus } : undefined);
+  let resolvedRootAgent = versionResolutionAgent;
+  if (rootSelector && mastra) {
+    try {
+      resolvedRootAgent = (await mastra.resolveVersionedAgent(
+        versionResolutionAgent as unknown as Agent,
+        rootSelector,
+      )) as unknown as Agent<string, any, OUTPUT>;
+    } catch (versionError) {
+      if ('versionId' in rootSelector || 'label' in rootSelector) throw versionError;
+      logger?.warn?.('[DurableAgent] Failed to resolve versioned root agent, using code-defined default', {
+        agentId: publicAgentId,
+        versionSelector: rootSelector,
+        error: versionError,
+      });
+    }
+  }
+
+  const resolvedSelection =
+    rootPin ??
+    (explicitRootSelector
+      ? getResolvedAgentVersionSelection(resolvedRootAgent, rootSelector)
+      : (currentRootSelection ?? getResolvedAgentVersionSelection(resolvedRootAgent, rootSelector)));
+  if (resolvedSelection) {
+    applySelectedLabelToResolvedAgent(resolvedRootAgent, resolvedSelection);
+    recordAgentVersionPin(requestContext, resolvedSelection, 'root');
+  }
+
+  const durableExecutionAgent = (
+    resolvedRootAgent as Agent<string, any, OUTPUT> & {
+      __getDurableExecutionAgent?: () => Agent<string, any, OUTPUT>;
+    }
+  ).__getDurableExecutionAgent?.();
+  agent = durableExecutionAgent ?? resolvedRootAgent;
+  typedAgent = agent as unknown as DurablePreparationAgent;
+
+  await typedAgent.__resolveExplicitAgentVersionPins({ requestContext, versions: mergedVersions });
+  const selectedRoot = mergedVersions?.self ?? mergedVersions?.agents?.[publicAgentId];
+  setAgentVersionPinDefaultStatus(
+    requestContext,
+    mergedVersions?.defaultStatus ?? (selectedRoot ? ('versionId' in selectedRoot ? 'draft' : 'published') : undefined),
+  );
+
+  const selectedPins = getAgentVersionPins(requestContext);
 
   // 4. Resolve thread/memory context
   const thread =
@@ -503,17 +633,30 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // context from these entries via restoreRequestContext, so anything missing
   // here is silently dropped on the worker. Framework-internal prep state
   // (memory keys, auth token, merged versions) is excluded by key inside
-  // snapshotRequestContextEntries; the versions entry is pinned back to the
-  // caller's own value (captured at step 3, before the merge) so persisted
-  // input still reflects only caller intent.
+  // snapshotRequestContextEntries. Persist continuation-safe selectors only:
+  // root labels/statuses are historical input, and explicit dependencies keep
+  // the immutable IDs resolved before behavior began.
   let requestContextEntriesSnapshot = snapshotRequestContextEntries(requestContext);
-  if (requestVersions !== undefined) {
-    const requestVersionsJson = boundedStringify(requestVersions);
-    if (requestVersionsJson !== undefined) {
-      requestContextEntriesSnapshot = {
-        ...requestContextEntriesSnapshot,
-        [MASTRA_VERSIONS_KEY]: JSON.parse(requestVersionsJson),
-      };
+  if (requestVersions !== undefined || mergedVersions) {
+    const persistedVersions: VersionOverrides = {
+      ...(selectedPins?.defaultStatus
+        ? { defaultStatus: selectedPins.defaultStatus }
+        : selectedRoot
+          ? { defaultStatus: 'versionId' in selectedRoot ? 'draft' : 'published' }
+          : selectedPins?.root?.selectedLabel
+            ? { defaultStatus: 'published' }
+            : {}),
+      ...(selectedPins?.agents
+        ? {
+            agents: Object.fromEntries(
+              Object.entries(selectedPins.agents).map(([agentId, pin]) => [agentId, { versionId: pin.versionId }]),
+            ),
+          }
+        : {}),
+    };
+    if (Object.keys(persistedVersions).length > 0) {
+      requestContextEntriesSnapshot ??= {};
+      requestContextEntriesSnapshot[MASTRA_VERSIONS_KEY] = persistedVersions;
     }
   }
 
@@ -655,6 +798,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     runId,
     agentId: publicAgentId,
     agentName: publicAgentName,
+    agentVersionPins: getAgentVersionPins(requestContext),
     messageList,
     tools,
     model,

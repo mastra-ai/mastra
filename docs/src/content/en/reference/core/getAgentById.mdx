@@ -49,9 +49,9 @@ const response = await agent.generate('How can I reset my password?')
   },
   {
     name: 'version',
-    type: "{ versionId: string } | { status?: 'draft' | 'published' }",
+    type: "{ versionId: string } | { label: string } | { status: 'draft' | 'published' }",
     description:
-      'Optional version selector for retrieving a versioned agent. When provided, the method returns a promise.',
+      'Optional version selector for retrieving a versioned agent. Pass exactly one immutable version ID, computed or custom label, or publication status. When provided, the method returns a promise.',
     isOptional: true,
     properties: [
       {
@@ -63,10 +63,14 @@ const response = await agent.generate('How can I reset my password?')
             description: 'The ID of a specific agent version to retrieve.',
           },
           {
+            name: 'label',
+            type: 'string',
+            description: 'A computed or custom version label to resolve.',
+          },
+          {
             name: 'status',
             type: "'draft' | 'published'",
             description: 'Select the latest agent version with this publication status.',
-            isOptional: true,
           },
         ],
       },
@@ -92,7 +96,7 @@ const response = await agent.generate('How can I reset my password?')
 ]}
 />
 
-Throws a `MastraError` when no agent is found by ID or registry key.
+Throws a `MastraError` when no agent is found by ID or registry key, or when an explicit `versionId` or `label` can't be resolved. See [Editor versioning](/reference/editor/versioning#select-an-agent-version) for label syntax and selector behavior.
 
 ## Related
 

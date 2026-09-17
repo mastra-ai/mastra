@@ -1,6 +1,6 @@
 ---
 title: "Reference: Versioning | Editor"
-description: "Editor versions stored agents and prompt blocks. Database-backed resources use draft and publish operations."
+description: "Editor versions stored agents and prompt blocks. Database-backed resources use draft and publish operations, with labels for selecting stored-agent versions."
 packages:
   - "@mastra/core"
   - "@mastra/editor"
@@ -9,7 +9,7 @@ packages:
 
 # Versioning
 
-Editor versions stored agents and prompt blocks. Database-backed resources use draft and publish operations. Code-backed agent overrides use deterministic files and Git history.
+Editor versions stored agents and prompt blocks. Database-backed resources use draft and publish operations. Stored-agent version labels provide stable names for selecting and promoting immutable versions. Code-backed agent overrides use deterministic files and Git history.
 
 See [Editor versioning](/docs/studio/editor#versioning) for release and experimentation patterns.
 
@@ -32,6 +32,30 @@ The direct namespace methods and the REST APIs agree on this. `editor.prompt.upd
 
 When a generic stored resource has no active version, published resolution can fall back to the latest snapshot. For a code-defined agent override, requesting `status: 'published'` without an active override returns the original code agent.
 
+## Version labels
+
+A version label is a movable pointer to one immutable stored-agent version. Mastra exposes two computed labels and any custom labels supported by the configured agents storage domain:
+
+| Label kind | Name | Target |
+| - | - | - |
+| Production | `production` | The version selected by `activeVersionId`. It's absent when the agent has no active version. |
+| Latest | `latest` | The version with the highest version number. |
+| Custom | A caller-defined name | The version selected by the custom pointer. |
+
+`production` and `latest` are reserved and can't be created, moved, or deleted through custom-label mutations. Custom names contain 1 to 64 lowercase letters, numbers, periods, underscore characters, or hyphens. They must start and end with a letter or number.
+
+Selecting a label resolves its current target for that request. A later request can resolve a different version after the label moves. Use a `versionId` instead when a request must name one immutable version directly.
+
+For an agent execution, Mastra resolves the root selector and every explicit `versions.agents` selector before behavior begins. It records the resulting immutable version IDs with the run, so suspension, tool approval, retry, and recovery continue on the same versions even if a label moves. A later, separate execution resolves the label again and can therefore use its new target.
+
+### Storage and deployment limits
+
+Custom labels apply to agents only, not prompt blocks, skills, or other versioned resources. Built-in InMemory storage supports labels for the lifetime of the process. Filesystem storage retains labeled versions across restarts, but coordinates writes only within one process. Use one writer process for each filesystem storage path.
+
+Upgrade core, editor, and any custom storage adapter together before enabling labels. Mixing older database writers with label-aware writers can bypass labeled-version deletion protection.
+
+Run pinning doesn't add persisted trace or evaluation provenance, or a historical evaluation interface.
+
 ## Code source
 
 With `source: 'code'`, active agent overrides are serialized as deterministic JSON under `<codePath>/agents/<encodedAgentId>.json`. The default `codePath` is `./mastra/editor`.
@@ -42,7 +66,15 @@ See [`MastraEditor`](/reference/editor/mastra-editor#source) for source options.
 
 ## Select an agent version
 
-Calling [`mastra.getAgentById()`](/reference/core/getAgentById) without a selector returns the registered code-defined agent. Pass `status` or `versionId` to apply a stored override. See [Select a version](/docs/studio/editor#select-a-version) for a TypeScript example.
+Calling [`mastra.getAgentById()`](/reference/core/getAgentById) without a selector returns the registered code-defined agent. Pass exactly one of `status`, `versionId`, or `label` to apply a stored override. See [Select a version](/docs/studio/editor#select-a-version) for a TypeScript example.
+
+Direct editor namespace lookups also reject conflicting selectors. Exact version lookups verify that the version belongs to the requested resource, including non-agent resources. This doesn't enable custom labels for those resources.
+
+```typescript title="Select an agent by label"
+const candidate = await mastra.getAgentById('support-agent', {
+  label: 'candidate',
+});
+```
 
 With the default server prefix, pass selectors as query parameters under `/api`:
 
@@ -72,8 +104,8 @@ Entries merge by agent ID. For the same ID, precedence is **direct invocation > 
 Set defaults on the Mastra instance:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { MastraEditor } from '@mastra/editor'
+import { Mastra } from '@mastra/core';
+import { MastraEditor } from '@mastra/editor';
 
 export const mastra = new Mastra({
   agents: { supervisor, researchAgent, writerAgent },
@@ -84,7 +116,7 @@ export const mastra = new Mastra({
       'writer-agent': { versionId: 'abc-123' },
     },
   },
-})
+});
 ```
 
 Override one sub-agent for a direct invocation:
@@ -96,7 +128,7 @@ const result = await supervisor.generate('Research and write about AI safety', {
       'research-agent': { status: 'draft' },
     },
   },
-})
+});
 ```
 
 Or pass selectors in the server request body:
@@ -114,7 +146,11 @@ curl -X POST http://localhost:4111/api/agents/supervisor/generate \
   }'
 ```
 
-If Editor isn't configured or a version can't be resolved, Mastra logs a warning and uses the code-defined sub-agent.
+`versions.self` selects only the root agent for the current execution. Mastra consumes it at the root execution boundary and doesn't propagate it to delegated sub-agents. Use `versions.agents` to select sub-agent versions.
+
+Explicit sub-agent selectors are resolved and pinned at run start. Unspecified dependencies use their existing status default. A label-selected root uses published dependencies. For backward compatibility, an exact-version root infers draft. An explicit `defaultStatus` takes precedence.
+
+An explicit `versionId` or `label` fails closed when Mastra can't resolve the requested stored version. Status-based defaults can still fall back to the code-defined agent when no stored override exists.
 
 ## Stored-agent REST API
 

@@ -74,6 +74,45 @@ export class FilesystemDB {
   }
 
   /**
+   * Read adapter-owned JSON whose corruption must fail closed.
+   * Unlike `readDomain`, this never turns malformed state into an empty object.
+   */
+  readJsonFileStrict<T>(filename: string): T | null {
+    const filePath = resolve(this.dir, filename);
+    const rootDir = resolve(this.dir);
+    if (!filePath.startsWith(rootDir + sep) && filePath !== rootDir) {
+      throw new Error(`Path traversal detected: file "${filename}" escapes storage directory`);
+    }
+    if (!existsSync(filePath)) return null;
+
+    const raw = readFileSync(filePath, 'utf-8');
+    try {
+      return JSON.parse(raw, dateReviver) as T;
+    } catch (error) {
+      throw new Error(`Failed to parse adapter state file "${filename}"`, { cause: error });
+    }
+  }
+
+  /** Atomically replace one adapter-owned JSON state file. */
+  writeJsonFile<T>(filename: string, data: T): void {
+    const filePath = resolve(this.dir, filename);
+    const rootDir = resolve(this.dir);
+    if (!filePath.startsWith(rootDir + sep) && filePath !== rootDir) {
+      throw new Error(`Path traversal detected: file "${filename}" escapes storage directory`);
+    }
+
+    const parentDir = dirname(filePath);
+    if (!existsSync(parentDir)) mkdirSync(parentDir, { recursive: true });
+    const tmpPath = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
+    try {
+      writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
+      renameSync(tmpPath, filePath);
+    } finally {
+      if (existsSync(tmpPath)) rmSync(tmpPath);
+    }
+  }
+
+  /**
    * Write a domain's full entity map to its JSON file.
    * Uses atomic write (write to .tmp, then rename) to prevent corruption.
    */

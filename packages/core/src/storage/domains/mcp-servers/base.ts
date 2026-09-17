@@ -75,6 +75,7 @@ export abstract class MCPServersStorage extends VersionedStorageDomain<
   StorageListMCPServersResolvedOutput
 > {
   protected readonly listKey = 'mcpServers';
+  protected readonly versionParentIdField = 'mcpServerId';
   protected readonly versionMetadataFields = [
     'id',
     'mcpServerId',

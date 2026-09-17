@@ -21,6 +21,7 @@ import type { MessageList } from '../../../message-list';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
 import { resolveSuspendedToolRunId } from '../../../utils';
+import type { AgentVersionPins } from '../../../version-pins';
 import { DurableStepIds } from '../../constants';
 import { globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
@@ -283,6 +284,7 @@ export function createDurableToolCallStep() {
           threadExists?: boolean;
         };
         requestContextEntries?: Record<string, unknown>;
+        agentVersionPins?: AgentVersionPins;
         agentSpanData?: unknown;
         modelSpanData?: unknown;
       }>();
@@ -361,6 +363,7 @@ export function createDurableToolCallStep() {
       let rebuiltWorkspace: any;
       let rebuiltMemory: any;
       let rebuiltSaveQueueManager: any;
+      const preferPinnedAgentTools = !tool && initData.agentVersionPins !== undefined && !!mastra;
 
       if (!tool) {
         tool = findProviderToolByName(registryEntry?.tools as any, toolName) as typeof tool;
@@ -372,11 +375,11 @@ export function createDurableToolCallStep() {
         ) as typeof tool;
       }
 
-      if (!tool) {
+      if (!tool && !preferPinnedAgentTools) {
         tool = resolveTool(toolName, mastra as Mastra);
       }
 
-      if (!tool && mastra) {
+      if (!tool && !preferPinnedAgentTools && mastra) {
         mastraTools = (mastra as Mastra).listTools?.() as Record<string, any> | undefined;
         if (mastraTools) {
           tool = findProviderToolByName(mastraTools as any, toolName) as typeof tool;
@@ -418,6 +421,7 @@ export function createDurableToolCallStep() {
           state: state as any,
           options: agentOptions,
           requestContextEntries: initData.requestContextEntries,
+          agentVersionPins: initData.agentVersionPins,
           requestContext,
           logger,
         });
@@ -438,6 +442,26 @@ export function createDurableToolCallStep() {
             tool = Object.values(rebuiltTools).find(
               (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
             ) as typeof tool;
+          }
+        }
+      }
+
+      // A cold worker has no run-local tool closures. When the workflow carries
+      // structured version pins, rebuild the selected agent first so a Mastra-wide
+      // tool with the same name cannot replace the immutable run tool. The global
+      // registry remains a fallback only when the pinned agent genuinely has no
+      // matching tool.
+      if (!tool && preferPinnedAgentTools) {
+        tool = resolveTool(toolName, mastra as Mastra);
+        if (!tool && mastra) {
+          mastraTools = (mastra as Mastra).listTools?.() as Record<string, any> | undefined;
+          if (mastraTools) {
+            tool = findProviderToolByName(mastraTools as any, toolName) as typeof tool;
+            if (!tool) {
+              tool = Object.values(mastraTools).find(
+                (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
+              ) as typeof tool;
+            }
           }
         }
       }

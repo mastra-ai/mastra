@@ -1,5 +1,6 @@
 export * from './base';
 export * from './versioned';
+export * from './version-labels';
 export * from './agents';
 export * from './channels';
 export * from './prompt-blocks';

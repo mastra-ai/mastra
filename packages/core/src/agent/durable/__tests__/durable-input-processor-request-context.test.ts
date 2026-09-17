@@ -75,7 +75,7 @@ describe('DurableAgent input processor requestContext writes (#23904)', () => {
     });
   });
 
-  it('excludes framework-internal prep keys while pinning the caller versions entry', async () => {
+  it('excludes framework-internal prep keys while preserving the frozen dependency policy', async () => {
     const stageProcessor: Processor = {
       id: 'stage-marker',
       name: 'stage-marker',
@@ -95,7 +95,7 @@ describe('DurableAgent input processor requestContext writes (#23904)', () => {
 
     const requestContext = new RequestContext();
     requestContext.set('userId', 'user-123');
-    // Caller-provided version overrides must persist as-is.
+    // An unresolved dependency selector cannot become a new selection on recovery.
     requestContext.set(MASTRA_VERSIONS_KEY, { agents: { helper: { status: 'draft' } } });
     // A delegated/caller context can carry the parent's framework-managed
     // memory entry; it must never persist into workflow input.
@@ -105,15 +105,15 @@ describe('DurableAgent input processor requestContext writes (#23904)', () => {
       agent: baseAgent,
       messages: 'Hello',
       requestContext,
-      // Call-site versions merge into the live context during prep (step 3),
-      // but the persisted entry must stay pinned to the caller's own value.
+      // The dependency policy is frozen at preparation alongside any resolved
+      // immutable pins, rather than reselecting mutable versions on recovery.
       options: { versions: { defaultStatus: 'published' } } as any,
     });
 
     expect(getRequestContextEntries(result.workflowInput)).toEqual({
       userId: 'user-123',
       stage: 'processed',
-      [MASTRA_VERSIONS_KEY]: { agents: { helper: { status: 'draft' } } },
+      [MASTRA_VERSIONS_KEY]: { defaultStatus: 'published' },
     });
   });
 });

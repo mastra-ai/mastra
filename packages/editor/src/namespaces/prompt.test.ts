@@ -117,7 +117,7 @@ describe('EditorPromptNamespace', () => {
     });
 
     await expect(prompt.getById('pinned-block', { versionId: publishedVersion.id, versionNumber: 2 })).rejects.toThrow(
-      'versionId and versionNumber cannot be used together',
+      'versionId, versionNumber, label, and status cannot be used together',
     );
 
     await prompt.create({
