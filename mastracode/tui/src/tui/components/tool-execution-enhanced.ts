@@ -1438,11 +1438,16 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const argsObj = this.args as Record<string, unknown> | undefined;
     let command = argsObj?.command ? String(argsObj.command) : '...';
     const timeout = argsObj?.timeout as number | undefined;
-    const cwd = argsObj?.cwd ? shortenPath(String(argsObj.cwd)) : '';
 
-    // Strip "cd $CWD && " from the start since we show cwd in the footer
-    const cdPattern = /^cd\s+[^\s]+\s+&&\s+/;
-    command = command.replace(cdPattern, '');
+    // Strip a leading "cd <path>" since we show cwd in the footer. Callers bake this prefix into
+    // the command instead of passing `cwd`, and separate it with "&&", ";", or a bare newline —
+    // with quoted paths and leading whitespace also showing up.
+    const cdMatch = command.match(/^\s*cd\s+(?:"([^"]*)"|'([^']*)'|([^\s;]+))\s*(?:&&|;|\n)\s*(?=\S)/);
+    const cdPath = cdMatch?.[1] ?? cdMatch?.[2] ?? cdMatch?.[3] ?? '';
+    if (cdMatch) {
+      command = command.slice(cdMatch[0].length);
+    }
+    const cwd = argsObj?.cwd ? shortenPath(String(argsObj.cwd)) : cdPath ? shortenPath(cdPath) : '';
 
     // Extract tail value from command (e.g., "| tail -5" or "| tail -n 5")
     let maxStreamLines: number | undefined;

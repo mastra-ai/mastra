@@ -1053,6 +1053,75 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(full).not.toContain('⋯ (+');
   });
 
+  it('strips a leading cd prefix separated by a bare newline and shows the path in the footer', () => {
+    // The form callers actually emit: no `&&`, path on its own line, no `cwd` arg.
+    const command = [
+      'cd /Users/example/code/some-workspace',
+      "timeout 400 pnpm exec vitest run src/sandbox/index.test.ts --reporter=dot 2>&1 | grep -E 'Tests '",
+    ].join('\n');
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
+
+    const visible = stripAnsi(component.render(120).join('\n'));
+    expect(visible).not.toContain('cd /Users/example');
+    expect(visible).toContain('$ timeout 400 pnpm exec vitest');
+    expect(visible).toContain('in /Users/example/code/some-workspace');
+  });
+
+  it('strips cd prefixes for quoted paths, semicolons, and leading whitespace', () => {
+    const cases = [
+      ['cd "/Users/example/some path/ws" && npm run build', 'npm run build'],
+      ["cd '/Users/example/some path/ws' && npm run build", 'npm run build'],
+      ['cd /Users/example/ws; npm run build', 'npm run build'],
+      ['  cd /Users/example/ws && npm run build', 'npm run build'],
+    ];
+
+    for (const [command, expected] of cases) {
+      const component = new ToolExecutionComponentEnhanced(
+        'execute_command',
+        { command },
+        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+        ui,
+      );
+      component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
+
+      const visible = stripAnsi(component.render(120).join('\n'));
+      expect(visible).not.toContain('cd ');
+      expect(visible).toContain(`$ ${expected}`);
+    }
+  });
+
+  it('keeps a lone cd command since stripping it would leave nothing to run', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'cd /Users/example/ws' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
+
+    expect(stripAnsi(component.render(120).join('\n'))).toContain('$ cd /Users/example/ws');
+  });
+
+  it('prefers the cwd arg over the stripped cd path', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'cd /Users/example/somewhere-else && npm run build', cwd: '/Users/example/real-cwd' },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
+
+    const visible = stripAnsi(component.render(120).join('\n'));
+    expect(visible).toContain('$ npm run build');
+    expect(visible).toContain('in /Users/example/real-cwd');
+  });
+
   it('still hides quiet shell output when the command fails', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
