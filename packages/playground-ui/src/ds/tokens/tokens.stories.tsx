@@ -6,6 +6,7 @@ import { Colors, BorderColors } from './colors';
 import { FontSizes, LineHeights } from './fonts';
 import { Shadows, Glows } from './shadows';
 import { Spacings } from './spacings';
+import { cn } from '@/lib/utils';
 
 const meta: Meta = {
   title: 'Foundations/Tokens',
@@ -14,7 +15,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          'Design tokens available in `packages/playground-ui`. The raw CSS contract lives in `theme.css`; TypeScript mirrors the component-facing tokens in `src/ds/tokens`. Components use semantic color roles rather than foundation values.',
+          'Design tokens available in `packages/playground-ui`. Foundation tokens live in `theme.css`; opt-in semantic tokens live in `new-theme.css` under `.new-theme`; TypeScript mirrors the component-facing tokens in `src/ds/tokens`. Components use semantic color roles rather than foundation values.',
       },
     },
   },
@@ -133,56 +134,44 @@ const semanticEntries: [string, string][] = [
   ['muted-foreground', Colors['muted-foreground']],
   ['ring', Colors.ring],
   ['sidebar-accent', Colors['sidebar-accent']],
+  ['selected', Colors.selected],
 ];
 
 const semanticBorderEntries: [string, string][] = [['border', BorderColors.border]];
 
 const SurfacePreview = ({ semantic }: { semantic: boolean }) => {
-  const tokens = semantic
-    ? { sidebar: 'sidebar', canvas: 'background', card: 'card', muted: 'muted', popover: 'popover' }
-    : { sidebar: 'surface1', canvas: 'surface2', card: 'surface3', muted: 'surface4', popover: 'surface3' };
-
   return (
     <div
-      className="grid min-h-80 grid-cols-[9rem_1fr] overflow-hidden rounded-lg border"
-      style={{
-        color: semantic ? 'var(--foreground)' : 'var(--neutral6)',
-        borderColor: semantic ? 'var(--border)' : 'var(--border1)',
-      }}
+      className={cn(
+        'grid min-h-80 grid-cols-[9rem_1fr] overflow-hidden rounded-lg border',
+        semantic ? 'new-theme border-border text-foreground' : 'border-border1 text-neutral6',
+      )}
     >
-      <div className="p-4" style={{ background: `var(--${tokens.sidebar})` }}>
+      <div className={cn('p-4', semantic ? 'bg-sidebar' : 'bg-surface1')}>
         <Txt variant="ui-sm">Sidebar</Txt>
         <div className="mt-4 space-y-2">
-          <div
-            className="h-6 rounded"
-            style={{ background: semantic ? 'var(--sidebar-accent)' : 'var(--sidebar-nav-hover)' }}
-          />
-          <div
-            className="h-6 rounded"
-            style={{ background: semantic ? 'var(--sidebar-accent)' : 'var(--sidebar-nav-hover)' }}
-          />
+          <div className={cn('h-6 rounded', semantic ? 'bg-sidebar-accent' : 'bg-sidebar-nav-hover')} />
+          <div className={cn('h-6 rounded', semantic ? 'bg-selected' : 'bg-sidebar-nav-active')} />
         </div>
       </div>
-      <div className="relative p-4" style={{ background: `var(--${tokens.canvas})` }}>
+      <div className={cn('relative p-4', semantic ? 'bg-background' : 'bg-surface2')}>
         <Txt variant="ui-sm">Main canvas</Txt>
         <div
-          className="mt-4 rounded-lg border p-4"
-          style={{
-            background: `var(--${tokens.card})`,
-            borderColor: semantic ? 'var(--border)' : 'var(--border1)',
-          }}
+          className={cn(
+            'mt-4 rounded-lg border p-4',
+            semantic ? 'border-border bg-card' : 'border-border1 bg-surface3',
+          )}
         >
           <Txt variant="ui-sm">Card</Txt>
-          <div className="mt-3 rounded-md p-3" style={{ background: `var(--${tokens.muted})` }}>
+          <div className={cn('mt-3 rounded-md p-3', semantic ? 'bg-muted' : 'bg-surface4')}>
             <Txt variant="ui-sm">Muted region</Txt>
           </div>
         </div>
         <div
-          className="absolute right-6 bottom-6 w-36 rounded-md border p-3 shadow-lg"
-          style={{
-            background: `var(--${tokens.popover})`,
-            borderColor: semantic ? 'var(--border)' : 'var(--border1)',
-          }}
+          className={cn(
+            'absolute right-6 bottom-6 w-36 rounded-md border p-3 shadow-lg',
+            semantic ? 'border-border bg-popover' : 'border-border1 bg-surface3',
+          )}
         >
           <Txt variant="ui-sm">Popover</Txt>
         </div>
@@ -227,8 +216,8 @@ export const SurfaceMigration: Story = {
 
 export const SemanticNeutrals: Story = {
   render: () => (
-    <div>
-      <SectionTitle note="Component-facing roles. Tailwind utilities use the same names, such as bg-card and text-muted-foreground.">
+    <div className="new-theme">
+      <SectionTitle note="Apply new-theme to the component or portal root. Use semantic Tailwind utilities such as bg-card and text-muted-foreground.">
         Semantic neutrals
       </SectionTitle>
       <SwatchGrid entries={[...semanticEntries, ...semanticBorderEntries]} />
@@ -238,14 +227,14 @@ export const SemanticNeutrals: Story = {
       <div className="grid gap-4 md:grid-cols-2">
         <div className="border-border bg-background text-foreground rounded-md border p-4">
           <div className="text-ui-sm font-medium">Observation summary</div>
-          <div className="text-muted-foreground text-ui-sm mt-1">Today, 12 minutes ago</div>
-          <div className="bg-muted text-muted-foreground text-ui-xs mt-3 inline-flex rounded px-2 py-1">
+          <div className="text-ui-sm text-muted-foreground mt-1">Today, 12 minutes ago</div>
+          <div className="bg-muted text-ui-xs text-muted-foreground mt-3 inline-flex rounded px-2 py-1">
             Thread support-triage
           </div>
         </div>
         <div className="border-border bg-muted rounded-md border p-4">
-          <div className="text-foreground text-ui-sm font-medium">Dataset import</div>
-          <div className="text-muted-foreground text-ui-sm mt-1">No validation issues found.</div>
+          <div className="text-ui-sm text-foreground font-medium">Dataset import</div>
+          <div className="text-ui-sm text-muted-foreground mt-1">No validation issues found.</div>
         </div>
       </div>
     </div>
@@ -264,7 +253,7 @@ export const ColorsStory: Story = {
       Border: Object.entries(BorderColors),
     };
     return (
-      <div>
+      <div className="new-theme">
         <SectionTitle note="Tailwind classes: bg-{token}, text-{token}, border-{token}. Values are CSS vars, so light/dark themes swap automatically.">
           Colors
         </SectionTitle>

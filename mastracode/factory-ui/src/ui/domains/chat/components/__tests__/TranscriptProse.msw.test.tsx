@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
-import { act, screen } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
@@ -29,6 +29,49 @@ afterEach(() => {
 });
 
 describe('assistant prose', () => {
+  it('lets the reader collapse and reopen reasoning without hiding the answer', () => {
+    renderEntries([
+      assistant([
+        { type: 'reasoning', reasoning: 'Check `agent.stream()` first.', details: [] },
+        { type: 'text', text: 'Here is the answer.' },
+      ]),
+    ]);
+
+    expect(screen.getByText('agent.stream()').tagName).toBe('CODE');
+    fireEvent.click(screen.getByRole('button', { name: 'Hide reasoning' }));
+    expect(screen.queryByText('agent.stream()')).toBeNull();
+    expect(screen.getByText('Here is the answer.')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show reasoning' }));
+    expect(screen.getByText('agent.stream()')).toBeTruthy();
+  });
+
+  it('shows a redaction notice without exposing the reasoning text', () => {
+    const part = { type: 'reasoning' as const, reasoning: 'Private thought', details: [], redacted: true };
+    renderEntries([assistant([part])]);
+
+    expect(screen.getByText('Reasoning was redacted by the provider.')).toBeTruthy();
+    expect(screen.queryByText('Private thought')).toBeNull();
+  });
+
+  it('shows a redaction notice when no reasoning text was supplied', () => {
+    const part = { type: 'reasoning' as const, reasoning: '', details: [], redacted: true };
+    renderEntries([assistant([part])]);
+
+    expect(screen.getByText('Reasoning was redacted by the provider.')).toBeTruthy();
+  });
+
+  it('shows waiting reasoning and removes it if the stream finishes without text', () => {
+    const part = { type: 'reasoning' as const, reasoning: '', details: [], state: 'streaming' as const };
+    const { rerender } = renderEntries([assistant([part], true)]);
+    expect(screen.getByText('Reasoning...')).toBeTruthy();
+
+    const finished = { ...part, state: 'done' as const };
+    rerender(<TranscriptEntries entries={[assistant([finished])]} onApprove={() => {}} onRespond={() => {}} />);
+    expect(screen.queryByText('Reasoning...')).toBeNull();
+    expect(screen.queryByRole('button', { name: /reasoning/ })).toBeNull();
+  });
+
   it('reads a reply cut into parts as one markdown document', () => {
     const { container } = renderEntries([
       assistant([

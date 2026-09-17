@@ -82,7 +82,7 @@ async function runRequestReply() {
 
     const signal = await agent.sendSignal(
       { type: 'user-message', contents: 'cross-process request' },
-      { resourceId, threadId: peerThreadId, ifIdle: { behavior: 'wake' } },
+      { resourceId, threadId: peerThreadId, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
     );
     const accepted = await signal.accepted;
     emit('send-result', { action: accepted.action, runId: 'runId' in accepted ? accepted.runId : undefined });
@@ -105,7 +105,7 @@ async function runRequestReply() {
 
     const signal = await agent.sendSignal(
       { type: 'user-message', contents: 'cross-process reply' },
-      { resourceId, threadId: peerThreadId, ifIdle: { behavior: 'wake' } },
+      { resourceId, threadId: peerThreadId, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
     );
     const accepted = await signal.accepted;
     emit('send-result', { action: accepted.action, runId: 'runId' in accepted ? accepted.runId : undefined });
@@ -179,7 +179,7 @@ async function runSimultaneousWakeSender() {
 
   const signal = await agent.sendSignal(
     { type: 'user-message', contents: 'wake exactly one simultaneous owner' },
-    { resourceId, threadId: contentionThreadId, ifIdle: { behavior: 'wake' } },
+    { resourceId, threadId: contentionThreadId, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
   );
   const accepted = await signal.accepted;
   emit('send-result', { action: accepted.action, runId: 'runId' in accepted ? accepted.runId : undefined });
@@ -236,6 +236,11 @@ async function runThreadTransition() {
 
     const reply = await agent.sendSignal(
       { type: 'user-message', contents: 'delayed reply to captured thread' },
+      // Deliberately omits `requireClaimedOwner` (unlike the wake signals above):
+      // the sender already released `sender-thread` when it transitioned to
+      // `sender-thread-2`, so requiring a claimed owner would throw
+      // "No claimed thread owner responded". This scenario intentionally covers
+      // the fail-open routing path.
       { resourceId, threadId: capturedPeer.threadId, ifIdle: { behavior: 'wake' } },
     );
     const accepted = await reply.accepted;

@@ -21,15 +21,9 @@ import {
 } from '@mastra/playground-ui/domains/chat/messages/signal-data';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { MessageFactory } from '@mastra/react';
-import type {
-  MastraDBMessageMetadata,
-  MessageRenderers,
-  MessageStatusRenderers,
-  DynamicToolPart,
-  ToolInvocationPart,
-  RequireApprovalEntry,
-} from '@mastra/react';
+import type { MastraDBMessageMetadata, RequireApprovalEntry } from '@mastra/react';
+import { MessageFactory } from '@mastra/react/ui';
+import type { MessageRenderers, MessageStatusRenderers, DynamicToolPart, ToolInvocationPart } from '@mastra/react/ui';
 import {
   AlertTriangle,
   AlignLeft,

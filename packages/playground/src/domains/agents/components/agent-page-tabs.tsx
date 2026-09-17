@@ -4,12 +4,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
-import { ExternalLink, FlaskConical, GitBranch, MessageSquare } from 'lucide-react';
+import { ExternalLink, GitBranch, MessageSquare } from 'lucide-react';
 
 import { useLinkComponent } from '@/lib/framework';
 
 /** Tabs that render a pill in the bar. Routes without a pill pass `'none'`. */
-export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'traces';
+export type AgentPageTab = 'chat' | 'versions' | 'traces';
 
 interface AgentPageTabsProps {
   agentId: string;
@@ -93,7 +93,6 @@ export function AgentPageTabs({
   const hrefMap: Record<AgentPageTab, string> = {
     chat: `/agents/${agentId}/threads/new`,
     versions: `/agents/${agentId}/editor`,
-    evaluate: `/agents/${agentId}/evaluate`,
     traces: `/agents/${agentId}/traces`,
   };
 
@@ -121,23 +120,11 @@ export function AgentPageTabs({
             disabled={!showObservability}
             disabledReason={observabilityDisabledReason}
           />
-          {showObservability && <AgentTab value="evaluate" icon={<FlaskConical />} label="Evals" />}
           {showPlayground && <AgentTab value="versions" icon={<GitBranch />} label="Editor" />}
         </TabList>
       </Tabs>
       <div className="ml-auto flex items-center gap-2">
         {rightSlot}
-        {!showObservability && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Evals"
-            aria-disabled="true"
-            tooltip={observabilityDisabledReason}
-          >
-            <FlaskConical />
-          </Button>
-        )}
         {!showPlayground && (
           <Button
             variant="ghost"

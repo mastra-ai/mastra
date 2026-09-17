@@ -1,0 +1,1746 @@
+import type { TokenCredential } from '@azure/core-auth';
+import type {
+  VectorQuery,
+  VectorSearchOptions,
+  SemanticSearchOptions,
+  SearchRequestOptions,
+  VectorizedQuery,
+  SearchClientOptions,
+} from '@azure/search-documents';
+import { SearchClient, SearchIndexClient, AzureKeyCredential } from '@azure/search-documents';
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import type {
+  CreateIndexParams,
+  DeleteIndexParams,
+  DeleteVectorParams,
+  DescribeIndexParams,
+  IndexStats,
+  QueryResult,
+  QueryVectorParams,
+  UpdateVectorParams,
+  UpsertVectorParams,
+} from '@mastra/core/vector';
+import { MastraVector } from '@mastra/core/vector';
+import type { AzureAISearchVectorFilter } from './filter';
+import { AzureAISearchFilterTranslator } from './filter';
+
+/**
+ * Configuration options for Azure AI Search vector store
+ */
+export interface AzureAISearchVectorOptions {
+  /** The endpoint URL of your Azure AI Search service */
+  endpoint: string;
+  /** Authentication credential - either API key or Azure credential */
+  credential: string | AzureKeyCredential | TokenCredential;
+  /** API version (optional, defaults to latest) */
+  apiVersion?: string;
+  /**
+   * Additional options for SearchClient (optional)
+   * Use this to pass custom policies like AXET proxy, retry options, etc.
+   *
+   * @example
+   * ```typescript
+   * clientOptions: {
+   *   additionalPolicies: [{
+   *     position: 'perCall',
+   *     policy: createAxetProxyPolicy({ ... })
+   *   }]
+   * }
+   * ```
+   */
+  clientOptions?: Omit<SearchClientOptions, 'apiVersion'>;
+  /**
+   * Automatically add a filterable field to the index the first time a top-level
+   * string/number/boolean metadata key is seen in `upsert`/`updateVector`.
+   *
+   * Azure AI Search can only filter on fields declared in the index schema and has
+   * no JSON-path filtering, so without this, `query({ filter: { thread_id } })` on a
+   * key that was never declared via `metadataIndexes` fails with HTTP 400. Mastra
+   * Memory relies on filtering by `thread_id`/`resource_id` without declaring them.
+   *
+   * Field type is inferred from the first value seen. Keys whose names are not valid
+   * Azure field names (must match `^[A-Za-z][A-Za-z0-9_]*$`), or whose values are
+   * arrays/objects/null, stay in the JSON `metadata` blob only and are not filterable.
+   *
+   * Defaults to `true`. Set to `false` to require explicit `metadataIndexes`.
+   */
+  autoIndexMetadata?: boolean;
+}
+
+/**
+ * Azure AI Search document keys may only contain letters, digits, `_`, `-` and `=`.
+ * IDs that use anything else (e.g. `urn:uuid:...`, paths, emails) are base64url
+ * encoded behind a marker prefix and decoded back on every read path.
+ */
+const SAFE_DOCUMENT_KEY = /^[A-Za-z0-9_\-=]+$/;
+const ENCODED_KEY_PREFIX = 'b64-';
+
+function encodeDocumentKey(id: string): string {
+  if (SAFE_DOCUMENT_KEY.test(id) && !id.startsWith(ENCODED_KEY_PREFIX)) {
+    return id;
+  }
+  return ENCODED_KEY_PREFIX + Buffer.from(id, 'utf8').toString('base64url');
+}
+
+function decodeDocumentKey(key: string): string {
+  if (!key.startsWith(ENCODED_KEY_PREFIX)) {
+    return key;
+  }
+  return Buffer.from(key.slice(ENCODED_KEY_PREFIX.length), 'base64url').toString('utf8');
+}
+
+/** Azure AI Search field naming rules (letters/digits/underscore, must start with a letter, max 128 chars). */
+const AZURE_FIELD_NAME = /^[A-Za-z][A-Za-z0-9_]{0,127}$/;
+
+function edmTypeForValue(value: unknown): string | undefined {
+  switch (typeof value) {
+    case 'string':
+      return 'Edm.String';
+    case 'number':
+      return Number.isFinite(value) ? 'Edm.Double' : undefined;
+    case 'boolean':
+      return 'Edm.Boolean';
+    default:
+      return undefined;
+  }
+}
+
+function valueMatchesEdmType(value: unknown, edmType: string | undefined): boolean {
+  switch (edmType) {
+    case 'Edm.String':
+      return typeof value === 'string';
+    case 'Edm.Double':
+    case 'Edm.Int32':
+    case 'Edm.Int64':
+      return typeof value === 'number' && Number.isFinite(value);
+    case 'Edm.Boolean':
+      return typeof value === 'boolean';
+    default:
+      return false;
+  }
+}
+
+/**
+ * Azure AI Search document structure for vector storage
+ */
+interface AzureAISearchDocument {
+  /** Unique identifier for the document */
+  id: string;
+  /** Vector embedding */
+  vector: number[];
+  /** Metadata associated with the document (stored as JSON string) */
+  metadata: string;
+  /** Optional content field */
+  content?: string;
+}
+
+/**
+ * Mapping of Mastra metrics to Azure AI Search vector similarity functions
+ */
+const METRIC_MAPPING = {
+  cosine: 'cosine',
+  euclidean: 'euclidean',
+  dotproduct: 'dotProduct',
+} as const;
+
+export type AzureAISearchQueryVectorParams = QueryVectorParams<AzureAISearchVectorFilter>;
+
+type AzureAISearchUpsertParams = UpsertVectorParams & { deleteFilter?: AzureAISearchVectorFilter };
+type AzureAISearchUpdateParams = UpdateVectorParams & { filter?: AzureAISearchVectorFilter };
+type AzureAISearchDeleteVectorsParams = {
+  indexName: string;
+  ids?: string[];
+  filter?: AzureAISearchVectorFilter;
+};
+
+interface IndexSchema {
+  vectorFieldName: string;
+  dimension: number | undefined;
+  fields: Map<string, IndexFieldCapabilities>;
+}
+
+type IndexFieldCapabilities = {
+  type?: string;
+};
+
+const DEFAULT_DOCUMENT_FIELDS = new Set(['id', 'metadata', 'content']);
+
+/**
+ * Extended index creation parameters for Azure AI Search specific features
+ */
+export interface AzureAISearchCreateIndexParams extends CreateIndexParams {
+  /** Name of the vector field (defaults to 'vector') */
+  vectorField?: string;
+  /** Additional fields to include in the index schema */
+  additionalFields?: Array<{
+    name: string;
+    type: string;
+    searchable?: boolean;
+    filterable?: boolean;
+    retrievable?: boolean;
+    sortable?: boolean;
+    facetable?: boolean;
+    key?: boolean;
+  }>;
+  /**
+   * Metadata keys that should also be created as explicit filterable Azure AI Search fields.
+   * A plain string declares a field as `Edm.String` (backward-compatible default). To filter
+   * on a numeric or boolean metadata value with the correct Azure field type — required for
+   * numeric comparisons like $gt/$gte/$lt/$lte to work, since Azure rejects an unquoted numeric
+   * literal against an Edm.String field — pass `{ name, type }` instead.
+   */
+  metadataIndexes?: Array<string | { name: string; type: 'string' | 'number' | 'boolean' }>;
+  /** HNSW algorithm parameters */
+  hnswParameters?: {
+    m?: number;
+    efConstruction?: number;
+    efSearch?: number;
+  };
+  /** Semantic search configuration */
+  semanticConfig?: {
+    name?: string;
+    prioritizedFields?: {
+      /** Single title field for semantic ranking */
+      titleField?: { fieldName: string };
+      /** Content fields for semantic ranking (renamed from contentFields) */
+      prioritizedContentFields?: Array<{ fieldName: string }>;
+      /** Keywords fields for semantic ranking (renamed from keywordsFields) */
+      prioritizedKeywordsFields?: Array<{ fieldName: string }>;
+    };
+  };
+  /**
+   * Enable vector compression (quantization) on the index's vector field.
+   * Required for the `oversampling` query parameter to have any effect —
+   * Azure AI Search only allows oversampling when the vector field has a
+   * compression configured, since oversampling compensates for the recall
+   * lost to compression.
+   */
+  compression?: {
+    /** Compression kind. Defaults to 'scalarQuantization'. */
+    kind?: 'scalarQuantization' | 'binaryQuantization';
+  };
+}
+
+/**
+ * Extended query parameters for Azure AI Search advanced features
+ */
+export interface AzureAISearchAdvancedQueryParams extends AzureAISearchQueryVectorParams {
+  /** Enable semantic search capabilities */
+  useSemanticSearch?: boolean;
+  /** Semantic search configuration */
+  semanticOptions?: {
+    /** Name of semantic configuration in the index */
+    configurationName?: string;
+    /** Separate query for semantic reranking */
+    semanticQuery?: string;
+    /** Enable answer extraction from documents */
+    answers?: boolean;
+    /** Enable caption extraction from documents */
+    captions?: boolean;
+    /** Maximum wait time for semantic processing (ms) */
+    maxWaitTime?: number;
+  };
+  /** Use exhaustive k-NN search for exact results */
+  exhaustiveSearch?: boolean;
+  /** Oversampling factor for compressed vectors */
+  oversampling?: number;
+  /** Relative weight for this vector query in hybrid scenarios */
+  weight?: number;
+  /** Query type: simple, full, or semantic */
+  queryType?: 'simple' | 'full' | 'semantic';
+  /**
+   * Combine a full-text query with the vector query for hybrid search.
+   * Runs as native Azure AI Search hybrid search (BM25 full-text + vector,
+   * fused via Reciprocal Rank Fusion) — no vectorizer needs to be configured
+   * on the index, unlike Azure's server-side query vectorization.
+   */
+  textVectorization?: {
+    /** Text to search for (BM25 full-text search term) */
+    text: string;
+    /** Searchable text fields to match against. Defaults to the index's default searchable fields (e.g. content). */
+    fields?: string[];
+  };
+  /** Multiple vector queries for hybrid search */
+  additionalVectorQueries?: Array<{
+    vector: number[];
+    fields?: string[];
+    weight?: number;
+    kNearestNeighborsCount?: number;
+  }>;
+  /** Vector filter mode: apply before or after vector search */
+  filterMode?: 'preFilter' | 'postFilter';
+}
+
+/**
+ * Azure AI Search vector store implementation for Mastra
+ *
+ * This implementation provides vector storage and similarity search capabilities
+ * using Azure AI Search's vector search features.
+ *
+ * @example
+ * ```typescript
+ * const azureVector = new AzureAISearchVector({
+ *   id: 'azure-search-vectors',
+ *   endpoint: 'https://your-service.search.windows.net',
+ *   credential: 'your-api-key'
+ * });
+ *
+ * // Create an index
+ * await azureVector.createIndex({
+ *   indexName: 'products',
+ *   dimension: 1536,
+ *   metric: 'cosine'
+ * });
+ *
+ * // Insert vectors
+ * const ids = await azureVector.upsert({
+ *   indexName: 'products',
+ *   vectors: [[0.1, 0.2, ...], [0.3, 0.4, ...]],
+ *   metadata: [{ category: 'electronics' }, { category: 'books' }]
+ * });
+ *
+ * // Search vectors
+ * const results = await azureVector.query({
+ *   indexName: 'products',
+ *   queryVector: [0.1, 0.2, ...],
+ *   topK: 5,
+ *   filter: { eq: { category: 'electronics' } }
+ * });
+ * ```
+ */
+export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter> {
+  private endpoint: string;
+  private credential: string | AzureKeyCredential | TokenCredential;
+  private apiVersion?: string;
+  private clientOptions?: Omit<SearchClientOptions, 'apiVersion'>;
+  private indexClient: SearchIndexClient;
+  private searchClients: Map<string, SearchClient<AzureAISearchDocument>> = new Map();
+  private autoIndexMetadata: boolean;
+  /**
+   * Serializes schema updates per index within this process. `createOrUpdateIndex`
+   * is last-writer-wins, so two concurrent upserts each adding a different new
+   * metadata field would otherwise clobber each other's field.
+   */
+  private schemaUpdateQueues: Map<string, Promise<void>> = new Map();
+
+  /**
+   * Azure AI Search rejects indexing requests containing more than 1,000 documents
+   * (and any request larger than 16 MB). Chunk large upload/merge/delete calls to
+   * stay within these per-request limits.
+   */
+  private static readonly INDEXING_BATCH_SIZE = 1000;
+
+  constructor({
+    id,
+    endpoint,
+    credential,
+    apiVersion,
+    clientOptions,
+    autoIndexMetadata = true,
+  }: AzureAISearchVectorOptions & { id: string }) {
+    super({ id });
+
+    this.endpoint = endpoint;
+    this.credential = credential;
+    this.apiVersion = apiVersion;
+    this.clientOptions = clientOptions;
+    this.autoIndexMetadata = autoIndexMetadata;
+
+    // Initialize the index client for managing indexes
+    this.indexClient = new SearchIndexClient(
+      endpoint,
+      typeof credential === 'string' ? new AzureKeyCredential(credential) : credential,
+      {
+        apiVersion,
+        ...clientOptions, // Apply client options to index client as well
+      },
+    );
+  }
+
+  /**
+   * Static factory method for easier instantiation with connection string
+   */
+  static fromConnectionString(connectionString: string, options?: { id?: string; apiVersion?: string }) {
+    const url = new URL(connectionString);
+    const endpoint = url.origin;
+    const apiKey = url.searchParams.get('api-key') || url.searchParams.get('key');
+
+    if (!apiKey) {
+      throw new Error('API key not found in connection string');
+    }
+
+    return new AzureAISearchVector({
+      id: options?.id || 'azure-ai-search',
+      endpoint,
+      credential: apiKey,
+      apiVersion: options?.apiVersion,
+    });
+  }
+
+  /**
+   * Gets or creates a search client for a specific index
+   */
+  private getSearchClient(indexName: string): SearchClient<AzureAISearchDocument> {
+    if (!this.searchClients.has(indexName)) {
+      const client = new SearchClient<AzureAISearchDocument>(
+        this.endpoint,
+        indexName,
+        typeof this.credential === 'string' ? new AzureKeyCredential(this.credential) : this.credential,
+        {
+          apiVersion: this.apiVersion,
+          ...this.clientOptions, // Merge custom client options
+        },
+      );
+      this.searchClients.set(indexName, client);
+    }
+    return this.searchClients.get(indexName)!;
+  }
+
+  /**
+   * Runs an indexing operation (upload/merge/delete) in batches that respect
+   * Azure AI Search's 1,000-document per-request limit, aggregating the
+   * per-document results across all batches.
+   */
+  private async runBatchedIndexing<R extends { succeeded: boolean; key: string; errorMessage?: string }>(
+    documents: unknown[],
+    operation: (batch: unknown[]) => Promise<{ results: R[] }>,
+  ): Promise<R[]> {
+    const results: R[] = [];
+    for (let i = 0; i < documents.length; i += AzureAISearchVector.INDEXING_BATCH_SIZE) {
+      const batch = documents.slice(i, i + AzureAISearchVector.INDEXING_BATCH_SIZE);
+      const { results: batchResults } = await this.retryWhileSchemaPropagates(() => operation(batch));
+      results.push(...batchResults);
+    }
+    return results;
+  }
+
+  /**
+   * A field added with `createOrUpdateIndex` is not immediately visible to the
+   * indexing endpoint; an upload issued right after can be rejected with
+   * "The property 'x' does not exist on type 'search.documentFields'". Retry that
+   * specific error briefly while the schema change propagates.
+   */
+  private async retryWhileSchemaPropagates<T>(operation: () => Promise<T>): Promise<T> {
+    const maxAttempts = 20;
+    const delayMs = 500;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const schemaLag = /does not exist on type 'search\.documentFields'/.test(message);
+        if (!schemaLag || attempt >= maxAttempts) {
+          throw error;
+        }
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+
+  /**
+   * Reads the index definition once and derives everything a write path needs
+   * from it: the vector field name, its dimension, and per-field capabilities.
+   * `@azure/search-documents` does not cache `getIndex`, so callers that need
+   * more than one of these must share a single read.
+   */
+  private async readIndexSchema(indexName: string): Promise<IndexSchema> {
+    const index = await this.indexClient.getIndex(indexName);
+    return this.schemaFromIndex(index);
+  }
+
+  private schemaFromIndex(index: { fields?: unknown[] }): IndexSchema {
+    const fields = new Map<string, IndexFieldCapabilities>();
+    let vectorFieldName = 'vector';
+    let dimension: number | undefined;
+
+    for (const raw of index.fields ?? []) {
+      const field = raw as { name: string; type: string; dimensions?: number; vectorSearchDimensions?: number };
+      fields.set(field.name, { type: field.type });
+      const dims = field.dimensions ?? field.vectorSearchDimensions;
+      if (dimension === undefined && field.type === 'Collection(Edm.Single)' && dims) {
+        vectorFieldName = field.name;
+        dimension = dims;
+      }
+    }
+
+    return { vectorFieldName, dimension, fields };
+  }
+
+  /**
+   * Detects the vector field name in an existing index
+   * Falls back to 'vector' for backward compatibility
+   */
+  private async getVectorFieldName(indexName: string): Promise<string> {
+    try {
+      return (await this.readIndexSchema(indexName)).vectorFieldName;
+    } catch {
+      // If we can't determine the vector field name, fall back to 'vector' for backward compatibility
+      return 'vector';
+    }
+  }
+
+  private getMetadataIndexFields(
+    metadataIndexes: NonNullable<AzureAISearchCreateIndexParams['metadataIndexes']>,
+    additionalFields: AzureAISearchCreateIndexParams['additionalFields'],
+  ) {
+    const edmTypeFor = (type?: 'string' | 'number' | 'boolean'): string => {
+      switch (type) {
+        case 'number':
+          return 'Edm.Double';
+        case 'boolean':
+          return 'Edm.Boolean';
+        default:
+          return 'Edm.String';
+      }
+    };
+
+    const reservedFieldNames = new Set(['id', 'metadata', 'content', 'vector']);
+    return metadataIndexes
+      .map(entry => (typeof entry === 'string' ? { name: entry, type: 'string' as const } : entry))
+      .filter(
+        entry => !reservedFieldNames.has(entry.name) && !additionalFields?.some(field => field.name === entry.name),
+      )
+      .map(entry => ({
+        name: entry.name,
+        type: edmTypeFor(entry.type),
+        searchable: false,
+        filterable: true,
+        retrievable: true,
+        sortable: false,
+        facetable: false,
+      }));
+  }
+
+  private async ensureExistingIndexFields({
+    indexName,
+    fields,
+  }: {
+    indexName: string;
+    fields: Array<Record<string, any>>;
+  }): Promise<void> {
+    if (fields.length === 0) {
+      return;
+    }
+
+    const previous = this.schemaUpdateQueues.get(indexName) ?? Promise.resolve();
+    const run = previous
+      .catch(() => {})
+      .then(async () => {
+        // Re-read inside the lock so we merge onto whatever the previous update wrote.
+        const existingIndex = (await this.indexClient.getIndex(indexName)) as any;
+        const existingFieldNames = new Set((existingIndex.fields ?? []).map((field: any) => field.name));
+        const missingFields = fields.filter(field => !existingFieldNames.has(field.name));
+
+        if (missingFields.length === 0) {
+          return;
+        }
+
+        await (this.indexClient as any).createOrUpdateIndex({
+          ...existingIndex,
+          fields: [...(existingIndex.fields ?? []), ...missingFields],
+        });
+      });
+    this.schemaUpdateQueues.set(indexName, run);
+    try {
+      await run;
+    } finally {
+      if (this.schemaUpdateQueues.get(indexName) === run) {
+        this.schemaUpdateQueues.delete(indexName);
+      }
+    }
+  }
+
+  /**
+   * Adds a filterable field for every top-level scalar metadata key that the index
+   * does not yet have, so that `filter: { key: value }` works without the caller
+   * declaring the key up front. Mutates `fields` so the subsequent document build
+   * writes the typed column. No-op when `autoIndexMetadata` is false.
+   */
+  private async ensureMetadataFields({
+    indexName,
+    metadataList,
+    vectorFieldName,
+    fields,
+  }: {
+    indexName: string;
+    metadataList: Array<Record<string, any> | undefined>;
+    vectorFieldName: string;
+    fields: Map<string, IndexFieldCapabilities>;
+  }): Promise<void> {
+    if (!this.autoIndexMetadata) {
+      return;
+    }
+
+    const missing = new Map<string, string>();
+    for (const metadata of metadataList) {
+      if (!metadata) continue;
+      for (const [key, value] of Object.entries(metadata)) {
+        if (fields.has(key) || missing.has(key)) continue;
+        if (DEFAULT_DOCUMENT_FIELDS.has(key) || key === vectorFieldName) continue;
+        // Names starting with "azureSearch" are reserved by the service.
+        if (!AZURE_FIELD_NAME.test(key) || key.startsWith('azureSearch')) continue;
+        const edmType = edmTypeForValue(value);
+        if (!edmType) continue;
+        missing.set(key, edmType);
+      }
+    }
+
+    if (missing.size === 0) {
+      return;
+    }
+
+    await this.ensureExistingIndexFields({
+      indexName,
+      fields: [...missing].map(([name, type]) => ({
+        name,
+        type,
+        searchable: false,
+        filterable: true,
+        retrievable: true,
+        sortable: false,
+        facetable: false,
+      })),
+    });
+
+    // Another writer may have declared the field with a different type; re-read
+    // the authoritative schema rather than trusting our inferred types.
+    const refreshed = (await this.readIndexSchema(indexName)).fields;
+    for (const [name, capability] of refreshed) {
+      fields.set(name, capability);
+    }
+  }
+
+  private buildDocumentFromMetadata({
+    id,
+    vector,
+    vectorFieldName,
+    metadata = {},
+    fields,
+    writeMetadata = true,
+  }: {
+    id: string;
+    vector?: number[];
+    vectorFieldName: string;
+    metadata?: Record<string, any>;
+    fields: Map<string, IndexFieldCapabilities>;
+    writeMetadata?: boolean;
+  }): Record<string, any> {
+    const doc: Record<string, any> = { id };
+
+    if (writeMetadata) {
+      doc.metadata = JSON.stringify(metadata);
+    }
+
+    if (vector) {
+      doc[vectorFieldName] = vector;
+    }
+
+    // `content` is derived from metadata, so whenever the metadata blob is
+    // (re)written the column must follow it; otherwise a merge would keep a
+    // stale value from the previous document.
+    if (typeof metadata.content === 'string') {
+      doc.content = metadata.content;
+    } else if (writeMetadata) {
+      doc.content = '';
+    }
+
+    for (const [fieldName, field] of fields.entries()) {
+      if (DEFAULT_DOCUMENT_FIELDS.has(fieldName) || fieldName === vectorFieldName) {
+        continue;
+      }
+
+      if (field.type === 'Collection(Edm.Single)') {
+        continue;
+      }
+
+      // Only write the typed column when the JS value matches the column's Edm type.
+      // Azure rejects the whole document otherwise (e.g. number into Edm.String:
+      // "Cannot convert the literal '0' to the expected type 'Edm.String'"). The
+      // JSON `metadata` blob remains the source of truth on read either way.
+      if (Object.prototype.hasOwnProperty.call(metadata, fieldName)) {
+        doc[fieldName] = valueMatchesEdmType(metadata[fieldName], field.type) ? metadata[fieldName] : null;
+      }
+    }
+
+    return doc;
+  }
+
+  /**
+   * Creates a new vector search index with the specified configuration
+   *
+   * @param params - Index creation parameters (supports both basic Mastra interface and Azure AI Search extended options)
+   * @throws {MastraError} When index creation fails or invalid parameters are provided
+   */
+  async createIndex(params: CreateIndexParams | AzureAISearchCreateIndexParams): Promise<void> {
+    const {
+      indexName,
+      dimension,
+      metric = 'cosine',
+      vectorField = 'vector',
+      additionalFields = [],
+      metadataIndexes = [],
+      hnswParameters = {},
+      semanticConfig,
+      compression,
+    } = params as AzureAISearchCreateIndexParams;
+
+    if (!Number.isInteger(dimension) || dimension <= 0) {
+      throw new MastraError({
+        id: 'STORAGE_AZURE_AI_SEARCH_CREATE_INDEX_INVALID_DIMENSION',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Dimension must be a positive integer',
+        details: { indexName, dimension },
+      });
+    }
+
+    try {
+      const similarityFunction = METRIC_MAPPING[metric as keyof typeof METRIC_MAPPING];
+
+      // Vector field configuration (customizable name).
+      // Both `retrievable` and `hidden` are set: some API versions key retrievability
+      // off `retrievable`, newer ones off `hidden` (inverted) — the service otherwise
+      // silently defaults new vector fields to hidden/non-retrievable and `$select`ing
+      // them for `includeVector` fails with "'vector' is not a retrievable field".
+      const vectorFieldConfig = {
+        name: vectorField,
+        type: 'Collection(Edm.Single)',
+        searchable: true,
+        retrievable: true,
+        hidden: false,
+        vectorSearchDimensions: dimension,
+        vectorSearchProfileName: 'vector-profile',
+      };
+
+      // Core default fields (aligned with other Mastra vector stores)
+      const defaultFields = [
+        {
+          name: 'id',
+          type: 'Edm.String',
+          key: true,
+          filterable: true,
+          // Sortable so filter-based lookups can page past Azure's 100,000 $skip
+          // ceiling using a stable ordered range scan (see findIdsByFilter).
+          sortable: true,
+          facetable: false,
+          searchable: false,
+        },
+        vectorFieldConfig,
+        {
+          name: 'metadata',
+          type: 'Edm.String',
+          searchable: false,
+          filterable: true,
+          sortable: false,
+          facetable: false,
+        },
+        {
+          name: 'content',
+          type: 'Edm.String',
+          searchable: true,
+          filterable: false,
+          sortable: false,
+          facetable: false,
+        },
+      ];
+
+      // Merge default fields with additional fields (avoid duplicates)
+      const existingFieldNames = new Set(defaultFields.map(f => f.name));
+      const metadataIndexFields = this.getMetadataIndexFields(metadataIndexes, additionalFields);
+      const allFields = [
+        ...defaultFields,
+        ...metadataIndexFields,
+        ...additionalFields.filter(field => !existingFieldNames.has(field.name)),
+      ];
+
+      // HNSW parameters with customizable values
+      const hnswConfig = {
+        metric: similarityFunction,
+        m: hnswParameters.m ?? 4,
+        efConstruction: hnswParameters.efConstruction ?? 400,
+        efSearch: hnswParameters.efSearch ?? 500,
+      };
+
+      const indexDefinition: any = {
+        name: indexName,
+        fields: allFields,
+        vectorSearch: {
+          profiles: [
+            {
+              name: 'vector-profile',
+              algorithmConfigurationName: 'vector-algorithm',
+              ...(compression && { compressionName: 'vector-compression' }),
+            },
+          ],
+          algorithms: [
+            {
+              name: 'vector-algorithm',
+              kind: 'hnsw',
+              hnswParameters: hnswConfig,
+            },
+          ],
+          ...(compression && {
+            compressions: [
+              {
+                kind: compression.kind ?? 'scalarQuantization',
+                compressionName: 'vector-compression',
+                // Rescoring with full-precision vectors is what makes `oversampling`
+                // meaningful: oversampling widens the initial (compressed) candidate
+                // set so the rescore step has more to recover recall from.
+                rescoringOptions: {
+                  enableRescoring: true,
+                  defaultOversampling: 10,
+                },
+              },
+            ],
+          }),
+        },
+      };
+
+      // Add semantic search configuration if provided.
+      // Note: the SDK's SearchIndex field is `semanticSearch`, not `semantic`, and its
+      // SemanticField entries use `name`, not `fieldName` — an unrecognized top-level
+      // property is silently dropped by the service rather than rejected, so a wrong
+      // shape here does not surface as a createIndex error, only later as "this index
+      // must have valid semantic configurations defined" from a semantic query.
+      if (semanticConfig) {
+        const prioritizedFields = semanticConfig.prioritizedFields ?? {
+          titleField: { fieldName: 'content' },
+          prioritizedContentFields: [{ fieldName: 'content' }],
+        };
+        indexDefinition.semanticSearch = {
+          configurations: [
+            {
+              name: semanticConfig.name ?? 'default-semantic-config',
+              prioritizedFields: {
+                ...(prioritizedFields.titleField && {
+                  titleField: { name: prioritizedFields.titleField.fieldName },
+                }),
+                ...(prioritizedFields.prioritizedContentFields && {
+                  contentFields: prioritizedFields.prioritizedContentFields.map(f => ({ name: f.fieldName })),
+                }),
+                ...(prioritizedFields.prioritizedKeywordsFields && {
+                  keywordsFields: prioritizedFields.prioritizedKeywordsFields.map(f => ({ name: f.fieldName })),
+                }),
+              },
+            },
+          ],
+        };
+      }
+
+      await this.indexClient.createIndex(indexDefinition as any);
+
+      // Index created successfully
+    } catch (error: any) {
+      // Check if index already exists
+      if (error?.statusCode === 409 || error?.message?.includes('already exists')) {
+        await this.ensureExistingIndexFields({
+          indexName,
+          fields: [...this.getMetadataIndexFields(metadataIndexes, additionalFields), ...additionalFields],
+        });
+        // Index already exists, that's fine
+        return;
+      }
+
+      throw new MastraError(
+        {
+          id: 'STORAGE_AZURE_AI_SEARCH_CREATE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, dimension, metric },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Creates an advanced vector search index with full Azure AI Search capabilities
+   *
+   * @param params - Extended Azure AI Search index creation parameters
+   * @throws {MastraError} When index creation fails or invalid parameters are provided
+   */
+  async createAdvancedIndex(params: AzureAISearchCreateIndexParams): Promise<void> {
+    return this.createIndex(params);
+  }
+
+  /**
+   * Lists all available indexes in the Azure AI Search service
+   *
+   * @returns Array of index names
+   * @throws {MastraError} When listing indexes fails
+   */
+  async listIndexes(): Promise<string[]> {
+    try {
+      const indexes = [];
+      const indexIterator = this.indexClient.listIndexes();
+
+      for await (const index of indexIterator) {
+        indexes.push(index.name);
+      }
+
+      return indexes;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_AZURE_AI_SEARCH_LIST_INDEXES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Retrieves statistics and configuration information about an index
+   *
+   * @param indexName - Name of the index to describe
+   * @returns Index statistics including dimension, count, and metric
+   * @throws {MastraError} When describing index fails
+   */
+  async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
+    try {
+      // Get index definition
+      const index = await this.indexClient.getIndex(indexName);
+
+      // Get document count
+      const searchClient = this.getSearchClient(indexName);
+      const countResult = await searchClient.getDocumentsCount();
+
+      const { dimension } = this.schemaFromIndex(index);
+      if (dimension === undefined) {
+        throw new Error('Vector field not found or missing dimensions');
+      }
+
+      // Extract metric from vector search configuration
+      let metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine';
+      if (index.vectorSearch?.algorithms) {
+        const algorithm = index.vectorSearch.algorithms[0] as any;
+        if (algorithm?.hnswParameters?.metric) {
+          const azureMetric = algorithm.hnswParameters.metric;
+          // Reverse lookup
+          const metricEntry = Object.entries(METRIC_MAPPING).find(([_, value]) => value === azureMetric);
+          if (metricEntry) {
+            metric = metricEntry[0] as 'cosine' | 'euclidean' | 'dotproduct';
+          }
+        }
+      }
+
+      return { dimension, count: countResult, metric };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_AZURE_AI_SEARCH_DESCRIBE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Deletes an index and all its documents
+   *
+   * @param indexName - Name of the index to delete
+   * @throws {MastraError} When deletion fails
+   */
+  async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
+    try {
+      await this.indexClient.deleteIndex(indexName);
+
+      // Remove cached search client
+      this.searchClients.delete(indexName);
+
+      // Index deleted successfully
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_AZURE_AI_SEARCH_DELETE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Inserts or updates vectors in the specified index
+   *
+   * @param indexName - Name of the index to upsert into
+   * @param vectors - Array of vectors to upsert
+   * @param metadata - Array of metadata objects corresponding to each vector
+   * @param ids - Array of IDs corresponding to each vector (auto-generated if not provided)
+   * @returns Array of IDs of the upserted vectors
+   * @throws {MastraError} When upsert operation fails
+   */
+  async upsert({ indexName, vectors, metadata = [], ids, deleteFilter }: AzureAISearchUpsertParams): Promise<string[]> {
+    if (!Array.isArray(vectors) || vectors.length === 0) {
+      throw new MastraError({
+        id: 'STORAGE_AZURE_AI_SEARCH_UPSERT_EMPTY_VECTORS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Cannot upsert an empty vectors array',
+        details: { indexName },
+      });
+    }
+    if (metadata.length > 0 && metadata.length !== vectors.length) {
+      throw new MastraError({
+        id: 'STORAGE_AZURE_AI_SEARCH_UPSERT_METADATA_LENGTH_MISMATCH',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Vectors and metadata must have the same length. Got ${vectors.length} vectors and ${metadata.length} metadata entries.`,
+        details: { indexName, vectorsLength: vectors.length, metadataLength: metadata.length },
+      });
+    }
+    if (ids && ids.length !== vectors.length) {
+      throw new MastraError({
+        id: 'STORAGE_AZURE_AI_SEARCH_UPSERT_IDS_LENGTH_MISMATCH',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Vectors and ids must have the same length. Got ${vectors.length} vectors and ${ids.length} ids.`,
+        details: { indexName, vectorsLength: vectors.length, idsLength: ids.length },
+      });
+    }
+
+    try {
+      if (deleteFilter) {
+        await this.deleteVectors({ indexName, filter: deleteFilter });
+      }
+
+      // One schema read gives us the vector field, its dimension, and field types.
+      const { vectorFieldName, dimension, fields } = await this.readIndexSchema(indexName);
+      if (dimension === undefined) {
+        throw new Error('Vector field not found or missing dimensions');
+      }
+      this.validateVectorDimensions(vectors, dimension);
+      await this.ensureMetadataFields({ indexName, metadataList: metadata, vectorFieldName, fields });
+
+      // Generate IDs if not provided
+      const vectorIds = ids || vectors.map(() => crypto.randomUUID());
+
+      // Prepare documents for upload using dynamic vector field
+      const documents = vectors.map((vector: number[], i: number) =>
+        this.buildDocumentFromMetadata({
+          id: encodeDocumentKey(vectorIds[i]!),
+          vector,
+          vectorFieldName,
+          metadata: metadata[i] || {},
+          fields,
+        }),
+      );
+
+      // Upload documents (batched to respect Azure's per-request limits)
+      const searchClient = this.getSearchClient(indexName);
+      const uploadResults = await this.runBatchedIndexing(documents, batch =>
+        searchClient.uploadDocuments(batch as any),
+      );
+
+      // Check for failures
+      const failures = uploadResults.filter(result => !result.succeeded);
+      if (failures.length > 0) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_AZURE_AI_SEARCH_UPSERT_PARTIAL_FAILURE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              indexName,
+              totalDocuments: uploadResults.length,
+              failedCount: failures.length,
+              firstFailedKey: failures[0]?.key || 'unknown',
+              firstFailedError: failures[0]?.errorMessage || 'No error message',
+            },
+          },
+          new Error(`${failures.length} of ${uploadResults.length} documents failed to upload`),
+        );
+      }
+
+      return vectorIds;
+    } catch (error) {
+      // If it's already a MastraError (e.g., from partial failure above), re-throw it
+      if (error instanceof MastraError) {
+        throw error;
+      }
+
+      // Normalize error to Error instance to avoid unsafe casting
+      const normalizedError = error instanceof Error ? error : new Error(String(error));
+
+      // Otherwise, wrap the error in a MastraError
+      throw new MastraError(
+        {
+          id: 'STORAGE_AZURE_AI_SEARCH_UPSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, vectorCount: vectors?.length || 0 },
+        },
+        normalizedError,
+      );
+    }
+  }
+
+  /**
+   * Standard MastraVector query method - compatible with Memory integration
+   *
+   * @param params - Standard query parameters compatible with MastraVector interface
+   * @returns Array of search results with scores and metadata
+   * @throws {MastraError} When search operation fails
+   */
+  async query(params: QueryVectorParams<AzureAISearchVectorFilter>): Promise<QueryResult[]> {
+    return this.advancedQuery(params);
+  }
+
+  /**
+   * Advanced vector similarity search with full Azure AI Search capabilities
+   *
+   * @param indexName - Name of the index to search
+   * @param queryVector - Vector to search with
+   * @param topK - Maximum number of results to return
+   * @param filter - Optional filter to apply to the search
+   * @param includeVector - Whether to include the vector in each result (requires an extra retrievable select)
+   * @param useSemanticSearch - Enable semantic search for better relevance
+   * @param semanticOptions - Configuration for semantic search features
+   * @param exhaustiveSearch - Use exhaustive k-NN search for exact results
+   * @param oversampling - Oversampling factor for compressed vectors
+   * @param weight - Relative weight for this vector query in hybrid scenarios
+   * @param queryType - Query type: simple, full, or semantic
+   * @param textVectorization - Enable automatic text vectorization
+   * @param additionalVectorQueries - Multiple vector queries for hybrid search
+   * @param filterMode - Apply filters before or after vector search
+   * @returns Array of search results with scores and metadata
+   * @throws {MastraError} When search operation fails
+   */
+  async advancedQuery({
+    indexName,
+    queryVector,
+    filter,
+    topK = 10,
+    includeVector = false, // Kept for API compatibility but ignored due to Azure AI Search limitations
+    useSemanticSearch = false,
+    semanticOptions,
+    exhaustiveSearch = false,
+    oversampling,
+    weight = 1.0,
+    queryType = 'simple',
+    textVectorization,
+    additionalVectorQueries = [],
+    filterMode = 'preFilter',
+  }: AzureAISearchAdvancedQueryParams): Promise<QueryResult[]> {
+    try {
+      const searchClient = this.getSearchClient(indexName);
+
+      // Detect vector field name
+      const vectorFieldName = await this.getVectorFieldName(indexName);
+
+      // Translate filter to OData syntax
+      const odataFilter = this.transformFilter(filter);
+
+      // Prepare primary vector query using dynamic field name
+      const primaryVectorQuery: VectorizedQuery<any> = {
+        kind: 'vector' as const,
+        vector: queryVector as number[],
+        kNearestNeighborsCount: topK,
+        fields: [vectorFieldName],
+        exhaustive: exhaustiveSearch,
+        weight: weight,
+        // Oversampling only makes sense for approximate (compressed) search — Azure
+        // rejects the combination of oversampling and exhaustive search outright.
+        ...(oversampling && !exhaustiveSearch && { oversampling }),
+      };
+
+      // Prepare additional vector queries for hybrid search
+      const allVectorQueries: VectorQuery<any>[] = [primaryVectorQuery];
+
+      // Add additional vector queries
+      additionalVectorQueries.forEach(vq => {
+        const vectorQuery: VectorizedQuery<any> = {
+          kind: 'vector' as const,
+          vector: vq.vector,
+          kNearestNeighborsCount: vq.kNearestNeighborsCount || topK,
+          fields: vq.fields || [vectorFieldName],
+          weight: vq.weight || 1.0,
+          exhaustive: exhaustiveSearch,
+        };
+        allVectorQueries.push(vectorQuery);
+      });
+
+      // Prepare vector search options
+      const vectorSearchOptions: VectorSearchOptions<any> = {
+        queries: allVectorQueries,
+        filterMode: filterMode,
+      };
+
+      // Prepare field selection. The vector field is declared `retrievable: true`
+      // in the index schema, so it can be selected back when explicitly requested.
+      const selectFields = includeVector
+        ? ['id', 'metadata', 'content', vectorFieldName]
+        : ['id', 'metadata', 'content'];
+
+      // Build search options
+      let searchOptions: SearchRequestOptions<any> = {
+        vectorSearchOptions,
+        filter: odataFilter,
+        top: topK,
+        select: selectFields,
+        // Combining a full-text `search` term with vectorSearchOptions makes Azure AI
+        // Search run true hybrid search (BM25 + vector, fused via Reciprocal Rank Fusion)
+        // in a single request. This needs no server-side vectorizer, unlike a
+        // VectorizableTextQuery, which requires one to be configured on the index.
+        ...(textVectorization?.fields && { searchFields: textVectorization.fields }),
+      };
+
+      // Add semantic search if enabled
+      if (useSemanticSearch || queryType === 'semantic') {
+        const semanticSearchOptions: SemanticSearchOptions = {
+          configurationName: semanticOptions?.configurationName || 'default-semantic-config',
+          ...(semanticOptions?.semanticQuery && { semanticQuery: semanticOptions.semanticQuery }),
+          ...(semanticOptions?.answers && {
+            answers: {
+              answerType: 'extractive' as const,
+              count: 3,
+              threshold: 0.7,
+            },
+          }),
+          ...(semanticOptions?.captions && {
+            captions: {
+              captionType: 'extractive' as const,
+              highlight: true,
+            },
+          }),
+          ...(semanticOptions?.maxWaitTime && { maxWaitInMilliseconds: semanticOptions.maxWaitTime }),
+        };
+
+        searchOptions = {
+          ...searchOptions,
+          queryType: 'semantic' as const,
+          semanticSearchOptions,
+        };
+      } else {
+        searchOptions = {
+          ...searchOptions,
+          queryType: queryType === 'full' ? ('full' as const) : ('simple' as const),
+        };
+      }
+
+      // Perform search. A text query (from textVectorization.text) is passed as the
+      // full-text search term rather than vectorized server-side, so hybrid search
+      // works against any index without requiring a configured vectorizer.
+      const searchResults = await searchClient.search(textVectorization?.text ?? '*', searchOptions as any);
+
+      // Process results - Azure SDK returns object with .results property
+      const results: QueryResult[] = [];
+      for await (const result of searchResults.results) {
+        if (result.document) {
+          const queryResult: QueryResult = {
+            id: decodeDocumentKey(result.document.id),
+            score: result.score || 0,
+            metadata: result.document.metadata
+              ? (() => {
+                  try {
+                    return JSON.parse(result.document.metadata);
+                  } catch {
+                    return { _raw: result.document.metadata };
+                  }
+                })()
+              : {},
+            document: result.document.content,
+            ...(includeVector && { vector: (result.document as Record<string, any>)[vectorFieldName] }),
+          };
+
+          // Add semantic-specific fields if available
+          if (result.rerankerScore) {
+            queryResult.metadata = queryResult.metadata || {};
+            queryResult.metadata['@search.rerankerScore'] = result.rerankerScore;
+          }
+          if (result.captions && result.captions.length > 0) {
+            queryResult.metadata = queryResult.metadata || {};
+            queryResult.metadata['@search.captions'] = result.captions;
+          }
+          if (result.highlights) {
+            queryResult.metadata = queryResult.metadata || {};
+            queryResult.metadata['@search.highlights'] = result.highlights;
+          }
+
+          results.push(queryResult);
+        }
+      }
+
+      return results;
+    } catch (error) {
+      const unknownField = this.unknownFilterField(error);
+      if (unknownField) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_AZURE_AI_SEARCH_FILTER_UNKNOWN_FIELD',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text: `Filter references metadata field '${unknownField}' which does not exist on index '${indexName}'. Azure AI Search can only filter on declared fields: either upsert at least one document carrying '${unknownField}' as a string/number/boolean value (autoIndexMetadata), or declare it via createIndex({ metadataIndexes: ['${unknownField}'] }).`,
+            details: { indexName, field: unknownField },
+          },
+          error,
+        );
+      }
+      throw new MastraError(
+        {
+          id: 'STORAGE_AZURE_AI_SEARCH_QUERY_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, topK },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Updates a vector and/or its metadata by ID
+   *
+   * @param indexName - Name of the index containing the vector
+   * @param id - ID of the vector to update
+   * @param update - Object containing vector and/or metadata updates
+   * @throws {MastraError} When update operation fails
+   */
+  async updateVector({ indexName, id, filter, update }: AzureAISearchUpdateParams): Promise<void> {
+    try {
+      if (!update.vector && !update.metadata) {
+        throw new MastraError({
+          id: 'STORAGE_AZURE_AI_SEARCH_NO_UPDATES',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: 'No updates provided',
+        });
+      }
+
+      if (!id && !filter) {
+        throw new MastraError({
+          id: 'STORAGE_AZURE_AI_SEARCH_MISSING_ID_OR_FILTER',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: 'Either id or filter must be provided',
+        });
+      }
+
+      if (id && filter) {
+        throw new MastraError({
+          id: 'STORAGE_AZURE_AI_SEARCH_ID_AND_FILTER',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: 'Cannot provide both id and filter - they are mutually exclusive',
+        });
+      }
+
+      const searchClient = this.getSearchClient(indexName);
+
+      const { vectorFieldName, dimension, fields } = await this.readIndexSchema(indexName);
+
+      // Validate vector dimension if updating vector
+      if (update.vector) {
+        if (dimension === undefined) {
+          throw new Error('Vector field not found or missing dimensions');
+        }
+        this.validateVectorDimensions([update.vector], dimension);
+      }
+
+      let targetIds: string[];
+      if (id) {
+        targetIds = [id];
+      } else {
+        if (!filter || Object.keys(filter).length === 0) {
+          throw new MastraError({
+            id: 'STORAGE_AZURE_AI_SEARCH_EMPTY_FILTER',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName },
+            text: 'Cannot update with empty filter',
+          });
+        }
+        targetIds = await this.findIdsByFilter(indexName, filter);
+      }
+
+      if (targetIds.length === 0) {
+        return;
+      }
+
+      if (update.metadata) {
+        await this.ensureMetadataFields({ indexName, metadataList: [update.metadata], vectorFieldName, fields });
+      }
+
+      const updatedDocs = targetIds.map(targetId =>
+        this.buildDocumentFromMetadata({
+          id: encodeDocumentKey(targetId),
+          vector: update.vector,
+          vectorFieldName,
+          metadata: update.metadata,
+          fields,
+          writeMetadata: Boolean(update.metadata),
+        }),
+      );
+
+      // Merge documents (update operation, batched to respect Azure's per-request limits)
+      const mergeResults = await this.runBatchedIndexing(updatedDocs, batch =>
+        searchClient.mergeDocuments(batch as any),
+      );
+
+      // Check for per-document failures
+      const mergeFailures = mergeResults.filter(result => !result.succeeded);
+      if (mergeFailures.length > 0) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_AZURE_AI_SEARCH_UPDATE_PARTIAL_FAILURE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              indexName,
+              totalDocuments: mergeResults.length,
+              failedCount: mergeFailures.length,
+              firstFailedKey: mergeFailures[0]?.key || 'unknown',
+              firstFailedError: mergeFailures[0]?.errorMessage || 'No error message',
+            },
+          },
+          new Error(`${mergeFailures.length} of ${mergeResults.length} documents failed to update`),
+        );
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: 'STORAGE_AZURE_AI_SEARCH_UPDATE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, ...(id ? { id } : {}) },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Deletes multiple vectors by IDs or metadata filter.
+   */
+  async deleteVectors({ indexName, ids, filter }: AzureAISearchDeleteVectorsParams): Promise<void> {
+    try {
+      if (ids && filter) {
+        throw new MastraError({
+          id: 'STORAGE_AZURE_AI_SEARCH_IDS_AND_FILTER',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: 'Cannot specify both ids and filter - they are mutually exclusive',
+        });
+      }
+
+      if (!ids && !filter) {
+        throw new MastraError({
+          id: 'STORAGE_AZURE_AI_SEARCH_MISSING_IDS_OR_FILTER',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: 'Either filter or ids must be provided',
+        });
+      }
+
+      let idsToDelete: string[];
+      if (ids) {
+        if (ids.length === 0) {
+          throw new MastraError({
+            id: 'STORAGE_AZURE_AI_SEARCH_EMPTY_IDS',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName },
+            text: 'Cannot delete with empty ids array',
+          });
+        }
+        idsToDelete = ids;
+      } else {
+        if (!filter || Object.keys(filter).length === 0) {
+          throw new MastraError({
+            id: 'STORAGE_AZURE_AI_SEARCH_EMPTY_FILTER',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName },
+            text: 'Cannot delete with empty filter',
+          });
+        }
+        idsToDelete = await this.findIdsByFilter(indexName, filter);
+      }
+
+      if (idsToDelete.length === 0) {
+        return;
+      }
+
+      const searchClient = this.getSearchClient(indexName);
+      const deleteDocs = idsToDelete.map(id => ({ id: encodeDocumentKey(id) }));
+      const deleteResults = await this.runBatchedIndexing(deleteDocs, batch =>
+        searchClient.deleteDocuments(batch as any),
+      );
+
+      // Check for per-document failures
+      const deleteFailures = deleteResults.filter(result => !result.succeeded);
+      if (deleteFailures.length > 0) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_AZURE_AI_SEARCH_DELETE_PARTIAL_FAILURE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              indexName,
+              totalDocuments: deleteResults.length,
+              failedCount: deleteFailures.length,
+              firstFailedKey: deleteFailures[0]?.key || 'unknown',
+              firstFailedError: deleteFailures[0]?.errorMessage || 'No error message',
+            },
+          },
+          new Error(`${deleteFailures.length} of ${deleteResults.length} documents failed to delete`),
+        );
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: 'STORAGE_AZURE_AI_SEARCH_DELETE_VECTORS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            idsCount: ids?.length || 0,
+            hasFilter: !!filter,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Deletes a vector by its ID
+   *
+   * @param indexName - Name of the index containing the vector
+   * @param id - ID of the vector to delete
+   * @throws {MastraError} When deletion fails
+   */
+  async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
+    try {
+      const searchClient = this.getSearchClient(indexName);
+      const deleteResult = await searchClient.deleteDocuments([{ id: encodeDocumentKey(id) }] as any);
+      const deleteFailure = deleteResult.results.find(result => !result.succeeded);
+
+      if (deleteFailure) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_AZURE_AI_SEARCH_DELETE_VECTOR_PARTIAL_FAILURE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              indexName,
+              id,
+              failedKey: deleteFailure.key || 'unknown',
+              error: deleteFailure.errorMessage || 'No error message',
+            },
+          },
+          new Error(`Document ${deleteFailure.key || id} failed to delete`),
+        );
+      }
+    } catch (error: unknown) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      // Don't throw error if document doesn't exist (404)
+      if (error && typeof error === 'object' && 'statusCode' in error && error.statusCode === 404) {
+        return;
+      }
+      throw new MastraError(
+        {
+          id: 'STORAGE_AZURE_AI_SEARCH_DELETE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, id },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Validates that all vectors have the correct dimension
+   */
+  private validateVectorDimensions(vectors: number[][], dimension: number): void {
+    for (let i = 0; i < vectors.length; i++) {
+      if (vectors[i]?.length !== dimension) {
+        throw new Error(
+          `Vector at index ${i} has invalid dimension ${vectors[i]?.length}. Expected ${dimension} dimensions.`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Extracts the field name from Azure's "Could not find a property named 'x'" $filter error.
+   */
+  private unknownFilterField(error: unknown): string | undefined {
+    const message = error instanceof Error ? error.message : String(error);
+    return /Could not find a property named '([^']+)'/.exec(message)?.[1];
+  }
+
+  /**
+   * Transforms filter to Azure AI Search OData syntax
+   */
+  private transformFilter(filter?: AzureAISearchVectorFilter): string | undefined {
+    const translator = new AzureAISearchFilterTranslator();
+    return translator.translate(filter);
+  }
+
+  /**
+   * Finds document IDs matching a filter.
+   */
+  private async findIdsByFilter(indexName: string, filter: AzureAISearchVectorFilter): Promise<string[]> {
+    const searchClient = this.getSearchClient(indexName);
+    const odataFilter = this.transformFilter(filter);
+    // Only update/delete call this. A filter that is non-empty as an object but
+    // translates to no predicate (`{ $and: [] }`, `{ x: { $nin: [] } }`) would
+    // otherwise select every document, which is never what a caller meant.
+    if (!odataFilter) {
+      throw new MastraError({
+        id: 'STORAGE_AZURE_AI_SEARCH_EMPTY_FILTER',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: 'Filter does not constrain any documents; refusing to apply it to every document',
+      });
+    }
+
+    const ids: string[] = [];
+    const pageSize = 1000;
+    // Azure AI Search caps $skip at 100,000, so paginate with a stable
+    // ordered range scan ("search after") on the sortable key field instead.
+    let lastId: string | undefined;
+
+    while (true) {
+      const rangeClause = lastId !== undefined ? `id gt '${lastId.replace(/'/g, "''")}'` : undefined;
+      const combinedFilter = [odataFilter ? `(${odataFilter})` : undefined, rangeClause].filter(Boolean).join(' and ');
+
+      const searchResults = await searchClient.search('*', {
+        filter: combinedFilter || undefined,
+        top: pageSize,
+        orderBy: ['id asc'],
+        select: ['id'],
+      } as any);
+
+      let count = 0;
+      for await (const result of searchResults.results) {
+        if (result.document?.id) {
+          ids.push(decodeDocumentKey(result.document.id));
+          // Range-scan cursor must stay in stored (encoded) key space.
+          lastId = result.document.id;
+        }
+        count++;
+      }
+
+      if (count < pageSize) {
+        break;
+      }
+    }
+
+    return ids;
+  }
+
+  /**
+   * Convenience method for semantic search
+   *
+   * @param params - Query parameters with semantic search enabled
+   * @returns Array of search results with semantic enhancements
+   */
+  async semanticQuery(
+    params: Omit<AzureAISearchAdvancedQueryParams, 'useSemanticSearch' | 'queryType' | 'semanticOptions'> & {
+      semanticConfig?: string;
+      semanticQuery?: string;
+      enableAnswers?: boolean;
+      enableCaptions?: boolean;
+    },
+  ): Promise<QueryResult[]> {
+    return this.advancedQuery({
+      ...params,
+      useSemanticSearch: true,
+      queryType: 'semantic',
+      semanticOptions: {
+        configurationName: params.semanticConfig,
+        semanticQuery: params.semanticQuery,
+        answers: params.enableAnswers,
+        captions: params.enableCaptions,
+      },
+    });
+  }
+
+  /**
+   * Convenience method for hybrid vector + text search. Combines the vector query with a
+   * BM25 full-text query over `textQuery`, fused via Azure AI Search's native Reciprocal
+   * Rank Fusion. No vectorizer needs to be configured on the index.
+   *
+   * @param params - Query parameters with a text query
+   * @returns Array of search results from hybrid search
+   */
+  async hybridQuery(
+    params: Omit<AzureAISearchAdvancedQueryParams, 'textVectorization'> & {
+      textQuery: string;
+      /** Searchable text fields to match `textQuery` against. Defaults to the index's default searchable fields. */
+      vectorFields?: string[];
+    },
+  ): Promise<QueryResult[]> {
+    return this.advancedQuery({
+      ...params,
+      textVectorization: {
+        text: params.textQuery,
+        fields: params.vectorFields,
+      },
+    });
+  }
+
+  /**
+   * Convenience method for multi-vector search
+   *
+   * @param params - Query parameters with multiple vectors
+   * @returns Array of search results from multi-vector search
+   */
+  async multiVectorQuery(
+    params: Omit<AzureAISearchAdvancedQueryParams, 'additionalVectorQueries'> & {
+      vectors: Array<{
+        vector: number[];
+        weight?: number;
+        fields?: string[];
+      }>;
+    },
+  ): Promise<QueryResult[]> {
+    return this.advancedQuery({
+      ...params,
+      additionalVectorQueries: params.vectors.map(v => ({
+        vector: v.vector,
+        weight: v.weight,
+        fields: v.fields,
+        kNearestNeighborsCount: params.topK,
+      })),
+    });
+  }
+
+  /**
+   * Convenience method for exhaustive (exact) search
+   *
+   * @param params - Query parameters with exhaustive search enabled
+   * @returns Array of search results from exhaustive search
+   */
+  async exactQuery(params: Omit<AzureAISearchAdvancedQueryParams, 'exhaustiveSearch'>): Promise<QueryResult[]> {
+    return this.advancedQuery({
+      ...params,
+      exhaustiveSearch: true,
+    });
+  }
+}
