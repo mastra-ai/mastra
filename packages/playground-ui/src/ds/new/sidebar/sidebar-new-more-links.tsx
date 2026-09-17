@@ -28,7 +28,7 @@ export function SidebarNewMoreLinks({
   const surfacedLinks =
     links.length < 2
       ? links
-      : links.filter(link => linkIsActive(link) || (recentLinks[link.name] ?? 0) >= recentCutoff);
+      : links.filter(link => linkIsActive(link) || (recentLinks[`${link.url}:${link.name}`] ?? 0) >= recentCutoff);
   const foldedLinks = links.filter(link => !surfacedLinks.includes(link));
 
   function renderLink(link: NavLink) {

@@ -949,6 +949,30 @@ describe('SidebarNew', () => {
       expect(screen.getByRole('button', { name: 'More' })).toBeTruthy();
     });
 
+    it('tracks recent links by URL when labels match', () => {
+      mockMatchMedia(false);
+      const sections: SidebarNewSection[] = [
+        {
+          key: 'tools',
+          links: [],
+          moreLinks: [
+            { name: 'Tools', url: '/tools/first' },
+            { name: 'Tools', url: '/tools/second' },
+          ],
+        },
+      ];
+      const firstRender = renderSidebarNewSections(sections);
+      fireEvent.click(screen.getByRole('button', { name: 'More' }));
+      const firstLink = screen.getAllByRole('link', { name: 'Tools' })[0];
+      if (!firstLink) throw new Error('First Tools link was not rendered');
+      fireEvent.click(firstLink);
+      firstRender.unmount();
+
+      renderSidebarNewSections(sections);
+
+      expect(screen.getByRole('link', { name: 'Tools' }).getAttribute('href')).toBe('/tools/first');
+    });
+
     it('keeps an active folded link visible', () => {
       mockMatchMedia(false);
       render(
@@ -973,7 +997,7 @@ describe('SidebarNew', () => {
       mockMatchMedia(false);
       window.localStorage.setItem(
         sidebarNewMoreStorageKey,
-        JSON.stringify({ Tools: Date.now() - 8 * 24 * 60 * 60 * 1000 }),
+        JSON.stringify({ '/tools:Tools': Date.now() - 8 * 24 * 60 * 60 * 1000 }),
       );
 
       renderSidebarNewSections();
@@ -1029,5 +1053,6 @@ describe('SidebarNew', () => {
       expect(document.querySelector('[data-sidebar-scope]')?.getAttribute('data-sidebar-mobile-present')).toBe('false'),
     );
     expect(screen.getByRole('button', { name: 'Open navigation menu' })).toBe(mobileTrigger);
+    await waitFor(() => expect(document.activeElement).toBe(mobileTrigger));
   });
 });

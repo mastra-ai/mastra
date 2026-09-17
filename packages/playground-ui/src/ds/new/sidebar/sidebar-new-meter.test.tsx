@@ -193,7 +193,7 @@ describe('SidebarNew command header', () => {
       'hover:bg-sidebar-nav-hover',
     );
     expect(container.querySelector('[data-slot="sidebar-new-search-trigger"]')?.className).toContain('rounded-full');
-    expect(container.querySelector('[data-slot="sidebar-new-search-trigger"]')?.className).toContain('h-form-md');
+    expect(container.querySelector('[data-slot="sidebar-new-search-trigger"]')?.className).toContain('size-form-md');
     expect(container.querySelector('[data-slot="sidebar-new-footer-meta"]')?.className).toContain(
       'border-sidebar-divider',
     );

@@ -109,6 +109,7 @@ export function MainSidebarProvider({
   const [openMobile, setOpenMobileState] = React.useState(false);
   const [mobileDrawerPresent, setMobileDrawerPresent] = React.useState(false);
   const openMobileRef = React.useRef(false);
+  const mobileTriggerRef = React.useRef<HTMLButtonElement | null>(null);
   const widthRef = React.useRef<number>(initial.width);
   const stateRef = React.useRef<SidebarState>(initial.state);
   stateRef.current = state;
@@ -268,7 +269,7 @@ export function MainSidebarProvider({
   );
 
   const drawerValue = React.useMemo<MobileDrawerContextValue>(
-    () => ({ openMobile, setOpenMobile, setMobileDrawerPresent }),
+    () => ({ openMobile, mobileTriggerRef, setOpenMobile, setMobileDrawerPresent }),
     [openMobile, setOpenMobile],
   );
 

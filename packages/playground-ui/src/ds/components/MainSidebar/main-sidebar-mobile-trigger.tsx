@@ -14,9 +14,10 @@ export function MainSidebarMobileTrigger({
   onClick,
   ...props
 }: MainSidebarMobileTriggerProps) {
-  const { isMobile, setOpenMobile } = useMainSidebar();
+  const { isMobile, mobileTriggerRef, setOpenMobile } = useMainSidebar();
   return (
     <button
+      ref={mobileTriggerRef}
       type="button"
       aria-label={ariaLabel}
       aria-hidden={!isMobile}

@@ -19,14 +19,24 @@ export const SidebarNewFooterMeta = forwardRef<HTMLDivElement, SidebarNewFooterM
       data-slot="sidebar-new-footer-meta"
       data-state={state}
       className={cn(
-        'flex min-h-10 items-center border-t border-sidebar-divider px-2 py-1 text-ui-xs text-muted-foreground',
-        state === 'collapsed' && 'justify-center px-0',
+        'grid min-h-10 grid-cols-[minmax(0,1fr)_auto_0fr] items-center border-t border-sidebar-divider px-2 py-1 text-ui-xs text-muted-foreground',
+        'transition-[grid-template-columns] duration-slow ease-out-custom motion-reduce:transition-none',
+        state === 'collapsed' && 'grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] px-0',
         className,
       )}
       {...props}
     >
-      {state === 'collapsed' ? null : <div className="min-w-0 flex-1 truncate">{children}</div>}
+      <div
+        aria-hidden={state === 'collapsed'}
+        className={cn(
+          'min-w-0 truncate transition-opacity duration-normal ease-out-custom motion-reduce:transition-none',
+          state === 'collapsed' && 'opacity-0',
+        )}
+      >
+        {children}
+      </div>
       {action}
+      <span aria-hidden />
     </div>
   );
 });

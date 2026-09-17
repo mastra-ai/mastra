@@ -15,9 +15,8 @@ export const SidebarNewCommandHeader = forwardRef<HTMLElement, SidebarNewCommand
         data-slot="sidebar-new-command-header"
         data-state={state}
         className={cn(
-          'flex h-header-default shrink-0 items-center gap-1 px-3',
-          state === 'collapsed' &&
-            '[&_[data-slot=sidebar-new-brand]]:justify-center [&_[data-slot=sidebar-new-search-trigger]]:hidden',
+          'flex h-header-default shrink-0 items-center gap-1 overflow-hidden px-3',
+          state === 'collapsed' && '[&_[data-slot=sidebar-new-search-trigger]]:hidden',
           className,
         )}
         {...props}

@@ -246,11 +246,6 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
         </SidebarNew.Nav>
 
         <SidebarNew.Footer className="space-y-1.5 pb-1">
-          {header === 'command' || version ? (
-            <SidebarNew.FooterMeta action={header === 'command' ? <SidebarNew.Trigger /> : undefined}>
-              {version}
-            </SidebarNew.FooterMeta>
-          ) : null}
           <SidebarNew.Meter
             label="Credits"
             value="$4"
@@ -306,6 +301,11 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu>
+          {header === 'command' || version ? (
+            <SidebarNew.FooterMeta action={header === 'command' ? <SidebarNew.Trigger /> : undefined}>
+              {version}
+            </SidebarNew.FooterMeta>
+          ) : null}
         </SidebarNew.Footer>
       </SidebarNew>
 

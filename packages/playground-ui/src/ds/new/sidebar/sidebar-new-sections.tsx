@@ -45,7 +45,7 @@ export function SidebarNewSections({
   const recentCutoff = renderedAt - recentLinkRetentionMs;
 
   function rememberLink(link: NavLink) {
-    setRecentLinks(current => ({ ...current, [link.name]: Date.now() }));
+    setRecentLinks(current => ({ ...current, [getLinkKey(link)]: Date.now() }));
   }
 
   return (

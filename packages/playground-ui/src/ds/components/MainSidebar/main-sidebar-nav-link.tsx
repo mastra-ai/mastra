@@ -140,14 +140,16 @@ function navTooltipLabel(link: NavLink | undefined, isCollapsed: boolean) {
 }
 
 function NavRowTooltip({ label, children }: { label?: string; children: React.ReactNode }) {
-  if (!label || !React.isValidElement(children)) return children;
+  if (!React.isValidElement(children)) return children;
 
   return (
-    <Tooltip>
+    <Tooltip disabled={!label}>
       <TooltipTrigger render={children} />
-      <TooltipContent side="right" align="center" sideOffset={16}>
-        {label}
-      </TooltipContent>
+      {label ? (
+        <TooltipContent side="right" align="center" sideOffset={16}>
+          {label}
+        </TooltipContent>
+      ) : null}
     </Tooltip>
   );
 }

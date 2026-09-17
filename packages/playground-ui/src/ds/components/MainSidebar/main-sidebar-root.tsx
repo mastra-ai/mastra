@@ -27,6 +27,7 @@ export function MainSidebarRoot({ children, className, mobileMode = 'drawer' }: 
     collapsedWidth,
     isMobile,
     openMobile,
+    mobileTriggerRef,
     setOpenMobile,
     setMobileDrawerPresent,
     setWidth,
@@ -192,6 +193,7 @@ export function MainSidebarRoot({ children, className, mobileMode = 'drawer' }: 
       >
         <DrawerContent
           data-mobile-mode={mobileMode}
+          finalFocus={mobileTriggerRef}
           showCloseButton={mobileMode === 'drawer'}
           className={cn(
             'new-theme border-0 bg-sidebar text-foreground',
@@ -238,10 +240,8 @@ export function MainSidebarRoot({ children, className, mobileMode = 'drawer' }: 
   return (
     <div
       className={cn(
-        'new-theme sidebar-layout group/sidebar relative min-h-0 shrink-0 self-stretch bg-sidebar text-foreground',
+        'new-theme sidebar-layout group/sidebar t-resize relative min-h-0 shrink-0 self-stretch bg-sidebar text-foreground',
         'w-(--sidebar-width)',
-        'transition-[width] duration-220 ease-[cubic-bezier(0.32,0.72,0,1)]',
-        'motion-reduce:transition-none',
         'in-data-[sidebar-gesture=active]:transition-none',
         className,
 
