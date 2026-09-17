@@ -34,7 +34,7 @@ flowchart LR
   client -- "Bearer token for<br/>the server URI" --> server([MCP server])
 ```
 
-The **MCP server** is the protected resource, and not necessarily the service that signs users in. The **authorization server** issues tokens and can be separate from the MCP server. The **client** obtains and presents a token. In user-delegated flows, the authorization server interacts with the **user** for authentication and consent as needed. Not every flow requires user interaction.
+The MCP server is the protected resource, and not necessarily the service that signs users in. The authorization server issues tokens and can be separate from the MCP server. The client obtains and presents a token. In user-delegated flows, the authorization server interacts with the user for authentication and consent as needed. Not every flow requires user interaction.
 
 Where your application sits in that picture decides which credentials it manages. With [`MCPClient`](/reference/tools/mcp-client), your Mastra application connects to another MCP server. With [`MCPServer`](/reference/tools/mcp-server), your application exposes capabilities to other clients. The same application can do both, but its incoming and outgoing credentials serve different boundaries.
 
@@ -53,9 +53,9 @@ See [MCP connection configuration](/docs/connections/mcp) for static and runtime
 
 A separate provider per MCP server does one thing and not another:
 
-- **It stops** that provider's authorization session state from being shared across servers.
-- **It doesn't isolate** users or authorization-server issuers. Mastra's default OAuth storage is in memory. Custom `OAuthStorage` controls persistence, so scope that storage to the user and connection.
-- **It can't bind** credentials to an issuer for you. The specification requires issuer-bound registration credentials and separate registration and token state for different authorization servers, so don't reuse those credentials when the issuer changes.
+- It stops that provider's authorization session state from being shared across servers.
+- It doesn't isolate users or authorization-server issuers. Mastra's default OAuth storage is in memory. Custom `OAuthStorage` controls persistence, so scope that storage to the user and connection.
+- It can't bind credentials to an issuer for you. The specification requires issuer-bound registration credentials and separate registration and token state for different authorization servers, so don't reuse those credentials when the issuer changes.
 
 ### Registration and browser callbacks
 
@@ -91,7 +91,7 @@ Start with two separate questions: how does a client discover where to obtain a 
 
 If your server uses authorization, the protocol flow is:
 
-1. The client discovers the MCP server's **Protected Resource Metadata**, which identifies its authorization servers.
+1. The client discovers the MCP server's Protected Resource Metadata, which identifies its authorization servers.
 1. The client discovers the selected authorization server's metadata and obtains a token for the MCP server.
 1. The MCP server validates the token before the application authorizes the requested operation.
 
