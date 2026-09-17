@@ -74,10 +74,15 @@ function scanObservationGroupTags(observations: string): ObservationGroupScan {
 
     const closeStart = observations.indexOf(OBSERVATION_GROUP_CLOSE, Math.max(openEnd + 1, closeFloor));
     if (closeStart === -1) {
-      // The opening never closes. Its content stays unattributed, but the tag text is metadata and
-      // must still be dropped so it cannot leak into reflection prompts as stray XML.
-      incompleteOpenings.push({ start, end: openEnd + 1 });
-      break;
+      // No closing tag remains, so every later opening is unterminated too. Only a line-started
+      // opening is a group tag; an inline mention stays content. Parking closeFloor at the end keeps
+      // the remaining lookups O(1) instead of re-walking the tail once per opening.
+      if (isLineStart(observations, start)) {
+        incompleteOpenings.push({ start, end: openEnd + 1 });
+      }
+      closeFloor = observations.length;
+      cursor = openEnd + 1;
+      continue;
     }
 
     // Only a line-started opening can be a nested group: the producer always writes tags on their

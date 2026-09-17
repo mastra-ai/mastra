@@ -124,6 +124,28 @@ Lone text`;
 
     expect(stripObservationGroups(observations)).toBe('Lone text');
   });
+
+  it('drops every unterminated opening tag, not just the first', () => {
+    const observations = `<observation-group id="a" range="1:2">
+Text A
+<observation-group id="b" range="3:4">
+Text B`;
+
+    const stripped = stripObservationGroups(observations);
+    expect(stripped).not.toContain('<observation-group');
+    expect(stripped).toContain('Text A');
+    expect(stripped).toContain('Text B');
+  });
+
+  it('keeps an inline tag mention that has no closing tag', () => {
+    const observations = `<observation-group id="a" range="1:2">
+Text A
+The format is <observation-group id="example" range="2:3"> inline`;
+
+    expect(stripObservationGroups(observations)).toContain(
+      'The format is <observation-group id="example" range="2:3"> inline',
+    );
+  });
 });
 
 describe('combineObservationGroupRanges', () => {
