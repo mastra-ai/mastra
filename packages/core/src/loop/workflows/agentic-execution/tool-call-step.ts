@@ -260,11 +260,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       const removeToolMetadata = async (
         target: { toolCallId: string; toolName: string },
         type: 'suspension' | 'approval',
-      ) => {
+      ): Promise<{ suspendPayload?: unknown; resumeSchema?: string } | undefined> => {
         const { saveQueueManager, memoryConfig, threadId } = _internal || {};
 
         if (!saveQueueManager || !threadId) {
-          return;
+          return undefined;
         }
 
         const { toolCallId, toolName } = target;
@@ -322,6 +322,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           return false;
         });
 
+        let removedEntry: { suspendPayload?: unknown; resumeSchema?: string } | undefined;
+
         if (lastAssistantMessage) {
           const metadata = getMetadata(lastAssistantMessage);
           let suspendedTools = metadata?.[metadataKey] as Record<string, any> | undefined;
@@ -344,12 +346,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             if (metadata) {
               const entryKey = resolveEntryKey(suspendedTools);
               if (entryKey) {
+                removedEntry = suspendedTools[entryKey];
                 delete suspendedTools[entryKey];
               }
             } else {
               lastAssistantMessage.content.parts = lastAssistantMessage.content.parts?.map(part => {
                 if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
                   if (partMatches(part.data)) {
+                    removedEntry = part.data as any;
                     return {
                       ...part,
                       data: {
@@ -376,6 +380,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             }
           }
         }
+
+        return removedEntry;
       };
 
       // Helper function to flush messages before suspension
@@ -948,7 +954,47 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // top of it, and `removeToolMetadata`'s toolCallId -> toolName fallback could then drop a
         // concurrently suspended sibling that shares this tool name.
         if (!approvalGated && resumeData != null) {
-          await removeToolMetadata({ toolCallId: inputData.toolCallId, toolName: inputData.toolName }, 'suspension');
+          const removedSuspension = await removeToolMetadata(
+            { toolCallId: inputData.toolCallId, toolName: inputData.toolName },
+            'suspension',
+          );
+
+          // Live counterpart to the storage-only `resumed: true` mutation `removeToolMetadata`
+          // just applied to the persisted `data-tool-call-suspended` part: re-emit that same
+          // chunk, marked resumed, onto the OPEN stream too. Without this, a client only ever
+          // learns about the resume via the tool's own native `tool-<name>` part transitioning
+          // to `output-available` — but for a delegated call, that exact toolCallId later
+          // receives the delegation wrapper's own unrelated completion output too (once its
+          // sub-agent finishes), silently overwriting whatever a client wrote there via
+          // `addToolOutput()`. `data-tool-call-suspended` parts collapse by `(type, toolCallId)`
+          // (client behavior, not asserted here), so a UI keying its "already resolved" check off
+          // this chunk's `resumed` field instead of the collision-prone native part's `output`
+          // gets a signal that survives that later overwrite. Skipped when nothing was actually
+          // found suspended (e.g. an already-cleared or unrelated resume).
+          if (removedSuspension) {
+            const resumeAckChunk = await transformChunk(
+              {
+                type: 'tool-call-suspended',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId: inputData.toolCallId,
+                  toolName: inputData.toolName,
+                  suspendPayload: removedSuspension.suspendPayload,
+                  args: inputData.args,
+                  resumeSchema: removedSuspension.resumeSchema ?? '',
+                  resumed: true,
+                },
+              },
+              'suspend',
+              { suspendPayload: removedSuspension.suspendPayload },
+            );
+            if (outputWriter) {
+              await outputWriter(resumeAckChunk);
+            } else {
+              safeEnqueue(controller, resumeAckChunk);
+            }
+          }
         }
 
         if (args === null || args === undefined) {

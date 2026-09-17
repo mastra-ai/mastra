@@ -479,12 +479,17 @@ export class SessionRunEngine {
         if (chunk.type === 'abort') {
           aborted = true;
         }
+        // A `resumed: true` suspend chunk is a live ack that an EARLIER suspension
+        // resolved (see `ToolCallSuspendedPayload.resumed`), not a new suspension —
+        // it must not halt consumption of an already-resumed, still-running stream.
+        const isNewSuspension =
+          chunk.type === 'tool-call-suspended' && !(chunk.payload as { resumed?: boolean }).resumed;
         if (
           result ||
           chunk.type === 'finish' ||
           chunk.type === 'error' ||
           chunk.type === 'abort' ||
-          chunk.type === 'tool-call-suspended' ||
+          isNewSuspension ||
           this.#session.run.isAbortRequested()
         ) {
           result ??= this.finishStreamState(state);
@@ -803,6 +808,13 @@ export class SessionRunEngine {
       }
 
       case 'tool-call-suspended': {
+        // A `resumed: true` suspend chunk is a live ack that an EARLIER suspension resolved
+        // (see `ToolCallSuspendedPayload.resumed`), not a new suspension — it must not
+        // re-register the (already-resolved) suspension or emit a duplicate `tool_suspended`.
+        if (getPayload(chunk).resumed) {
+          break;
+        }
+
         const suspToolCallId = getString(getPayload(chunk).toolCallId) ?? '';
         const suspToolName = getString(getPayload(chunk).toolName) ?? '';
         const suspArgs = getDisplayTransform(chunk.metadata, 'input-available', getPayload(chunk).args);
@@ -1364,17 +1376,20 @@ export class SessionRunEngine {
 
         try {
           const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext, agent);
+          // A `resumed: true` suspend chunk is a live ack that an EARLIER suspension resolved
+          // (see `ToolCallSuspendedPayload.resumed`), not a new suspension — it must not end
+          // this run as suspended, nor halt consumption of an already-resumed stream.
+          const isNewSuspension =
+            chunk.type === 'tool-call-suspended' && !(chunk.payload as { resumed?: boolean }).resumed;
           if (
             streamResult ||
             chunk.type === 'finish' ||
             chunk.type === 'error' ||
             chunk.type === 'abort' ||
-            chunk.type === 'tool-call-suspended'
+            isNewSuspension
           ) {
             const suspended =
-              chunk.type === 'tool-call-suspended' ||
-              (streamResult ?? this.finishStreamState(currentRun)).suspended ||
-              undefined;
+              isNewSuspension || (streamResult ?? this.finishStreamState(currentRun)).suspended || undefined;
             const aborted = chunk.type === 'abort';
             // A non-success terminal finish reason (e.g. a `claude-fable-5`
             // content-filter refusal) becomes an explicit error so the

@@ -357,7 +357,11 @@ describeForAllEngines(
         resumeFirstChunks.push(chunk);
       }
 
-      const secondSuspended = resumeFirstChunks.filter(c => c.type === 'tool-call-suspended');
+      // Excludes the live `resumed: true` ack of the FIRST tool's suspension (see
+      // `ToolCallSuspendedPayload.resumed`) — that's not the second tool's new suspension.
+      const secondSuspended = resumeFirstChunks.filter(
+        c => c.type === 'tool-call-suspended' && !(c as any).payload.resumed,
+      );
       expect(secondSuspended.length).toBe(1);
       const secondToolName = (secondSuspended[0] as any).payload.toolName;
 

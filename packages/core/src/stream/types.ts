@@ -820,6 +820,17 @@ interface ToolCallSuspendedPayload {
   suspendPayload: any;
   args: Record<string, any>;
   resumeSchema: string;
+  /**
+   * Set on a live re-emission of this call's suspension chunk once the call has actually
+   * resumed. The client's `addToolOutput()` mutates the native `tool-<name>` UI part sharing
+   * this `toolCallId` — but that same part later receives the tool's own real, unrelated
+   * completion output too (e.g. a delegation wrapper's `{ text, subAgentToolResults, ... }`
+   * once its sub-agent finishes), overwriting whatever the client wrote. Since data parts with
+   * the same `id` (here, `toolCallId`) collapse to the latest one, a UI reading this field
+   * instead of the native part's `output` gets an authoritative, collision-free "already
+   * resolved" signal that survives that later overwrite.
+   */
+  resumed?: boolean;
 }
 
 export type DataChunkType = {

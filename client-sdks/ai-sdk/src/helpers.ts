@@ -299,6 +299,10 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
             ? displaySuspendTransform.transformed
             : chunk.payload.suspendPayload,
           resumeSchema: chunk.payload.resumeSchema,
+          // Set on the live re-emission Mastra sends once this call actually resumes — see
+          // `ToolCallSuspendedPayload.resumed` for why a UI should key its "already answered"
+          // check off this field rather than the tool's native output part.
+          ...(chunk.payload.resumed ? { resumed: true } : {}),
         },
       } satisfies DataChunkType;
     case 'tool-call-input-streaming-start':

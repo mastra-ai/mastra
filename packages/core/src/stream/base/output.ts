@@ -559,9 +559,19 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#baseStream = processedStream.pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
         transform: async (chunk, controller) => {
+          // A `tool-call-suspended` chunk with `resumed: true` is a live ack that this exact
+          // toolCallId's EARLIER suspension has resolved (see `ToolCallSuspendedPayload.resumed`)
+          // — not a new suspension. Treating it as one below would incorrectly mark an
+          // already-resumed, still-running stream as suspended again and end it early.
+          const isResumedSuspendAck =
+            chunk.type === 'tool-call-suspended' && Boolean((chunk.payload as { resumed?: boolean }).resumed);
+
           switch (chunk.type) {
             case 'tool-call-suspended':
             case 'tool-call-approval':
+              if (isResumedSuspendAck) {
+                break;
+              }
               self.#status = 'suspended';
               self.#wasSuspended = true;
               self.#delayedPromises.suspendPayload.resolve(chunk.payload);

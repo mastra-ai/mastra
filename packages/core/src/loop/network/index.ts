@@ -991,7 +991,10 @@ export async function createNetworkLoop({
             },
           };
         }
-        if (chunk.type === 'tool-call-suspended') {
+        // A `resumed: true` suspend chunk is a live ack that an EARLIER suspension resolved
+        // (see `ToolCallSuspendedPayload.resumed`), not a new suspension — recording it here
+        // would misclassify an already-resumed, successfully-finished agent call as suspended.
+        if (chunk.type === 'tool-call-suspended' && !(chunk.payload as { resumed?: boolean }).resumed) {
           suspendedTools = {
             ...(suspendedTools ?? {}),
             [inputData.primitiveId]: {

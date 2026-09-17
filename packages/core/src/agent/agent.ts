@@ -5706,7 +5706,11 @@ export class Agent<
                     suspendedPayload = {
                       requireToolApproval: (chunk as any).data ?? {},
                     };
-                  } else if (chunk.type === 'data-tool-call-suspended') {
+                  } else if (chunk.type === 'data-tool-call-suspended' && !(chunk as any).data?.resumed) {
+                    // `resumed: true` is a live ack that an EARLIER suspension on this exact
+                    // toolCallId resolved (see `ToolCallSuspendedPayload.resumed`) — not a new
+                    // suspension. Without this guard, forwarding it here would make this
+                    // delegation call re-suspend even though its sub-agent already finished.
                     suspendedPayload = chunk.data.suspendPayload;
                     resumeSchema = chunk.data.resumeSchema;
                   } else if (chunk.type === 'tool-call-approval') {
@@ -5714,7 +5718,8 @@ export class Agent<
                     suspendedPayload = {
                       requireToolApproval: chunk.payload ?? {},
                     };
-                  } else if (chunk.type === 'tool-call-suspended') {
+                  } else if (chunk.type === 'tool-call-suspended' && !(chunk.payload as any)?.resumed) {
+                    // Same guard as above, for the un-wrapped chunk form.
                     suspendedPayload = chunk.payload.suspendPayload;
                     resumeSchema = chunk.payload.resumeSchema;
                   }
