@@ -638,14 +638,11 @@ export class AgentThreadStreamRuntime {
     );
   }
 
-  #isActivelyRunning(state: AgentThreadRuntimeState, record: AgentThreadRunRecord<any>) {
-    return (
-      (record.currentSegmentOutput ?? record.output).status === 'running' &&
-      record.lifecycle !== 'suspending' &&
-      record.lifecycle !== 'suspended' &&
-      !record.suspensions?.size &&
-      !this.#isSuspendedRun(state, record.runId)
-    );
+  #isActivelyRunning(record: AgentThreadRunRecord<any>) {
+    // Activity is derived from the current execution segment and the record lifecycle only.
+    // Pending sibling suspensions legitimately coexist with an actively running resumed
+    // segment (partial resume), so suspension bookkeeping must not make the run look idle.
+    return (record.currentSegmentOutput ?? record.output).status === 'running' && record.lifecycle === 'running';
   }
 
   #serializeSignal(signal: CreatedAgentSignal): SerializableAgentSignal {
@@ -2712,7 +2709,7 @@ export class AgentThreadStreamRuntime {
         if (!this.#isThreadBlockingRun(state, activeRecord)) {
           return;
         }
-        if (activeRecord.agent.id === agent.id && !this.#isActivelyRunning(state, activeRecord)) {
+        if (activeRecord.agent.id === agent.id && !this.#isActivelyRunning(activeRecord)) {
           // Same-agent record that is suspended/suspending: waiting could block indefinitely
           // on human input (resume/approval), so preserve the historical exemption.
           return;
