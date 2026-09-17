@@ -148,6 +148,7 @@ import { shellPassthroughDuringRunScenario } from './shell-passthrough-during-ru
 import { shellPassthroughEnvOverrideScenario } from './shell-passthrough-env-override.js';
 import { shellPassthroughLongOutputScenario } from './shell-passthrough-long-output.js';
 import { shellPassthroughNonpersistentScenario } from './shell-passthrough-nonpersistent.js';
+import { skillTabAutocompleteScenario } from './skill-tab-autocomplete.js';
 import { skillsCommandActivationScenario } from './skills-command-activation.js';
 import { skillsSymlinkDedupeScenario } from './skills-symlink-dedupe.js';
 import { startupScenario } from './startup.js';
@@ -349,6 +350,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'shell-passthrough-env-override': shellPassthroughEnvOverrideScenario,
   'shell-passthrough-long-output': shellPassthroughLongOutputScenario,
   'shell-passthrough-nonpersistent': shellPassthroughNonpersistentScenario,
+  'skill-tab-autocomplete': skillTabAutocompleteScenario,
   'skills-command-activation': skillsCommandActivationScenario,
   'skills-symlink-dedupe': skillsSymlinkDedupeScenario,
   'storage-fallback-history-reload': storageFallbackHistoryReloadScenario,
