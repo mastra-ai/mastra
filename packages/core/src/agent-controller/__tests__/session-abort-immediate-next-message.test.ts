@@ -136,7 +136,19 @@ function waitForFirstActive(events: AgentControllerEvent[], firstCallStarted: Pr
     // before the first request and let the follow-up run claim this run's held
     // stream, which stalls the follow-up's lifecycle instead of exercising the
     // post-abort path this suite is about.
-    return firstCallStarted;
+    //
+    // Bound the wait: if `sendMessage` fails before `doStream`, the promise never
+    // resolves, and an unbounded await would stall until the suite timeout with
+    // no indication of why. Fail with the reason instead.
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([
+      firstCallStarted,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error('waitForFirstActive: the first model call never started')), 5_000);
+      }),
+    ]).finally(() => {
+      if (timeout) clearTimeout(timeout);
+    });
   });
 }
 
