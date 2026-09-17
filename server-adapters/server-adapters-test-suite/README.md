@@ -10,7 +10,7 @@ Install the suite with its peer dependencies in your adapter's development envir
 npm install @mastra/server-adapters-test-suite
 ```
 
-The package requires Mastra Core and Server `>=1.64.0-0 <2.0.0-0`, Vitest `>=4.0.0 <5.0.0`, and Zod `^3.25.0 || ^4.0.0`. Install those peer dependencies in your adapter's development environment.
+The package requires Mastra Core and Server `>=1.64.0-0 <2.0.0-0`, Mastra MCP `>=1.18.0-0 <2.0.0-0`, Vitest `>=4.0.0 <5.0.0`, and Zod `^3.25.0 || ^4.0.0`. Install those peer dependencies in your adapter's development environment.
 
 ## Usage
 
@@ -35,7 +35,7 @@ Additional root exports cover MCP routes and transports, multipart requests, HTT
 
 ## Changelog
 
-See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/server-adapters/_test-utils/CHANGELOG.md) for version history and release notes.
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/server-adapters/server-adapters-test-suite/CHANGELOG.md) for version history and release notes.
 
 ## Support
 
