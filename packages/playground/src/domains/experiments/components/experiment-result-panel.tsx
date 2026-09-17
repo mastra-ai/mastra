@@ -75,16 +75,16 @@ export function ExperimentResultPanel({
   onClose,
   ...bodyProps
 }: ExperimentResultPanelProps) {
-  const id = result?.id ?? itemId;
+  const title = result ? `Result ${result.id}` : `Experiment item ${itemId ?? ''}`;
   return (
-    <DataPanel open={!!id} onClose={onClose} title={`Result ${id ?? ''}`} depth={1} className={className}>
+    <DataPanel open={!!(result ?? itemId)} onClose={onClose} title={title} depth={1} className={className}>
       {result ? (
         <ExperimentResultPanelBody result={result} onClose={onClose} {...bodyProps} />
       ) : itemId ? (
         <>
           <DataPanel.Header>
             <DataPanel.Heading>
-              Result <b>#{itemId}</b>
+              Experiment item <b>#{itemId}</b>
             </DataPanel.Heading>
             <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" className="ml-auto shrink-0" />
           </DataPanel.Header>

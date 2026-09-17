@@ -340,7 +340,7 @@ describe('experiment item sub-route', () => {
     it('shows a not-found state for an unknown item id', async () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/does-not-exist`);
 
-      const dialog = await screen.findByRole('dialog', { name: 'Result does-not-exist' });
+      const dialog = await screen.findByRole('dialog', { name: 'Experiment item does-not-exist' });
       await waitFor(() => {
         expect(dialog.textContent).toContain('No loaded result for item "does-not-exist"');
       });
