@@ -435,7 +435,11 @@ describe('eager tool dispatch — excluded tool classes', () => {
 
     await drain(await agent.stream('go', { maxSteps: 1, eagerToolExecution: true }));
 
-    // Our copy must never start, early or late.
+    // Our copy must never start, early or late. This pins the behaviour, not the
+    // predicate's `providerExecuted` line: deleting that line alone, or all three
+    // provider/client guards together, leaves this test green, because a
+    // provider-executed call is not run by the normal path either. The guard is
+    // redundant today and kept for the same reason as the other redundant ones.
     expect(events.indexOf('execute-a')).toBe(-1);
     expect(events.indexOf('input-available-a')).toBe(-1);
   });
