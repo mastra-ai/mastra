@@ -1,5 +1,7 @@
+import { MessageList } from '@mastra/core/agent';
 import { MASTRA_THREAD_BRANCH_METADATA_KEY } from '@mastra/core/memory';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -84,6 +86,30 @@ describe('branch logical message queries', () => {
     });
 
     expect(result.messages.map(item => item.id)).toEqual(['a', 'b', 'child-tail']);
+  });
+
+  it('loads reachable history through the model-facing MessageHistory processor', async () => {
+    await seedRoot([message('a', 'root', 0), message('b', 'root', 1), message('parent-tail', 'root', 2)]);
+    const branch = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'b' });
+    await memory.saveMessages({ messages: [message('child-tail', branch.thread.id, 3)] });
+
+    const processor = (await memory.getInputProcessors()).find(candidate => candidate.id === 'message-history');
+    expect(processor).toBeDefined();
+
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: branch.thread, resourceId });
+    const current = message('current', branch.thread.id, 4);
+    const messageList = new MessageList().add([current], 'input');
+    const result = await processor!.processInput({
+      messages: [current],
+      messageList,
+      abort: vi.fn() as never,
+      requestContext,
+    });
+    const loaded = Array.isArray(result) ? result : result.get.all.db();
+
+    expect(loaded.map(item => item.id)).toEqual(['a', 'b', 'child-tail', 'current']);
+    expect(loaded.map(item => item.id)).not.toContain('parent-tail');
   });
 
   it('applies filters, deterministic pagination, exact totals, and both order directions', async () => {

@@ -8,7 +8,7 @@ import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import { SpanType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
 import type { RequestContext } from '../../request-context';
-import type { MemoryStorage } from '../../storage';
+import type { MemoryStorage, StorageListMessagesInput, StorageListMessagesOutput } from '../../storage';
 
 /**
  * Options for the MessageHistory processor
@@ -18,6 +18,8 @@ export interface MessageHistoryOptions {
   lastMessages?: number | false;
   tokenLimit?: { maxTokens: number; atMaxRemoveTokens: number };
   tokenCounter?: { countMessage(message: MastraDBMessage): number | Promise<number> };
+  /** @internal Memory-level reader used to preserve logical history semantics. */
+  listMessages?: (input: StorageListMessagesInput) => Promise<StorageListMessagesOutput>;
   /** @internal Framework persistence hook used to preserve Memory-level mutation guarantees. */
   persistMessages?: (
     input: { messages: MastraDBMessage[]; thread?: StorageThreadType },
@@ -69,6 +71,7 @@ export class MessageHistory implements Processor {
   private lastMessages?: number | false;
   private tokenLimit?: MessageHistoryOptions['tokenLimit'];
   private tokenCounter?: MessageHistoryOptions['tokenCounter'];
+  private listMessagesHook?: MessageHistoryOptions['listMessages'];
   private persistMessagesHook?: MessageHistoryOptions['persistMessages'];
   private persistMessagesCreatesThread: boolean;
 
@@ -77,6 +80,7 @@ export class MessageHistory implements Processor {
     this.lastMessages = options.lastMessages;
     this.tokenLimit = options.tokenLimit;
     this.tokenCounter = options.tokenCounter;
+    this.listMessagesHook = options.listMessages;
     this.persistMessagesHook = options.persistMessages;
     this.persistMessagesCreatesThread = options.persistMessagesCreatesThread ?? false;
   }
@@ -164,11 +168,12 @@ export class MessageHistory implements Processor {
             atMaxRemoveTokens: this.tokenLimit.atMaxRemoveTokens,
             tokenCounter: this.tokenCounter,
             includeOverflow: true,
+            listMessages: this.listMessagesHook,
           });
           return [...result.overflow, ...result.messages].reverse();
         }
 
-        const result = await this.storage.listMessages({
+        const result = await (this.listMessagesHook ?? (input => this.storage.listMessages(input)))({
           threadId,
           resourceId,
           page: 0,
