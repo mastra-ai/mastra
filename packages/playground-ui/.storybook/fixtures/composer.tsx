@@ -1,3 +1,4 @@
+import { Hammer, Map, Zap } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
@@ -6,7 +7,7 @@ import {
   ComposerBox,
   ComposerInput,
   type ComposerInputProps,
-  type ComposerTone,
+  type ComposerModeOption,
   ComposerModeSelect,
   ComposerSendButton,
   ComposerStopButton,
@@ -14,10 +15,10 @@ import {
 } from '@/ds/components/Composer';
 
 const modes = [
-  { id: 'build', name: 'Build', tone: 'green' },
-  { id: 'plan', name: 'Plan', tone: 'purple' },
-  { id: 'fast', name: 'Fast', tone: 'orange' },
-] satisfies { id: string; name: string; tone: ComposerTone }[];
+  { icon: <Hammer size={12} aria-hidden />, id: 'build', name: 'Build', tone: 'green' },
+  { icon: <Map size={12} aria-hidden />, id: 'plan', name: 'Plan', tone: 'purple' },
+  { icon: <Zap size={12} aria-hidden />, id: 'fast', name: 'Fast', tone: 'orange' },
+] satisfies ComposerModeOption[];
 
 export interface ComposerPreviewProps {
   mode?: string;

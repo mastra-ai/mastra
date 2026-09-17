@@ -2,3 +2,10 @@
 @import '../new-theme.css';
 
 @source './fixtures';
+
+@source '../../playground/.storybook';
+@source '../../playground/src/domains/voice/components';
+@source '../../playground/src/domains/agents/components';
+@source '../../../mastracode/factory-ui/.storybook';
+@source '../../../mastracode/factory-ui/src/ui/domains/chat/components/StatusLine';
+@source './stories';

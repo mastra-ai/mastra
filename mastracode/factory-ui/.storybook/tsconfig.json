@@ -1,0 +1,4 @@
+{
+  "extends": "../../../packages/playground-ui/tsconfig.storybook.json",
+  "include": ["**/*.ts", "**/*.tsx"]
+}

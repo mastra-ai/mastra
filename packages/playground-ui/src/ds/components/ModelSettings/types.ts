@@ -11,5 +11,4 @@ export interface ModelSettingsValues {
   topP?: number;
   seed?: number;
   providerOptions?: LLMStepResult['providerMetadata'];
-  requireToolApproval?: boolean;
 }

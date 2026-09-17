@@ -145,6 +145,7 @@
     "test": "vitest",
     "test:mutate": "stryker run --mutate",
     "typecheck": "tsc",
+    "typecheck:storybook": "tsc -p tsconfig.storybook.json",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix .",
     "build:publish": "pnpm build && yalc push",

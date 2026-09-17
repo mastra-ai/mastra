@@ -26,7 +26,6 @@ export {
   ComposerSendButton,
   ComposerStopButton,
   ComposerAttachmentButton,
-  ComposerDictationButton,
   ComposerModelSettingsButton,
 } from './actions/composer-buttons';
 export { ComposerStatusLine } from './actions/composer-status';

@@ -1,4 +1,4 @@
-import { ArrowUp, ImagePlus, Mic, Plus, Sliders, Square } from 'lucide-react';
+import { ArrowUp, ImagePlus, Plus, Sliders, Square } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import { Button } from '@/ds/components/Button';
 
@@ -69,23 +69,6 @@ export function ComposerAttachmentButton({ appearance = 'round', ...props }: Act
       ) : (
         <Plus className="text-neutral3 hover:text-neutral6 size-5" />
       )}
-    </Button>
-  );
-}
-
-export function ComposerDictationButton({
-  listening,
-  ...props
-}: Omit<ActionProps, 'appearance'> & { listening: boolean }) {
-  return (
-    <Button
-      variant="default"
-      size="icon-md"
-      type="button"
-      tooltip={listening ? 'Stop dictation' : 'Start dictation'}
-      {...props}
-    >
-      {listening ? <ComposerStopIcon /> : <Mic className="text-neutral3 hover:text-neutral6 size-5" />}
     </Button>
   );
 }

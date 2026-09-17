@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, within } from 'storybook/test';
-import { VoiceCallButton } from './voice-call-button';
-import { VoiceCallPanel } from './voice-call-panel';
+import { VoiceCallButtonView as VoiceCallButton } from '../src/domains/voice/components/voice-call-button';
+import { VoiceCallPanelView as VoiceCallPanel } from '../src/domains/voice/components/voice-call-panel';
 const meta = {
-  title: 'AI/Voice call',
+  title: 'Applications/Studio/Voice call',
   component: VoiceCallButton,
   args: { status: 'idle', available: true, onStart: fn(), onStop: fn() },
 } satisfies Meta<typeof VoiceCallButton>;

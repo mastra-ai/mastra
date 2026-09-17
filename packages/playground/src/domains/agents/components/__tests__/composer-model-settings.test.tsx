@@ -159,6 +159,37 @@ describe('ComposerModelSettings', () => {
     expect(cleared.modelSettings.chatWithGenerate).toBe(true);
   });
 
+  describe('when tool approval is enabled with a selected chat method', () => {
+    it('keeps both settings when editing model parameters and clears them on reset', async () => {
+      useDefaultHandlers();
+      renderSettings();
+      await openPopover();
+      await act(async () => {
+        fireEvent.click(screen.getByRole('radio', { name: 'Generate' }));
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Require Tool Approval' }));
+        fireEvent.click(screen.getByRole('button', { name: /advanced settings/i }));
+      });
+      await act(async () => {
+        fireEvent.change(await screen.findByRole('spinbutton', { name: 'Seed' }), { target: { value: '0' } });
+      });
+      const stored = JSON.parse(window.localStorage.getItem(`mastra-agent-store-${AGENT_ID}`) ?? '{}');
+      expect(stored.modelSettings).toMatchObject({ seed: 0, requireToolApproval: true, chatWithGenerate: true });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /close/i }));
+      });
+      await waitFor(() => expect(screen.queryByRole('heading', { name: /advanced model settings/i })).toBeNull());
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+      });
+      const reset = JSON.parse(window.localStorage.getItem(`mastra-agent-store-${AGENT_ID}`) ?? '{}');
+      expect(reset.modelSettings?.requireToolApproval).not.toBe(true);
+      expect(reset.modelSettings?.chatWithGenerate).not.toBe(true);
+      expect(screen.getByRole('checkbox', { name: 'Require Tool Approval' }).getAttribute('aria-checked')).toBe(
+        'false',
+      );
+    });
+  });
+
   it('keeps the popover open when the Advanced Settings dialog is dismissed via its built-in close button', async () => {
     useDefaultHandlers();
     renderSettings();

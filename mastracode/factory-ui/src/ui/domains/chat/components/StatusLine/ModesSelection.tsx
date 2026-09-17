@@ -1,3 +1,4 @@
+import { ModeIcon } from './ModeIcon';
 import { ComposerModeSelect } from '@mastra/playground-ui/components/Composer';
 import { useState } from 'react';
 
@@ -18,7 +19,12 @@ export function ModesSelection() {
 
   return (
     <ComposerModeSelect
-      modes={modes.map(mode => ({ id: mode.id, name: mode.name ?? mode.id, tone: getComposerTone(mode.id) }))}
+      modes={modes.map(mode => ({
+        id: mode.id,
+        name: mode.name ?? mode.id,
+        tone: getComposerTone(mode.id),
+        icon: <ModeIcon modeId={mode.id} />,
+      }))}
       value={selectedMode.id}
       busy={Boolean(pendingModeId)}
       onValueChange={modeId => {

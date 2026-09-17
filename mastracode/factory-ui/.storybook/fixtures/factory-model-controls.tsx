@@ -1,20 +1,28 @@
+import {
+  ModelPickerPackActions,
+  ModelPickerResetPack,
+  ModelPickerManagePacks,
+} from '../../src/ui/domains/chat/components/StatusLine/ModelPackActions';
+import { ModeIcon } from '../../src/ui/domains/chat/components/StatusLine/ModeIcon';
 import { useState } from 'react';
 import { fn } from 'storybook/test';
-import { models, modes, packs, packModel } from './models';
-import type { ModelControlState } from './models';
-import { ComposerModeSelect, ComposerStatusLine } from '@/ds/components/Composer';
+import {
+  models,
+  modes,
+  packs,
+  packModel,
+} from '../../../../packages/playground-ui/.storybook/fixtures/model-picker/models';
+import type { ModelControlState } from '../../../../packages/playground-ui/.storybook/fixtures/model-picker/models';
+import { ComposerModeSelect, ComposerStatusLine } from '@mastra/playground-ui/components/Composer';
 import {
   ModelPicker,
   ModelPickerTrigger,
   ModelPickerContent,
   ModelPickerModels,
   ModelPickerPacks,
-  ModelPickerPackActions,
-  ModelPickerResetPack,
-  ModelPickerManagePacks,
   ModelPickerLoading,
   ModelPickerReadOnly,
-} from '@/ds/components/ModelPicker';
+} from '@mastra/playground-ui/components/ModelPicker';
 
 const manageModelPacks = fn().mockName('Navigate to model pack settings');
 
@@ -76,7 +84,13 @@ export function FactoryModelControls({
 }) {
   return (
     <ComposerStatusLine>
-      {personal && <ComposerModeSelect modes={modes} value={mode} onValueChange={onModeChange} />}
+      {personal && (
+        <ComposerModeSelect
+          modes={modes.map(mode => ({ ...mode, icon: <ModeIcon modeId={mode.id} /> }))}
+          value={mode}
+          onValueChange={onModeChange}
+        />
+      )}
       <FactoryModelMenu personal={personal} mode={mode} state={state} />
     </ComposerStatusLine>
   );

@@ -54,6 +54,7 @@ export type ReadonlyJSONObject = {
 export type ReadonlyJSONArray = readonly ReadonlyJSONValue[];
 
 export interface ModelSettings extends ModelSettingsValues {
+  requireToolApproval?: boolean;
   chatWithGenerateLegacy?: boolean;
   chatWithGenerate?: boolean;
   chatWithLegacyStream?: boolean;

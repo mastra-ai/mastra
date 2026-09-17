@@ -1,72 +1,31 @@
 import { Info, Settings2, RotateCcw } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { AdvancedModelSettings } from './advanced-model-settings';
 import type { ModelSettingsValues } from './types';
 import { Button } from '@/ds/components/Button';
-import { Checkbox } from '@/ds/components/Checkbox';
 import { ComposerModelSettingsButton } from '@/ds/components/Composer';
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
 import { Entry } from '@/ds/components/Entry';
-import { Label } from '@/ds/components/Label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
-import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Slider } from '@/ds/components/Slider';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
 
-export interface ModelSettingsMethod {
-  value: string;
-  label: string;
-  unavailable?: string;
-}
 export interface ModelSettingsProps {
   value: ModelSettingsValues;
   onChange: (value: ModelSettingsValues) => void;
-  method?: string;
-  methods: ModelSettingsMethod[];
-  onMethodChange: (method: string) => void;
+  children?: ReactNode;
   onReset: () => void;
   canEdit?: boolean;
   loading?: boolean;
   samplingNotice?: string;
 }
 
-function MethodRadio({ option, disabled, id }: { option: ModelSettingsMethod; disabled: boolean; id: string }) {
-  const radio = (
-    <div className="flex items-center gap-2">
-      <RadioGroupItem
-        value={option.value}
-        id={id}
-        className="text-neutral6"
-        disabled={disabled || Boolean(option.unavailable)}
-      />
-      <Label
-        className={cn('text-ui-md text-neutral6', option.unavailable && 'cursor-not-allowed text-neutral3!')}
-        htmlFor={id}
-      >
-        {option.label}
-      </Label>
-    </div>
-  );
-  if (!option.unavailable) return radio;
-  return (
-    <Tooltip>
-      <TooltipTrigger render={<span />}>{radio}</TooltipTrigger>
-      <TooltipContent>
-        <p>{option.unavailable}</p>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
 export function ModelSettings({
   value,
   onChange,
-  method,
-  methods,
-  onMethodChange,
+  children,
   onReset,
   canEdit = true,
   loading,
@@ -74,7 +33,6 @@ export function ModelSettings({
 }: ModelSettingsProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
-  const methodId = useId();
   return (
     <>
       <Popover
@@ -93,35 +51,7 @@ export function ModelSettings({
             <Skeleton className="h-40 w-full" data-testid="composer-model-settings-skeleton" />
           ) : (
             <section className="@container space-y-5">
-              <Entry label="Chat Method">
-                <RadioGroup
-                  value={method}
-                  disabled={!canEdit}
-                  onValueChange={selected => {
-                    if (canEdit) onMethodChange(selected);
-                  }}
-                  className="flex flex-col gap-3"
-                >
-                  {methods.map(option => (
-                    <MethodRadio
-                      key={option.value}
-                      option={option}
-                      disabled={!canEdit}
-                      id={`${methodId}-${option.value}`}
-                    />
-                  ))}
-                </RadioGroup>
-              </Entry>
-              <Entry label="Require Tool Approval">
-                <Checkbox
-                  aria-label="Require Tool Approval"
-                  checked={value.requireToolApproval}
-                  disabled={!canEdit}
-                  onCheckedChange={checked => {
-                    if (canEdit) onChange({ ...value, requireToolApproval: checked });
-                  }}
-                />
-              </Entry>
+              {children}
               {samplingNotice && (
                 <div
                   className="bg-surface3 text-ui-sm text-neutral3 flex items-center gap-2 rounded px-3 py-2"

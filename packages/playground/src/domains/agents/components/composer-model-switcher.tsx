@@ -1,10 +1,7 @@
-import {
-  ModelPickerDivider,
-  ModelPickerLocked,
-  ModelPickerWarnings,
-} from '@mastra/playground-ui/components/ModelPicker';
+import { ModelPickerDivider, ModelPickerLocked } from '@mastra/playground-ui/components/ModelPicker';
 import { useState } from 'react';
 import { usePlaygroundModelOptional } from '../context/playground-model-context';
+import { ComposerModelWarnings } from './composer-model-warnings';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
@@ -96,7 +93,7 @@ export const ComposerModelWarning = () => {
     : providerEnvironmentVariables;
 
   return (
-    <ModelPickerWarnings
+    <ComposerModelWarnings
       warning={modelWarning}
       staleModel={stale ? `${provider}/${selectedModel}` : undefined}
       environmentVariable={showProviderWarning ? environmentVariable : undefined}

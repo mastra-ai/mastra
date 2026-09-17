@@ -1,4 +1,4 @@
-import { Circle, Hammer, Map, Zap } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { ComposerToneLabel } from '../composer';
 import type { ComposerTone } from '../composer';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/ds/components/Select';
@@ -7,6 +7,7 @@ export interface ComposerModeOption {
   id: string;
   name: string;
   tone: ComposerTone;
+  icon?: ReactNode;
 }
 export interface ComposerModeSelectProps {
   modes: ComposerModeOption[];
@@ -17,12 +18,9 @@ export interface ComposerModeSelectProps {
 }
 
 function ModeLabel({ mode }: { mode: ComposerModeOption }) {
-  const icons = { build: Hammer, plan: Map, fast: Zap };
-  const modeId = mode.id.toLowerCase();
-  const Icon = modeId === 'build' || modeId === 'plan' || modeId === 'fast' ? icons[modeId] : Circle;
   return (
     <span className="inline-flex items-center gap-1.5">
-      <Icon size={12} aria-hidden />
+      {mode.icon}
       <span>{mode.name}</span>
     </span>
   );

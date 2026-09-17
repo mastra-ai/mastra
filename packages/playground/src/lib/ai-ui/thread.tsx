@@ -8,7 +8,6 @@ import {
   ComposerActions,
   ComposerSendButton as SendButton,
   ComposerStopButton,
-  ComposerDictationButton,
   ComposerAttachments,
   ComposerBox,
   ComposerInput,
@@ -46,6 +45,7 @@ import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
 import { useVoiceCall, VoiceCallButton, VoiceCallPanel } from '@/domains/voice';
 import type { VoiceCallControls } from '@/domains/voice';
+import { DictationButton } from '@/domains/voice/components/dictation-button';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 const SKELETON_DELAY_MS = 300;
@@ -369,7 +369,7 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
     startTransition(() => onTranscript(transcript));
   }, [onTranscript, transcript]);
 
-  return <ComposerDictationButton listening={isListening} onClick={() => (isListening ? stop() : start())} />;
+  return <DictationButton listening={isListening} onClick={() => (isListening ? stop() : start())} />;
 };
 
 interface ComposerActionRowProps {

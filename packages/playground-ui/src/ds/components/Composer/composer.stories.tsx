@@ -1,15 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ArrowUp, Paperclip } from 'lucide-react';
-import { useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { ComposerModeStates, ComposerPreview } from '../../../../.storybook/fixtures/composer';
 
-import { StudioModelExample } from '../../../../.storybook/fixtures/model-picker/studio-model-controls';
-import { VoiceCallButton, VoiceCallPanel } from '../ai/voice-call';
-import type { VoiceCallStatus } from '../ai/voice-call';
 import { Badge } from '../Badge/Badge';
 import { Button } from '../Button';
-import { ComposerDictationButton } from './actions/composer-buttons';
 import { Composer, ComposerActions, ComposerAttachments, ComposerBox, ComposerInput, ComposerRing } from './composer';
 
 const meta: Meta<typeof Composer> = {
@@ -136,34 +131,6 @@ export const WithModeControls: Story = {
     await expect(input).toHaveFocus();
     await expect(canvas.getByRole('combobox', { name: 'Session mode' })).toHaveTextContent('Plan');
   },
-};
-
-function ComposerWithVoice() {
-  const [status, setStatus] = useState<VoiceCallStatus>('idle');
-  const [listening, setListening] = useState(false);
-  return (
-    <>
-      <VoiceCallPanel status={status} agentState="listening" captions={[]} />
-      <ComposerPreview
-        controls={<StudioModelExample state="ready" />}
-        actions={
-          <>
-            <ComposerDictationButton listening={listening} onClick={() => setListening(current => !current)} />
-            <VoiceCallButton
-              status={status}
-              available
-              onStart={() => setStatus('active')}
-              onStop={() => setStatus('idle')}
-            />
-          </>
-        }
-      />
-    </>
-  );
-}
-
-export const WithModelAndVoiceControls: Story = {
-  render: () => <ComposerWithVoice />,
 };
 
 export const TallDraft: Story = {

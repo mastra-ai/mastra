@@ -4,7 +4,13 @@ import type { StorybookConfig } from '@storybook/react-vite';
 import { mergeConfig } from 'vite';
 
 const config: StorybookConfig = {
-  stories: ['../src/**/*.mdx', '../src/**/*.stories.@(js|jsx|mjs|ts|tsx)'],
+  stories: [
+    '../src/**/*.mdx',
+    '../src/**/*.stories.@(js|jsx|mjs|ts|tsx)',
+    './stories/**/*.stories.tsx',
+    '../../playground/.storybook/**/*.stories.tsx',
+    '../../../mastracode/factory-ui/.storybook/**/*.stories.tsx',
+  ],
   addons: [
     getAbsolutePath('@storybook/addon-docs'),
     getAbsolutePath('@storybook/addon-mcp'),
@@ -20,7 +26,21 @@ const config: StorybookConfig = {
   viteFinal: config =>
     mergeConfig(config, {
       resolve: {
+        dedupe: ['react', 'react-dom'],
         alias: [
+          {
+            find: /^@mastra\/playground-ui\/components\/(.+)$/,
+            replacement: fileURLToPath(new URL('../src/ds/components/$1', import.meta.url)),
+          },
+          {
+            find: /^@mastra\/playground-ui\/icons\/(.+)$/,
+            replacement: fileURLToPath(new URL('../src/ds/icons/$1', import.meta.url)),
+          },
+          {
+            find: /^@mastra\/playground-ui\/utils\/(.+)$/,
+            replacement: fileURLToPath(new URL('../src/utils/$1', import.meta.url)),
+          },
+          { find: 'storybook/test', replacement: fileURLToPath(import.meta.resolve('storybook/test')) },
           {
             find: /^@mastra\/react$/,
             replacement: fileURLToPath(new URL('./mocks/mastra-react.ts', import.meta.url)),
@@ -32,6 +52,6 @@ const config: StorybookConfig = {
 
 export default config;
 
-function getAbsolutePath(value: string): any {
+function getAbsolutePath(value: string) {
   return dirname(fileURLToPath(import.meta.resolve(`${value}/package.json`)));
 }

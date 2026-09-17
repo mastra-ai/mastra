@@ -1,18 +1,19 @@
-import { useState } from 'react';
-import { models, initialStudioModelSelection } from './models';
-import type { ModelControlState } from './models';
 import {
   ModelPickerCombobox,
   ModelPickerDivider,
   ModelPickerGroup,
   ModelPickerLocked,
-  ModelPickerWarnings,
   ModelProviderIcon,
-} from '@/ds/components/ModelPicker';
-import { ModelSettings } from '@/ds/components/ModelSettings';
-import type { ModelSettingsValues } from '@/ds/components/ModelSettings';
-import { AnthropicMessagesIcon } from '@/ds/icons/AnthropicMessagesIcon';
-import { OpenAIIcon } from '@/ds/icons/OpenAIIcon';
+} from '@mastra/playground-ui/components/ModelPicker';
+import { ModelSettings } from '@mastra/playground-ui/components/ModelSettings';
+import type { ModelSettingsValues } from '@mastra/playground-ui/components/ModelSettings';
+import { AnthropicMessagesIcon } from '@mastra/playground-ui/icons/AnthropicMessagesIcon';
+import { OpenAIIcon } from '@mastra/playground-ui/icons/OpenAIIcon';
+import { useState } from 'react';
+import type { ModelControlState } from '../../../playground-ui/.storybook/fixtures/model-picker/models';
+import { models, initialStudioModelSelection } from '../../../playground-ui/.storybook/fixtures/model-picker/models';
+import { ComposerModelWarnings } from '../../src/domains/agents/components/composer-model-warnings';
+import { ComposerRunSettings } from '../../src/domains/agents/components/composer-run-settings';
 
 const methods = [
   { value: 'generate', label: 'Generate' },
@@ -35,6 +36,7 @@ export function StudioModelControls({
   onSelectionChange: (selection: typeof initialStudioModelSelection) => void;
 }) {
   const [modelOpen, setModelOpen] = useState(false);
+  const [requireToolApproval, setRequireToolApproval] = useState(false);
   const [method, setMethod] = useState('streamSubscription');
   const [settings, setSettings] = useState<ModelSettingsValues>({});
   const providers = [
@@ -104,21 +106,27 @@ export function StudioModelControls({
       <ModelSettings
         value={settings}
         onChange={setSettings}
-        method={method}
-        methods={methods}
-        onMethodChange={setMethod}
         onReset={() => {
           setSettings({});
           setMethod('streamSubscription');
+          setRequireToolApproval(false);
         }}
-      />
+      >
+        <ComposerRunSettings
+          method={method}
+          methods={methods}
+          onMethodChange={setMethod}
+          requireToolApproval={requireToolApproval}
+          onToolApprovalChange={setRequireToolApproval}
+        />
+      </ModelSettings>
     </div>
   );
 }
 
 export function StudioModelWarnings({ state, provider }: { state: ModelControlState; provider: string }) {
   if (state !== 'unconfigured' || provider !== 'openai') return null;
-  return <ModelPickerWarnings environmentVariable="OPENAI_API_KEY" />;
+  return <ComposerModelWarnings environmentVariable="OPENAI_API_KEY" />;
 }
 
 export function StudioModelExample({ state }: { state: ModelControlState }) {

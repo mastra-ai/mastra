@@ -6,17 +6,13 @@ import type { ModelSettingsProps } from './model-settings';
 
 function SettingsExample(props: ModelSettingsProps) {
   const [value, setValue] = useState(props.value);
-  const [method, setMethod] = useState(props.method);
   return (
     <ModelSettings
       {...props}
       value={value}
       onChange={setValue}
-      method={method}
-      onMethodChange={setMethod}
       onReset={() => {
         setValue({});
-        setMethod('streamSubscription');
       }}
     />
   );
@@ -27,19 +23,7 @@ const meta = {
   render: props => <SettingsExample {...props} />,
   args: {
     value: {},
-    method: 'streamSubscription',
-    methods: [
-      { value: 'generate', label: 'Generate' },
-      { value: 'streamSubscription', label: 'Stream subscription (default)' },
-      { value: 'stream', label: 'Stream' },
-      {
-        value: 'network',
-        label: 'Network',
-        unavailable: 'Network is not available. Please make sure you have at least one sub-agent.',
-      },
-    ],
     onChange: fn(),
-    onMethodChange: fn(),
     onReset: fn(),
   },
 } satisfies Meta<typeof ModelSettings>;
@@ -54,22 +38,11 @@ export const SamplingRestriction: Story = {
     samplingNotice: 'Claude 4.5+ models only accept Temperature OR Top P. Clear Temperature to use Top P.',
   },
 };
-export const LegacyMethods: Story = {
-  args: {
-    method: 'streamLegacy',
-    methods: [
-      { value: 'generateLegacy', label: 'Generate (Legacy)' },
-      { value: 'streamLegacy', label: 'Stream (Legacy)' },
-    ],
-  },
-};
-
 export const AdvancedOptions: Story = {
   args: { value: { seed: 0, maxRetries: 0 } },
   play: async ({ canvasElement }) => {
     const screen = within(canvasElement.ownerDocument.body);
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Model settings' }));
-    await expect(screen.getByRole('checkbox', { name: 'Require Tool Approval' })).toBeEnabled();
     await expect(screen.getByRole('slider', { name: 'Temperature' })).toBeEnabled();
     await expect(screen.getByRole('slider', { name: 'Top P' })).toBeEnabled();
     await userEvent.click(screen.getByRole('button', { name: 'Advanced Settings' }));

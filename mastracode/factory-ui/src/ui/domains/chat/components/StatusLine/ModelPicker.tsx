@@ -1,12 +1,10 @@
+import { ModelPickerPackActions, ModelPickerResetPack, ModelPickerManagePacks } from './ModelPackActions';
 import {
   ModelPicker as ModelPickerView,
   ModelPickerTrigger,
   ModelPickerContent,
   ModelPickerModels,
   ModelPickerPacks,
-  ModelPickerPackActions,
-  ModelPickerResetPack,
-  ModelPickerManagePacks,
   ModelPickerLoading,
   ModelPickerUnavailable,
   ModelPickerReadOnly,

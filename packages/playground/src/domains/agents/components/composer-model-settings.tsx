@@ -1,8 +1,9 @@
 import { ModelSettings } from '@mastra/playground-ui/components/ModelSettings';
-import type { ModelSettingsMethod } from '@mastra/playground-ui/components/ModelSettings';
 import { useAgentSettings } from '../context/agent-context';
 import { useAgent } from '../hooks/use-agent';
 import { useSamplingRestriction } from '../hooks/use-sampling-restriction';
+import type { ModelSettingsMethod } from './composer-run-settings';
+import { ComposerRunSettings } from './composer-run-settings';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
 
@@ -90,24 +91,32 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
     <ModelSettings
       value={settings?.modelSettings ?? {}}
       onChange={value => setSettings({ ...settings, modelSettings: { ...settings?.modelSettings, ...value } })}
-      method={radioValue}
-      methods={methods}
-      onMethodChange={value =>
-        setSettings({
-          ...settings,
-          modelSettings: {
-            ...settings?.modelSettings,
-            chatWithGenerateLegacy: value === 'generateLegacy',
-            chatWithGenerate: value === 'generate',
-            chatWithLegacyStream: value === 'stream',
-            chatWithNetwork: value === 'network',
-          },
-        })
-      }
       onReset={resetAll}
       canEdit={canEditSettings}
       loading={isLoading || isMemoryLoading}
       samplingNotice={showSamplingBanner ? samplingNotice : undefined}
-    />
+    >
+      <ComposerRunSettings
+        method={radioValue}
+        methods={methods}
+        onMethodChange={value =>
+          setSettings({
+            ...settings,
+            modelSettings: {
+              ...settings?.modelSettings,
+              chatWithGenerateLegacy: value === 'generateLegacy',
+              chatWithGenerate: value === 'generate',
+              chatWithLegacyStream: value === 'stream',
+              chatWithNetwork: value === 'network',
+            },
+          })
+        }
+        canEdit={canEditSettings}
+        requireToolApproval={settings?.modelSettings?.requireToolApproval}
+        onToolApprovalChange={requireToolApproval =>
+          setSettings({ ...settings, modelSettings: { ...settings?.modelSettings, requireToolApproval } })
+        }
+      />
+    </ModelSettings>
   );
 };
