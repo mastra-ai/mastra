@@ -376,6 +376,167 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
     }
 
     if (capabilities.traceQuery) {
+      it('matches advanced predicate conformance when polling trace deltas', async () => {
+        const feature = 'observability-delta-polling';
+        const wasEnabled = coreFeatures.has(feature);
+        coreFeatures.add(feature);
+        try {
+          const cases = TRACE_QUERY_CONFORMANCE_CASES.filter(
+            testCase =>
+              !testCase.request.group &&
+              !(testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false),
+          );
+          const requests = await Promise.all(
+            cases.map(async testCase => {
+              const request = {
+                timeRange: testCase.request.timeRange,
+                where: testCase.request.where,
+                mode: 'delta' as const,
+                limit: 2,
+              };
+              const bootstrap = await storage.queryTraces(planTraceQuery(parseTraceQueryRequest(request)));
+              if (!('delta' in bootstrap)) throw new Error('Expected delta');
+              return { testCase, request, after: bootstrap.deltaCursor };
+            }),
+          );
+          await writeTraceQueryFixture(storage, TRACE_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
+          for (const { testCase, request, after } of requests) {
+            const expected = testCase.expected.map(row => ('traceId' in row ? row.traceId : '')).sort();
+            const result = await waitFor(
+              async () => {
+                let cursor = after;
+                const ids: string[] = [];
+                for (let page = 0; page < 20; page++) {
+                  const batch = await storage.queryTraces(
+                    planTraceQuery(parseTraceQueryRequest({ ...request, after: cursor })),
+                  );
+                  if (!('delta' in batch)) throw new Error('Expected delta');
+                  ids.push(...batch.traces.map(trace => trace.traceId));
+                  cursor = batch.deltaCursor;
+                  if (!batch.delta.hasMore) return ids.sort();
+                }
+                throw new Error('Delta pagination did not terminate');
+              },
+              ids => JSON.stringify(ids) === JSON.stringify(expected),
+            );
+            expect(result, testCase.name).toEqual(expected);
+          }
+        } finally {
+          if (!wasEnabled) coreFeatures.delete(feature);
+        }
+      });
+
+      it('hands numbered trace pages to delta polling and drains matching completed roots', async () => {
+        const feature = 'observability-delta-polling';
+        const wasEnabled = coreFeatures.has(feature);
+        coreFeatures.add(feature);
+        try {
+          const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+          const predicate = {
+            op: 'and' as const,
+            args: [
+              { op: 'exists' as const, path: 'threadId' },
+              {
+                op: 'not' as const,
+                arg: { op: 'eq' as const, left: { path: 'traceId' }, right: { literal: 'excluded' } },
+              },
+            ],
+          };
+          const query = (fields: Partial<TraceQueryRequest>) =>
+            storage.queryTraces(planTraceQuery(parseTraceQueryRequest({ timeRange, where: predicate, ...fields })));
+          const page = await query({ pagination: { page: 0, perPage: 2 } });
+          if (!('pagination' in page)) throw new Error('Expected numbered page');
+          expect(page.traces).toEqual([]);
+          expect(page.deltaCursor).toBeTruthy();
+          const bootstrap = await query({ mode: 'delta' });
+          if (!('delta' in bootstrap)) throw new Error('Expected delta');
+          expect(bootstrap.traces).toEqual([]);
+          expect(bootstrap.delta).toEqual({ limit: 10, hasMore: false });
+
+          const template = TRACE_QUERY_FIXTURE_DATA.spans.find(span => span.parentSpanId === null && !span.isPending)!;
+          const rows = ['delta-a', 'delta-b', 'delta-c'].map((traceId, i) => ({
+            ...template,
+            traceId,
+            spanId: traceId,
+            cursorId: 100 + i,
+            threadId: 'delta-thread',
+          }));
+          await writeTraceQueryFixture(
+            storage,
+            {
+              spans: [{ ...rows[0]!, traceId: 'excluded', spanId: 'excluded', name: 'excluded' }, ...rows],
+              scores: [],
+              feedback: [],
+            },
+            capabilities.traceQuerySpanWriteModel,
+          );
+          const first = await waitFor(
+            () => query({ mode: 'delta', after: page.deltaCursor, limit: 2 }),
+            result => 'delta' in result && result.traces.length === 2,
+          );
+          if (!('delta' in first)) throw new Error('Expected delta');
+          expect(first.delta).toEqual({ limit: 2, hasMore: true });
+          const second = await query({ mode: 'delta', after: first.deltaCursor, limit: 2 });
+          if (!('delta' in second)) throw new Error('Expected delta');
+          expect(second.delta.hasMore).toBe(false);
+          expect([...first.traces, ...second.traces].map(trace => trace.traceId).sort()).toEqual([
+            'delta-a',
+            'delta-b',
+            'delta-c',
+          ]);
+          const empty = await query({ mode: 'delta', after: second.deltaCursor });
+          if (!('delta' in empty)) throw new Error('Expected delta');
+          expect(empty.traces).toEqual([]);
+          expect(empty.delta.hasMore).toBe(false);
+
+          // A child write does not constitute a new root/completion candidate.
+          await writeTraceQueryFixture(
+            storage,
+            { spans: [{ ...rows[0]!, spanId: 'child', parentSpanId: rows[0]!.spanId }], scores: [], feedback: [] },
+            capabilities.traceQuerySpanWriteModel,
+          );
+          const childPoll = await query({ mode: 'delta', after: empty.deltaCursor });
+          expect('traces' in childPoll && childPoll.traces).toEqual([]);
+        } finally {
+          if (!wasEnabled) coreFeatures.delete(feature);
+        }
+      });
+
+      it('returns a root completed after the delta bootstrap', async () => {
+        const feature = 'observability-delta-polling';
+        const wasEnabled = coreFeatures.has(feature);
+        coreFeatures.add(feature);
+        try {
+          const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+          const template = TRACE_QUERY_FIXTURE_DATA.spans.find(span => span.parentSpanId === null && !span.isPending)!;
+          const root = { ...template, traceId: 'delta-completion', spanId: 'delta-completion' };
+          await writeTraceQueryFixture(
+            storage,
+            { spans: [{ ...root, isPending: true, endedAt: null }], scores: [], feedback: [] },
+            capabilities.traceQuerySpanWriteModel,
+          );
+          const bootstrap = await storage.queryTraces(
+            planTraceQuery(parseTraceQueryRequest({ timeRange, mode: 'delta' })),
+          );
+          if (!('delta' in bootstrap)) throw new Error('Expected delta');
+          await writeTraceQueryFixture(
+            storage,
+            { spans: [root], scores: [], feedback: [] },
+            capabilities.traceQuerySpanWriteModel,
+          );
+          const poll = await waitFor(
+            () =>
+              storage.queryTraces(
+                planTraceQuery(parseTraceQueryRequest({ timeRange, mode: 'delta', after: bootstrap.deltaCursor })),
+              ),
+            result => 'traces' in result && result.traces.length === 1,
+          );
+          expect('traces' in poll && poll.traces.map(trace => trace.traceId)).toEqual(['delta-completion']);
+        } finally {
+          if (!wasEnabled) coreFeatures.delete(feature);
+        }
+      });
+
       it('matches the shared advanced trace-query conformance cases without merge assistance', async () => {
         await writeTraceQueryFixture(storage, TRACE_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
 
@@ -458,7 +619,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         );
         const empty = await storage.queryTraces(emptyPlan);
         if (!('traces' in empty) || !('pagination' in empty)) throw new Error('Expected paginated traces');
-        expect(empty).toEqual({
+        expect(empty).toMatchObject({
           traces: [],
           pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
         });

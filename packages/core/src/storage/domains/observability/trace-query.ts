@@ -1,6 +1,13 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod/v4';
-import { paginationArgsSchema, paginationInfoSchema } from '../shared';
+import {
+  defaultDeltaLimit,
+  deltaCursorSchema,
+  deltaInfoSchema,
+  deltaLimitSchema,
+  paginationArgsSchema,
+  paginationInfoSchema,
+} from '../shared';
 import type { SpanRecord } from './tracing';
 
 export const TRACE_QUERY_MAX_DEPTH = 12;
@@ -276,9 +283,25 @@ const traceQueryRequestObjectSchema = z
       .optional(),
     page: pageSchema.optional(),
     pagination: paginationArgsSchema.optional(),
+    mode: z.literal('delta').optional(),
+    after: deltaCursorSchema.optional(),
+    limit: deltaLimitSchema,
   })
   .strict()
   .superRefine((request, context) => {
+    if (request.mode === 'delta') {
+      for (const field of ['page', 'pagination', 'group', 'orderBy'] as const) {
+        if (request[field] !== undefined) {
+          context.addIssue({ code: 'custom', path: [field], message: `Delta trace queries do not support ${field}` });
+        }
+      }
+    } else {
+      for (const field of ['after', 'limit'] as const) {
+        if (request[field] !== undefined) {
+          context.addIssue({ code: 'custom', path: [field], message: `${field} requires delta mode` });
+        }
+      }
+    }
     if (request.page && request.pagination) {
       context.addIssue({
         code: 'custom',
@@ -348,7 +371,14 @@ export const traceQueryTraceResponseSchema = z
   .object({ traces: z.array(traceQueryTraceSchema), page: responsePageSchema })
   .strict();
 export const traceQueryPaginatedTraceResponseSchema = z
-  .object({ traces: z.array(traceQueryTraceSchema), pagination: paginationInfoSchema })
+  .object({
+    traces: z.array(traceQueryTraceSchema),
+    pagination: paginationInfoSchema,
+    deltaCursor: deltaCursorSchema.optional(),
+  })
+  .strict();
+export const traceQueryDeltaTraceResponseSchema = z
+  .object({ traces: z.array(traceQueryTraceSchema), delta: deltaInfoSchema, deltaCursor: deltaCursorSchema })
   .strict();
 export const traceQueryGroupResponseSchema = z
   .object({
@@ -359,6 +389,7 @@ export const traceQueryGroupResponseSchema = z
 export const traceQueryResponseSchema = z.union([
   traceQueryTraceResponseSchema,
   traceQueryPaginatedTraceResponseSchema,
+  traceQueryDeltaTraceResponseSchema,
   traceQueryGroupResponseSchema,
 ]);
 
@@ -409,6 +440,7 @@ export type NormalizedTraceQueryRequest = z.output<typeof traceQueryRequestObjec
 export type TraceQueryTrace = z.infer<typeof traceQueryTraceSchema>;
 export type TraceQueryTraceResponse = z.infer<typeof traceQueryTraceResponseSchema>;
 export type TraceQueryPaginatedTraceResponse = z.infer<typeof traceQueryPaginatedTraceResponseSchema>;
+export type TraceQueryDeltaTraceResponse = z.infer<typeof traceQueryDeltaTraceResponseSchema>;
 export type TraceQueryGroupResponse = z.infer<typeof traceQueryGroupResponseSchema>;
 export type TraceQueryResponse = z.infer<typeof traceQueryResponseSchema>;
 
@@ -582,6 +614,7 @@ export interface TrustedTraceQueryPagePlan {
   paginationMode: 'page';
   page: number;
   perPage: number;
+  deltaBinding: string;
 }
 
 interface TrustedTraceQueryTracesBasePlan extends TrustedTraceQueryBasePlan {
@@ -595,7 +628,16 @@ interface TrustedTraceQueryTracesBasePlan extends TrustedTraceQueryBasePlan {
 export type TrustedTraceQueryKeysetTracesPlan = TrustedTraceQueryTracesBasePlan &
   TrustedTraceQueryKeysetPlan & { cursor?: { sortValue: string; traceId: string } };
 export type TrustedTraceQueryPaginatedTracesPlan = TrustedTraceQueryTracesBasePlan & TrustedTraceQueryPagePlan;
-export type TrustedTraceQueryTracesPlan = TrustedTraceQueryKeysetTracesPlan | TrustedTraceQueryPaginatedTracesPlan;
+export type TrustedTraceQueryDeltaTracesPlan = TrustedTraceQueryTracesBasePlan & {
+  paginationMode: 'delta';
+  limit: number;
+  binding: string;
+  deltaCursor?: { adapter: string; watermark: string };
+};
+export type TrustedTraceQueryTracesPlan =
+  | TrustedTraceQueryKeysetTracesPlan
+  | TrustedTraceQueryPaginatedTracesPlan
+  | TrustedTraceQueryDeltaTracesPlan;
 
 export type TrustedTraceQueryGroupsPlan = TrustedTraceQueryBasePlan &
   TrustedTraceQueryKeysetPlan & {
@@ -947,6 +989,24 @@ export function planTraceQuery(
 
   const result = 'traces' as const;
   const orderBy = request.orderBy?.[0] ?? ({ field: 'startedAt', direction: 'desc' } as const);
+  const deltaBinding = digestBinding({
+    timeRange,
+    where,
+    result: 'trace-delta',
+    authorization: options.authorizationBinding,
+  });
+  if (request.mode === 'delta') {
+    return {
+      result,
+      timeRange,
+      where,
+      orderBy,
+      paginationMode: 'delta',
+      limit: request.limit ?? defaultDeltaLimit,
+      binding: deltaBinding,
+      deltaCursor: request.after === undefined ? undefined : decodeTraceQueryDeltaCursor(request.after, deltaBinding),
+    };
+  }
   if (request.pagination) {
     return {
       result,
@@ -956,6 +1016,7 @@ export function planTraceQuery(
       paginationMode: 'page',
       page: request.pagination.page,
       perPage: request.pagination.perPage,
+      deltaBinding,
     };
   }
 
@@ -1031,6 +1092,56 @@ export function planThreadQuery(
 export function encodeTraceQueryCursor(plan: TraceQueryCursorPlan, values: TraceQueryCursorValues): string {
   if (values.result !== plan.result) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_CONFLICT');
   return Buffer.from(JSON.stringify({ version: 1, binding: plan.binding, values }), 'utf8').toString('base64url');
+}
+
+const deltaCursorEnvelopeSchema = z
+  .object({
+    version: z.literal(1),
+    kind: z.literal('trace-delta'),
+    binding: z.string().length(64),
+    adapter: z.string().min(1).max(100),
+    watermark: z.string().min(1).max(4096),
+  })
+  .strict();
+
+/** Wraps a storage-native watermark in a query-bound, delta-only cursor. */
+export function encodeTraceQueryDeltaCursor(
+  plan: { binding: string } | { deltaBinding: string },
+  adapter: string,
+  watermark: string,
+): string {
+  const envelope = deltaCursorEnvelopeSchema.parse({
+    version: 1,
+    kind: 'trace-delta',
+    binding: 'deltaBinding' in plan ? plan.deltaBinding : plan.binding,
+    adapter,
+    watermark,
+  });
+  return Buffer.from(JSON.stringify(envelope), 'utf8').toString('base64url');
+}
+
+function decodeTraceQueryDeltaCursor(cursor: string, binding: string): { adapter: string; watermark: string } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+  } catch {
+    throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
+  }
+  const envelope = deltaCursorEnvelopeSchema.safeParse(parsed);
+  if (!envelope.success) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
+  if (envelope.data.binding !== binding) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_CONFLICT');
+  return { adapter: envelope.data.adapter, watermark: envelope.data.watermark };
+}
+
+/** Storage adapters must check cursor ownership before interpreting the native watermark. */
+export function getTraceQueryDeltaWatermark(
+  plan: TrustedTraceQueryDeltaTracesPlan,
+  adapter: string,
+): string | undefined {
+  if (plan.deltaCursor && plan.deltaCursor.adapter !== adapter) {
+    throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_CONFLICT');
+  }
+  return plan.deltaCursor?.watermark;
 }
 
 function decodeTraceQueryCursor(

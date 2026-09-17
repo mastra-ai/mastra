@@ -1011,11 +1011,12 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
     try {
-      return await traceQueryOps.queryTraces(this.#client, plan, this.#traceQueryTimeoutMs);
+      return await traceQueryOps.queryTraces(this.#client, plan, this.#traceQueryTimeoutMs, this.#deltaCursorStrategy);
     } catch (error) {
       if (
         error instanceof MastraError ||
         error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryCursorError ||
         error instanceof coreStorage.TraceQueryResourceLimitError
       )
         throw error;

@@ -1,6 +1,10 @@
+import { coreFeatures } from '@mastra/core/features';
 import {
   compareTraceQueryStrings,
   encodeTraceQueryCursor,
+  encodeTraceQueryDeltaCursor,
+  getTraceQueryDeltaWatermark,
+  TraceQueryCursorError,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
   planThreadQuery,
@@ -1963,6 +1967,25 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
     return { groups: page.map(threadId => ({ threadId })), page: { next } } satisfies TraceQueryGroupResponse;
   }
 
+  const head = data.spans.reduce((max, row) => (row.parentSpanId === null ? Math.max(max, row.cursorId) : max), 0);
+  if (plan.paginationMode === 'delta') {
+    const watermark = getTraceQueryDeltaWatermark(plan, 'reference');
+    if (watermark !== undefined && (!/^\d+$/.test(watermark) || !Number.isSafeInteger(Number(watermark)))) {
+      throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
+    }
+    const after = watermark === undefined ? head : Number(watermark);
+    const candidates = roots.filter(root => root.cursorId > after).sort((a, b) => a.cursorId - b.cursorId);
+    const visible = candidates.slice(0, plan.limit);
+    return {
+      traces: visible.map(toTraceQueryTrace),
+      delta: { limit: plan.limit, hasMore: candidates.length > plan.limit },
+      deltaCursor: encodeTraceQueryDeltaCursor(
+        plan,
+        'reference',
+        String(visible.at(-1)?.cursorId ?? Math.max(after, head)),
+      ),
+    };
+  }
   let traces = roots.map(toTraceQueryTrace).sort((left, right) => compareTraces(left, right, plan));
   if (plan.paginationMode === 'page') {
     const total = traces.length;
@@ -1975,6 +1998,9 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
         perPage: plan.perPage,
         hasMore: (plan.page + 1) * plan.perPage < total,
       },
+      ...(coreFeatures.has('observability-delta-polling')
+        ? { deltaCursor: encodeTraceQueryDeltaCursor(plan, 'reference', String(head)) }
+        : {}),
     } satisfies TraceQueryPaginatedTraceResponse;
   }
 

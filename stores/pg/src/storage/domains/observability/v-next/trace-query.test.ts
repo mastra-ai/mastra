@@ -1,5 +1,8 @@
+import { coreFeatures } from '@mastra/core/features';
 import {
   encodeTraceQueryCursor,
+  encodeTraceQueryDeltaCursor,
+  getTraceQueryDeltaWatermark,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
   planThreadQuery,
@@ -7,8 +10,8 @@ import {
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
-import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
-import { describe, expect, it, vi } from 'vitest';
+import type { TraceQueryResponse, TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DbClient } from '../../../client';
 import { compilePostgresThreadQuery, compilePostgresTraceQuery, queryThreads, queryTraces } from './trace-query';
@@ -25,6 +28,15 @@ function threadPlan(input: Record<string, unknown> = {}): TrustedThreadQueryPlan
 }
 
 describe('Postgres advanced trace query', () => {
+  let wasEnabled: boolean;
+  beforeEach(() => {
+    wasEnabled = coreFeatures.has('observability-delta-polling');
+    coreFeatures.delete('observability-delta-polling');
+  });
+  afterEach(() => {
+    if (wasEnabled) coreFeatures.add('observability-delta-polling');
+    vi.restoreAllMocks();
+  });
   it('rejects invalid trace-query timeout configuration at construction', () => {
     expect(
       () =>
@@ -611,3 +623,124 @@ function traceRow(traceId: string, startedAt: string) {
     status: 'success',
   };
 }
+
+describe('Postgres advanced trace delta polling', () => {
+  let wasEnabled: boolean;
+  beforeEach(() => {
+    wasEnabled = coreFeatures.has('observability-delta-polling');
+    coreFeatures.add('observability-delta-polling');
+  });
+  afterEach(() => {
+    if (!wasEnabled) coreFeatures.delete('observability-delta-polling');
+    vi.restoreAllMocks();
+  });
+
+  function deltaPlan(watermark?: string, adapter = 'pg') {
+    const initial = plan({ mode: 'delta', limit: 1 });
+    return plan({
+      mode: 'delta',
+      limit: 1,
+      ...(watermark === undefined
+        ? {}
+        : {
+            after: encodeTraceQueryDeltaCursor(initial, adapter, watermark),
+          }),
+    });
+  }
+
+  function nativeCursor(response: TraceQueryResponse) {
+    if (!('deltaCursor' in response)) throw new Error('Expected delta cursor');
+    const continuation = plan({ mode: 'delta', after: response.deltaCursor });
+    if (continuation.paginationMode !== 'delta') throw new Error('Expected delta plan');
+    return getTraceQueryDeltaWatermark(continuation, 'pg');
+  }
+
+  it('bootstraps at the safe horizon without selecting roots', async () => {
+    const one = vi.fn().mockResolvedValue({ xactId: '100' });
+    const any = vi.fn();
+    const query = vi.fn();
+    const tx = vi.fn(async callback => callback({ one, any, query }));
+    const response = await queryTraces({ tx } as unknown as DbClient, 'public', deltaPlan(), 15000);
+    expect(response).toMatchObject({ traces: [], delta: { limit: 1, hasMore: false } });
+    expect(nativeCursor(response)).toBe('100:0');
+    expect(any).not.toHaveBeenCalled();
+    expect(query).toHaveBeenCalledWith('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+  });
+
+  it('filters and deduplicates completed roots before watermark ordering and limiting', () => {
+    const compiled = compilePostgresTraceQuery('public', deltaPlan('100:4'), 'data', '200');
+    expect(compiled.text).toContain('newer."cursorId" > r."cursorId"');
+    expect(compiled.text).toContain('NOT r."isPending"');
+    expect(compiled.text).toContain('r."endedAt" IS NOT NULL');
+    expect(compiled.text).toContain('("xactId", "cursorId") > ($3::xid8, $4::bigint)');
+    expect(compiled.text).toContain('"xactId" < $5::xid8');
+    expect(compiled.text).toContain('ORDER BY "xactId" ASC, "cursorId" ASC');
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, '100', '4', '200', 2]);
+  });
+
+  it('continues from the last emitted pair when more matching roots remain', async () => {
+    const one = vi.fn().mockResolvedValue({ xactId: '200' });
+    const any = vi.fn().mockResolvedValue([
+      { ...traceRow('a', '2026-01-01T10:00:00.000Z'), xactId: '120', cursorId: '8' },
+      { ...traceRow('b', '2026-01-01T10:00:00.000Z'), xactId: '120', cursorId: '9' },
+    ]);
+    const tx = vi.fn(async callback => callback({ one, any, query: vi.fn() }));
+    const response = await queryTraces({ tx } as unknown as DbClient, 'public', deltaPlan('100:0'), 15000);
+    expect(response).toMatchObject({ traces: [{ traceId: 'a' }], delta: { limit: 1, hasMore: true } });
+    expect(nativeCursor(response)).toBe('120:8');
+    expect(response).not.toHaveProperty('page');
+    expect(response).not.toHaveProperty('pagination');
+  });
+
+  it('advances empty continuations to the safely observed horizon', async () => {
+    const tx = vi.fn(async callback =>
+      callback({
+        one: vi.fn().mockResolvedValue({ xactId: '200' }),
+        any: vi.fn().mockResolvedValue([]),
+        query: vi.fn(),
+      }),
+    );
+    const response = await queryTraces({ tx } as unknown as DbClient, 'public', deltaPlan('100:0'), 15000);
+    expect(nativeCursor(response)).toBe('200:0');
+  });
+
+  it('captures the numbered handoff before count and data in the same snapshot', async () => {
+    const one = vi.fn().mockResolvedValue({ xactId: '200' });
+    const any = vi
+      .fn()
+      .mockResolvedValueOnce([{ count: '0' }])
+      .mockResolvedValueOnce([]);
+    const tx = vi.fn(async callback => callback({ one, any, query: vi.fn() }));
+    const response = await queryTraces({ tx } as unknown as DbClient, 'public', plan({ pagination: {} }), 15000);
+    expect(nativeCursor(response)).toBe('200:0');
+    expect(one.mock.invocationCallOrder[0]).toBeLessThan(any.mock.invocationCallOrder[0]!);
+    expect(response).toMatchObject({ traces: [], pagination: { total: 0 } });
+  });
+
+  it('rejects invalid native watermarks and adapter mismatches before opening a transaction', async () => {
+    const tx = vi.fn();
+    for (const invalid of [deltaPlan('invalid'), deltaPlan('100:0', 'duckdb')]) {
+      await expect(queryTraces({ tx } as unknown as DbClient, 'public', invalid, 15000)).rejects.toThrow();
+    }
+    expect(tx).not.toHaveBeenCalled();
+  });
+
+  it('preserves the feature gate and the shared deadline after reading the horizon', async () => {
+    coreFeatures.delete('observability-delta-polling');
+    await expect(queryTraces({} as DbClient, 'public', deltaPlan(), 15000)).rejects.toThrow();
+    coreFeatures.add('observability-delta-polling');
+    vi.spyOn(performance, 'now').mockReturnValueOnce(1000).mockReturnValue(16000);
+    const any = vi.fn();
+    const tx = vi.fn(async callback =>
+      callback({
+        one: vi.fn().mockResolvedValue({ xactId: '200' }),
+        any,
+        query: vi.fn(),
+      }),
+    );
+    await expect(
+      queryTraces({ tx } as unknown as DbClient, 'public', deltaPlan('100:0'), 15000),
+    ).rejects.toBeInstanceOf(TraceQueryExecutionError);
+    expect(any).not.toHaveBeenCalled();
+  });
+});
