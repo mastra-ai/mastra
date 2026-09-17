@@ -1,8 +1,9 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { resolveJsonPromptInjection } from '../../../agent/structured-output';
 import { coreFeatures } from '../../../features';
-import { execute, resolveJsonPromptInjection } from './execute';
+import { execute } from './execute';
 import { testUsage } from './test-utils';
 
 const inputMessages = [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Summarize the plan.' }] }];
