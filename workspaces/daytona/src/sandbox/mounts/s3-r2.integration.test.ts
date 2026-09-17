@@ -1,5 +1,3 @@
-import { createHash, createHmac, randomUUID } from 'node:crypto';
-
 import { Daytona } from '@daytonaio/sdk';
 import { Workspace } from '@mastra/core/workspace';
 import { S3Filesystem } from '@mastra/s3';
@@ -7,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { shellQuote } from '../../utils/shell-quote';
 import { DaytonaSandbox } from '../index';
+import { createR2TemporaryCredentials } from './s3-r2-credentials';
 
 // Explicit opt-in: creates billable sandboxes and disposable objects in the configured R2 bucket.
 // Requires DAYTONA_API_KEY, S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY.
@@ -22,7 +21,7 @@ describe.skipIf(process.env.RUN_R2_ISOLATION_TEST !== '1')('R2 temporary-credent
     const bucket = process.env.S3_BUCKET!;
     const accessKeyId = process.env.S3_ACCESS_KEY_ID!;
     const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY!;
-    const root = `mastra-daytona-isolation/${randomUUID()}/`;
+    const root = `mastra-daytona-isolation/${globalThis.crypto.randomUUID()}/`;
     const parent = new S3Filesystem({
       bucket,
       endpoint: endpoint.origin,
@@ -32,44 +31,46 @@ describe.skipIf(process.env.RUN_R2_ISOLATION_TEST !== '1')('R2 temporary-credent
       secretAccessKey,
     });
     const daytona = new Daytona();
-    const scopes = ['a', 'b'].map(name => {
-      const prefix = `${root}${name}/`;
-      // R2-specific local signing, not a portable S3 credential provider.
-      const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
-      const now = Math.floor(Date.now() / 1000);
-      const unsigned = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({
-        sub: endpoint.hostname.split('.')[0],
-        iss: accessKeyId,
-        aud: endpoint.host,
-        iat: now,
-        exp: now + 1800,
-        bucket,
-        scope: 'object-read-write',
-        paths: { prefixPaths: [prefix], objectPaths: [] },
-      })}`;
-      const jwt = `${unsigned}.${createHmac('sha256', secretAccessKey).update(unsigned).digest('base64url')}`;
-      const filesystem = new S3Filesystem({
-        bucket,
-        endpoint: endpoint.origin,
-        region: 'auto',
-        prefix,
-        accessKeyId,
-        secretAccessKey: createHash('sha256').update(jwt).digest('hex'),
-        sessionToken: Buffer.from(`jwt/${jwt}`).toString('base64'),
-      });
-      const sandbox = new DaytonaSandbox({
-        language: 'python',
-        ephemeral: true,
-        snapshot: process.env.DAYTONA_R2_TEST_SNAPSHOT,
-      });
-      return {
-        name,
-        prefix,
-        filesystem,
-        sandbox,
-        workspace: new Workspace({ mounts: { '/s3-data': filesystem }, sandbox }),
-      };
-    });
+    const scopes = await Promise.all(
+      ['a', 'b'].map(async name => {
+        const prefix = `${root}${name}/`;
+        // R2-specific local signing, not a portable S3 credential provider.
+        const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
+        const now = Math.floor(Date.now() / 1000);
+        const unsigned = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({
+          sub: endpoint.hostname.split('.')[0],
+          iss: accessKeyId,
+          aud: endpoint.host,
+          iat: now,
+          exp: now + 1800,
+          bucket,
+          scope: 'object-read-write',
+          paths: { prefixPaths: [prefix], objectPaths: [] },
+        })}`;
+        const credentials = await createR2TemporaryCredentials(unsigned, secretAccessKey);
+        const filesystem = new S3Filesystem({
+          bucket,
+          endpoint: endpoint.origin,
+          region: 'auto',
+          prefix,
+          accessKeyId,
+          secretAccessKey: credentials.secretAccessKey,
+          sessionToken: Buffer.from(`jwt/${credentials.jwt}`).toString('base64'),
+        });
+        const sandbox = new DaytonaSandbox({
+          language: 'python',
+          ephemeral: true,
+          snapshot: process.env.DAYTONA_R2_TEST_SNAPSHOT,
+        });
+        return {
+          name,
+          prefix,
+          filesystem,
+          sandbox,
+          workspace: new Workspace({ mounts: { '/s3-data': filesystem }, sandbox }),
+        };
+      }),
+    );
     const started: typeof scopes = [];
     async function command(sandbox: DaytonaSandbox, shell: string) {
       const result = await sandbox.executeCommand('sh', ['-c', shell], { cwd: '/', timeout: 30_000 });

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -2020,7 +2019,7 @@ export class MemoryPG extends MemoryStorage {
     }
 
     // Use provided ID or generate a new one
-    const newThreadId = providedThreadId || crypto.randomUUID();
+    const newThreadId = providedThreadId || globalThis.crypto.randomUUID();
 
     // Check if the new thread ID already exists
     const existingThread = await this.#getThreadById(this.#db.client, { threadId: newThreadId });
@@ -2134,7 +2133,7 @@ export class MemoryPG extends MemoryStorage {
         const targetResourceId = resourceId || sourceThread.resourceId;
 
         for (const sourceMsg of sourceMessages) {
-          const newMessageId = crypto.randomUUID();
+          const newMessageId = globalThis.crypto.randomUUID();
           messageIdMap[sourceMsg.id] = newMessageId;
 
           const insertResult = await t.query(
@@ -2311,7 +2310,7 @@ export class MemoryPG extends MemoryStorage {
 
   async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
     try {
-      const id = crypto.randomUUID();
+      const id = globalThis.crypto.randomUUID();
       const now = new Date();
       const lookupKey = this.getOMKey(input.threadId, input.resourceId);
 
@@ -2535,7 +2534,7 @@ export class MemoryPG extends MemoryStorage {
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
     try {
-      const id = crypto.randomUUID();
+      const id = globalThis.crypto.randomUUID();
       const now = new Date();
       const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
 
@@ -2908,7 +2907,7 @@ export class MemoryPG extends MemoryStorage {
 
       // Create new chunk with ID and timestamp
       const newChunk: BufferedObservationChunk = {
-        id: `ombuf-${randomUUID()}`,
+        id: `ombuf-${globalThis.crypto.randomUUID()}`,
         cycleId: input.chunk.cycleId,
         observations: input.chunk.observations,
         tokenCount: Math.round(input.chunk.tokenCount),

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { describe, it, expect } from 'vitest';
 import { AgentCoreRuntimeSandbox } from './index';
 
@@ -12,7 +11,7 @@ describeAgentCore('AgentCoreRuntimeSandbox integration', () => {
     const sandbox = new AgentCoreRuntimeSandbox({
       region,
       agentRuntimeArn: agentRuntimeArn!,
-      runtimeSessionId: randomUUID(),
+      runtimeSessionId: globalThis.crypto.randomUUID(),
     });
 
     try {
@@ -39,7 +38,7 @@ describeAgentCore('AgentCoreRuntimeSandbox integration', () => {
     const sandbox = new AgentCoreRuntimeSandbox({
       region,
       agentRuntimeArn: agentRuntimeArn!,
-      runtimeSessionId: randomUUID(),
+      runtimeSessionId: globalThis.crypto.randomUUID(),
     });
 
     try {

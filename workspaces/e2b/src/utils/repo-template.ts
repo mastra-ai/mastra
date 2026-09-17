@@ -28,7 +28,6 @@
  * full clone using its runtime-injected credential instead.
  */
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { repoCloneCommand, setupMarkerCommand, setupMarkerContent } from '@internal/workspace';
 
@@ -205,8 +204,8 @@ export interface RepoTemplateIdentity {
  * when the sha is known. Exposed so callers (and proofs) can predict which
  * ref a sandbox will resolve.
  */
-export function repoTemplateRef(identity: RepoTemplateIdentity): string {
-  const name = repoTemplateName(identity);
+export async function repoTemplateRef(identity: RepoTemplateIdentity): Promise<string> {
+  const name = await repoTemplateName(identity);
   // The sha-less degrade also pins a tag (`current`) rather than the bare
   // name: `Template.exists(name)` is true whenever ANY tagged build exists,
   // but creating from a bare name resolves its `default` tag — which
@@ -219,7 +218,7 @@ export function repoTemplateRef(identity: RepoTemplateIdentity): string {
 // design (the sha rides the tag), and the signature is what enforces it —
 // making the name sha-dependent would collapse every commit into its own
 // template and kill warm reuse.
-function repoTemplateName(identity: Omit<RepoTemplateIdentity, 'sha'>): string {
+async function repoTemplateName(identity: Omit<RepoTemplateIdentity, 'sha'>): Promise<string> {
   const cloneUrl = normalizeCloneUrl(identity.cloneUrl);
   // Fixed key order, so a plain stringify is already canonical. Not a
   // replacer array: that filters keys at every level, which would drop the
@@ -239,7 +238,11 @@ function repoTemplateName(identity: Omit<RepoTemplateIdentity, 'sha'>): string {
     // existing names (and warm builds) instead of all rebuilding.
     ...(identity.workingDirectory !== undefined ? [identity.workingDirectory] : []),
   ];
-  const hash = createHash('sha256').update(JSON.stringify(config)).digest('hex').slice(0, 8);
+  const hash = Buffer.from(
+    await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(config))),
+  )
+    .toString('hex')
+    .slice(0, 8);
   // Readable name: the repo slug is right in the template name; the short
   // hash suffix keeps host/setup-command variants and sanitization
   // collisions distinct.
@@ -328,7 +331,7 @@ async function resolveSpecAtHead(options: RepoTemplateOptions): Promise<{ spec: 
       ? { workingDirectory: trimTrailingSlashes(assertWorkingDirectory(options.workingDirectory)) }
       : {}),
   };
-  return { spec: buildRepoTemplateSpec(identity, token), ...(sha ? { sha } : {}) };
+  return { spec: await buildRepoTemplateSpec(identity, token), ...(sha ? { sha } : {}) };
 }
 
 /** Result of a {@link refreshRepoTemplate} call. */
@@ -395,7 +398,7 @@ function gitAuthFlag(): string {
   return `-c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$${BUILD_TOKEN_ENV}" | base64 -w0)"`;
 }
 
-function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): NamedTemplateSpec {
+async function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): Promise<NamedTemplateSpec> {
   const { sha, setupCommand, buildEnv, workingDirectory } = identity;
   const cloneUrl = normalizeCloneUrl(identity.cloneUrl);
   // Relative to the build cwd, which `setWorkdir` (or the base image) also
@@ -404,7 +407,7 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
 
   const auth = token ? `${gitAuthFlag()} ` : '';
 
-  let template = createDefaultMountableTemplate().template;
+  let template = (await createDefaultMountableTemplate()).template;
   const env: Record<string, string> = { ...buildEnv };
   if (token) env[BUILD_TOKEN_ENV] = token;
   if (Object.keys(env).length > 0) {
@@ -439,10 +442,10 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
     template = template.runCmd(`cd "${repoDir}" && ${command}`);
   }
   // Last, so it only exists in images where every step above succeeded.
-  template = template.runCmd(setupMarkerCommand(setupMarkerContent(setupCommands)));
+  template = template.runCmd(setupMarkerCommand(await setupMarkerContent(setupCommands)));
 
   return {
-    ref: repoTemplateRef(identity),
+    ref: await repoTemplateRef(identity),
     template,
     // A failed repo build degrades to the default mountable template; the
     // session's runtime cold clone into `$HOME` keeps working.
@@ -451,7 +454,7 @@ function buildRepoTemplateSpec(identity: RepoTemplateIdentity, token?: string): 
     // moved head means the exact sha tag doesn't exist yet, the sandbox
     // boots from `name:current` immediately (runtime setup fast-forwards
     // the checkout) while the fresh sha builds in the background.
-    staleRef: `${repoTemplateName(identity)}:${CURRENT_TAG}`,
+    staleRef: `${await repoTemplateName(identity)}:${CURRENT_TAG}`,
     buildTags: [CURRENT_TAG],
     // Always explicit, so what gets built matches what got hashed.
     buildResources: {

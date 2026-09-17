@@ -16,8 +16,8 @@ const cloneUrl = 'https://example.com/acme/app.git';
 const sha = '0123456789abcdef0123456789abcdef01234567';
 
 describe('buildRepoTemplate', () => {
-  it('clones under /workspace/<repo>, installs git first, and sets the workdir', () => {
-    const dockerfile = buildRepoTemplate({ cloneUrl, sha, workingDirectory: '/workspace' }).dockerfile;
+  it('clones under /workspace/<repo>, installs git first, and sets the workdir', async () => {
+    const dockerfile = (await buildRepoTemplate({ cloneUrl, sha, workingDirectory: '/workspace' })).dockerfile;
     // The slim default base has no git, so it is installed before the clone stage.
     expect(dockerfile.indexOf('apt-get install')).toBeLessThan(dockerfile.indexOf('git clone'));
     expect(dockerfile).toMatch(/apt-get install[^\n]*\bgit\b/);
@@ -25,17 +25,17 @@ describe('buildRepoTemplate', () => {
     expect(dockerfile).toContain('WORKDIR /workspace/app');
   });
 
-  it('pins the sha with a full clone + detached checkout, making it part of the identity', () => {
-    const a = buildRepoTemplate({ cloneUrl, sha, workingDirectory: '/workspace' });
-    const b = buildRepoTemplate({ cloneUrl, sha: 'f'.repeat(40), workingDirectory: '/workspace' });
+  it('pins the sha with a full clone + detached checkout, making it part of the identity', async () => {
+    const a = await buildRepoTemplate({ cloneUrl, sha, workingDirectory: '/workspace' });
+    const b = await buildRepoTemplate({ cloneUrl, sha: 'f'.repeat(40), workingDirectory: '/workspace' });
     expect(a.dockerfile).not.toContain('--depth=1');
     expect(a.dockerfile).toContain(`git -C '/workspace/app' checkout --detach '${sha}'`);
     expect(a.templateId).not.toBe(b.templateId);
   });
 
-  it('passes the token by value to the clone stage only and keeps it out of the identity', () => {
-    const withToken = buildRepoTemplate({ cloneUrl, sha, token: 'tok-1', workingDirectory: '/workspace' });
-    const rotated = buildRepoTemplate({ cloneUrl, sha, token: 'tok-2', workingDirectory: '/workspace' });
+  it('passes the token by value to the clone stage only and keeps it out of the identity', async () => {
+    const withToken = await buildRepoTemplate({ cloneUrl, sha, token: 'tok-1', workingDirectory: '/workspace' });
+    const rotated = await buildRepoTemplate({ cloneUrl, sha, token: 'tok-2', workingDirectory: '/workspace' });
     const dockerfile = withToken.dockerfile;
     expect(dockerfile).toContain('AS mastra-secret-');
     expect(dockerfile).toContain('--mount=type=secret,id=GH_TOKEN');
@@ -48,14 +48,14 @@ describe('buildRepoTemplate', () => {
     expect(withToken.templateId).toBe(rotated.templateId);
   });
 
-  it('bakes buildEnv into ENV and the identity', () => {
-    const a = buildRepoTemplate({
+  it('bakes buildEnv into ENV and the identity', async () => {
+    const a = await buildRepoTemplate({
       cloneUrl,
       sha,
       buildEnv: { NPM_CONFIG_REGISTRY: 'https://r1' },
       workingDirectory: '/w',
     });
-    const b = buildRepoTemplate({
+    const b = await buildRepoTemplate({
       cloneUrl,
       sha,
       buildEnv: { NPM_CONFIG_REGISTRY: 'https://r2' },
@@ -65,25 +65,29 @@ describe('buildRepoTemplate', () => {
     expect(a.templateId).not.toBe(b.templateId);
   });
 
-  it('runs setup commands and writes the completion marker last', () => {
-    const dockerfile = buildRepoTemplate({
-      cloneUrl,
-      sha,
-      setupCommand: ['npm ci', 'npm run build'],
-      workingDirectory: '/workspace',
-    }).dockerfile;
+  it('runs setup commands and writes the completion marker last', async () => {
+    const dockerfile = (
+      await buildRepoTemplate({
+        cloneUrl,
+        sha,
+        setupCommand: ['npm ci', 'npm run build'],
+        workingDirectory: '/workspace',
+      })
+    ).dockerfile;
     expect(dockerfile).toContain('RUN npm ci');
     expect(dockerfile).toContain('RUN npm run build');
     expect(dockerfile.indexOf(SETUP_MARKER_PATH)).toBeGreaterThan(dockerfile.indexOf('npm run build'));
   });
 
-  it('supports a custom base image and working directory', () => {
-    const dockerfile = buildRepoTemplate({
-      cloneUrl,
-      sha,
-      baseImage: 'ubuntu:24.04',
-      workingDirectory: '/srv/',
-    }).dockerfile;
+  it('supports a custom base image and working directory', async () => {
+    const dockerfile = (
+      await buildRepoTemplate({
+        cloneUrl,
+        sha,
+        baseImage: 'ubuntu:24.04',
+        workingDirectory: '/srv/',
+      })
+    ).dockerfile;
     expect(dockerfile).toContain('FROM ubuntu:24.04');
     expect(dockerfile).toContain('WORKDIR /srv/app');
   });

@@ -1,7 +1,6 @@
-import crypto from 'node:crypto';
-
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
+import { sha256Hex } from '../../utils/crypto';
 import { shellQuote } from '../../utils/shell-quote';
 import {
   LOG_PREFIX,
@@ -124,7 +123,7 @@ export async function mountS3(mountPath: string, config: BlaxelS3MountConfig, ct
   const hasCredentials = hasAccessKey && hasSecretKey;
 
   // Use a mount-specific credentials path to avoid races with concurrent mounts
-  const mountHash = crypto.createHash('md5').update(mountPath).digest('hex').slice(0, 8);
+  const mountHash = (await sha256Hex(mountPath)).slice(0, 8);
   const credentialsPath = `/tmp/.passwd-s3fs-${mountHash}`;
 
   // S3-compatible services (R2, MinIO, etc.) require credentials

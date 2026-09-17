@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -169,7 +168,7 @@ describe('LibSQL observational-memory write-lock regression', () => {
     await memory.init();
     await workflows.init();
 
-    const resourceId = `resource-${randomUUID()}`;
+    const resourceId = `resource-${globalThis.crypto.randomUUID()}`;
     const record = await memory.initializeObservationalMemory({
       threadId: null,
       resourceId,
@@ -212,10 +211,10 @@ describe('LibSQL observational-memory write-lock regression', () => {
       memory.updateBufferedObservations({
         id: record.id,
         chunk: {
-          cycleId: `cycle-${randomUUID()}`,
+          cycleId: `cycle-${globalThis.crypto.randomUUID()}`,
           observations: label,
           tokenCount: 50,
-          messageIds: [`msg-${randomUUID()}`],
+          messageIds: [`msg-${globalThis.crypto.randomUUID()}`],
           messageTokens: 100,
           lastObservedAt: new Date(),
         },
@@ -245,7 +244,7 @@ describe('LibSQL observational-memory write-lock regression', () => {
     const memory = store.stores.memory!;
     await memory.init();
 
-    const resourceId = `resource-${randomUUID()}`;
+    const resourceId = `resource-${globalThis.crypto.randomUUID()}`;
     const record = await memory.initializeObservationalMemory({
       threadId: null,
       resourceId,

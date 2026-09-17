@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Database, Transaction } from '@google-cloud/spanner';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
@@ -262,7 +261,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
   async createExperiment(input: CreateExperimentInput): Promise<Experiment> {
     try {
       const now = new Date();
-      const id = input.id ?? randomUUID();
+      const id = input.id ?? globalThis.crypto.randomUUID();
       const experiment: Experiment = {
         id,
         name: input.name ?? undefined,
@@ -592,7 +591,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
   async addExperimentResult(input: AddExperimentResultInput): Promise<ExperimentResult> {
     try {
       const now = new Date();
-      const id = input.id ?? randomUUID();
+      const id = input.id ?? globalThis.crypto.randomUUID();
       return await this.#withPurgeBarrier(input.experimentId, input.itemId, async (tx, marker) => {
         const result: ExperimentResult = {
           id,
@@ -696,7 +695,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
 
         if (!existingRow) {
           const result: ExperimentResult = {
-            id: randomUUID(),
+            id: globalThis.crypto.randomUUID(),
             experimentId: input.experimentId,
             itemId: input.itemId,
             ...values,

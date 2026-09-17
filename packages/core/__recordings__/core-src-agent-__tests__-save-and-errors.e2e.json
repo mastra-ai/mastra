@@ -7,7 +7,7 @@
   },
   "recordings": [
     {
-      "hash": "1b120088dd8b3ecd",
+      "hash": "94d334c44e5bf564",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",

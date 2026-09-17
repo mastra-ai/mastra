@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type {
   ChannelHandler,
   ChannelHandlerContext,
@@ -375,7 +373,7 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
       });
       if (existing) return existing.sessionId;
       const session = await sourceControl.sessions.create({
-        sessionId: randomUUID(),
+        sessionId: globalThis.crypto.randomUUID(),
         projectRepositoryId: repo.projectRepositoryId,
         orgId,
         userId: link.userId,

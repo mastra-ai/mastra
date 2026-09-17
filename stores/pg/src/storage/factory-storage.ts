@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { FactoryStorage, UniqueViolationError } from '@mastra/core/storage';
 import type {
   CollectionColumnSpec,
@@ -313,7 +311,7 @@ class PgFactoryStorageOps implements FactoryStorageOps {
 
     const values: Record<string, unknown> = { ...row };
     if (schema.columns[pk]!.type === 'uuid-pk' && values[pk] === undefined) {
-      values[pk] = randomUUID();
+      values[pk] = globalThis.crypto.randomUUID();
     }
 
     const columns = Object.keys(values).filter(column => values[column] !== undefined);

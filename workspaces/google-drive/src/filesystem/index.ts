@@ -1,4 +1,3 @@
-import { createSign } from 'node:crypto';
 import type { RequestContext } from '@mastra/core/request-context';
 import {
   DirectoryNotEmptyError,
@@ -562,7 +561,23 @@ export class GoogleDriveFilesystem extends MastraFilesystem {
     const privateKey = this.normalizePrivateKey(account.privateKey);
     let signature: string;
     try {
-      signature = createSign('RSA-SHA256').update(unsigned).sign(privateKey, 'base64url');
+      const keyBytes = Buffer.from(
+        privateKey.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, ''),
+        'base64',
+      );
+      const key = await globalThis.crypto.subtle.importKey(
+        'pkcs8',
+        keyBytes,
+        { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+        false,
+        ['sign'],
+      );
+      const signatureBytes = await globalThis.crypto.subtle.sign(
+        'RSASSA-PKCS1-v1_5',
+        key,
+        new TextEncoder().encode(unsigned),
+      );
+      signature = Buffer.from(signatureBytes).toString('base64url');
     } catch (err) {
       const hasBegin = privateKey.includes('-----BEGIN');
       const hasEnd = privateKey.includes('-----END');

@@ -1,32 +1,32 @@
-import * as crypto from 'crypto';
+import { Buffer } from 'node:buffer';
 
 /**
  * Verify that a request came from Slack
  */
-export function verifySlackRequest(
+export async function verifySlackRequest(
   signingSecret: string,
   requestSignature: string,
   timestamp: string,
   body: string,
-): boolean {
+): Promise<boolean> {
   // Reject old requests (more than 5 minutes old)
   const fiveMinutesAgo = Math.floor(Date.now() / 1000) - 60 * 5;
-  if (parseInt(timestamp) < fiveMinutesAgo) {
+  if (parseInt(timestamp) < fiveMinutesAgo || !/^v0=[0-9a-f]{64}$/.test(requestSignature)) {
     return false;
   }
 
-  // Compute the expected signature
-  const sigBasestring = `v0:${timestamp}:${body}`;
-  const mySignature = 'v0=' + crypto.createHmac('sha256', signingSecret).update(sigBasestring, 'utf8').digest('hex');
+  const key = await globalThis.crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(signingSecret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['verify'],
+  );
 
-  // Guard: ensure requestSignature is valid and lengths match before timingSafeEqual
-  if (
-    typeof requestSignature !== 'string' ||
-    Buffer.byteLength(requestSignature, 'utf8') !== Buffer.byteLength(mySignature, 'utf8')
-  ) {
-    return false;
-  }
-
-  // Compare signatures
-  return crypto.timingSafeEqual(Buffer.from(mySignature, 'utf8'), Buffer.from(requestSignature, 'utf8'));
+  return globalThis.crypto.subtle.verify(
+    'HMAC',
+    key,
+    Buffer.from(requestSignature.slice(3), 'hex'),
+    new TextEncoder().encode(`v0:${timestamp}:${body}`),
+  );
 }

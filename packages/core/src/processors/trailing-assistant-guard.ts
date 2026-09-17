@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from './index';
 
 /**
@@ -31,7 +29,7 @@ export class TrailingAssistantGuard implements Processor<'trailing-assistant-gua
       messages: [
         ...messages,
         {
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           role: 'user' as const,
           content: {
             format: 2 as const,

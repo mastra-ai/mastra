@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,7 +20,7 @@ import { createAskMemoryTool } from '../../src/processors/observational-memory/s
 
 function message(threadId: string, resourceId: string, text = 'Maya Chen owns Project Atlas.'): MastraDBMessage {
   return {
-    id: randomUUID(),
+    id: globalThis.crypto.randomUUID(),
     threadId,
     resourceId,
     role: 'user',
@@ -52,8 +51,8 @@ describe('Subconscious LibSQL integration', () => {
     const directory = await mkdtemp(join(tmpdir(), 'subconscious-libsql-'));
     directories.push(directory);
     const databaseUrl = `file:${join(directory, 'knowledge.db')}`;
-    const storage = new LibSQLStore({ id: randomUUID(), url: databaseUrl });
-    const vector = new LibSQLVector({ id: randomUUID(), url: databaseUrl });
+    const storage = new LibSQLStore({ id: globalThis.crypto.randomUUID(), url: databaseUrl });
+    const vector = new LibSQLVector({ id: globalThis.crypto.randomUUID(), url: databaseUrl });
     await storage.init();
 
     const observerModel = new MockLanguageModelV2({
@@ -151,8 +150,8 @@ describe('Subconscious LibSQL integration', () => {
         },
       },
     });
-    const threadId = randomUUID();
-    const resourceId = randomUUID();
+    const threadId = globalThis.crypto.randomUUID();
+    const resourceId = globalThis.crypto.randomUUID();
     await memory.createThread({ threadId, resourceId, title: 'Subconscious curation' });
     await memory.saveMessages({ messages: [message(threadId, resourceId)] });
     const requestContext = new RequestContext();
@@ -162,7 +161,12 @@ describe('Subconscious LibSQL integration', () => {
       threadId,
       resourceId,
       requestContext,
-      sendStateSignal: vi.fn(async () => ({ skipped: false }) as any),
+      sendStateSignal: vi.fn(
+        async () =>
+          ({
+            skipped: false,
+          }) as any,
+      ),
     });
     expect(result.observed).toBe(true);
     await curatorContinuation;
@@ -181,7 +185,7 @@ describe('Subconscious LibSQL integration', () => {
     const matches = await vector.query({ indexName, queryVector: [0.1, 0.2, 0.3, 0.4], topK: 20 });
     expect(matches.map(match => match.id)).toContain(`knowledge:node:${atlas!.id}`);
 
-    const betaThreadId = randomUUID();
+    const betaThreadId = globalThis.crypto.randomUUID();
     await memory.createThread({ threadId: betaThreadId, resourceId, title: 'Sibling thread' });
     const tools = memory.listTools();
     const toolContext = { agent: { threadId: betaThreadId, resourceId }, requestContext } as any;
@@ -200,8 +204,8 @@ describe('Subconscious LibSQL integration', () => {
     const directory = await mkdtemp(join(tmpdir(), 'subconscious-remind-libsql-'));
     directories.push(directory);
     const databaseUrl = `file:${join(directory, 'knowledge.db')}`;
-    const storage = new LibSQLStore({ id: randomUUID(), url: databaseUrl });
-    const vector = new LibSQLVector({ id: randomUUID(), url: databaseUrl });
+    const storage = new LibSQLStore({ id: globalThis.crypto.randomUUID(), url: databaseUrl });
+    const vector = new LibSQLVector({ id: globalThis.crypto.randomUUID(), url: databaseUrl });
     await storage.init();
 
     let streamCall = 0;
@@ -270,8 +274,8 @@ describe('Subconscious LibSQL integration', () => {
         },
       },
     });
-    const threadId = randomUUID();
-    const resourceId = randomUUID();
+    const threadId = globalThis.crypto.randomUUID();
+    const resourceId = globalThis.crypto.randomUUID();
     const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
     const knowledge = (await storage.getStore('knowledge'))!;
     const atlas = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scope: scope.slice(0, 2) });
@@ -362,11 +366,11 @@ describe('Subconscious LibSQL integration', () => {
     const directory = await mkdtemp(join(tmpdir(), 'subconscious-remind-resource-'));
     directories.push(directory);
     const databaseUrl = `file:${join(directory, 'knowledge.db')}`;
-    const storage = new LibSQLStore({ id: randomUUID(), url: databaseUrl });
-    const vector = new LibSQLVector({ id: randomUUID(), url: databaseUrl });
+    const storage = new LibSQLStore({ id: globalThis.crypto.randomUUID(), url: databaseUrl });
+    const vector = new LibSQLVector({ id: globalThis.crypto.randomUUID(), url: databaseUrl });
     await storage.init();
-    const resourceId = randomUUID();
-    const threadIds = [randomUUID(), randomUUID()];
+    const resourceId = globalThis.crypto.randomUUID();
+    const threadIds = [globalThis.crypto.randomUUID(), globalThis.crypto.randomUUID()];
     const observations = threadIds
       .map(threadId => `<thread id="${threadId}">\n- Project Atlas planning is active.\n</thread>`)
       .join('\n');
@@ -508,12 +512,12 @@ describe('Subconscious LibSQL integration', () => {
     const directory = await mkdtemp(join(tmpdir(), 'subconscious-question-libsql-'));
     directories.push(directory);
     const databaseUrl = `file:${join(directory, 'memory.db')}`;
-    const storage = new LibSQLStore({ id: randomUUID(), url: databaseUrl });
-    const vector = new LibSQLVector({ id: randomUUID(), url: databaseUrl });
+    const storage = new LibSQLStore({ id: globalThis.crypto.randomUUID(), url: databaseUrl });
+    const vector = new LibSQLVector({ id: globalThis.crypto.randomUUID(), url: databaseUrl });
     await storage.init();
     const memory = new Memory({ storage, vector, embedder });
-    const parentThreadId = randomUUID();
-    const resourceId = randomUUID();
+    const parentThreadId = globalThis.crypto.randomUUID();
+    const resourceId = globalThis.crypto.randomUUID();
     await memory.createThread({ threadId: parentThreadId, resourceId, title: 'Parent' });
 
     let streamCall = 0;
@@ -631,11 +635,14 @@ describe('Subconscious LibSQL integration', () => {
   it('reconstructs direct memory questions and continuation attempts from LibSQL MessageList history', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'subconscious-continuation-libsql-'));
     directories.push(directory);
-    const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'memory.db')}` });
+    const storage = new LibSQLStore({
+      id: globalThis.crypto.randomUUID(),
+      url: `file:${join(directory, 'memory.db')}`,
+    });
     await storage.init();
     const memory = new Memory({ storage });
-    const parentThreadId = randomUUID();
-    const resourceId = randomUUID();
+    const parentThreadId = globalThis.crypto.randomUUID();
+    const resourceId = globalThis.crypto.randomUUID();
     const reminderThread = await ensureOwnedRemindThread({ memory, parentThreadId, resourceId });
     const question = message(reminderThread.id, resourceId, 'Memory question reply-1\n\nWhat did I decide?');
     question.createdAt = new Date(1_000);
@@ -660,7 +667,11 @@ describe('Subconscious LibSQL integration', () => {
       parentThreadId,
       parentAgent: { sendSignal: vi.fn() } as any,
       maxSteps: 5,
-      getReminderAgent: () => ({ id: 'reminder-agent', sendMessage }) as any,
+      getReminderAgent: () =>
+        ({
+          id: 'reminder-agent',
+          sendMessage,
+        }) as any,
     });
 
     await processor.processOutputResult({
@@ -709,7 +720,11 @@ describe('Subconscious LibSQL integration', () => {
       parentThreadId,
       parentAgent: { sendSignal: reconstructedParentSignal } as any,
       maxSteps: 5,
-      getReminderAgent: () => ({ id: 'reminder-agent', sendMessage: reconstructedSendMessage }) as any,
+      getReminderAgent: () =>
+        ({
+          id: 'reminder-agent',
+          sendMessage: reconstructedSendMessage,
+        }) as any,
     });
     await reconstructedProcessor.processOutputResult({
       state: {},
@@ -726,14 +741,17 @@ describe('Subconscious LibSQL integration', () => {
   it('isolates owned reminder threads by resource and cascades deletion conservatively', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'subconscious-delete-libsql-'));
     directories.push(directory);
-    const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'memory.db')}` });
+    const storage = new LibSQLStore({
+      id: globalThis.crypto.randomUUID(),
+      url: `file:${join(directory, 'memory.db')}`,
+    });
     await storage.init();
     const memory = new Memory({ storage });
-    const ownedParentId = randomUUID();
-    const unmarkedParentId = randomUUID();
-    const foreignParentId = randomUUID();
-    const ownedResourceId = randomUUID();
-    const foreignResourceId = randomUUID();
+    const ownedParentId = globalThis.crypto.randomUUID();
+    const unmarkedParentId = globalThis.crypto.randomUUID();
+    const foreignParentId = globalThis.crypto.randomUUID();
+    const ownedResourceId = globalThis.crypto.randomUUID();
+    const foreignResourceId = globalThis.crypto.randomUUID();
     for (const [threadId, resourceId] of [
       [ownedParentId, ownedResourceId],
       [unmarkedParentId, ownedResourceId],

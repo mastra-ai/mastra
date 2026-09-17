@@ -533,22 +533,22 @@ describe('MastraAuthNeon', () => {
       await expect(auth.destroySession('sess-abc')).resolves.not.toThrow();
     });
 
-    test('getSessionIdFromRequest extracts cookie', () => {
+    test('getSessionIdFromRequest extracts cookie', async () => {
       const auth = new MastraAuthNeon();
       const req = mockRawRequest({ Cookie: 'other=x; neonauth.session_token=tok123; foo=bar' });
-      expect(auth.getSessionIdFromRequest(req)).toBe('tok123');
+      await expect(auth.getSessionIdFromRequest(req)).resolves.toBe('tok123');
     });
 
-    test('getSessionIdFromRequest returns null when no cookie', () => {
+    test('getSessionIdFromRequest returns null when no cookie', async () => {
       const auth = new MastraAuthNeon();
       const req = mockRawRequest();
-      expect(auth.getSessionIdFromRequest(req)).toBeNull();
+      await expect(auth.getSessionIdFromRequest(req)).resolves.toBeNull();
     });
 
-    test('getSessionHeaders returns empty by default', () => {
+    test('getSessionHeaders returns empty by default', async () => {
       const auth = new MastraAuthNeon();
       const session = { id: 's1', userId: 'u1', expiresAt: new Date(), createdAt: new Date() };
-      expect(auth.getSessionHeaders(session)).toEqual({});
+      await expect(auth.getSessionHeaders(session)).resolves.toEqual({});
     });
 
     test('getBaseUrl returns the configured base URL', () => {

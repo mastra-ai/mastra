@@ -1,6 +1,7 @@
 import { StdinBuffer } from '@earendil-works/pi-tui';
 import type { Terminal } from '@earendil-works/pi-tui';
 import type { MastraCodeConfig } from '@mastra/code-sdk';
+import { detectProject } from '@mastra/code-sdk/utils/project';
 import type { Terminal as XtermTerminalType } from '@xterm/headless';
 import xterm from '@xterm/headless';
 
@@ -372,9 +373,12 @@ async function startMastraCodeApp(
   if (result.observabilityWarning) terminal.write(`⚠ ${result.observabilityWarning}\r\n`);
   await options?.onCreated?.(result);
 
+  const projectInfo = await detectProject(runConfig.cwd);
+
   const tui = new MastraTUI({
     controller: result.controller,
     session: result.session,
+    projectInfo,
     hookManager: result.hookManager,
     authStorage: result.authStorage,
     mcpManager: result.mcpManager,

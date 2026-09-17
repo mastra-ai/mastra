@@ -1,4 +1,3 @@
-import { createHash, randomUUID } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -347,8 +346,9 @@ function stableJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function snapshotHash(value: unknown): string {
-  return createHash('sha256').update(stableJson(value)).digest('hex');
+async function snapshotHash(value: unknown): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(stableJson(value)));
+  return Buffer.from(digest).toString('hex');
 }
 
 function resolveHomePath(path: string): string {
@@ -1222,11 +1222,11 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
           : 'unknown';
     const threadContentHash = readString(thread.content_hash);
     const unresolvedReviewThreads = Number(reviewState?.unresolved_count ?? 0);
-    const reviewStateHash = snapshotHash({
+    const reviewStateHash = await snapshotHash({
       unresolvedReviewThreads,
       latestReviewThreadAt: reviewState?.latest_review_thread_at,
     });
-    const contentHash = snapshotHash({
+    const contentHash = await snapshotHash({
       threadContentHash,
       state: thread.state,
       headSha: details?.head_sha,
@@ -1400,7 +1400,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   ): Promise<GithubOperationResult> {
     const pr = typeof input.pr === 'number' ? { number: input.pr } : input.pr;
     return this.#subscribe({
-      id: `github-command-subscribe-${randomUUID()}`,
+      id: `github-command-subscribe-${globalThis.crypto.randomUUID()}`,
       ...pr,
       mode: normalizeGithubSubscriptionMode(input.mode),
       threadId: input.threadId,
@@ -1413,7 +1413,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   ): Promise<GithubOperationResult> {
     const pr = typeof input.pr === 'number' ? { number: input.pr } : input.pr;
     return this.#unsubscribe({
-      id: `github-command-unsubscribe-${randomUUID()}`,
+      id: `github-command-unsubscribe-${globalThis.crypto.randomUUID()}`,
       ...pr,
       threadId: input.threadId,
       resourceId: input.resourceId,
@@ -1670,7 +1670,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           for (const pr of requestedPrs) {
             try {
               const result = await this.#subscribe({
-                id: `github-tool-subscribe-${randomUUID()}`,
+                id: `github-tool-subscribe-${globalThis.crypto.randomUUID()}`,
                 owner: pr.owner,
                 repo: pr.repo,
                 number: pr.number,
@@ -1736,7 +1736,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           for (const pr of requestedPrs) {
             try {
               const result = await this.#unsubscribe({
-                id: `github-tool-unsubscribe-${randomUUID()}`,
+                id: `github-tool-unsubscribe-${globalThis.crypto.randomUUID()}`,
                 owner: pr.owner,
                 repo: pr.repo,
                 number: pr.number,

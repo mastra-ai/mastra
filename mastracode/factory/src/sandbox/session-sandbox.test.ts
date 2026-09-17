@@ -129,7 +129,7 @@ describe('session sandbox memo', () => {
 describe('session setup hook', () => {
   let dir: string;
   const SETUP = 'pnpm install';
-  const digest = () => setupMarkerContent(SETUP);
+  const digest = async () => setupMarkerContent(SETUP);
 
   /** A run that materializes a fake checkout and, when the gate says so, "runs setup". */
   const runWith = (setupTouch: string) => async (sb: WorkspaceSandbox, _workdir: string, gate: SessionSetupGate) => {
@@ -155,7 +155,7 @@ describe('session setup hook', () => {
     });
     await sandbox._start();
     await expect(fs.stat(path.join(boot, 'setup-ran.txt'))).resolves.toBeDefined();
-    await expect(fs.readFile(path.join(boot, '.mastra-sandbox/setup'), 'utf8')).resolves.toBe(digest());
+    await expect(fs.readFile(path.join(boot, '.mastra-sandbox/setup'), 'utf8')).resolves.toBe(await digest());
   });
 
   it('a fresh sandbox that already carries the marker (warm template image) skips setup but still materializes', async () => {
@@ -164,7 +164,7 @@ describe('session setup hook', () => {
     await fs.mkdir(path.join(boot, 'repo/.git'), { recursive: true });
     await fs.mkdir(path.join(boot, '.mastra-factory'), { recursive: true });
     await fs.mkdir(path.join(boot, '.mastra-sandbox'));
-    await fs.writeFile(path.join(boot, '.mastra-sandbox/setup'), digest());
+    await fs.writeFile(path.join(boot, '.mastra-sandbox/setup'), await digest());
 
     const sandbox = new LocalSandbox({
       workingDirectory: boot,
@@ -204,7 +204,7 @@ describe('session setup hook', () => {
     });
     await legacy._start();
     await expect(fs.stat(path.join(boot, 'legacy-rerun.txt'))).resolves.toBeDefined();
-    await expect(fs.readFile(path.join(boot, '.mastra-sandbox/setup'), 'utf8')).resolves.toBe(digest());
+    await expect(fs.readFile(path.join(boot, '.mastra-sandbox/setup'), 'utf8')).resolves.toBe(await digest());
 
     const edited = new LocalSandbox({
       workingDirectory: boot,
@@ -213,7 +213,7 @@ describe('session setup hook', () => {
     await edited._start();
     await expect(fs.stat(path.join(boot, 'edited-rerun.txt'))).resolves.toBeDefined();
     await expect(fs.readFile(path.join(boot, '.mastra-sandbox/setup'), 'utf8')).resolves.toBe(
-      setupMarkerContent('pnpm ci'),
+      await setupMarkerContent('pnpm ci'),
     );
   });
 
@@ -277,6 +277,6 @@ describe('session setup hook', () => {
     });
     await healed._start();
     await expect(fs.stat(path.join(boot, 'healed.txt'))).resolves.toBeDefined();
-    await expect(fs.readFile(path.join(boot, '.mastra-sandbox/setup'), 'utf8')).resolves.toBe(digest());
+    await expect(fs.readFile(path.join(boot, '.mastra-sandbox/setup'), 'utf8')).resolves.toBe(await digest());
   });
 });

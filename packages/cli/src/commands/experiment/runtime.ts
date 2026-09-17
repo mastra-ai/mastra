@@ -1,4 +1,3 @@
-import { createHash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 
 export const EXPERIMENT_WORKER_PROTOCOL_VERSION = '1' as const;
@@ -177,8 +176,10 @@ function canonicalize(value: unknown): string {
     .join(',')}}`;
 }
 
-function datasetDigest(items: DatasetItem[]): string {
-  return createHash('sha256').update(canonicalize(items)).digest('hex');
+async function datasetDigest(items: DatasetItem[]): Promise<string> {
+  return Buffer.from(
+    await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalize(items))),
+  ).toString('hex');
 }
 
 function isValidFinishedEvent(event: ExperimentEvent): boolean {
@@ -189,7 +190,7 @@ function isValidFinishedEvent(event: ExperimentEvent): boolean {
   );
 }
 
-function validateRunRequest(value: unknown, build: ExperimentWorkerBuildIdentity): string | undefined {
+async function validateRunRequest(value: unknown, build: ExperimentWorkerBuildIdentity): Promise<string | undefined> {
   if (!isRecord(value) || value.type !== 'run') return 'expected run request';
   const request = value as unknown as RunRequest;
   if (
@@ -246,7 +247,7 @@ function validateRunRequest(value: unknown, build: ExperimentWorkerBuildIdentity
   ) {
     return 'unsupported dataset canonicalization version';
   }
-  const digest = datasetDigest(dataset.items);
+  const digest = await datasetDigest(dataset.items);
   if (
     dataset.digest !== digest ||
     request.datasetAttestation?.digest !== digest ||
@@ -321,8 +322,8 @@ export async function runExperimentWorker({
   stdin = process.stdin,
   stdout = process.stdout,
   stderr = process.stderr,
-  workerId = randomUUID(),
-  createEventId = randomUUID,
+  workerId = globalThis.crypto.randomUUID(),
+  createEventId = () => globalThis.crypto.randomUUID(),
   now = () => new Date(),
 }: ExperimentWorkerDependencies): Promise<number> {
   let correlation: Correlation | undefined;
@@ -674,7 +675,7 @@ export async function runExperimentWorker({
       return;
     }
     if (!correlation) {
-      const validationError = validateRunRequest(value, build);
+      const validationError = await validateRunRequest(value, build);
       if (validationError) {
         abortForProtocolFailure(validationError);
         return;

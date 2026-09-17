@@ -392,7 +392,7 @@ export class MastraAuthNeon
     return this.validateSession(sessionId);
   }
 
-  getSessionIdFromRequest(request: Request): string | null {
+  async getSessionIdFromRequest(request: Request): Promise<string | null> {
     const cookieHeader = request.headers.get('Cookie');
     if (!cookieHeader) return null;
 
@@ -406,7 +406,7 @@ export class MastraAuthNeon
     return null;
   }
 
-  getSessionHeaders(session: Session): Record<string, string> {
+  async getSessionHeaders(session: Session): Promise<Record<string, string>> {
     const cookie = (session as unknown as Record<string, unknown>)._sessionCookie;
     if (typeof cookie === 'string') {
       return { 'Set-Cookie': cookie };

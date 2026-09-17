@@ -4,27 +4,34 @@ import { shouldSkipDotenvLoading } from '../utils.js';
 
 export function getWorkerEntry(): string {
   return `
-    import { timingSafeEqual } from 'node:crypto';
     import { createServer } from 'node:http';
     import { mastra } from '#mastra';
 
     const workerConfigToken = process.env.MASTRA_WORKER_CONFIG_TOKEN;
+    const configTokenComparisonKey = await globalThis.crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode('mastra-worker-config-token-comparison-v1'),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign', 'verify'],
+    );
     let workersReady = false;
     let shuttingDown = false;
 
-    const isWorkerConfigRequestAuthorized = request => {
+    const isWorkerConfigRequestAuthorized = async request => {
       const authorization = request.headers.authorization;
       if (!workerConfigToken || !authorization?.startsWith('Bearer ')) return false;
-      const providedToken = Buffer.from(authorization.slice('Bearer '.length));
-      const expectedToken = Buffer.from(workerConfigToken);
-      return providedToken.length === expectedToken.length && timingSafeEqual(providedToken, expectedToken);
+      const expectedToken = new TextEncoder().encode(workerConfigToken);
+      const providedToken = new TextEncoder().encode(authorization.slice('Bearer '.length));
+      const signature = await globalThis.crypto.subtle.sign('HMAC', configTokenComparisonKey, expectedToken);
+      return globalThis.crypto.subtle.verify('HMAC', configTokenComparisonKey, signature, providedToken);
     };
 
-    const healthServer = createServer((request, response) => {
+    const healthServer = createServer(async (request, response) => {
       response.setHeader('content-type', 'application/json');
 
       if (request.url === '/config') {
-        if (!isWorkerConfigRequestAuthorized(request)) {
+        if (!(await isWorkerConfigRequestAuthorized(request))) {
           response.statusCode = 401;
           response.end(JSON.stringify({ status: 'unauthorized' }));
           return;

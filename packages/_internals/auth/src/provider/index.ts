@@ -436,12 +436,12 @@ export class CompositeAuth
     return null;
   }
 
-  getSessionIdFromRequest(request: Request): string | null {
+  async getSessionIdFromRequest(request: Request): Promise<string | null> {
     // Try each session provider until one finds a session ID
     for (const provider of this.providers) {
       if (isSessionProvider(provider)) {
         try {
-          const sessionId = provider.getSessionIdFromRequest(request);
+          const sessionId = await provider.getSessionIdFromRequest(request);
           if (sessionId) return sessionId;
         } catch {
           // Try next provider
@@ -451,12 +451,12 @@ export class CompositeAuth
     return null;
   }
 
-  getSessionHeaders(session: Session): Record<string, string> {
+  async getSessionHeaders(session: Session): Promise<Record<string, string>> {
     // Intentionally uses only the first session provider: a session is created by one
     // provider, so we only set its cookie. clearSession clears ALL providers to ensure
     // no stale cookies remain.
     const sessionProvider = this.findProvider(isSessionProvider);
-    return sessionProvider?.getSessionHeaders(session) ?? {};
+    return (await sessionProvider?.getSessionHeaders(session)) ?? {};
   }
 
   getClearSessionHeaders(): Record<string, string> {

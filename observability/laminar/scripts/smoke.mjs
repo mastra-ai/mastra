@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { LaminarExporter, otelTraceIdToUUID } from '@mastra/laminar';
 
@@ -7,9 +6,9 @@ if (!process.env.LMNR_PROJECT_API_KEY) {
   process.exit(1);
 }
 
-const traceId = randomBytes(16).toString('hex');
-const rootSpanId = randomBytes(8).toString('hex');
-const llmSpanId = randomBytes(8).toString('hex');
+const traceId = Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(16))).toString('hex');
+const rootSpanId = Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(8))).toString('hex');
+const llmSpanId = Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(8))).toString('hex');
 
 const now = new Date();
 

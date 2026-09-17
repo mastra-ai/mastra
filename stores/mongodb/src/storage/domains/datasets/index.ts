@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   DatasetsStorage,
@@ -234,7 +232,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
-      const id = input.id ?? randomUUID();
+      const id = input.id ?? globalThis.crypto.randomUUID();
       if (input.id !== undefined) this.validateCallerDefinedDatasetId(input.id);
       const now = new Date();
       const collection = await this.getCollection(TABLE_DATASETS);
@@ -477,8 +475,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
   protected async _doAddItem(args: AddDatasetItemInput): Promise<DatasetItem> {
     try {
-      const id = randomUUID();
-      const versionId = randomUUID();
+      const id = globalThis.crypto.randomUUID();
+      const versionId = globalThis.crypto.randomUUID();
       const now = new Date();
 
       const datasetsCollection = await this.getCollection(TABLE_DATASETS);
@@ -607,7 +605,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       }
 
       const now = new Date();
-      const versionId = randomUUID();
+      const versionId = globalThis.crypto.randomUUID();
       const datasetsCollection = await this.getCollection(TABLE_DATASETS);
       const itemsCollection = await this.getCollection(TABLE_DATASET_ITEMS);
       const versionsCollection = await this.getCollection(TABLE_DATASET_VERSIONS);
@@ -738,7 +736,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
   protected async _doDeleteItem({ id, datasetId }: DeleteDatasetItemInput): Promise<void> {
     try {
       const now = new Date();
-      const versionId = randomUUID();
+      const versionId = globalThis.crypto.randomUUID();
       const datasetsCollection = await this.getCollection(TABLE_DATASETS);
       const itemsCollection = await this.getCollection(TABLE_DATASET_ITEMS);
       const versionsCollection = await this.getCollection(TABLE_DATASET_VERSIONS);
@@ -953,7 +951,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         const plan = this.planDatasetItemBatch(
           input.items,
           historyRows.map(row => this.transformItemRowFull(row)),
-          randomUUID,
+          () => globalThis.crypto.randomUUID(),
         );
         const resolved = new Map<string, DatasetItem>(
           [...plan.existingCurrentItems].map(([id, row]) => [id, this.datasetItemFromRow(row)]),
@@ -991,7 +989,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             resolved.set(item.id, item);
           }
           await versionsCollection.insertOne(
-            { id: randomUUID(), datasetId: input.datasetId, version: newVersion, createdAt: now },
+            { id: globalThis.crypto.randomUUID(), datasetId: input.datasetId, version: newVersion, createdAt: now },
             { session },
           );
         }
@@ -1028,7 +1026,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const itemsCollection = await this.getCollection(TABLE_DATASET_ITEMS);
 
       const now = new Date();
-      const versionId = randomUUID();
+      const versionId = globalThis.crypto.randomUUID();
 
       const datasetsCollection = await this.getCollection(TABLE_DATASETS);
       const versionsCollection = await this.getCollection(TABLE_DATASET_VERSIONS);
@@ -1295,7 +1293,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
   async createDatasetVersion(datasetId: string, version: number): Promise<DatasetVersion> {
     try {
-      const id = randomUUID();
+      const id = globalThis.crypto.randomUUID();
       const now = new Date();
       const collection = await this.getCollection(TABLE_DATASET_VERSIONS);
 

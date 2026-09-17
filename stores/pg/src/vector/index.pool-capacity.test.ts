@@ -1,11 +1,10 @@
-import { randomUUID } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
 
 import { PgVector } from '.';
 
 it('supports cold-cache vector operations with a single-connection pool', async () => {
   const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
-  const indexName = `pool_${randomUUID().replaceAll('-', '')}`;
+  const indexName = `pool_${globalThis.crypto.randomUUID().replaceAll('-', '')}`;
   const admin = new PgVector({ id: 'pool-capacity-admin', connectionString, pgPoolOptions: { max: 1 } });
   const createClient = () => {
     // Prevent constructor warmup from filling the metadata cache before the operation under test.

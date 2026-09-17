@@ -79,8 +79,8 @@ export interface LLMMock {
   readonly recordingName: string;
   /** Current test mode (record, replay, auto, live) */
   readonly mode: LLMRecorderInstance['mode'];
-  /** Start intercepting requests */
-  start(): void;
+  /** Initialize and start intercepting requests. */
+  start(): Promise<void>;
   /** Save recordings (if in record mode) and stop intercepting */
   saveAndStop(): Promise<void>;
   /** The underlying recorder instance for advanced use */
@@ -178,7 +178,7 @@ export function createLLMMock(model: ModelLike, options: MockOptions = {}): LLMM
   const { provider, modelId } = model;
   const recordingName = name ?? deriveModelRecordingName(provider, modelId);
 
-  const recorder = setupLLMRecording({
+  const recorderPromise = setupLLMRecording({
     name: recordingName,
     recordingsDir,
     debug,
@@ -189,25 +189,32 @@ export function createLLMMock(model: ModelLike, options: MockOptions = {}): LLMM
     },
     ...recorderOptions,
   });
+  let recorder: LLMRecorderInstance | undefined;
+  const getRecorder = async () => (recorder ??= await recorderPromise);
 
   return {
     provider,
     modelId,
     recordingName,
     get mode() {
+      if (!recorder) throw new Error('LLM mock has not been initialized; await start() first');
       return recorder.mode;
     },
-    start() {
-      recorder.start();
+    async start() {
+      (await getRecorder()).start();
     },
     async saveAndStop() {
+      const activeRecorder = await getRecorder();
       try {
-        await recorder.save();
+        await activeRecorder.save();
       } finally {
-        recorder.stop();
+        activeRecorder.stop();
       }
     },
-    recorder,
+    get recorder() {
+      if (!recorder) throw new Error('LLM mock has not been initialized; await start() first');
+      return recorder;
+    },
   };
 }
 
@@ -219,8 +226,8 @@ export interface GatewayMock {
   readonly recordingName: string;
   /** Current test mode (record, replay, auto, live) */
   readonly mode: LLMRecorderInstance['mode'];
-  /** Start intercepting requests */
-  start(): void;
+  /** Initialize and start intercepting requests. */
+  start(): Promise<void>;
   /** Save recordings (if in record mode) and stop intercepting */
   saveAndStop(): Promise<void>;
   /** The underlying recorder instance for advanced use */
@@ -257,7 +264,7 @@ export function createGatewayMock(options: MockOptions = {}): GatewayMock {
 
   const recordingName = name ?? getTestBaseName();
 
-  const recorder = setupLLMRecording({
+  const recorderPromise = setupLLMRecording({
     name: recordingName,
     recordingsDir,
     debug,
@@ -266,22 +273,29 @@ export function createGatewayMock(options: MockOptions = {}): GatewayMock {
     },
     ...recorderOptions,
   });
+  let recorder: LLMRecorderInstance | undefined;
+  const getRecorder = async () => (recorder ??= await recorderPromise);
 
   return {
     recordingName,
     get mode() {
+      if (!recorder) throw new Error('Gateway mock has not been initialized; await start() first');
       return recorder.mode;
     },
-    start() {
-      recorder.start();
+    async start() {
+      (await getRecorder()).start();
     },
     async saveAndStop() {
+      const activeRecorder = await getRecorder();
       try {
-        await recorder.save();
+        await activeRecorder.save();
       } finally {
-        recorder.stop();
+        activeRecorder.stop();
       }
     },
-    recorder,
+    get recorder() {
+      if (!recorder) throw new Error('Gateway mock has not been initialized; await start() first');
+      return recorder;
+    },
   };
 }

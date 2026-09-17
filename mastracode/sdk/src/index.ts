@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { hostname } from 'node:os';
 import path from 'node:path';
 
@@ -205,8 +204,9 @@ function emitTransientRetry(
 }
 
 /** Short deterministic hash (sha256, first 12 hex chars) matching project.ts shortHash style. */
-function shortHash(input: string): string {
-  return createHash('sha256').update(input).digest('hex').slice(0, 12);
+async function shortHash(input: string): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  return Buffer.from(digest).toString('hex').slice(0, 12);
 }
 
 function applyEffectiveDefaultsToModes(
@@ -503,7 +503,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const amazonBedrockGateway = createAmazonBedrockGateway();
 
   // Project detection
-  const project = detectProject(cwd);
+  const project = await detectProject(cwd);
 
   const resourceIdOverride = getResourceIdOverride(project.rootPath, configDir);
   if (resourceIdOverride) {
@@ -514,8 +514,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // Stable session id unique to this project/resource, and a machine-bound owner
   // id. resourceId encodes root path + git identity and honors overrides, so it
   // is the right input for scoping the session to the cwd/project.
-  const sessionId = `mastracode-session-${shortHash(project.resourceId)}`;
-  const ownerId = `mastracode-${shortHash(`${hostname()}\0${project.rootPath}`)}`;
+  const sessionId = `mastracode-session-${await shortHash(project.resourceId)}`;
+  const ownerId = `mastracode-${await shortHash(`${hostname()}\0${project.rootPath}`)}`;
 
   const configuredPubSub = config?.pubsub;
   const useUnixSocketPubSub =

@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, posix, relative } from 'node:path';
@@ -36,8 +35,8 @@ const PACKAGE_NAME_PATTERN = /^(?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/;
 const TARBALL_SUFFIX_PATTERN = /\.(?:tgz|tar\.gz|tar)$/i;
 /** npm reads a value starting like this as a path, whatever follows. A bare `~` is a semver range. */
 const FILE_SPEC_PREFIX_PATTERN = /^(?:\.|~[/\\]|[/\\]|[A-Za-z]:[/\\])/;
-/** A range admitting any published version: `*`, `x`, `>=0`, and any union containing one. */
-const UNBOUNDED_RANGE_PATTERN = /(?:^|\|\||\s)\s*(?:[*xX]|>=?\s*0(?:\.0)*(?:\.0)*)\s*(?:$|\|\|)/;
+/** A range admitting any published version: `*`, `x`, or `>=0`. */
+const UNBOUNDED_RANGE_PATTERN = /^(?:[*xX]|>=?\s*0(?:\.0)*)$/;
 
 /**
  * Constraints declared by the source app, plus the packages some resolution field pins.
@@ -107,7 +106,7 @@ const isBoundedVersionSpec = (spec: string): boolean => {
       })()
     : spec;
 
-  return /\d/.test(range) && !UNBOUNDED_RANGE_PATTERN.test(range);
+  return /\d/.test(range) && !range.split('||').some(part => UNBOUNDED_RANGE_PATTERN.test(part.trim()));
 };
 
 const readManifest = async (manifestPath: string | undefined): Promise<Record<string, unknown> | undefined> => {
@@ -282,8 +281,10 @@ export const applySourceDependencyRange = (
   return { ...dependencyInfo, version: declared };
 };
 
-function toolIdForEntry(relativeEntryFile: string): string {
-  const digest = createHash('sha256').update(relativeEntryFile).digest('hex');
+async function toolIdForEntry(relativeEntryFile: string): Promise<string> {
+  const digest = Buffer.from(
+    await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(relativeEntryFile)),
+  ).toString('hex');
   return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}`;
 }
 
@@ -577,9 +578,16 @@ export abstract class Bundler extends MastraBundler {
     }
 
     return Object.fromEntries(
-      [...entries.entries()]
-        .sort(([first], [second]) => (first < second ? -1 : first > second ? 1 : 0))
-        .map(([relativeEntryFile, entryFile]) => [`tools/${toolIdForEntry(relativeEntryFile)}`, entryFile]),
+      await Promise.all(
+        [...entries.entries()]
+          .sort(([first], [second]) => (first < second ? -1 : first > second ? 1 : 0))
+          .map(
+            async ([relativeEntryFile, entryFile]): Promise<[string, string]> => [
+              `tools/${await toolIdForEntry(relativeEntryFile)}`,
+              entryFile,
+            ],
+          ),
+      ),
     );
   }
 

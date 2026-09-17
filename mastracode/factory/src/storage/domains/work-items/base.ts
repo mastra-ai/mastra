@@ -8,8 +8,6 @@
  * Factory transition path keeps one exclusive current stage per item.
  */
 
-import { createHash } from 'node:crypto';
-
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 import type { FactoryTriageType } from '../../../rules/types.js';
@@ -33,8 +31,9 @@ function stableJson(value: unknown): string {
   return JSON.stringify(value) ?? 'null';
 }
 
-export function factoryDecisionHash(decision: Record<string, unknown>): string {
-  return createHash('sha256').update(stableJson(decision)).digest('hex');
+export async function factoryDecisionHash(decision: Record<string, unknown>): Promise<string> {
+  const bytes = new TextEncoder().encode(stableJson(decision));
+  return Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', bytes)).toString('hex');
 }
 
 export interface ExternalWorkItemSource {
@@ -1815,7 +1814,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 source_key: decisionSourceKey(decision),
                 idempotency_key: String(decision.idempotencyKey),
                 effect_ordinal: index,
-                effect_hash: factoryDecisionHash(decision),
+                effect_hash: await factoryDecisionHash(decision),
                 causal_chain: input.causalChain,
                 actor: null,
                 decision,
@@ -1953,7 +1952,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             source_key: decisionSourceKey(decision),
             idempotency_key: String(decision.idempotencyKey),
             effect_ordinal: effectOrdinal,
-            effect_hash: factoryDecisionHash(decision),
+            effect_hash: await factoryDecisionHash(decision),
             causal_chain: input.causalChain,
             actor: input.actor,
             decision,

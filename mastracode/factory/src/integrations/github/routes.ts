@@ -1,17 +1,3 @@
-/**
- * Mastra `apiRoutes` for the GitHub App project feature.
- *
- * Registered alongside the other `/web/*` routes, behind the host auth gate.
- * Every route additionally re-checks the authenticated user via the injected
- * `RouteAuth` seam and scopes all rows by that user's stable id, so a user can
- * only ever see and operate on their own installations and projects.
- *
- * When the feature is disabled (`isGithubFeatureEnabled()` false), `buildGithubRoutes`
- * returns only `GET /web/github/status`, which reports `enabled:false`
- * so the SPA can cleanly hide all GitHub UI.
- */
-
-import { randomUUID } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import { resolveModel } from '@mastra/code-sdk/agents/model';
 import { RequestContext } from '@mastra/core/request-context';
@@ -445,7 +431,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   if (!isGithubFeatureEnabled({ github, auth }) || !github || !stateSigner) {
     return routes;
   }
-  const signState = (orgId: string, userId: string): string => stateSigner.sign(orgId, userId);
+  const signState = (orgId: string, userId: string) => stateSigner.sign(orgId, userId);
   const verifyState = (state: string | undefined) => stateSigner.verify(state);
 
   routes.push(
@@ -528,7 +514,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
-        const state = signState(resolved.tenant.orgId, resolved.tenant.userId);
+        const state = await signState(resolved.tenant.orgId, resolved.tenant.userId);
         if (c.req.query('manage')) return c.redirect(github.buildInstallUrl(state));
         return c.redirect(github.buildOAuthIdentifyUrl(state, redirectUri));
       },
@@ -551,9 +537,9 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           // arrives with `installation_id` + `setup_action` but no state. We
           // never trust the raw installation_id; start a fresh identify bounce
           // bound to the current session so the update re-syncs installations.
-          return c.redirect(github.buildOAuthIdentifyUrl(signState(orgId, userId), redirectUri));
+          return c.redirect(github.buildOAuthIdentifyUrl(await signState(orgId, userId), redirectUri));
         }
-        const stateTenant = verifyState(state);
+        const stateTenant = await verifyState(state);
         if (!stateTenant || stateTenant.userId !== userId || stateTenant.orgId !== orgId) {
           // CSRF / cross-user/org linking protection: the signed state must belong
           // to the same logged-in user *and* their current org.
@@ -577,7 +563,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         // an arbitrary id — so when no code is present we bounce through the OAuth
         // identify flow to obtain a verified user token first.
         if (!code) {
-          return c.redirect(github.buildOAuthIdentifyUrl(signState(orgId, userId), redirectUri));
+          return c.redirect(github.buildOAuthIdentifyUrl(await signState(orgId, userId), redirectUri));
         }
 
         try {
@@ -588,7 +574,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             // install page. After installing, GitHub redirects back here with
             // the same state (and no code), which bounces through identify
             // again and lands in the persist path below.
-            return c.redirect(github.buildInstallUrl(signState(orgId, userId)));
+            return c.redirect(github.buildInstallUrl(await signState(orgId, userId)));
           }
           for (const inst of installations) {
             // The installation is org-owned; `userId` records who connected it.
@@ -1280,7 +1266,7 @@ function buildProjectGitRoutes({
         ) {
           return c.json({ error: 'Invalid sessionId' }, 400);
         }
-        const sessionId = requestedSessionId ?? randomUUID();
+        const sessionId = requestedSessionId ?? globalThis.crypto.randomUUID();
 
         const requestedTitle = body.title;
         if (requestedTitle !== undefined && typeof requestedTitle !== 'string') {

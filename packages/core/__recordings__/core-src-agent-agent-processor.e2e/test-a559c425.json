@@ -9,7 +9,7 @@
   },
   "recordings": [
     {
-      "hash": "951dd5ee8f3228d1",
+      "hash": "c0e0ff248071108a",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -153,7 +153,7 @@
       }
     },
     {
-      "hash": "ecbff2e869136a3e",
+      "hash": "bf5d4801c583397e",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",

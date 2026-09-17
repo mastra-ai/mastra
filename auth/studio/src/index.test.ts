@@ -98,13 +98,13 @@ describe('MastraAuthStudio', () => {
       expect(auth.isMastraCloudAuth).toBe(true);
     });
 
-    it('should not auto-detect a .mastra.ai cookie domain from the built-in default URL', () => {
+    it('should not auto-detect a .mastra.ai cookie domain from the built-in default URL', async () => {
       // The platform.mastra.ai fallback must not flip on production cookies —
       // a localhost studio using the default would mint Domain=.mastra.ai
       // cookies the browser rejects.
       delete process.env.MASTRA_SHARED_API_URL;
       const a = new MastraAuthStudio();
-      const headers = a.getSessionHeaders({ id: 'sess', userId: 'u1' } as any);
+      const headers = await a.getSessionHeaders({ id: 'sess', userId: 'u1' } as any);
       expect(headers['Set-Cookie']).not.toContain('Domain=');
       expect(headers['Set-Cookie']).not.toContain('Secure');
     });
@@ -697,25 +697,25 @@ describe('MastraAuthStudio', () => {
   });
 
   describe('getSessionIdFromRequest', () => {
-    it('should extract wos-session cookie from request', () => {
+    it('should extract wos-session cookie from request', async () => {
       const req = mockRequest({ cookie: 'other=foo; wos-session=my-token; another=bar' });
-      expect(auth.getSessionIdFromRequest(req)).toBe('my-token');
+      expect(await auth.getSessionIdFromRequest(req)).toBe('my-token');
     });
 
-    it('should return null when no wos-session cookie', () => {
+    it('should return null when no wos-session cookie', async () => {
       const req = mockRequest({ cookie: 'other=foo' });
-      expect(auth.getSessionIdFromRequest(req)).toBeNull();
+      expect(await auth.getSessionIdFromRequest(req)).toBeNull();
     });
 
-    it('should return null when no Cookie header', () => {
+    it('should return null when no Cookie header', async () => {
       const req = mockRequest();
-      expect(auth.getSessionIdFromRequest(req)).toBeNull();
+      expect(await auth.getSessionIdFromRequest(req)).toBeNull();
     });
   });
 
   describe('getSessionHeaders', () => {
-    it('should return Set-Cookie header without Secure/Domain for localhost', () => {
-      const headers = auth.getSessionHeaders({
+    it('should return Set-Cookie header without Secure/Domain for localhost', async () => {
+      const headers = await auth.getSessionHeaders({
         id: 'token-123',
         userId: 'user-1',
         expiresAt: new Date(),
@@ -727,10 +727,10 @@ describe('MastraAuthStudio', () => {
       expect(headers['Set-Cookie']).not.toContain('Domain');
     });
 
-    it('should include Secure and Domain when sharedApiUrl is on .mastra.ai', () => {
+    it('should include Secure and Domain when sharedApiUrl is on .mastra.ai', async () => {
       const prodAuth = new MastraAuthStudio({ sharedApiUrl: SHARED_API_PROD });
 
-      const headers = prodAuth.getSessionHeaders({
+      const headers = await prodAuth.getSessionHeaders({
         id: 'token-123',
         userId: 'user-1',
         expiresAt: new Date(),
@@ -741,13 +741,13 @@ describe('MastraAuthStudio', () => {
       expect(headers['Set-Cookie']).toContain('Domain=.mastra.ai');
     });
 
-    it('should use custom cookieDomain when provided', () => {
+    it('should use custom cookieDomain when provided', async () => {
       const customAuth = new MastraAuthStudio({
         sharedApiUrl: SHARED_API,
         cookieDomain: '.example.com',
       });
 
-      const headers = customAuth.getSessionHeaders({
+      const headers = await customAuth.getSessionHeaders({
         id: 'token-123',
         userId: 'user-1',
         expiresAt: new Date(),
@@ -759,11 +759,11 @@ describe('MastraAuthStudio', () => {
       expect(headers['Set-Cookie']).not.toContain('.mastra.ai');
     });
 
-    it('should use MASTRA_COOKIE_DOMAIN env var when no explicit option', () => {
+    it('should use MASTRA_COOKIE_DOMAIN env var when no explicit option', async () => {
       process.env.MASTRA_COOKIE_DOMAIN = '.env-domain.io';
       const envAuth = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
 
-      const headers = envAuth.getSessionHeaders({
+      const headers = await envAuth.getSessionHeaders({
         id: 'token-123',
         userId: 'user-1',
         expiresAt: new Date(),
@@ -775,14 +775,14 @@ describe('MastraAuthStudio', () => {
       delete process.env.MASTRA_COOKIE_DOMAIN;
     });
 
-    it('should prefer explicit cookieDomain option over env var', () => {
+    it('should prefer explicit cookieDomain option over env var', async () => {
       process.env.MASTRA_COOKIE_DOMAIN = '.env-domain.io';
       const customAuth = new MastraAuthStudio({
         sharedApiUrl: SHARED_API,
         cookieDomain: '.explicit.com',
       });
 
-      const headers = customAuth.getSessionHeaders({
+      const headers = await customAuth.getSessionHeaders({
         id: 'token-123',
         userId: 'user-1',
         expiresAt: new Date(),
@@ -794,13 +794,13 @@ describe('MastraAuthStudio', () => {
       delete process.env.MASTRA_COOKIE_DOMAIN;
     });
 
-    it('should not auto-detect mastra.ai from malicious URLs', () => {
+    it('should not auto-detect mastra.ai from malicious URLs', async () => {
       // Ensure hostname-based detection prevents false positives
       const maliciousAuth = new MastraAuthStudio({
         sharedApiUrl: 'https://api.mastra.ai.evil.com/v1',
       });
 
-      const headers = maliciousAuth.getSessionHeaders({
+      const headers = await maliciousAuth.getSessionHeaders({
         id: 'token-123',
         userId: 'user-1',
         expiresAt: new Date(),

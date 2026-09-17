@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from '../boards/transition-policy.js';
@@ -257,7 +255,7 @@ export class FactoryTransitionService {
     );
     if (replay) return replay as unknown as FactoryTransitionResult;
 
-    const transitionId = request.ingress.transitionId ?? randomUUID();
+    const transitionId = request.ingress.transitionId ?? globalThis.crypto.randomUUID();
     const item = await this.#storage.get({ orgId: request.orgId, id: request.workItemId });
     if (!item) {
       const rejection = await this.#commitRejection(

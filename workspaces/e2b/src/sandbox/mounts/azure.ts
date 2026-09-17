@@ -1,7 +1,6 @@
-import { createHash } from 'node:crypto';
-
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
+import { sha256Hex } from '../../utils/crypto';
 import { shellQuote } from '../../utils/shell-quote';
 import { LOG_PREFIX, validateEndpoint, validatePrefix } from './types';
 import type { MountContext } from './types';
@@ -304,7 +303,7 @@ export async function mountAzure(mountPath: string, config: E2BAzureBlobMountCon
     }
   }
 
-  const mountHash = createHash('md5').update(mountPath).digest('hex').slice(0, 8);
+  const mountHash = (await sha256Hex(mountPath)).slice(0, 8);
   const configPath = `/tmp/.blobfuse2-config-${mountHash}.yaml`;
   const cachePath = `/tmp/blobfuse2-cache-${mountHash}`;
   const yaml = buildBlobfuseConfig(config.container, auth, cachePath, !!config.readOnly);

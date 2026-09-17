@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { Agent } from '../agent';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../agent/message-list/state/types';
@@ -2083,7 +2081,7 @@ export class AgentController<TState = {}> {
     if (!this.#resolveStorage()) return null;
     const memoryStorage = await this.getMemoryStorage();
     const dbMessage = {
-      id: randomUUID(),
+      id: globalThis.crypto.randomUUID(),
       role,
       threadId,
       resourceId,
@@ -2470,6 +2468,6 @@ export class AgentController<TState = {}> {
     if (this.config.idGenerator) {
       return this.config.idGenerator();
     }
-    return randomUUID();
+    return globalThis.crypto.randomUUID();
   }
 }

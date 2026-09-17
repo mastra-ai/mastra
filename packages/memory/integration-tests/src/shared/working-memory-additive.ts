@@ -1,11 +1,3 @@
-/**
- * Test for GitHub Issue #7775: Working Memory Updates Not Always Additive
- * https://github.com/mastra-ai/mastra/issues/7775
- *
- * These tests verify that schema-based working memory uses MERGE semantics (PATCH),
- * preserving existing data when new data is added across multiple conversation turns.
- */
-import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -47,7 +39,7 @@ async function agentGenerate(
 }
 
 const createTestThread = (title: string, metadata = {}) => ({
-  id: randomUUID(),
+  id: globalThis.crypto.randomUUID(),
   title,
   resourceId,
   metadata,

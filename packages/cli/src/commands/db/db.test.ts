@@ -69,30 +69,30 @@ describe('formatScope', () => {
 });
 
 describe('defaultDatabaseName', () => {
-  it('derives a name from the project slug with a per-provider suffix', () => {
-    expect(defaultDatabaseName('turso', { name: 'My App', slug: 'my-app' })).toBe('my-app-turso');
+  it('derives a name from the project slug with a per-provider suffix', async () => {
+    expect(await defaultDatabaseName('turso', { name: 'My App', slug: 'my-app' })).toBe('my-app-turso');
   });
 
-  it('matches the dashboard suggestions for every provider', () => {
+  it('matches the dashboard suggestions for every provider', async () => {
     // Must stay in sync with `suggestDatabaseName` in the platform
     // frontend so CLI- and UI-created databases look the same.
-    expect(defaultDatabaseName('turso', { name: 'My App', slug: 'my-app' })).toBe('my-app-turso');
-    expect(defaultDatabaseName('neon', { name: 'My App', slug: 'my-app' })).toBe('my-app-pg');
-    expect(defaultDatabaseName('redis', { name: 'My App', slug: 'my-app' })).toBe('my-app-redis');
-    expect(defaultDatabaseName('mongodb', { name: 'My App', slug: 'my-app' })).toBe('my-app-mongo');
+    expect(await defaultDatabaseName('turso', { name: 'My App', slug: 'my-app' })).toBe('my-app-turso');
+    expect(await defaultDatabaseName('neon', { name: 'My App', slug: 'my-app' })).toBe('my-app-pg');
+    expect(await defaultDatabaseName('redis', { name: 'My App', slug: 'my-app' })).toBe('my-app-redis');
+    expect(await defaultDatabaseName('mongodb', { name: 'My App', slug: 'my-app' })).toBe('my-app-mongo');
   });
 
-  it('falls back to the project name and sanitizes it for DNS-safe providers', () => {
-    expect(defaultDatabaseName('turso', { name: 'My_Fancy App!', slug: null })).toBe('my-fancy-app-turso');
+  it('falls back to the project name and sanitizes it for DNS-safe providers', async () => {
+    expect(await defaultDatabaseName('turso', { name: 'My_Fancy App!', slug: null })).toBe('my-fancy-app-turso');
   });
 
-  it('never returns leading/trailing hyphens or an empty base', () => {
-    expect(defaultDatabaseName('turso', { name: '---', slug: null })).toBe('mastra-turso');
+  it('never returns leading/trailing hyphens or an empty base', async () => {
+    expect(await defaultDatabaseName('turso', { name: '---', slug: null })).toBe('mastra-turso');
   });
 
-  it('does not suffix production-type environments (keeps the canonical name)', () => {
+  it('does not suffix production-type environments (keeps the canonical name)', async () => {
     expect(
-      defaultDatabaseName(
+      await defaultDatabaseName(
         'turso',
         { name: 'My App', slug: 'my-app' },
         { name: 'production', slug: 'my-app', type: 'production' },
@@ -100,11 +100,11 @@ describe('defaultDatabaseName', () => {
     ).toBe('my-app-turso');
   });
 
-  it('recognises production by env type even when the env is renamed (e.g. `main`)', () => {
+  it('recognises production by env type even when the env is renamed (e.g. `main`)', async () => {
     // Users are free to rename their production env; we must not suffix
     // it and orphan the canonical DB.
     expect(
-      defaultDatabaseName(
+      await defaultDatabaseName(
         'turso',
         { name: 'My App', slug: 'my-app' },
         { name: 'main', slug: 'main', type: 'production' },
@@ -112,10 +112,10 @@ describe('defaultDatabaseName', () => {
     ).toBe('my-app-turso');
   });
 
-  it('suffixes a non-production env even if it happens to be named `production`', () => {
+  it('suffixes a non-production env even if it happens to be named `production`', async () => {
     // The name is not the discriminator — the type is.
     expect(
-      defaultDatabaseName(
+      await defaultDatabaseName(
         'turso',
         { name: 'My App', slug: 'my-app' },
         { name: 'production', slug: 'production', type: 'staging' },
@@ -123,16 +123,16 @@ describe('defaultDatabaseName', () => {
     ).toBe('my-app-production-turso');
   });
 
-  it('suffixes non-production environments so multi-env attaches do not collide', () => {
+  it('suffixes non-production environments so multi-env attaches do not collide', async () => {
     expect(
-      defaultDatabaseName(
+      await defaultDatabaseName(
         'redis',
         { name: 'My App', slug: 'my-app' },
         { name: 'eu', slug: 'my-app--eu', type: 'preview' },
       ),
     ).toBe('my-app-eu-redis');
     expect(
-      defaultDatabaseName(
+      await defaultDatabaseName(
         'redis',
         { name: 'My App', slug: 'my-app' },
         { name: 'staging', slug: 'my-app--staging', type: 'staging' },
@@ -140,9 +140,9 @@ describe('defaultDatabaseName', () => {
     ).toBe('my-app-staging-redis');
   });
 
-  it('sanitizes env names into DNS-safe segments', () => {
+  it('sanitizes env names into DNS-safe segments', async () => {
     expect(
-      defaultDatabaseName(
+      await defaultDatabaseName(
         'turso',
         { name: 'My App', slug: 'my-app' },
         { name: 'EU West', slug: 'eu', type: 'preview' },
@@ -150,16 +150,16 @@ describe('defaultDatabaseName', () => {
     ).toBe('my-app-eu-west-turso');
   });
 
-  it('truncates the project segment (not the env) so long-slug projects still get distinct names per env', () => {
+  it('truncates the project segment (not the env) so long-slug projects still get distinct names per env', async () => {
     // 60-char project slug + `-eu-turso` / `-us-turso` would collide if
     // we truncated the tail. Both must produce distinct names.
     const longSlug = 'a'.repeat(60);
-    const euName = defaultDatabaseName(
+    const euName = await defaultDatabaseName(
       'turso',
       { name: 'App', slug: longSlug },
       { name: 'eu', slug: 'eu', type: 'preview' },
     );
-    const usName = defaultDatabaseName(
+    const usName = await defaultDatabaseName(
       'turso',
       { name: 'App', slug: longSlug },
       { name: 'us', slug: 'us', type: 'preview' },
@@ -171,10 +171,10 @@ describe('defaultDatabaseName', () => {
     expect(usName.endsWith('-us-turso')).toBe(true);
   });
 
-  it('respects the 64-char cap even with long env discriminators', () => {
+  it('respects the 64-char cap even with long env discriminators', async () => {
     const longSlug = 'p'.repeat(50);
     const longEnv = 'e'.repeat(30);
-    const name = defaultDatabaseName(
+    const name = await defaultDatabaseName(
       'turso',
       { name: 'App', slug: longSlug },
       { name: longEnv, slug: longEnv, type: 'preview' },
@@ -186,18 +186,18 @@ describe('defaultDatabaseName', () => {
     expect(name).toContain('-e');
   });
 
-  it('keeps truncated env discriminators unique via a hash suffix', () => {
+  it('keeps truncated env discriminators unique via a hash suffix', async () => {
     // Two env names sharing the same >56-char prefix must not produce the
     // same database name once the env segment is truncated to fit the cap —
     // the platform rejects duplicate names, stranding the second attach.
     const prefix = 'e'.repeat(60);
     const project = { name: 'App', slug: 'app' };
-    const first = defaultDatabaseName('redis', project, {
+    const first = await defaultDatabaseName('redis', project, {
       name: `${prefix}-one`,
       slug: `${prefix}-one`,
       type: 'preview',
     });
-    const second = defaultDatabaseName('redis', project, {
+    const second = await defaultDatabaseName('redis', project, {
       name: `${prefix}-two`,
       slug: `${prefix}-two`,
       type: 'preview',
@@ -209,11 +209,11 @@ describe('defaultDatabaseName', () => {
     expect(second.endsWith('-redis')).toBe(true);
   });
 
-  it('drops a hyphen at the truncation boundary so the joined name stays DNS-clean', () => {
+  it('drops a hyphen at the truncation boundary so the joined name stays DNS-clean', async () => {
     // A slug whose char at the cutoff is `-` would leave `foo--eu-turso`
     // if we naively sliced. The result must have no double hyphens.
     const slug = 'x-'.repeat(40).replace(/-$/, ''); // long alternating x-x-x-...
-    const name = defaultDatabaseName('turso', { name: 'X', slug }, { name: 'eu', slug: 'eu', type: 'preview' });
+    const name = await defaultDatabaseName('turso', { name: 'X', slug }, { name: 'eu', slug: 'eu', type: 'preview' });
     expect(name).not.toMatch(/--/);
     expect(name.length).toBeLessThanOrEqual(64);
   });

@@ -108,7 +108,7 @@ export class MemorySessionProvider implements ISessionProvider {
     return session;
   }
 
-  getSessionIdFromRequest(request: Request): string | null {
+  async getSessionIdFromRequest(request: Request): Promise<string | null> {
     const cookieHeader = request.headers.get('cookie');
     if (!cookieHeader) return null;
 
@@ -117,7 +117,7 @@ export class MemorySessionProvider implements ISessionProvider {
     return match?.[1] ?? null;
   }
 
-  getSessionHeaders(session: Session): Record<string, string> {
+  async getSessionHeaders(session: Session): Promise<Record<string, string>> {
     const maxAge = Math.floor((session.expiresAt.getTime() - Date.now()) / 1000);
     return {
       'Set-Cookie': `${this.cookieName}=${session.id}; HttpOnly; SameSite=Lax; Path=${this.cookiePath}; Max-Age=${maxAge}`,

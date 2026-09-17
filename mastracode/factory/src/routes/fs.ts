@@ -780,8 +780,8 @@ export interface ResolvedCodebase {
  * shared continuity point — start in the TUI, continue on the web, same path
  * → same resourceId → same session.
  */
-export function resolveCodebase(projectPath: string): ResolvedCodebase {
-  const info = detectProject(projectPath);
+export async function resolveCodebase(projectPath: string): Promise<ResolvedCodebase> {
+  const info = await detectProject(projectPath);
   const override = getResourceIdOverride(info.rootPath);
   return {
     resourceId: override ?? info.resourceId,
@@ -976,7 +976,7 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
         const confined = await realPathWithinRoot(isAbsolute(path) ? resolve(path) : resolve(root, path), root);
         if (!confined) return c.json({ error: 'Path is outside the browsable root' }, 403);
         try {
-          return c.json(resolveCodebase(confined));
+          return c.json(await resolveCodebase(confined));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           return c.json({ error: message }, 500);

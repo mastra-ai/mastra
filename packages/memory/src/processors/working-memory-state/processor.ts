@@ -30,8 +30,6 @@
  * ```
  */
 
-import { createHash } from 'node:crypto';
-
 import type { MastraMemory, MemoryConfigInternal, WorkingMemoryTemplate } from '@mastra/core/memory';
 import type {
   ComputeStateSignalArgs,
@@ -68,7 +66,7 @@ export class WorkingMemoryStateProcessor implements Processor<typeof WORKING_MEM
     const contents = data?.trim();
     if (!contents) return;
 
-    const cacheKey = stableWorkingMemoryCacheKey({ format: template.format, data: contents });
+    const cacheKey = await stableWorkingMemoryCacheKey({ format: template.format, data: contents });
     const shouldMakeSnapshot = !args.contextWindow.hasSnapshot;
     if (args.tracking?.currentCacheKey === cacheKey && !shouldMakeSnapshot) return;
 
@@ -126,15 +124,13 @@ export class WorkingMemoryStateProcessor implements Processor<typeof WORKING_MEM
  * digest so dedup metadata stays compact regardless of payload size (working
  * memory blobs can grow arbitrarily long).
  */
-export function stableWorkingMemoryCacheKey(input: {
+export async function stableWorkingMemoryCacheKey(input: {
   format: WorkingMemoryTemplate['format'];
   data: string | null;
-}): string {
-  const hash = createHash('sha256');
-  hash.update(input.format);
-  hash.update('\0');
-  hash.update(input.data ?? '');
-  return `sha256:${hash.digest('hex')}`;
+}): Promise<string> {
+  const data = new TextEncoder().encode(`${input.format}\0${input.data ?? ''}`);
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', data);
+  return `sha256:${Buffer.from(digest).toString('hex')}`;
 }
 
 /**

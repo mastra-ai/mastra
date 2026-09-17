@@ -6,7 +6,6 @@
  */
 
 import { execFile, execSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -58,8 +57,10 @@ function slugify(str: string): string {
 /**
  * Create a short hash of a string
  */
-function shortHash(str: string): string {
-  return createHash('sha256').update(str).digest('hex').slice(0, 12);
+async function shortHash(str: string): Promise<string> {
+  return Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)))
+    .toString('hex')
+    .slice(0, 12);
 }
 
 /**
@@ -79,7 +80,7 @@ function normalizeGitUrl(url: string): string {
 /**
  * Detect project info from a directory path
  */
-export function detectProject(projectPath: string): ProjectInfo {
+export async function detectProject(projectPath: string): Promise<ProjectInfo> {
   const absolutePath = path.resolve(projectPath);
 
   // Check if this is a git repo
@@ -140,7 +141,7 @@ export function detectProject(projectPath: string): ProjectInfo {
         ?.replace(/\.git$/, '') || 'project'
     : path.basename(rootPath);
 
-  const resourceId = `${slugify(baseName)}-${shortHash(resourceIdSource)}`;
+  const resourceId = `${slugify(baseName)}-${await shortHash(resourceIdSource)}`;
 
   return {
     resourceId,

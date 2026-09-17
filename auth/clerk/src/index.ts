@@ -790,18 +790,18 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> implements IU
       return null;
     };
 
-    (this as unknown as ISessionProvider<Session>).getSessionIdFromRequest = function (
+    (this as unknown as ISessionProvider<Session>).getSessionIdFromRequest = async function (
       request: Request,
-    ): string | null {
+    ): Promise<string | null> {
       const cookie = request.headers.get('Cookie');
       if (!cookie) return null;
       const match = cookie.match(new RegExp(`(?:^|;\\s*)${escapeRegex(self.cookieName)}=([^;]+)`));
       return match?.[1] ? decodeURIComponent(match[1]) : null;
     };
 
-    (this as unknown as ISessionProvider<Session>).getSessionHeaders = function (
+    (this as unknown as ISessionProvider<Session>).getSessionHeaders = async function (
       _session: Session,
-    ): Record<string, string> {
+    ): Promise<Record<string, string>> {
       return {};
     };
 

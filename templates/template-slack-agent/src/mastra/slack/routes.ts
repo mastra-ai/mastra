@@ -44,7 +44,7 @@ function createSlackEventsRoute(config: SlackAppConfig) {
         }
 
         // Verify the request signature
-        const isValid = verifySlackRequest(config.signingSecret, slackSignature, slackTimestamp, body);
+        const isValid = await verifySlackRequest(config.signingSecret, slackSignature, slackTimestamp, body);
 
         if (!isValid) {
           console.error(`❌ [${config.name}] Invalid Slack signature`);

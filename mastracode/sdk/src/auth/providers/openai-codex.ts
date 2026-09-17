@@ -4,14 +4,11 @@
  * Inspired by pi-mono's OAuth implementation:
  * https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/utils/oauth/openai-codex.ts
  *
- * NOTE: This module uses Node.js crypto and http for the OAuth callback.
+ * NOTE: This module uses Node.js http for the OAuth callback.
  * It is only intended for CLI use, not browser environments.
  */
 
 // NEVER convert to top-level imports - breaks browser/Vite builds (web-ui)
-let _randomBytes: ((size: number) => Buffer) | null = null;
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
-let _cryptoPromise: Promise<typeof import('node:crypto')> | null = null;
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 let _httpPromise: Promise<typeof import('node:http')> | null = null;
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -23,10 +20,6 @@ type HttpServer = {
   close: () => void;
 };
 if (typeof process !== 'undefined' && (process.versions?.node || process.versions?.bun)) {
-  _cryptoPromise = import('node:crypto').then(m => {
-    _randomBytes = m.randomBytes;
-    return m;
-  });
   _httpPromise = import('node:http').then(m => {
     _http = m;
     return m;
@@ -96,8 +89,7 @@ type JwtPayload = {
 };
 
 async function createState(): Promise<string> {
-  const randomBytes = await getRandomBytes();
-  return randomBytes(16).toString('hex');
+  return Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(16))).toString('hex');
 }
 
 function decodeJwt(token: string): JwtPayload | null {
@@ -207,16 +199,6 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenResult> {
     console.error('[openai-codex] Token refresh error:', error);
     return { type: 'failed' };
   }
-}
-
-async function getRandomBytes() {
-  if (!_randomBytes && _cryptoPromise) {
-    _randomBytes = (await _cryptoPromise).randomBytes;
-  }
-  if (!_randomBytes) {
-    throw new Error('OpenAI Codex OAuth is only available in Node.js environments');
-  }
-  return _randomBytes;
 }
 
 async function createAuthorizationFlow(

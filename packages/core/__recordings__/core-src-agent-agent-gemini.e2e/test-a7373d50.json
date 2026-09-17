@@ -7,7 +7,7 @@
   },
   "recordings": [
     {
-      "hash": "d81cda23e17b8c1b",
+      "hash": "95d269f7a6262e46",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
@@ -123,7 +123,7 @@
       }
     },
     {
-      "hash": "619f4a1d2f7e2c14",
+      "hash": "7238a184b8ecdf5d",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
         "method": "POST",

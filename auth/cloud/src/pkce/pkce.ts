@@ -5,7 +5,7 @@
  * @internal This module is not exported from the main package.
  */
 
-import { randomBytes, createHash } from 'node:crypto';
+const encoder = new TextEncoder();
 
 /**
  * Generate a code verifier for PKCE.
@@ -15,7 +15,7 @@ import { randomBytes, createHash } from 'node:crypto';
  */
 export function generateCodeVerifier(): string {
   // 32 bytes -> 43 chars base64url
-  return randomBytes(32).toString('base64url');
+  return Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
 }
 
 /**
@@ -24,8 +24,9 @@ export function generateCodeVerifier(): string {
  *
  * Per RFC 7636: S256 method uses SHA-256 hash of the verifier.
  */
-export function computeCodeChallenge(verifier: string): string {
-  return createHash('sha256').update(verifier).digest('base64url');
+export async function computeCodeChallenge(verifier: string): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', encoder.encode(verifier));
+  return Buffer.from(digest).toString('base64url');
 }
 
 /**
@@ -34,5 +35,5 @@ export function computeCodeChallenge(verifier: string): string {
  */
 export function generateState(): string {
   // 16 bytes -> 22 chars base64url
-  return randomBytes(16).toString('base64url');
+  return Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(16))).toString('base64url');
 }

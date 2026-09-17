@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 import {
   CreateTableCommand,
   DeleteTableCommand,
@@ -18,8 +17,8 @@ import { MemoryStorageDynamoDB } from './index';
 function createSampleThread() {
   const date = new Date();
   return {
-    id: `thread-${randomUUID()}`,
-    resourceId: `resource-${randomUUID()}`,
+    id: `thread-${globalThis.crypto.randomUUID()}`,
+    resourceId: `resource-${globalThis.crypto.randomUUID()}`,
     title: 'Test Thread',
     createdAt: date,
     updatedAt: date,
@@ -41,7 +40,7 @@ function createSampleMessageV2({
   createdAt?: Date;
 }): MastraDBMessage {
   return {
-    id: `msg-${randomUUID()}`,
+    id: `msg-${globalThis.crypto.randomUUID()}`,
     role,
     type: 'text',
     threadId,

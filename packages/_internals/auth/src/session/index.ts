@@ -22,8 +22,8 @@ export interface ISessionProvider<TSession extends Session = Session> {
   validateSession(sessionId: string): Promise<TSession | null>;
   destroySession(sessionId: string): Promise<void>;
   refreshSession(sessionId: string): Promise<TSession | null>;
-  getSessionIdFromRequest(request: Request): string | null;
-  getSessionHeaders(session: TSession): Record<string, string>;
+  getSessionIdFromRequest(request: Request): Promise<string | null>;
+  getSessionHeaders(session: TSession): Promise<Record<string, string>>;
   getClearSessionHeaders(): Record<string, string>;
 }
 

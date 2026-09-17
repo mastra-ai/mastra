@@ -167,7 +167,7 @@ interface RepoTemplateInputs {
  * tests so the Dockerfile can be asserted without a network head lookup.
  * @internal
  */
-export function buildRepoTemplate(inputs: RepoTemplateInputs): DockerTemplate {
+export async function buildRepoTemplate(inputs: RepoTemplateInputs): Promise<DockerTemplate> {
   const { cloneUrl, sha, token, buildEnv } = inputs;
   const destination = `${trimTrailingSlashes(inputs.workingDirectory)}/${repoDirName(cloneUrl)}`;
 
@@ -204,7 +204,7 @@ export function buildRepoTemplate(inputs: RepoTemplateInputs): DockerTemplate {
   }
   if (setupCommands.length > 0) {
     // Written last, so the marker exists only when every setup step succeeded.
-    template = template.runCmd(setupMarkerCommand(setupMarkerContent(setupCommands)));
+    template = template.runCmd(setupMarkerCommand(await setupMarkerContent(setupCommands)));
   }
   return template;
 }

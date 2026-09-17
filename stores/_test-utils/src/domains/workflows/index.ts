@@ -1,6 +1,5 @@
 import type { MastraStorage, WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, it, expect, beforeEach } from 'vitest';
 import { checkWorkflowSnapshot, createSampleWorkflowSnapshot } from './data';
 
@@ -420,7 +419,7 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
   describe('Workflow Snapshots', () => {
     it('should persist and load workflow snapshots', async () => {
       const workflowName = 'test-workflow';
-      const runId = `run-${randomUUID()}`;
+      const runId = `run-${globalThis.crypto.randomUUID()}`;
       const snapshot = {
         status: 'running',
         context: {
@@ -455,7 +454,7 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
 
     it('should update existing workflow snapshot', async () => {
       const workflowName = 'test-workflow';
-      const runId = `run-${randomUUID()}`;
+      const runId = `run-${globalThis.crypto.randomUUID()}`;
       const initialSnapshot = {
         status: 'running',
         context: {
@@ -498,7 +497,7 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
 
     it('should handle complex workflow state', async () => {
       const workflowName = 'complex-workflow';
-      const runId = `run-${randomUUID()}`;
+      const runId = `run-${globalThis.crypto.randomUUID()}`;
       const complexSnapshot = {
         value: { currentState: 'running' },
         context: {
@@ -559,8 +558,8 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
 
     it('should persist resourceId when creating workflow runs', async () => {
       const workflowName = 'test-workflow';
-      const runId = `run-${randomUUID()}`;
-      const resourceId = `resource-${randomUUID()}`;
+      const runId = `run-${globalThis.crypto.randomUUID()}`;
+      const resourceId = `resource-${globalThis.crypto.randomUUID()}`;
       const snapshot = {
         status: 'running',
         context: {},
@@ -591,7 +590,7 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
         return;
       }
       const workflowName = 'test-workflow';
-      const runId = `run-${randomUUID()}`;
+      const runId = `run-${globalThis.crypto.randomUUID()}`;
 
       await workflowsStorage.persistWorkflowSnapshot({
         workflowName,
@@ -620,7 +619,7 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
         return;
       }
       const workflowName = 'test-workflow';
-      const runId = `run-${randomUUID()}`;
+      const runId = `run-${globalThis.crypto.randomUUID()}`;
 
       await workflowsStorage.persistWorkflowSnapshot({
         workflowName,
@@ -646,7 +645,7 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
         return;
       }
       const workflowName = 'test-workflow';
-      const runId = `run-${randomUUID()}`;
+      const runId = `run-${globalThis.crypto.randomUUID()}`;
 
       await workflowsStorage.persistWorkflowSnapshot({
         workflowName,
@@ -674,7 +673,7 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
         return;
       }
       const workflowName = 'test-workflow';
-      const runId = `run-${randomUUID()}`;
+      const runId = `run-${globalThis.crypto.randomUUID()}`;
       const snapshot = {
         status: 'running',
         context: {},
@@ -769,7 +768,7 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
         return;
       }
       const workflowName = 'test-workflow';
-      const runId = `run-${randomUUID()}`;
+      const runId = `run-${globalThis.crypto.randomUUID()}`;
       const snapshot = {
         status: 'running',
         context: { initialStep: { status: 'success' } },
@@ -839,7 +838,7 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
       }
       const result = await workflowsStorage.updateWorkflowState({
         workflowName: 'non-existent-workflow',
-        runId: `run-${randomUUID()}`,
+        runId: `run-${globalThis.crypto.randomUUID()}`,
         opts: {
           status: 'success',
         },
@@ -857,7 +856,7 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
         return;
       }
       const workflowName = 'test-workflow';
-      const runId = `run-${randomUUID()}`;
+      const runId = `run-${globalThis.crypto.randomUUID()}`;
       const snapshot = {
         status: 'running',
         context: {},
@@ -963,7 +962,7 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
         return;
       }
       const workflowName = 'test-workflow';
-      const runId = `run-${randomUUID()}`;
+      const runId = `run-${globalThis.crypto.randomUUID()}`;
       const snapshot = {
         status: 'running',
         context: {},

@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
@@ -125,7 +123,7 @@ export class OracleStore extends MastraCompositeStore {
 
   private async runMigrations(forceRepeatable: boolean): Promise<OracleMigrationResult[]> {
     try {
-      const results = await this.migrationRegistry.run(this.storageMigrations(), { forceRepeatable });
+      const results = await this.migrationRegistry.run(await this.storageMigrations(), { forceRepeatable });
       this.isInitialized = true;
       return results;
     } catch (error) {
@@ -144,23 +142,23 @@ export class OracleStore extends MastraCompositeStore {
     }
   }
 
-  private storageMigrations(): OracleMigration[] {
-    const repeatable = (
+  private async storageMigrations(): Promise<OracleMigration[]> {
+    const repeatable = async (
       id: string,
       name: string,
       description: string,
       managedTables: readonly string[],
       run: () => Promise<void>,
-    ): OracleMigration => ({
+    ): Promise<OracleMigration> => ({
       id,
       name,
       kind: 'repeatable',
       description,
-      checksum: this.domainMigrationChecksum({ id, name, description, managedTables }),
+      checksum: await this.domainMigrationChecksum({ id, name, description, managedTables }),
       run,
     });
 
-    return [
+    return Promise.all([
       repeatable(
         'R001_MEMORY_SCHEMA',
         'Memory domain schema',
@@ -224,33 +222,31 @@ export class OracleStore extends MastraCompositeStore {
           await this.stores.agents?.init();
         },
       ),
-    ];
+    ]);
   }
 
-  private domainMigrationChecksum(input: {
+  private async domainMigrationChecksum(input: {
     id: string;
     name: string;
     description: string;
     managedTables: readonly string[];
-  }): string {
+  }): Promise<string> {
     const indexes = filterIndexesForTables(this.indexes, input.managedTables);
+    const value = stableStringify({
+      id: input.id,
+      name: input.name,
+      kind: 'repeatable',
+      description: input.description,
+      schemaVersion: DOMAIN_SCHEMA_VERSIONS[input.id] ?? 1,
+      managedTables: [...input.managedTables],
+      indexConfig: {
+        skipDefaultIndexes: this.skipDefaultIndexes === true,
+        indexes,
+      },
+    });
 
-    return createHash('sha256')
-      .update(
-        stableStringify({
-          id: input.id,
-          name: input.name,
-          kind: 'repeatable',
-          description: input.description,
-          schemaVersion: DOMAIN_SCHEMA_VERSIONS[input.id] ?? 1,
-          managedTables: [...input.managedTables],
-          indexConfig: {
-            skipDefaultIndexes: this.skipDefaultIndexes === true,
-            indexes,
-          },
-        }),
-      )
-      .digest('hex')
+    return Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))
+      .toString('hex')
       .toUpperCase();
   }
 

@@ -23,7 +23,7 @@
  * so in-flight OAuth states survive a deploy.
  */
 
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+const encoder = new TextEncoder();
 
 /** Verified tenant and optional Factory context carried by a signed `state`. */
 export interface StateTenant {
@@ -42,9 +42,9 @@ export interface StateTenant {
 /** Signs and verifies OAuth `state` values bound to a tenant and optional Factory. */
 export interface StateSigner {
   /** Build a signed `state` bound to the tenant and optional initiating Factory. */
-  sign(orgId: string, userId: string, context?: { factoryProjectId?: string }): string;
+  sign(orgId: string, userId: string, context?: { factoryProjectId?: string }): Promise<string>;
   /** Verify a signed `state`; returns the bound tenant, or `null` if invalid. */
-  verify(state: string | undefined): StateTenant | null;
+  verify(state: string | undefined): Promise<StateTenant | null>;
   /**
    * True when the signer was built from an explicit deployment-stable secret.
    * False means a per-process random secret: fine for single-process/local
@@ -71,31 +71,38 @@ const STATE_MAX_AGE_MS = 10 * 60 * 1000;
  */
 export function createStateSigner(secret?: string): StateSigner {
   const stable = typeof secret === 'string' && secret.length > 0;
-  const key = stable ? secret : randomBytes(32).toString('hex');
+  const secretValue = stable
+    ? secret
+    : Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(32))).toString('hex');
+  const key = globalThis.crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secretValue),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign', 'verify'],
+  );
+
   return {
     stable,
-    sign(orgId: string, userId: string, context?: { factoryProjectId?: string }): string {
+    async sign(orgId: string, userId: string, context?: { factoryProjectId?: string }): Promise<string> {
       const payload: StatePayload = {
         orgId,
         userId,
         ...(context?.factoryProjectId ? { factoryProjectId: context.factoryProjectId } : {}),
-        nonce: randomBytes(8).toString('hex'),
+        nonce: Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(8))).toString('hex'),
         issuedAt: Date.now(),
       };
       const body = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
-      const sig = createHmac('sha256', key).update(body).digest('base64url');
-      return `${body}.${sig}`;
+      const signature = await globalThis.crypto.subtle.sign('HMAC', await key, encoder.encode(body));
+      return `${body}.${Buffer.from(signature).toString('base64url')}`;
     },
-    verify(state: string | undefined): StateTenant | null {
+    async verify(state: string | undefined): Promise<StateTenant | null> {
       if (!state) return null;
       const dot = state.lastIndexOf('.');
       if (dot <= 0) return null;
       const body = state.slice(0, dot);
-      const sig = state.slice(dot + 1);
-      const expected = createHmac('sha256', key).update(body).digest('base64url');
-      const sigBuf = Buffer.from(sig);
-      const expectedBuf = Buffer.from(expected);
-      if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) {
+      const signature = Buffer.from(state.slice(dot + 1), 'base64url');
+      if (!(await globalThis.crypto.subtle.verify('HMAC', await key, signature, encoder.encode(body)))) {
         return null;
       }
       try {

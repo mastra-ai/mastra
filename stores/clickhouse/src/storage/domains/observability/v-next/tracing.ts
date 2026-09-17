@@ -1,17 +1,3 @@
-/**
- * Tracing operations for ClickHouse v-next observability.
- *
- * Owns: batchCreateSpans, getSpan, getSpans, getTrace, getTraceLight,
- *       listBranches, batchDeleteTraces, dangerouslyClearSpanEvents.
- * Delegates to trace-roots.ts: listTraces, getRootSpan.
- *
- * `listBranches` reads from the MV-fed `mastra_trace_branches` table (one row
- * per branch anchor span). It lives here -- alongside the other read paths
- * over the trace data -- since branches are conceptually a subset of traces.
- */
-
-import { randomUUID } from 'node:crypto';
-
 import type { ClickHouseClient } from '@clickhouse/client';
 import { BRANCH_SPAN_TYPES, listBranchesArgsSchema, toTraceSpans, TraceStatus } from '@mastra/core/storage';
 import type {
@@ -236,7 +222,7 @@ export async function batchDeleteTraces(
   if (args.traceIds.length === 0) return;
 
   await recordDeletionRequest(client, {
-    requestId: randomUUID(),
+    requestId: globalThis.crypto.randomUUID(),
     organizationId: args.organizationId,
     resourceId: args.resourceId,
     signal: 'traces',

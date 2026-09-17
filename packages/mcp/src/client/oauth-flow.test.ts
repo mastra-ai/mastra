@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { Buffer } from 'node:buffer';
 import { createServer } from 'node:http';
 import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node:http';
 import { describe, it, expect, afterEach } from 'vitest';
@@ -92,7 +92,7 @@ async function startFakeAuthorizationServer(port: number): Promise<FakeAuthoriza
     if (requestUrl.pathname === '/register' && req.method === 'POST') {
       const metadata = JSON.parse(await readBody(req));
       const registration: ClientRegistration = {
-        client_id: `client-${randomUUID()}`,
+        client_id: `client-${globalThis.crypto.randomUUID()}`,
         redirect_uris: metadata.redirect_uris,
       };
       clientsById.set(registration.client_id, registration);
@@ -123,7 +123,7 @@ async function startFakeAuthorizationServer(port: number): Promise<FakeAuthoriza
       if (state.denyAuthorization) {
         location.searchParams.set('error', 'access_denied');
       } else {
-        const code = `code-${randomUUID()}`;
+        const code = `code-${globalThis.crypto.randomUUID()}`;
         pendingCodes.set(code, { codeChallenge, redirectUri });
         location.searchParams.set('code', code);
       }
@@ -140,7 +140,9 @@ async function startFakeAuthorizationServer(port: number): Promise<FakeAuthoriza
       if (grantType === 'authorization_code') {
         const pending = pendingCodes.get(params.get('code') ?? '');
         const verifier = params.get('code_verifier') ?? '';
-        const challenge = createHash('sha256').update(verifier).digest('base64url');
+        const challenge = Buffer.from(
+          await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)),
+        ).toString('base64url');
         if (!pending || pending.codeChallenge !== challenge) {
           sendJson(res, 400, { error: 'invalid_grant' });
           return;
@@ -157,8 +159,8 @@ async function startFakeAuthorizationServer(port: number): Promise<FakeAuthoriza
         return;
       }
 
-      const accessToken = `access-${randomUUID()}`;
-      const refreshToken = `refresh-${randomUUID()}`;
+      const accessToken = `access-${globalThis.crypto.randomUUID()}`;
+      const refreshToken = `refresh-${globalThis.crypto.randomUUID()}`;
       state.validTokens.add(accessToken);
       refreshTokens.add(refreshToken);
       sendJson(res, 200, {
@@ -277,7 +279,7 @@ function createProvider(options: {
 
 function createClient(serverUrl: string, provider: MCPOAuthClientProvider): MCPClient {
   return new MCPClient({
-    id: `oauth-flow-test-${randomUUID()}`,
+    id: `oauth-flow-test-${globalThis.crypto.randomUUID()}`,
     servers: {
       fixture: {
         url: new URL(`${serverUrl}/mcp`),
@@ -676,7 +678,7 @@ describe('MCPClient OAuth authorization flow', () => {
   it('rejects authenticate for servers without an MCPOAuthClientProvider', async () => {
     const mcp = track(
       new MCPClient({
-        id: `oauth-flow-test-${randomUUID()}`,
+        id: `oauth-flow-test-${globalThis.crypto.randomUUID()}`,
         servers: {
           fixture: { url: new URL('http://127.0.0.1:1/mcp') },
         },

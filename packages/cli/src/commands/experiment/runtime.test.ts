@@ -1,4 +1,3 @@
-import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { PassThrough, Readable } from 'node:stream';
 import { ToolMockMatcher } from '@mastra/core/datasets';
@@ -17,18 +16,22 @@ const build: ExperimentWorkerBuildIdentity = {
   datasetCanonicalizationVersion: '1',
 };
 
-function createRequest() {
+async function sha256Hex(input: string): Promise<string> {
+  return Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(input))).toString('hex');
+}
+
+async function createRequest() {
   const items = [{ id: 'item-1', input: { prompt: 'hello' }, toolMocks: [] }];
-  const digest = createHash('sha256').update(canonicalize(items)).digest('hex');
-  const experimentId = randomUUID();
+  const digest = await sha256Hex(canonicalize(items));
+  const experimentId = globalThis.crypto.randomUUID();
   return {
     type: 'run',
     protocolVersion: '1',
     supportedProtocolVersions: ['1'],
     experimentId,
-    jobId: randomUUID(),
+    jobId: globalThis.crypto.randomUUID(),
     attempt: 1,
-    idempotencyKey: randomUUID(),
+    idempotencyKey: globalThis.crypto.randomUUID(),
     deadlineAt: new Date(Date.now() + 5_000).toISOString(),
     datasetAttestation: { itemCount: items.length, digest, canonicalizationVersion: '1' },
     packet: {
@@ -172,7 +175,7 @@ describe('runExperimentWorker', () => {
     ['negative timeout', (request: any) => (request.packet.limits.timeoutMs = -1), 'invalid experiment configuration'],
     ['null dataset item', (request: any) => (request.packet.dataset.items[0] = null), 'invalid dataset'],
   ])('rejects %s deterministically', async (_name, mutate, expectedError) => {
-    const request = createRequest();
+    const request = await createRequest();
     mutate(request);
     const harness = createHarness(vi.fn());
     harness.stdin.end(`${JSON.stringify(request)}\n`);
@@ -183,7 +186,7 @@ describe('runExperimentWorker', () => {
   });
 
   it('uses the retryable exit code for retryable experiment failures', async () => {
-    const request = createRequest();
+    const request = await createRequest();
     const error = Object.assign(new Error('temporary failure'), { retryable: true });
     const harness = createHarness(async () => {
       throw error;
@@ -201,13 +204,13 @@ describe('runExperimentWorker', () => {
   });
 
   it('maps scorer provenance and agent tool mocks into the public experiment configuration', async () => {
-    const request: any = createRequest();
+    const request: any = await createRequest();
     request.packet.scorers = [{ id: 'quality', version: 'v1' }];
     request.packet.dataset.items[0].toolMocks = [
       { toolId: 'lookup', args: { query: 'value' }, output: { value: 1 }, matchArgs: 'strict' },
     ];
     request.packet.policies.allowedToolIds = ['lookup'];
-    const digest = createHash('sha256').update(canonicalize(request.packet.dataset.items)).digest('hex');
+    const digest = await sha256Hex(canonicalize(request.packet.dataset.items));
     request.packet.dataset.digest = digest;
     request.datasetAttestation.digest = digest;
     const runExperiment = vi.fn(async (_mastra, config) => {
@@ -256,11 +259,11 @@ describe('runExperimentWorker', () => {
       'allowed tools and deterministic mocks must match',
     ],
   ])('rejects %s', async (_name, mutate, expectedError) => {
-    const request: any = createRequest();
+    const request: any = await createRequest();
     request.packet.dataset.items[0].toolMocks = [{ toolId: 'lookup', args: { query: 'value' }, output: { value: 1 } }];
     request.packet.policies.allowedToolIds = ['lookup'];
     mutate(request);
-    const digest = createHash('sha256').update(canonicalize(request.packet.dataset.items)).digest('hex');
+    const digest = await sha256Hex(canonicalize(request.packet.dataset.items));
     request.packet.dataset.digest = digest;
     request.datasetAttestation.digest = digest;
     const harness = createHarness(vi.fn());
@@ -271,7 +274,7 @@ describe('runExperimentWorker', () => {
   });
 
   it('finishes without waiting for stdin to close after writing the terminal event', async () => {
-    const request = createRequest();
+    const request = await createRequest();
     const harness = createHarness(async (_mastra, config) => {
       await config.onEvent({
         type: 'experiment.run.finished',
@@ -291,7 +294,7 @@ describe('runExperimentWorker', () => {
   });
 
   it('rejects a buffered truncated frame when the run completes', async () => {
-    const request = createRequest();
+    const request = await createRequest();
     const harness = createHarness(async (_mastra, config) => {
       await config.onEvent({
         type: 'experiment.run.finished',
@@ -317,7 +320,7 @@ describe('runExperimentWorker', () => {
   });
 
   it('rejects multiple terminal semantic events', async () => {
-    const request = createRequest();
+    const request = await createRequest();
     const harness = createHarness(async (_mastra, config) => {
       const event = {
         type: 'experiment.run.finished' as const,
@@ -339,7 +342,7 @@ describe('runExperimentWorker', () => {
   });
 
   it('rejects cancellation with a mismatched correlation tuple', async () => {
-    const request = createRequest();
+    const request = await createRequest();
     const harness = createHarness(async (_mastra, config) => {
       if (!config.signal.aborted) {
         await new Promise<void>(resolve => config.signal.addEventListener('abort', () => resolve(), { once: true }));
@@ -365,7 +368,7 @@ describe('runExperimentWorker', () => {
   });
 
   it('times out even when runExperiment ignores cancellation', async () => {
-    const request = createRequest();
+    const request = await createRequest();
     request.deadlineAt = new Date(Date.now() + 25).toISOString();
     const harness = createHarness(async () => new Promise(() => undefined));
     harness.stdin.write(`${JSON.stringify(request)}\n`);
@@ -375,7 +378,7 @@ describe('runExperimentWorker', () => {
   });
 
   it('does not overflow far-future deadlines', async () => {
-    const request = createRequest();
+    const request = await createRequest();
     request.deadlineAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1_000).toISOString();
     let signal: AbortSignal | undefined;
     const harness = createHarness(async (_mastra, config) => {
@@ -417,7 +420,7 @@ describe('runExperimentWorker', () => {
   });
 
   it('rejects an invalid terminal semantic outcome', async () => {
-    const request = createRequest();
+    const request = await createRequest();
     const harness = createHarness(async (_mastra, config) => {
       await config.onEvent({
         type: 'experiment.run.finished',
@@ -437,7 +440,7 @@ describe('runExperimentWorker', () => {
   });
 
   it('returns the protocol exit code when the terminal frame cannot be written', async () => {
-    const request = createRequest();
+    const request = await createRequest();
     const harness = createHarness(async (_mastra, config) => {
       await config.onEvent({
         type: 'experiment.run.finished',
@@ -465,7 +468,7 @@ describe('runExperimentWorker', () => {
   });
 
   it('reports stdin read failures through protocol finalization', async () => {
-    const request = createRequest();
+    const request = await createRequest();
     const stdin = Readable.from(
       (async function* () {
         yield `${JSON.stringify(request)}\n`;
@@ -496,7 +499,7 @@ describe('runExperimentWorker', () => {
   });
 
   it('reports synchronous stdin iterator failures through protocol finalization', async () => {
-    const request = createRequest();
+    const request = await createRequest();
     let readCount = 0;
     const stdin = {
       [Symbol.asyncIterator]() {
@@ -538,7 +541,7 @@ describe('runExperimentWorker', () => {
   it('does not publish a successful terminal after a queued heartbeat write fails', async () => {
     vi.useFakeTimers();
     try {
-      const request = createRequest();
+      const request = await createRequest();
       request.deadlineAt = new Date(Date.now() + 60_000).toISOString();
       const stdin = new PassThrough();
       const stdout = new PassThrough();
@@ -555,6 +558,10 @@ describe('runExperimentWorker', () => {
       const runReady = new Promise<void>(resolve => {
         completeRun = resolve;
       });
+      let startRun: (() => void) | undefined;
+      const runStarted = new Promise<void>(resolve => {
+        startRun = resolve;
+      });
       const result = runExperimentWorker({
         mastra: { shutdown: vi.fn().mockResolvedValue(undefined) },
         build,
@@ -562,6 +569,7 @@ describe('runExperimentWorker', () => {
         stdout,
         stderr: new PassThrough(),
         runExperiment: async (_mastra, config) => {
+          startRun?.();
           await runReady;
           await config.onEvent({
             type: 'experiment.run.finished',
@@ -576,6 +584,7 @@ describe('runExperimentWorker', () => {
         },
       });
       stdin.write(`${JSON.stringify(request)}\n`);
+      await runStarted;
       await vi.advanceTimersByTimeAsync(5_000);
       expect(writeCount).toBe(2);
 
@@ -597,7 +606,7 @@ describe('runExperimentWorker', () => {
   });
 
   it('cancels only with the complete active correlation tuple', async () => {
-    const request = createRequest();
+    const request = await createRequest();
     const harness = createHarness(async (_mastra, config) => {
       if (!config.signal.aborted) {
         await new Promise<void>(resolve => config.signal.addEventListener('abort', () => resolve(), { once: true }));

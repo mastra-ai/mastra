@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -1399,7 +1398,7 @@ function getRouteSpecificPathDefaults(route: ServerRoute): {
   // Workflow stream routes reject runIds whose run already finished (409),
   // so each request needs a fresh runId instead of the shared 'test-run'.
   if (routePath === '/workflows/:workflowId/stream' || routePath === '/agent-builder/:actionId/stream') {
-    return { query: { runId: `test-run-${randomUUID()}` } };
+    return { query: { runId: `test-run-${globalThis.crypto.randomUUID()}` } };
   }
 
   return {};

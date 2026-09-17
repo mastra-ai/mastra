@@ -1,17 +1,9 @@
-/**
- * Approach 1: runEvals + global targetOptions.memory
- *
- * Pro: simplest. The same thread/resource for every eval item.
- * Con: all items share state — turn N can see turn N-1. Use only when you
- *      actually want a single multi-turn conversation across items.
- */
-import { randomUUID } from 'node:crypto';
 import { runEvals } from '@mastra/core/evals';
 import { buildAgent, containsScorer } from './shared.ts';
 
 async function main() {
   const { agent, cleanup } = buildAgent({ observationalMemory: true });
-  const threadId = `eval-global-${randomUUID()}`;
+  const threadId = `eval-global-${globalThis.crypto.randomUUID()}`;
   const resourceId = 'ci-user';
 
   // Pre-create the thread so observational-memory thread scope doesn't bail.

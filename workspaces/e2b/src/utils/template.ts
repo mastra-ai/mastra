@@ -3,7 +3,6 @@
  *
  * Helper functions for creating and managing E2B sandbox templates.
  */
-import { createHash } from 'node:crypto';
 import { Template } from 'e2b';
 import type { TemplateBuilder } from 'e2b';
 
@@ -217,7 +216,9 @@ export const MOUNTABLE_TEMPLATE_VERSION = 'v3';
  *
  * @returns Object with template builder and deterministic ID
  */
-export function createDefaultMountableTemplate(options?: MountableTemplateOptions): MountableTemplateResult {
+export async function createDefaultMountableTemplate(
+  options?: MountableTemplateOptions,
+): Promise<MountableTemplateResult> {
   const aptPackages = ['s3fs', 'fuse'];
   // Resources are part of the template's identity: each machine size is its
   // own template, so a resize can never silently reuse a build at the old
@@ -232,9 +233,13 @@ export function createDefaultMountableTemplate(options?: MountableTemplateOption
   }
   const config = { version: MOUNTABLE_TEMPLATE_VERSION, aptPackages, cpuCount, memoryMB, nodeVersion };
 
-  const hash = createHash('sha256')
-    .update(JSON.stringify(config, Object.keys(config).sort()))
-    .digest('hex')
+  const hash = Buffer.from(
+    await globalThis.crypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(JSON.stringify(config, Object.keys(config).sort())),
+    ),
+  )
+    .toString('hex')
     .slice(0, 16);
 
   // Build steps and runtime commands both run as the non-root `user` in its

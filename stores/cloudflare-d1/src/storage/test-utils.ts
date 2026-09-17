@@ -1,9 +1,7 @@
-import { randomUUID } from 'node:crypto';
-
 export const createSampleTrace = (name: string, scope?: string, attributes?: Record<string, string>) => ({
-  id: `trace-${randomUUID()}`,
-  parentSpanId: `span-${randomUUID()}`,
-  traceId: `trace-${randomUUID()}`,
+  id: `trace-${globalThis.crypto.randomUUID()}`,
+  parentSpanId: `span-${globalThis.crypto.randomUUID()}`,
+  traceId: `trace-${globalThis.crypto.randomUUID()}`,
   name,
   scope,
   kind: 'internal',

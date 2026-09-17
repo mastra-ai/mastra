@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { ActorSignal } from '../../auth/ee';
 import type { RequestContext } from '../../di';
 import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '../../error';
@@ -104,9 +103,11 @@ export async function executeStep(
   const skipEmits = skipEmitsParam || engine.options.emitStepEvents === false;
   const observabilityContext = resolveObservabilityContext(rest);
 
-  const stepCallId = randomUUID();
+  const stepCallId = globalThis.crypto.randomUUID();
   const nestedRunId =
-    step.component === 'WORKFLOW' && executionContext.foreachIndex !== undefined ? randomUUID() : undefined;
+    step.component === 'WORKFLOW' && executionContext.foreachIndex !== undefined
+      ? globalThis.crypto.randomUUID()
+      : undefined;
 
   const { inputData, validationError: inputValidationError } = await validateStepInput({
     prevOutput,
@@ -635,7 +636,7 @@ export async function runScorersForStep(params: RunScorersParams): Promise<void>
         scorerObject.scorer.__registerMastra(engine.mastra);
         engine.mastra.addScorer(scorerObject.scorer, undefined, { source: 'code' });
       }
-      runScorer({
+      await runScorer({
         mastra: engine.mastra,
         scorerId: scorerObject.scorer.id,
         scorerObject: scorerObject,

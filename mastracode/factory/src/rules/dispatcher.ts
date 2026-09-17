@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener, Session } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
@@ -503,7 +501,7 @@ export class FactoryDecisionDispatcher {
     this.#transitionService = options.transitionService;
     this.#boards = options.boards ?? createBoardRegistry();
     this.#storage = options.storage;
-    this.#ownerId = options.ownerId ?? `factory-dispatcher:${randomUUID()}`;
+    this.#ownerId = options.ownerId ?? `factory-dispatcher:${globalThis.crypto.randomUUID()}`;
     this.#isAutoRunEnabled = options.isAutoRunEnabled;
     this.#autoApprovePlans = options.autoApprovePlans;
     this.#reconcileToolResults = options.reconcileToolResults;

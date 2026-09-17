@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -407,7 +406,7 @@ async function startStreamableServer(
 async function startStatefulStreamableServer(): Promise<TestMcpServer> {
   const mcpServer = buildMcpServer();
   const requests: { method: string; url: string }[] = [];
-  const serverTransport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: () => randomUUID() });
+  const serverTransport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: () => globalThis.crypto.randomUUID() });
   await mcpServer.connect(serverTransport);
 
   const httpServer = createServer();
@@ -751,7 +750,7 @@ describe('allowedHosts and OAuth discovery', () => {
         req.on('end', () => {
           const metadata = JSON.parse(body);
           res.writeHead(201, { 'content-type': 'application/json' }).end(
-            JSON.stringify({ ...metadata, client_id: `client-${randomUUID()}`, token_endpoint_auth_method: 'none' }),
+            JSON.stringify({ ...metadata, client_id: `client-${globalThis.crypto.randomUUID()}`, token_endpoint_auth_method: 'none' }),
           );
         });
         return;

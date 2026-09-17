@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -23,6 +22,10 @@ vi.mock('@mastra/deployer/build', () => ({
   },
 }));
 vi.mock('../utils.js', () => ({ shouldSkipDotenvLoading: vi.fn().mockReturnValue(false) }));
+
+async function sha256Hex(input: string): Promise<string> {
+  return Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(input))).toString('hex');
+}
 
 describe('ExperimentBundler', () => {
   const temporaryDirectories: string[] = [];
@@ -186,9 +189,9 @@ describe('ExperimentBundler', () => {
       { path: 'index.mjs', sha256: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { path: 'package.json', sha256: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
-    const expectedContentDigest = createHash('sha256')
-      .update(manifest.files.map((file: { path: string; sha256: string }) => `${file.path}\0${file.sha256}\n`).join(''))
-      .digest('hex');
+    const expectedContentDigest = await sha256Hex(
+      manifest.files.map((file: { path: string; sha256: string }) => `${file.path}\0${file.sha256}\n`).join(''),
+    );
     expect(manifest.artifact).toEqual({
       digestAlgorithm: 'sha256',
       contentDigest: expectedContentDigest,
@@ -330,7 +333,7 @@ describe('ExperimentBundler', () => {
       path: 'linked-directory',
       type: 'symlink',
       target: 'linked-directory-target',
-      sha256: createHash('sha256').update('linked-directory-target').digest('hex'),
+      sha256: await sha256Hex('linked-directory-target'),
     });
     expect(manifest.files).toContainEqual(expect.objectContaining({ path: 'linked-directory-target/nested.txt' }));
   });
@@ -427,16 +430,16 @@ describe('ExperimentBundler', () => {
 
     const items = [{ id: 'item-1', input: { prompt: 'hello' }, groundTruth: 'world', toolMocks: [] }];
     const canonical = canonicalize(items);
-    const digest = createHash('sha256').update(canonical).digest('hex');
-    const experimentId = randomUUID();
+    const digest = await sha256Hex(canonical);
+    const experimentId = globalThis.crypto.randomUUID();
     const request = {
       type: 'run',
       protocolVersion: '1',
       supportedProtocolVersions: ['1'],
       experimentId,
-      jobId: randomUUID(),
+      jobId: globalThis.crypto.randomUUID(),
       attempt: 1,
-      idempotencyKey: randomUUID(),
+      idempotencyKey: globalThis.crypto.randomUUID(),
       deadlineAt: new Date(Date.now() + 30_000).toISOString(),
       datasetAttestation: { itemCount: items.length, digest, canonicalizationVersion: '1' },
       packet: {
@@ -488,15 +491,15 @@ describe('ExperimentBundler', () => {
     await writeFile(entryFile, entry);
     await writeWorkerManifest(directory, bundler.buildIdentity.buildId);
 
-    const experimentId = randomUUID();
+    const experimentId = globalThis.crypto.randomUUID();
     const request = {
       type: 'run',
       protocolVersion: '1',
       supportedProtocolVersions: ['1'],
       experimentId,
-      jobId: randomUUID(),
+      jobId: globalThis.crypto.randomUUID(),
       attempt: 1,
-      idempotencyKey: randomUUID(),
+      idempotencyKey: globalThis.crypto.randomUUID(),
       deadlineAt: new Date(Date.now() + 30_000).toISOString(),
       datasetAttestation: { itemCount: 0, digest: '0'.repeat(64), canonicalizationVersion: '1' },
       packet: {
@@ -538,16 +541,16 @@ describe('ExperimentBundler', () => {
     await writeWorkerManifest(directory, bundler.buildIdentity.buildId);
 
     const items: unknown[] = [];
-    const digest = createHash('sha256').update(canonicalize(items)).digest('hex');
-    const experimentId = randomUUID();
+    const digest = await sha256Hex(canonicalize(items));
+    const experimentId = globalThis.crypto.randomUUID();
     const result = await runWorker(entryFile, {
       type: 'run',
       protocolVersion: '1',
       supportedProtocolVersions: ['1'],
       experimentId,
-      jobId: randomUUID(),
+      jobId: globalThis.crypto.randomUUID(),
       attempt: 1,
-      idempotencyKey: randomUUID(),
+      idempotencyKey: globalThis.crypto.randomUUID(),
       deadlineAt: new Date(Date.now() + 100).toISOString(),
       datasetAttestation: { itemCount: 0, digest, canonicalizationVersion: '1' },
       packet: {

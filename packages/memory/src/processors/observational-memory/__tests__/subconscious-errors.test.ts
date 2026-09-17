@@ -20,6 +20,7 @@ describe('Subconscious errors', () => {
     });
     expect(sendStateSignal).toHaveBeenCalledWith(
       expect.objectContaining({
+        cacheKey: '232b1353322676a79edecb678b2994d58499e5ba474084cb23268f8531e504fe',
         metadata: { origin: 'subconscious' },
         value: expect.objectContaining({ errors: ['curate failed'] }),
       }),

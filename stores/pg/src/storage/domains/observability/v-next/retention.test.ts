@@ -1,14 +1,3 @@
-/**
- * Retention tests for the v-next Postgres observability domain (native
- * partition mode, which is what plain Postgres resolves to).
- *
- * Old-day partitions are created manually (init() only pre-creates
- * [yesterday, today + N]), rows are inserted through the domain API so they
- * route into those partitions, and prune() is asserted to drop exactly the
- * partitions that are wholly older than the cutoff.
- */
-
-import { randomUUID } from 'node:crypto';
 import { SpanType } from '@mastra/core/observability';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -76,8 +65,8 @@ function makeSpan(overrides: Partial<Record<string, unknown>> = {}) {
   const startedAt = (overrides.startedAt as Date | undefined) ?? dayAt(0, 10);
   const endedAt = (overrides.endedAt as Date | undefined) ?? new Date(startedAt.getTime() + 1_000);
   return {
-    traceId: `trace-${randomUUID()}`,
-    spanId: `span-${randomUUID()}`,
+    traceId: `trace-${globalThis.crypto.randomUUID()}`,
+    spanId: `span-${globalThis.crypto.randomUUID()}`,
     name: 'retention-span',
     spanType: SpanType.AGENT_RUN,
     isEvent: false,
@@ -92,7 +81,7 @@ function makeSpan(overrides: Partial<Record<string, unknown>> = {}) {
 
 function makeMetric(timestamp: Date) {
   return {
-    metricId: `metric-${randomUUID()}`,
+    metricId: `metric-${globalThis.crypto.randomUUID()}`,
     timestamp,
     name: 'mastra_latency_ms',
     value: 1,
@@ -105,7 +94,7 @@ function makeMetric(timestamp: Date) {
 
 function makeLog(timestamp: Date) {
   return {
-    logId: `log-${randomUUID()}`,
+    logId: `log-${globalThis.crypto.randomUUID()}`,
     timestamp,
     level: 'info' as const,
     message: 'retention-log',
@@ -116,9 +105,9 @@ function makeLog(timestamp: Date) {
 
 function makeScore(timestamp: Date) {
   return {
-    scoreId: `score-${randomUUID()}`,
+    scoreId: `score-${globalThis.crypto.randomUUID()}`,
     timestamp,
-    traceId: `score-trace-${randomUUID()}`,
+    traceId: `score-trace-${globalThis.crypto.randomUUID()}`,
     spanId: null,
     scorerId: 'quality',
     score: 0.5,
@@ -128,7 +117,7 @@ function makeScore(timestamp: Date) {
 }
 
 describe('ObservabilityStoragePostgresVNext — retention (native partitions)', () => {
-  const schema = `obs_retention_${randomUUID().replace(/-/g, '').slice(0, 8)}`;
+  const schema = `obs_retention_${globalThis.crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`;
   let pool: Pool;
   let client: DbClient;
   let domain: ObservabilityStoragePostgresVNext;

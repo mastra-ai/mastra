@@ -19,6 +19,7 @@ import { MastraFGAPermissions } from '../interfaces/permissions.generated';
 import type { IRBACProvider } from '../interfaces/rbac';
 import type { EEUser } from '../interfaces/user';
 import { clearLicenseCache } from '../license';
+import { hashTelemetryValue } from '../telemetry';
 import type * as EETelemetry from '../telemetry';
 
 function createMockAuth(user: EEUser | null) {
@@ -47,6 +48,10 @@ function createMockRBACProvider(): IRBACProvider<EEUser> {
 }
 
 describe('EE telemetry', () => {
+  it('matches the SHA-256 compatibility vector', async () => {
+    expect(await hashTelemetryValue('hello')).toBe('2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824');
+  });
+
   let originalNodeEnv: string | undefined;
   let originalLicense: string | undefined;
   let originalTelemetryDisabled: string | undefined;

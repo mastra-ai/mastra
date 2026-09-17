@@ -52,6 +52,26 @@ describe('AuditStorage', () => {
     expect(page.nextCursor).toBeUndefined();
   });
 
+  it('derives a stable SHA-256 idempotency ID', async () => {
+    const storage = await makeStorage();
+    const input = {
+      orgId: 'org1',
+      actorId: 'user:alice',
+      action: 'factory.work_item.created',
+      targets: [],
+      idempotencyKey: 'audit-key',
+    };
+
+    await expect(storage.recordOnce(input)).resolves.toMatchObject({
+      created: true,
+      event: { id: 'a8e2764a-de9e-821f-a34f-8292c92a262e' },
+    });
+    await expect(storage.recordOnce(input)).resolves.toMatchObject({
+      created: false,
+      event: { id: 'a8e2764a-de9e-821f-a34f-8292c92a262e' },
+    });
+  });
+
   it('paginates newest-first with keyset cursors', async () => {
     const storage = await makeStorage();
     const base = Date.now();

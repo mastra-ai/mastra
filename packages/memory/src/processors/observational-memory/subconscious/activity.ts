@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type {
   KnowledgeActivityEvent,
@@ -10,6 +8,11 @@ import type {
 import { isKnowledgeScopeVisible } from '@mastra/core/storage';
 
 export const SUBCONSCIOUS_ACTIVITY_STATE_ID = 'subconscious-activity';
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
 
 export interface SubconsciousActivityUpdate {
   action: KnowledgeActivityEvent['action'];
@@ -117,7 +120,7 @@ export async function publishSubconsciousError(input: {
   await input.sendStateSignal({
     id: SUBCONSCIOUS_ACTIVITY_STATE_ID,
     mode: 'snapshot',
-    cacheKey: createHash('sha256').update(contents).digest('hex'),
+    cacheKey: await sha256Hex(contents),
     tagName: 'state',
     attributes: { id: SUBCONSCIOUS_ACTIVITY_STATE_ID },
     metadata: { origin: 'subconscious' },
@@ -136,7 +139,7 @@ export async function publishSubconsciousActivity(input: {
   if (!input.sendStateSignal) return undefined;
   const snapshot = await buildSubconsciousActivitySnapshot(input);
   const contents = renderSubconsciousActivity(snapshot);
-  const cacheKey = createHash('sha256').update(contents).digest('hex');
+  const cacheKey = await sha256Hex(contents);
   await input.sendStateSignal({
     id: SUBCONSCIOUS_ACTIVITY_STATE_ID,
     mode: 'snapshot',

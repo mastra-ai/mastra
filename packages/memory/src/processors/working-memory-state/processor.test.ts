@@ -77,7 +77,7 @@ describe('WorkingMemoryStateProcessor', () => {
       mode: 'snapshot',
       tagName: 'working-memory',
     });
-    expect(result?.cacheKey).toBe(stableWorkingMemoryCacheKey({ format: 'markdown', data: '# Title\n- ready' }));
+    expect(result?.cacheKey).toBe(await stableWorkingMemoryCacheKey({ format: 'markdown', data: '# Title\n- ready' }));
     // Plain text contents — runtime wraps in <working-memory ...>…</working-memory> via tagName.
     expect(result?.contents).toBe('# Title\n- ready');
     expect(result?.contents).not.toContain('<working_memory_');
@@ -93,7 +93,7 @@ describe('WorkingMemoryStateProcessor', () => {
     const memory = buildMemoryMock({ template, data });
     const processor = new WorkingMemoryStateProcessor(memory);
 
-    const cacheKey = stableWorkingMemoryCacheKey({ format: 'markdown', data });
+    const cacheKey = await stableWorkingMemoryCacheKey({ format: 'markdown', data });
     const tracking: ProcessorStateSignalTracking = {
       currentCacheKey: cacheKey,
       currentMode: 'snapshot',
@@ -121,7 +121,7 @@ describe('WorkingMemoryStateProcessor', () => {
     const memory = buildMemoryMock({ template, data });
     const processor = new WorkingMemoryStateProcessor(memory);
 
-    const cacheKey = stableWorkingMemoryCacheKey({ format: 'markdown', data });
+    const cacheKey = await stableWorkingMemoryCacheKey({ format: 'markdown', data });
     const tracking: ProcessorStateSignalTracking = {
       currentCacheKey: cacheKey,
       currentMode: 'snapshot',
@@ -150,7 +150,7 @@ describe('WorkingMemoryStateProcessor', () => {
     const memory = buildMemoryMock({ template, data: '# new' });
     const processor = new WorkingMemoryStateProcessor(memory);
 
-    const oldCacheKey = stableWorkingMemoryCacheKey({ format: 'markdown', data: '# old' });
+    const oldCacheKey = await stableWorkingMemoryCacheKey({ format: 'markdown', data: '# old' });
     const tracking: ProcessorStateSignalTracking = {
       currentCacheKey: oldCacheKey,
       currentMode: 'snapshot',
@@ -191,11 +191,11 @@ describe('WorkingMemoryStateProcessor', () => {
     expect(result).toBeUndefined();
   });
 
-  it('produces compact, stable, content-addressed cacheKeys', () => {
+  it('produces compact, stable, content-addressed cacheKeys', async () => {
     const longBlob = '# User Profile\n' + '- Name: Caleb\n'.repeat(1000);
-    const a = stableWorkingMemoryCacheKey({ format: 'markdown', data: longBlob });
-    const b = stableWorkingMemoryCacheKey({ format: 'markdown', data: longBlob });
-    const c = stableWorkingMemoryCacheKey({ format: 'markdown', data: longBlob + 'change' });
+    const a = await stableWorkingMemoryCacheKey({ format: 'markdown', data: longBlob });
+    const b = await stableWorkingMemoryCacheKey({ format: 'markdown', data: longBlob });
+    const c = await stableWorkingMemoryCacheKey({ format: 'markdown', data: longBlob + 'change' });
     expect(a).toBe(b);
     expect(a).not.toBe(c);
     // sha256 hex digest + prefix is always 71 chars, regardless of payload size.
@@ -203,9 +203,9 @@ describe('WorkingMemoryStateProcessor', () => {
     expect(a.length).toBe(71);
   });
 
-  it('treats format as part of the cache key', () => {
-    const md = stableWorkingMemoryCacheKey({ format: 'markdown', data: '{}' });
-    const json = stableWorkingMemoryCacheKey({ format: 'json', data: '{}' });
+  it('treats format as part of the cache key', async () => {
+    const md = await stableWorkingMemoryCacheKey({ format: 'markdown', data: '{}' });
+    const json = await stableWorkingMemoryCacheKey({ format: 'json', data: '{}' });
     expect(md).not.toBe(json);
   });
 
@@ -231,7 +231,7 @@ describe('WorkingMemoryStateProcessor', () => {
           lastSnapshot: priorSnapshot(prior),
           deltasSinceSnapshot: [],
           tracking: {
-            currentCacheKey: stableWorkingMemoryCacheKey({ format: 'markdown', data: prior }),
+            currentCacheKey: await stableWorkingMemoryCacheKey({ format: 'markdown', data: prior }),
             currentMode: 'snapshot',
             version: 1,
           },
@@ -245,7 +245,7 @@ describe('WorkingMemoryStateProcessor', () => {
       expect(result?.contents).toContain('-- Favorite color: orange');
       expect(result?.contents).toContain('+- Favorite color: blue');
       // Cache key still matches the full next contents (after trim, same as processor).
-      expect(result?.cacheKey).toBe(stableWorkingMemoryCacheKey({ format: 'markdown', data: next.trim() }));
+      expect(result?.cacheKey).toBe(await stableWorkingMemoryCacheKey({ format: 'markdown', data: next.trim() }));
       // Patch must be strictly smaller than a full snapshot for delta to win.
       expect((result?.contents as string).length).toBeLessThan(next.length);
       // Delta carries the full post-edit text on `value` so the next turn can
@@ -275,7 +275,7 @@ describe('WorkingMemoryStateProcessor', () => {
           lastSnapshot: priorSnapshot(snapshotA),
           deltasSinceSnapshot: [priorDelta],
           tracking: {
-            currentCacheKey: stableWorkingMemoryCacheKey({ format: 'markdown', data: deltaB }),
+            currentCacheKey: await stableWorkingMemoryCacheKey({ format: 'markdown', data: deltaB }),
             currentMode: 'delta',
             version: 2,
           },

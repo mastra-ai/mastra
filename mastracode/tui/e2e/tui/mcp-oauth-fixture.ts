@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -117,7 +117,10 @@ export async function startMcpOAuthFixtureServer(options: McpOAuthFixtureOptions
       // --- RFC 7591 dynamic client registration ---
       if (requestUrl.pathname === '/register' && req.method === 'POST') {
         const metadata = JSON.parse(await readBody(req));
-        const registration = { client_id: `client-${randomUUID()}`, redirect_uris: metadata.redirect_uris };
+        const registration = {
+          client_id: `client-${globalThis.crypto.randomUUID()}`,
+          redirect_uris: metadata.redirect_uris,
+        };
         clientsById.set(registration.client_id, registration);
         sendJson(res, 201, {
           ...metadata,
@@ -141,7 +144,7 @@ export async function startMcpOAuthFixtureServer(options: McpOAuthFixtureOptions
         if (authorizeGate) {
           await authorizeGate;
         }
-        const code = `code-${randomUUID()}`;
+        const code = `code-${globalThis.crypto.randomUUID()}`;
         pendingCodes.set(code, { codeChallenge: requestUrl.searchParams.get('code_challenge') ?? '', redirectUri });
         const location = new URL(redirectUri);
         location.searchParams.set('code', code);
@@ -174,8 +177,8 @@ export async function startMcpOAuthFixtureServer(options: McpOAuthFixtureOptions
           sendJson(res, 400, { error: 'unsupported_grant_type' });
           return;
         }
-        const accessToken = `mc-e2e-access-${randomUUID()}`;
-        const refreshToken = `mc-e2e-refresh-${randomUUID()}`;
+        const accessToken = `mc-e2e-access-${globalThis.crypto.randomUUID()}`;
+        const refreshToken = `mc-e2e-refresh-${globalThis.crypto.randomUUID()}`;
         validTokens.add(accessToken);
         refreshTokens.add(refreshToken);
         sendJson(res, 200, {

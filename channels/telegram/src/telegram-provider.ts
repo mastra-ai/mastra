@@ -1,4 +1,3 @@
-import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { AgentChannels, resolveWaitUntil } from '@mastra/core/channels';
 import type {
   ChannelAdapterConfig,
@@ -213,11 +212,11 @@ export class TelegramProvider implements ChannelProvider {
     }
 
     if (!options.botToken) {
-      const installationId = existing?.id ?? randomUUID();
+      const installationId = existing?.id ?? globalThis.crypto.randomUUID();
       await store.save({
         id: installationId,
         agentId,
-        webhookId: existing?.webhookId ?? randomUUID(),
+        webhookId: existing?.webhookId ?? globalThis.crypto.randomUUID(),
         status: 'pending',
         installedAt: existing?.installedAt ?? new Date(),
       });
@@ -225,8 +224,8 @@ export class TelegramProvider implements ChannelProvider {
     }
 
     const me = await getMe(options.botToken, this.#apiBaseUrl());
-    const installationId = existing?.id ?? randomUUID();
-    const webhookId = existing?.webhookId ?? randomUUID();
+    const installationId = existing?.id ?? globalThis.crypto.randomUUID();
+    const webhookId = existing?.webhookId ?? globalThis.crypto.randomUUID();
     const baseUrl = this.#getBaseUrl();
     const mode = this.#resolveMode(baseUrl);
     if (mode === 'webhook' && !baseUrl) {
@@ -341,7 +340,7 @@ export class TelegramProvider implements ChannelProvider {
 
     // Verify the shared secret on every POST (constant-time), before any work.
     const provided = c.req.header(SECRET_HEADER);
-    if (!secretMatches(provided, installation.secretToken)) {
+    if (!(await secretMatches(provided, installation.secretToken))) {
       return c.json({ ok: false, error: 'Invalid secret token' }, 401);
     }
 
@@ -531,12 +530,24 @@ export class TelegramProvider implements ChannelProvider {
   }
 }
 
+function toArrayBuffer(value: Uint8Array): ArrayBuffer {
+  return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
+}
+
 /** Constant-time comparison of the webhook secret header. */
-function secretMatches(provided: string | undefined, expected: string | undefined): boolean {
+async function secretMatches(provided: string | undefined, expected: string | undefined): Promise<boolean> {
   if (!provided || !expected) return false;
-  const a = Buffer.from(provided);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
+
+  const encoder = new TextEncoder();
+  const key = await globalThis.crypto.subtle.importKey(
+    'raw',
+    toArrayBuffer(encoder.encode('mastra:telegram-secret-comparison:v1')),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign', 'verify'],
+  );
+  const signature = await globalThis.crypto.subtle.sign('HMAC', key, toArrayBuffer(encoder.encode(expected)));
+  return globalThis.crypto.subtle.verify('HMAC', key, signature, toArrayBuffer(encoder.encode(provided)));
 }
 
 function stripTrailingSlash(url: string): string {

@@ -79,18 +79,19 @@ export function enableAutoRecording(options: AutoRecordingOptions = {}) {
     name = testPath ? defaultNameGenerator(testPath) : 'unknown-test';
   }
 
-  const recorder = setupLLMRecording({ name, recordingsDir, ...recorderOptions });
+  let recorder: Awaited<ReturnType<typeof setupLLMRecording>> | undefined;
 
-  beforeAll(() => {
+  beforeAll(async () => {
+    recorder = await setupLLMRecording({ name, recordingsDir, ...recorderOptions });
     recorder.start();
   });
 
   afterAll(async () => {
-    await recorder.save();
-    recorder.stop();
+    if (recorder) {
+      await recorder.save();
+      recorder.stop();
+    }
   });
-
-  return recorder;
 }
 
 /**

@@ -1,4 +1,3 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 import { RequestContext } from '@mastra/core/request-context';
@@ -126,15 +125,28 @@ function normalizeHeader(value: string | undefined | null): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function verifySignature(rawBody: string, signature: string, secret: string): boolean {
+function toArrayBuffer(value: Uint8Array): ArrayBuffer {
+  return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
+}
+
+async function verifySignature(rawBody: string, signature: string, secret: string): Promise<boolean> {
   if (!signature.startsWith('sha256=')) return false;
   const signatureHex = signature.slice('sha256='.length);
   if (!/^[a-fA-F0-9]{64}$/.test(signatureHex)) return false;
 
-  const expectedHex = createHmac('sha256', secret).update(rawBody).digest('hex');
-  const received = Buffer.from(signatureHex, 'hex');
-  const expected = Buffer.from(expectedHex, 'hex');
-  return received.length === expected.length && timingSafeEqual(received, expected);
+  const key = await globalThis.crypto.subtle.importKey(
+    'raw',
+    toArrayBuffer(new TextEncoder().encode(secret)),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['verify'],
+  );
+  return globalThis.crypto.subtle.verify(
+    'HMAC',
+    key,
+    toArrayBuffer(Buffer.from(signatureHex, 'hex')),
+    toArrayBuffer(new TextEncoder().encode(rawBody)),
+  );
 }
 
 async function parseGithubWebhook(
@@ -155,7 +167,7 @@ async function parseGithubWebhook(
     return { status: 401, body: { error: 'unauthorized', message: 'Missing x-hub-signature-256 header' } };
 
   const rawBody = await c.req.text();
-  if (!verifySignature(rawBody, signature, secret)) {
+  if (!(await verifySignature(rawBody, signature, secret))) {
     return { status: 401, body: { error: 'unauthorized', message: 'Invalid GitHub webhook signature' } };
   }
 

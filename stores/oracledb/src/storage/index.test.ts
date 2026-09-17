@@ -177,13 +177,13 @@ describe('OracleStore facade', () => {
 
     const firstInit = store.init();
     const secondInit = store.init();
-    expect(migrationRegistry.run).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(migrationRegistry.run).toHaveBeenCalledTimes(1));
     resolveRun([{ id: 'R001_MEMORY_SCHEMA', status: 'applied' }]);
     await Promise.all([firstInit, secondInit]);
 
     const firstMigrate = store.migrate();
     const secondMigrate = store.migrate();
-    expect(migrationRegistry.run).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(migrationRegistry.run).toHaveBeenCalledTimes(2));
     resolveRun([{ id: 'R001_MEMORY_SCHEMA', status: 'reapplied' }]);
     await expect(Promise.all([firstMigrate, secondMigrate])).resolves.toEqual([
       [{ id: 'R001_MEMORY_SCHEMA', status: 'reapplied' }],
@@ -220,7 +220,7 @@ describe('OracleStore facade', () => {
     const initPromise = store.init();
     const migratePromise = store.migrate();
 
-    expect(migrationRegistry.run).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(migrationRegistry.run).toHaveBeenCalledTimes(1));
     expect(migrationRegistry.run.mock.calls[0]?.[1]).toEqual({ forceRepeatable: false });
 
     resolvers[0]?.([{ id: 'R001_MEMORY_SCHEMA', status: 'applied' }]);
@@ -339,15 +339,15 @@ describe('OracleStore first-PR domains', () => {
     ]);
   });
 
-  it('registers only selected storage migrations', () => {
+  it('registers only selected storage migrations', async () => {
     const store = new OracleStore({
       id: 'first-pr-migrations-test',
       pool: {} as any,
     });
 
-    const migrations = (
+    const migrations = await (
       store as unknown as {
-        storageMigrations: () => Array<{ id: string }>;
+        storageMigrations: () => Promise<Array<{ id: string }>>;
       }
     ).storageMigrations();
 
@@ -362,18 +362,21 @@ describe('OracleStore first-PR domains', () => {
     ]);
   });
 
-  it('assigns stable checksums to repeatable storage migrations', () => {
+  it('assigns frozen Node-compatible checksums to repeatable storage migrations', async () => {
     const store = new OracleStore({
       id: 'repeatable-checksum-test',
       pool: {} as any,
     });
 
-    const migrations = (
+    const migrations = await (
       store as unknown as {
-        storageMigrations: () => Array<{ checksum?: string }>;
+        storageMigrations: () => Promise<Array<{ id: string; checksum?: string }>>;
       }
     ).storageMigrations();
 
+    expect(migrations.find(migration => migration.id === 'R001_MEMORY_SCHEMA')?.checksum).toBe(
+      'C64F8E4857295CEA29857471CA77200BF6D02987EDA94F322BB7E988EB6764EA',
+    );
     expect(migrations.every(migration => /^[A-F0-9]{64}$/.test(migration.checksum ?? ''))).toBe(true);
   });
 

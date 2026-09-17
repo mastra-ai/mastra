@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { ErrorCategory, MastraError } from '@mastra/core/error';
 import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
@@ -159,7 +157,7 @@ export class ScoresOracle extends ScoresStorage {
     }
 
     try {
-      const id = randomUUID();
+      const id = globalThis.crypto.randomUUID();
       const now = new Date();
 
       // Use the generic OracleDB insert path so JSON-heavy evaluator payloads

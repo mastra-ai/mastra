@@ -542,11 +542,11 @@ export class MastraAuthOkta
     return null;
   }
 
-  getSessionIdFromRequest(_request: Request): string | null {
+  async getSessionIdFromRequest(_request: Request): Promise<string | null> {
     return null;
   }
 
-  getSessionHeaders(_session: Session): Record<string, string> {
+  async getSessionHeaders(_session: Session): Promise<Record<string, string>> {
     return {};
   }
 

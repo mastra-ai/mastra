@@ -14,8 +14,6 @@
  * whose message drove the run. Rule-driven events carry `actor_type = 'system'`.
  */
 
-import { createHash } from 'node:crypto';
-
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 
@@ -242,9 +240,10 @@ export class AuditStorage extends FactoryStorageDomain {
 
   async recordOnce(input: RecordAuditEventInput): Promise<{ event: AuditEventRow; created: boolean }> {
     if (!input.idempotencyKey) throw new Error('An audit idempotency key is required');
-    const hash = createHash('sha256')
-      .update(JSON.stringify([input.orgId, input.factoryProjectId ?? null, input.action, input.idempotencyKey]))
-      .digest('hex');
+    const inputBytes = new TextEncoder().encode(
+      JSON.stringify([input.orgId, input.factoryProjectId ?? null, input.action, input.idempotencyKey]),
+    );
+    const hash = Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', inputBytes)).toString('hex');
     const id = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-8${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
     try {
       return { event: await this.#insert(input, id), created: true };

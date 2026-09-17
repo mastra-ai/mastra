@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,7 +26,7 @@ async function docker(args: string[], timeoutMs = 90_000) {
 
 describe('experiment worker Postgres lifecycle', () => {
   const resources = new OwnedResources();
-  const containerName = `mastra-experiment-postgres-${randomUUID().slice(0, 8)}`;
+  const containerName = `mastra-experiment-postgres-${globalThis.crypto.randomUUID().slice(0, 8)}`;
   let artifactRoot: string;
   let manifest: ExperimentWorkerManifest;
   let connectionString: string;

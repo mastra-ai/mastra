@@ -66,7 +66,7 @@ export class MastraCloudAuth {
    * @param options - Login options
    * @returns URL to redirect to and cookies to set
    */
-  getLoginUrl(options: { returnTo?: string; requestOrigin: string }): LoginUrlResult {
+  getLoginUrl(options: { returnTo?: string; requestOrigin: string }): Promise<LoginUrlResult> {
     return getLoginUrl({
       projectId: this.config.projectId,
       cloudBaseUrl: this.config.cloudBaseUrl,

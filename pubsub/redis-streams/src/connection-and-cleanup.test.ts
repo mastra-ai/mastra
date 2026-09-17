@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import net from 'node:net';
 import type { Event, EventCallback } from '@mastra/core/events';
 import { createClient } from 'redis';
@@ -82,7 +81,7 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
 
   describe('shutdown batch drainage', () => {
     it.each([true, false])('delivers the acquired batch and preserves ACK ownership (ack=%s)', async shouldAck => {
-      const prefix = `shutdown-${randomUUID()}`;
+      const prefix = `shutdown-${globalThis.crypto.randomUUID()}`;
       const ps = createPubSub({ keyPrefix: prefix, reclaimIntervalMs: 0 });
       const inspector = await createInspector();
       for (let i = 0; i < 10; i++) {
@@ -125,7 +124,7 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
       try {
         const port = await proxy.listening;
         ps = new RedisStreamsPubSub({ url: `redis://127.0.0.1:${port}`, blockMs: 200 });
-        const topic = `sever-${randomUUID()}`;
+        const topic = `sever-${globalThis.crypto.randomUUID()}`;
         const received: Event[] = [];
         const cb: EventCallback = (event, ack) => {
           received.push(event);
@@ -163,7 +162,7 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
   describe('clearTopic', () => {
     it('deletes the topic stream so finished runs release their memory', async () => {
       const ps = createPubSub();
-      const topic = `clear-${randomUUID()}`;
+      const topic = `clear-${globalThis.crypto.randomUUID()}`;
       await ps.publish(topic, makeEvent());
       await ps.publish(topic, makeEvent());
 
@@ -177,12 +176,12 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
 
     it('is a no-op for a topic that was never published to', async () => {
       const ps = createPubSub();
-      await expect(ps.clearTopic(`never-${randomUUID()}`)).resolves.toBeUndefined();
+      await expect(ps.clearTopic(`never-${globalThis.crypto.randomUUID()}`)).resolves.toBeUndefined();
     }, 15_000);
 
     it('lets a still-attached subscriber recover after the stream is deleted', async () => {
       const ps = createPubSub();
-      const topic = `clear-live-${randomUUID()}`;
+      const topic = `clear-live-${globalThis.crypto.randomUUID()}`;
       const received: string[] = [];
       await ps.subscribe(topic, (event, ack) => {
         received.push((event.data as { n: number }).n.toString());
@@ -202,7 +201,7 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
 
     it('preserves a latest subscriber position when recovering after deletion', async () => {
       const ps = createPubSub();
-      const topic = `clear-latest-${randomUUID()}`;
+      const topic = `clear-latest-${globalThis.crypto.randomUUID()}`;
       const received: number[] = [];
       await ps.publish(topic, makeEvent({ data: { n: 0 } }));
       await ps.subscribe(
@@ -226,7 +225,7 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
   describe('streamIdleTtlMs', () => {
     it('stamps a rolling TTL on the stream key when configured (atomically with the write)', async () => {
       const ps = createPubSub({ streamIdleTtlMs: 60_000 });
-      const topic = `ttl-${randomUUID()}`;
+      const topic = `ttl-${globalThis.crypto.randomUUID()}`;
       await ps.publish(topic, makeEvent());
 
       const inspector = await createInspector();
@@ -242,7 +241,7 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
 
     it('leaves streams persistent by default', async () => {
       const ps = createPubSub();
-      const topic = `nottl-${randomUUID()}`;
+      const topic = `nottl-${globalThis.crypto.randomUUID()}`;
       await ps.publish(topic, makeEvent());
 
       const inspector = await createInspector();
@@ -260,7 +259,7 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
 
     it('stamps a TTL when subscribe() creates the stream and nothing is ever published', async () => {
       const ps = createPubSub({ streamIdleTtlMs: 60_000 });
-      const topic = `ttl-subscribe-${randomUUID()}`;
+      const topic = `ttl-subscribe-${globalThis.crypto.randomUUID()}`;
       const streamKey = `mastra:topic:${topic}`;
 
       // Subscribe only — no publish. MKSTREAM creates the (empty) stream, and
@@ -278,7 +277,7 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
     it('tolerates a second same-group subscriber (BUSYGROUP in the subscribe MULTI) and refreshes the TTL', async () => {
       const ps1 = createPubSub({ streamIdleTtlMs: 60_000 });
       const ps2 = createPubSub({ streamIdleTtlMs: 60_000 });
-      const topic = `ttl-subscribe-race-${randomUUID()}`;
+      const topic = `ttl-subscribe-race-${globalThis.crypto.randomUUID()}`;
       const group = 'workers';
       const streamKey = `mastra:topic:${topic}`;
       const inspector = await createInspector();
@@ -297,7 +296,7 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
 
     it('refreshes the TTL on a nack retry republish', async () => {
       const ps = createPubSub({ streamIdleTtlMs: 60_000, maxDeliveryAttempts: 3 });
-      const topic = `ttl-nack-${randomUUID()}`;
+      const topic = `ttl-nack-${globalThis.crypto.randomUUID()}`;
       const inspector = await createInspector();
       const streamKey = `mastra:topic:${topic}`;
 
@@ -322,7 +321,7 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
 
     it('reapplies the TTL when the read loop recreates a deleted stream (no publish)', async () => {
       const ps = createPubSub({ streamIdleTtlMs: 60_000 });
-      const topic = `ttl-recreate-${randomUUID()}`;
+      const topic = `ttl-recreate-${globalThis.crypto.randomUUID()}`;
       const inspector = await createInspector();
       const streamKey = `mastra:topic:${topic}`;
 
@@ -351,7 +350,7 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
       };
       const ps1 = createPubSub({ streamIdleTtlMs: 60_000, logger });
       const ps2 = createPubSub({ streamIdleTtlMs: 60_000, logger });
-      const topic = `busygroup-${randomUUID()}`;
+      const topic = `busygroup-${globalThis.crypto.randomUUID()}`;
       const group = 'workers';
       const received: number[] = [];
       const cb: EventCallback = (event, ack) => {

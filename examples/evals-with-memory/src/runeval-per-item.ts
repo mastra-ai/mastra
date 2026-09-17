@@ -1,16 +1,3 @@
-/**
- * Approach 2: per-item threads with `runEvals` — looped invocation
- *
- * `runEvals` accepts `targetOptions.memory` GLOBALLY (one thread for the
- * whole batch). It does NOT support per-item agent options today, and
- * pre-seeding `RequestContext.MastraMemory` does not drive the agent's
- * thread resolution (only `args.memory.thread` does).
- *
- * The pragmatic CI shape is therefore: call `runEvals` once per item (or
- * per group) with its own `targetOptions.memory`. Aggregate scores yourself.
- * This is what existing prebuilt scorers do for stateful agents in CI.
- */
-import { randomUUID } from 'node:crypto';
 import { runEvals } from '@mastra/core/evals';
 import { buildAgent, containsScorer } from './shared.ts';
 
@@ -31,7 +18,7 @@ async function main() {
 
     const perItem: Array<{ thread: string; result: any }> = [];
     for (const it of items) {
-      const thread = `t-${randomUUID()}`;
+      const thread = `t-${globalThis.crypto.randomUUID()}`;
       await memory.createThread({ threadId: thread, resourceId, title: it.input });
       const result = await runEvals({
         target: agent,

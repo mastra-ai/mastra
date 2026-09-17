@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
@@ -193,7 +192,7 @@ describe('serializable MCP tool definitions (issue #20527)', () => {
 
     function createClient(servers?: Record<string, any>) {
       mcp = new MCPClient({
-        id: `defs-test-${randomUUID()}`,
+        id: `defs-test-${globalThis.crypto.randomUUID()}`,
         servers: servers ?? { weather: { url: testServer.baseUrl } },
       });
       clients.push(mcp);

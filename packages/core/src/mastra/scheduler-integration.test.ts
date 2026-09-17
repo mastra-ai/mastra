@@ -347,7 +347,7 @@ describe('Mastra — workflow scheduler integration', () => {
       const initial = await schedulesStore.getSchedule('wf_rolling-wf');
       const initialHash = (initial!.target as any).definitionHash;
       expect(initialHash).toMatch(/^[0-9a-f]{16}$/);
-      expect(initialHash).toBe(computeScheduleDefinitionHash(firstWf.serializedStepGraph));
+      expect(initialHash).toBe(await computeScheduleDefinitionHash(firstWf.serializedStepGraph));
       await first.shutdown();
 
       // Same schedule config, different step graph (a gate step added in

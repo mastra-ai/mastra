@@ -1161,7 +1161,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
 
     if (typeof spec === 'function') {
       // Apply customization function to base mountable template
-      const { template: baseTemplate } = createDefaultMountableTemplate();
+      const { template: baseTemplate } = await createDefaultMountableTemplate();
       template = spec(baseTemplate);
       // Custom templates get unique names since they're modified
       templateName = `mastra-custom-${this.id.replace(/[^a-zA-Z0-9-]/g, '-')}`;
@@ -1264,7 +1264,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
   }
 
   private async buildOrReuseDefaultTemplate(): Promise<string> {
-    const { template, id, resources } = createDefaultMountableTemplate(this.requestedBuildResources());
+    const { template, id, resources } = await createDefaultMountableTemplate(this.requestedBuildResources());
 
     const exists = await Template.exists(id, this.connectionOpts);
     if (exists) {
@@ -1287,7 +1287,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
    * `start()` when no explicit template was configured.
    */
   protected async buildDefaultTemplate(): Promise<string> {
-    const { template, id, resources } = createDefaultMountableTemplate(this.requestedBuildResources());
+    const { template, id, resources } = await createDefaultMountableTemplate(this.requestedBuildResources());
     this.logger.debug(`${LOG_PREFIX} Building default mountable template: ${id}...`);
     const buildResult = await Template.build(template as TemplateClass, id, { ...this.connectionOpts, ...resources });
     this._resolvedTemplateId = buildResult.templateId;

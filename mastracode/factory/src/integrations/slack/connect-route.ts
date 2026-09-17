@@ -144,6 +144,7 @@ export function createSlackConnectRoutes(deps: {
           return c.redirect(`/auth/login?returnTo=${encodeURIComponent(startPath)}`);
         }
 
+        const state = await tenantStateSigner!.sign(tenant.orgId ?? '', tenant.userId, { factoryProjectId });
         const params = new URLSearchParams({
           response_type: 'code',
           // `profile` adds display-name claims (user name, team name) to the
@@ -152,7 +153,7 @@ export function createSlackConnectRoutes(deps: {
           client_id: oidc!.clientId,
           // Personal accounts have no org; the signer requires a string, so an
           // empty org round-trips and is mapped back to undefined on save.
-          state: tenantStateSigner!.sign(tenant.orgId ?? '', tenant.userId, { factoryProjectId }),
+          state,
           redirect_uri: `${oidc!.redirectBaseUrl.replace(/\/$/, '')}${OIDC_CALLBACK_PATH}`,
         });
         return c.redirect(`${SLACK_AUTHORIZE_URL}?${params.toString()}`);
@@ -168,7 +169,7 @@ export function createSlackConnectRoutes(deps: {
       handler: async c => {
         if (!oidcEnabled) return c.redirect(`${uiOrigin}/?slack=error`);
 
-        const tenant = tenantStateSigner!.verify(c.req.query('state'));
+        const tenant = await tenantStateSigner!.verify(c.req.query('state'));
         const code = c.req.query('code');
         if (!tenant || !code) return c.redirect(`${uiOrigin}/?slack=error`);
         // Burn the state before spending the code, not after saving: a replay

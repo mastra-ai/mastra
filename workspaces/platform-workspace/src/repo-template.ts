@@ -217,7 +217,7 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
     // Build steps use fresh shells, so each setup command needs its own `cd`.
     for (const command of setupCommands) template = template.runCmd(`cd "${repoDir}" && ${command}`);
     // Last, so it only exists in images where every step above succeeded.
-    template = template.runCmd(setupMarkerCommand(setupMarkerContent(setupCommands)));
+    template = template.runCmd(setupMarkerCommand(await setupMarkerContent(setupCommands)));
     return template.withFamily(family);
   };
 }

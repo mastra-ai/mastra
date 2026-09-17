@@ -65,14 +65,14 @@ async function resolve(options: RepoTemplateOptions): Promise<NamedTemplateSpec>
 }
 
 describe('repoTemplateRef', () => {
-  it('is deterministic for identical inputs', () => {
-    expect(repoTemplateRef(IDENTITY)).toBe(repoTemplateRef({ ...IDENTITY }));
-    expect(repoTemplateRef(IDENTITY)).toMatch(/^mastra-repo-octocat-hello-[0-9a-f]{8}:sha-[0-9a-f]{12}$/);
+  it('is deterministic for identical inputs', async () => {
+    expect(await repoTemplateRef(IDENTITY)).toBe(await repoTemplateRef({ ...IDENTITY }));
+    expect(await repoTemplateRef(IDENTITY)).toMatch(/^mastra-repo-octocat-hello-[0-9a-f]{8}:sha-[0-9a-f]{12}$/);
   });
 
-  it('keys the sha as a tag on a sha-independent template name', () => {
-    const a = repoTemplateRef(IDENTITY);
-    const b = repoTemplateRef({ ...IDENTITY, sha: 'b'.repeat(40) });
+  it('keys the sha as a tag on a sha-independent template name', async () => {
+    const a = await repoTemplateRef(IDENTITY);
+    const b = await repoTemplateRef({ ...IDENTITY, sha: 'b'.repeat(40) });
     expect(a).not.toBe(b);
     // Same template NAME — a moved head is a rebuild-in-place under a new
     // tag, not a new template.
@@ -80,67 +80,67 @@ describe('repoTemplateRef', () => {
     expect(a.split(':')[1]).toBe(`sha-${'a'.repeat(12)}`);
   });
 
-  it('changes when the setup command changes', () => {
-    expect(repoTemplateRef(IDENTITY)).not.toBe(repoTemplateRef({ ...IDENTITY, setupCommand: 'npm ci' }));
+  it('changes when the setup command changes', async () => {
+    expect(await repoTemplateRef(IDENTITY)).not.toBe(await repoTemplateRef({ ...IDENTITY, setupCommand: 'npm ci' }));
   });
 
-  it('changes when the repo changes', () => {
-    expect(repoTemplateRef(IDENTITY)).not.toBe(
-      repoTemplateRef({ ...IDENTITY, cloneUrl: 'https://github.com/octocat/world.git' }),
+  it('changes when the repo changes', async () => {
+    expect(await repoTemplateRef(IDENTITY)).not.toBe(
+      await repoTemplateRef({ ...IDENTITY, cloneUrl: 'https://github.com/octocat/world.git' }),
     );
   });
 
-  it('changes when the host changes, so same-slug repos on two providers stay distinct', () => {
-    expect(repoTemplateRef(IDENTITY)).not.toBe(
-      repoTemplateRef({ ...IDENTITY, cloneUrl: 'https://gitlab.com/octocat/hello.git' }),
+  it('changes when the host changes, so same-slug repos on two providers stay distinct', async () => {
+    expect(await repoTemplateRef(IDENTITY)).not.toBe(
+      await repoTemplateRef({ ...IDENTITY, cloneUrl: 'https://gitlab.com/octocat/hello.git' }),
     );
   });
 
-  it('treats clone-URL spellings of one repo as one template', () => {
+  it('treats clone-URL spellings of one repo as one template', async () => {
     for (const spelling of [
       'https://github.com/octocat/hello',
       'https://github.com/octocat/hello.git/',
       'https://GitHub.com/octocat/hello.git',
     ]) {
-      expect(repoTemplateRef({ ...IDENTITY, cloneUrl: spelling })).toBe(repoTemplateRef(IDENTITY));
+      expect(await repoTemplateRef({ ...IDENTITY, cloneUrl: spelling })).toBe(await repoTemplateRef(IDENTITY));
     }
   });
 
-  it('changes when build env changes, since it changes what setup installs', () => {
-    const withEnv = repoTemplateRef({ ...IDENTITY, buildEnv: { NPM_TOKEN: 'one' } });
-    expect(withEnv).not.toBe(repoTemplateRef(IDENTITY));
-    expect(withEnv).not.toBe(repoTemplateRef({ ...IDENTITY, buildEnv: { NPM_TOKEN: 'two' } }));
+  it('changes when build env changes, since it changes what setup installs', async () => {
+    const withEnv = await repoTemplateRef({ ...IDENTITY, buildEnv: { NPM_TOKEN: 'one' } });
+    expect(withEnv).not.toBe(await repoTemplateRef(IDENTITY));
+    expect(withEnv).not.toBe(await repoTemplateRef({ ...IDENTITY, buildEnv: { NPM_TOKEN: 'two' } }));
     // Key order is not identity.
-    expect(repoTemplateRef({ ...IDENTITY, buildEnv: { A: '1', B: '2' } })).toBe(
-      repoTemplateRef({ ...IDENTITY, buildEnv: { B: '2', A: '1' } }),
+    expect(await repoTemplateRef({ ...IDENTITY, buildEnv: { A: '1', B: '2' } })).toBe(
+      await repoTemplateRef({ ...IDENTITY, buildEnv: { B: '2', A: '1' } }),
     );
   });
 
-  it('changes when machine resources change — a resize is a new template, never a reuse', () => {
-    expect(repoTemplateRef({ ...IDENTITY, memoryMB: 2048 })).not.toBe(repoTemplateRef(IDENTITY));
-    expect(repoTemplateRef({ ...IDENTITY, cpuCount: 4 })).not.toBe(repoTemplateRef(IDENTITY));
+  it('changes when machine resources change — a resize is a new template, never a reuse', async () => {
+    expect(await repoTemplateRef({ ...IDENTITY, memoryMB: 2048 })).not.toBe(await repoTemplateRef(IDENTITY));
+    expect(await repoTemplateRef({ ...IDENTITY, cpuCount: 4 })).not.toBe(await repoTemplateRef(IDENTITY));
     // Absent and explicitly-default are the same template.
-    expect(repoTemplateRef({ ...IDENTITY, cpuCount: 2, memoryMB: 1024 })).toBe(repoTemplateRef(IDENTITY));
+    expect(await repoTemplateRef({ ...IDENTITY, cpuCount: 2, memoryMB: 1024 })).toBe(await repoTemplateRef(IDENTITY));
   });
 
-  it('degrades to the current tag without a sha', () => {
+  it('degrades to the current tag without a sha', async () => {
     const shaless = { cloneUrl: CLONE_URL, setupCommand: SETUP };
     // Same template NAME as the tagged form, pinned to the stable `current`
     // tag — never a bare name, whose create would resolve the unassigned
     // `default` tag and 404.
-    const name = repoTemplateRef(IDENTITY).split(':')[0];
-    expect(repoTemplateRef(shaless)).toBe(`${name}:current`);
+    const name = (await repoTemplateRef(IDENTITY)).split(':')[0];
+    expect(await repoTemplateRef(shaless)).toBe(`${name}:current`);
   });
 });
 
 describe('createRepoTemplate', () => {
-  it('returns undefined when the session has no repository access', () => {
+  it('returns undefined when the session has no repository access', async () => {
     expect(createRepoTemplate({ getRepositoryAccess: undefined })).toBeUndefined();
     expect(createRepoTemplate({ getRepositoryAccess: undefined, setupCommand: SETUP })).toBeUndefined();
   });
 
   it('resolves to a spec whose ref matches repoTemplateRef', async () => {
-    expect((await resolve(BASE)).ref).toBe(repoTemplateRef(IDENTITY));
+    expect((await resolve(BASE)).ref).toBe(await repoTemplateRef(IDENTITY));
   });
 
   it('clones relative to the build cwd, pins the sha, and runs the setup command in the checkout', async () => {
@@ -205,7 +205,7 @@ describe('createRepoTemplate', () => {
     const custom = await resolve({ ...BASE, workingDirectory: '/workspace' });
     expect(custom.ref).not.toBe(defaulted.ref);
     // Absent stays absent: pre-option templates keep their names.
-    expect(defaulted.ref).toBe(repoTemplateRef(IDENTITY));
+    expect(defaulted.ref).toBe(await repoTemplateRef(IDENTITY));
     // One layout, one name: a trailing slash is not a different directory.
     const slashed = await resolve({ ...BASE, workingDirectory: '/workspace/' });
     expect(slashed.ref).toBe(custom.ref);
@@ -221,21 +221,21 @@ describe('createRepoTemplate', () => {
     const head = 'c'.repeat(40);
     mockHead(head);
     const resolved = await resolve(BASE);
-    expect(resolved.ref).toBe(repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP, sha: head }));
+    expect(resolved.ref).toBe(await repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP, sha: head }));
     expect(await serializedSteps(resolved)).toContain(`checkout ${head}`);
   });
 
   it('always writes the setup marker beside the checkout as the last build step', async () => {
     const resolved = await resolve(BASE);
     const steps = await serializedSteps(resolved);
-    const content = setupMarkerContent([SETUP]);
+    const content = await setupMarkerContent([SETUP]);
     expect(content).toMatch(/^sha256:[0-9a-f]{64}$/);
     const markerStep = `mkdir -p \\"$(dirname \\"${SETUP_MARKER_PATH}\\")\\" && printf '%s' '${content}' > \\"${SETUP_MARKER_PATH}\\"`;
     expect(steps).toContain(markerStep);
     expect(steps.lastIndexOf(markerStep)).toBeGreaterThan(steps.lastIndexOf(SETUP));
     // The digest covers exactly the commands the image ran, in order.
-    expect(setupMarkerContent(['a', 'b'])).not.toBe(setupMarkerContent(['b', 'a']));
-    expect(setupMarkerContent([])).toMatch(/^sha256:/);
+    expect(await setupMarkerContent(['a', 'b'])).not.toBe(await setupMarkerContent(['b', 'a']));
+    expect(await setupMarkerContent([])).toMatch(/^sha256:/);
   });
 
   it('looks a github.com head up through the REST API, without git or a clone', async () => {
@@ -265,14 +265,14 @@ describe('createRepoTemplate', () => {
     expect(command).toBe('git');
     expect(args).toContain('ls-remote');
     expect(args).toContain(other);
-    expect(resolved.ref).toBe(repoTemplateRef({ cloneUrl: other, setupCommand: SETUP, sha: SHA }));
+    expect(resolved.ref).toBe(await repoTemplateRef({ cloneUrl: other, setupCommand: SETUP, sha: SHA }));
   });
 
   it('degrades to the sha-less name when head resolution fails', async () => {
     for (const head of [undefined, 'not a sha']) {
       mockHead(head);
       const resolved = await resolve(BASE);
-      expect(resolved.ref).toBe(repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP }));
+      expect(resolved.ref).toBe(await repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP }));
       const steps = await serializedSteps(resolved);
       expect(steps).toContain("git clone --depth=1 --single-branch 'https://github.com/octocat/hello'");
       expect(steps).not.toContain('checkout');
@@ -436,7 +436,7 @@ describe('refreshRepoTemplate', () => {
     const build = vi.spyOn(Template, 'build').mockRejectedValue(new Error('must not build'));
     const result = await refreshRepoTemplate(options);
     expect(result).toEqual({
-      ref: repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP, sha: head }),
+      ref: await repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP, sha: head }),
       action: 'reused',
       sha: head,
     });
@@ -451,7 +451,7 @@ describe('refreshRepoTemplate', () => {
       .mockResolvedValue({ alias: 'x', name: 'x', tags: [], templateId: 't', buildId: 'b' });
     const result = await refreshRepoTemplate(options);
     expect(result.action).toBe('built');
-    expect(result.ref).toBe(repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP, sha: head }));
+    expect(result.ref).toBe(await repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP, sha: head }));
     expect(build).toHaveBeenCalledTimes(1);
     expect(build.mock.calls[0]?.[1]).toBe(result.ref);
     expect(build.mock.calls[0]?.[2]).toMatchObject({ tags: ['current'] });
@@ -468,7 +468,7 @@ describe('refreshRepoTemplate', () => {
     mockHead(undefined);
     const result = await refreshRepoTemplate(options);
     expect(result).toEqual({
-      ref: repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP }),
+      ref: await repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP }),
       action: 'reused',
     });
   });

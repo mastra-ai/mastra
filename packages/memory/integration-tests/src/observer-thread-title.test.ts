@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -53,10 +52,10 @@ describe('Observer thread title generation', () => {
   });
 
   it('should generate and persist a thread title through Memory observational memory', async () => {
-    const threadId = randomUUID();
-    const resourceId = randomUUID();
+    const threadId = globalThis.crypto.randomUUID();
+    const resourceId = globalThis.crypto.randomUUID();
     const storage = new LibSQLStore({
-      id: randomUUID(),
+      id: globalThis.crypto.randomUUID(),
       url: `file:${join(dbDir, `${threadId}.db`)}`,
     });
     await storage.init();

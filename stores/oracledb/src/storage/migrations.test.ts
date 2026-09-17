@@ -87,6 +87,7 @@ describe('OracleMigrationRegistry', () => {
 
     expect(runs).toBe(1);
     expect(first[0]?.status).toBe('applied');
+    expect(first[0]?.checksum).toBe('12BCFE9F405A72FAE42A5CC0EC75185A5E27CDBD7ACBCE371ECEDA13F5D85363');
     expect(second[0]?.status).toBe('skipped');
   });
 

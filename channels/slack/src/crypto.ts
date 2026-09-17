@@ -1,33 +1,38 @@
-import { createHmac, timingSafeEqual, createCipheriv, createDecipheriv, randomBytes, hkdfSync } from 'node:crypto';
+import { createCipheriv, createDecipheriv, hkdfSync } from 'node:crypto';
+
+const encoder = new TextEncoder();
 
 /**
  * Verify a Slack request signature.
  * @see https://api.slack.com/authentication/verifying-requests-from-slack
  */
-export function verifySlackRequest(params: {
+export async function verifySlackRequest(params: {
   signingSecret: string;
   timestamp: string;
   body: string;
   signature: string;
-}): boolean {
+}): Promise<boolean> {
   const { signingSecret, timestamp, body, signature } = params;
   // Check timestamp to prevent replay attacks (5 minute window)
   const now = Math.floor(Date.now() / 1000);
   const requestTime = parseInt(timestamp, 10);
-  if (Math.abs(now - requestTime) > 300) {
+  if (Math.abs(now - requestTime) > 300 || !/^v0=[0-9a-f]{64}$/.test(signature)) {
     return false;
   }
 
-  // Compute expected signature
-  const sigBasestring = `v0:${timestamp}:${body}`;
-  const expectedSignature = `v0=${createHmac('sha256', signingSecret).update(sigBasestring).digest('hex')}`;
-
-  // Timing-safe comparison
-  try {
-    return timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature));
-  } catch {
-    return false;
-  }
+  const key = await globalThis.crypto.subtle.importKey(
+    'raw',
+    encoder.encode(signingSecret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['verify'],
+  );
+  return globalThis.crypto.subtle.verify(
+    'HMAC',
+    key,
+    Buffer.from(signature.slice(3), 'hex'),
+    encoder.encode(`v0:${timestamp}:${body}`),
+  );
 }
 
 /**
@@ -61,9 +66,9 @@ const ALGO_PREFIX = 'aes-256-gcm-hkdf';
  * Returns: `aes-256-gcm-hkdf:base64(salt):base64(iv):base64(authTag):base64(ciphertext)`
  */
 export function encrypt(plaintext: string, key: string): string {
-  const salt = randomBytes(16);
+  const salt = Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(16)));
   const derived = Buffer.from(hkdfSync('sha256', key, salt, 'mastra-slack-encryption', 32));
-  const iv = randomBytes(12);
+  const iv = Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(12)));
   const cipher = createCipheriv('aes-256-gcm', derived, iv);
 
   const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);

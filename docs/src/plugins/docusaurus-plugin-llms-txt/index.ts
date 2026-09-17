@@ -71,7 +71,7 @@ export default function pluginLlmsTxt(_context: LoadContext, userOptions: LlmsTx
         try {
           // Read HTML content
           const html = await fs.readFile(htmlPath, 'utf-8')
-          const contentHash = computeHash(html)
+          const contentHash = await computeHash(html)
 
           const llmsTxtPath = path.join(path.dirname(htmlPath), 'llms.txt')
 
@@ -181,7 +181,7 @@ async function computePluginHash(): Promise<string> {
     contents.push(content)
   }
 
-  return computeHash(contents.join(''))
+  return await computeHash(contents.join(''))
 }
 
 // Export types for external use

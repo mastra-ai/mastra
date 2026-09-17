@@ -268,7 +268,7 @@ describe('license', () => {
       process.env['MASTRA_LICENSE_KEY'] = 'LIC-ent-secret-key';
       vi.stubGlobal('fetch', mockValidateResponse(VALID_ENTERPRISE));
       await startLicenseValidation();
-      const summary = getSafeLicenseSummary();
+      const summary = await getSafeLicenseSummary();
       expect(summary.valid).toBe(true);
       expect(summary.licenseHash).toHaveLength(16);
       expect(summary.licenseHash).not.toContain('LIC-');

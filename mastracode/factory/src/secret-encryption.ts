@@ -1,4 +1,14 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv } from 'node:crypto';
+
+const randomBytesFromWebCrypto = (size: number) => {
+  const bytes = new Uint8Array(size);
+
+  for (let offset = 0; offset < size; offset += 65536) {
+    globalThis.crypto.getRandomValues(bytes.subarray(offset, Math.min(offset + 65536, size)));
+  }
+
+  return Buffer.from(bytes);
+};
 
 const ENVELOPE_PREFIX = 'mastra:factory-secret:v1:';
 const ALGORITHM = 'aes-256-gcm';
@@ -76,7 +86,7 @@ export function createFactorySecretEncryption(config: FactorySecretEncryptionCon
 
   return {
     async encrypt<T>(value: T): Promise<string> {
-      const iv = randomBytes(IV_BYTES);
+      const iv = randomBytesFromWebCrypto(IV_BYTES);
       const cipher = createCipheriv(ALGORITHM, primaryKey, iv);
       const ciphertext = Buffer.concat([cipher.update(JSON.stringify(value), 'utf8'), cipher.final()]);
       const envelope: SecretEnvelopeV1 = {

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,7 +19,7 @@ describe('Subconscious pinned facts against LibSQL', () => {
   async function createHarness() {
     const directory = await mkdtemp(join(tmpdir(), 'subconscious-pins-libsql-'));
     directories.push(directory);
-    const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'pins.db')}` });
+    const storage = new LibSQLStore({ id: globalThis.crypto.randomUUID(), url: `file:${join(directory, 'pins.db')}` });
     await storage.init();
     const memory = { storage } as unknown as Parameters<typeof createPinnedTools>[0];
     const tools = createPinnedTools(memory, {

@@ -8,7 +8,7 @@
   },
   "recordings": [
     {
-      "hash": "f2c176ff290a9280",
+      "hash": "a55893317eeccaff",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -26,16 +26,7 @@
             },
             {
               "role": "user",
-              "content": [
-                {
-                  "type": "text",
-                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
-                },
-                {
-                  "type": "text",
-                  "text": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
-                }
-              ]
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
             },
             {
               "role": "assistant",

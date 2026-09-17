@@ -170,7 +170,7 @@ export class MastraCloudAuthProvider
    * @param state - State parameter (format: uuid|encodedPostLoginRedirect)
    * @returns Full authorization URL
    */
-  getLoginUrl(redirectUri: string, state: string): string {
+  async getLoginUrl(redirectUri: string, state: string): Promise<string> {
     // Extract postLoginRedirect from state (format: uuid|encodedPostLoginRedirect)
     let postLoginRedirect = '/';
     if (state && state.includes('|')) {
@@ -190,7 +190,7 @@ export class MastraCloudAuthProvider
     const origin = redirectUrl.origin;
 
     // Generate login URL with PKCE
-    const result = this.client.getLoginUrl({
+    const result = await this.client.getLoginUrl({
       returnTo: postLoginRedirect,
       requestOrigin: origin,
     });
@@ -275,9 +275,9 @@ export class MastraCloudAuthProvider
    * @param request - Request to extract session token from
    * @returns Logout URL with redirect and token parameters, or null if no session
    */
-  getLogoutUrl(redirectUri: string, request?: Request): string | null {
+  async getLogoutUrl(redirectUri: string, request?: Request): Promise<string | null> {
     // Get session token from request cookies for id_token_hint
-    const sessionToken = request ? this.getSessionIdFromRequest(request) : null;
+    const sessionToken = request ? await this.getSessionIdFromRequest(request) : null;
     if (!sessionToken) {
       return null; // No active session, nothing to logout
     }
@@ -355,7 +355,7 @@ export class MastraCloudAuthProvider
    * @param request - Incoming HTTP request
    * @returns Session token or null if not present
    */
-  getSessionIdFromRequest(request: Request): string | null {
+  async getSessionIdFromRequest(request: Request): Promise<string | null> {
     return parseSessionCookie(request.headers.get('cookie'));
   }
 
@@ -365,7 +365,7 @@ export class MastraCloudAuthProvider
    * @param session - Session to encode (id is the access token)
    * @returns Headers object with Set-Cookie
    */
-  getSessionHeaders(session: Session): Record<string, string> {
+  async getSessionHeaders(session: Session): Promise<Record<string, string>> {
     return { 'Set-Cookie': this.client.setSessionCookie(session.id) };
   }
 
@@ -389,7 +389,7 @@ export class MastraCloudAuthProvider
    * @returns User with role or null if not authenticated
    */
   async getCurrentUser(request: Request): Promise<CloudUser | null> {
-    const sessionToken = this.getSessionIdFromRequest(request);
+    const sessionToken = await this.getSessionIdFromRequest(request);
     if (!sessionToken) return null;
 
     try {

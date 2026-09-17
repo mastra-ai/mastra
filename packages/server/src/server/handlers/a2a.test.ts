@@ -137,7 +137,7 @@ function createDeferred<T>() {
 async function seedTask(
   taskStore: InMemoryTaskStore,
   taskId: string,
-  contextId = crypto.randomUUID(),
+  contextId = globalThis.crypto.randomUUID(),
   state: Task['status']['state'] = 'submitted',
 ) {
   await taskStore.save({

@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import * as p from '@clack/prompts';
 import type { Command } from 'commander';
 import { getToken } from '../auth/credentials.js';
@@ -121,11 +120,11 @@ const KIND_NAME_SUFFIX: Record<DatabaseKind, string> = {
   mongodb: 'mongo',
 };
 
-export function defaultDatabaseName(
+export async function defaultDatabaseName(
   kind: DatabaseKind,
   project: Pick<Project, 'name' | 'slug'>,
   environment?: Pick<Environment, 'name' | 'slug' | 'type'> | null,
-): string {
+): Promise<string> {
   const tail = `-${KIND_NAME_SUFFIX[kind] ?? kind}`;
   const projectPart = sanitizeSegment(project.slug || project.name) || 'mastra';
 
@@ -155,7 +154,8 @@ export function defaultDatabaseName(
     // the same prefix collide, so replace the cut portion with a short hash
     // of the full env part to keep the discriminator unique.
     projectRoom = 1;
-    const hash = createHash('sha256').update(envPart).digest('hex').slice(0, 6);
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(envPart));
+    const hash = Buffer.from(digest).toString('hex').slice(0, 6);
     const envRoom = MAX_DB_NAME_LEN - projectRoom - separatorLen - tail.length - hash.length - 1;
     envSegment = `${truncateToMax(envPart, Math.max(1, envRoom))}-${hash}`;
   }
@@ -400,7 +400,7 @@ async function createDatabase(opts: {
   json?: boolean;
 }) {
   const { token, orgId, project, environment, kind } = opts;
-  const name = opts.name ?? defaultDatabaseName(kind, project, environment);
+  const name = opts.name ?? (await defaultDatabaseName(kind, project, environment));
 
   const created = await attachDatabase(token, orgId, project.id, {
     kind,
