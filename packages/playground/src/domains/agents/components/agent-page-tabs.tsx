@@ -17,7 +17,6 @@ interface AgentPageTabsProps {
   activeTab: AgentPageTab | 'none';
   showPlayground?: boolean;
   showObservability?: boolean;
-  rightSlot?: React.ReactNode;
 }
 
 function DocsLink({ href, children }: { href: string; children: React.ReactNode }) {
@@ -79,7 +78,6 @@ export function AgentPageTabs({
   activeTab,
   showPlayground = false,
   showObservability = false,
-  rightSlot,
 }: AgentPageTabsProps) {
   const { navigate } = useLinkComponent();
 
@@ -102,7 +100,7 @@ export function AgentPageTabs({
   };
 
   return (
-    // Below lg the rightSlot buttons wrap onto their own line (right-aligned)
+    // Below lg the trailing buttons wrap onto their own line (right-aligned)
     // when the full tab list no longer fits, so the tabs keep the full row width.
     <div className="flex min-w-0 items-center gap-2 p-1.5 max-lg:flex-wrap">
       <Tabs
@@ -124,7 +122,6 @@ export function AgentPageTabs({
         </TabList>
       </Tabs>
       <div className="ml-auto flex items-center gap-2">
-        {rightSlot}
         {!showPlayground && (
           <Button
             variant="ghost"

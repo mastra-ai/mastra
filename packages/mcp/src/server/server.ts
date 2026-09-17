@@ -71,6 +71,22 @@ import type {
   MCPServerCacheHints,
 } from './types';
 
+type HonoSSEStreamingApi = {
+  readonly closed: boolean;
+  abort(): void;
+  onAbort(listener: () => void | Promise<void>): void;
+  sleep(ms: number): Promise<unknown>;
+  write(input: Uint8Array | string): Promise<unknown>;
+  writeSSE(message: Parameters<SSEStreamingApi['writeSSE']>[0]): Promise<void>;
+};
+type HonoSSEContext = {
+  req: Pick<Context['req'], 'header' | 'json'>;
+  text: Context['text'];
+};
+type HonoSSETransport = Omit<SSETransport, 'handlePostMessage'> & {
+  handlePostMessage(context: HonoSSEContext): Promise<Response>;
+};
+
 /**
  * Flattens the MCP `ServerContext` into the shape Mastra tools receive as `extra`.
  *
@@ -285,8 +301,8 @@ export class MCPServer extends MCPServerBase {
    * @param sessionId - The session identifier
    * @returns The Hono SSE transport instance, or undefined if session not found
    */
-  public getSseHonoTransport(sessionId: string): SSETransport | undefined {
-    return this.sseHonoTransports.get(sessionId);
+  public getSseHonoTransport(sessionId: string): HonoSSETransport | undefined {
+    return this.sseHonoTransports.get(sessionId) as HonoSSETransport | undefined;
   }
 
   /**
@@ -2437,9 +2453,9 @@ export class MCPServer extends MCPServerBase {
    * });
    * ```
    */
-  public async connectHonoSSE({ messagePath, stream }: { messagePath: string; stream: SSEStreamingApi }) {
+  public async connectHonoSSE({ messagePath, stream }: { messagePath: string; stream: HonoSSEStreamingApi }) {
     this.logger.debug('Received SSE connection');
-    const sseTransport = new SSETransport(messagePath, stream);
+    const sseTransport = new SSETransport(messagePath, stream as SSEStreamingApi);
     const sessionId = sseTransport.sessionId;
     this.logger.debug('SSE Transport created with sessionId:', { sessionId });
     this.sseHonoTransports.set(sessionId, sseTransport);
