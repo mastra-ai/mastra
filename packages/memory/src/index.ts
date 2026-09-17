@@ -2800,6 +2800,7 @@ Notes:
       retrievalScope: omConfig.retrieval.scope ?? 'resource',
       searchEnabled: this.hasRetrievalSearch(omConfig.retrieval),
       observationsEnabled: omConfig.observation?.archive !== undefined,
+      obscureThreadIds: omConfig.obscureThreadIds === true,
     });
     return createMemoryRecallCodeMode(recall, omConfig.retrieval.codeMode).instructions;
   }
