@@ -1,28 +1,17 @@
 import { XIcon } from 'lucide-react';
-import { createPortal } from 'react-dom';
 import { useFilterBarContext } from './filter-bar-context';
 import { Button } from '@/ds/components/Button/Button';
 
-export type FilterBarClearProps = {
-  label?: string;
-  className?: string;
-};
-
-/**
- * Removes every filter. Renders nothing while the bar is empty. Always sits at
- * the trailing edge of the bar, after the wrapping chip list, wherever it is
- * declared among the children.
- */
-export function FilterBarClear({ label = 'Clear filters', className }: FilterBarClearProps) {
+/** Removes every filter. Rendered by FilterBar at its trailing edge; hidden while the bar is empty. */
+export function FilterBarClear({ label }: { label: string }) {
   const ctx = useFilterBarContext();
-  if (ctx.items.length === 0 || !ctx.trailingSlot) return null;
-  return createPortal(
+  if (ctx.items.length === 0) return null;
+  return (
     <Button
       variant="ghost"
-      size="icon-sm"
+      size="icon-xs"
       aria-label={label}
       tooltip={label}
-      className={className}
       onClick={event => {
         event.stopPropagation();
         ctx.clear();
@@ -30,7 +19,6 @@ export function FilterBarClear({ label = 'Clear filters', className }: FilterBar
       }}
     >
       <XIcon />
-    </Button>,
-    ctx.trailingSlot,
+    </Button>
   );
 }

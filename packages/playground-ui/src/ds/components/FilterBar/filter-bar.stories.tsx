@@ -1,15 +1,19 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { CircleIcon, GlobeIcon, HashIcon, PlayIcon, TagIcon, TimerIcon, TriangleAlertIcon } from 'lucide-react';
 import { useState } from 'react';
 import { userEvent, within } from 'storybook/test';
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
 import { FilterBar } from './filter-bar';
 import type { FilterBarField, FilterBarItem } from './types';
 import { Txt } from '@/ds/components/Txt';
+import { themedHueColor } from '@/lib/colors';
 
 const FIELDS: FilterBarField[] = [
   {
     id: 'status',
     label: 'Status',
+    icon: CircleIcon,
+    color: themedHueColor(0),
     operators: ['is', 'is-not', 'in', 'is-empty', 'is-not-empty'],
     suggestions: [
       { value: 'running', label: 'Running' },
@@ -20,20 +24,44 @@ const FIELDS: FilterBarField[] = [
   {
     id: 'environment',
     label: 'Environment',
+    icon: GlobeIcon,
+    color: themedHueColor(120),
     operators: ['is', 'is-not', 'in'],
     suggestions: [{ value: 'prod' }, { value: 'staging' }, { value: 'dev' }],
   },
   {
     id: 'tags',
     label: 'Tags',
+    icon: TagIcon,
+    color: themedHueColor(280),
     operators: ['in'],
     strict: true,
     suggestions: [{ value: 'production' }, { value: 'experiment' }, { value: 'regression' }, { value: 'canary' }],
   },
-  { id: 'traceId', label: 'Trace ID', operators: ['is', 'contains', 'starts-with'] },
-  { id: 'runId', label: 'Run ID', operators: ['is', 'contains'] },
-  { id: 'duration', label: 'Duration (ms)', type: 'number', operators: ['gt', 'gte', 'lt', 'lte'] },
-  { id: 'hasError', label: 'Has error', type: 'boolean', operators: ['is'] },
+  {
+    id: 'traceId',
+    label: 'Trace ID',
+    icon: HashIcon,
+    color: themedHueColor(220),
+    operators: ['is', 'contains', 'starts-with'],
+  },
+  { id: 'runId', label: 'Run ID', icon: PlayIcon, color: themedHueColor(180), operators: ['is', 'contains'] },
+  {
+    id: 'duration',
+    label: 'Duration (ms)',
+    icon: TimerIcon,
+    color: themedHueColor(40),
+    type: 'number',
+    operators: ['gt', 'gte', 'lt', 'lte'],
+  },
+  {
+    id: 'hasError',
+    label: 'Has error',
+    icon: TriangleAlertIcon,
+    color: themedHueColor(330),
+    type: 'boolean',
+    operators: ['is'],
+  },
 ];
 
 const meta: Meta = {
@@ -72,7 +100,6 @@ function Demo({
       <FilterBar fields={fields} operators={DEFAULT_FILTER_OPERATORS} value={items} onValueChange={setItems}>
         <FilterBar.Chips />
         <FilterBar.Input placeholder="Filter traces…" />
-        <FilterBar.Clear />
       </FilterBar>
       {children?.(items)}
       <pre className="bg-surface3 text-ui-xs text-neutral4 rounded-lg p-3">{JSON.stringify(items, null, 2)}</pre>
@@ -165,7 +192,6 @@ export const LockedChip: Story = {
           <FilterBar.Chip key={item.id} item={item} readOnly={item.id === 'scope'} />
         ))}
         <FilterBar.Input />
-        <FilterBar.Clear />
       </FilterBar>
     );
   },

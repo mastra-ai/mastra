@@ -34,9 +34,6 @@ export type FilterBarContextValue = {
   announce: (message: string) => void;
   announcement: string;
   ariaLabel: string;
-  /** Element after the wrapping chip list; `FilterBar.Clear` portals itself there. */
-  trailingSlot: HTMLElement | null;
-  registerTrailingSlot: (el: HTMLElement | null) => void;
 };
 
 const FilterBarContext = createContext<FilterBarContextValue | null>(null);
@@ -80,7 +77,6 @@ export function FilterBarProvider({
   const itemsRef = useRef(value);
   itemsRef.current = value;
   const [announcement, setAnnouncement] = useState('');
-  const [trailingSlot, registerTrailingSlot] = useState<HTMLElement | null>(null);
 
   const getField = useCallback((fieldId: string) => fields.find(f => f.id === fieldId), [fields]);
   const getOperator = useCallback((operatorId: string) => operators.find(o => o.id === operatorId), [operators]);
@@ -194,8 +190,6 @@ export function FilterBarProvider({
       announce,
       announcement,
       ariaLabel,
-      trailingSlot,
-      registerTrailingSlot,
     }),
     [
       fields,
@@ -216,7 +210,6 @@ export function FilterBarProvider({
       announce,
       announcement,
       ariaLabel,
-      trailingSlot,
     ],
   );
 

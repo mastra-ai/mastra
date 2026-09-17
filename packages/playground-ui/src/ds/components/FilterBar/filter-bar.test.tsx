@@ -88,7 +88,6 @@ function Harness({
         <FilterBar.Chips />
       )}
       <FilterBar.Input placeholder="Filter…" />
-      <FilterBar.Clear />
     </FilterBar>
   );
 }
