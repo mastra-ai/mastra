@@ -176,3 +176,51 @@ const StackedDemo = () => {
 export const Stacked: Story = {
   render: () => <StackedDemo />,
 };
+
+const SiblingsWithDepthDemo = () => {
+  const [resultOpen, setResultOpen] = useState(false);
+  const [scoreOpen, setScoreOpen] = useState(false);
+
+  const closeResult = () => {
+    setScoreOpen(false);
+    setResultOpen(false);
+  };
+
+  return (
+    <div className="p-8">
+      <Button onClick={() => setResultOpen(true)}>Open result</Button>
+
+      <DataPanel open={resultOpen} onClose={closeResult} title="Result" depth={1}>
+        <DataPanel.Header>
+          <DataPanel.Heading>
+            <b>Result</b> item-42
+          </DataPanel.Heading>
+          <DataPanel.CloseButton onClick={closeResult} />
+        </DataPanel.Header>
+        <DataPanel.Content className="flex flex-col gap-3">
+          <p className="text-ui-sm text-neutral3">
+            The score panel is a <b>sibling</b> drawer (not nested in the DOM) rendered after this one with a higher{' '}
+            <code>depth</code>, so it is narrower and this panel peeks out on the left.
+          </p>
+          <Button onClick={() => setScoreOpen(true)}>Open score</Button>
+        </DataPanel.Content>
+      </DataPanel>
+
+      <DataPanel open={scoreOpen} onClose={() => setScoreOpen(false)} title="Score" depth={2}>
+        <DataPanel.Header>
+          <DataPanel.Heading>
+            <b>Score</b> answer-relevancy
+          </DataPanel.Heading>
+          <DataPanel.CloseButton onClick={() => setScoreOpen(false)} />
+        </DataPanel.Header>
+        <DataPanel.Content>
+          <p className="text-ui-sm text-neutral3">Escape closes this panel first; the result stays open beneath.</p>
+        </DataPanel.Content>
+      </DataPanel>
+    </div>
+  );
+};
+
+export const SiblingsWithDepth: Story = {
+  render: () => <SiblingsWithDepthDemo />,
+};

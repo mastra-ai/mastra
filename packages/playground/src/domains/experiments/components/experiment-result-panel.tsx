@@ -41,6 +41,7 @@ export type ExperimentResultPanelProps = {
   className?: string;
   onPrevious?: () => void;
   onNext?: () => void;
+  open: boolean;
   onClose: () => void;
   onShowTrace?: () => void;
   onScoreClick?: (scoreId: string) => void;
@@ -48,11 +49,6 @@ export type ExperimentResultPanelProps = {
   onFlagForReview?: (resultId: string) => void;
   /** Controlled collapsed state used when opening related trace details. */
   collapsed?: boolean;
-  /**
-   * When provided, the panel splits into two columns inside the same card: the
-   * result content on the left, this slot (typically the score detail) on the right.
-   */
-  scorePanelSlot?: ReactNode;
   /** When provided, tags become editable in the metadata block (add via picker, remove via badge). */
   onTagsChange?: (tags: string[]) => void;
   /** Known tags offered by the tag picker. */
@@ -75,13 +71,13 @@ export function ExperimentResultPanel({
   className,
   onPrevious,
   onNext,
+  open,
   onClose,
   onShowTrace,
   onScoreClick,
   featuredScoreId,
   onFlagForReview,
   collapsed = false,
-  scorePanelSlot,
   onTagsChange,
   tagVocabulary = [],
   isUpdatingTags = false,
@@ -231,7 +227,14 @@ export function ExperimentResultPanel({
   );
 
   return (
-    <DataPanel collapsed={collapsed} className={className}>
+    <DataPanel
+      open={open}
+      onClose={onClose}
+      title={`Result ${result.id}`}
+      depth={1}
+      collapsed={collapsed}
+      className={className}
+    >
       {/* Actions may wrap on narrow panels; the close button sits outside the group so it stays on the first row. */}
       <DataPanel.Header className="items-start">
         <DataPanel.Heading className="shrink-0 self-center whitespace-nowrap">
@@ -268,50 +271,29 @@ export function ExperimentResultPanel({
         <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" className="shrink-0" />
       </DataPanel.Header>
 
-      {!collapsed && (
-        <SplitWithScorePanel scorePanelSlot={scorePanelSlot}>
-          {feedbackTraceId ? (
-            <Tabs<'details' | 'feedback'> defaultTab="details" className="grid h-full min-h-0 grid-rows-[auto_1fr]">
-              <DataPanel.Header className="py-2">
-                <TabList variant="pill-ghost">
-                  <Tab value="details">Details</Tab>
-                  <Tab value="feedback">
-                    Feedback
-                    <NeedsReviewDot feedback={traceFeedback?.feedback} />
-                  </Tab>
-                </TabList>
-              </DataPanel.Header>
-              <TabContent value="details" className="min-h-0 py-0">
-                {details}
-              </TabContent>
-              <TabContent value="feedback" className="h-full min-h-0 py-0">
-                <DataPanel.Content>{feedbackTabSlot!({ traceId: feedbackTraceId })}</DataPanel.Content>
-              </TabContent>
-            </Tabs>
-          ) : (
-            details
-          )}
-        </SplitWithScorePanel>
-      )}
+      {!collapsed &&
+        (feedbackTraceId ? (
+          <Tabs<'details' | 'feedback'> defaultTab="details" className="grid h-full min-h-0 grid-rows-[auto_1fr]">
+            <DataPanel.Header className="py-2">
+              <TabList variant="pill-ghost">
+                <Tab value="details">Details</Tab>
+                <Tab value="feedback">
+                  Feedback
+                  <NeedsReviewDot feedback={traceFeedback?.feedback} />
+                </Tab>
+              </TabList>
+            </DataPanel.Header>
+            <TabContent value="details" className="min-h-0 py-0">
+              {details}
+            </TabContent>
+            <TabContent value="feedback" className="h-full min-h-0 py-0">
+              <DataPanel.Content>{feedbackTabSlot!({ traceId: feedbackTraceId })}</DataPanel.Content>
+            </TabContent>
+          </Tabs>
+        ) : (
+          details
+        ))}
     </DataPanel>
-  );
-}
-
-/**
- * Renders the result content as-is, or — when a score panel is provided — as a
- * two-column split inside the same card, with the score detail on the right.
- * Mirrors `SplitWithSpanPanel` from the traces domain.
- */
-function SplitWithScorePanel({ scorePanelSlot, children }: { scorePanelSlot?: ReactNode; children: ReactNode }) {
-  if (!scorePanelSlot) return <>{children}</>;
-
-  return (
-    <div className="grid min-h-0 flex-1 grid-cols-[1fr_1fr]">
-      <div className="flex min-h-0 flex-col overflow-hidden">{children}</div>
-      <div className="animate-in border-border1 fade-in-0 flex min-h-0 flex-col overflow-hidden border-l duration-300">
-        {scorePanelSlot}
-      </div>
-    </div>
   );
 }
 

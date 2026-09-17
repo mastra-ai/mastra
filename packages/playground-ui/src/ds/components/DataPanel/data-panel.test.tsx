@@ -118,4 +118,54 @@ describe('DataPanel', () => {
     expect(popups).toHaveLength(2);
     expect(popups[0]?.hasAttribute('data-nested-drawer-open')).toBe(true);
   });
+
+  describe('when two sibling panels are open with increasing depth', () => {
+    const Siblings = ({
+      scoreOpen,
+      onCloseResult,
+      onCloseScore,
+    }: {
+      scoreOpen: boolean;
+      onCloseResult?: () => void;
+      onCloseScore?: () => void;
+    }) => (
+      <>
+        <DataPanel open onClose={onCloseResult} title="Result" depth={1}>
+          <DataPanel.Content>Result body</DataPanel.Content>
+        </DataPanel>
+        <DataPanel open={scoreOpen} onClose={onCloseScore} title="Score" depth={2}>
+          <DataPanel.Content>Score body</DataPanel.Content>
+        </DataPanel>
+      </>
+    );
+
+    it('renders both popups and tags each with its depth', () => {
+      const { rerender } = render(<Siblings scoreOpen={false} />);
+      rerender(<Siblings scoreOpen />);
+
+      expect(screen.getByRole('dialog', { name: 'Score' })).toBeDefined();
+      // The result panel sits beneath the score panel and is made inert by it.
+      expect(screen.getByRole('dialog', { name: 'Result', hidden: true })).toBeDefined();
+
+      const popups = document.querySelectorAll(POPUP);
+      expect(popups).toHaveLength(2);
+      expect(popups[0]?.getAttribute('data-depth')).toBe('1');
+      expect(popups[1]?.getAttribute('data-depth')).toBe('2');
+    });
+
+    it('closes the deeper panel first on Escape', () => {
+      const onCloseResult = vi.fn();
+      const onCloseScore = vi.fn();
+
+      const { rerender } = render(
+        <Siblings scoreOpen={false} onCloseResult={onCloseResult} onCloseScore={onCloseScore} />,
+      );
+      rerender(<Siblings scoreOpen onCloseResult={onCloseResult} onCloseScore={onCloseScore} />);
+
+      fireEvent.keyDown(screen.getByRole('dialog', { name: 'Score' }), { key: 'Escape' });
+
+      expect(onCloseScore).toHaveBeenCalledTimes(1);
+      expect(onCloseResult).not.toHaveBeenCalled();
+    });
+  });
 });

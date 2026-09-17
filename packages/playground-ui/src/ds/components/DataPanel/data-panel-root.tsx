@@ -13,12 +13,30 @@ export interface DataPanelProps {
   title: string;
   /** Accessible dialog description (screen-reader only). */
   description?: string;
+  /**
+   * Elevation level when several sibling panels are open at once (not nested in
+   * the React tree, so Base UI's own stacking doesn't apply). A deeper panel is
+   * narrower so the one beneath peeks out on the left. Siblings stack in mount
+   * order: render the deeper panel after the shallower one.
+   */
+  depth?: 1 | 2 | 3;
   collapsed?: boolean;
   children: React.ReactNode;
   className?: string;
 }
 
-export function DataPanelRoot({ open, onClose, title, description, collapsed, children, className }: DataPanelProps) {
+const DEPTH_WIDTH = { 1: 'w-md', 2: 'w-sm', 3: 'w-xs' } as const;
+
+export function DataPanelRoot({
+  open,
+  onClose,
+  title,
+  description,
+  depth = 1,
+  collapsed,
+  children,
+  className,
+}: DataPanelProps) {
   // Swipe-exempt mount point for nested popups (Select, DropdownMenu, …) so they
   // stay inside Base UI's modal focus region and don't start a drawer swipe on
   // pointerdown. Same pattern as `SideDialogRoot`; see `portal-container.tsx`.
@@ -37,7 +55,8 @@ export function DataPanelRoot({ open, onClose, title, description, collapsed, ch
         <DrawerPrimitive.Viewport className="fixed inset-0 z-50">
           <DrawerPrimitive.Popup
             data-slot="data-panel-popup"
-            className="fixed inset-y-0 right-0 z-50 flex w-md max-w-full p-4 outline-none"
+            data-depth={depth}
+            className={cn('fixed inset-y-0 right-0 z-50 flex max-w-full p-4 outline-none', DEPTH_WIDTH[depth])}
           >
             <DrawerPrimitive.Title className="sr-only">{title}</DrawerPrimitive.Title>
             {description && (

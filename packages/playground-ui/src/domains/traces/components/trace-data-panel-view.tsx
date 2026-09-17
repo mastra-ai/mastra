@@ -260,7 +260,13 @@ export function TraceDataPanelView({
   );
 
   return (
-    <DataPanel collapsed={collapsed} className={className}>
+    <DataPanel
+      open
+      onClose={onClose}
+      title={isOnTracePage ? 'Trace Timeline' : `Trace ${traceId}`}
+      collapsed={collapsed}
+      className={className}
+    >
       <DataPanel.Header>
         {isOnTracePage ? (
           <>

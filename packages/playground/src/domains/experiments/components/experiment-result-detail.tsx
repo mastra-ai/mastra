@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils';
 
 export type ExperimentResultDetailProps = Omit<
   ExperimentResultPanelProps,
-  'scores' | 'onShowTrace' | 'onScoreClick' | 'featuredScoreId' | 'collapsed' | 'scorePanelSlot' | 'feedbackTabSlot'
+  'open' | 'scores' | 'onShowTrace' | 'onScoreClick' | 'featuredScoreId' | 'collapsed' | 'feedbackTabSlot'
 > & {
   scores?: ClientScoreRowData[];
   /**
@@ -102,7 +102,7 @@ export function ExperimentResultDetail({
     page: 0,
   });
 
-  // Row stack: Result (with score split inside) → shared Trace/Span panel.
+  // Row stack: Result → shared Trace/Span panel.
   const gridRows = (() => {
     const rows: string[] = [];
     rows.push(resultCollapsed ? 'auto' : featuredTraceId ? '2fr' : '1fr');
@@ -120,6 +120,7 @@ export function ExperimentResultDetail({
     >
       <ExperimentResultPanel
         {...panelProps}
+        open
         result={result}
         scores={scores}
         onScoreClick={handleScoreClick}
@@ -127,19 +128,19 @@ export function ExperimentResultDetail({
         onShowTrace={() => showTrace(result.traceId)}
         feedbackTabSlot={({ traceId }) => <TraceFeedbackTab key={traceId} traceId={traceId} />}
         collapsed={resultCollapsed}
-        scorePanelSlot={
-          featuredScore ? (
-            <ExperimentScorePanel
-              score={featuredScore}
-              onNext={toNextScore()}
-              onPrevious={toPreviousScore()}
-              onClose={() => setFeaturedScoreId(null)}
-              onShowTrace={() => showTrace(featuredScore.traceId)}
-              className="rounded-none border-0 bg-transparent"
-            />
-          ) : null
-        }
       />
+
+      {/* Sibling drawer (not nested in the result panel): rendered after it so it stacks on top at depth 2. */}
+      {featuredScore && (
+        <ExperimentScorePanel
+          open
+          score={featuredScore}
+          onNext={toNextScore()}
+          onPrevious={toPreviousScore()}
+          onClose={() => setFeaturedScoreId(null)}
+          onShowTrace={() => showTrace(featuredScore.traceId)}
+        />
+      )}
 
       {featuredTraceId && (
         <TraceSpanPanel
