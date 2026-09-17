@@ -7814,6 +7814,8 @@ export class Agent<
     threadExists,
     structuredOutput = false,
     overrideScorers,
+    writer,
+    abortSignal,
     onTitleGenerated,
     waitUntil,
   }: AgentExecuteOnFinishOptions) {
@@ -7899,6 +7901,7 @@ export class Agent<
           model: titleModel,
           instructions: titleInstructions,
           minMessages,
+          emitEvent,
         } = this.resolveTitleGenerationConfig(
           config?.generateTitle as
             | boolean
@@ -7906,6 +7909,7 @@ export class Agent<
                 model?: DynamicArgument<MastraModelConfig, TRequestContext>;
                 instructions?: DynamicArgument<string>;
                 minMessages?: number;
+                emitEvent?: boolean;
               }
             | undefined,
         );
@@ -7920,10 +7924,12 @@ export class Agent<
             const userMessage = this.getMostRecentUserMessage(threadUiMessages);
 
             if (userMessage) {
-              // Fire-and-forget so generate()/stream() stay fast. On serverless
-              // runtimes that freeze after the response, pass
-              // `serverless.waitUntil` so the platform keeps this promise alive (#20682).
-              const titlePromise = this.genTitle(
+              // Fire-and-forget so generate()/stream() stay fast — unless the caller
+              // opted into streaming the title on this run, in which case `finish`
+              // waits for persist+emit below. On serverless runtimes that freeze
+              // after the response, pass `serverless.waitUntil` so the platform
+              // keeps this promise alive (#20682).
+              const persistAndEmitPromise = this.genTitle(
                 userMessage,
                 requestContext,
                 observabilityContext,
@@ -7940,16 +7946,73 @@ export class Agent<
                       title,
                       metadata: thread.metadata,
                     });
-                    if (typeof onTitleGenerated === 'function') {
-                      await onTitleGenerated(title);
+
+                    if (emitEvent && writer && !abortSignal?.aborted) {
+                      try {
+                        // Transient chunk: delivered to stream consumers before
+                        // `finish`, never persisted to the message history.
+                        await writer.custom({
+                          type: 'data-thread-title',
+                          data: { threadId: thread.id, title },
+                          transient: true,
+                        });
+                      } catch {
+                        // The stream may already be closed by the consumer; the
+                        // title is still persisted above.
+                        this.logger.debug('Failed to emit data-thread-title chunk: stream already closed');
+                      }
                     }
+
+                    return title;
                   }
+                  return undefined;
                 })
                 .catch(error => {
                   this.logger.error('Error persisting generated title:', error);
+                  return undefined as string | undefined;
                 });
 
-              if (typeof waitUntil === 'function') {
+              // The user callback runs after persist+emit but never holds `finish`.
+              const titlePromise = persistAndEmitPromise
+                .then(title => {
+                  if (title && typeof onTitleGenerated === 'function') {
+                    return onTitleGenerated(title);
+                  }
+                })
+                .catch(error => {
+                  this.logger.error('Error in onTitleGenerated callback:', error);
+                });
+
+              if (emitEvent && writer && !abortSignal?.aborted) {
+                // Hold `finish` until the title is generated, persisted, and emitted
+                // so the `data-thread-title` chunk lands before `finish`. An abort
+                // during the wait releases `finish` immediately; title generation
+                // continues detached and still persists.
+                if (abortSignal) {
+                  let onAbort: () => void = () => {};
+                  const abortedDuringWait = new Promise<'aborted'>(resolve => {
+                    onAbort = () => resolve('aborted');
+                    if (abortSignal.aborted) {
+                      onAbort();
+                    } else {
+                      abortSignal.addEventListener('abort', onAbort, { once: true });
+                    }
+                  });
+                  try {
+                    await Promise.race([persistAndEmitPromise, abortedDuringWait]);
+                  } finally {
+                    abortSignal.removeEventListener('abort', onAbort);
+                  }
+                } else {
+                  await persistAndEmitPromise;
+                }
+
+                if (typeof waitUntil === 'function') {
+                  waitUntil(titlePromise);
+                } else {
+                  void titlePromise;
+                }
+              } else if (typeof waitUntil === 'function') {
                 waitUntil(titlePromise);
               } else {
                 void titlePromise;
@@ -10116,6 +10179,7 @@ export class Agent<
           model?: DynamicArgument<MastraModelConfig, TRequestContext>;
           instructions?: DynamicArgument<string>;
           minMessages?: number;
+          emitEvent?: boolean;
         }
       | undefined,
   ): {
@@ -10123,6 +10187,7 @@ export class Agent<
     model?: DynamicArgument<MastraModelConfig, TRequestContext>;
     instructions?: DynamicArgument<string>;
     minMessages?: number;
+    emitEvent?: boolean;
   } {
     if (typeof generateTitleConfig === 'boolean') {
       return { shouldGenerate: generateTitleConfig };
@@ -10134,6 +10199,7 @@ export class Agent<
         model: generateTitleConfig.model,
         instructions: generateTitleConfig.instructions,
         minMessages: generateTitleConfig.minMessages,
+        emitEvent: generateTitleConfig.emitEvent,
       };
     }
 
