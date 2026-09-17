@@ -23,7 +23,9 @@ export function SaveButton() {
 
 ### Opt-in semantic theme
 
-`MainSidebar` and `SidebarNew` use the same root, which imports `new-theme.css` and applies `new-theme`, including in the mobile drawer. Their navigation uses semantic utilities directly; no legacy token aliases are needed. Mobile triggers and portalled tooltips apply their own scope. Keep importing `style.css` once in the app: it provides the compiled utilities. The theme import only adds scoped token values.
+`MainSidebar` and `SidebarNew` use the same root, which imports `new-theme.css` and applies `new-theme`, including in the mobile drawer. Their navigation uses semantic utilities directly; no legacy token aliases are needed. Mobile triggers apply their own scope. Keep importing `style.css` once in the app: it provides the compiled utilities. The theme import only adds scoped token values.
+
+`TooltipContent` also imports and applies the theme on its portalled popup. The popup and arrow share `--popover` and `--border`, and text uses `--foreground`. Set custom values on `TooltipContent` itself so the arrow follows the popup colors; values on the trigger's ancestors do not cross the portal.
 
 For other components, import the theme and apply its scope where semantic colors are needed:
 
