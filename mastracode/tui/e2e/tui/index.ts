@@ -87,6 +87,7 @@ import { modelsPackActivationPersistenceScenario } from './models-pack-activatio
 import { notificationInboxCrudFlowScenario } from './notification-inbox-crud-flow.js';
 import { notificationInboxReloadScenario } from './notification-inbox-reload.js';
 import { notificationInboxToolFlowScenario } from './notification-inbox-tool-flow.js';
+import { notificationSignalInterruptScenario } from './notification-signal-interrupt.js';
 import { notificationSignalRenderingScenario } from './notification-signal-rendering.js';
 import { notifyInputRequestHookScenario } from './notify-input-request-hook.js';
 import { omAttachmentObservationScenario } from './om-attachment-observation.js';
@@ -282,6 +283,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'notification-inbox-crud-flow': notificationInboxCrudFlowScenario,
   'notification-inbox-reload': notificationInboxReloadScenario,
   'notification-inbox-tool-flow': notificationInboxToolFlowScenario,
+  'notification-signal-interrupt': notificationSignalInterruptScenario,
   'notification-signal-rendering': notificationSignalRenderingScenario,
   'notify-input-request-hook': notifyInputRequestHookScenario,
   'knowledge-browser': knowledgeBrowserScenario,

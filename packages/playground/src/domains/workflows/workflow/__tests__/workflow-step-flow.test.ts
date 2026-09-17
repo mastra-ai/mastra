@@ -39,7 +39,7 @@ describe('buildStepSuccessors', () => {
 
 describe('collectGraphStepFlags', () => {
   it('collects conditional arm ids but not parallel arm ids', () => {
-    const stepGraph = [
+    const stepGraph: SerializedStepFlowEntry[] = [
       {
         type: 'parallel',
         steps: [
@@ -53,8 +53,12 @@ describe('collectGraphStepFlags', () => {
           { type: 'step', step: { id: 'short' } },
           { type: 'step', step: { id: 'long' } },
         ],
+        serializedConditions: [
+          { id: 'short-condition', fn: 'true' },
+          { id: 'long-condition', fn: 'false' },
+        ],
       },
-    ] as unknown as SerializedStepFlowEntry[];
+    ];
 
     const { conditionalStepIds, nestedWorkflowStepIds } = collectGraphStepFlags(stepGraph);
 
@@ -63,10 +67,10 @@ describe('collectGraphStepFlags', () => {
   });
 
   it('flags nested workflow steps by component', () => {
-    const stepGraph = [
+    const stepGraph: SerializedStepFlowEntry[] = [
       { type: 'step', step: { id: 'plain', component: 'STEP' } },
       { type: 'step', step: { id: 'nested', component: 'WORKFLOW' } },
-    ] as unknown as SerializedStepFlowEntry[];
+    ];
 
     const { nestedWorkflowStepIds } = collectGraphStepFlags(stepGraph);
 
@@ -82,43 +86,51 @@ describe('collectGraphStepFlags', () => {
 });
 
 describe('isBranchArmBypassed', () => {
-  // A conditional with two arms (short, long) that both feed a single join.
-  const conditionalStepIds = new Set(['short', 'long']);
-  const stepsFlow = { join: ['short', 'long'] };
-  const stepSuccessors = { short: ['join'], long: ['join'] };
+  const graph = {
+    conditionalStepIds: new Set(['short', 'long']),
+    stepSuccessors: { short: ['join'], long: ['join'] },
+    stepsFlow: { join: ['short', 'long'] },
+  };
 
-  it('bypasses an un-taken conditional arm once a sibling on the join has succeeded', () => {
-    const isStepSuccess = (id: string) => id === 'short';
-
-    expect(isBranchArmBypassed({ stepId: 'long', conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess })).toBe(
-      true,
-    );
+  it('bypasses an un-taken conditional arm once its sibling on the join has succeeded', () => {
+    expect(isBranchArmBypassed({ ...graph, stepId: 'long', steps: { short: { status: 'success' } } })).toBe(true);
   });
 
-  it('does not bypass an arm while no sibling has succeeded yet', () => {
-    const isStepSuccess = () => false;
-
-    expect(isBranchArmBypassed({ stepId: 'long', conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess })).toBe(
-      false,
-    );
+  it('keeps a conditional arm runnable while no sibling has succeeded', () => {
+    expect(isBranchArmBypassed({ ...graph, stepId: 'long', steps: { short: { status: 'running' } } })).toBe(false);
   });
 
-  it('never bypasses a parallel arm even when a sibling on the shared join has succeeded', () => {
-    // Parallel arms are absent from conditionalStepIds, so every arm must still run.
-    const parallelConditionalStepIds = new Set<string>();
-    const parallelStepsFlow = { join: ['p1', 'p2'] };
-    const parallelSuccessors = { p1: ['join'], p2: ['join'] };
-    const isStepSuccess = (id: string) => id === 'p1';
+  it('bypasses an explicitly skipped conditional arm', () => {
+    expect(isBranchArmBypassed({ ...graph, stepId: 'long', steps: { long: { status: 'skipped' } } })).toBe(true);
+  });
 
+  it('does not revisit an absent arm after its downstream join has completed', () => {
+    expect(isBranchArmBypassed({ ...graph, stepId: 'long', steps: { join: { status: 'success' } } })).toBe(true);
+  });
+
+  it('does not treat a skipped parallel arm as a resolved input', () => {
     expect(
-      isBranchArmBypassed({
-        stepId: 'p2',
-        conditionalStepIds: parallelConditionalStepIds,
-        stepSuccessors: parallelSuccessors,
-        stepsFlow: parallelStepsFlow,
-        isStepSuccess,
-      }),
+      isBranchArmBypassed({ ...graph, stepId: 'parallel-arm', steps: { 'parallel-arm': { status: 'skipped' } } }),
     ).toBe(false);
+  });
+});
+
+describe('Conditional join readiness', () => {
+  describe('when another matching branch arm has not finished', () => {
+    it.each(['running', 'paused', 'failed'])('does not bypass a %s arm after its sibling succeeds', status => {
+      const steps = { short: { status: 'success', output: 'short' }, long: { status } };
+      const graph = {
+        conditionalStepIds: new Set(['short', 'long']),
+        stepSuccessors: { short: ['join'], long: ['join'] },
+        stepsFlow: { join: ['short', 'long'] },
+        steps,
+      };
+      const isStepBypassed = (stepId: string) => isBranchArmBypassed({ ...graph, stepId });
+      expect(isStepBypassed('long')).toBe(false);
+      expect(
+        buildNextStepInput({ nextStepKey: 'join', stepsFlow: graph.stepsFlow, steps, isStepBypassed }),
+      ).toBeUndefined();
+    });
   });
 });
 

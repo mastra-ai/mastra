@@ -1,6 +1,6 @@
 'use client';
 
-import type { DatasetItemToolMock } from '@mastra/client-js';
+import type { DatasetItemToolMock, AddDatasetItemParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Label } from '@mastra/playground-ui/components/Label';
@@ -114,7 +114,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
       }
     }
 
-    let parsedTrajectory: unknown | undefined;
+    let parsedTrajectory: AddDatasetItemParams['expectedTrajectory'];
     if (expectedTrajectory.trim()) {
       try {
         parsedTrajectory = JSON.parse(expectedTrajectory);

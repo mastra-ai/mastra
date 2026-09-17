@@ -77,7 +77,7 @@ export function TraceColumnsMenu({
       <DropdownMenu>
         <DropdownMenu.Trigger
           render={
-            <Button variant="outline" size="md" icon={<Columns3Icon aria-hidden />}>
+            <Button variant="ghost" size="md" icon={<Columns3Icon aria-hidden />}>
               Columns
             </Button>
           }

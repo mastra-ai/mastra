@@ -1,4 +1,3 @@
-import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useParams } from 'react-router';
@@ -10,13 +9,11 @@ import { WorkflowLayout as WorkflowLayoutUI } from '@/domains/workflows/componen
 import { WorkflowRunProvider } from '@/domains/workflows/context/workflow-run-provider';
 import { WorkflowSelectedStepProvider } from '@/domains/workflows/context/workflow-selected-step-context';
 import { WorkflowStepDetailProvider } from '@/domains/workflows/context/workflow-step-detail-provider';
-import { useWorkflowRun } from '@/hooks/use-workflow-runs';
 import { useWorkflow } from '@/hooks/use-workflows';
 
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();
   const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId);
-  const { data: runExecutionResult, isLoading: isRunLoading } = useWorkflowRun(workflowId ?? '', runId ?? '');
 
   if (!workflowId) {
     return (
@@ -28,7 +25,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  if (isWorkflowLoading || (Boolean(runId) && isRunLoading)) {
+  if (isWorkflowLoading) {
     return (
       <div className="h-full p-4">
         <Skeleton className="h-full" />
@@ -36,27 +33,12 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  const snapshot =
-    runExecutionResult && runId
-      ? ({
-          context: {
-            input: runExecutionResult?.payload,
-            ...runExecutionResult?.steps,
-          },
-          status: runExecutionResult?.status,
-          result: runExecutionResult?.result,
-          error: runExecutionResult?.error,
-          runId,
-          serializedStepGraph: runExecutionResult?.serializedStepGraph,
-        } as WorkflowRunState)
-      : undefined;
-
   return (
     <TracingSettingsProvider entityId={workflowId} entityType="workflow">
       <SchemaRequestContextProvider>
-        <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId}>
-          <WorkflowSelectedStepProvider>
-            <WorkflowStepDetailProvider>
+        <WorkflowStepDetailProvider key={workflowId}>
+          <WorkflowRunProvider workflowId={workflowId} initialRunId={runId}>
+            <WorkflowSelectedStepProvider>
               <div className="h-full min-h-0">
                 <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} />
                 <WorkflowLayoutUI
@@ -66,9 +48,9 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
                   {children}
                 </WorkflowLayoutUI>
               </div>
-            </WorkflowStepDetailProvider>
-          </WorkflowSelectedStepProvider>
-        </WorkflowRunProvider>
+            </WorkflowSelectedStepProvider>
+          </WorkflowRunProvider>
+        </WorkflowStepDetailProvider>
       </SchemaRequestContextProvider>
     </TracingSettingsProvider>
   );

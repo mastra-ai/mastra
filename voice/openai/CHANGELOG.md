@@ -1,5 +1,11 @@
 # @mastra/voice-openai
 
+## 0.13.2-alpha.0
+
+### Patch Changes
+
+- Fixed install warnings when `@mastra/voice-openai` is used alongside Zod 4 by updating the OpenAI SDK to v6. Existing speech and transcription behavior is unchanged. ([#24198](https://github.com/mastra-ai/mastra/pull/24198))
+
 ## 0.13.1
 
 ### Patch Changes

@@ -876,6 +876,39 @@ Transform hooks are always awaited, on every path (manual `observe()`/`reflect()
 
 Because hooks receive `threadId` and `resourceId`, you can also use them to update [working memory](/docs/memory/working-memory) via `memory.updateWorkingMemory()` during a cycle. These external updates aren't atomic with the OM text commit.
 
+### Redact skill results
+
+Agent skills are injected into the agent as tools (`skill`, `skill_search`, `skill_read`). Their results contain the skill's full instructions or file contents, so without redaction the Observer re-observes that text every time a skill is used. `skillResultRedactor()` is a ready-made `beforeObservation` hook that replaces those results with a placeholder and leaves everything else in place. The tool call survives, so the Observer still records which skill was used and what it was called with.
+
+```typescript
+import { Memory } from '@mastra/memory'
+import { skillResultRedactor } from '@mastra/memory/hooks'
+
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: '__GATEWAY_GOOGLE_MODEL_FLASH__',
+      hooks: {
+        beforeObservation: skillResultRedactor(),
+      },
+    },
+  },
+})
+```
+
+Pass `toolNames` to redact results from a different set of tools. Because a hook is a function over the messages, it composes with your own transforms by chaining the outputs. Await each chained hook so an async one isn't discarded:
+
+```typescript oxfmt:false
+const dropSkillResults = skillResultRedactor()
+
+hooks: {
+  beforeObservation: async input => {
+    const messages = (await dropSkillResults(input))?.messages ?? input.messages
+    return { messages: messages.filter(m => m.role !== 'signal') }
+  },
+}
+```
+
 ## Migrating existing threads
 
 No manual migration needed. OM reads existing messages and observes them lazily when thresholds are exceeded.
