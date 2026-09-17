@@ -100,7 +100,10 @@ export function reconcileEchoedAssistantMessage(
   const parts: Part[] = storedParts.map(storedPart => {
     const key = partKey(storedPart);
     const echoedPart = key ? echoedByKey.get(key)?.shift() : undefined;
-    if (!echoedPart) return storedPart;
+    if (!echoedPart) {
+      if (storedPart.type === 'reasoning') restored = true;
+      return storedPart;
+    }
     consumed.add(echoedPart);
     const { merged, restored: metaRestored } = mergeProviderMetadata(
       providerMetadataOf(storedPart),

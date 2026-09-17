@@ -55,6 +55,18 @@ describe('reconcileEchoedAssistantMessage', () => {
     expect(result.content.parts).toEqual(storedParts);
   });
 
+  it('restores only the reasoning parts omitted from a partial echo', () => {
+    const secondReasoning = {
+      type: 'reasoning',
+      text: 'second',
+      providerMetadata: { openai: { itemId: 'rs_2', reasoningEncryptedContent: null } },
+    };
+    const stored = assistant([storedParts[0], secondReasoning, storedParts[1]]);
+    const echoed = assistant([storedParts[0], storedParts[1]]);
+    const result = reconcileEchoedAssistantMessage(stored, echoed)!;
+    expect(result.content.parts).toEqual(stored.content.parts);
+  });
+
   it('keeps client-side tool output added to the echo while restoring reasoning', () => {
     const stored = assistant([
       { type: 'reasoning', text: '', providerMetadata: rs },
