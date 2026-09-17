@@ -1,24 +1,4 @@
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "declaration": false,
-    "rootDir": "../..",
-    "paths": {
-      "@/*": ["./src/*"],
-      "@mastra/playground-ui/components/*": ["./src/ds/components/*"],
-      "@mastra/playground-ui/icons/*": ["./src/ds/icons/*"],
-      "@mastra/playground-ui/utils/*": ["./src/utils/*"],
-      "@mastra/playground-ui/hooks/*": ["./src/hooks/*"],
-      "@storybook/react-vite": ["./node_modules/@storybook/react-vite/dist/index.d.ts"],
-      "storybook/test": ["./node_modules/storybook/dist/test/index.d.ts"]
-    }
-  },
-  "include": [
-    "src/vite-env.d.ts",
-    ".storybook/**/*.ts",
-    ".storybook/**/*.tsx",
-    "src/**/*.stories.tsx",
-    "../playground/.storybook/**/*.tsx",
-    "../../mastracode/factory-ui/.storybook/**/*.tsx"
-  ]
+  "include": ["src/vite-env.d.ts", ".storybook/**/*.ts", ".storybook/**/*.tsx", "src/**/*.stories.tsx"]
 }

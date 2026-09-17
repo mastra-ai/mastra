@@ -1,9 +1,13 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import {
   Composer,
+  ComposerSendButton,
+  ComposerStopButton,
   ComposerActions,
   ComposerAttachments,
   ComposerBox,
@@ -22,6 +26,7 @@ import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { useSpeechRecognition } from '@mastra/react';
 import type { MessageFactoryPart } from '@mastra/react/ui';
+import { Mic } from 'lucide-react';
 import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AttachFilePopover } from './attachments/attach-file-popover';
@@ -29,7 +34,6 @@ import { ComposerAttachments as ChatComposerAttachments } from './attachments/at
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
 import { useReadAloud } from './chat/use-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
-import { ComposerActionRow } from './composer-action-row';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { MessageRow } from './messages/message-row';
 import { SuggestedPromptList } from './suggested-prompt-list';
@@ -42,7 +46,6 @@ import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
 import { useVoiceCall, VoiceCallButton, VoiceCallPanel } from '@/domains/voice';
 import type { VoiceCallControls } from '@/domains/voice';
-import { DictationButton } from '@/domains/voice/components/dictation-button';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 const SKELETON_DELAY_MS = 300;
@@ -335,7 +338,7 @@ const AgentComposer = ({
             />
             {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
             <ComposerActions>
-              <ThreadComposerActions
+              <ComposerActionRow
                 canExecute={canExecuteAgent}
                 agentId={agentId}
                 runOptionsSlot={runOptionsSlot}
@@ -366,10 +369,15 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
     startTransition(() => onTranscript(transcript));
   }, [onTranscript, transcript]);
 
-  return <DictationButton listening={isListening} onClick={() => (isListening ? stop() : start())} />;
+  if (isListening) return <ComposerStopButton tooltip="Stop dictation" onClick={stop} />;
+  return (
+    <Button variant="default" size="icon-md" type="button" tooltip="Start dictation" onClick={start}>
+      <Mic className="text-neutral3 hover:text-neutral6 size-5" />
+    </Button>
+  );
 };
 
-interface ThreadComposerActionsProps {
+interface ComposerActionRowProps {
   canExecute?: boolean;
   agentId?: string;
   showModelSwitcher?: boolean;
@@ -382,7 +390,7 @@ interface ThreadComposerActionsProps {
   voiceCall?: VoiceCallControls;
 }
 
-const ThreadComposerActions = ({
+const ComposerActionRow = ({
   canExecute = true,
   agentId,
   showModelSwitcher,
@@ -393,33 +401,36 @@ const ThreadComposerActions = ({
   onCancel,
   onSetText,
   voiceCall,
-}: ThreadComposerActionsProps) => {
+}: ComposerActionRowProps) => {
   return (
-    <ComposerActionRow
-      controls={
-        ((showModelSwitcher && agentId) || runOptionsSlot) && (
-          <>
-            {showModelSwitcher && agentId && (
-              <>
-                <div className="bg-surface3 border-border1 duration-normal focus-within:border-border2 rounded-full border transition-colors">
-                  <ComposerModelSwitcher />
-                </div>
-                <ComposerModelSettings agentId={agentId} />
-              </>
-            )}
-            {runOptionsSlot}
-          </>
-        )
-      }
-      canExecute={canExecute}
-      isEmpty={isEmpty}
-      isRunning={isRunning}
-      canSendWhileStreaming={canSendWhileStreaming}
-      onCancel={onCancel}
-    >
-      <AttachFilePopover />
-      <SpeechInput agentId={agentId} onTranscript={onSetText} />
-      {agentId && voiceCall && <VoiceCallButton voiceCall={voiceCall} />}
-    </ComposerActionRow>
+    <>
+      {((showModelSwitcher && agentId) || runOptionsSlot) && (
+        <div className="flex max-w-full shrink-0 items-center gap-1.5">
+          {showModelSwitcher && agentId && (
+            <>
+              <div className="bg-surface3 border-border1 duration-normal focus-within:border-border2 rounded-full border transition-colors">
+                <ComposerModelSwitcher />
+              </div>
+              <ComposerModelSettings agentId={agentId} />
+            </>
+          )}
+          {runOptionsSlot}
+        </div>
+      )}
+      <div className="flex shrink-0 items-center gap-1.5">
+        <ButtonsGroup spacing="close">
+          {canExecute && <AttachFilePopover />}
+          {canExecute && <SpeechInput agentId={agentId} onTranscript={onSetText} />}
+          {canExecute && agentId && voiceCall && <VoiceCallButton voiceCall={voiceCall} />}
+        </ButtonsGroup>
+        {(!isRunning || canSendWhileStreaming) && (
+          <ComposerSendButton
+            tooltip={canExecute ? 'Send' : 'No permission to execute'}
+            disabled={!canExecute || isEmpty}
+          />
+        )}
+        {isRunning && <ComposerStopButton tooltip="Cancel" onClick={onCancel} />}
+      </div>
+    </>
   );
 };

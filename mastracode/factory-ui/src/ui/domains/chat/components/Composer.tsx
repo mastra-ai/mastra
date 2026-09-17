@@ -1,6 +1,11 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
   Composer as ComposerRoot,
+  ComposerActions,
+  ComposerAttachmentButton,
+  ComposerSendButton,
+  ComposerStopButton,
   ComposerBox,
   ComposerInput,
   type ComposerInputProps,
@@ -33,7 +38,6 @@ import { commandRequiresReadySession } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { getComposerTone } from './composer-tone';
 import { StatusLine } from './StatusLine';
-import { ComposerActionRow } from './ComposerActionRow';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
 import { useComposerImages } from './useComposerImages';
 import type { PendingImage } from './useComposerImages';
@@ -279,17 +283,32 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             className="hidden"
             aria-label="Attach images"
           />
-          <ComposerActionRow
-            attachDisabled={attachDisabled}
-            onAttach={() => fileInputRef.current?.click()}
-            onAbort={liveRun ? () => void abortMutation.mutateAsync() : undefined}
-            sendDisabled={
-              sendDisabled || (!draft.trim() && images.length === 0) || (planFeedback.pending && !draft.trim())
-            }
-            sendTitle={sendTitle}
-          >
+          <ComposerActions>
             <StatusLine />
-          </ComposerActionRow>
+            <ButtonsGroup className="ml-auto" spacing="close" aria-label="Composer actions">
+              <ComposerAttachmentButton
+                appearance="outline"
+                disabled={attachDisabled}
+                onClick={() => fileInputRef.current?.click()}
+                aria-label="Attach image"
+              />
+              {liveRun && (
+                <ComposerStopButton
+                  appearance="outline"
+                  onClick={() => void abortMutation.mutateAsync()}
+                  aria-label="Abort"
+                />
+              )}
+              <ComposerSendButton
+                appearance="outline"
+                disabled={
+                  sendDisabled || (!draft.trim() && images.length === 0) || (planFeedback.pending && !draft.trim())
+                }
+                aria-label="Send message"
+                title={sendTitle}
+              />
+            </ButtonsGroup>
+          </ComposerActions>
         </ComposerBox>
       </ComposerRing>
     </ComposerRoot>
