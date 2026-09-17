@@ -1537,7 +1537,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
     // For errors, use bordered box with error status
     if (this.result.isError) {
-      const status = theme.fg('error', ' ✗');
+      const status = this.getStatusIndicator(true);
       const output = this.streamingOutput.trim() || this.getFormattedOutput();
       renderBorderedShell(status, this.limitQuietShellLines(prepareOutputLines(output)));
       return;
@@ -1549,14 +1549,14 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       /Error:|TypeError:|SyntaxError:|ReferenceError:|command not found|fatal:|error:/i,
     );
     if (looksLikeError) {
-      const status = theme.fg('error', ' ✗');
+      const status = this.getStatusIndicator(true);
       const output = this.streamingOutput.trim() || this.getFormattedOutput();
       renderBorderedShell(status, this.limitQuietShellLines(prepareOutputLines(output)));
       return;
     }
 
     // Success - use bordered box with checkmark
-    const status = theme.fg('success', ' ✓');
+    const status = this.getStatusIndicator(false);
     const output = this.streamingOutput.trim() || this.getFormattedOutput();
     {
       renderBorderedShell(status, this.limitQuietShellLines(prepareOutputLines(output)));
@@ -1608,7 +1608,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       return;
     }
 
-    const status = this.result.isError ? theme.fg('error', ' ✗') : theme.fg('success', ' ✓');
+    const status = this.getStatusIndicator(this.result.isError);
     const output = this.streamingOutput.trim() || this.getFormattedOutput();
     {
       renderBorderedProcess(status, prepareOutputLines(output));
@@ -2602,23 +2602,19 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return ' ' + theme.fg('toolArgs', parts.join(', '));
   }
 
-  private getBackgroundStatusIndicator(): string {
+  private getBackgroundStatusIndicator(isError = this.isErrorResult()): string {
     if (!this.backgroundTaskId) return '';
     if (this.backgroundCancelled) return theme.fg('muted', ` ■ background · ${this.backgroundTaskId}`);
     if (this.isPartial) return theme.fg('warning', ` ◌ background · ${this.backgroundTaskId}`);
-    return this.isErrorResult()
+    return isError
       ? theme.fg('error', ` ✗ background · ${this.backgroundTaskId}`)
       : theme.fg('success', ` ✓ background · ${this.backgroundTaskId}`);
   }
 
-  private getStatusIndicator(): string {
-    const backgroundStatus = this.getBackgroundStatusIndicator();
+  private getStatusIndicator(isError = this.isErrorResult()): string {
+    const backgroundStatus = this.getBackgroundStatusIndicator(isError);
     if (backgroundStatus) return backgroundStatus;
-    return this.isPartial
-      ? theme.fg('muted', ' ⋯')
-      : this.isErrorResult()
-        ? theme.fg('error', ' ✗')
-        : theme.fg('success', ' ✓');
+    return this.isPartial ? theme.fg('muted', ' ⋯') : isError ? theme.fg('error', ' ✗') : theme.fg('success', ' ✓');
   }
 
   private getDurationSuffix(): string {

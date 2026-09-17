@@ -96,6 +96,15 @@ export async function dispatchEvent(
   ectx: EventHandlerContext,
   state: TUIState,
 ): Promise<void> {
+  if (
+    'toolCallId' in event &&
+    'threadId' in event &&
+    event.threadId &&
+    (state.pendingNewThread || event.threadId !== state.session.thread.getId())
+  ) {
+    return;
+  }
+
   switch (event.type) {
     case 'agent_start':
       clearToolInputParsers();
@@ -174,7 +183,7 @@ export async function dispatchEvent(
     case 'tool_start':
       state.agentRunLastStreamPartAt = Date.now();
       if (state.options.backgroundToolsEnabled) {
-        const threadId = state.session.thread.getId();
+        const threadId = event.threadId ?? state.session.thread.getId();
         if (threadId) {
           state.backgroundToolContexts.set(event.toolCallId, {
             toolName: event.toolName,
@@ -271,6 +280,7 @@ export async function dispatchEvent(
     case 'thread_changed': {
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
       state.latestRequestPromptTokens = undefined;
+      state.backgroundToolContexts?.clear();
       // Clear per-thread ephemeral state first so renderExistingMessages
       // and other downstream observers see clean state.
       await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
@@ -311,6 +321,7 @@ export async function dispatchEvent(
     case 'thread_created': {
       ectx.showInfo(`Created thread: ${event.thread.id}`);
       state.latestRequestPromptTokens = undefined;
+      state.backgroundToolContexts?.clear();
       // Update current thread title for status line display
       setCurrentThreadTitle(state, event.thread.title);
       state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(
