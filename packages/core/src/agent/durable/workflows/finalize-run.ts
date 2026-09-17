@@ -31,6 +31,7 @@ export interface DurableFinishSideEffectsOptions {
 export interface DurableFinishSideEffectsResult {
   messageListState: SerializedMessageListState;
   outputText: string;
+  titleGeneration?: Promise<void>;
 }
 
 function restoreRequestContext(
@@ -198,6 +199,8 @@ export async function runDurableFinishSideEffects({
     }
   }
 
+  let titleGeneration: Promise<void> | undefined;
+
   // Same exclusions as the persistence block above: an observational-memory run writes no
   // messages here, and titling it would create a thread row holding a title and nothing else.
   if (
@@ -216,7 +219,7 @@ export async function runDurableFinishSideEffects({
     };
 
     const generateThreadTitle = registryEntry?.generateThreadTitle;
-    const titlePromise = (async () => {
+    titleGeneration = (async () => {
       if (generateThreadTitle) {
         await generateThreadTitle(titleArgs);
       } else if (mastra) {
@@ -229,12 +232,12 @@ export async function runDurableFinishSideEffects({
     })().catch(error => {
       effectiveLogger.warn('[DurableAgent] Error generating thread title', { runId, error });
     });
-    void titlePromise;
   }
 
   return {
     messageListState: messageList.serialize(),
     outputText,
+    titleGeneration,
   };
 }
 

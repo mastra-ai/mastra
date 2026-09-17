@@ -101,16 +101,17 @@ describe('runDurableFinishSideEffects', () => {
       generateThreadTitle,
     } as unknown as RunRegistryEntry);
 
-    await runDurableFinishSideEffects({
+    const result = await runDurableFinishSideEffects({
       runId: 'run-1',
       initData: makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: true }),
       messageListState: makeMessageListState(),
     });
+    await result.titleGeneration;
 
     expect(generateThreadTitle).toHaveBeenCalledTimes(1);
   });
 
-  it('does not wait for title generation before finishing', async () => {
+  it('returns title generation for the workflow to manage after finishing', async () => {
     let resolveTitle: () => void;
     const titlePending = new Promise<void>(resolve => {
       resolveTitle = resolve;
@@ -123,21 +124,22 @@ describe('runDurableFinishSideEffects', () => {
       generateThreadTitle,
     } as unknown as RunRegistryEntry);
 
-    let finishResolved = false;
-    const finishPromise = runDurableFinishSideEffects({
+    const finishResult = await runDurableFinishSideEffects({
       runId: 'run-1',
       initData: makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: true }),
       messageListState: makeMessageListState(),
-    }).then(result => {
-      finishResolved = true;
-      return result;
+    });
+    let titleResolved = false;
+    const managedTitleGeneration = finishResult.titleGeneration?.then(() => {
+      titleResolved = true;
     });
 
-    await vi.waitFor(() => expect(generateThreadTitle).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(finishResolved).toBe(true));
+    expect(generateThreadTitle).toHaveBeenCalledTimes(1);
+    expect(titleResolved).toBe(false);
 
     resolveTitle!();
-    await finishPromise;
+    await managedTitleGeneration;
+    expect(titleResolved).toBe(true);
   });
 
   it('handles title generation failures without failing the durable run', async () => {
@@ -151,21 +153,18 @@ describe('runDurableFinishSideEffects', () => {
       generateThreadTitle,
     } as unknown as RunRegistryEntry);
 
-    await expect(
-      runDurableFinishSideEffects({
-        runId: 'run-1',
-        initData: makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: true }),
-        messageListState: makeMessageListState(),
-        logger: { warn } as any,
-      }),
-    ).resolves.toBeDefined();
+    const result = await runDurableFinishSideEffects({
+      runId: 'run-1',
+      initData: makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: true }),
+      messageListState: makeMessageListState(),
+      logger: { warn } as any,
+    });
+    await expect(result.titleGeneration).resolves.toBeUndefined();
 
-    await vi.waitFor(() =>
-      expect(warn).toHaveBeenCalledWith('[DurableAgent] Error generating thread title', {
-        runId: 'run-1',
-        error,
-      }),
-    );
+    expect(warn).toHaveBeenCalledWith('[DurableAgent] Error generating thread title', {
+      runId: 'run-1',
+      error,
+    });
   });
 
   it('deserializes into the run MessageList the stream is already holding', async () => {

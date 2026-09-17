@@ -859,12 +859,9 @@ describe('DurableAgent memory edge cases', () => {
   // title-generation branch, so `memory.options.generateTitle` silently never fired for
   // durable/evented agents (and Inngest). See create-durable-agentic-workflow.ts.
   describe('generateTitle', () => {
-    it('generates a thread title from the first message after a completed durable stream', async () => {
+    it('finishes the stream before lifecycle-managed title generation completes', async () => {
       const mockMemory = new MockMemory();
-      // Mirror the non-durable title-generation test: a dedicated title model so we can
-      // assert the exact generated title, wired via getMergedThreadConfig.
-      const titleModel = createTextModel('Generated Thread Title');
-      mockMemory.getMergedThreadConfig = () => ({ generateTitle: { model: titleModel as LanguageModelV2 } });
+      mockMemory.getMergedThreadConfig = () => ({ generateTitle: true });
 
       const baseAgent = new Agent({
         id: 'title-durable-agent',
@@ -873,6 +870,11 @@ describe('DurableAgent memory edge cases', () => {
         model: createTextModel('assistant response') as LanguageModelV2,
         memory: mockMemory,
       });
+      let resolveTitle: (title: string) => void;
+      const titlePending = new Promise<string>(resolve => {
+        resolveTitle = resolve;
+      });
+      const generateTitle = vi.spyOn(baseAgent, 'genTitle').mockReturnValue(titlePending);
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       const result = await durableAgent.stream('What is the weather like today?', {
@@ -881,6 +883,10 @@ describe('DurableAgent memory edge cases', () => {
       for await (const _chunk of result.fullStream as AsyncIterable<any>) {
       }
 
+      expect(generateTitle).toHaveBeenCalledTimes(1);
+      expect((await mockMemory.getThreadById({ threadId: 'thread-title' }))?.title).toBe('');
+
+      resolveTitle!('Generated Thread Title');
       await vi.waitFor(async () => {
         const thread = await mockMemory.getThreadById({ threadId: 'thread-title' });
         expect(thread?.title).toBe('Generated Thread Title');
