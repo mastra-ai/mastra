@@ -124,7 +124,11 @@ function isUnreplayableHostedToolSearchPart(part: AIV5Type.ToolUIPart): boolean 
   const callProviderMetadata =
     'callProviderMetadata' in part ? (part.callProviderMetadata as Record<string, unknown> | undefined) : undefined;
   if (getResponseProviderItemId(callProviderMetadata)) {
-    if (part.state !== 'output-available' || getResponseResultProviderMetadata(callProviderMetadata)) return false;
+    // Both completed states emit a tool-call AND a tool-result, each carrying the
+    // part's call metadata, so a lone id lands on both. An in-flight call emits no
+    // result part, so its call id alone is complete.
+    const isCompleted = part.state === 'output-available' || part.state === 'output-error';
+    if (!isCompleted || getResponseResultProviderMetadata(callProviderMetadata)) return false;
   }
 
   const input = part.input;

@@ -199,6 +199,115 @@ describe('aiV5UIMessagesToAIV5ModelMessages — hosted tool_search replay', () =
     expect(allParts.filter(p => p.type === 'tool-call' || p.type === 'tool-result')).toHaveLength(0);
   });
 
+  it('should drop a single-id hosted tool_search whose one id is the CALL id', () => {
+    // Which half survived depends on write order, so the drop cannot key off the
+    // id looking like a result (`tso_…`) — a lone call id is equally unreplayable.
+    const msg = makeMessage([
+      {
+        type: 'tool-tool_search',
+        toolCallId: 'tsc_1',
+        state: 'output-available',
+        input: { queries: ['cache'], call_id: null },
+        output: { tools: ['get_block'] },
+        providerExecuted: true,
+        callProviderMetadata: { openai: { itemId: 'tsc_1' } },
+      } as ToolUIPartLike,
+    ]);
+
+    const result = aiV5UIMessagesToAIV5ModelMessages([msg], [], 'prompt');
+
+    const allParts = result.flatMap(m => (typeof m.content === 'string' ? [] : m.content));
+    expect(allParts.filter(p => p.type === 'tool-call' || p.type === 'tool-result')).toHaveLength(0);
+  });
+
+  it('should drop a single-id hosted tool_search that ended in output-error', () => {
+    // A failed hosted search emits a tool-call AND a tool-result too, both stamped
+    // with the part's call metadata — so a lone id duplicates exactly as it does
+    // for a successful one.
+    const msg = makeMessage([
+      {
+        type: 'tool-tool_search',
+        toolCallId: 'tsc_1',
+        state: 'output-error',
+        input: { queries: ['cache'], call_id: null },
+        errorText: 'search failed',
+        providerExecuted: true,
+        callProviderMetadata: { openai: { itemId: 'tso_1' } },
+      } as ToolUIPartLike,
+    ]);
+
+    const result = aiV5UIMessagesToAIV5ModelMessages([msg], [], 'prompt');
+
+    const allParts = result.flatMap(m => (typeof m.content === 'string' ? [] : m.content));
+    expect(allParts.filter(p => p.type === 'tool-call' || p.type === 'tool-result')).toHaveLength(0);
+  });
+
+  it('should keep an output-error hosted tool_search that carries both ids', () => {
+    const msg = makeMessage([
+      {
+        type: 'tool-tool_search',
+        toolCallId: 'tsc_1',
+        state: 'output-error',
+        input: { queries: ['cache'], call_id: null },
+        errorText: 'search failed',
+        providerExecuted: true,
+        callProviderMetadata: { openai: { itemId: 'tsc_1', resultItemId: 'tso_1' } },
+      } as ToolUIPartLike,
+    ]);
+
+    const result = aiV5UIMessagesToAIV5ModelMessages([msg], [], 'prompt');
+
+    const entries = collectOpenAIItemMetadata(result);
+    expect(entries.find(e => e.partType === 'tool-call')?.openai).toEqual({ itemId: 'tsc_1' });
+    expect(entries.find(e => e.partType === 'tool-result')?.openai).toEqual({ itemId: 'tso_1' });
+  });
+
+  it('should drop only the legacy single-id search when a later turn has a complete one', () => {
+    const messages: AIV5Type.UIMessage[] = [
+      makeMessage(
+        [
+          {
+            type: 'tool-tool_search',
+            toolCallId: 'tsc_old',
+            state: 'output-available',
+            input: { queries: ['cache'], call_id: null },
+            output: { tools: ['get_block'] },
+            providerExecuted: true,
+            callProviderMetadata: { openai: { itemId: 'tso_old' } },
+          } as ToolUIPartLike,
+          { type: 'text', text: 'older turn' },
+        ],
+        'msg-1',
+      ),
+      { id: 'msg-2', role: 'user', parts: [{ type: 'text', text: 'and again' }] },
+      makeMessage(
+        [
+          {
+            type: 'tool-tool_search',
+            toolCallId: 'tsc_new',
+            state: 'output-available',
+            input: { queries: ['cache'], call_id: null },
+            output: { tools: ['get_block'] },
+            providerExecuted: true,
+            callProviderMetadata: { openai: { itemId: 'tsc_new', resultItemId: 'tso_new' } },
+          } as ToolUIPartLike,
+        ],
+        'msg-3',
+      ),
+    ];
+
+    const result = aiV5UIMessagesToAIV5ModelMessages(messages, [], 'prompt');
+
+    const entries = collectOpenAIItemMetadata(result);
+    const itemIds = entries.map(e => e.openai.itemId);
+    expect(itemIds.sort()).toEqual(['tsc_new', 'tso_new']);
+    expect(new Set(itemIds).size).toBe(itemIds.length);
+    const allParts = result.flatMap(m => (typeof m.content === 'string' ? [] : m.content));
+    // Exactly one pair survives — no metadata-less half of the dropped pair leaks through.
+    expect(allParts.filter(p => p.type === 'tool-call' || p.type === 'tool-result')).toHaveLength(2);
+    expect(allParts.some(p => p.type === 'text' && p.text === 'older turn')).toBe(true);
+  });
+
   it('should keep a single-id completed hosted tool_search in response mode', () => {
     // Dropping is a prompt-building concern only. Response messages are what
     // gets persisted, so removing the part there would delete real history.
@@ -217,7 +326,11 @@ describe('aiV5UIMessagesToAIV5ModelMessages — hosted tool_search replay', () =
     const result = aiV5UIMessagesToAIV5ModelMessages([msg], [], 'response');
 
     const allParts = result.flatMap(m => (typeof m.content === 'string' ? [] : m.content));
-    expect(allParts.some(p => p.type === 'tool-call')).toBe(true);
+    const toolCall = allParts.find(p => p.type === 'tool-call');
+    const toolResult = allParts.find(p => p.type === 'tool-result');
+    expect(toolCall).toMatchObject({ toolCallId: 'tsc_1', input: { queries: ['cache'] } });
+    expect(toolResult).toMatchObject({ toolCallId: 'tsc_1' });
+    expect(collectOpenAIItemMetadata(result).map(e => e.openai.itemId)).toContain('tso_1');
   });
 
   it('should keep an in-flight hosted tool_search that has only its call item id', () => {
