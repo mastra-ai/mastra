@@ -100,7 +100,8 @@ function scoreRewriteConflict(row: Record<string, unknown>): string {
 function collapseExactScoreConflicts(rows: Record<string, unknown>[]): Record<string, unknown>[] {
   const records = new Map<string, Record<string, unknown>>();
   for (const row of rows) {
-    const key = `${String(row.scoreId)}\u0000${String(row.timestamp)}`;
+    const timestamp = row.timestamp instanceof Date ? row.timestamp.toISOString() : String(row.timestamp);
+    const key = `${String(row.scoreId)}\u0000${timestamp}`;
     records.delete(key);
     records.set(key, row);
   }
