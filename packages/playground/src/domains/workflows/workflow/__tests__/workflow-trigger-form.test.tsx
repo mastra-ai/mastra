@@ -52,6 +52,21 @@ describe('WorkflowTriggerForm', () => {
     });
   });
 
+  describe('when preparing a new run without an input schema', () => {
+    it('keeps the workflow header above the Run button', () => {
+      render(
+        <WorkflowTriggerForm
+          zodSchema={null}
+          isStreaming={false}
+          onExecute={vi.fn()}
+          headingSlot={<div>Workflow header</div>}
+        />,
+      );
+      expect(screen.getByText('Workflow header')).not.toBeNull();
+      expect(screen.getByRole('button', { name: /^run$/i })).not.toBeNull();
+    });
+  });
+
   describe('when a run has no input schema', () => {
     it('keeps the run status visible without an empty input control', () => {
       render(

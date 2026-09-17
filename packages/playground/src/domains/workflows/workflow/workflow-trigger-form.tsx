@@ -62,23 +62,26 @@ export function WorkflowTriggerForm({
   }
 
   return (
-    <div className="flex items-center justify-between gap-1">
-      {leftActions ?? <div />}
-      <div className="flex items-center gap-1">
-        {submitActions}
-        <Button variant="primary" disabled={isStreaming} onClick={() => onExecute(null)}>
-          {isStreaming ? (
-            <Icon>
-              <Loader2 className="animate-spin" />
-            </Icon>
-          ) : (
-            <Icon>
-              <Play />
-            </Icon>
-          )}
-          {submitButtonLabel}
-        </Button>
+    <>
+      {headingSlot && <div className="border-border1/50 border-b pb-3">{headingSlot}</div>}
+      <div className="flex items-center justify-between gap-1 pt-3">
+        {leftActions ?? <div />}
+        <div className="flex items-center gap-1">
+          {submitActions}
+          <Button variant="primary" disabled={isStreaming} onClick={() => onExecute(null)}>
+            {isStreaming ? (
+              <Icon>
+                <Loader2 className="animate-spin" />
+              </Icon>
+            ) : (
+              <Icon>
+                <Play />
+              </Icon>
+            )}
+            {submitButtonLabel}
+          </Button>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
