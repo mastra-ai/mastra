@@ -1,4 +1,4 @@
-import type { DatasetItem } from '@mastra/client-js';
+import type { DatasetItem, UpdateDatasetItemParams } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
@@ -8,7 +8,6 @@ import { Sections } from '@mastra/playground-ui/components/Sections';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { format } from 'date-fns/format';
 import {
@@ -21,6 +20,8 @@ import {
   Pencil,
   Trash2,
   Eraser,
+  Check,
+  X,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
@@ -130,7 +131,7 @@ export function ItemDetailDialog({
     }
 
     // Parse expectedTrajectory: empty string means explicitly clear (null), omitted means keep existing
-    let parsedTrajectory: unknown | null = null;
+    let parsedTrajectory: UpdateDatasetItemParams['expectedTrajectory'] = null;
     if (trajectoryValue.trim()) {
       try {
         parsedTrajectory = JSON.parse(trajectoryValue);
@@ -225,22 +226,13 @@ export function ItemDetailDialog({
         <SideDialog.Nav onNext={toNextItem()} onPrevious={toPreviousItem()} />
         {!isEditing && (
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleEdit}>
-              <Icon>
-                <Pencil />
-              </Icon>
+            <Button variant="outline" size="sm" onClick={handleEdit} icon={<Pencil />}>
               Edit
             </Button>
-            <Button variant="outline" size="sm" onClick={handleDelete}>
-              <Icon>
-                <Trash2 />
-              </Icon>
+            <Button variant="outline" size="sm" onClick={handleDelete} icon={<Trash2 />}>
               Delete
             </Button>
-            <Button variant="destructive" size="sm" onClick={() => setShowPurgeConfirm(true)}>
-              <Icon>
-                <Eraser />
-              </Icon>
+            <Button variant="destructive" size="sm" onClick={() => setShowPurgeConfirm(true)} icon={<Eraser />}>
               Purge Data
             </Button>
           </div>
@@ -303,6 +295,7 @@ export function ItemDetailDialog({
                 preventDefault, which would hide the pending state and a failed
                 purge behind a toast. */}
             <Button
+              icon={<Trash2 />}
               variant="primary"
               size="lg"
               onClick={() => void handlePurgeConfirm()}
@@ -469,10 +462,10 @@ function EditModeContent({
         </div>
 
         <div className="flex justify-end gap-2 pt-4">
-          <Button onClick={onCancel} disabled={isSaving}>
+          <Button icon={<X />} onClick={onCancel} disabled={isSaving}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={onSave} disabled={isSaving}>
+          <Button icon={<Check />} variant="primary" onClick={onSave} disabled={isSaving}>
             {isSaving ? 'Saving...' : 'Save Changes'}
           </Button>
         </div>

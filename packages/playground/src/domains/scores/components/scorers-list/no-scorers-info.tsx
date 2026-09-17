@@ -15,8 +15,9 @@ export const NoScorersInfo = () => (
           href="https://mastra.ai/docs/evals/overview"
           target="_blank"
           rel="noopener noreferrer"
+          icon={<ExternalLinkIcon />}
         >
-          Scorers Documentation <ExternalLinkIcon />
+          Scorers Documentation
         </Button>
       }
     />

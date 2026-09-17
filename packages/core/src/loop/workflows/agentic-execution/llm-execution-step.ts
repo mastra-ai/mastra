@@ -84,6 +84,7 @@ import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
+import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-message';
 import { isMastraTimeoutError } from '../../timeout';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
@@ -1599,25 +1600,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             : currentStep.model?.specificationVersion === 'v3'
               ? messageList.get.all.aiV6.llmPrompt
               : messageList.get.all.aiV5.llmPrompt;
-        let inputMessages = await llmPromptForModel(messageListPromptArgs);
-
-        inputMessages = applyAutoResumeSystemMessage({
-          autoResume: autoResumeSuspendedTools,
-          inputMessages,
-          messages: messageList.get.all.db(),
+        let downloadError: MastraError | undefined;
+        let inputMessages = await llmPromptForModel(messageListPromptArgs).catch(error => {
+          if (!(error instanceof MastraError) || error.id !== 'DOWNLOAD_ASSETS_FAILED') {
+            throw error;
+          }
+          downloadError = error;
+          return [];
         });
-
-        inputMessages = injectBackgroundTaskPrompt({
-          inputMessages,
-          backgroundTaskManager: readScoped(scopeCtx, BACKGROUND_TASK_MANAGER_KEY, 'backgroundTaskManager'),
-          tools: currentStep.tools,
-          agentBackgroundConfig: readScoped(scopeCtx, AGENT_BACKGROUND_CONFIG_KEY, 'agentBackgroundConfig'),
-        });
-
-        // Run `processLLMRequest` for any input processors that implement it.
-        // This hook lets processors rewrite the outbound prompt transiently
-        // without persisting changes back to the message list, or short-circuit
-        // the call entirely by returning a cached response.
+        let cachedResponse: CachedLLMStepResponse | undefined;
         const requestStepRunner = new ProcessorRunner({
           inputProcessors: getRequestInputProcessors({ inputProcessors, llmRequestInputProcessors }),
           outputProcessors: [],
@@ -1631,61 +1622,89 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 outputWriter(data as ChunkType, { ...options, messageId: currentStep.messageId }),
             }
           : undefined;
-        let cachedResponse: CachedLLMStepResponse | undefined;
-        try {
-          const requestStepResult = await requestStepRunner.runProcessLLMRequest({
-            prompt: inputMessages,
-            model: currentStep.model,
-            stepNumber: inputData.output?.steps?.length || 0,
-            steps: inputData.output?.steps || [],
-            retryCount: inputData.processorRetryCount || 0,
-            requestContext,
-            tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
-            writer: requestStepWriter,
-            abortSignal: options?.abortSignal,
+
+        if (!downloadError) {
+          inputMessages = applyAutoResumeSystemMessage({
+            autoResume: autoResumeSuspendedTools,
+            inputMessages,
+            messages: messageList.get.all.db(),
           });
-          inputMessages = requestStepResult.prompt;
-          cachedResponse = requestStepResult.response;
-        } catch (error) {
-          if (error instanceof TripWire) {
-            logger?.warn('Streaming request processor tripwire triggered', {
-              reason: error.message,
-              processorId: error.processorId,
-              retry: error.options?.retry,
-            });
-            return buildTripWireBailResponse({
-              error,
-              controller,
-              runId,
+
+          inputMessages = injectBackgroundTaskPrompt({
+            inputMessages,
+            backgroundTaskManager: readScoped(scopeCtx, BACKGROUND_TASK_MANAGER_KEY, 'backgroundTaskManager'),
+            tools: currentStep.tools,
+            agentBackgroundConfig: readScoped(scopeCtx, AGENT_BACKGROUND_CONFIG_KEY, 'agentBackgroundConfig'),
+          });
+
+          // Run `processLLMRequest` for any input processors that implement it.
+          // This hook lets processors rewrite the outbound prompt transiently
+          // without persisting changes back to the message list, or short-circuit
+          // the call entirely by returning a cached response.
+          try {
+            const requestStepResult = await requestStepRunner.runProcessLLMRequest({
+              prompt: inputMessages,
               model: currentStep.model,
               messageList,
-              messageId: currentStep.messageId,
-              stepTools: currentStep.tools,
-              _internal: _internal,
+              stepNumber: inputData.output?.steps?.length || 0,
+              steps: inputData.output?.steps || [],
+              retryCount: inputData.processorRetryCount || 0,
+              requestContext,
+              tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
+              writer: requestStepWriter,
+              abortSignal: options?.abortSignal,
             });
+            inputMessages = requestStepResult.prompt;
+            cachedResponse = requestStepResult.response;
+          } catch (error) {
+            if (error instanceof TripWire) {
+              logger?.warn('Streaming request processor tripwire triggered', {
+                reason: error.message,
+                processorId: error.processorId,
+                retry: error.options?.retry,
+              });
+              return buildTripWireBailResponse({
+                error,
+                controller,
+                runId,
+                model: currentStep.model,
+                messageList,
+                messageId: currentStep.messageId,
+                stepTools: currentStep.tools,
+                _internal: _internal,
+              });
+            }
+            logger?.error('Error in processLLMRequest processors:', error);
+            throw error;
           }
-          logger?.error('Error in processLLMRequest processors:', error);
-          throw error;
+
+          const omContinuation = messageList.get.all.db().find(message => message.id === 'om-continuation');
+          const omContinuationText = omContinuation?.content.parts
+            .filter(part => part.type === 'text')
+            .map(part => part.text)
+            .join('');
+          const delegationMessages = omContinuationText
+            ? inputMessages.filter(message => {
+                if (message.role !== 'user' || !Array.isArray(message.content)) return true;
+                const text = message.content
+                  .filter(part => part.type === 'text')
+                  .map(part => part.text)
+                  .join('');
+                return text !== omContinuationText;
+              })
+            : inputMessages;
+          writeScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages', delegationMessages);
         }
 
-        const omContinuation = messageList.get.all.db().find(message => message.id === 'om-continuation');
-        const omContinuationText = omContinuation?.content.parts
-          .filter(part => part.type === 'text')
-          .map(part => part.text)
-          .join('');
-        const delegationMessages = omContinuationText
-          ? inputMessages.filter(message => {
-              if (message.role !== 'user' || !Array.isArray(message.content)) return true;
-              const text = message.content
-                .filter(part => part.type === 'text')
-                .map(part => part.text)
-                .join('');
-              return text !== omContinuationText;
-            })
-          : inputMessages;
-        writeScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages', delegationMessages);
-
-        if (cachedResponse) {
+        if (downloadError) {
+          // Use the existing error-processor and model-fallback path without calling
+          // request processors or the model with an incomplete prompt.
+          modelResult = new globalThis.ReadableStream<ChunkType>({
+            start(controller) {
+              controller.error(downloadError);
+            },
+          });
+        } else if (cachedResponse) {
           // Short-circuit: replay cached chunks instead of calling the model.
           // Output processors are skipped on cache hit because the cached
           // chunks already reflect their effects from the original call.
@@ -1830,6 +1849,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           messageId: currentStep.messageId,
           options: {
             runId,
+            logger,
             toolCallStreaming,
             includeRawChunks,
             structuredOutput: currentStep.structuredOutput,
@@ -2189,6 +2209,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         return bailFromExecution();
       }
 
+      // The failed attempt's materialization id, captured before processAPIError
+      // can rotate the active response id. This attempt's partial output was
+      // stored under this id, so a terminal error part has to land on that same
+      // record instead of a fresh one.
+      const attemptMessageId = currentMessageId;
+
       // Handle processAPIError for API rejections
       // This covers two cases:
       // 1. Non-last model: processAPIError was already run in the catch block, result passed via processAPIErrorRetry
@@ -2342,6 +2368,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             logger?.debug?.(`Output processor failed on deferred error chunk: ${processorError}`, { runId });
           }
         }
+
+        // Nothing recovered, so this is the terminal failure for the turn: keep it
+        // in thread history as an `error` part on this attempt's assistant record
+        // (creating one when the attempt produced no output). The streamed chunk,
+        // onError callback and result.error keep the original error identity.
+        recordTerminalErrorMessage({
+          messageList,
+          attemptId: attemptMessageId,
+          activeId: currentMessageId,
+          error: deferredError,
+        });
 
         safeEnqueue(controller, errorChunk);
         await options?.onError?.({ error: deferredError });

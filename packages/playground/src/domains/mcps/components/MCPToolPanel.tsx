@@ -73,7 +73,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
 
   if (isLoading) {
     return (
-      <div className="p-6">
+      <div className="p-4">
         <Skeleton className="mb-4 h-8 w-48" />
         <Skeleton className="h-32 w-full" />
       </div>
@@ -84,7 +84,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
 
   if (!tool)
     return (
-      <div className="px-6 py-12 text-center">
+      <div className="px-4 py-8 text-center">
         <Txt variant="header-md" className="text-neutral3">
           Tool not found
         </Txt>
@@ -93,7 +93,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
 
   if (!canExecuteTool)
     return (
-      <div className="px-6 py-12 text-center">
+      <div className="px-4 py-8 text-center">
         <Txt variant="ui-sm" className="text-neutral3">
           You don't have permission to execute tools.
         </Txt>
@@ -113,7 +113,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
     <div className="flex flex-col gap-4">
       {appHtml && (
         <div className="border-border1 border-b p-4">
-          <McpAppViewer html={appHtml} toolName={tool.name ?? tool.id} onToolCall={handleToolCall} />
+          <McpAppViewer html={appHtml} toolName={tool.name} onToolCall={handleToolCall} />
         </div>
       )}
       <ToolExecutor
@@ -122,7 +122,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
         zodInputSchema={zodInputSchema}
         handleExecuteTool={handleExecuteTool}
         toolDescription={tool.description || ''}
-        toolId={tool.id}
+        toolId={tool.name}
       />
     </div>
   );

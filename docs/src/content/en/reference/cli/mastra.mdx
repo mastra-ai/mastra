@@ -621,6 +621,30 @@ Omit `[environment]` to show deploys across all environments; pass an environmen
 
 Emit machine-readable JSON.
 
+### `mastra env diagnosis`
+
+Diagnoses a failed deploy and prints suggestions for fixing it. Each suggestion includes a description, a recommended action, and a documentation link when one applies, followed by a link to the deploy logs in the dashboard.
+
+```bash
+mastra env diagnosis
+mastra env diagnosis <deploy-id>
+mastra env diagnosis --environment staging
+```
+
+Omit `<deploy-id>` to diagnose the environment's latest deploy. The environment comes from `--environment`, or from the project when it has exactly one environment. Projects with several environments require `--environment` or a deploy ID. A deploy ID passed on its own works without a linked project.
+
+If the deploy is running successfully, the command reports that no suggestions are required and exits. Otherwise it starts a diagnosis when one doesn't already exist and polls until the result is ready, for up to five minutes. Rerunning the command reuses an in-progress diagnosis instead of restarting it. The command exits with a non-zero code when the diagnosis itself fails.
+
+After a failed `mastra deploy`, the CLI prints the exact `mastra env diagnosis <deploy-id>` command to run.
+
+#### `--project`
+
+Project name, slug, or ID. Defaults to the linked project, as described in [`mastra env`](#mastra-env).
+
+#### `--environment`
+
+Environment name, slug, or ID. Defaults to the project's only environment. Required when the project has more than one and no deploy ID is passed.
+
 ## `mastra studio deploy`
 
 :::note
@@ -1055,6 +1079,90 @@ See the [Storage migration guide](/reference/migrations/upgrade-to-v1/storage#du
 
 It accepts [common flags][common-flags].
 
+## `mastra traces import`
+
+Imports historical traces from a supported observability provider into an existing Mastra Platform project. The command prepares complete traces locally, uploads whole-trace batches, supports resume, and verifies a sample through Mastra Platform.
+
+```bash
+mastra traces import <provider> [options]
+```
+
+The following provider is currently supported:
+
+| Provider | Argument | Requirements |
+| - | - | - |
+| Langfuse | `langfuse` | Langfuse Cloud or self-hosted Langfuse v4 or later |
+
+See [Import existing traces](/docs/mastra-platform/observability#import-existing-traces) for the complete workflow, data mapping, local-file lifecycle, and limits.
+
+### Options
+
+#### `--project <name|slug|id>`
+
+Selects the destination Mastra Platform project. `MASTRA_PROJECT_ID` takes precedence when set. Without either value, the command uses the project linked in `.mastra-project.json`.
+
+#### `--from <date>`
+
+Sets the inclusive start of the import window as an ISO 8601 date or timestamp. It defaults to 30 days before `--to`, clamped to the current 30-day Platform retention boundary.
+
+#### `--to <date>`
+
+Sets the exclusive end of the import window as an ISO 8601 date or timestamp. It defaults to the time when the import starts and can't be in the future.
+
+The complete window must fall within the current 30-day Platform retention period, `--from` must be earlier than `--to`, and the window can't exceed 30 days.
+
+#### `--dry-run`
+
+Reads the source and prepares valid traces locally without uploading them. The command writes a report and prints a command that resumes the prepared import.
+
+#### `--resume <import-id>`
+
+Resumes a prepared import using its saved provider, destination project, date window, and acknowledged progress. Use the same destination project shown in the generated resume command. This option can't be combined with `--from`, `--to`, or `--dry-run`.
+
+#### `-y, --yes`
+
+Uploads without asking for confirmation.
+
+### Environment variables
+
+The command loads `.env` and `.env.local` from the current directory.
+
+| Variable | Required | Description |
+| - | - | - |
+| `LANGFUSE_PUBLIC_KEY` | For new Langfuse imports | Public project API key. |
+| `LANGFUSE_SECRET_KEY` | For new Langfuse imports | Secret project API key. |
+| `LANGFUSE_BASE_URL` | No | Langfuse host. Defaults to `https://cloud.langfuse.com`. |
+| `MASTRA_API_TOKEN` | For headless authentication | Mastra Platform API token. Without it, the command uses credentials from `mastra auth login`. |
+| `MASTRA_ORG_ID` | With `MASTRA_API_TOKEN` | Organization that owns the destination project. |
+| `MASTRA_PLATFORM_ACCESS_TOKEN` | For upload and read-back with interactive login | Mastra Platform access token for the destination. Not required for `--dry-run` or when `MASTRA_API_TOKEN` is set. |
+| `MASTRA_PROJECT_ID` | When no project is otherwise linked | Destination project ID. Takes precedence over `--project`. |
+
+### Examples
+
+Preview the default 30-day window without uploading:
+
+```bash
+mastra traces import langfuse --project my-project --dry-run
+```
+
+Import a smaller date window without a confirmation prompt:
+
+```bash
+mastra traces import langfuse \
+  --project my-project \
+  --from "$FROM" \
+  --to "$TO" \
+  --yes
+```
+
+Resume an existing import:
+
+```bash
+mastra traces import langfuse \
+  --resume 00000000-0000-0000-0000-000000000000 \
+  --project my-project
+```
+
 ## `mastra api`
 
 Calls a Mastra runtime server with JSON input and JSON output. Use it for local development servers, deployed Mastra platform projects, self-hosted Mastra servers, or hosted Mastra Platform Observability APIs.
@@ -1481,6 +1589,34 @@ mastra api trace list '{"page":0,"perPage":20}' --verbose
 ```
 
 `trace list` returns lightweight root span records by default so you can page through traces without fetching large input, output, attributes, or metadata payloads. Pass `--verbose` to fetch the full root span records.
+
+#### `mastra api trace query`
+
+Queries completed observability traces with recursive predicates over trace and related span or score fields. The inline JSON input is required. Like other observability commands, it targets `https://observability.mastra.ai` by default.
+
+```bash
+mastra api trace query <input>
+mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"}}'
+```
+
+Inspect the target server's exact request contract before constructing a query:
+
+```bash
+mastra api trace query --schema
+```
+
+The response remains nested under `data` to preserve cursor pagination:
+
+```json
+{
+  "data": {
+    "traces": [],
+    "page": { "next": "opaque-cursor" }
+  }
+}
+```
+
+Pass a non-null `page.next` value back as `page.after` in the next query. See [Advanced trace queries](/reference/observability/tracing/trace-query) for supported fields and operators, recursive predicates, limits, pagination, and errors.
 
 #### `mastra api trace get`
 

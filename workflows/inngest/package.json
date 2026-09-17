@@ -1,6 +1,6 @@
 {
   "name": "@mastra/inngest",
-  "version": "1.8.11",
+  "version": "1.9.0-alpha.3",
   "description": "Mastra Inngest integration",
   "type": "module",
   "main": "dist/index.js",
@@ -40,6 +40,7 @@
     "test:workflow": "vitest run --no-isolate --retry=1 src/index.test.ts -t 'Inngest Engine'",
     "test:integration": "vitest run --no-isolate --retry=1 src/__tests__/adapters/",
     "test:docker": "docker-compose up -d && vitest run --no-isolate --retry=1 --exclude='src/__tests__/adapters/**' && docker-compose down",
+    "setup:inngest-cli": "node -e \"const path=require('path');const p=path.dirname(require.resolve('inngest-cli/package.json'));require('child_process').execFileSync(process.execPath,[path.join(p,'postinstall.js')],{cwd:p,stdio:'inherit'})\"",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix ."
   },
@@ -69,9 +70,9 @@
     "eslint": "^10.7.0",
     "execa": "^9.6.1",
     "express": "^5.2.1",
-    "fastify": "^5.8.5",
+    "fastify": "^5.12.4",
     "get-port": "7.1.0",
-    "hono": "^4.12.8",
+    "hono": "^4.13.7",
     "inngest-cli": "^1.26.0",
     "koa": "^3.1.2",
     "koa-bodyparser": "^4.4.1",

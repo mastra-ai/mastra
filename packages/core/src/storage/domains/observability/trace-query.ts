@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod/v4';
-import type { FeedbackRecord } from './feedback';
-import type { ScoreRecord } from './scores';
+import { paginationArgsSchema, paginationInfoSchema } from '../shared';
 import type { SpanRecord } from './tracing';
 
 export const TRACE_QUERY_MAX_DEPTH = 12;
@@ -11,10 +10,15 @@ export const TRACE_QUERY_MAX_RELATED_CLAUSES = 8;
 export const TRACE_QUERY_MAX_LITERAL_UNITS = 1000;
 export const TRACE_QUERY_MAX_STRING_BYTES = 4096;
 export const TRACE_QUERY_MAX_PATH_BYTES = 128;
+export const TRACE_QUERY_DISCOVERY_DEFAULT_LIMIT = 25;
+export const TRACE_QUERY_DISCOVERY_MAX_LIMIT = 100;
+export const TRACE_QUERY_DISCOVERY_MAX_SEARCH_LENGTH = 256;
 export const TRACE_QUERY_DEFAULT_TIMEOUT_MS = 15_000;
 export const TRACE_QUERY_MAX_TIMEOUT_MS = 300_000;
 
 const PREDICATE_COMPLEXITY_MESSAGE = `Predicates are limited to ${TRACE_QUERY_MAX_NODES} nodes and ${TRACE_QUERY_MAX_DEPTH} levels`;
+const PAGINATION_MODE_CONFLICT_MESSAGE = 'Trace queries cannot combine keyset and page pagination';
+const GROUP_PAGINATION_NOT_SUPPORTED_MESSAGE = 'Grouped trace queries do not support page pagination';
 
 export function compareTraceQueryStrings(left: string, right: string): number {
   if (left < right) return -1;
@@ -114,24 +118,146 @@ export const traceQueryPredicateSchema: z.ZodType<TraceQueryPredicate> = z.lazy(
   ]),
 );
 
-const timeRangeSchema = z
+export const traceQueryTimeRangeSchema = z
   .object({
     from: z.string().datetime({ offset: true }),
     to: z.string().datetime({ offset: true }),
   })
   .strict();
 
+export const traceQueryPredicateScopeSchema = z.enum(['trace', 'spans', 'scores', 'feedback']);
+export const traceQueryOperatorSchema = z.enum([
+  'eq',
+  'ne',
+  'lt',
+  'lte',
+  'gt',
+  'gte',
+  'in',
+  'notIn',
+  'exists',
+  'notExists',
+]);
+export const traceQueryValueKindSchema = z.enum(['string', 'number', 'stringOrNumber', 'timestamp', 'presence']);
+
+const traceQueryDiscoveryTimeRangeSchema = traceQueryTimeRangeSchema.superRefine((timeRange, context) => {
+  const from = new Date(timeRange.from);
+  const to = new Date(timeRange.to);
+  if (from >= to) {
+    context.addIssue({ code: 'custom', path: [], message: '`from` must be earlier than `to`' });
+  } else if (to.getTime() - from.getTime() > 31 * 24 * 60 * 60 * 1000) {
+    context.addIssue({ code: 'custom', path: [], message: 'The time range cannot exceed 31 days' });
+  }
+});
+const traceQueryDiscoverySearchSchema = z.string().trim().max(TRACE_QUERY_DISCOVERY_MAX_SEARCH_LENGTH).optional();
+const traceQueryDiscoveryLimitSchema = z
+  .number()
+  .int()
+  .min(1)
+  .max(TRACE_QUERY_DISCOVERY_MAX_LIMIT)
+  .default(TRACE_QUERY_DISCOVERY_DEFAULT_LIMIT);
+
+export const getTraceQueryFieldsArgsSchema = z
+  .object({
+    timeRange: traceQueryDiscoveryTimeRangeSchema,
+    predicateScope: traceQueryPredicateScopeSchema,
+    search: traceQueryDiscoverySearchSchema,
+    limit: traceQueryDiscoveryLimitSchema,
+  })
+  .strict();
+
+export const getTraceQueryValuesArgsSchema = z
+  .object({
+    timeRange: traceQueryDiscoveryTimeRangeSchema,
+    predicateScope: traceQueryPredicateScopeSchema,
+    path: predicatePathSchema.transform(path => normalizePath(path)),
+    search: traceQueryDiscoverySearchSchema,
+    limit: traceQueryDiscoveryLimitSchema,
+  })
+  .strict()
+  .superRefine((args, context) => {
+    if (!isTraceQueryValueSuggestionsPath(args.predicateScope, args.path)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['path'],
+        message: 'Value suggestions are not available for this path',
+      });
+    }
+  });
+
+export const traceQueryCanonicalFieldDescriptorSchema = z
+  .object({
+    path: z.string(),
+    valueKind: traceQueryValueKindSchema,
+    operators: z.array(traceQueryOperatorSchema),
+    valueSuggestions: z.boolean(),
+  })
+  .strict();
+export const traceQueryObservedFieldDescriptorSchema = z
+  .object({
+    path: z
+      .string()
+      .startsWith('metadata.')
+      .refine(path => isTraceQueryMetadataPath(path), 'Invalid metadata path'),
+    valueKind: z.literal('string'),
+    operators: z.array(z.enum(['eq', 'ne', 'in', 'notIn', 'exists', 'notExists'])),
+    valueSuggestions: z.literal(true),
+    occurrences: z.number().int().nonnegative(),
+  })
+  .strict();
+export const getTraceQueryFieldsResponseSchema = z
+  .object({
+    canonicalFields: z.array(traceQueryCanonicalFieldDescriptorSchema),
+    observedFields: z.array(traceQueryObservedFieldDescriptorSchema).max(TRACE_QUERY_DISCOVERY_MAX_LIMIT),
+    observedFieldsTruncated: z.boolean(),
+  })
+  .strict();
+export const getTraceQueryValuesResponseSchema = z
+  .object({
+    values: z
+      .array(z.object({ value: literalStringSchema, count: z.number().int().nonnegative() }).strict())
+      .max(TRACE_QUERY_DISCOVERY_MAX_LIMIT),
+    valuesTruncated: z.boolean(),
+  })
+  .strict();
+
+export const traceSelectionSchema = z
+  .object({
+    timeRange: traceQueryTimeRangeSchema,
+    where: traceQueryPredicateSchema.optional(),
+  })
+  .strict();
+
+export const threadPredicateSchema: z.ZodType<ThreadPredicate> = z.lazy(() =>
+  z.union([
+    z
+      .object({
+        op: z.enum(['and', 'or']),
+        args: z.array(threadPredicateSchema).min(1),
+      })
+      .strict(),
+    z.object({ op: z.literal('not'), arg: threadPredicateSchema }).strict(),
+    z
+      .object({
+        traces: z.union([
+          z.object({ some: traceQueryPredicateSchema }).strict(),
+          z.object({ none: traceQueryPredicateSchema }).strict(),
+        ]),
+      })
+      .strict(),
+  ]),
+);
+
 const pageSchema = z
   .object({
     limit: z.number().int().min(1).max(1000).default(100),
     after: z.string().min(1).nullable().optional(),
   })
-  .strict()
-  .default({ limit: 100 });
+  .strict();
 
 const traceQueryRequestObjectSchema = z
   .object({
-    timeRange: timeRangeSchema,
+    timeRange: traceQueryTimeRangeSchema,
     where: traceQueryPredicateSchema.optional(),
     group: z
       .object({ by: z.tuple([z.literal('threadId')]) })
@@ -148,12 +274,29 @@ const traceQueryRequestObjectSchema = z
       )
       .length(1)
       .optional(),
-    page: pageSchema,
+    page: pageSchema.optional(),
+    pagination: paginationArgsSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((request, context) => {
+    if (request.page && request.pagination) {
+      context.addIssue({
+        code: 'custom',
+        path: ['pagination'],
+        message: PAGINATION_MODE_CONFLICT_MESSAGE,
+      });
+    }
+    if (request.group && request.pagination) {
+      context.addIssue({
+        code: 'custom',
+        path: ['pagination'],
+        message: GROUP_PAGINATION_NOT_SUPPORTED_MESSAGE,
+      });
+    }
+  });
 
 export const traceQueryRequestSchema = z.preprocess((input, context) => {
-  const issuePath = findPredicateComplexityIssue(input);
+  const issuePath = findPredicateComplexityIssue(input, [['where']]);
   if (issuePath) {
     context.addIssue({ code: 'custom', path: issuePath, message: PREDICATE_COMPLEXITY_MESSAGE });
     return z.NEVER;
@@ -161,10 +304,33 @@ export const traceQueryRequestSchema = z.preprocess((input, context) => {
   return input;
 }, traceQueryRequestObjectSchema);
 
+const queryThreadsInputObjectSchema = z
+  .object({
+    traces: traceSelectionSchema,
+    where: threadPredicateSchema.optional(),
+    page: pageSchema.default({ limit: 100 }),
+  })
+  .strict();
+
+export const queryThreadsInputSchema = z.preprocess((input, context) => {
+  const issuePath = findPredicateComplexityIssue(input, [['traces', 'where'], ['where']]);
+  if (issuePath) {
+    context.addIssue({ code: 'custom', path: issuePath, message: PREDICATE_COMPLEXITY_MESSAGE });
+    return z.NEVER;
+  }
+  return input;
+}, queryThreadsInputObjectSchema);
+
 export const traceQueryTraceSchema = z
   .object({
     traceId: z.string(),
     rootSpanId: z.string(),
+    name: z.string(),
+    entityId: z.string().nullable(),
+    parentSpanId: z.string().nullable(),
+    createdAt: z.string().datetime({ offset: true }),
+    metadata: z.record(z.string(), z.unknown()).nullable(),
+    inputPreview: z.string().nullable(),
     threadId: z.string().nullable(),
     resourceId: z.string().nullable(),
     startedAt: z.string().datetime({ offset: true }),
@@ -181,13 +347,28 @@ const responsePageSchema = z.object({ next: z.string().nullable() }).strict();
 export const traceQueryTraceResponseSchema = z
   .object({ traces: z.array(traceQueryTraceSchema), page: responsePageSchema })
   .strict();
+export const traceQueryPaginatedTraceResponseSchema = z
+  .object({ traces: z.array(traceQueryTraceSchema), pagination: paginationInfoSchema })
+  .strict();
 export const traceQueryGroupResponseSchema = z
   .object({
     groups: z.array(z.object({ threadId: z.string() }).strict()),
     page: responsePageSchema,
   })
   .strict();
-export const traceQueryResponseSchema = z.union([traceQueryTraceResponseSchema, traceQueryGroupResponseSchema]);
+export const traceQueryResponseSchema = z.union([
+  traceQueryTraceResponseSchema,
+  traceQueryPaginatedTraceResponseSchema,
+  traceQueryGroupResponseSchema,
+]);
+
+export const threadIdentitySchema = z.object({ threadId: z.string() }).strict();
+export const queryThreadsResultSchema = z
+  .object({
+    threads: z.array(threadIdentitySchema),
+    page: responsePageSchema,
+  })
+  .strict();
 
 export type TraceQueryLiteral = string | number | boolean | null;
 export type TraceQueryPathOrLiteral = { path: string } | { literal: TraceQueryLiteral };
@@ -210,27 +391,123 @@ export type TraceQueryPredicate =
   | { scores: { some: TraceQueryScalarPredicate } | { none: TraceQueryScalarPredicate } }
   | { feedback: { some: TraceQueryScalarPredicate } | { none: TraceQueryScalarPredicate } };
 
+export type ThreadPredicate =
+  | { op: 'and' | 'or'; args: ThreadPredicate[] }
+  | { op: 'not'; arg: ThreadPredicate }
+  | { traces: { some: TraceQueryPredicate } | { none: TraceQueryPredicate } };
+
+export type TimeRange = z.infer<typeof traceQueryTimeRangeSchema>;
+export type TraceSelection = z.input<typeof traceSelectionSchema>;
+export type NormalizedTraceSelection = z.output<typeof traceSelectionSchema>;
+export type QueryThreadsInput = z.input<typeof queryThreadsInputObjectSchema>;
+export type NormalizedQueryThreadsInput = z.output<typeof queryThreadsInputObjectSchema>;
+export type ThreadIdentity = z.infer<typeof threadIdentitySchema>;
+export type QueryThreadsResult = z.infer<typeof queryThreadsResultSchema>;
+
 export type TraceQueryRequest = z.input<typeof traceQueryRequestObjectSchema>;
 export type NormalizedTraceQueryRequest = z.output<typeof traceQueryRequestObjectSchema>;
 export type TraceQueryTrace = z.infer<typeof traceQueryTraceSchema>;
 export type TraceQueryTraceResponse = z.infer<typeof traceQueryTraceResponseSchema>;
+export type TraceQueryPaginatedTraceResponse = z.infer<typeof traceQueryPaginatedTraceResponseSchema>;
 export type TraceQueryGroupResponse = z.infer<typeof traceQueryGroupResponseSchema>;
 export type TraceQueryResponse = z.infer<typeof traceQueryResponseSchema>;
 
-export type TraceQueryField =
-  | 'traceId'
-  | 'threadId'
-  | 'resourceId'
-  | 'startedAt'
-  | 'endedAt'
-  | 'entityName'
-  | 'entityType'
-  | 'environment'
-  | 'status';
-type TraceQueryDerivedSpanField = 'model' | 'provider' | 'durationMs' | 'status';
-export type TraceQuerySpanField = keyof typeof SPAN_FIELD_RULES;
-export type TraceQueryScoreField = keyof typeof SCORE_FIELD_RULES;
-export type TraceQueryFeedbackField = keyof typeof FEEDBACK_FIELD_RULES;
+export type TraceQueryOperator = z.infer<typeof traceQueryOperatorSchema>;
+export type TraceQueryValueKind = z.infer<typeof traceQueryValueKindSchema>;
+export type TraceQueryPredicateScope = z.infer<typeof traceQueryPredicateScopeSchema>;
+
+interface FieldRule {
+  valueKind: TraceQueryValueKind;
+  operators: readonly TraceQueryOperator[];
+  valueSuggestions: boolean;
+  nonEmpty?: boolean;
+}
+
+export const TRACE_QUERY_STRING_OPERATORS = ['eq', 'ne', 'in', 'notIn', 'exists', 'notExists'] as const;
+export const TRACE_QUERY_ORDERED_OPERATORS = [...TRACE_QUERY_STRING_OPERATORS, 'lt', 'lte', 'gt', 'gte'] as const;
+export const TRACE_QUERY_PRESENCE_OPERATORS = ['exists', 'notExists'] as const;
+
+const stringField = (valueSuggestions: boolean): FieldRule => ({
+  valueKind: 'string',
+  operators: TRACE_QUERY_STRING_OPERATORS,
+  valueSuggestions,
+});
+const orderedField = (valueKind: 'number' | 'stringOrNumber' | 'timestamp'): FieldRule => ({
+  valueKind,
+  operators: TRACE_QUERY_ORDERED_OPERATORS,
+  valueSuggestions: false,
+});
+const presenceField = (): FieldRule => ({
+  valueKind: 'presence',
+  operators: TRACE_QUERY_PRESENCE_OPERATORS,
+  valueSuggestions: false,
+});
+
+export const TRACE_QUERY_FIELD_REGISTRY = {
+  trace: {
+    traceId: stringField(false),
+    threadId: stringField(false),
+    resourceId: stringField(false),
+    startedAt: orderedField('timestamp'),
+    endedAt: orderedField('timestamp'),
+    entityName: stringField(true),
+    entityType: stringField(true),
+    environment: stringField(true),
+    status: stringField(true),
+  },
+  spans: {
+    name: stringField(true),
+    spanType: stringField(true),
+    model: stringField(true),
+    provider: stringField(true),
+    startedAt: orderedField('timestamp'),
+    endedAt: orderedField('timestamp'),
+    durationMs: orderedField('number'),
+    status: stringField(true),
+    error: presenceField(),
+    entityType: stringField(true),
+    entityId: stringField(false),
+    entityName: stringField(true),
+    entityVersionId: stringField(false),
+    parentEntityVersionId: stringField(false),
+    rootEntityVersionId: stringField(false),
+  },
+  scores: {
+    scorerId: stringField(true),
+    scorerVersion: stringField(true),
+    scoreSource: stringField(true),
+    score: orderedField('number'),
+    timestamp: orderedField('timestamp'),
+    spanId: presenceField(),
+    entityVersionId: stringField(false),
+    parentEntityVersionId: stringField(false),
+    rootEntityVersionId: stringField(false),
+  },
+  feedback: {
+    feedbackType: stringField(true),
+    feedbackSource: stringField(true),
+    feedbackUserId: stringField(false),
+    sourceId: stringField(false),
+    entityVersionId: stringField(false),
+    parentEntityVersionId: stringField(false),
+    rootEntityVersionId: stringField(false),
+    value: orderedField('stringOrNumber'),
+    timestamp: orderedField('timestamp'),
+    comment: presenceField(),
+  },
+} as const satisfies Record<TraceQueryPredicateScope, Record<string, FieldRule>>;
+
+const METADATA_FIELD_RULE: FieldRule = {
+  valueKind: 'string',
+  operators: TRACE_QUERY_STRING_OPERATORS,
+  valueSuggestions: true,
+  nonEmpty: true,
+};
+
+export type TraceQueryField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['trace'];
+export type TraceQuerySpanField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['spans'];
+export type TraceQueryScoreField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['scores'];
+export type TraceQueryFeedbackField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['feedback'];
 export type TraceQueryCanonicalField =
   | TraceQueryField
   | TraceQuerySpanField
@@ -242,6 +519,15 @@ export type TraceQueryPredicateField = TraceQueryCanonicalField | TraceQueryMeta
 export type TraceQueryComparisonOperator = 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
 export type TraceQueryMembershipOperator = 'in' | 'notIn';
 export type TraceQueryPresenceOperator = 'exists' | 'notExists';
+
+export type GetTraceQueryFieldsArgs = z.input<typeof getTraceQueryFieldsArgsSchema>;
+export type NormalizedGetTraceQueryFieldsArgs = z.output<typeof getTraceQueryFieldsArgsSchema>;
+export type GetTraceQueryValuesArgs = z.input<typeof getTraceQueryValuesArgsSchema>;
+export type NormalizedGetTraceQueryValuesArgs = z.output<typeof getTraceQueryValuesArgsSchema>;
+export type TraceQueryCanonicalFieldDescriptor = z.infer<typeof traceQueryCanonicalFieldDescriptorSchema>;
+export type TraceQueryObservedFieldDescriptor = z.infer<typeof traceQueryObservedFieldDescriptorSchema>;
+export type GetTraceQueryFieldsResponse = z.infer<typeof getTraceQueryFieldsResponseSchema>;
+export type GetTraceQueryValuesResponse = z.infer<typeof getTraceQueryValuesResponseSchema>;
 
 export type TrustedTraceQueryScalarPredicate =
   | {
@@ -271,32 +557,92 @@ export type TrustedTraceQueryPredicate =
       predicate: TrustedTraceQueryScalarPredicate;
     };
 
+export type TrustedThreadPredicate =
+  | { type: 'boolean'; operator: 'and' | 'or'; args: TrustedThreadPredicate[] }
+  | { type: 'not'; arg: TrustedThreadPredicate }
+  | {
+      type: 'relation';
+      collection: 'traces';
+      quantifier: 'some' | 'none';
+      predicate: TrustedTraceQueryPredicate;
+    };
+
 export interface TrustedTraceQueryBasePlan {
   timeRange: { from: string; to: string };
   where?: TrustedTraceQueryPredicate;
+}
+
+export interface TrustedTraceQueryKeysetPlan {
+  paginationMode: 'keyset';
   limit: number;
   binding: string;
 }
 
-export interface TrustedTraceQueryTracesPlan extends TrustedTraceQueryBasePlan {
+export interface TrustedTraceQueryPagePlan {
+  paginationMode: 'page';
+  page: number;
+  perPage: number;
+}
+
+interface TrustedTraceQueryTracesBasePlan extends TrustedTraceQueryBasePlan {
   result: 'traces';
   orderBy: {
     field: 'startedAt' | 'endedAt';
     direction: 'asc' | 'desc';
   };
-  cursor?: { sortValue: string; traceId: string };
 }
 
-export interface TrustedTraceQueryGroupsPlan extends TrustedTraceQueryBasePlan {
-  result: 'groups';
+export type TrustedTraceQueryKeysetTracesPlan = TrustedTraceQueryTracesBasePlan &
+  TrustedTraceQueryKeysetPlan & { cursor?: { sortValue: string; traceId: string } };
+export type TrustedTraceQueryPaginatedTracesPlan = TrustedTraceQueryTracesBasePlan & TrustedTraceQueryPagePlan;
+export type TrustedTraceQueryTracesPlan = TrustedTraceQueryKeysetTracesPlan | TrustedTraceQueryPaginatedTracesPlan;
+
+export type TrustedTraceQueryGroupsPlan = TrustedTraceQueryBasePlan &
+  TrustedTraceQueryKeysetPlan & {
+    result: 'groups';
+    orderBy: { field: 'threadId'; direction: 'asc' };
+    cursor?: { threadId: string };
+  };
+
+export type TrustedTraceQueryPlan = TrustedTraceQueryTracesPlan | TrustedTraceQueryGroupsPlan;
+
+export interface TrustedThreadQueryPlan {
+  result: 'threads';
+  traces: {
+    timeRange: { from: string; to: string };
+    where?: TrustedTraceQueryPredicate;
+  };
+  where?: TrustedThreadPredicate;
   orderBy: { field: 'threadId'; direction: 'asc' };
+  limit: number;
+  binding: string;
   cursor?: { threadId: string };
 }
 
-export type TrustedTraceQueryPlan = TrustedTraceQueryTracesPlan | TrustedTraceQueryGroupsPlan;
+export interface TrustedTraceQueryObservedFieldsPlan {
+  timeRange: { from: string; to: string };
+  predicateScope: TraceQueryPredicateScope;
+  search?: string;
+  limit: number;
+}
+
+export interface TrustedTraceQueryValuesPlan extends TrustedTraceQueryObservedFieldsPlan {
+  path: string;
+}
+
+export interface TraceQueryObservedFieldsResult {
+  observedFields: TraceQueryObservedFieldDescriptor[];
+  observedFieldsTruncated: boolean;
+}
+
+export type TraceQueryCursorPlan =
+  | TrustedTraceQueryKeysetTracesPlan
+  | TrustedTraceQueryGroupsPlan
+  | TrustedThreadQueryPlan;
 export type TraceQueryCursorValues =
   | { result: 'traces'; sortValue: string; traceId: string }
-  | { result: 'groups'; threadId: string };
+  | { result: 'groups'; threadId: string }
+  | { result: 'threads'; threadId: string };
 
 export type TraceQueryIssueCode =
   | 'invalid_request'
@@ -308,7 +654,9 @@ export type TraceQueryIssueCode =
   | 'operator_not_allowed'
   | 'invalid_operands'
   | 'invalid_literal'
-  | 'group_order_not_supported';
+  | 'group_order_not_supported'
+  | 'pagination_mode_conflict'
+  | 'group_pagination_not_supported';
 
 export interface TraceQueryIssue {
   code: TraceQueryIssueCode;
@@ -345,6 +693,15 @@ export class TraceQueryExecutionError extends Error {
   }
 }
 
+export class TraceQueryResourceLimitError extends Error {
+  readonly code = 'TRACE_QUERY_RESOURCE_LIMIT';
+
+  constructor() {
+    super('The trace query exceeded its resource limit');
+    this.name = 'TraceQueryResourceLimitError';
+  }
+}
+
 export function resolveTraceQueryTimeoutMs(timeoutMs = TRACE_QUERY_DEFAULT_TIMEOUT_MS): number {
   if (
     !Number.isFinite(timeoutMs) ||
@@ -357,73 +714,7 @@ export function resolveTraceQueryTimeoutMs(timeoutMs = TRACE_QUERY_DEFAULT_TIMEO
   return timeoutMs;
 }
 
-interface FieldRule {
-  type: 'string' | 'number' | 'stringOrNumber' | 'timestamp' | 'presence';
-  operators: ReadonlySet<string>;
-  nonEmpty?: boolean;
-}
-
-const STRING_OPERATORS = new Set(['eq', 'ne', 'in', 'notIn', 'exists', 'notExists']);
-const ORDERED_OPERATORS = new Set([...STRING_OPERATORS, 'lt', 'lte', 'gt', 'gte']);
-const PRESENCE_OPERATORS = new Set(['exists', 'notExists']);
-const METADATA_FIELD_RULE: FieldRule = { type: 'string', operators: STRING_OPERATORS, nonEmpty: true };
-
-const TRACE_FIELD_RULES: Record<TraceQueryField, FieldRule> = {
-  traceId: { type: 'string', operators: STRING_OPERATORS },
-  threadId: { type: 'string', operators: STRING_OPERATORS },
-  resourceId: { type: 'string', operators: STRING_OPERATORS },
-  startedAt: { type: 'timestamp', operators: ORDERED_OPERATORS },
-  endedAt: { type: 'timestamp', operators: ORDERED_OPERATORS },
-  entityName: { type: 'string', operators: STRING_OPERATORS },
-  entityType: { type: 'string', operators: STRING_OPERATORS },
-  environment: { type: 'string', operators: STRING_OPERATORS },
-  status: { type: 'string', operators: STRING_OPERATORS },
-};
-
-const SPAN_FIELD_RULES = {
-  name: { type: 'string', operators: STRING_OPERATORS },
-  spanType: { type: 'string', operators: STRING_OPERATORS },
-  model: { type: 'string', operators: STRING_OPERATORS },
-  provider: { type: 'string', operators: STRING_OPERATORS },
-  startedAt: { type: 'timestamp', operators: ORDERED_OPERATORS },
-  endedAt: { type: 'timestamp', operators: ORDERED_OPERATORS },
-  durationMs: { type: 'number', operators: ORDERED_OPERATORS },
-  status: { type: 'string', operators: STRING_OPERATORS },
-  error: { type: 'presence', operators: PRESENCE_OPERATORS },
-  entityType: { type: 'string', operators: STRING_OPERATORS },
-  entityId: { type: 'string', operators: STRING_OPERATORS },
-  entityName: { type: 'string', operators: STRING_OPERATORS },
-  entityVersionId: { type: 'string', operators: STRING_OPERATORS },
-  parentEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
-  rootEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
-} as const satisfies Partial<Record<Extract<keyof SpanRecord, string> | TraceQueryDerivedSpanField, FieldRule>>;
-
-const SCORE_FIELD_RULES = {
-  scorerId: { type: 'string', operators: STRING_OPERATORS },
-  scorerVersion: { type: 'string', operators: STRING_OPERATORS },
-  scoreSource: { type: 'string', operators: STRING_OPERATORS },
-  score: { type: 'number', operators: ORDERED_OPERATORS },
-  timestamp: { type: 'timestamp', operators: ORDERED_OPERATORS },
-  spanId: { type: 'presence', operators: PRESENCE_OPERATORS },
-  entityVersionId: { type: 'string', operators: STRING_OPERATORS },
-  parentEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
-  rootEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
-} as const satisfies Partial<Record<Extract<keyof ScoreRecord, string>, FieldRule>>;
-
-const FEEDBACK_FIELD_RULES = {
-  feedbackType: { type: 'string', operators: STRING_OPERATORS },
-  feedbackSource: { type: 'string', operators: STRING_OPERATORS },
-  feedbackUserId: { type: 'string', operators: STRING_OPERATORS },
-  sourceId: { type: 'string', operators: STRING_OPERATORS },
-  entityVersionId: { type: 'string', operators: STRING_OPERATORS },
-  parentEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
-  rootEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
-  value: { type: 'stringOrNumber', operators: ORDERED_OPERATORS },
-  timestamp: { type: 'timestamp', operators: ORDERED_OPERATORS },
-  comment: { type: 'presence', operators: PRESENCE_OPERATORS },
-} as const satisfies Partial<Record<Extract<keyof FeedbackRecord, string>, FieldRule>>;
-
-type PredicateContext = 'trace' | 'spans' | 'scores' | 'feedback';
+type PredicateContext = TraceQueryPredicateScope;
 
 interface PlannerState {
   nodes: number;
@@ -438,17 +729,27 @@ function addPredicateComplexityIssue(path: Array<string | number>, message: stri
   }
 }
 
-function findPredicateComplexityIssue(input: unknown): Array<string | number> | undefined {
-  if (!input || typeof input !== 'object' || !Object.hasOwn(input, 'where')) return undefined;
+function findPredicateComplexityIssue(
+  input: unknown,
+  rootPaths: Array<Array<string | number>>,
+): Array<string | number> | undefined {
+  if (!input || typeof input !== 'object') return undefined;
 
-  const where = (input as { where?: unknown }).where;
-  if (where === undefined) return undefined;
+  const stack: Array<{ predicate: unknown; path: Array<string | number>; depth: number }> = [];
+  for (let index = rootPaths.length - 1; index >= 0; index -= 1) {
+    const path = rootPaths[index]!;
+    let predicate: unknown = input;
+    for (const part of path) {
+      if (!predicate || typeof predicate !== 'object' || !Object.hasOwn(predicate, part)) {
+        predicate = undefined;
+        break;
+      }
+      predicate = (predicate as Record<string | number, unknown>)[part];
+    }
+    if (predicate !== undefined) stack.push({ predicate, path, depth: 1 });
+  }
 
-  const stack: Array<{ predicate: unknown; path: Array<string | number>; depth: number }> = [
-    { predicate: where, path: ['where'], depth: 1 },
-  ];
   let nodes = 0;
-
   while (stack.length > 0) {
     const frame = stack.pop()!;
     nodes += 1;
@@ -467,7 +768,7 @@ function findPredicateComplexityIssue(input: unknown): Array<string | number> | 
       continue;
     }
 
-    for (const collection of ['feedback', 'scores', 'spans'] as const) {
+    for (const collection of ['traces', 'feedback', 'scores', 'spans'] as const) {
       const clause = predicate[collection];
       if (!clause || typeof clause !== 'object') continue;
       for (const quantifier of ['none', 'some'] as const) {
@@ -484,21 +785,108 @@ function findPredicateComplexityIssue(input: unknown): Array<string | number> | 
   return undefined;
 }
 
+function getTraceQueryFieldRule(scope: TraceQueryPredicateScope, path: string): FieldRule | undefined {
+  if (scope === 'trace' && isTraceQueryMetadataPath(path)) return METADATA_FIELD_RULE;
+  const registry: Record<string, FieldRule> = TRACE_QUERY_FIELD_REGISTRY[scope];
+  return Object.hasOwn(registry, path) ? registry[path] : undefined;
+}
+
+export function isTraceQueryMetadataPath(path: string): path is TraceQueryMetadataField {
+  if (!path.startsWith('metadata.') || !hasMaxUtf8Bytes(path, TRACE_QUERY_MAX_PATH_BYTES)) return false;
+  const key = path.slice('metadata.'.length);
+  return key.length > 0 && !key.includes('.');
+}
+
+export function isTraceQueryValueSuggestionsPath(scope: TraceQueryPredicateScope, path: string): boolean {
+  return getTraceQueryFieldRule(scope, normalizePath(path))?.valueSuggestions === true;
+}
+
+export function getTraceQueryCanonicalFieldDescriptors(
+  scope: TraceQueryPredicateScope,
+  search?: string,
+): TraceQueryCanonicalFieldDescriptor[] {
+  const normalizedSearch = search?.trim().toLowerCase();
+  return Object.entries(TRACE_QUERY_FIELD_REGISTRY[scope])
+    .filter(([path]) => !normalizedSearch || path.toLowerCase().includes(normalizedSearch))
+    .map(([path, rule]) => ({
+      path,
+      valueKind: rule.valueKind,
+      operators: [...rule.operators],
+      valueSuggestions: rule.valueSuggestions,
+    }));
+}
+
+export function createTraceQueryObservedFieldDescriptor(
+  path: string,
+  occurrences: number,
+): TraceQueryObservedFieldDescriptor {
+  return traceQueryObservedFieldDescriptorSchema.parse({
+    path,
+    valueKind: 'string',
+    operators: [...TRACE_QUERY_STRING_OPERATORS],
+    valueSuggestions: true,
+    occurrences,
+  });
+}
+
+export function parseGetTraceQueryFieldsArgs(input: unknown): NormalizedGetTraceQueryFieldsArgs {
+  const result = getTraceQueryFieldsArgsSchema.safeParse(input);
+  if (!result.success) throw new TraceQueryValidationError(formatTraceQuerySchemaIssues(result.error));
+  return result.data;
+}
+
+export function parseGetTraceQueryValuesArgs(input: unknown): NormalizedGetTraceQueryValuesArgs {
+  const result = getTraceQueryValuesArgsSchema.safeParse(input);
+  if (!result.success) throw new TraceQueryValidationError(formatTraceQuerySchemaIssues(result.error));
+  return result.data;
+}
+
+export function planTraceQueryObservedFields(
+  args: NormalizedGetTraceQueryFieldsArgs,
+): TrustedTraceQueryObservedFieldsPlan {
+  return {
+    timeRange: {
+      from: new Date(args.timeRange.from).toISOString(),
+      to: new Date(args.timeRange.to).toISOString(),
+    },
+    predicateScope: args.predicateScope,
+    search: args.search,
+    limit: args.limit,
+  };
+}
+
+export function planTraceQueryValues(args: NormalizedGetTraceQueryValuesArgs): TrustedTraceQueryValuesPlan {
+  return { ...planTraceQueryObservedFields(args), path: args.path };
+}
+
 export function formatTraceQuerySchemaIssues(error: z.ZodError): TraceQueryIssue[] {
   return error.issues.map(issue => {
-    const predicateTooComplex = issue.code === 'custom' && issue.message === PREDICATE_COMPLEXITY_MESSAGE;
+    const customIssueCode =
+      issue.code === 'custom'
+        ? issue.message === PREDICATE_COMPLEXITY_MESSAGE
+          ? 'predicate_too_complex'
+          : issue.message === PAGINATION_MODE_CONFLICT_MESSAGE
+            ? 'pagination_mode_conflict'
+            : issue.message === GROUP_PAGINATION_NOT_SUPPORTED_MESSAGE
+              ? 'group_pagination_not_supported'
+              : undefined
+        : undefined;
     return {
-      code: predicateTooComplex ? 'predicate_too_complex' : 'invalid_request',
+      code: customIssueCode ?? 'invalid_request',
       path: issue.path.map(part => (typeof part === 'symbol' ? String(part) : part)),
-      message: predicateTooComplex
-        ? PREDICATE_COMPLEXITY_MESSAGE
-        : 'The value does not match the trace-query request contract',
+      message: customIssueCode ? issue.message : 'The value does not match the trace-query request contract',
     };
   });
 }
 
 export function parseTraceQueryRequest(input: unknown): NormalizedTraceQueryRequest {
   const result = traceQueryRequestSchema.safeParse(input);
+  if (!result.success) throw new TraceQueryValidationError(formatTraceQuerySchemaIssues(result.error));
+  return result.data;
+}
+
+export function parseQueryThreadsInput(input: unknown): NormalizedQueryThreadsInput {
+  const result = queryThreadsInputSchema.safeParse(input);
   if (!result.success) throw new TraceQueryValidationError(formatTraceQuerySchemaIssues(result.error));
   return result.data;
 }
@@ -533,25 +921,25 @@ export function planTraceQuery(
       message: 'Grouped trace queries use fixed threadId ordering',
     });
   }
-
   const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
   const where = request.where ? planPredicate(request.where, 'trace', ['where'], 1, state) : undefined;
   if (issues.length > 0) throw new TraceQueryValidationError(issues);
 
   const timeRange = { from: from.toISOString(), to: to.toISOString() };
-  const limit = request.page.limit;
 
   if (request.group) {
     const result = 'groups' as const;
     const orderBy = { field: 'threadId', direction: 'asc' } as const;
     const binding = digestBinding({ timeRange, where, result, orderBy, authorization: options.authorizationBinding });
-    const cursor = request.page.after ? decodeTraceQueryCursor(request.page.after, result, binding) : undefined;
+    const page = request.page ?? { limit: 100 };
+    const cursor = page.after ? decodeTraceQueryCursor(page.after, result, binding) : undefined;
     return {
       result,
       timeRange,
       where,
       orderBy,
-      limit,
+      paginationMode: 'keyset',
+      limit: page.limit,
       binding,
       cursor: cursor?.result === 'groups' ? { threadId: cursor.threadId } : undefined,
     };
@@ -559,27 +947,95 @@ export function planTraceQuery(
 
   const result = 'traces' as const;
   const orderBy = request.orderBy?.[0] ?? ({ field: 'startedAt', direction: 'desc' } as const);
+  if (request.pagination) {
+    return {
+      result,
+      timeRange,
+      where,
+      orderBy,
+      paginationMode: 'page',
+      page: request.pagination.page,
+      perPage: request.pagination.perPage,
+    };
+  }
+
+  const page = request.page ?? { limit: 100 };
   const binding = digestBinding({ timeRange, where, result, orderBy, authorization: options.authorizationBinding });
-  const cursor = request.page.after ? decodeTraceQueryCursor(request.page.after, result, binding) : undefined;
+  const cursor = page.after ? decodeTraceQueryCursor(page.after, result, binding) : undefined;
   return {
     result,
     timeRange,
     where,
     orderBy,
-    limit,
+    paginationMode: 'keyset',
+    limit: page.limit,
     binding,
     cursor: cursor?.result === 'traces' ? { sortValue: cursor.sortValue, traceId: cursor.traceId } : undefined,
   };
 }
 
-export function encodeTraceQueryCursor(plan: TrustedTraceQueryPlan, values: TraceQueryCursorValues): string {
+/**
+ * Converts a structurally valid thread-query request into the canonical plan consumed by
+ * observability storage adapters.
+ *
+ * @internal This is a trusted server/storage boundary, not a client-side query builder.
+ */
+export function planThreadQuery(
+  request: NormalizedQueryThreadsInput,
+  options: { authorizationBinding?: string } = {},
+): TrustedThreadQueryPlan {
+  const issues: TraceQueryIssue[] = [];
+  const from = new Date(request.traces.timeRange.from);
+  const to = new Date(request.traces.timeRange.to);
+  if (from >= to) {
+    issues.push({
+      code: 'invalid_time_range',
+      path: ['traces', 'timeRange'],
+      message: '`from` must be earlier than `to`',
+    });
+  } else if (to.getTime() - from.getTime() > 31 * 24 * 60 * 60 * 1000) {
+    issues.push({
+      code: 'time_range_too_large',
+      path: ['traces', 'timeRange'],
+      message: 'The time range cannot exceed 31 days',
+    });
+  }
+
+  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
+  const traceWhere = request.traces.where
+    ? planPredicate(request.traces.where, 'trace', ['traces', 'where'], 1, state)
+    : undefined;
+  const where = request.where ? planThreadPredicate(request.where, ['where'], 1, state) : undefined;
+  if (issues.length > 0) throw new TraceQueryValidationError(issues);
+
+  const result = 'threads' as const;
+  const traces = {
+    timeRange: { from: from.toISOString(), to: to.toISOString() },
+    where: traceWhere,
+  };
+  const orderBy = { field: 'threadId', direction: 'asc' } as const;
+  const binding = digestBinding({ traces, where, result, orderBy, authorization: options.authorizationBinding });
+  const cursor = request.page.after ? decodeTraceQueryCursor(request.page.after, result, binding) : undefined;
+
+  return {
+    result,
+    traces,
+    where,
+    orderBy,
+    limit: request.page.limit,
+    binding,
+    cursor: cursor?.result === 'threads' ? { threadId: cursor.threadId } : undefined,
+  };
+}
+
+export function encodeTraceQueryCursor(plan: TraceQueryCursorPlan, values: TraceQueryCursorValues): string {
   if (values.result !== plan.result) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_CONFLICT');
   return Buffer.from(JSON.stringify({ version: 1, binding: plan.binding, values }), 'utf8').toString('base64url');
 }
 
 function decodeTraceQueryCursor(
   cursor: string,
-  expectedResult: 'traces' | 'groups',
+  expectedResult: TraceQueryCursorValues['result'],
   expectedBinding: string,
 ): TraceQueryCursorValues {
   let parsed: unknown;
@@ -610,9 +1066,52 @@ const cursorEnvelopeSchema = z
         })
         .strict(),
       z.object({ result: z.literal('groups'), threadId: z.string().min(1) }).strict(),
+      z.object({ result: z.literal('threads'), threadId: z.string().min(1) }).strict(),
     ]),
   })
   .strict();
+
+function planThreadPredicate(
+  predicate: ThreadPredicate,
+  path: Array<string | number>,
+  depth: number,
+  state: PlannerState,
+): TrustedThreadPredicate | undefined {
+  state.nodes += 1;
+  if (depth > TRACE_QUERY_MAX_DEPTH || state.nodes > TRACE_QUERY_MAX_NODES) {
+    addPredicateComplexityIssue(path, PREDICATE_COMPLEXITY_MESSAGE, state);
+    return undefined;
+  }
+
+  if ('traces' in predicate) {
+    state.relatedClauses += 1;
+    if (state.relatedClauses > TRACE_QUERY_MAX_RELATED_CLAUSES) {
+      addPredicateComplexityIssue(
+        path,
+        `Trace queries are limited to ${TRACE_QUERY_MAX_RELATED_CLAUSES} related collection clauses`,
+        state,
+      );
+    }
+    const quantifier = 'some' in predicate.traces ? 'some' : 'none';
+    const nested = 'some' in predicate.traces ? predicate.traces.some : predicate.traces.none;
+    const planned = planPredicate(nested, 'trace', [...path, 'traces', quantifier], depth + 1, state);
+    return planned ? { type: 'relation', collection: 'traces', quantifier, predicate: planned } : undefined;
+  }
+
+  if (predicate.op === 'and' || predicate.op === 'or') {
+    const args = predicate.args
+      .map((arg, index) => planThreadPredicate(arg, [...path, 'args', index], depth + 1, state))
+      .filter((arg): arg is TrustedThreadPredicate => arg !== undefined);
+    return { type: 'boolean', operator: predicate.op, args };
+  }
+
+  if (predicate.op === 'not') {
+    const arg = planThreadPredicate(predicate.arg, [...path, 'arg'], depth + 1, state);
+    return arg ? { type: 'not', arg } : undefined;
+  }
+
+  return undefined;
+}
 
 function planPredicate(
   predicate: TraceQueryPredicate | TraceQueryScalarPredicate,
@@ -671,7 +1170,7 @@ function planPredicate(
     const field = normalizePath(predicate.path);
     const rule = getRule(field, context, rules, [...path, 'path'], state);
     if (!rule) return undefined;
-    if (!rule.operators.has(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
+    if (!rule.operators.includes(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
     return { type: 'presence', field: field as TraceQueryPredicateField, operator: predicate.op };
   }
 
@@ -695,7 +1194,7 @@ function planPredicate(
     const field = normalizePath(predicate.value.path);
     const rule = getRule(field, context, rules, [...path, 'value', 'path'], state);
     if (!rule) return undefined;
-    if (!rule.operators.has(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
+    if (!rule.operators.includes(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
     const values = normalizeSet(predicate.set, rule);
     if (!values) {
       state.issues.push({
@@ -733,7 +1232,7 @@ function planPredicate(
   const field = normalizePath(comparison.left.path);
   const rule = getRule(field, context, rules, [...path, 'left', 'path'], state);
   if (!rule) return undefined;
-  if (!rule.operators.has(comparison.op)) addOperatorIssue(comparison.op, field, [...path, 'op'], state);
+  if (!rule.operators.includes(comparison.op)) addOperatorIssue(comparison.op, field, [...path, 'op'], state);
   const value = normalizeLiteral(comparison.right.literal, rule, comparison.op);
   if (value === undefined) {
     state.issues.push({
@@ -747,10 +1246,7 @@ function planPredicate(
 }
 
 function rulesForContext(context: PredicateContext): Record<string, FieldRule> {
-  if (context === 'spans') return SPAN_FIELD_RULES;
-  if (context === 'scores') return SCORE_FIELD_RULES;
-  if (context === 'feedback') return FEEDBACK_FIELD_RULES;
-  return TRACE_FIELD_RULES;
+  return TRACE_QUERY_FIELD_REGISTRY[context];
 }
 
 function getRule(
@@ -803,18 +1299,18 @@ function normalizeLiteral(
   rule: FieldRule,
   operator?: TraceQueryComparisonOperator,
 ): string | number | undefined {
-  if (rule.type === 'number') return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-  if (rule.type === 'stringOrNumber') {
-    if (operator && !STRING_OPERATORS.has(operator)) {
+  if (rule.valueKind === 'number') return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  if (rule.valueKind === 'stringOrNumber') {
+    if (operator && !TRACE_QUERY_STRING_OPERATORS.some(candidate => candidate === operator)) {
       return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
     }
     return typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value)) ? value : undefined;
   }
-  if (rule.type === 'timestamp') {
+  if (rule.valueKind === 'timestamp') {
     const timestamp = timestampLiteralSchema.safeParse(value);
     return timestamp.success ? new Date(timestamp.data).toISOString() : undefined;
   }
-  if (rule.type === 'string') {
+  if (rule.valueKind === 'string') {
     return typeof value === 'string' && (!rule.nonEmpty || value.trim().length > 0) ? value : undefined;
   }
   return undefined;
@@ -823,7 +1319,7 @@ function normalizeLiteral(
 function normalizeSet(values: TraceQueryLiteral[], rule: FieldRule): Array<string | number> | undefined {
   const normalized = values.map(value => normalizeLiteral(value, rule));
   if (normalized.some(value => value === undefined)) return undefined;
-  if (rule.type === 'stringOrNumber' && normalized.some(value => typeof value !== typeof normalized[0]))
+  if (rule.valueKind === 'stringOrNumber' && normalized.some(value => typeof value !== typeof normalized[0]))
     return undefined;
   return normalized as Array<string | number>;
 }

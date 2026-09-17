@@ -1365,6 +1365,24 @@ export const API_ROUTE_METADATA = {
       "listProperty": "clonedMessages"
     }
   },
+  "POST /memory/threads/:threadId/transfer": {
+    "method": "POST",
+    "path": "/memory/threads/:threadId/transfer",
+    "pathParams": [
+      "threadId"
+    ],
+    "queryParams": [
+      "agentId"
+    ],
+    "bodyParams": [
+      "resourceId"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /memory/threads/:threadId/working-memory": {
     "method": "POST",
     "path": "/memory/threads/:threadId/working-memory",
@@ -1986,6 +2004,7 @@ export const API_ROUTE_METADATA = {
       "group",
       "orderBy",
       "page",
+      "pagination",
       "timeRange",
       "where"
     ],
@@ -1993,6 +2012,60 @@ export const API_ROUTE_METADATA = {
     "hasBody": true,
     "responseShape": {
       "kind": "single"
+    }
+  },
+  "POST /observability/threads/query": {
+    "method": "POST",
+    "path": "/observability/threads/query",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "page",
+      "traces",
+      "where"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "threads",
+      "paginationProperty": "page"
+    }
+  },
+  "POST /observability/traces/query/fields": {
+    "method": "POST",
+    "path": "/observability/traces/query/fields",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "limit",
+      "predicateScope",
+      "search",
+      "timeRange"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /observability/traces/query/values": {
+    "method": "POST",
+    "path": "/observability/traces/query/values",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "limit",
+      "path",
+      "predicateScope",
+      "search",
+      "timeRange"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "values"
     }
   },
   "GET /observability/metrics": {
@@ -2821,20 +2894,6 @@ export const API_ROUTE_METADATA = {
       "listProperty": "embedders"
     }
   },
-  "GET /.well-known/:agentId/agent-card.json": {
-    "method": "GET",
-    "path": "/.well-known/:agentId/agent-card.json",
-    "pathParams": [
-      "agentId"
-    ],
-    "queryParams": [],
-    "bodyParams": [],
-    "hasQuery": false,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
   "GET /workspaces": {
     "method": "GET",
     "path": "/workspaces",
@@ -3312,7 +3371,9 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
-      "data"
+      "data",
+      "resumeData",
+      "suspendPayload"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -4949,7 +5010,9 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [
       "page",
-      "perPage"
+      "perPage",
+      "targetIds",
+      "targetType"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -5256,6 +5319,8 @@ export const API_ROUTE_METADATA = {
       "experimentSetId",
       "page",
       "perPage",
+      "targetId",
+      "targetType",
       "trialIndex",
       "variantId"
     ],
@@ -5309,6 +5374,8 @@ export const API_ROUTE_METADATA = {
       "experimentSetId",
       "page",
       "perPage",
+      "targetId",
+      "targetType",
       "trialIndex",
       "variantId"
     ],
@@ -5606,6 +5673,18 @@ export const API_ROUTE_METADATA = {
   "GET /editor/builder/settings": {
     "method": "GET",
     "path": "/editor/builder/settings",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /editor/workflow-builder/settings": {
+    "method": "GET",
+    "path": "/editor/workflow-builder/settings",
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [],
@@ -6003,6 +6082,7 @@ export const API_ROUTE_METADATA = {
       "prompt",
       "providerOptions",
       "requestContext",
+      "resourceId",
       "signalType",
       "status",
       "tagName",

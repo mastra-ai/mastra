@@ -25,7 +25,7 @@ export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesLi
     );
   }, [schedules, search]);
 
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: filtered.length });
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filtered.length, global: true });
 
   if (isLoading) {
     return <DataListSkeleton columns={COLUMNS} />;

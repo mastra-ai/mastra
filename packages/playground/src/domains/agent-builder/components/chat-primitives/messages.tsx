@@ -21,15 +21,9 @@ import {
 } from '@mastra/playground-ui/domains/chat/messages/signal-data';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { MessageFactory } from '@mastra/react';
-import type {
-  MastraDBMessageMetadata,
-  MessageRenderers,
-  MessageStatusRenderers,
-  DynamicToolPart,
-  ToolInvocationPart,
-  RequireApprovalEntry,
-} from '@mastra/react';
+import type { MastraDBMessageMetadata, RequireApprovalEntry } from '@mastra/react';
+import { MessageFactory } from '@mastra/react/ui';
+import type { MessageRenderers, MessageStatusRenderers, DynamicToolPart, ToolInvocationPart } from '@mastra/react/ui';
 import {
   AlertTriangle,
   AlignLeft,
@@ -328,15 +322,14 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
               <Button
                 variant="default"
                 onClick={onRetry}
-                className="gap-1.5"
                 data-testid="agent-builder-chat-error-retry"
+                icon={<RefreshCw aria-hidden />}
               >
-                <RefreshCw className="size-3.5" aria-hidden />
                 Try again
               </Button>
             )}
             <CollapsibleTrigger
-              className="text-neutral4 hover:text-neutral6 text-sm underline-offset-2 hover:underline"
+              className="text-neutral4 hover:text-neutral6 text-ui-md underline-offset-2 hover:underline"
               data-testid="agent-builder-chat-error-details-trigger"
             >
               Details
@@ -344,7 +337,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
           </div>
           <CollapsibleContent>
             <pre
-              className="text-neutral4 bg-surface1 max-h-48 overflow-auto rounded-md p-2 text-xs break-all whitespace-pre-wrap"
+              className="text-neutral4 bg-surface1 text-ui-sm max-h-48 overflow-auto rounded-md p-2 break-all whitespace-pre-wrap"
               data-testid="agent-builder-chat-error-details"
             >
               {error.details}
@@ -357,10 +350,9 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
             <Button
               variant="default"
               onClick={onRetry}
-              className="gap-1.5"
               data-testid="agent-builder-chat-error-retry"
+              icon={<RefreshCw aria-hidden />}
             >
-              <RefreshCw className="size-3.5" aria-hidden />
               Try again
             </Button>
           </div>
@@ -372,7 +364,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
 
 export const MessagesSkeleton = ({ testId }: { testId?: string }) => {
   return (
-    <div className="flex flex-col gap-6" data-testid={testId}>
+    <div className="flex flex-col gap-4" data-testid={testId}>
       <div className="flex justify-end">
         <Skeleton className="h-10 w-56 rounded-2xl" />
       </div>
@@ -426,7 +418,7 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
                   Input
                 </Txt>
               </div>
-              <pre className="text-neutral5 m-0 max-h-[320px] overflow-auto p-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
+              <pre className="text-neutral5 text-ui-sm m-0 max-h-[320px] overflow-auto p-3 break-words whitespace-pre-wrap">
                 {inputJson || '{}'}
               </pre>
             </div>
@@ -437,7 +429,7 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
                     Output
                   </Txt>
                 </div>
-                <pre className="text-neutral5 m-0 max-h-[320px] overflow-auto p-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
+                <pre className="text-neutral5 text-ui-sm m-0 max-h-[320px] overflow-auto p-3 break-words whitespace-pre-wrap">
                   {outputJson}
                 </pre>
               </div>

@@ -586,6 +586,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         })
         .catch(error => {
           logError(`[DurableAgentStream] Failed to subscribe to ${topic}:`, error);
+          markTerminated();
           rejectReady(error);
           ctrl.error(error);
         });

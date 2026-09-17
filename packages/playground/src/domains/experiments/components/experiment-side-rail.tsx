@@ -19,7 +19,7 @@ export interface ExperimentSideRailProps {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="grid gap-3">
-      <h2 className="text-ui-sm text-neutral2 tracking-widest uppercase">{title}</h2>
+      <h2 className="text-ui-md text-neutral2 tracking-widest uppercase">{title}</h2>
       {children}
     </section>
   );
@@ -39,7 +39,7 @@ export function ExperimentSideRail({ experiment, metrics, className }: Experimen
       : null;
 
   return (
-    <Card as="aside" aria-label="Experiment details" className={cn('grid content-start gap-8 p-5', className)}>
+    <Card as="aside" aria-label="Experiment details" className={cn('grid content-start gap-5 p-5', className)}>
       <Section title="Pipeline">
         <ExperimentFlowChain experiment={experiment} />
         {experiment.agentVersion && (

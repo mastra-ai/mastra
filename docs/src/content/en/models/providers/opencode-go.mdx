@@ -7,7 +7,7 @@ description: "Browse OpenCode Go model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/opencode-go.svg" alt="OpenCode Go logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode Go
 
-Access 36 OpenCode Go models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+Access 37 OpenCode Go models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
 Learn more in the [OpenCode Go documentation](https://opencode.ai/docs/zen).
 
@@ -368,6 +368,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 2,
     "outputCost": 6
+  },
+  {
+    "model": "opencode-go/union-alpha",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -402,7 +414,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "opencode-go/qwen3.8-max"
+      ? "opencode-go/union-alpha"
       : "opencode-go/deepseek-v4-flash";
   }
 });

@@ -710,14 +710,15 @@ export class StoreMemoryRedis extends MemoryStorage {
         };
       }
 
+      const perThreadIds = await Promise.all(
+        threadIds.map(tid => this.client.zRange(getThreadMessagesKey(tid), 0, -1)),
+      );
       const allMessageIdsWithThreads: { threadId: string; messageId: string }[] = [];
-      for (const tid of threadIds) {
-        const threadMessagesKey = getThreadMessagesKey(tid);
-        const msgIds = await this.client.zRange(threadMessagesKey, 0, -1);
-        for (const mid of msgIds) {
+      threadIds.forEach((tid, i) => {
+        for (const mid of perThreadIds[i]!) {
           allMessageIdsWithThreads.push({ threadId: tid, messageId: mid });
         }
-      }
+      });
 
       if (allMessageIdsWithThreads.length === 0) {
         return {
@@ -1264,6 +1265,7 @@ export class StoreMemoryRedis extends MemoryStorage {
       multi.set(threadKey, JSON.stringify(processRecord(TABLE_THREADS, newThread).processedRecord));
 
       const clonedMessages: MastraDBMessage[] = [];
+      const messageIdMap: Record<string, string> = Object.create(null);
       const targetResourceId = resourceId || sourceThread.resourceId;
       const newThreadMessagesKey = getThreadMessagesKey(newThreadId);
 
@@ -1286,6 +1288,7 @@ export class StoreMemoryRedis extends MemoryStorage {
         multi.zAdd(newThreadMessagesKey, { score, value: newMessageId });
 
         clonedMessages.push(newMessage);
+        messageIdMap[sourceMsg.id] = newMessageId;
       }
 
       await multi.exec();
@@ -1293,6 +1296,7 @@ export class StoreMemoryRedis extends MemoryStorage {
       return {
         thread: newThread,
         clonedMessages,
+        messageIdMap,
       };
     } catch (error) {
       if (error instanceof MastraError) {

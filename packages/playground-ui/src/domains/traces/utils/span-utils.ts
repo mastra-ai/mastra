@@ -1,5 +1,5 @@
-import type { SpanRecord } from '@mastra/core/storage';
 import { format } from 'date-fns';
+import type { SpanRecord } from '../types';
 
 type MessageLike = { role?: string; content?: unknown };
 
@@ -55,11 +55,6 @@ export function formatSpanTimestamp(value: Date | string | null | undefined): st
 export function formatSpanTimestampExact(value: Date | string | null | undefined): string | undefined {
   const timestamp = toTimestamp(value);
   return timestamp === undefined ? undefined : format(new Date(timestamp), 'MMM d, yyyy, h:mm:ss.SSS a');
-}
-
-export function formatSpanPanelTimestamp(value: Date | string | null | undefined): string | undefined {
-  const timestamp = toTimestamp(value);
-  return timestamp === undefined ? undefined : format(new Date(timestamp), 'MMM dd, h:mm:ss.SSS aaa');
 }
 
 /**

@@ -392,6 +392,12 @@ processInputStep?<TTripwireMetadata = unknown>(
     isOptional: false,
   },
   {
+    name: 'runId',
+    type: 'string',
+    description: 'ID of the active agent run.',
+    isOptional: true,
+  },
+  {
     name: 'stepNumber',
     type: 'number',
     description: 'Current step number (0-indexed). Step 0 is the initial LLM call.',
@@ -610,6 +616,13 @@ processLLMRequest?(
     type: 'MastraLanguageModel',
     description: 'The resolved model that will receive the prompt. Use this to scope provider-specific rewrites.',
     isOptional: false,
+  },
+  {
+    name: 'messageList',
+    type: 'MessageList',
+    description:
+      'The message list the prompt was converted from, when the call path has one. Use it for provenance the converted prompt no longer carries, such as per-turn provider stamps.',
+    isOptional: true,
   },
   {
     name: 'stepNumber',

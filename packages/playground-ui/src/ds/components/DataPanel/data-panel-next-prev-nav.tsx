@@ -1,5 +1,6 @@
 import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
+import type { ButtonProps } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 
 export interface DataPanelNextPrevNavProps {
@@ -7,6 +8,7 @@ export interface DataPanelNextPrevNavProps {
   onNext?: () => void;
   previousLabel?: string;
   nextLabel?: string;
+  variant?: ButtonProps['variant'];
 }
 
 export function DataPanelNextPrevNav({
@@ -14,13 +16,14 @@ export function DataPanelNextPrevNav({
   onNext,
   previousLabel = 'Previous',
   nextLabel = 'Next',
+  variant = 'ghost',
 }: DataPanelNextPrevNavProps) {
   return (
     <ButtonsGroup spacing="close">
-      <Button size="md" tooltip={previousLabel} onClick={onPrevious} disabled={!onPrevious}>
+      <Button size="sm" variant={variant} tooltip={previousLabel} onClick={onPrevious} disabled={!onPrevious}>
         <ArrowUpIcon />
       </Button>
-      <Button size="md" tooltip={nextLabel} onClick={onNext} disabled={!onNext}>
+      <Button size="sm" variant={variant} tooltip={nextLabel} onClick={onNext} disabled={!onNext}>
         <ArrowDownIcon />
       </Button>
     </ButtonsGroup>

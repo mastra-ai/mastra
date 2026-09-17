@@ -14,12 +14,6 @@ Vitest + MSW + typed @mastra/client-js fixtures is the primary test strategy
 
 Test-first (TDD): RED failing MSW test → GREEN minimum code → REFACTOR.
 
-After tests pass, mutation testing is mandatory on exactly the production
-`.ts`/`.tsx` files the task changed (none changed = skip):
-`pnpm --filter ./packages/playground test:mutate "src/foo.ts,src/bar.tsx"`.
-No dirs/globs, unrelated files, direct `stryker run`, or non-production files.
-Kill survivors by strengthening tests (never weaken); report equivalent ones.
-
 BDD-style, lint-enforced in `eslint.config.js`; MSW runs with
 `onUnhandledRequest: 'error'`. Outer `describe` = the unit; inner
 `describe('when …')` = ONE precondition via a real MSW fixture; each `it` =
@@ -33,4 +27,5 @@ Playwright E2E (`e2e-tests-studio` skill) only when MSW can't model the journey
 (multi-page, real server, streaming, real browser concerns).
 
 Attach mobile/tablet/desktop screenshots when handing off UI changes.
+Typography: use DS tokens only (`Txt` variants, or `text-ui-*` / `text-header-*` classes). No `text-xs/sm/base/lg/xl/…` and no arbitrary `text-[Npx]`; lint enforces this.
 Coordinate with packages/playground-ui for cross-boundary changes.

@@ -240,9 +240,10 @@ describe('createNodeServer graceful shutdown', () => {
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
-  it('bounds a hanging mastra.shutdown() separately from the drain window', async () => {
+  it('bounds a hanging mastra.shutdown() by the drain window plus the core teardown budget', async () => {
     vi.useFakeTimers();
     shutdownMock.mockImplementation(() => new Promise<void>(() => {}));
+    (mockMastra.getServer as ReturnType<typeof vi.fn>).mockReturnValue({ drainTimeout: 2000 });
     await createNodeServer(mockMastra, { tools: {} });
 
     process.emit('SIGTERM', 'SIGTERM');
@@ -250,13 +251,18 @@ describe('createNodeServer graceful shutdown', () => {
     // Drain completes immediately.
     closeCallbacks.forEach(cb => cb());
     await flushMicrotasks();
-    expect(shutdownMock).toHaveBeenCalledOnce();
+    // Core gets the same drain window for in-flight evented workflow runs.
+    expect(shutdownMock).toHaveBeenCalledExactlyOnceWith({ drainTimeout: 2000 });
     expect(exitSpy).not.toHaveBeenCalled();
 
+    // The historic 5s core budget alone is not enough to force exit.
     await vi.advanceTimersByTimeAsync(5000);
+    expect(exitSpy).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(2000);
     await flushMicrotasks();
 
-    expect(logger.warn).toHaveBeenCalledWith('Mastra shutdown timed out; forcing exit', { timeoutMs: 5000 });
+    expect(logger.warn).toHaveBeenCalledWith('Mastra shutdown timed out; forcing exit', { timeoutMs: 7000 });
     expect(fakeServer.closeAllConnections).not.toHaveBeenCalled();
     expect(exitSpy).toHaveBeenCalledWith(0);
   });

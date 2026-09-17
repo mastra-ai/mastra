@@ -844,6 +844,89 @@ describe('Structured output memory inheritance', () => {
     expect(promptText).toContain('Mochi');
   });
 
+  it('keeps memory context but excludes rejected output when useAgent retries', async () => {
+    const threadId = randomUUID();
+    const resourceId = `structured-output-retry-memory-${randomUUID()}`;
+    const mockMemory = new MockMemory();
+    const mainModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: 'Seed response.' }],
+        warnings: [],
+      }),
+    });
+    const structuringPrompts: unknown[] = [];
+    const structuringModel = new MockLanguageModelV2({
+      doStream: async options => {
+        structuringPrompts.push(options.prompt);
+        const count = structuringPrompts.length === 1 ? 'invalid' : 4;
+        const text = JSON.stringify({ count });
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'structuring-text' },
+            { type: 'text-delta', id: 'structuring-text', delta: text },
+            { type: 'text-end', id: 'structuring-text' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'structured-output-use-agent-retry-boundary',
+      name: 'Structured output useAgent retry boundary',
+      instructions: 'Answer briefly.',
+      model: mainModel,
+      memory: mockMemory,
+    });
+
+    await mockMemory.createThread({ threadId, resourceId });
+    await agent.generate('Remember the project is Wren.', {
+      memory: { thread: threadId, resource: resourceId },
+    });
+    let requestCalls = 0;
+    (mainModel as any).doGenerate = async () => {
+      requestCalls++;
+      const text = requestCalls === 1 ? 'There are three files.' : 'There are four files.';
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text }],
+        warnings: [],
+      };
+    };
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+
+    const result = await agent.generate('Count the files.', {
+      maxProcessorRetries: 1,
+      memory: { thread: threadId, resource: resourceId },
+      requestContext,
+      structuredOutput: {
+        schema: z.object({ count: z.number() }),
+        model: structuringModel,
+        useAgent: true,
+      },
+    });
+
+    expect(result.object).toEqual({ count: 4 });
+    expect(structuringPrompts).toHaveLength(2);
+    const retryPrompt = JSON.stringify(structuringPrompts[1]);
+    expect(retryPrompt).toContain('Remember the project is Wren.');
+    expect(retryPrompt).toContain('There are four files.');
+    expect(retryPrompt).not.toContain('There are three files.');
+  });
+
   it('does not leak the structuring agent readOnly memory config into the parent request context', async () => {
     const threadId = randomUUID();
     const resourceId = `structured-output-memory-${randomUUID()}`;

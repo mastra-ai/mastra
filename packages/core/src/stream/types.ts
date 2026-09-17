@@ -20,6 +20,7 @@ import type { AgentSignalType } from '../agent/signals';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { ModelConfigModelSettings } from '../llm/model/model-settings';
 import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
+import type { IMastraLogger } from '../logger';
 import type { ScorerResult } from '../loop';
 import type { ClientObservabilityCarrier, ObservabilityContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
@@ -1155,6 +1156,7 @@ export type MastraStreamTransformOptions<OUTPUT = undefined> =
 
 export type MastraModelOutputOptions<OUTPUT = undefined> = {
   runId: string;
+  logger?: IMastraLogger;
   toolCallStreaming?: boolean;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
   onStepFinish?: MastraOnStepFinishCallback<OUTPUT>;

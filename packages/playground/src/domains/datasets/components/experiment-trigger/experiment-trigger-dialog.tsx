@@ -17,7 +17,7 @@ import { Label } from '@mastra/playground-ui/components/Label';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useDatasetItems } from '../../hooks/use-dataset-items';
@@ -67,7 +67,7 @@ function RequestContextForm({
   }, [requestContextSchema]);
 
   if (!zodSchema) {
-    return <p className="text-destructive text-sm">Failed to parse request context schema</p>;
+    return <p className="text-destructive text-ui-md">Failed to parse request context schema</p>;
   }
 
   return (
@@ -103,7 +103,7 @@ function PipelineStep({
         </span>
         {!isLast && <span aria-hidden="true" className="bg-border1 mt-2 w-px flex-1" />}
       </div>
-      <div className={cn('min-w-0 flex-1 space-y-3', !isLast && 'pb-6')}>{children}</div>
+      <div className={cn('min-w-0 flex-1 space-y-3', !isLast && 'pb-4')}>{children}</div>
     </li>
   );
 }
@@ -246,14 +246,14 @@ export function ExperimentTriggerDialog({
         className="w-[640px] max-w-[calc(100vw-2rem)] gap-0 p-0"
         onKeyDown={handleKeyDown}
       >
-        <DialogHeader className="border-border1 border-b px-6 py-4">
+        <DialogHeader className="border-border1 border-b px-4 py-4">
           <DialogTitle>Run experiment</DialogTitle>
           <DialogDescription className="text-ui-sm text-neutral3 not-sr-only">
             Pick a dataset, choose what to run it against, and optionally score the results.
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="max-h-[70vh] space-y-6 overflow-y-auto px-6 py-5">
+        <DialogBody className="max-h-[70vh] space-y-6 overflow-y-auto px-4 py-5">
           <div className="space-y-4">
             <div className="grid gap-2">
               <Label htmlFor="experiment-name">Name *</Label>
@@ -362,7 +362,7 @@ export function ExperimentTriggerDialog({
           </Collapsible>
         </DialogBody>
 
-        <DialogFooter className="border-border1 items-center border-t px-6 py-4 sm:justify-between">
+        <DialogFooter className="border-border1 items-center border-t px-4 py-4 sm:justify-between">
           <p data-testid="experiment-run-status" aria-live="polite" className="flex items-center gap-2">
             {missing.length === 0 ? (
               <>
@@ -380,7 +380,7 @@ export function ExperimentTriggerDialog({
             )}
           </p>
           <div className="flex items-center gap-2">
-            <Button onClick={handleClose} disabled={isRunning}>
+            <Button icon={<X />} onClick={handleClose} disabled={isRunning}>
               Cancel
             </Button>
             <Button variant="primary" onClick={handleRun} disabled={!canRun || isRunning}>

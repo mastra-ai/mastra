@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@m
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { useDatasets } from '../hooks/use-datasets';
@@ -103,7 +104,7 @@ export function AddItemsToDatasetDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {availableDatasets.length === 0 ? (
-                    <div className="text-neutral4 px-2 py-4 text-center text-sm">No other datasets available</div>
+                    <div className="text-neutral4 text-ui-md px-2 py-4 text-center">No other datasets available</div>
                   ) : (
                     availableDatasets.map(dataset => (
                       <SelectItem key={dataset.id} value={dataset.id}>
@@ -115,7 +116,7 @@ export function AddItemsToDatasetDialog({
               </Select>
             </div>
 
-            <p className="text-muted-foreground text-sm">
+            <p className="text-muted-foreground text-ui-md">
               {items.length} item{items.length !== 1 ? 's' : ''} will be copied to the selected dataset
             </p>
 
@@ -127,17 +128,18 @@ export function AddItemsToDatasetDialog({
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-muted-foreground text-sm">
+                <p className="text-muted-foreground text-ui-md">
                   Adding items: {progress} / {items.length}
                 </p>
               </div>
             )}
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" onClick={handleCancel} disabled={isAdding}>
+              <Button icon={<X />} type="button" onClick={handleCancel} disabled={isAdding}>
                 Cancel
               </Button>
               <Button
+                icon={<Plus />}
                 type="submit"
                 variant="primary"
                 disabled={isAdding || !selectedDatasetId || availableDatasets.length === 0}

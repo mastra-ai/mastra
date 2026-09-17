@@ -16,7 +16,7 @@ const meta: Meta<typeof Input> = {
     },
     size: {
       control: { type: 'select' },
-      options: ['xs', 'sm', 'md', 'default', 'lg'],
+      options: ['xs', 'sm', 'md', 'lg'],
     },
     disabled: {
       control: { type: 'boolean' },
@@ -55,7 +55,6 @@ export const Sizes: Story = {
       <Input size="xs" placeholder="Extra Small" />
       <Input size="sm" placeholder="Small" />
       <Input size="md" placeholder="Medium" />
-      <Input size="default" placeholder="Default" />
       <Input size="lg" placeholder="Large" />
     </div>
   ),
@@ -134,10 +133,10 @@ export const Number: Story = {
 export const SizesWithButton: Story = {
   render: () => (
     <div className="grid grid-cols-[200px_auto] items-center gap-3">
-      {(['xs', 'sm', 'md', 'default', 'lg'] as const).map(size => (
+      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
         <Fragment key={size}>
           <Input size={size} placeholder={size} />
-          <Button size={size === 'default' ? 'lg' : size} className="justify-self-start">
+          <Button size={size} className="justify-self-start">
             Button
           </Button>
         </Fragment>

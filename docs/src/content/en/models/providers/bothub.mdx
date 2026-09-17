@@ -7,7 +7,7 @@ description: "Browse Bothub model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/bothub.svg" alt="Bothub logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Bothub
 
-Access 7 Bothub models through Mastra's model router. Authentication is handled automatically using the `BOTHUB_API_KEY` environment variable.
+Access 8 Bothub models through Mastra's model router. Authentication is handled automatically using the `BOTHUB_API_KEY` environment variable.
 
 Learn more in the [Bothub documentation](https://bothub.ru/models).
 
@@ -116,6 +116,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 0.06,
     "outputCost": 0.37
+  },
+  {
+    "model": "bothub/muse-spark-1.3-contributor",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 943718,
+    "inputCost": 0.1,
+    "outputCost": 0.2
   },
   {
     "model": "bothub/nemotron-3-ultra-550b-a55b:free",

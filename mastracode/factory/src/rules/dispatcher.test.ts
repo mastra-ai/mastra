@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import { createLifecycleTestRegistry, createTestBoard } from '../boards/test-utils.js';
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
-import { observeSessionRunEnd } from '../session/run-audit.js';
+import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd } from '../session/run-audit.js';
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY, type WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -36,6 +36,8 @@ function createSession(
     signalAccepted?: Promise<{ accepted: true; action?: string }>;
     emitAgentEndDuringSignal?: boolean;
     agentEndReason?: 'complete' | 'aborted' | 'error' | 'suspended';
+    /** Emitted on the run's event stream just before each `agent_end`, modelling an OM failure that aborted the run. */
+    omObservationError?: string;
     /** Models a signal queued onto an in-flight run that ends before draining it. */
     dropDeliveredSignal?: boolean;
     /** The run that swallowed the dropped signal ends, freeing the session. */
@@ -65,8 +67,13 @@ function createSession(
 ) {
   let threadId = 'thread-1';
   const settings: Record<string, unknown> = {};
-  const agentEndListeners = new Set<(event: { type: string; reason?: string }) => void>();
+  const agentEndListeners = new Set<(event: { type: string; reason?: string; error?: string }) => void>();
   const emitAgentEnd = (reason = options?.agentEndReason) => {
+    if (options?.omObservationError) {
+      for (const listener of agentEndListeners) {
+        listener({ type: 'om_observation_failed', error: options.omObservationError });
+      }
+    }
     for (const listener of agentEndListeners) {
       listener({ type: 'agent_end', reason });
     }
@@ -184,7 +191,7 @@ function createSession(
       if (redelivered) return { accepted: Promise.resolve({ accepted: true as const, action: 'wake' }) };
       return { accepted: options?.signalAccepted ?? Promise.resolve({ accepted: true, action: 'deliver' }) };
     }),
-    subscribe: vi.fn((listener: (event: { type: string; reason?: string }) => void) => {
+    subscribe: vi.fn((listener: (event: { type: string; reason?: string; error?: string }) => void) => {
       agentEndListeners.add(listener);
       return () => agentEndListeners.delete(listener);
     }),
@@ -292,6 +299,7 @@ async function bindWorkRun(storage: WorkItemsStorage, workItemId: string, option
     kickoffMessage: null,
   });
   await storage.markPendingStart(prepared.binding.id, 'sent');
+  return prepared.binding;
 }
 
 /** A card whose run someone asked for: a pending start still waiting to be sent. */
@@ -419,7 +427,10 @@ describe('FactoryDecisionDispatcher', () => {
       isAutoRunEnabled: async () => true,
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('retry');
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      failureCode: 'notification_delivery_failed',
+    });
     expect((await seed.audit.list({ orgId: 'org-1' })).events).toEqual([]);
   });
 
@@ -1254,8 +1265,58 @@ describe('FactoryDecisionDispatcher', () => {
       threadId: 'thread-1',
       session: { modeId: 'build', modelId: 'openai/gpt-5.6-sol' },
     });
-    expect(session.subscribe).toHaveBeenCalledTimes(1);
+    expect(session.subscribe).toHaveBeenCalledTimes(2);
     expect(getAgentEndListenerCount()).toBe(0);
+  });
+
+  it('delivers a compact continuation instead of the full skill body when the invokeSkill decision sets resume', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      arguments: 'Issue 42',
+      idempotencyKey: 'skill-resume-1',
+      resume: true,
+    });
+    const { controller, session } = createSession();
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-null',
+      kickoffMessage: null,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      primeCredentials: vi.fn(async () => {}),
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const contents = session.sendSignal.mock.calls[0]?.[0]?.contents as string;
+    expect(contents).toContain('<skill name="understand-issue">');
+    expect(contents).toContain('Resume the active understand-issue session');
+    expect(contents).toContain('ARGUMENTS: Issue 42');
+    // The whole fix: the full skill body ('Follow the skill.') is not re-pasted.
+    expect(contents).not.toContain('Follow the skill.');
   });
 
   describe('a role handed past on a shared session', () => {
@@ -1512,6 +1573,50 @@ describe('FactoryDecisionDispatcher', () => {
       });
     });
 
+    it('supersedes a plan decision on a card that has reached a terminal stage instead of retrying it', async () => {
+      // An external terminal transition revoked the seat out from under a queued
+      // plan decision. The card can never mint a plan seat again, so the decision
+      // must settle as superseded rather than flap through session_unavailable
+      // retries and page a person on a finished card.
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-terminal'));
+      const { controller } = createSession();
+      const binding = await bindRole(storage, item.id, 'plan');
+      await storage.revokeRunBinding({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        bindingId: binding.id,
+        revokedAt: new Date('2030-01-01T00:00:00Z'),
+      });
+      const current = await storage.get({ orgId: 'org-1', id: item.id });
+      await storage.commitTransition({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        workItemId: item.id,
+        expectedRevision: current!.revision,
+        destinationStage: 'done',
+        actorId: 'user-1',
+        ingress: { identity: 'external-close', triggerType: 'github', transitionId: 'external-close' },
+        configVersion: 'rules-v1',
+        causalChain: [],
+        evaluation: { outcome: 'accepted', decisions: [] },
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'succeeded',
+        attempts: 1,
+      });
+    });
+
     it('still fails when the run ends in error with the plan seat intact', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const { item, transitionService } = await queueDecision(storage, planSkill('plan-real-error'));
@@ -1530,6 +1635,105 @@ describe('FactoryDecisionDispatcher', () => {
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
         status: 'retry',
         lastError: expect.stringContaining('ended in error'),
+      });
+    });
+
+    it('fails terminally when an abort follows a permanent OM provider rejection', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-om-permanent'));
+      const { controller } = createSession(undefined, {
+        agentEndReason: 'aborted',
+        omObservationError: 'HTTP 400: model not supported with ChatGPT account',
+      });
+      await bindRole(storage, item.id, 'plan');
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'failed',
+        failureCode: 'run_configuration_invalid',
+        lastError: expect.stringContaining('model not supported'),
+      });
+    });
+
+    it('surfaces the real OM error but stays retryable for an ambiguous abort', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-om-transient'));
+      const { controller } = createSession(undefined, {
+        agentEndReason: 'aborted',
+        omObservationError: 'network timeout while observing',
+      });
+      await bindRole(storage, item.id, 'plan');
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'retry',
+        lastError: expect.stringContaining('network timeout while observing'),
+      });
+    });
+
+    it('stays retryable when a bare 400 appears without HTTP status context', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-om-bare-400'));
+      const { controller } = createSession(undefined, {
+        agentEndReason: 'aborted',
+        omObservationError: 'observation retry failed after 400 attempts',
+      });
+      await bindRole(storage, item.id, 'plan');
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'retry',
+        lastError: expect.stringContaining('observation retry failed after 400 attempts'),
+      });
+    });
+
+    it('reapplies managed memory settings when reusing an existing session', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-refresh-reuse'));
+      const { controller, session } = createSession();
+      await bindRole(storage, item.id, 'plan');
+      const refreshManagedMemorySettings = vi.fn(async () => {});
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        refreshManagedMemorySettings,
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect(refreshManagedMemorySettings).toHaveBeenCalledWith(
+        expect.objectContaining({ binding: expect.objectContaining({ role: 'plan' }), session }),
+      );
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'succeeded',
+        attempts: 1,
       });
     });
   });
@@ -1776,7 +1980,257 @@ describe('FactoryDecisionDispatcher', () => {
     ).toMatchObject({ status: 'succeeded' });
   });
 
-  it('fails a wake dispatch for retry when the terminal event is not observed before the deadline', async () => {
+  it('waits for an open run on the same binding before sending another kickoff', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      cancelInFlight: true,
+      idempotencyKey: 'wait-for-open-binding-run',
+    });
+    const binding = await bindWorkRun(storage, item.id);
+    const { controller, session, emitAgentEnd, getAgentEndListenerCount, abort } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+      emitAgentEndDuringSignal: true,
+      agentEndReason: 'complete',
+      streamActive: true,
+    });
+    await session.thread.setSetting({
+      key: FACTORY_OPEN_RUNS_SETTING,
+      value: [
+        {
+          kickoffId: 'earlier-kickoff',
+          bindingId: binding.id,
+          role: binding.role,
+          startedBy: 'factory-rule-dispatcher',
+          orgId: binding.orgId,
+          factoryProjectId: binding.factoryProjectId,
+          workItemId: binding.workItemId,
+          sessionId: binding.sessionId,
+          threadId: binding.threadId,
+          branch: binding.branch,
+          agentName: 'build',
+        },
+      ],
+    });
+    controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: binding.threadId }]);
+    observeSessionRunEnd(session, { audit: seed.audit });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      audit: seed.audit,
+      ownerId: 'worker-1',
+    });
+
+    const dispatch = dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    await vi.waitFor(() => expect(getAgentEndListenerCount()).toBe(2));
+    expect(session.sendSignal).not.toHaveBeenCalled();
+    expect(abort).not.toHaveBeenCalled();
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'leased',
+      attempts: 1,
+      deliveryGeneration: 0,
+    });
+
+    controller.listActiveThreadRuns.mockReturnValue([]);
+    emitAgentEnd('complete');
+    await dispatch;
+
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+  });
+
+  describe('open-run ledger across dispatchers', () => {
+    async function setUpOpenBinding(entry: Record<string, unknown>) {
+      const seed = await createFactoryStorageForTests();
+      const storage = seed.workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'work',
+        skillName: 'understand-issue',
+        idempotencyKey: 'open-binding-ledger',
+      });
+      const binding = await bindWorkRun(storage, item.id);
+      const { controller, session } = createSession(undefined, {
+        signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+        emitAgentEndDuringSignal: true,
+        agentEndReason: 'complete',
+      });
+      await session.thread.setSetting({
+        key: FACTORY_OPEN_RUNS_SETTING,
+        value: [
+          {
+            kickoffId: 'earlier-kickoff',
+            bindingId: binding.id,
+            role: binding.role,
+            startedBy: 'factory-rule-dispatcher',
+            orgId: binding.orgId,
+            factoryProjectId: binding.factoryProjectId,
+            workItemId: binding.workItemId,
+            sessionId: binding.sessionId,
+            threadId: binding.threadId,
+            branch: binding.branch,
+            agentName: 'build',
+            ...entry,
+          },
+        ],
+      });
+      // Nothing live in this process's registry: the entry is either an orphan
+      // or a run another replica is hosting.
+      controller.listActiveThreadRuns.mockReturnValue([]);
+      observeSessionRunEnd(session, { audit: seed.audit });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        audit: seed.audit,
+        ownerId: 'worker-1',
+      });
+      return { storage, session, dispatcher };
+    }
+
+    it.each([
+      ['a legacy entry with no owner', {}],
+      ['an entry whose owner stopped heartbeating', { ownerId: 'worker-2', heartbeatAt: Date.now() - 60_000 }],
+      ['our own entry from a run that died', { ownerId: 'worker-1', heartbeatAt: Date.now() - 60_000 }],
+    ])('kicks off past %s', async (_label, entry) => {
+      const { storage, session, dispatcher } = await setUpOpenBinding(entry);
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    });
+
+    it('hands the decision back for retry while another dispatcher is heartbeating the run', async () => {
+      const { storage, session, dispatcher } = await setUpOpenBinding({ ownerId: 'worker-2', heartbeatAt: Date.now() });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect(session.sendSignal).not.toHaveBeenCalled();
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'retry',
+        failureCode: 'session_unavailable',
+        lastError: expect.stringContaining('in flight on another dispatcher'),
+      });
+    });
+
+    it('stamps ownership on the run it starts and heartbeats it until the run settles', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+      try {
+        const seed = await createFactoryStorageForTests();
+        const storage = seed.workItems;
+        const { item, transitionService } = await queueDecision(storage, {
+          type: 'invokeSkill',
+          role: 'work',
+          skillName: 'understand-issue',
+          idempotencyKey: 'heartbeat-open-run',
+        });
+        const binding = await bindWorkRun(storage, item.id);
+        const { controller, session, emitAgentEnd } = createSession(undefined, {
+          signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+          streamActive: true,
+        });
+        controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: binding.threadId }]);
+        observeSessionRunEnd(session, { audit: seed.audit });
+        const dispatcher = new FactoryDecisionDispatcher({
+          controller: controller as never,
+          isAutoRunEnabled: async () => true,
+          transitionService,
+          storage,
+          audit: seed.audit,
+          ownerId: 'worker-1',
+        });
+
+        const dispatch = dispatcher.runOnce();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(session.sendSignal).toHaveBeenCalledTimes(1);
+        const startedAt = Date.now();
+        expect(await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })).toEqual([
+          expect.objectContaining({ bindingId: binding.id, ownerId: 'worker-1', heartbeatAt: startedAt }),
+        ]);
+
+        // A remote replica reading the ledger during the run must keep seeing a fresh claim.
+        await vi.advanceTimersByTimeAsync(25_000);
+        const [entry] = (await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })) as Array<{
+          heartbeatAt: number;
+        }>;
+        expect(entry.heartbeatAt).toBeGreaterThan(startedAt);
+        expect(Date.now() - entry.heartbeatAt).toBeLessThan(FACTORY_DISPATCH_CONSTANTS.openRunStaleMs);
+
+        controller.listActiveThreadRuns.mockReturnValue([]);
+        emitAgentEnd('complete');
+        await dispatch;
+        expect(await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })).toEqual([]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  it('serializes concurrently claimed skill decisions for the same binding', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'same-binding-first',
+    });
+    await bindWorkRun(storage, item.id);
+    const current = await storage.get({ orgId: 'org-1', id: item.id });
+    if (!current) throw new Error('Expected work item');
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'same-binding-second', triggerType: 'rule' },
+      configVersion: 'rules-v1',
+      expectedRevision: current.revision,
+      actor: { type: 'system', id: 'factory-rule-dispatcher' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'invokeSkill',
+          role: 'work',
+          skillName: 'understand-issue',
+          idempotencyKey: 'same-binding-second',
+        },
+      ],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const { controller, session, emitAgentEnd } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    const dispatch = dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
+    emitAgentEnd('complete');
+    await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledTimes(2));
+    emitAgentEnd('complete');
+    await dispatch;
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID)).map(row => row.status)).toEqual([
+      'succeeded',
+      'succeeded',
+    ]);
+  });
+
+  it('fails a wake dispatch terminally when the terminal event is not observed', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
     try {
@@ -1825,11 +2279,13 @@ describe('FactoryDecisionDispatcher', () => {
       await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs);
       await dispatch;
 
-      // An unobserved run end is the silent-stall failure mode: the decision
-      // must fail for redelivery instead of completing on nothing.
+      // Once delivery was admitted, a missing terminal event cannot be retried
+      // safely: another generation could duplicate work that actually started.
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
-        status: 'retry',
+        status: 'failed',
         attempts: 1,
+        deliveryGeneration: 0,
+        failureCode: 'run_terminal_event_missing',
         lastError: expect.stringContaining('terminal event was not observed'),
       });
       expect(getAgentEndListenerCount()).toBe(0);
@@ -2086,7 +2542,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
-  it('retries a kickoff that was queued onto an ending run instead of reporting success', async () => {
+  it('fails terminally when a kickoff remains queued after an ending run', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
@@ -2135,8 +2591,12 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(decision?.status).toBe('retry');
-    expect(decision?.lastError).toContain('never reached the agent');
+    expect(decision).toMatchObject({
+      status: 'failed',
+      deliveryGeneration: 0,
+      failureCode: 'skill_delivery_ambiguous',
+      lastError: expect.stringContaining('never reached the agent'),
+    });
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
@@ -3510,7 +3970,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(record?.lastError).toContain('did not reach the agent');
   });
 
-  it('retries the skill kickoff when acceptance carries no delivery action', async () => {
+  it('fails terminally when acceptance carries no delivery action', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
@@ -3555,8 +4015,12 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(record?.status).toBe('retry');
-    expect(record?.lastError).toContain('did not reach the agent');
+    expect(record).toMatchObject({
+      status: 'failed',
+      deliveryGeneration: 0,
+      failureCode: 'skill_delivery_ambiguous',
+      lastError: expect.stringContaining('did not reach the agent'),
+    });
   });
 
   it('prepares a missing binding before dispatching a rule-driven skill', async () => {
@@ -4107,6 +4571,127 @@ describe('FactoryDecisionDispatcher', () => {
     expect(linked).toMatchObject({ parentWorkItemId: parent.id, stages: ['intake'] });
     expect(intakeEntered).toHaveBeenCalledTimes(1);
     expect(await decisionByKey(storage, 'linked-1')).toMatchObject({ status: 'succeeded' });
+  });
+
+  it('spends a linked-item decision when another project holds the claim for its record', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await storage.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: 'other-project',
+      input: {
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-1' },
+        claimKey: 'linear:issue:1',
+        title: 'ENG-1: held elsewhere',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const parent = await createItem(storage);
+    const boards = createLifecycleTestRegistry({
+      execute: {
+        issue: {
+          onEnter: () => ({
+            type: 'upsertLinkedWorkItem',
+            idempotencyKey: 'linked-claimed',
+            board: 'work',
+            source: 'linear-issue',
+            sourceKey: 'linear:ENG-1',
+            claimKey: 'linear:issue:1',
+            title: 'ENG-1: held elsewhere',
+            url: null,
+            stage: 'intake',
+          }),
+        },
+      },
+    });
+    const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: parent.id,
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: parent.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'move-claimed' },
+      cause: 'test',
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const filedHere = (await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).filter(
+      item => item.externalSource?.externalId === 'linear:ENG-1',
+    );
+    expect(filedHere).toEqual([]);
+    expect(await decisionByKey(storage, 'linked-claimed')).toMatchObject({ status: 'succeeded' });
+  });
+
+  it('adopts the claim on a linked card filed before claims existed', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const legacy = await storage.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-1' },
+        title: 'ENG-1: filed earlier',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    expect(legacy.item.claimKey).toBeNull();
+    const parent = await createItem(storage);
+    const boards = createLifecycleTestRegistry({
+      execute: {
+        issue: {
+          onEnter: () => ({
+            type: 'upsertLinkedWorkItem',
+            idempotencyKey: 'linked-adopt',
+            board: 'work',
+            source: 'linear-issue',
+            sourceKey: 'linear:ENG-1',
+            claimKey: 'linear:issue:1',
+            title: 'ENG-1: filed earlier',
+            url: null,
+            stage: 'intake',
+          }),
+        },
+      },
+    });
+    const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: parent.id,
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: parent.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'move-adopt' },
+      cause: 'test',
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(await storage.get({ orgId: 'org-1', id: legacy.item.id })).toMatchObject({ claimKey: 'linear:issue:1' });
+    expect(await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toHaveLength(2);
   });
 
   it('removes a newly materialized linked item when its initial Intake entry is rejected', async () => {

@@ -1,6 +1,5 @@
 import type { FeedbackItem } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -80,7 +79,7 @@ export default function InboxPage() {
     selectedIndex >= 0 && selectedIndex < feedbackQuery.items.length - 1
       ? feedbackQuery.items[selectedIndex + 1]
       : undefined;
-  const showPanel = !!selectedTraceId && !!selectedFeedbackId;
+  const showPanel = !!selectedTraceId && !!selectedFeedbackId && !!selectedFeedback;
 
   const markReviewed = (feedbackId: string) => {
     updateReviewStatus.mutate(
@@ -102,14 +101,7 @@ export default function InboxPage() {
 
   return (
     <div className="relative h-full overflow-hidden">
-      <PageLayout height="full">
-        <PageLayout.TopArea>
-          <PageHeader>
-            <PageHeader.Title>Inbox</PageHeader.Title>
-            <PageHeader.Description>Items waiting for review</PageHeader.Description>
-          </PageHeader>
-        </PageLayout.TopArea>
-
+      <PageLayout height="full" className="grid-rows-[minmax(0,1fr)]">
         <PageLayout.MainArea className="min-h-0 overflow-hidden">
           {isInboxEmpty ? (
             <InboxEmptyState />
@@ -121,7 +113,7 @@ export default function InboxPage() {
               className="grid h-full min-h-0 grid-rows-[auto_1fr]"
             >
               <TabList variant="pill-ghost">
-                <Tab value="feedback" className="px-3 py-2.5">
+                <Tab value="feedback">
                   <Icon size="sm">
                     <MessageSquare />
                   </Icon>
@@ -134,7 +126,7 @@ export default function InboxPage() {
                     </Badge>
                   )}
                 </Tab>
-                <Tab value="dataset" className="px-3 py-2.5">
+                <Tab value="dataset">
                   <Icon size="sm">
                     <ClipboardCheck />
                   </Icon>
@@ -178,19 +170,16 @@ export default function InboxPage() {
         </PageLayout.MainArea>
       </PageLayout>
 
-      {showPanel && selectedTraceId && selectedFeedback && (
-        <InboxTracePanel
-          key={`${selectedFeedbackId}:${selectedTraceId}`}
-          feedback={selectedFeedback}
-          traceId={selectedTraceId}
-          initialSpanId={selectedSpanId}
-          onClose={closePanel}
-          onPrevious={previousFeedback ? () => selectFeedback(previousFeedback) : undefined}
-          onNext={nextFeedback ? () => selectFeedback(nextFeedback) : undefined}
-          onMarkReviewed={() => selectedFeedbackId && markReviewed(selectedFeedbackId)}
-          isMarkingReviewed={updateReviewStatus.isPending}
-        />
-      )}
+      <InboxTracePanel
+        feedback={showPanel ? selectedFeedback : undefined}
+        traceId={showPanel ? selectedTraceId : undefined}
+        initialSpanId={selectedSpanId}
+        onClose={closePanel}
+        onPrevious={previousFeedback ? () => selectFeedback(previousFeedback) : undefined}
+        onNext={nextFeedback ? () => selectFeedback(nextFeedback) : undefined}
+        onMarkReviewed={() => selectedFeedbackId && markReviewed(selectedFeedbackId)}
+        isMarkingReviewed={updateReviewStatus.isPending}
+      />
     </div>
   );
 }

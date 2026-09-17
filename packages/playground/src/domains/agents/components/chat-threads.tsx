@@ -1,11 +1,13 @@
 import type { StorageThreadType } from '@mastra/core/memory';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import {
   ThreadList,
   ThreadListEmpty,
   ThreadListItem,
   ThreadListItems,
   ThreadListNewItem,
+  ThreadListSeparator,
 } from '@mastra/playground-ui/components/ThreadList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -70,10 +72,17 @@ export const ChatThreads = ({
                   </Icon>
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right">Hide threads panel</TooltipContent>
+              <TooltipContent side="right">
+                <span className="inline-flex items-center gap-1.5">
+                  Hide threads panel
+                  <Kbd size="xs">{'{'}</Kbd>
+                </span>
+              </TooltipContent>
             </Tooltip>
           )}
         </div>
+
+        <ThreadListSeparator />
 
         {threads.length === 0 ? (
           <ThreadListEmpty>Your conversations will appear here once you start chatting!</ThreadListEmpty>

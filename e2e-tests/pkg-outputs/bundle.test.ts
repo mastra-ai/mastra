@@ -63,6 +63,7 @@ describe.for(
         pkgName === '@mastra/playground-ui' ||
           pkgName === '@mastra/code-sdk' ||
           pkgName === '@mastra/factory' ||
+          pkgName === '@mastra/server-adapters-test-suite' ||
           pkgName === 'mastra' ||
           pkgName.startsWith('@internal/'),
       )('should use .cjs and .d.ts extensions when using require', async () => {

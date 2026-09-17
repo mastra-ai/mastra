@@ -22,8 +22,8 @@ import {
 } from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
-import type { MessageFactoryPart } from '@mastra/react';
 import { useSpeechRecognition } from '@mastra/react';
+import type { MessageFactoryPart } from '@mastra/react/ui';
 import { ArrowUp, Mic } from 'lucide-react';
 import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -167,7 +167,7 @@ export const Thread = ({
             <ThreadRailLayer turns={threadRailTurns} />
             <ChatShell.Content>
               {isEmpty && isHistoryLoading ? (
-                <ChatShell.Column data-testid="thread-history-skeleton" aria-busy="true" className="flex-1 py-6">
+                <ChatShell.Column data-testid="thread-history-skeleton" aria-busy="true" className="flex-1 py-4">
                   <ChatMessagesLoadingSkeleton />
                 </ChatShell.Column>
               ) : isEmpty ? (
@@ -176,7 +176,7 @@ export const Thread = ({
                 <ChatShell.Column
                   ref={messagesContainerRef}
                   data-testid="thread-message-column"
-                  className="relative flex-1 gap-6 py-6"
+                  className="relative flex-1 gap-4 py-4"
                 >
                   <BracketOverlay containerRef={messagesContainerRef} />
                   {/* Everything already here when the reader arrived is theirs; what lands after fades in. */}
@@ -190,7 +190,7 @@ export const Thread = ({
                           key={group.key}
                           opensTurn={group.opensTurn}
                           holdsRoom={holdsRoom}
-                          className="gap-6"
+                          className="gap-4"
                         >
                           {group.entries.map(message => (
                             <MessageScrollerItem

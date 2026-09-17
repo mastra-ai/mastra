@@ -73,7 +73,7 @@ import type {
   StorageListThreadsOutput,
   CreateIndexOptions,
   StorageCloneThreadInput,
-  StorageCloneThreadOutput,
+  StorageCopyThreadOutput,
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
   ObservationalMemoryHistoryOptions,
@@ -532,6 +532,72 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
+  /**
+   * Atomically reassign a thread and all of its messages to a different resource.
+   *
+   * Runs inside a single transaction and takes a `SELECT ... FOR UPDATE` row lock on the
+   * thread, so overlapping transfers of the same thread serialize and can never interleave
+   * the thread update with the message update. Either both the thread and every message move
+   * to the new resource, or neither does — there is no split-ownership window. The thread's
+   * `createdAt` is preserved. Callers are responsible for authorizing the reassignment.
+   */
+  async updateThreadResourceId({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<StorageThreadType> {
+    const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+
+    try {
+      return await this.#db.client.tx(async t => {
+        // Lock the thread row for the duration of the transaction. Concurrent transfers of the
+        // same thread block here until this transaction commits, so they cannot interleave.
+        const thread = await t.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
+          `SELECT * FROM ${threadsTable} WHERE id = $1 FOR UPDATE`,
+          [threadId],
+        );
+
+        if (!thread) {
+          throw new Error(`Thread "${threadId}" not found`);
+        }
+
+        const normalized: StorageThreadType = {
+          id: thread.id,
+          resourceId: thread.resourceId,
+          title: thread.title,
+          metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+          createdAt: thread.createdAtZ || thread.createdAt,
+          updatedAt: thread.updatedAtZ || thread.updatedAt,
+        };
+
+        if (thread.resourceId === resourceId) {
+          return normalized;
+        }
+
+        await t.none(
+          `UPDATE ${threadsTable} SET "resourceId" = $1, "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id = $2`,
+          [resourceId, threadId],
+        );
+        await t.none(`UPDATE ${messagesTable} SET "resourceId" = $1 WHERE thread_id = $2`, [resourceId, threadId]);
+
+        return { ...normalized, resourceId, updatedAt: new Date() };
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'UPDATE_THREAD_RESOURCE_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId },
+        },
+        error,
+      );
+    }
+  }
+
   public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 
@@ -612,7 +678,7 @@ export class MemoryPG extends MemoryStorage {
 
       const limitValue = perPageInput === false ? total : perPage;
       // Select both standard and timezone-aware columns (*Z) for proper UTC timestamp handling
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY COALESCE("${field}Z", "${field}") ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY COALESCE("${field}Z", "${field}") ${direction}, "id" ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
       const rows = await this.#db.readClient.manyOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         dataQuery,
         [...queryParams, limitValue, offset],
@@ -839,12 +905,14 @@ export class MemoryPG extends MemoryStorage {
       const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
       const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
 
-      if (aValue == null && bValue == null) return a.id.localeCompare(b.id);
+      const idOrder = direction === 'ASC' ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id);
+
+      if (aValue == null && bValue == null) return idOrder;
       if (aValue == null) return 1;
       if (bValue == null) return -1;
 
       if (aValue === bValue) {
-        return a.id.localeCompare(b.id);
+        return idOrder;
       }
 
       if (typeof aValue === 'number' && typeof bValue === 'number') {
@@ -1166,7 +1234,7 @@ export class MemoryPG extends MemoryStorage {
       // instead of materializing/seq-scanning the whole thread. createdAt and createdAtZ
       // always store the same instant (createdAtZ is a TIMESTAMPTZ copy), so row selection
       // under LIMIT is identical. This mirrors the index-safe ordering in _getIncludedMessages.
-      const orderByStatement = `ORDER BY "${field}" ${direction}`;
+      const orderByStatement = `ORDER BY "${field}" ${direction}, "id" ${direction}`;
 
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
@@ -1377,7 +1445,7 @@ export class MemoryPG extends MemoryStorage {
       // instead of materializing/seq-scanning the whole thread. createdAt and createdAtZ
       // always store the same instant (createdAtZ is a TIMESTAMPTZ copy), so row selection
       // under LIMIT is identical. This mirrors the index-safe ordering in _getIncludedMessages.
-      const orderByStatement = `ORDER BY "${field}" ${direction}`;
+      const orderByStatement = `ORDER BY "${field}" ${direction}, "id" ${direction}`;
 
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
@@ -1938,7 +2006,7 @@ export class MemoryPG extends MemoryStorage {
     return updatedResource;
   }
 
-  async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
+  async copyThread(args: StorageCloneThreadInput): Promise<StorageCopyThreadOutput> {
     const { sourceThreadId, newThreadId: providedThreadId, resourceId, title, metadata, options } = args;
 
     // Get the source thread
@@ -1971,17 +2039,12 @@ export class MemoryPG extends MemoryStorage {
     const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     const messageTableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
 
-    const hydrateMessages = options?.hydrateMessages ?? true;
-
     try {
       return await this.#db.client.tx(async t => {
-        // Build message query with filters. When not hydrating, we only need the ids
-        // (and createdAt for ordering / clone metadata) — content is copied inside the
-        // database via INSERT … SELECT and never returned to the JS heap.
-        const messageColumns = hydrateMessages
-          ? `id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`
-          : `id, "createdAt"`;
-        let messageQuery = `SELECT ${messageColumns}
+        // Build message query with filters. Only ids (and createdAt for ordering / clone
+        // metadata) are read here — content is copied inside the database via
+        // INSERT … SELECT and never returned to the JS heap.
+        let messageQuery = `SELECT id, "createdAt"
                             FROM ${messageTableName} WHERE thread_id = $1`;
         const messageParams: any[] = [sourceThreadId];
         let paramIndex = 2;
@@ -2012,7 +2075,10 @@ export class MemoryPG extends MemoryStorage {
           messageQuery = limitQuery;
         }
 
-        const sourceMessages = await t.manyOrNone<MessageRowFromDB>(messageQuery, messageParams);
+        const sourceMessages = await t.manyOrNone<Pick<MessageRowFromDB, 'id' | 'createdAt'>>(
+          messageQuery,
+          messageParams,
+        );
 
         const now = new Date();
         const nowStr = toUtcISOString(now);
@@ -2064,8 +2130,8 @@ export class MemoryPG extends MemoryStorage {
           ],
         );
 
-        // Clone messages with new IDs
-        const clonedMessages: MastraDBMessage[] = [];
+        // Copy messages under new IDs. content/role/type are read from the source row
+        // within SQL and never materialized in the JS heap.
         const messageIdMap: Record<string, string> = {};
         const targetResourceId = resourceId || sourceThread.resourceId;
 
@@ -2073,63 +2139,20 @@ export class MemoryPG extends MemoryStorage {
           const newMessageId = crypto.randomUUID();
           messageIdMap[sourceMsg.id] = newMessageId;
 
-          if (!hydrateMessages) {
-            // Copy the row inside the database. content/role/type are read from the
-            // source row within SQL and never materialized in the JS heap.
-            const insertResult = await t.query(
-              `INSERT INTO ${messageTableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
-               SELECT $1, $2, content, "createdAt", "createdAtZ", role, type, $3
-               FROM ${messageTableName} WHERE id = $4`,
-              [newMessageId, newThreadId, targetResourceId, sourceMsg.id],
-            );
-            if (insertResult.rowCount !== 1) {
-              throw new Error(
-                `Failed to clone message ${sourceMsg.id}: expected 1 row copied but got ${insertResult.rowCount}`,
-              );
-            }
-            continue;
-          }
-
-          const normalizedMsg = this.normalizeMessageRow(sourceMsg);
-          let parsedContent = normalizedMsg.content;
-          try {
-            parsedContent = JSON.parse(normalizedMsg.content);
-          } catch {
-            // use content as is
-          }
-          const createdAt = toUtcISOString(new Date(normalizedMsg.createdAt));
-
-          await t.none(
+          const insertResult = await t.query(
             `INSERT INTO ${messageTableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-            [
-              newMessageId,
-              newThreadId,
-              typeof normalizedMsg.content === 'string' ? normalizedMsg.content : JSON.stringify(normalizedMsg.content),
-              createdAt,
-              createdAt,
-              normalizedMsg.role,
-              normalizedMsg.type || 'v2',
-              targetResourceId,
-            ],
+             SELECT $1, $2, content, "createdAt", "createdAtZ", role, type, $3
+             FROM ${messageTableName} WHERE id = $4`,
+            [newMessageId, newThreadId, targetResourceId, sourceMsg.id],
           );
-
-          clonedMessages.push({
-            id: newMessageId,
-            threadId: newThreadId,
-            content: parsedContent,
-            role: normalizedMsg.role as MastraDBMessage['role'],
-            type: normalizedMsg.type,
-            createdAt: new Date(normalizedMsg.createdAt as string),
-            resourceId: targetResourceId,
-          });
+          if (insertResult.rowCount !== 1) {
+            throw new Error(
+              `Failed to copy message ${sourceMsg.id}: expected 1 row copied but got ${insertResult.rowCount}`,
+            );
+          }
         }
 
-        return {
-          thread: newThread,
-          clonedMessages,
-          messageIdMap,
-        };
+        return { thread: newThread, messageIdMap };
       });
     } catch (error) {
       if (error instanceof MastraError) {

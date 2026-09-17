@@ -7,7 +7,7 @@ description: "Browse Deep Infra model IDs, capabilities, context windows, and pr
 
 # <img src="https://models.dev/logos/deepinfra.svg" alt="Deep Infra logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Deep Infra
 
-Access 67 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
+Access 68 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
 
 Learn more in the [Deep Infra documentation](https://deepinfra.com/models).
 
@@ -595,13 +595,25 @@ for await (const chunk of stream) {
     "model": "deepinfra/Qwen/Qwen3.8-27B",
     "imageInput": true,
     "audioInput": false,
-    "videoInput": false,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 32768,
-    "inputCost": 0.4,
-    "outputCost": 3
+    "inputCost": 0.2,
+    "outputCost": 2.5
+  },
+  {
+    "model": "deepinfra/Qwen/Qwen3.8-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.113,
+    "outputCost": 0.382
   },
   {
     "model": "deepinfra/Qwen/Qwen3.8-Max",

@@ -186,8 +186,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 256000,
     "maxOutput": 256000,
-    "inputCost": 0.334,
-    "outputCost": 1.003
+    "inputCost": 0.368,
+    "outputCost": 1.103
   },
   {
     "model": "cortecs/deepseek-r1-0528",
@@ -222,8 +222,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 1048576,
-    "inputCost": 0.13,
-    "outputCost": 0.28
+    "inputCost": 0.055,
+    "outputCost": 0.174
   },
   {
     "model": "cortecs/deepseek-v4-pro",
@@ -248,6 +248,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 64000,
     "inputCost": 2,
     "outputCost": 3.999
+  },
+  {
+    "model": "cortecs/deepseek-v4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 64000,
+    "inputCost": 0.5,
+    "outputCost": 1.499
   },
   {
     "model": "cortecs/devstral-2512",
@@ -450,8 +462,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 1000000,
-    "inputCost": 1.2,
-    "outputCost": 4.2
+    "inputCost": 1.1,
+    "outputCost": 2.99
   },
   {
     "model": "cortecs/glm-5.3",
@@ -474,8 +486,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 1048576,
-    "inputCost": 0.201,
-    "outputCost": 0.5
+    "inputCost": 0.1,
+    "outputCost": 0.35
   },
   {
     "model": "cortecs/glm-5v-turbo",
@@ -714,8 +726,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.773,
-    "outputCost": 3.38
+    "inputCost": 0.516,
+    "outputCost": 2.869
   },
   {
     "model": "cortecs/kimi-k2.7-code",
@@ -726,8 +738,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.75,
-    "outputCost": 3.5
+    "inputCost": 0.706,
+    "outputCost": 3.208
   },
   {
     "model": "cortecs/kimi-k3",
@@ -740,18 +752,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1048576,
     "inputCost": 3,
     "outputCost": 14.999
-  },
-  {
-    "model": "cortecs/llama-3.1-405b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 128000,
-    "inputCost": 1.95,
-    "outputCost": 1.95
   },
   {
     "model": "cortecs/llama-3.1-8b-instruct",
@@ -774,8 +774,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 131000,
     "maxOutput": 131000,
-    "inputCost": 0.129,
-    "outputCost": 0.399
+    "inputCost": 0.724,
+    "outputCost": 0.724
   },
   {
     "model": "cortecs/minicpm-v-4.5",
@@ -858,8 +858,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 256000,
     "maxOutput": 256000,
-    "inputCost": 0.223,
-    "outputCost": 0.223
+    "inputCost": 0.24,
+    "outputCost": 0.24
   },
   {
     "model": "cortecs/ministral-3b-2512",
@@ -870,8 +870,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 256000,
     "maxOutput": 256000,
-    "inputCost": 0.111,
-    "outputCost": 0.111
+    "inputCost": 0.123,
+    "outputCost": 0.123
   },
   {
     "model": "cortecs/ministral-8b-2512",
@@ -882,8 +882,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 256000,
     "maxOutput": 256000,
-    "inputCost": 0.167,
-    "outputCost": 0.167
+    "inputCost": 0.179,
+    "outputCost": 0.179
   },
   {
     "model": "cortecs/mistral-7b-instruct-v0.2",
@@ -930,8 +930,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 256000,
     "maxOutput": 256000,
-    "inputCost": 0.557,
-    "outputCost": 1.671
+    "inputCost": 0.613,
+    "outputCost": 1.838
   },
   {
     "model": "cortecs/mistral-medium-3.5",
@@ -942,8 +942,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 256000,
     "maxOutput": 256000,
-    "inputCost": 1.393,
-    "outputCost": 7.13
+    "inputCost": 1.532,
+    "outputCost": 7.843
   },
   {
     "model": "cortecs/mistral-nemo-instruct-2407",
@@ -978,8 +978,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 256000,
-    "inputCost": 0.143,
-    "outputCost": 0.568
+    "inputCost": 0.156,
+    "outputCost": 0.625
   },
   {
     "model": "cortecs/mistral-small-3.2-24b-instruct-2506",
@@ -1266,8 +1266,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.334,
-    "outputCost": 2.451
+    "inputCost": 0.1,
+    "outputCost": 0.4
   },
   {
     "model": "cortecs/qwen3.8-flash-next",
@@ -1314,8 +1314,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 32000,
     "maxOutput": 32000,
-    "inputCost": 0.111,
-    "outputCost": 0.334
+    "inputCost": 0.123,
+    "outputCost": 0.368
   }
 ]}
 />

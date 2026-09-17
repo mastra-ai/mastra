@@ -34,7 +34,6 @@ import * as path from 'node:path';
 import type { MastraBrowser } from '../browser';
 import type { IMastraLogger } from '../logger';
 import { RequestContext } from '../request-context';
-import { pMap, pMapSkip } from '../utils/p-map';
 import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError, WorkspaceNotReadyError } from './errors';
@@ -552,10 +551,27 @@ function parseBM25Config(
 // =============================================================================
 
 /**
- * Workspace provides agents with filesystem and execution capabilities.
+ * Provides agents with filesystem and execution capabilities through configured providers.
  *
- * At minimum, a workspace has either a filesystem or a sandbox (or both).
- * Users pass instantiated provider objects to the constructor.
+ * Supply a filesystem, a sandbox, or both. File operations require a filesystem;
+ * command execution requires a sandbox.
+ *
+ * @example
+ * ```typescript
+ * import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+ *
+ * const workspace = new Workspace({
+ *   filesystem: new LocalFilesystem({ basePath: './my-workspace' }),
+ * });
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Workspace documentation](https://mastra.ai/docs/workspace/overview)
+ * if packaged docs are unavailable.
  */
 export class Workspace<
   TFilesystem extends WorkspaceFilesystem | undefined = WorkspaceFilesystem | undefined,
@@ -1123,9 +1139,10 @@ export class Workspace<
     }
 
     const fs = this._fs;
+    const { default: pMap, pMapSkip } = await import('p-map');
     return pMap(
       files,
-      async (filePath): Promise<{ filePath: string; docs: IndexDocument[] } | typeof pMapSkip> => {
+      async (filePath): Promise<{ filePath: string; docs: IndexDocument[] } | typeof import('p-map').pMapSkip> => {
         try {
           const content = (await fs.readFile(filePath, { encoding: 'utf-8' })) as string;
           const chunks = splitIntoChunks(content);
@@ -1140,7 +1157,7 @@ export class Workspace<
                 }));
           return { filePath, docs };
         } catch {
-          return pMapSkip;
+          return pMapSkip as typeof import('p-map').pMapSkip;
         }
       },
       { stopOnError: false, concurrency: FS_READ_CONCURRENCY },
@@ -1158,6 +1175,7 @@ export class Workspace<
     if (!engine) return [];
     try {
       const entries = await this.batchReadFiles(paths);
+      const pMap = (await import('p-map')).default;
       // Clear stale single-doc/chunked entries from previous indexing passes.
       await pMap(entries, ({ filePath }) => engine.removeSource(filePath), {
         concurrency: FS_READ_CONCURRENCY,
@@ -1656,6 +1674,11 @@ export class Workspace<
    * Called by Mastra when the logger is set.
    * @internal
    */
+  /** Logger set by Mastra, if any. */
+  get logger(): IMastraLogger | undefined {
+    return this._logger;
+  }
+
   __setLogger(logger: IMastraLogger): void {
     this._logger = logger;
 

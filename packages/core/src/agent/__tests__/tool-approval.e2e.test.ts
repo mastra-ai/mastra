@@ -1,7 +1,7 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { getLLMTestMode, defaultNameGenerator, getLLMRecordingsDir } from '@internal/llm-recorder';
-import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
+import { canonicalizeRequestJsonSchema, createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
@@ -23,6 +23,11 @@ function normalizeDynamicRunIds({ url, body }: { url: string; body: unknown }): 
     /\\"suspendedToolRunId\\":\\"[^"]+\\"/g,
     '\\"suspendedToolRunId\\":\\"NORMALIZED\\"',
   );
+  stringifiedBody = stringifiedBody.replaceAll(/"suspendedToolCallId":"[^"]+"/g, '"suspendedToolCallId":"NORMALIZED"');
+  stringifiedBody = stringifiedBody.replaceAll(
+    /\\"suspendedToolCallId\\":\\"[^"]+\\"/g,
+    '\\"suspendedToolCallId\\":\\"NORMALIZED\\"',
+  );
 
   return { url, body: JSON.parse(stringifiedBody) };
 }
@@ -38,7 +43,7 @@ beforeEach(async c => {
       createHash('sha256').update(c.task.name).digest('hex').slice(0, 8),
     )}`,
     exactMatch: true,
-    transformRequest: normalizeDynamicRunIds,
+    transformRequest: req => canonicalizeRequestJsonSchema(normalizeDynamicRunIds(req)),
     recordingsDir: join(getLLMRecordingsDir(c.task.file.filepath), defaultNameGenerator(c.task.file.filepath)),
   });
   await mockGateway.start();

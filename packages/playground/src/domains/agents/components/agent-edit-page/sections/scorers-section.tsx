@@ -182,7 +182,7 @@ function ScorerConfigPanel({
           <Icon size="sm">
             <JudgeIcon className="text-neutral3" />
           </Icon>
-          <span className="text-neutral6 text-xs font-medium">{scorerName}</span>
+          <span className="text-neutral6 text-ui-sm font-medium">{scorerName}</span>
         </div>
         {!readOnly && (
           <Button type="button" tooltip={`Remove ${scorerName}`} onClick={onRemove} variant="ghost" size="icon-sm">
@@ -196,13 +196,13 @@ function ScorerConfigPanel({
         value={description}
         onChange={e => onDescriptionChange(e.target.value)}
         placeholder="Custom description for this scorer..."
-        className="bg-surface3 min-h-[40px] border-dashed px-2 py-1 text-xs"
+        className="bg-surface3 text-ui-sm min-h-[40px] border-dashed px-2 py-1"
         size="sm"
         disabled={readOnly}
       />
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`sampling-type-${scorerId}`} className="text-neutral4 text-xs">
+        <Label htmlFor={`sampling-type-${scorerId}`} className="text-neutral4 text-ui-sm">
           Sampling
         </Label>
         <RadioGroup
@@ -214,13 +214,13 @@ function ScorerConfigPanel({
         >
           <div className="flex items-center gap-2">
             <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-none`} className="text-neutral5 cursor-pointer text-sm">
+            <Label htmlFor={`${scorerId}-none`} className="text-neutral5 text-ui-md cursor-pointer">
               None (evaluate all)
             </Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-ratio`} className="text-neutral5 cursor-pointer text-sm">
+            <Label htmlFor={`${scorerId}-ratio`} className="text-neutral5 text-ui-md cursor-pointer">
               Ratio (percentage)
             </Label>
           </div>
@@ -228,7 +228,7 @@ function ScorerConfigPanel({
 
         {samplingType === 'ratio' && (
           <div className="mt-1 flex flex-col gap-1.5">
-            <Label htmlFor={`rate-${scorerId}`} className="text-neutral4 text-xs">
+            <Label htmlFor={`rate-${scorerId}`} className="text-neutral4 text-ui-sm">
               Sample Rate (0-1)
             </Label>
             <Input

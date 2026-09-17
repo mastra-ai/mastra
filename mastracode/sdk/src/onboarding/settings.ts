@@ -329,6 +329,8 @@ export interface GlobalSettings {
   shellPassthrough: ShellPassthroughSettings;
   // Hold-space voice input configuration
   voice: VoiceSettings;
+  // Native background execution for eligible Mastra Code tools
+  backgroundTools: BackgroundToolSettings;
   // Signal routing configuration
   signals: SignalSettings;
   // Read-only discovery of MCP servers configured by other coding agents
@@ -344,11 +346,18 @@ export interface McpDiscoverySettings {
   codexGlobal: boolean;
 }
 
+export interface BackgroundToolSettings {
+  /** Allow eligible Mastra Code tools to accept per-call background execution overrides. */
+  enabled: boolean;
+}
+
 export interface SignalSettings {
   /** Opt into local Unix socket PubSub for cross-process signal routing. */
   unixSocketPubSub: boolean;
   /** Experimental: enable GitHub PR subscription signals backed by gitcrawl. */
   experimentalGithubSignals: boolean;
+  /** Experimental: enable cross-agent communication (thread ownership advertisement, peer discovery, and agent connection tools). */
+  experimentalCrossAgentSignals: boolean;
   /** Poll interval for GitHub PR subscriptions. */
   githubPollIntervalMs: number;
 }
@@ -436,9 +445,11 @@ const DEFAULTS: GlobalSettings = {
   },
   shellPassthrough: { mode: 'default' },
   voice: { enabled: false, engine: defaultVoiceEngine(), provider: DEFAULT_STT_PROVIDER },
+  backgroundTools: { enabled: false },
   signals: {
     unixSocketPubSub: false,
     experimentalGithubSignals: false,
+    experimentalCrossAgentSignals: false,
     githubPollIntervalMs: GITHUB_POLL_INTERVAL_DEFAULT_MS,
   },
   mcp: { claudeCodeGlobal: false, codexGlobal: false },
@@ -462,6 +473,7 @@ function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boole
   return (
     left.unixSocketPubSub === right.unixSocketPubSub &&
     left.experimentalGithubSignals === right.experimentalGithubSignals &&
+    left.experimentalCrossAgentSignals === right.experimentalCrossAgentSignals &&
     left.githubPollIntervalMs === right.githubPollIntervalMs
   );
 }
@@ -529,6 +541,14 @@ function parseGithubPollIntervalMs(value: unknown): number {
   return Math.min(intervalMs, GITHUB_POLL_INTERVAL_MAX_MS);
 }
 
+function parseBackgroundToolSettings(rawBackgroundTools: unknown): BackgroundToolSettings {
+  const raw =
+    rawBackgroundTools && typeof rawBackgroundTools === 'object' ? (rawBackgroundTools as Record<string, unknown>) : {};
+  return {
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULTS.backgroundTools.enabled,
+  };
+}
+
 function parseSignalSettings(rawSignals: unknown): SignalSettings {
   const raw = rawSignals && typeof rawSignals === 'object' ? (rawSignals as Record<string, unknown>) : {};
   return {
@@ -538,6 +558,10 @@ function parseSignalSettings(rawSignals: unknown): SignalSettings {
       typeof raw.experimentalGithubSignals === 'boolean'
         ? raw.experimentalGithubSignals
         : DEFAULTS.signals.experimentalGithubSignals,
+    experimentalCrossAgentSignals:
+      typeof raw.experimentalCrossAgentSignals === 'boolean'
+        ? raw.experimentalCrossAgentSignals
+        : DEFAULTS.signals.experimentalCrossAgentSignals,
     githubPollIntervalMs: parseGithubPollIntervalMs(raw.githubPollIntervalMs),
   };
 }
@@ -875,6 +899,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         browser: parseBrowserSettings(raw.browser),
         shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
         voice: parseVoiceSettings(raw.voice),
+        backgroundTools: parseBackgroundToolSettings(raw.backgroundTools),
         signals: parseSignalSettings(raw.signals),
         mcp: parseMcpDiscoverySettings(raw.mcp),
         observability: parseObservabilitySettings(raw.observability),
@@ -1004,6 +1029,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       browser: parseBrowserSettings(raw.browser),
       shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
       voice: parseVoiceSettings(raw.voice),
+      backgroundTools: parseBackgroundToolSettings(raw.backgroundTools),
       signals: parseSignalSettings(raw.signals),
       mcp: parseMcpDiscoverySettings(raw.mcp),
       observability: parseObservabilitySettings(raw.observability),

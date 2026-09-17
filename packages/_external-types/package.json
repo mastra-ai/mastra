@@ -1,6 +1,6 @@
 {
   "name": "@internal/external-types",
-  "version": "0.0.82",
+  "version": "0.0.83",
   "description": "",
   "type": "module",
   "private": true,

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/docker",
-  "version": "0.8.0-alpha.0",
+  "version": "0.9.0-alpha.0",
   "description": "Docker container sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -31,12 +31,14 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
+    "@grpc/grpc-js": "^1.14.4",
     "dockerode": "^4.0.9",
     "tar-stream": "^3.1.7"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@internal/workspace": "workspace:*",
     "@internal/workspace-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/dockerode": "^4.0.1",
@@ -50,7 +52,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.12.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.67.0-0 <2.0.0-0"
   },
   "files": [
     "dist"

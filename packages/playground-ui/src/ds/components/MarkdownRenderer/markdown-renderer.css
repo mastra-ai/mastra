@@ -39,15 +39,15 @@
   }
 
   .mastra-markdown h1 {
-    font-size: 1.3em;
+    font-size: var(--text-header-sm);
   }
 
   .mastra-markdown h2 {
-    font-size: 1.15em;
+    font-size: var(--text-ui-lg);
   }
 
   .mastra-markdown h3 {
-    font-size: 1.05em;
+    font-size: var(--text-ui-md);
   }
 
   .mastra-markdown :is(h4, h5, h6) {

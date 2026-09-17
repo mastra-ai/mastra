@@ -163,7 +163,7 @@ export default function Scorer() {
   const hasNoScores = !isLoadingScores && scores.length === 0;
   const hasFilterApplied = selectedEntityOption?.value !== 'all';
 
-  const isStoredScorer = scorer?.scorer?.source === 'stored';
+  const isStoredScorer = scorer?.source === 'stored';
 
   const runDialog = scorerId ? (
     <ExperimentTriggerDialog
@@ -241,8 +241,7 @@ export default function Scorer() {
           />
           <ButtonsGroup>
             <ScoresColumnsMenu visibleColumns={columnsState.visibleColumns} toggleColumn={columnsState.toggleColumn} />
-            <Button variant="primary" onClick={() => setRunDialogOpen(true)}>
-              <Play />
+            <Button variant="primary" onClick={() => setRunDialogOpen(true)} icon={<Play />}>
               Run Experiment
             </Button>
             {scorerActionsMenu}

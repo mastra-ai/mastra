@@ -12,7 +12,7 @@ import { format } from 'date-fns/format';
 import { ArrowLeft, Copy, DatabaseIcon, FlaskConical, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { Link, Outlet, useParams, useNavigate, useSearchParams } from 'react-router';
+import { Link, useParams, useNavigate, useSearchParams } from 'react-router';
 import {
   DatasetItemsView,
   DatasetTagsEditor,
@@ -22,6 +22,7 @@ import {
   AddItemDialog,
   DeleteDatasetDialog,
 } from '@/domains/datasets';
+import { DatasetItemDrawer } from '@/domains/datasets/components/items/dataset-item-drawer';
 import { DatasetItemPanelProvider } from '@/domains/datasets/context/dataset-item-panel-context';
 import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDatasetItemsUrlState } from '@/domains/datasets/hooks/use-dataset-items-url-state';
@@ -87,8 +88,7 @@ function DatasetPage() {
           titleSlot="Dataset not found"
           descriptionSlot={`No dataset with id "${datasetId}".`}
           actionSlot={
-            <Button as={Link} to="/datasets">
-              <ArrowLeft />
+            <Button as={Link} to="/datasets" icon={<ArrowLeft />}>
               Back to Datasets
             </Button>
           }
@@ -133,8 +133,7 @@ function DatasetPage() {
               }
               rightSlot={
                 <ButtonsGroup>
-                  <Button as={Link} to={`/experiments?dataset=${datasetId}`}>
-                    <FlaskConical />
+                  <Button as={Link} to={`/experiments?dataset=${datasetId}`} icon={<FlaskConical />}>
                     View experiments
                   </Button>
                   <DatasetVersions
@@ -149,8 +148,7 @@ function DatasetPage() {
                       <TooltipTrigger asChild>
                         <span className="cursor-not-allowed">
                           <div className="pointer-events-none opacity-50" inert aria-disabled="true">
-                            <Button variant="primary">
-                              <Play />
+                            <Button variant="primary" icon={<Play />}>
                               Run Experiment
                             </Button>
                           </div>
@@ -159,8 +157,7 @@ function DatasetPage() {
                       <TooltipContent>Add items to the dataset before running an experiment</TooltipContent>
                     </Tooltip>
                   ) : (
-                    <Button variant="primary" onClick={() => setExperimentDialogOpen(true)}>
-                      <Play />
+                    <Button variant="primary" onClick={() => setExperimentDialogOpen(true)} icon={<Play />}>
                       Run Experiment
                     </Button>
                   )}
@@ -191,8 +188,8 @@ function DatasetPage() {
           </PageLayout.MainArea>
         </PageLayout>
 
-        {/* Item detail sub-route renders here as an absolute overlay panel */}
-        <Outlet />
+        {/* Item detail drawer; the `items/:itemId` child route only carries the breadcrumb. */}
+        <DatasetItemDrawer />
       </div>
 
       <ExperimentTriggerDialog

@@ -65,7 +65,16 @@ import type {
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
 } from './scores';
-import type { TraceQueryResponse, TrustedTraceQueryPlan } from './trace-query';
+import type {
+  GetTraceQueryValuesResponse,
+  QueryThreadsResult,
+  TraceQueryObservedFieldsResult,
+  TraceQueryResponse,
+  TrustedThreadQueryPlan,
+  TrustedTraceQueryObservedFieldsPlan,
+  TrustedTraceQueryPlan,
+  TrustedTraceQueryValuesPlan,
+} from './trace-query';
 import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -93,7 +102,13 @@ import type {
 import { extractBranchSpans, getBranchArgsSchema, toLightSpanRecord } from './tracing';
 import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './types';
 
-export type ObservabilityStorageFeature = 'delta-polling' | 'metrics' | 'logs' | 'trace-query';
+export type ObservabilityStorageFeature =
+  | 'delta-polling'
+  | 'metrics'
+  | 'logs'
+  | 'trace-query'
+  | 'trace-query-discovery'
+  | 'thread-query';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).
@@ -355,6 +370,44 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support advanced trace queries',
+    });
+  }
+
+  /**
+   * Discovers observed metadata fields over a validated trace population.
+   */
+  async getTraceQueryObservedFields(
+    _plan: TrustedTraceQueryObservedFieldsPlan,
+  ): Promise<TraceQueryObservedFieldsResult> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_TRACE_QUERY_DISCOVERY_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support trace-query discovery',
+    });
+  }
+
+  /**
+   * Discovers values for an eligible field over a validated trace population.
+   */
+  async getTraceQueryValues(_plan: TrustedTraceQueryValuesPlan): Promise<GetTraceQueryValuesResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_TRACE_QUERY_DISCOVERY_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support trace-query discovery',
+    });
+  }
+
+  /**
+   * Executes a validated thread-query plan.
+   */
+  async queryThreads(_plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_QUERY_THREADS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support advanced thread queries',
     });
   }
 

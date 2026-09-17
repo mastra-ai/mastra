@@ -1,6 +1,7 @@
 import { isValid, parse } from 'date-fns';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, Check } from 'lucide-react';
 import { useState } from 'react';
+import type { ReactElement } from 'react';
 import { Button } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
 import { DatePicker, TimePicker } from '@/ds/components/DateTimePicker';
@@ -32,11 +33,21 @@ export interface DateTimeRangePickerProps {
   dateFrom?: Date;
   dateTo?: Date;
   onDateChange?: (value: Date | undefined, type: 'from' | 'to') => void;
+  /**
+   * Called once with both ends when a custom range is applied. When provided it replaces
+   * the two `onDateChange` calls for that step, so consumers can write the range atomically.
+   */
+  onDateRangeChange?: (from: Date | undefined, to: Date | undefined) => void;
   disabled?: boolean;
   /** Subset of presets to show. If omitted, all presets are shown. */
   presets?: readonly DateRangePreset[];
   /** Size passed through to the trigger Button. Defaults to 'md'. */
   size?: ButtonProps['size'];
+  /**
+   * Replace the default Button trigger. Receives the current label (preset name or
+   * custom range) and must return an element the menu/popover can attach to.
+   */
+  renderTrigger?: (props: { label: string; disabled?: boolean }) => ReactElement;
 }
 
 export function DateTimeRangePicker({
@@ -45,9 +56,11 @@ export function DateTimeRangePicker({
   dateFrom,
   dateTo,
   onDateChange,
+  onDateRangeChange,
   disabled,
   presets,
   size = 'md',
+  renderTrigger,
 }: DateTimeRangePickerProps) {
   const visiblePresets = presets ? DATE_PRESETS.filter(p => presets.includes(p.value)) : DATE_PRESETS;
   const fallbackPreset: DateRangePreset = visiblePresets.find(p => p.value !== 'custom')?.value ?? 'all';
@@ -88,21 +101,28 @@ export function DateTimeRangePicker({
       return;
     }
     setCustomRangeError(undefined);
-    onDateChange?.(fromDate, 'from');
-    onDateChange?.(toDate, 'to');
+    if (onDateRangeChange) {
+      onDateRangeChange(fromDate, toDate);
+    } else {
+      onDateChange?.(fromDate, 'from');
+      onDateChange?.(toDate, 'to');
+    }
     setCustomRangeOpen(false);
   };
 
   if (preset === 'custom') {
+    const customLabel = `${dateFrom ? dateFrom.toLocaleDateString() : 'Start'} \u2013 ${dateTo ? dateTo.toLocaleDateString() : 'End'}`;
     return (
       <Popover open={customRangeOpen} onOpenChange={setCustomRangeOpen}>
-        <PopoverTrigger asChild>
-          <Button size={size} disabled={disabled}>
-            <CalendarIcon />
-            {dateFrom ? dateFrom.toLocaleDateString() : 'Start'} {' \u2013 '}
-            {dateTo ? dateTo.toLocaleDateString() : 'End'}
-          </Button>
-        </PopoverTrigger>
+        {renderTrigger ? (
+          <PopoverTrigger render={renderTrigger({ label: customLabel, disabled })} />
+        ) : (
+          <PopoverTrigger asChild>
+            <Button size={size} disabled={disabled} icon={<CalendarIcon />}>
+              {customLabel}
+            </Button>
+          </PopoverTrigger>
+        )}
         <PopoverContent align="start" className={cn('w-auto p-0')}>
           <div className={cn('flex')}>
             <div className={cn('border-r border-border1')}>
@@ -158,7 +178,7 @@ export function DateTimeRangePicker({
             >
               &larr; Presets
             </button>
-            <Button variant="primary" size="sm" onClick={applyCustomRange} disabled={disabled}>
+            <Button icon={<Check />} variant="primary" size="sm" onClick={applyCustomRange} disabled={disabled}>
               Apply
             </Button>
           </div>
@@ -169,12 +189,15 @@ export function DateTimeRangePicker({
 
   return (
     <DropdownMenu>
-      <DropdownMenu.Trigger asChild>
-        <Button size={size} disabled={disabled}>
-          <CalendarIcon />
-          {datePresetLabel}
-        </Button>
-      </DropdownMenu.Trigger>
+      {renderTrigger ? (
+        <DropdownMenu.Trigger render={renderTrigger({ label: datePresetLabel, disabled })} />
+      ) : (
+        <DropdownMenu.Trigger asChild>
+          <Button size={size} disabled={disabled} icon={<CalendarIcon />}>
+            {datePresetLabel}
+          </Button>
+        </DropdownMenu.Trigger>
+      )}
       <DropdownMenu.Content align="start">
         {visiblePresets.map(p => (
           <DropdownMenu.Item key={p.value} onSelect={() => handlePresetSelect(p.value)}>

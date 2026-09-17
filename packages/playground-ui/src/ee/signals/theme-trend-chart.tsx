@@ -64,7 +64,7 @@ export function ThemeTrendChart({ points, color }: { points: ThemeHistoryPoint[]
           );
         })}
       </div>
-      <div className="text-neutral3 mt-1 flex justify-between font-mono text-[11px]">
+      <div className="text-neutral3 text-ui-sm mt-1 flex justify-between font-mono">
         <span>{formatSnapshotDate(firstPoint.startedAt)}</span>
         <span>{formatSnapshotDate(lastPoint.startedAt)}</span>
       </div>

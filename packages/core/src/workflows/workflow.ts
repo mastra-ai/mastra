@@ -38,7 +38,7 @@ import type {
   ProcessorStreamWriter,
   ProcessorStreamWriterOptions,
 } from '../processors';
-import { ProcessorRunner, ProcessorState } from '../processors/runner';
+import { OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX, ProcessorRunner, ProcessorState } from '../processors/runner';
 import { createProcessorSendSignal } from '../processors/send-signal';
 import {
   resolveProcessorSpanAttributes,
@@ -300,6 +300,27 @@ function findStepInGraph(graph: SerializedStepFlowEntry[], stepId: string): Seri
  * @param params.outputSchema Zod schema defining the output structure
  * @param params.execute Function that performs the step's operations
  * @returns A Step object that can be added to the workflow
+ *
+ * @example
+ * ```typescript
+ * import { createStep } from '@mastra/core/workflows';
+ * import { z } from 'zod';
+ *
+ * const greet = createStep({
+ *   id: 'greet',
+ *   inputSchema: z.string(),
+ *   outputSchema: z.string(),
+ *   execute: async ({ inputData }) => `Hello, ${inputData}!`,
+ * });
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Workflow documentation](https://mastra.ai/docs/workflows/overview)
+ * if packaged docs are unavailable.
  */
 export function createStep<
   TStepId extends string,
@@ -738,6 +759,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
         messages,
         messageList,
         stepNumber,
+        runId: agentRunId,
         systemMessages,
         part,
         streamParts,
@@ -1055,6 +1077,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
       // This enables processor workflows to use .then(), .parallel(), .branch(), etc.
       const passThrough = {
         phase,
+        runId: agentRunId,
         // Auto-create MessageList from messages if not provided
         // This enables running processor workflows from the UI where messageList can't be serialized
         messageList: processorMessageList,
@@ -1216,6 +1239,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
                 messages: messages as MastraDBMessage[],
                 messageList: checkedMessageList,
                 stepNumber: stepNumber ?? 0,
+                runId: agentRunId,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 // Pass model/tools configuration fields - types match ProcessInputStepArgs
                 model: model!,
@@ -1255,6 +1279,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
                 ...passThrough,
                 messages,
                 ...validatedResult,
+                runId: agentRunId,
                 systemMessages: checkedMessageList.getSystemMessages(),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
@@ -1302,21 +1327,32 @@ export function createStepFromProcessor<TProcessorId extends string>(
 
               // Handle outputStream span lifecycle explicitly (not via executePhaseWithSpan)
               // because outputStream uses a per-processor span stored in mutableState
+              // Accumulates time spent inside the hook across chunks, beside the span.
+              const hookDurationKey = `${OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX}${processor.id}`;
+              const readHookDurationMs = () => (mutableState[hookDurationKey] as number | undefined) ?? 0;
               let result: ChunkType | null | undefined;
               try {
-                result = await processor.processOutputStream({
-                  ...baseContext,
-                  ...processorObservabilityContext,
-                  part: part as ChunkType,
-                  streamParts: (streamParts ?? []) as ChunkType[],
-                  state: mutableState,
-                  messageList: passThrough.messageList, // Optional for stream processing
-                });
+                const hookStart = performance.now();
+                try {
+                  result = await processor.processOutputStream({
+                    ...baseContext,
+                    ...processorObservabilityContext,
+                    part: part as ChunkType,
+                    streamParts: (streamParts ?? []) as ChunkType[],
+                    state: mutableState,
+                    messageList: passThrough.messageList, // Optional for stream processing
+                  });
+                } finally {
+                  mutableState[hookDurationKey] = readHookDurationMs() + (performance.now() - hookStart);
+                }
 
                 // End span on finish chunk
                 if (part && (part as ChunkType).type === 'finish') {
                   // Output just totalChunks (workflow processors don't track accumulated text yet)
-                  processorSpan?.end({ output: { totalChunks: (streamParts ?? []).length } });
+                  processorSpan?.end({
+                    output: { totalChunks: (streamParts ?? []).length },
+                    attributes: { hookDurationMs: readHookDurationMs() },
+                  });
                   // Keep the ended span reference in mutableState so that
                   // post-finish chunks (e.g. step-finish) don't trigger a
                   // new span creation at the guard above.
@@ -1328,6 +1364,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
                     error,
                     endSpan: true,
                     attributes: {
+                      hookDurationMs: readHookDurationMs(),
                       tripwireAbort: {
                         reason: error.message,
                         retry: error.options?.retry,
@@ -1336,7 +1373,11 @@ export function createStepFromProcessor<TProcessorId extends string>(
                     },
                   });
                 } else {
-                  processorSpan?.error({ error: error as Error, endSpan: true });
+                  processorSpan?.error({
+                    error: error as Error,
+                    endSpan: true,
+                    attributes: { hookDurationMs: readHookDurationMs() },
+                  });
                 }
                 throw error;
               }
@@ -4796,6 +4837,9 @@ export class Run<
       .then(result => {
         if (!params.isVNext && result.status !== 'suspended') {
           this.closeStreamAction?.().catch(() => {});
+        }
+        if (result.status !== 'suspended') {
+          this.cleanup?.();
         }
         result.traceId = traceId;
         result.spanId = spanId;

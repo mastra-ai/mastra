@@ -1219,7 +1219,8 @@ export class AgentChannels {
           // Prefer authenticated fetch (e.g. Slack CDN requires auth)
           try {
             const buf = await att.fetchData();
-            const base64 = Buffer.from(buf).toString('base64');
+            const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
+            const base64 = Buffer.from(bytes).toString('base64');
             data = `data:${mimeType};base64,${base64}`;
           } catch (err) {
             this.logger?.warn('[CHANNEL] fetchData failed', { mimeType, error: String(err) });
@@ -1453,6 +1454,7 @@ export class AgentChannels {
       typingGate,
       formatError: adapterConfig?.formatError,
       textFormat: adapterConfig?.textFormat,
+      onAbort: adapterConfig?.onAbort,
       approvalContext,
     };
   }

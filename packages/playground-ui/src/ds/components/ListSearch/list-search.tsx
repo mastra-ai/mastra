@@ -38,13 +38,15 @@ export const ListSearch = ({
   const [internalValue, setInternalValue] = useState(controlledValue ?? '');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useKeydown({
-    'mod+shift+f': () => {
-      if (shortcutDisabled) return;
-      inputRef.current?.focus();
-      inputRef.current?.select();
+  useKeydown(
+    {
+      'mod+shift+f': () => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      },
     },
-  });
+    { enabled: !shortcutDisabled },
+  );
 
   const debouncedSearch = useDebouncedCallback((val: string) => {
     onSearch(val);

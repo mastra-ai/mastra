@@ -1,4 +1,4 @@
-import type { GetScorerResponse } from '@mastra/client-js';
+import type { GetScorerResponse, RouteResponse } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import {
   DataList as EntityList,
@@ -10,19 +10,35 @@ import { WorkflowIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';
 
+export type ScorersListItem = GetScorerResponse & { id: string };
+
 export interface ScorersListProps {
-  scorers: Record<string, GetScorerResponse>;
+  scorers: RouteResponse<'GET /scores/scorers'>;
   isLoading: boolean;
   search?: string;
   sourceFilter?: string;
+  /** When provided, rows become buttons that call this instead of navigating to the scorer page. */
+  onSelectScorer?: (scorer: ScorersListItem) => void;
+  /** Highlights the row for the given scorer id (used with `onSelectScorer`). */
+  selectedScorerId?: string;
+  /** Whether keyboard roving is bound globally. Defaults to `true`. */
+  keyboardGlobal?: boolean;
 }
 
 const COLUMNS = 'minmax(0,1fr) minmax(0,1.5fr) auto auto auto';
 
-export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'all' }: ScorersListProps) {
+export function ScorersList({
+  scorers,
+  isLoading,
+  search = '',
+  sourceFilter = 'all',
+  onSelectScorer,
+  selectedScorerId,
+  keyboardGlobal = true,
+}: ScorersListProps) {
   const { paths, Link } = useLinkComponent();
 
-  const scorerData = useMemo(
+  const scorerData = useMemo<ScorersListItem[]>(
     () =>
       Object.entries(scorers).map(([key, scorer]) => ({
         ...scorer,
@@ -43,7 +59,7 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
     });
   }, [scorerData, search, sourceFilter]);
 
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length });
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: keyboardGlobal });
 
   if (isLoading) {
     return <EntityListSkeleton columns={COLUMNS} />;
@@ -76,13 +92,8 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
         const workflowCount = scorer.workflowIds?.length ?? 0;
         const isTrajectory = scorer.scorer.config?.type === 'trajectory';
 
-        return (
-          <EntityList.RowLink
-            key={scorer.id}
-            to={paths.scorerLink(scorer.id)}
-            LinkComponent={Link}
-            {...getRowProps(index)}
-          >
+        const cells = (
+          <>
             <EntityList.NameCell>
               <span className="flex max-w-full min-w-0 items-center gap-1.5">
                 <span className="min-w-0 truncate">{name}</span>
@@ -101,6 +112,30 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
             </EntityList.Cell>
             <EntityList.TextCell className="text-center">{agentCount || ''}</EntityList.TextCell>
             <EntityList.TextCell className="text-center">{workflowCount || ''}</EntityList.TextCell>
+          </>
+        );
+
+        if (onSelectScorer) {
+          return (
+            <EntityList.RowButton
+              key={scorer.id}
+              featured={selectedScorerId === scorer.id}
+              onClick={() => onSelectScorer(scorer)}
+              {...getRowProps(index)}
+            >
+              {cells}
+            </EntityList.RowButton>
+          );
+        }
+
+        return (
+          <EntityList.RowLink
+            key={scorer.id}
+            to={paths.scorerLink(scorer.id)}
+            LinkComponent={Link}
+            {...getRowProps(index)}
+          >
+            {cells}
           </EntityList.RowLink>
         );
       })}

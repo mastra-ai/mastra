@@ -21,6 +21,26 @@ export function SaveButton() {
 }
 ```
 
+### Opt-in semantic theme
+
+`new-theme.css` provides scoped semantic color tokens. Import it and apply `new-theme` to the root of the content using those tokens. Keep importing `style.css` once in the app for the compiled utilities.
+
+```tsx
+import '@mastra/playground-ui/new-theme.css';
+
+export function SummaryCard() {
+  return <div className="new-theme bg-card text-foreground">Summary</div>;
+}
+```
+
+The scope limits token defaults, not utility selectors. Classes such as `bg-card` remain global and share the host app's token contract. Audit existing uses before adopting these utilities; a previously ineffective class can start affecting the cascade.
+
+Semantic values follow the existing `html.light` mode; dark mode is the default. Override `--card`, `--foreground`, or another semantic variable on the themed element to customize it.
+
+Portalled content using semantic colors also needs `new-theme` on its portal root, since it renders outside the themed DOM subtree. Apply custom overrides to that root too; values inherited from the trigger's ancestors do not cross the portal.
+
+If your app generates additional semantic utilities, import `@mastra/playground-ui/new-theme.css` into its Tailwind stylesheet so Tailwind can read the `@theme inline` mappings.
+
 ## Documentation
 
 This README is the package guide. Import the global stylesheet once, then use the package's explicit `components/*`, `domains/*`, `hooks/*`, `icons/*`, `primitives/*`, `store/*`, `tokens`, and `utils/*` entry points rather than a package-root import.
