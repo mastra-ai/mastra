@@ -108,7 +108,7 @@ describe('resolvePlatformDashboardUrl', () => {
     vi.stubEnv('MASTRA_SHARED_API_URL', 'https://platform.mastra.ai/v1');
     vi.stubEnv('MASTRA_PLATFORM_DASHBOARD_URL', '');
 
-    expect(resolvePlatformDashboardUrl()).toBe('https://cloud.mastra.ai');
+    expect(resolvePlatformDashboardUrl()).toBe('https://projects.mastra.ai');
   });
 
   it('uses and normalizes an explicit dashboard URL override', () => {

@@ -71,7 +71,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const JIRA_CONNECTION_TOKEN_PREFIX = 'jira-connection:';
 const JIRA_ISSUE_REF_PREFIX = 'jira-issue:';
 const JIRA_SOURCE_PREFIX = 'jira-project:';
-const DEFAULT_PLATFORM_DASHBOARD_URL = 'https://cloud.mastra.ai';
+const DEFAULT_PLATFORM_DASHBOARD_URL = 'https://projects.mastra.ai';
 
 export function resolvePlatformDashboardUrl(configuredUrl?: string): string {
   const url =
