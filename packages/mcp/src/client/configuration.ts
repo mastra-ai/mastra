@@ -26,6 +26,7 @@ import { MCPOAuthClientProvider } from './oauth-provider';
 import { MCPClientServerProxy } from './server-proxy';
 import type {
   MCPServerMap,
+  MCPClientServers,
   MCPClientTools,
   MCPClientToolsets,
   SerializableMCPToolCatalog,
@@ -34,6 +35,11 @@ import type {
 
 // Client snapshots are erased in the shared runtime cache.
 const mcpClientInstances = new Map<string, object>();
+
+/** Reads the shared cache without promising the snapshot shape it was created with. */
+function cachedClient<TServers extends MCPClientServers<TServers>>(id: string): MCPClient<TServers> | undefined {
+  return mcpClientInstances.get(id) as MCPClient<TServers> | undefined;
+}
 const TOOL_DISCOVERY_MAX_ATTEMPTS = 2;
 
 // Outcome of a single server's discovery within discoverAcrossServers(). An
@@ -68,7 +74,7 @@ function isLoopbackHostname(hostname: string): boolean {
  * Configuration options for creating an MCPClient instance.
  */
 export interface MCPClientOptions<
-  TServers extends { [Server in keyof TServers]: MCPServerMap[string] } = MCPServerMap,
+  TServers extends MCPClientServers<TServers> = MCPServerMap,
 > {
   /** Optional unique identifier to prevent memory leaks when creating multiple instances with identical configurations */
   id?: string;
@@ -107,7 +113,7 @@ export interface MCPClientOptions<
  * if packaged docs are unavailable.
  */
 export class MCPClient<
-  TServers extends { [Server in keyof TServers]: MCPServerMap[string] } = MCPServerMap,
+  TServers extends MCPClientServers<TServers> = MCPServerMap,
 > extends MastraBase {
   readonly typegen?: Readonly<{ outFile: string }>;
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};
@@ -161,21 +167,18 @@ export class MCPClient<
 
     if (args.id) {
       this.id = args.id;
-      const cached = mcpClientInstances.get(this.id) as MCPClient<TServers> | undefined;
+      const cached = cachedClient<TServers>(this.id);
 
       if (cached && !equal(cached.serverConfigs, args.servers)) {
-        const existingInstance = mcpClientInstances.get(this.id) as MCPClient<TServers> | undefined;
-        if (existingInstance) {
-          void existingInstance.disconnect();
-          mcpClientInstances.delete(this.id);
-        }
+        void cached.disconnect();
+        mcpClientInstances.delete(this.id);
       }
     } else {
       this.id = this.makeId();
     }
 
     // to prevent memory leaks return the same MCP server instance when configured the same way multiple times
-    const existingInstance = mcpClientInstances.get(this.id) as MCPClient<TServers> | undefined;
+    const existingInstance = cachedClient<TServers>(this.id);
     if (existingInstance) {
       if (!args.id) {
         throw new Error(`MCPClient was initialized multiple times with the same configuration options.
@@ -191,11 +194,12 @@ To fix this you have three different options:
       return existingInstance;
     }
 
-    if (args.typegen !== undefined) {
-      if (!args.typegen || typeof args.typegen.outFile !== 'string' || !args.typegen.outFile.trim() || args.typegen.outFile.includes('\0')) {
+    const { typegen } = args;
+    if (typegen !== undefined) {
+      // Runtime guard for untyped callers; the option is typed as `{ outFile: string }`.
+      if (!typegen || typeof typegen.outFile !== 'string' || !typegen.outFile.trim() || typegen.outFile.includes('\0'))
         throw new Error('typegen.outFile must be a nonempty file path');
-      }
-      this.typegen = Object.freeze({ outFile: args.typegen.outFile });
+      this.typegen = Object.freeze({ outFile: typegen.outFile });
     }
     mcpClientInstances.set(this.id, this);
     this.addToInstanceCache();

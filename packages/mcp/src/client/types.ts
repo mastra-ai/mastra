@@ -17,6 +17,12 @@ import type {
 /** Published tool input and structured-output snapshot for each configured server. */
 export type MCPServerMap = Record<string, { tools: Record<string, { input: unknown; output: unknown }> }>;
 
+/**
+ * Constraint for a supplied server snapshot. Mapping over the given keys lets concrete
+ * generated interfaces satisfy it without declaring an index signature.
+ */
+export type MCPClientServers<TServers> = { [Server in keyof TServers]: MCPServerMap[string] };
+
 type MCPClientTool<Input, Output> = Omit<Tool<Input, Output | CallToolResult, any, any>, 'execute'> & {
   execute?: (
     input: Input,
@@ -25,7 +31,7 @@ type MCPClientTool<Input, Output> = Omit<Tool<Input, Output | CallToolResult, an
 };
 
 /** Flat discovery remains partial because servers and tools may be unavailable. */
-export type MCPClientTools<TServers extends { [Server in keyof TServers]: MCPServerMap[string] }> =
+export type MCPClientTools<TServers extends MCPClientServers<TServers>> =
   string extends keyof TServers
     ? Record<string, Tool<any, any, any, any>>
     : Partial<{
@@ -45,17 +51,17 @@ export type MCPClientTools<TServers extends { [Server in keyof TServers]: MCPSer
       }>;
 
 /** Grouped discovery preserves raw tool names and potentially absent servers. */
-export type MCPClientToolsets<TServers extends { [Server in keyof TServers]: MCPServerMap[string] }> =
+export type MCPClientToolsets<TServers extends MCPClientServers<TServers>> =
   string extends keyof TServers
     ? Record<string, Record<string, Tool<any, any, any, any>>>
-    : {
-        [Server in keyof TServers]?: {
-          [Name in keyof TServers[Server]['tools']]?: MCPClientTool<
+    : Partial<{
+        [Server in keyof TServers]: Partial<{
+          [Name in keyof TServers[Server]['tools'] & string]: MCPClientTool<
             TServers[Server]['tools'][Name]['input'],
             TServers[Server]['tools'][Name]['output']
           >;
-        };
-      };
+        }>;
+      }>;
 
 // FetchLike is used internally when wrapping MastraFetchLike for transport compatibility
 export type { FetchLike } from '@modelcontextprotocol/client';

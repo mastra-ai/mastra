@@ -28,6 +28,24 @@ const annotations = new Set([
   'writeOnly',
   '$schema',
 ]);
+/** Keywords whose value must be a string. */
+const strings = new Set([
+  'title',
+  'description',
+  '$comment',
+  '$schema',
+  '$id',
+  '$anchor',
+  '$dynamicRef',
+  'format',
+  'pattern',
+]);
+/** Keywords whose value must be a boolean. */
+const booleans = new Set(['deprecated', 'readOnly', 'writeOnly', 'uniqueItems']);
+/** Keywords whose value must be a number, with `multipleOf` additionally positive. */
+const bounds = new Set(['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf']);
+/** Keywords whose value must be a non-negative integer. */
+const counts = new Set(['minLength', 'maxLength', 'minProperties', 'maxProperties', 'minContains', 'maxContains']);
 const supported = new Set([
   'type',
   'properties',
@@ -62,6 +80,10 @@ const types = new Set(['object', 'array', 'string', 'number', 'integer', 'boolea
 
 function object(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function count(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
 function fail(position: string): never {
@@ -104,25 +126,10 @@ function prepare(raw: unknown, position: string, warnings: string[]): Schema {
     let unsupported = false;
     for (const [key, entry] of Object.entries(value)) {
       const here = `${path}/${pointer(key)}`;
-      if (
-        ['title', 'description', '$comment', '$schema', '$id', '$anchor', '$dynamicRef', 'format', 'pattern'].includes(
-          key,
-        ) &&
-        typeof entry !== 'string'
-      )
-        fail(nodePosition);
-      if (['deprecated', 'readOnly', 'writeOnly', 'uniqueItems'].includes(key) && typeof entry !== 'boolean')
-        fail(nodePosition);
-      if (
-        ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf'].includes(key) &&
-        (typeof entry !== 'number' || (key === 'multipleOf' && entry <= 0))
-      )
-        fail(nodePosition);
-      if (
-        ['minLength', 'maxLength', 'minProperties', 'maxProperties', 'minContains', 'maxContains'].includes(key) &&
-        (typeof entry !== 'number' || !Number.isInteger(entry) || entry < 0)
-      )
-        fail(nodePosition);
+      if (strings.has(key) && typeof entry !== 'string') fail(nodePosition);
+      if (booleans.has(key) && typeof entry !== 'boolean') fail(nodePosition);
+      if (bounds.has(key) && (typeof entry !== 'number' || (key === 'multipleOf' && entry <= 0))) fail(nodePosition);
+      if (counts.has(key) && !count(entry)) fail(nodePosition);
       if (key === 'examples' && !Array.isArray(entry)) fail(nodePosition);
       if (annotations.has(key)) continue;
       if (!supported.has(key)) unsupported = true;
@@ -162,7 +169,7 @@ function prepare(raw: unknown, position: string, warnings: string[]): Schema {
         if (!Array.isArray(entry) || entry.length === 0) fail(nodePosition);
         output[key] = entry;
       } else if (key === 'minItems' || key === 'maxItems') {
-        if (typeof entry !== 'number' || !Number.isInteger(entry) || entry < 0) fail(nodePosition);
+        if (!count(entry)) fail(nodePosition);
         if (entry > 100) unsupported = true;
         output[key] = entry;
       } else if (key === 'const') {
@@ -170,7 +177,7 @@ function prepare(raw: unknown, position: string, warnings: string[]): Schema {
       }
     }
     if (typeof value.minItems === 'number' && typeof value.maxItems === 'number' && value.minItems > value.maxItems)
-      fail(position);
+      fail(nodePosition);
     if (unsupported) {
       warnings.push(`Unsupported schema widened to unknown at ${nodePosition}`);
       // Keep reference targets even when their containing schema cannot be represented.

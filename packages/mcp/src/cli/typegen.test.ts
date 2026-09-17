@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compile } from 'json-schema-to-typescript';
 import { describe, expect, it, vi } from 'vitest';
-import { compileConsumer } from '../client/__fixtures__/typed-client/compile';
+import { compileConsumer, compileStrict } from '../client/__fixtures__/typed-client/compile';
 import type { SerializableMCPToolCatalog } from '../client/types';
 import { generateToolTypes } from './typegen';
 
@@ -22,17 +22,13 @@ function check(source: string, consumer = '') {
   const dir = mkdtempSync(join(fixtureDir, 'generated-'));
   try {
     const file = join(dir, 'contracts.ts');
-    writeFileSync(file, source + '\n' + consumer);
-    const result = compileConsumer([file]);
-    expect(result.error).toBeUndefined();
-    expect(result.stdout + result.stderr).toBe('');
-    expect(result.status).toBe(0);
-    const count = consumer.match(/@ts-expect-error/g)?.length ?? 0;
-    if (count) {
-      writeFileSync(file, (source + '\n' + consumer).replace(/@ts-expect-error/g, 'negative-case'));
-      const negative = compileConsumer([file]);
-      expect(negative.status).toBe(1);
-      expect(negative.stdout.match(/error TS/g)?.length).toBeGreaterThanOrEqual(count);
+    const { strict, negative, directives } = compileStrict(source + '\n' + consumer, file);
+    expect(strict.error).toBeUndefined();
+    expect(strict.stdout + strict.stderr).toBe('');
+    expect(strict.status).toBe(0);
+    if (directives) {
+      expect(negative!.status).toBe(1);
+      expect(negative!.stdout.match(/error TS/g)?.length).toBeGreaterThanOrEqual(directives);
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -323,6 +319,7 @@ describe('concrete MCP schema generation', () => {
     { items: 1 },
     { enum: [] },
     { minItems: -1 },
+    { minItems: 2, maxItems: 1 },
     { $ref: '#/missing' },
     { $ref: '#' },
     { definitions: { x: { $ref: '#/definitions/y' }, y: { $ref: '#/definitions/x' } }, $ref: '#/definitions/x' },

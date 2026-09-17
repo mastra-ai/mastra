@@ -175,8 +175,6 @@ Generation lists tool definitions without calling tools. It fails on discovery e
 
 Tools without output schemas use `unknown`. Constraints such as string formats, length limits, and numeric bounds retain their base TypeScript types and remain runtime validation rules. Unsupported schema portions, including conditional schemas and `prefixItems` tuples, widen to `unknown` with a warning. External schema references aren't fetched. Malformed schemas and unresolved local references fail generation.
 
-Regenerate when schemas change, with permissions equivalent to your application. Generated contracts are optional snapshots. Dynamic discovery and runtime validation remain authoritative.
-
 :::note Module execution and credentials
 
 The command executes the supplied modules and their imports. Use trusted modules without application startup side effects. Provide credentials before invoking the command. It doesn't load dotenv files or launch interactive authentication. Existing client timeout and discovery settings apply.
