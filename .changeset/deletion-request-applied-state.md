@@ -2,4 +2,4 @@
 '@mastra/clickhouse': patch
 ---
 
-Fixed ClickHouse deletion requests blocking updates to feedback that was never actually deleted. Requests are now marked applied only after their delete succeeds, and the feedback update guard ignores unapplied requests. If a delete fails after the request is recorded, the still-visible feedback stays editable; call `deleteFeedback()` again to retry the deletion. On replicated ClickHouse clusters, completed feedback deletions are now recognized consistently on every replica, and re-hiding a revived row no longer records a second deletion request.
+Fixed ClickHouse deletion requests blocking review updates after a failed delete. Requests are marked applied after successful deletion, and review updates ignore unapplied requests. Review-status updates now modify existing rows without recreating deleted feedback, including when a replica is behind. They require `ALTER UPDATE` permission and still publish delta notifications. Concurrent deletion-request writes retry temporary quorum contention; other failures remain recoverable by retrying the delete API.

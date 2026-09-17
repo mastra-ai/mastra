@@ -143,3 +143,43 @@ describe('markDeletionRequestApplied', () => {
     );
   });
 });
+
+describe('serialized quorum contention', () => {
+  const args = {
+    requestId: 'contended-request',
+    signal: 'feedback' as const,
+    predicateType: 'itemIds' as const,
+    predicateValues: ['feedback-1'],
+    requestedAt: '2026-09-01T16:00:00.123Z',
+    replication: {},
+  };
+  const busy = () => Object.assign(new Error('previous quorum is pending'), { code: '286' });
+
+  it('retries the same pending and applied rows without changing identity or version', async () => {
+    const insert = vi.fn().mockRejectedValueOnce(busy()).mockResolvedValue(undefined);
+    const client = { insert } as unknown as ClickHouseClient;
+    const pending = await recordDeletionRequest(client, args);
+    expect(insert).toHaveBeenCalledTimes(2);
+    expect(insert.mock.calls[0]).toEqual(insert.mock.calls[1]);
+    insert.mockClear().mockRejectedValueOnce(busy()).mockResolvedValue(undefined);
+    const applied = await markDeletionRequestApplied(client, pending, {});
+    expect(insert).toHaveBeenCalledTimes(2);
+    expect(insert.mock.calls[0]).toEqual(insert.mock.calls[1]);
+    expect(applied.requestId).toBe(pending.requestId);
+    expect(applied.lastAppliedAt).not.toBe(pending.lastAppliedAt);
+  });
+
+  it('bounds retries and preserves the final error for caller recovery', async () => {
+    const error = busy();
+    const insert = vi.fn().mockRejectedValue(error);
+    await expect(recordDeletionRequest({ insert } as unknown as ClickHouseClient, args)).rejects.toBe(error);
+    expect(insert).toHaveBeenCalledTimes(6);
+  });
+
+  it.each(['285', '999'])('does not retry ambiguous failures (code %s)', async code => {
+    const error = Object.assign(new Error('insert failed'), { code });
+    const insert = vi.fn().mockRejectedValue(error);
+    await expect(recordDeletionRequest({ insert } as unknown as ClickHouseClient, args)).rejects.toBe(error);
+    expect(insert).toHaveBeenCalledOnce();
+  });
+});

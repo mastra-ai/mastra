@@ -136,13 +136,10 @@ describe('ClickHouse deletion lifecycle', () => {
     const scoresClient = createClient();
     await deleteScores(scoresClient.client, { scoreIds: ['score-1'] });
 
-    // Feedback re-runs the delete after the applied mark to fence concurrent review-status writes.
-    expect(feedbackClient.command).toHaveBeenCalledTimes(2);
+    // Feedback runs a single delete before the applied mark; review updates mutate in place.
+    expect(feedbackClient.command).toHaveBeenCalledTimes(1);
     expect(feedbackClient.insert.mock.invocationCallOrder[1]).toBeGreaterThan(
       feedbackClient.command.mock.invocationCallOrder[0]!,
-    );
-    expect(feedbackClient.insert.mock.invocationCallOrder[1]).toBeLessThan(
-      feedbackClient.command.mock.invocationCallOrder[1]!,
     );
     // Scores delete from the current-score and event tables, then mark applied.
     expect(scoresClient.command).toHaveBeenCalledTimes(2);
@@ -166,7 +163,7 @@ describe('ClickHouse deletion lifecycle', () => {
     expect(scoresClient.insert.mock.calls[1]?.[0].clickhouse_settings).not.toHaveProperty('insert_quorum');
   });
 
-  it('re-hides only the matching scope when deletion starts during a review-status update', async () => {
+  it('mutates only the observed row and reports a concurrent applied deletion', async () => {
     const { client, insert, command, query } = createClient();
     const existingRow = feedbackRecordToRow({
       feedbackId: 'feedback-1',
@@ -182,7 +179,6 @@ describe('ClickHouse deletion lifecycle', () => {
     query
       .mockResolvedValueOnce(queryResult([existingRow]))
       .mockResolvedValueOnce(queryResult([]))
-      .mockResolvedValueOnce(queryResult([{ feedbackId: 'feedback-1', writeVersion: '0' }]))
       .mockResolvedValueOnce(queryResult([{ found: 1 }]));
 
     await expect(
@@ -207,31 +203,20 @@ describe('ClickHouse deletion lifecycle', () => {
     expect(query.mock.calls[1]?.[0].clickhouse_settings).toEqual(
       expect.objectContaining({ select_sequential_consistency: '1' }),
     );
-    expect(query.mock.calls[3]?.[0].clickhouse_settings).toEqual(
+    expect(query.mock.calls[2]?.[0].clickhouse_settings).toEqual(
       expect.objectContaining({ select_sequential_consistency: '1' }),
     );
-    expect(query).toHaveBeenNthCalledWith(
-      3,
-      expect.objectContaining({
-        query: expect.stringContaining('toString(max(writeVersion)) AS writeVersion'),
-        query_params: { feedbackIds: ['feedback-1'] },
+    expect(insert).not.toHaveBeenCalled();
+    expect(command).toHaveBeenCalledExactlyOnceWith({
+      query: expect.stringContaining(`ALTER TABLE ${TABLE_FEEDBACK_EVENTS} UPDATE reviewStatus`),
+      query_params: expect.objectContaining({
+        feedbackId: 'feedback-1',
+        traceId: 'trace-1',
+        writeVersion: '0',
+        reviewStatus: 'reviewed',
       }),
-    );
-    // The applied request already covers this id: re-hiding writes no new audit
-    // row, so the only insert is the review-status write itself.
-    expect(insert).toHaveBeenCalledTimes(1);
-    expect(insert.mock.calls.map(([call]) => call.table)).not.toContain(TABLE_DELETION_REQUESTS);
-    expect(command).toHaveBeenCalledWith({
-      query: `DELETE FROM ${TABLE_FEEDBACK_EVENTS} WHERE feedbackId IN ({fid_0:String}) AND organizationId = {delOrganizationId:String} AND resourceId = {delResourceId:String}`,
-      query_params: {
-        fid_0: 'feedback-1',
-        delOrganizationId: 'org-1',
-        delResourceId: 'resource-1',
-      },
-      clickhouse_settings: { lightweight_deletes_sync: '2' },
+      clickhouse_settings: expect.objectContaining({ mutations_sync: '2' }),
     });
-    expect(command).toHaveBeenCalledTimes(1);
-    expect(insert.mock.invocationCallOrder[0]).toBeLessThan(command.mock.invocationCallOrder[0]!);
   });
 
   it('reads the guard without sequential consistency when replication is not configured', async () => {
@@ -248,14 +233,14 @@ describe('ClickHouse deletion lifecycle', () => {
     query
       .mockResolvedValueOnce(queryResult([existingRow]))
       .mockResolvedValueOnce(queryResult([]))
-      .mockResolvedValueOnce(queryResult([{ feedbackId: 'feedback-1', writeVersion: '0' }]))
-      .mockResolvedValueOnce(queryResult([]));
+      .mockResolvedValueOnce(queryResult([]))
+      .mockResolvedValueOnce(queryResult([{ ...existingRow, reviewStatus: 'reviewed' }]));
 
     await updateFeedbackReviewStatus(client, { feedbackId: 'feedback-1', reviewStatus: 'reviewed' });
 
     expect(query.mock.calls[1]?.[0].query).toContain('has(predicateValues, {feedbackId:String})');
     expect(query.mock.calls[1]?.[0].clickhouse_settings).not.toHaveProperty('select_sequential_consistency');
-    expect(query.mock.calls[3]?.[0].clickhouse_settings).not.toHaveProperty('select_sequential_consistency');
+    expect(query.mock.calls[2]?.[0].clickhouse_settings).not.toHaveProperty('select_sequential_consistency');
   });
 
   it('is a complete no-op for empty id arrays', async () => {

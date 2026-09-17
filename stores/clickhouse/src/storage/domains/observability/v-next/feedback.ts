@@ -26,7 +26,12 @@ import { parseFieldKey } from '@mastra/core/utils';
 
 import { isReplicationConfigured } from '../../../db/replication';
 import type { ClickhouseReplicationConfig } from '../../../db/replication';
-import { TABLE_DELETION_REQUESTS, TABLE_FEEDBACK_EVENTS, TABLE_FEEDBACK_EVENTS_DELTA } from './ddl';
+import {
+  buildDeltaCursorExpr,
+  TABLE_DELETION_REQUESTS,
+  TABLE_FEEDBACK_EVENTS,
+  TABLE_FEEDBACK_EVENTS_DELTA,
+} from './ddl';
 import { markDeletionRequestApplied, recordDeletionRequest } from './deletion-requests';
 import { buildFeedbackFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
@@ -218,11 +223,7 @@ export async function batchCreateFeedback(client: ClickHouseClient, args: BatchC
 // Delete
 // ============================================================================
 
-/**
- * Scoped lightweight DELETE for feedback rows. Shared by the delete API and by
- * the post-write guard in `updateFeedbackReviewStatus`, which re-hides a row
- * that an already-applied request covers and therefore needs no new audit row.
- */
+/** Apply the scoped feedback delete mask and wait for completion. */
 async function hideFeedbackRows(
   client: ClickHouseClient,
   args: DeleteFeedbackArgs,
@@ -263,11 +264,6 @@ async function hideFeedbackRows(
  * stays unapplied and does not block updates to the still-visible rows; retry
  * by calling this function again.
  *
- * The delete runs once more after the applied mark. `updateFeedbackReviewStatus`
- * only re-hides rows for applied requests, so a review-status write that lands
- * between the first delete and the mark would otherwise survive; the second
- * delete is the fence that closes that window without cross-client locking.
- *
  * The delete is immediately visible to subsequent reads; physical purge depends
  * on the table's configured retention TTL. The delta table is intentionally not
  * touched and expires through its fixed two-day TTL.
@@ -292,7 +288,6 @@ export async function deleteFeedback(
 
   await hideFeedbackRows(client, args, replication);
   await markDeletionRequestApplied(client, request, replication);
-  await hideFeedbackRows(client, args, replication);
 }
 
 // ============================================================================
@@ -345,12 +340,13 @@ export async function updateFeedbackReviewStatus(
   client: ClickHouseClient,
   args: UpdateFeedbackReviewStatusArgs,
   replication?: ClickhouseReplicationConfig,
+  strategy: ClickHouseDeltaCursorStrategy | null = null,
 ): Promise<FeedbackRecord> {
   const { feedbackId, reviewStatus } = parseUpdateFeedbackReviewStatusArgs(args);
 
   const existing = await queryJson<Record<string, any>>(
     client,
-    `SELECT * FROM ${TABLE_FEEDBACK_EVENTS} FINAL
+    `SELECT *, toString(writeVersion) AS reviewWriteVersion FROM ${TABLE_FEEDBACK_EVENTS} FINAL
      WHERE feedbackId = {feedbackId:String}
      ORDER BY writeVersion DESC, timestamp DESC
      LIMIT 1`,
@@ -373,8 +369,42 @@ export async function updateFeedbackReviewStatus(
     throw feedbackNotFoundError(feedbackId);
   }
 
-  const updated = rowToFeedbackRecord({ ...existingRow, reviewStatus });
-  await batchCreateFeedback(client, { feedbacks: [updated] });
+  // Mutate the observed row instead of inserting a replacement. ClickHouse
+  // mutations preserve the delete mask, so even a failed post-write guard
+  // cannot leave a deleted record visible again.
+  const identity = `feedbackId = {feedbackId:String}
+    AND timestamp = parseDateTime64BestEffort({timestamp:String}, 3, 'UTC')
+    AND (traceId = {traceId:Nullable(String)} OR (isNull(traceId) AND isNull({traceId:Nullable(String)})))
+    AND writeVersion = {writeVersion:UInt64}`;
+  const params = {
+    feedbackId,
+    timestamp: existingRow.timestamp,
+    traceId: existingRow.traceId,
+    writeVersion: existingRow.reviewWriteVersion ?? String(existingRow.writeVersion ?? 0),
+    reviewStatus,
+  };
+  await client.command({
+    query: `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} UPDATE reviewStatus = {reviewStatus:String} WHERE ${identity}`,
+    query_params: params,
+    clickhouse_settings: { ...CH_SETTINGS, mutations_sync: isReplicationConfigured(replication) ? '2' : '1' },
+  });
+
+  // UPDATE mutations do not trigger the insert materialized view. Publish the
+  // cursor explicitly, only for a row that is still visible. A concurrent
+  // delete remains safe because delta reads join back to the visible main row.
+  if (strategy !== null) {
+    await client.command({
+      query: `INSERT INTO ${TABLE_FEEDBACK_EVENTS_DELTA}
+        SELECT ${buildDeltaCursorExpr(strategy, 'mastra_feedback_events_delta_cursor', 'feedbackId')} AS cursorId,
+          ingestedAt, traceId, timestamp, feedbackId
+        FROM (
+          SELECT now64(9, 'UTC') AS ingestedAt, traceId, timestamp, feedbackId
+          FROM ${TABLE_FEEDBACK_EVENTS} FINAL WHERE ${identity}
+        )`,
+      query_params: params,
+      clickhouse_settings: { ...CH_INSERT_SETTINGS, async_insert: 0 },
+    });
+  }
 
   if (
     await hasFeedbackDeletionRequest(
@@ -385,21 +415,16 @@ export async function updateFeedbackReviewStatus(
       replication,
     )
   ) {
-    // The applied request already covers this id, so re-hide without recording
-    // another audit row.
-    await hideFeedbackRows(
-      client,
-      {
-        feedbackIds: [feedbackId],
-        organizationId: existingRow.organizationId ?? undefined,
-        resourceId: existingRow.resourceId ?? undefined,
-      },
-      replication,
-    );
     throw feedbackNotFoundError(feedbackId);
   }
 
-  return updated;
+  const current = await queryJson<Record<string, any>>(
+    client,
+    `SELECT * FROM ${TABLE_FEEDBACK_EVENTS} FINAL WHERE ${identity} LIMIT 1`,
+    params,
+  );
+  if (!current[0]) throw feedbackNotFoundError(feedbackId);
+  return rowToFeedbackRecord(current[0]);
 }
 
 // ============================================================================

@@ -1,3 +1,5 @@
+import { setTimeout as delay } from 'node:timers/promises';
+
 import type { ClickHouseClient } from '@clickhouse/client';
 
 import { isReplicationConfigured } from '../../../db/replication';
@@ -71,14 +73,7 @@ export async function recordDeletionRequest(
     updatedAt: args.requestedAt,
   };
 
-  await client.insert({
-    table: TABLE_DELETION_REQUESTS,
-    values: [row],
-    format: 'JSONEachRow',
-    clickhouse_settings: isReplicationConfigured(args.replication)
-      ? { ...CH_INSERT_SETTINGS, ...QUORUM_INSERT_SETTINGS }
-      : CH_INSERT_SETTINGS,
-  });
+  await insertDeletionRequest(client, row, args.replication);
 
   return row;
 }
@@ -101,14 +96,43 @@ export async function markDeletionRequestApplied(
   const appliedAt = new Date(Math.max(Date.now(), Date.parse(row.updatedAt) + 1)).toISOString();
   const applied: DeletionRequestRow = { ...row, lastAppliedAt: appliedAt, updatedAt: appliedAt };
 
-  await client.insert({
-    table: TABLE_DELETION_REQUESTS,
-    values: [applied],
-    format: 'JSONEachRow',
-    clickhouse_settings: isReplicationConfigured(replication)
-      ? { ...CH_INSERT_SETTINGS, ...QUORUM_INSERT_SETTINGS }
-      : CH_INSERT_SETTINGS,
-  });
+  await insertDeletionRequest(client, applied, replication);
 
   return applied;
+}
+
+/** Retry only the rejection of a write while an earlier serialized quorum is
+ * pending. Reuse the exact row and version. Timeouts and ambiguous insert
+ * failures still propagate to the caller; OSS recovery is a delete API retry.
+ */
+async function insertDeletionRequest(
+  client: ClickHouseClient,
+  row: DeletionRequestRow,
+  replication?: ClickhouseReplicationConfig,
+): Promise<void> {
+  const replicated = isReplicationConfigured(replication);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await client.insert({
+        table: TABLE_DELETION_REQUESTS,
+        values: [row],
+        format: 'JSONEachRow',
+        clickhouse_settings: replicated ? { ...CH_INSERT_SETTINGS, ...QUORUM_INSERT_SETTINGS } : CH_INSERT_SETTINGS,
+      });
+      return;
+    } catch (error) {
+      // UNSATISFIED_QUORUM_FOR_PREVIOUS_WRITE: this insert was rejected before
+      // it could write. Do not retry a timeout of this insert's own quorum.
+      if (
+        !replicated ||
+        attempt >= 5 ||
+        !(error instanceof Error) ||
+        !('code' in error) ||
+        String(error.code) !== '286'
+      ) {
+        throw error;
+      }
+      await delay(Math.min(100 * 2 ** attempt, 1_000));
+    }
+  }
 }

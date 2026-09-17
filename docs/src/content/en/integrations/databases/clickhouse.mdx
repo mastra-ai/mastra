@@ -77,6 +77,8 @@ Lightweight deletion is a hide-only operation that marks rows with ClickHouse's 
 
 When all five observability signals have finite retention, Mastra also applies a TTL to deletion requests so they outlive the signal rows they protect. If any signal is unbounded, deletion requests remain unbounded. See [storage retention](/reference/storage/retention#clickhouse-native-ttl) for how the deletion-request TTL is calculated.
 
+Feedback review-status updates require `ALTER UPDATE` permission on `mastra_feedback_events`. These updates wait for a ClickHouse mutation to finish, including on all replicas when replication is configured, so latency depends on the mutation queue. They modify the existing feedback row and preserve deletion masks: a concurrent review update cannot recreate deleted feedback. Successful updates remain available through delta polling.
+
 ### Observability with the legacy domain
 
 `ObservabilityStorageClickhouse` is the original observability adapter and remains supported for projects that haven't migrated to the vNext schema. The configuration shape is the same as the vNext class.

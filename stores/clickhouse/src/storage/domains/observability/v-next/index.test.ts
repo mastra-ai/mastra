@@ -2548,7 +2548,7 @@ LIMIT 1`,
             format: 'JSONEachRow',
           });
           expect(await result.json<{ feedbackSource: string; reviewStatus: string; writeVersion: string }>()).toEqual([
-            { feedbackSource: 'current-review-source', reviewStatus: 'reviewed', writeVersion: '3' },
+            { feedbackSource: 'current-review-source', reviewStatus: 'reviewed', writeVersion: '2' },
           ]);
         } finally {
           await client.close();
@@ -5071,7 +5071,7 @@ LIMIT 1`,
       }
     });
 
-    it('re-hides a review-status write that lands between the delete and the applied mark', async () => {
+    it('does not recreate feedback when a review update lands between the delete and the applied mark', async () => {
       const client = createClient({
         url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
         username: process.env.CLICKHOUSE_USERNAME || 'default',
@@ -5141,9 +5141,9 @@ LIMIT 1`,
         });
 
         updateGuard.open();
-        await expect(update).resolves.toMatchObject({ feedbackId: 'race-feedback-1', reviewStatus: 'reviewed' });
-        // The write revived the row while the request is still unapplied.
-        expect((await racing.listFeedback({})).feedback.map(f => f.feedbackId)).toEqual(['race-feedback-1']);
+        await expect(update).rejects.toThrow('Feedback record not found');
+        // The request is still pending, but the update cannot recreate the deleted row.
+        expect((await racing.listFeedback({})).feedback).toEqual([]);
 
         appliedMark.open();
         await deletion;
@@ -5152,6 +5152,8 @@ LIMIT 1`,
           racing.updateFeedbackReviewStatus({ feedbackId: 'race-feedback-1', reviewStatus: 'reviewed' }),
         ).rejects.toThrow('Feedback record not found');
       } finally {
+        updateGuard.open();
+        appliedMark.open();
         querySpy.mockRestore();
         insertSpy.mockRestore();
         await client.close();

@@ -1338,7 +1338,12 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async updateFeedbackReviewStatus(args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
     try {
-      return await feedbackOps.updateFeedbackReviewStatus(this.#client, args, this.#replication);
+      return await feedbackOps.updateFeedbackReviewStatus(
+        this.#client,
+        args,
+        this.#replication,
+        this.#deltaCursorStrategy,
+      );
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
