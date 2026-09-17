@@ -94,6 +94,10 @@ export type MCPServerPrompts = {
  * Every instance that may answer a continuation must share the same key (set it from
  * the environment in multi-instance and serverless deployments). Without a key the
  * server generates one per process and continuations only succeed on that process.
+ *
+ * The envelope is bound to the authenticated caller. On a server without
+ * authorization every caller shares one anonymous principal, so a `requestState`
+ * acts as a bearer credential for its round until `ttlSeconds` elapse.
  */
 export interface MCPServerRequestStateOptions {
   /** HMAC key, at least 32 bytes. */

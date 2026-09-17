@@ -25,8 +25,10 @@ import type { McpConfig, McpHttpOAuthConfig, McpServerConfig, McpSkippedServer }
  * Port 1458 is stable across sessions so persisted tokens keep the same
  * storage fingerprint; it sits clear of the ports the Codex login flow
  * reserves (1455/1457). When 1458 is busy the callback server falls back
- * to the next sequential port, which stays covered by the client
- * registration (see `@mastra/mcp`'s `getCallbackUrlCandidates`).
+ * to the next sequential port (see `@mastra/mcp`'s `getCallbackUrlCandidates`).
+ * No registration covers those fallbacks: the hosted Client ID Metadata
+ * Document at MASTRA_CODE_CLIENT_METADATA_URL must list every candidate URL,
+ * so changing this default or the fallback range means republishing it.
  */
 export const DEFAULT_OAUTH_REDIRECT_URL = 'http://127.0.0.1:1458/oauth/callback';
 
@@ -36,7 +38,11 @@ export const DEFAULT_OAUTH_REDIRECT_URL = 'http://127.0.0.1:1458/oauth/callback'
  * this client by the document URL itself: the authorization server fetches it
  * to learn the client name and loopback redirect URIs, so no client
  * registration step is needed. The document is served by the Mastra Code
- * docs site (mastra-ai/mastracode-website, `static/.well-known/oauth-client/`).
+ * docs site (mastra-ai/mastracode-website, `static/.well-known/oauth-client/`)
+ * and lists the DEFAULT_OAUTH_REDIRECT_URL fallback candidates. A custom
+ * `redirectUrl` or `callbackPort` is only accepted under this identity by
+ * authorization servers that ignore the loopback port (RFC 8252 §7.3);
+ * otherwise pair it with a pre-registered `clientId`.
  */
 export const MASTRA_CODE_CLIENT_METADATA_URL = 'https://code.mastra.ai/.well-known/oauth-client/mastracode.json';
 

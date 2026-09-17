@@ -33,14 +33,21 @@ export interface McpHttpServerConfig {
  * OAuth client configuration for an HTTP MCP server.
  */
 export interface McpHttpOAuthConfig {
-  /** Redirect URL for OAuth callbacks. Defaults to DEFAULT_OAUTH_REDIRECT_URL when omitted. */
+  /**
+   * Redirect URL for OAuth callbacks. Defaults to DEFAULT_OAUTH_REDIRECT_URL
+   * when omitted. Without a `clientId`, Mastra Code's hosted Client ID
+   * Metadata Document only lists the default URL and its port fallbacks, so
+   * a custom value works only with authorization servers that ignore the
+   * loopback port (RFC 8252 §7.3); otherwise set `clientId` too.
+   */
   redirectUrl?: string;
   /**
    * Shorthand for a loopback redirect URL: synthesizes
    * `http://localhost:<callbackPort>/callback`, matching the convention
    * Claude Code and Codex use. Config files reject entries that set both
    * `callbackPort` and `redirectUrl`; for programmatically registered
-   * servers, `callbackPort` takes precedence over `redirectUrl`.
+   * servers, `callbackPort` takes precedence over `redirectUrl`. The same
+   * `clientId` caveat as `redirectUrl` applies.
    */
   callbackPort?: number;
   /** Human-readable OAuth client name */
