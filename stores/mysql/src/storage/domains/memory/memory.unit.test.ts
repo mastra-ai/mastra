@@ -1,6 +1,7 @@
 import { OBSERVATIONAL_MEMORY_TABLE_SCHEMA, TABLE_SCHEMAS } from '@mastra/core/storage';
+import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import type { Pool } from 'mysql2/promise';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { StoreOperationsMySQL } from '../operations';
 import { MemoryMySQL } from './index';
@@ -97,5 +98,58 @@ describe('memory domain init consults the schema snapshot', () => {
     statements.length = 0;
     await memory.init(); // second init in the same snapshot window
     expect(statements).toEqual([]);
+  });
+});
+
+describe('Observational Memory metadata persistence', () => {
+  it('round-trips cursor metadata through a reflection generation', async () => {
+    let row: Record<string, unknown> | undefined;
+    const execute = vi.fn(async (sql: string, params: unknown[] = []) => {
+      if (/^INSERT INTO `mastra_observational_memory`/.test(sql)) {
+        const columns = sql
+          .match(/\(([^)]+)\) VALUES/)![1]!
+          .split(',')
+          .map(column => column.trim().replaceAll('`', ''));
+        row = Object.fromEntries(columns.map((column, index) => [column, params[index]]));
+        return [{ affectedRows: 1 }, []];
+      }
+      if (/^SELECT \* FROM `mastra_observational_memory`/.test(sql)) return [row ? [row] : [], []];
+      return [[], []];
+    });
+    const pool = { execute, query: execute } as unknown as Pool;
+    const operations = new StoreOperationsMySQL({ pool, database: 'mastra' });
+    const memory = new MemoryMySQL({ pool, operations, skipDefaultIndexes: true });
+    const cursor = {
+      lastObservedAt: '2026-01-01T00:00:00.000Z',
+      messageIds: ['message-a', 'message-b'],
+    };
+    const currentRecord: ObservationalMemoryRecord = {
+      id: 'generation-0',
+      scope: 'thread',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      lastObservedAt: new Date('2026-01-01T00:00:00.000Z'),
+      originType: 'initial',
+      generationCount: 0,
+      activeObservations: 'Initial observation',
+      totalTokensObserved: 10,
+      observationTokenCount: 10,
+      pendingMessageTokens: 0,
+      isReflecting: false,
+      isObserving: false,
+      isBufferingObservation: false,
+      isBufferingReflection: false,
+      lastBufferedAtTokens: 0,
+      lastBufferedAtTime: null,
+      config: {},
+      metadata: { __mastra_observation_cursor: cursor },
+    };
+
+    await memory.createReflectionGeneration({ currentRecord, reflection: 'Reflected observation', tokenCount: 5 });
+    const restored = await memory.getObservationalMemory('thread-1', 'resource-1');
+
+    expect(restored?.metadata).toEqual({ __mastra_observation_cursor: cursor });
   });
 });

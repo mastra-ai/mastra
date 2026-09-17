@@ -1027,6 +1027,8 @@ export class Memory extends MastraMemory {
     }
   }
 
+  // These locks coordinate Memory instances in this process only. Adapters must provide durable
+  // transactions or row locks when branch mutations can race across processes.
   private static readonly branchMutationMutexes = new Map<string, Mutex>();
   private static readonly BRANCH_ID_COLLISION_RETRIES = 5;
 
@@ -1047,6 +1049,45 @@ export class Memory extends MastraMemory {
         if (mutex && !mutex.isLocked()) Memory.branchMutationMutexes.delete(key);
       }
     }
+  }
+
+  private async getBranchMutationThreadLockKeys(
+    memoryStore: MemoryStorage,
+    targetThreadIds: Iterable<string | undefined>,
+  ): Promise<string[]> {
+    const threads = await listRawThreads(memoryStore);
+    const threadsById = new Map(threads.map(thread => [thread.id, thread]));
+    const lineageIds = new Set([...targetThreadIds].filter((id): id is string => Boolean(id)));
+
+    for (const targetThreadId of [...lineageIds]) {
+      let current = threadsById.get(targetThreadId);
+      const visited = new Set<string>();
+      while (current && !visited.has(current.id)) {
+        visited.add(current.id);
+        lineageIds.add(current.id);
+        const branch = parseThreadBranchMetadata(current);
+        if (!branch) break;
+        lineageIds.add(branch.parentThreadId);
+        current = threadsById.get(branch.parentThreadId);
+      }
+    }
+
+    const lockIds = new Set(lineageIds);
+    for (const candidate of threads) {
+      const rawBranch = candidate.metadata?.[MASTRA_THREAD_BRANCH_METADATA_KEY];
+      if (
+        rawBranch &&
+        typeof rawBranch === 'object' &&
+        'parentThreadId' in rawBranch &&
+        typeof rawBranch.parentThreadId === 'string' &&
+        lineageIds.has(rawBranch.parentThreadId)
+      ) {
+        parseThreadBranchMetadata(candidate);
+        lockIds.add(candidate.id);
+      }
+    }
+
+    return [...lockIds].map(id => `thread:${id}`);
   }
 
   private async withValidatedMessageMutation<T>(
@@ -1076,7 +1117,13 @@ export class Memory extends MastraMemory {
     const initialThreads = await listAffectedThreads();
     const hasBranchMetadata = initialThreads.some(thread => parseThreadBranchMetadata(thread));
     const keys = [
-      ...(hasBranchMetadata ? initialThreads.map(thread => `thread:${thread.id}`) : []),
+      ...(hasBranchMetadata
+        ? await this.getBranchMutationThreadLockKeys(memoryStore, [
+            ...messages.map(message => message.threadId),
+            ...existingMessages.messages.map(message => message.threadId),
+            threadToCreate?.id,
+          ])
+        : []),
       ...messages.flatMap(message => [
         `message:${message.id}`,
         ...(message.threadId ? [`thread:${message.threadId}`] : []),
@@ -1358,9 +1405,8 @@ export class Memory extends MastraMemory {
   }): Promise<StorageThreadType> {
     assertNoReservedThreadBranchMetadata(thread.metadata);
     const memoryStore = await this.getMemoryStore();
-    const initialThreads = await listRawThreads(memoryStore);
     return this.withBranchMutationLocks(
-      [...initialThreads.map(candidate => `thread:${candidate.id}`), `thread:${thread.id}`],
+      await this.getBranchMutationThreadLockKeys(memoryStore, [thread.id]),
       async () => {
         const threads = await listRawThreads(memoryStore);
         const existing = threads.find(candidate => candidate.id === thread.id);
@@ -1420,41 +1466,37 @@ export class Memory extends MastraMemory {
   }): Promise<StorageThreadType> {
     assertNoReservedThreadBranchMetadata(metadata);
     const memoryStore = await this.getMemoryStore();
-    const initialThreads = await listRawThreads(memoryStore);
-    return this.withBranchMutationLocks(
-      [...initialThreads.map(candidate => `thread:${candidate.id}`), `thread:${id}`],
-      async () => {
-        const existing = await memoryStore.getThreadById({ threadId: id });
-        const existingBranch = existing ? parseThreadBranchMetadata(existing) : null;
-        if (existingBranch?.state === 'pending') {
-          throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
-        }
-        const persistedMetadata =
-          metadata === undefined
-            ? undefined
-            : {
-                ...metadata,
-                ...(existingBranch
-                  ? { [MASTRA_THREAD_BRANCH_METADATA_KEY]: serializeThreadBranchMetadata(existingBranch) }
-                  : {}),
-              };
-        const updatedThread = await memoryStore.patchThread({
-          id,
-          title,
-          metadata: persistedMetadata,
+    return this.withBranchMutationLocks(await this.getBranchMutationThreadLockKeys(memoryStore, [id]), async () => {
+      const existing = await memoryStore.getThreadById({ threadId: id });
+      const existingBranch = existing ? parseThreadBranchMetadata(existing) : null;
+      if (existingBranch?.state === 'pending') {
+        throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
+      }
+      const persistedMetadata =
+        metadata === undefined
+          ? undefined
+          : {
+              ...metadata,
+              ...(existingBranch
+                ? { [MASTRA_THREAD_BRANCH_METADATA_KEY]: serializeThreadBranchMetadata(existingBranch) }
+                : {}),
+            };
+      const updatedThread = await memoryStore.patchThread({
+        id,
+        title,
+        metadata: persistedMetadata,
+      });
+
+      if (metadata?.workingMemory && typeof metadata.workingMemory === 'string' && updatedThread.resourceId) {
+        await this.handleWorkingMemoryFromMetadata({
+          workingMemory: metadata.workingMemory as string,
+          resourceId: updatedThread.resourceId,
+          memoryConfig,
         });
+      }
 
-        if (metadata?.workingMemory && typeof metadata.workingMemory === 'string' && updatedThread.resourceId) {
-          await this.handleWorkingMemoryFromMetadata({
-            workingMemory: metadata.workingMemory as string,
-            resourceId: updatedThread.resourceId,
-            memoryConfig,
-          });
-        }
-
-        return sanitizeThread(updatedThread);
-      },
-    );
+      return sanitizeThread(updatedThread);
+    });
   }
 
   /**
@@ -1736,9 +1778,8 @@ export class Memory extends MastraMemory {
 
   async deleteThread(threadId: string): Promise<void> {
     const memoryStore = await this.getMemoryStore();
-    const initialThreads = await listRawThreads(memoryStore);
     await this.withBranchMutationLocks(
-      [...initialThreads.map(thread => `thread:${thread.id}`), `thread:${threadId}`],
+      await this.getBranchMutationThreadLockKeys(memoryStore, [threadId]),
       async () => {
         const threads = await listRawThreads(memoryStore);
         const thread = threads.find(candidate => candidate.id === threadId);
@@ -3777,12 +3818,13 @@ Notes:
             storedMessages.messages.map(message => message.resourceId).filter((id): id is string => Boolean(id)),
           ),
         ].sort();
-        const threadsById = new Map<string, StorageThreadType>();
-        for (const resourceId of resourceIds) {
-          for (const thread of await listRawThreads(memoryStore, resourceId)) threadsById.set(thread.id, thread);
-        }
         await this.withBranchMutationLocks(
-          [...threadsById.keys()].map(id => `thread:${id}`).concat(messageIds.map(id => `message:${id}`)),
+          (
+            await this.getBranchMutationThreadLockKeys(
+              memoryStore,
+              storedMessages.messages.map(message => message.threadId),
+            )
+          ).concat(messageIds.map(id => `message:${id}`)),
           async () => {
             const refreshedMessages = await memoryStore.listMessagesById({ messageIds });
             const refreshedResourceIds = [
@@ -4185,10 +4227,8 @@ Notes:
     memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType> {
     const memoryStore = await this.getMemoryStore();
-    const initialThreads = await listRawThreads(memoryStore);
-    return this.withBranchMutationLocks(
-      [...initialThreads.map(thread => `thread:${thread.id}`), `thread:${input.threadId}`],
-      () => this.updateThreadResourceIdUnderLock(input),
+    return this.withBranchMutationLocks(await this.getBranchMutationThreadLockKeys(memoryStore, [input.threadId]), () =>
+      this.updateThreadResourceIdUnderLock(input),
     );
   }
 
@@ -4623,6 +4663,10 @@ Notes:
     }
 
     return history;
+  }
+
+  protected override getMessageHistoryReader() {
+    return async (input: StorageListMessagesInput) => queryThreadMessages(await this.getMemoryStore(), input);
   }
 
   protected override getSemanticRecallMessageRetriever(semanticRecall: MemoryConfigInternal['semanticRecall']) {

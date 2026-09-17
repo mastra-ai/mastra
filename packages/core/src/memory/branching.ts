@@ -13,6 +13,7 @@ export type {
 
 /** @internal Framework-owned thread metadata key used for shared-history lineage. */
 export const MASTRA_THREAD_BRANCH_METADATA_KEY = '__mastra_thread_branch';
+const MASTRA_MEMORY_TOKEN_LIMITER_METADATA_KEY = 'memoryTokenLimiter';
 
 export type ThreadBranchErrorCode =
   | 'BRANCHING_UNSUPPORTED'
@@ -31,10 +32,15 @@ export function createThreadBranchError(code: ThreadBranchErrorCode, text: strin
 }
 
 export function assertNoReservedThreadBranchMetadata(metadata?: Record<string, unknown>): void {
-  if (metadata && Object.prototype.hasOwnProperty.call(metadata, MASTRA_THREAD_BRANCH_METADATA_KEY)) {
+  if (!metadata) return;
+
+  const reservedKey = [MASTRA_THREAD_BRANCH_METADATA_KEY, MASTRA_MEMORY_TOKEN_LIMITER_METADATA_KEY].find(key =>
+    Object.prototype.hasOwnProperty.call(metadata, key),
+  );
+  if (reservedKey) {
     throw createThreadBranchError(
       'BRANCH_MUTATION_CONFLICT',
-      `Thread metadata key "${MASTRA_THREAD_BRANCH_METADATA_KEY}" is reserved for Mastra-managed branch lineage.`,
+      `Thread metadata key "${reservedKey}" is reserved for Mastra-managed memory state.`,
     );
   }
 }
