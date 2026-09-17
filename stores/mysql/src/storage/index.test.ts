@@ -28,7 +28,7 @@ describe('MySQLStore configuration validation', () => {
 
 const store = new MySQLStore(TEST_CONFIG);
 // MySQL does not persist tool mocks / tool mock reports — it rejects them.
-createTestSuite(store, { toolMocks: false });
+createTestSuite(store, { toolMocks: false, versionLabels: 'unsupported' });
 
 afterAll(async () => {
   await store.close();

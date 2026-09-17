@@ -33,7 +33,7 @@ const mastra = new Mastra({
   storage: libsql,
 });
 
-createTestSuite(mastra.getStorage()!);
+createTestSuite(mastra.getStorage()!, { versionLabels: 'supported' });
 
 // Configuration validation tests
 createConfigValidationTests({

@@ -52,7 +52,9 @@ For an agent execution, Mastra resolves the root selector and every explicit `ve
 
 Custom labels apply to agents only, not prompt blocks, skills, or other versioned resources. Built-in InMemory storage supports labels for the lifetime of the process. Filesystem storage retains labeled versions across restarts, but coordinates writes only within one process. Use one writer process for each filesystem storage path.
 
-Upgrade core, editor, and any custom storage adapter together before enabling labels. Mixing older database writers with label-aware writers can bypass labeled-version deletion protection.
+Upgrade core, editor, and the selected storage adapter together before enabling labels. Mixing older database writers with label-aware writers can bypass labeled-version deletion protection.
+
+LibSQL, Turso, PostgreSQL, and PostgreSQL VNext persist custom labels. PostgreSQL resolves explicit labels and version IDs against the primary database so read-replica lag can't change the selected target. ClickHouse and Cloudflare table mappings provide build compatibility only, without custom-label persistence.
 
 Run pinning doesn't add persisted trace or evaluation provenance, or a historical evaluation interface.
 
