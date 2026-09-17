@@ -148,8 +148,10 @@ export abstract class MemoryStorage extends StorageDomain {
   }
 
   /**
-   * Serializes a metadata read-modify-write for one thread within this storage instance.
-   * Transaction-capable adapters may override this to provide cross-process atomicity.
+   * Serializes a metadata read-modify-write for one thread within this storage
+   * instance. The read and the write are still separate operations, so writers
+   * in other instances can interleave. Use `advanceMemoryTokenBoundary` when the
+   * update must be atomic across instances.
    */
   async updateThreadMetadata({
     id,
