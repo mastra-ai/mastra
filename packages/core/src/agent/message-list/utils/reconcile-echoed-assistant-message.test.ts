@@ -99,6 +99,58 @@ describe('reconcileEchoedAssistantMessage', () => {
     expect(result.content.parts).toEqual([...storedParts, { type: 'text', text: 'client-only' }]);
   });
 
+  it('restores per-part metadata when only some echoed parts lost it', () => {
+    const stored = assistant([
+      { type: 'text', text: 'One.', providerMetadata: { openai: { itemId: 'msg_1' } } },
+      { type: 'text', text: 'Two.', providerMetadata: { openai: { itemId: 'msg_2' } } },
+    ]);
+    const echoed = assistant([
+      { type: 'text', text: 'One.', providerMetadata: { openai: { itemId: 'msg_1' } } },
+      { type: 'text', text: 'Two.' },
+    ]);
+    const result = reconcileEchoedAssistantMessage(stored, echoed)!;
+    expect(result.content.parts).toEqual(stored.content.parts);
+  });
+
+  it('merges metadata per namespace: echoed keys win, stored keys fill gaps', () => {
+    const stored = assistant([
+      {
+        type: 'text',
+        text: 'Hi.',
+        providerMetadata: { openai: { itemId: 'msg_1', extra: 'stored' }, azure: { itemId: 'az_1' } },
+      },
+    ]);
+    const echoed = assistant([
+      { type: 'text', text: 'Hi.', providerMetadata: { openai: { extra: 'client' }, client: { flag: true } } },
+    ]);
+    const result = reconcileEchoedAssistantMessage(stored, echoed)!;
+    expect(result.content.parts).toEqual([
+      {
+        type: 'text',
+        text: 'Hi.',
+        providerMetadata: {
+          openai: { itemId: 'msg_1', extra: 'client' },
+          azure: { itemId: 'az_1' },
+          client: { flag: true },
+        },
+      },
+    ]);
+  });
+
+  it('matches repeated identical parts one-to-one', () => {
+    const stored = assistant([
+      { type: 'text', text: 'Same.', providerMetadata: { openai: { itemId: 'msg_1' } } },
+      { type: 'text', text: 'Same.', providerMetadata: { openai: { itemId: 'msg_2' } } },
+    ]);
+    const echoed = assistant([
+      { type: 'text', text: 'Same.' },
+      { type: 'text', text: 'Same.' },
+    ]);
+    const result = reconcileEchoedAssistantMessage(stored, echoed)!;
+    expect(result.content.parts).toEqual(stored.content.parts);
+    expect(result.content.parts).toHaveLength(2);
+  });
+
   it('keeps stored identity/timestamps and merges content metadata', () => {
     const stored = assistant(storedParts, { createdAt: new Date(1000) });
     stored.content.metadata = { fromStore: true };

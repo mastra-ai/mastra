@@ -29,9 +29,33 @@ function partKey(part: Part): string | undefined {
   }
 }
 
-function hasProviderMetadata(part: Part): boolean {
-  const meta = (part as { providerMetadata?: Record<string, unknown> }).providerMetadata;
-  return !!meta && Object.keys(meta).length > 0;
+type ProviderMetadata = Record<string, Record<string, unknown>>;
+
+function providerMetadataOf(part: Part): ProviderMetadata | undefined {
+  return (part as { providerMetadata?: ProviderMetadata }).providerMetadata;
+}
+
+/**
+ * Merge provider metadata per provider namespace: echoed keys win, stored keys fill
+ * anything the echo omitted. Returns `restored: true` when at least one stored key was
+ * missing from the echo.
+ */
+function mergeProviderMetadata(
+  stored: ProviderMetadata | undefined,
+  echoed: ProviderMetadata | undefined,
+): { merged: ProviderMetadata | undefined; restored: boolean } {
+  if (!stored) return { merged: echoed, restored: false };
+  const merged: ProviderMetadata = { ...echoed };
+  let restored = false;
+  for (const [namespace, storedValues] of Object.entries(stored)) {
+    const echoedValues = echoed?.[namespace];
+    const combined: Record<string, unknown> = { ...storedValues, ...echoedValues };
+    for (const key of Object.keys(storedValues)) {
+      if (!echoedValues || !(key in echoedValues)) restored = true;
+    }
+    merged[namespace] = combined;
+  }
+  return { merged, restored };
 }
 
 /**
@@ -60,30 +84,34 @@ export function reconcileEchoedAssistantMessage(
 
   const storedHasReasoning = storedParts.some(p => p.type === 'reasoning');
   const echoedHasReasoning = echoedParts.some(p => p.type === 'reasoning');
-  const storedHasProviderMetadata = storedParts.some(hasProviderMetadata);
-  const echoedHasProviderMetadata = echoedParts.some(hasProviderMetadata);
+  let restored = storedHasReasoning && !echoedHasReasoning;
 
-  const echoLostReasoning = storedHasReasoning && !echoedHasReasoning;
-  const echoLostProviderMetadata = storedHasProviderMetadata && !echoedHasProviderMetadata;
-  if (!echoLostReasoning && !echoLostProviderMetadata) return undefined;
-
-  const echoedByKey = new Map<string, Part>();
+  // Repeated parts share a key; consume echoed parts one-to-one in order.
+  const echoedByKey = new Map<string, Part[]>();
   for (const part of echoedParts) {
     const key = partKey(part);
-    if (key && !echoedByKey.has(key)) echoedByKey.set(key, part);
+    if (!key) continue;
+    const queue = echoedByKey.get(key);
+    if (queue) queue.push(part);
+    else echoedByKey.set(key, [part]);
   }
 
   const consumed = new Set<Part>();
   const parts: Part[] = storedParts.map(storedPart => {
     const key = partKey(storedPart);
-    const echoedPart = key ? echoedByKey.get(key) : undefined;
+    const echoedPart = key ? echoedByKey.get(key)?.shift() : undefined;
     if (!echoedPart) return storedPart;
     consumed.add(echoedPart);
-    const storedMeta = (storedPart as { providerMetadata?: unknown }).providerMetadata;
-    return hasProviderMetadata(echoedPart) || !storedMeta
-      ? echoedPart
-      : ({ ...echoedPart, providerMetadata: storedMeta } as Part);
+    const { merged, restored: metaRestored } = mergeProviderMetadata(
+      providerMetadataOf(storedPart),
+      providerMetadataOf(echoedPart),
+    );
+    if (!metaRestored) return echoedPart;
+    restored = true;
+    return { ...echoedPart, providerMetadata: merged } as Part;
   });
+  if (!restored) return undefined;
+
   for (const part of echoedParts) {
     if (!consumed.has(part)) parts.push(part);
   }
