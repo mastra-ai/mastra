@@ -1,12 +1,12 @@
 import { Slider as SliderPrimitive } from '@base-ui/react/slider';
-import '@/ds/primitives/focus.css';
 
 import { cn } from '@/lib/utils';
 
-export type SliderProps = Omit<SliderPrimitive.Root.Props, 'onValueChange' | 'onValueCommitted'> & {
-  onValueChange?: (value: number[], eventDetails: SliderPrimitive.Root.ChangeEventDetails) => void;
-  onValueCommitted?: (value: number[], eventDetails: SliderPrimitive.Root.CommitEventDetails) => void;
-};
+export type SliderProps = Omit<SliderPrimitive.Root.Props, 'onValueChange' | 'onValueCommitted'> &
+  Pick<SliderPrimitive.Thumb.Props, 'getAriaLabel'> & {
+    onValueChange?: (value: number[], eventDetails: SliderPrimitive.Root.ChangeEventDetails) => void;
+    onValueCommitted?: (value: number[], eventDetails: SliderPrimitive.Root.CommitEventDetails) => void;
+  };
 
 function toArray(value: number | readonly number[]): number[] {
   if (typeof value === 'number') {
@@ -25,9 +25,11 @@ const Slider = ({
   onValueCommitted,
   'aria-label': ariaLabel,
   'aria-labelledby': ariaLabelledBy,
+  getAriaLabel,
   ...props
 }: SliderProps) => {
-  const values = Array.isArray(value) ? value : Array.isArray(defaultValue) ? defaultValue : [min];
+  const currentValue = value ?? defaultValue ?? min;
+  const values = typeof currentValue === 'number' ? [currentValue] : currentValue;
 
   return (
     <SliderPrimitive.Root
@@ -70,12 +72,13 @@ const Slider = ({
             index={index}
             aria-label={ariaLabel}
             aria-labelledby={ariaLabelledBy}
+            getAriaLabel={getAriaLabel}
             className={cn(
               'relative block h-5 w-2.5 shrink-0 rounded-full border-2 border-neutral6 bg-neutral2 outline-hidden select-none',
               'after:absolute after:-inset-2 after:content-[""]',
               'transition-shadow duration-normal',
               'hover:ring-2 hover:ring-neutral6/30',
-              'ds-focus ds-focus-notch ds-focus-within',
+              'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-neutral6/60',
               'data-[orientation=vertical]:h-2.5 data-[orientation=vertical]:w-5',
               'data-[disabled]:pointer-events-none',
             )}

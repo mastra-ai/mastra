@@ -2336,6 +2336,62 @@ describe('Agent signals', () => {
     claim.unsubscribe();
   });
 
+  it('updates advertised peer metadata without replacing thread ownership', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const ownerAgent = new Agent({
+      id: 'updatable-peer-agent',
+      name: 'Updatable Peer Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('owner response'),
+      pubsub,
+    });
+    const discoveryAgent = new Agent({
+      id: 'peer-discovery-agent',
+      name: 'Peer Discovery Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('discovery response'),
+      pubsub,
+    });
+    const target = { resourceId: 'updatable-resource', threadId: 'updatable-thread' };
+    const claim = await ownerAgent.claimThreadOwnership({
+      ...target,
+      peer: { label: 'Mastra', title: 'Initial title', metadata: { mode: 'build' } },
+    });
+
+    expect(
+      ownerAgent.updateThreadPeerAdvertisement({
+        ...target,
+        peer: { title: 'Renamed thread', metadata: { mode: 'review' } },
+      }),
+    ).toBe(true);
+    expect(discoveryAgent.updateThreadPeerAdvertisement({ ...target, peer: { title: 'Unauthorized rename' } })).toBe(
+      false,
+    );
+
+    await expect(discoveryAgent.discoverThreadPeers()).resolves.toEqual([
+      expect.objectContaining({
+        id: 'updatable-peer-agent:updatable-resource:updatable-thread',
+        label: 'Mastra',
+        title: 'Renamed thread',
+        metadata: { mode: 'review' },
+      }),
+    ]);
+
+    expect(ownerAgent.updateThreadPeerAdvertisement({ ...target, peer: { metadata: undefined } })).toBe(true);
+    const peersAfterClearingMetadata = await discoveryAgent.discoverThreadPeers();
+    expect(peersAfterClearingMetadata).toEqual([
+      expect.objectContaining({
+        id: 'updatable-peer-agent:updatable-resource:updatable-thread',
+        label: 'Mastra',
+        title: 'Renamed thread',
+      }),
+    ]);
+    expect(peersAfterClearingMetadata[0]?.metadata).toBeUndefined();
+
+    claim.unsubscribe();
+    await expect(discoveryAgent.discoverThreadPeers({ timeoutMs: 10 })).resolves.toEqual([]);
+  });
+
   it('settles peer discovery without waiting for pubsub unsubscribe', async () => {
     const pubsub = new HangingUnsubscribePubSub();
     const agent = new Agent({
@@ -2917,6 +2973,697 @@ describe('Agent signals', () => {
     }
 
     await expect(stream.text).resolves.toBe('first response');
+  });
+
+  it.each(['pre-run', 'pending'] as const)(
+    'admits a forwarded signal once when first queued as %s',
+    async firstQueue => {
+      const pubsub = new ControlledLeasePubSub();
+      const scope = { resourceId: 'forwarded-pre-run-user', threadId: 'forwarded-pre-run-thread' };
+      const memory = new MockMemory();
+      const model = createTextStreamModel('winner answer');
+      const agent = new Agent({
+        id: 'forwarded-pre-run',
+        name: 'Forwarded pre-run',
+        instructions: 'Test',
+        model,
+        memory,
+        pubsub,
+      });
+      const subscription = await agent.subscribeToThread(scope);
+      const signal = createSignal({
+        id: 'same-forwarded-signal',
+        type: 'user-message',
+        contents: 'Only handle A once',
+      });
+      try {
+        for (const preRun of [firstQueue === 'pre-run', firstQueue !== 'pre-run']) {
+          const runId = preRun ? 'old-run' : 'winner-run';
+          await pubsub.publish(
+            `agent.thread-stream.${encodeURIComponent(`${scope.resourceId}\u0000${scope.threadId}`)}`,
+            {
+              type: 'signal-enqueued',
+              runId,
+              data: { type: 'signal-enqueued', runId, signal: signal.toDataPart().data, preRun, sourceId: 'old-owner' },
+            },
+          );
+        }
+        await pubsub.flush();
+        const output = await agent.stream('winner input', {
+          runId: 'winner-run',
+          memory: { resource: scope.resourceId, thread: scope.threadId },
+        });
+        await output.text;
+        await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
+        expect(model.doStreamCalls).toHaveLength(firstQueue === 'pre-run' ? 1 : 2);
+        const prompt = model.doStreamCalls.at(-1)?.prompt;
+        expect(JSON.stringify(prompt).match(/Only handle A once/g)).toHaveLength(1);
+        const { messages } = await memory.recall(scope);
+        expect(
+          messages.filter(message =>
+            message.content.parts.some(part => part.type === 'text' && part.text === 'Only handle A once'),
+          ),
+        ).toHaveLength(1);
+      } finally {
+        subscription.unsubscribe();
+      }
+    },
+  );
+
+  it.each(['thread', 'upstream', 'none'] as const)(
+    'preserves pending order after %s cancellation and idle preparation failure',
+    async cancellation => {
+      const scope = { resourceId: 'idle-failure-user', threadId: `idle-failure-${cancellation}` };
+      const pubsub = new ControlledLeasePubSub();
+      const memory = new MockMemory();
+      const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel('first response', 'answer');
+      let preparing!: () => void;
+      const prepared = new Promise<void>(resolve => {
+        preparing = resolve;
+      });
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      const abort = new AbortController();
+      let calls = 0;
+      const agent = new Agent({
+        id: 'idle-failure',
+        name: 'Idle failure',
+        model,
+        memory,
+        pubsub,
+        instructions: async () => {
+          if (++calls === 2) {
+            preparing();
+            await gate;
+            throw new Error('Idle preparation failed');
+          }
+          return 'Test';
+        },
+      });
+      const subscription = await agent.subscribeToThread(scope);
+      try {
+        const initial = await agent.stream('initial', {
+          memory: { resource: scope.resourceId, thread: scope.threadId },
+        });
+        await vi.waitFor(() => expect(getStreamCount()).toBe(1));
+        await agent.queueMessage('failed startup', {
+          ...scope,
+          ifIdle: { streamOptions: { abortSignal: abort.signal } },
+        }).accepted;
+        releaseFirst();
+        await initial.text;
+        await prepared;
+        await agent.sendSignal({ type: 'user-message', contents: 'pre-run A' }, scope).accepted;
+        await agent.queueMessage('idle C', scope).accepted;
+        if (cancellation === 'thread') expect(subscription.abort()).toBe(true);
+        if (cancellation === 'upstream') abort.abort();
+        release();
+        await vi.waitFor(() => expect(pubsub.publishedData.some(data => data.type === 'run-failed')).toBe(true));
+        await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
+        const { messages } = await memory.recall(scope);
+        const order = messages.flatMap(message =>
+          message.content.parts.flatMap(part =>
+            part.type === 'text' && ['pre-run A', 'idle C'].includes(part.text) ? [part.text] : [],
+          ),
+        );
+        expect(order).toEqual(['pre-run A', 'idle C']);
+        expect(model.doStreamCalls).toHaveLength(3);
+        expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('pre-run A');
+        expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).not.toContain('idle C');
+        expect(JSON.stringify(model.doStreamCalls[2]?.prompt)).toContain('idle C');
+        expect(calls).toBe(4);
+        await vi.waitFor(() => expect(pubsub.owners.get(`${scope.resourceId}\u0000${scope.threadId}`)).toBeUndefined());
+      } finally {
+        releaseFirst();
+        release();
+        subscription.unsubscribe();
+      }
+    },
+  );
+
+  it.each(['success', 'failure'] as const)(
+    'delivers pre-run and idle signals after aborting before preparation %s',
+    async outcome => {
+      const scope = { resourceId: 'preparation-abort-user', threadId: 'preparation-abort-thread' };
+      const pubsub = new ControlledLeasePubSub();
+      const memory = new MockMemory();
+      let reachedPreparation!: () => void;
+      const preparing = new Promise<void>(resolve => {
+        reachedPreparation = resolve;
+      });
+      let releasePreparation!: () => void;
+      const preparationGate = new Promise<void>(resolve => {
+        releasePreparation = resolve;
+      });
+      const model = createTextStreamModel('queued answer');
+      let firstPreparation = true;
+      const agent = new Agent({
+        id: 'preparation-abort',
+        name: 'Preparation abort',
+        model,
+        memory,
+        pubsub,
+        instructions: async () => {
+          if (!firstPreparation) return 'Test';
+          firstPreparation = false;
+          reachedPreparation();
+          await preparationGate;
+          if (outcome === 'failure') throw new Error('Preparation failed after abort');
+          return 'Test';
+        },
+      });
+      const subscription = await agent.subscribeToThread(scope);
+      const runId = 'aborted-preparation';
+      const streamPromise = agent.stream('first', {
+        runId,
+        memory: { resource: scope.resourceId, thread: scope.threadId },
+      });
+      void streamPromise.catch(() => {});
+      try {
+        await preparing;
+        expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBe(runId);
+        expect(agentThreadStreamRuntime.hasThreadRun(runId, pubsub)).toBe(false);
+        await agent.sendSignal({ type: 'user-message', contents: 'pre-run A' }, scope).accepted;
+        await agent.queueMessage('idle B', scope).accepted;
+        expect(subscription.abort()).toBe(true);
+        expect(agentThreadStreamRuntime.drainPendingSignals(runId, pubsub, 'pre-run')).toEqual([]);
+        releasePreparation();
+        if (outcome === 'failure') {
+          await expect(streamPromise).rejects.toThrow('Preparation failed after abort');
+        } else {
+          const stream = await streamPromise;
+          await stream.text;
+        }
+        await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
+        await vi.waitFor(() => expect(model.doStreamCalls).toHaveLength(2));
+        const { messages } = await memory.recall(scope);
+        const order = messages.flatMap(message =>
+          message.content.parts.flatMap(part =>
+            part.type === 'text' && ['pre-run A', 'idle B'].includes(part.text) ? [part.text] : [],
+          ),
+        );
+        expect(order).toEqual(['pre-run A', 'idle B']);
+        expect(JSON.stringify(model.doStreamCalls[0]?.prompt)).toContain('pre-run A');
+        expect(JSON.stringify(model.doStreamCalls[0]?.prompt)).not.toContain('idle B');
+        expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('idle B');
+        await vi.waitFor(() => expect(pubsub.owners.get(`${scope.resourceId}\u0000${scope.threadId}`)).toBeUndefined());
+      } finally {
+        releasePreparation();
+        subscription.unsubscribe();
+      }
+    },
+  );
+
+  it.each(
+    (['none', 'thread', 'upstream', 'remote'] as const).flatMap(cancellation =>
+      (['owner', 'follower'] as const).map(queueLocation => [cancellation, queueLocation] as const),
+    ),
+  )(
+    'preserves pending-before-idle order after %s cancellation with idle work on the %s',
+    async (cancellation, queueLocation) => {
+      const scope = { resourceId: 'mixed-queue-user', threadId: `mixed-${cancellation}` };
+      const pubsub = new ControlledLeasePubSub();
+      const memory = new MockMemory();
+      const upstream = new AbortController();
+      const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel(
+        'first response',
+        'later response',
+      );
+      const agent = new Agent({ id: 'mixed-queue', name: 'Mixed queue', instructions: 'Test', model, memory, pubsub });
+      const subscription = await agent.subscribeToThread(scope);
+      // A separate runtime has no owner records and must forward abort over PubSub.
+      const follower = new AgentThreadStreamRuntime();
+      const remoteSubscription = await follower.subscribeToThread(agent, scope, pubsub);
+      const stream = await agent.stream('first', {
+        memory: { resource: scope.resourceId, thread: scope.threadId },
+        abortSignal: upstream.signal,
+      });
+      try {
+        await vi.waitFor(() => expect(getStreamCount()).toBe(1));
+        await agent.sendSignal({ type: 'user-message', contents: 'pending A' }, scope).accepted;
+        await vi.waitFor(() => expect(remoteSubscription.activeRunId()).toBe(stream.runId));
+        await (
+          queueLocation === 'owner'
+            ? agent.queueMessage('idle B', scope)
+            : follower.queueMessage(agent, 'idle B', scope, pubsub)
+        ).accepted;
+        if (cancellation === 'thread') expect(subscription.abort()).toBe(true);
+        if (cancellation === 'upstream') upstream.abort();
+        if (cancellation === 'remote') {
+          await vi.waitFor(() => expect(remoteSubscription.activeRunId()).toBe(stream.runId));
+          expect(remoteSubscription.abort()).toBe(true);
+          await vi.waitFor(() =>
+            expect(pubsub.publishedData.some(data => data.type === 'run-aborted' && data.runId === stream.runId)).toBe(
+              true,
+            ),
+          );
+          expect(
+            pubsub.publishedData.some(data => data.type === 'run-abort-requested' && data.runId === stream.runId),
+          ).toBe(true);
+        }
+        releaseFirst();
+        await stream.text;
+        await vi.waitFor(() => expect(getStreamCount()).toBe(3));
+        await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
+        const { messages } = await memory.recall(scope);
+        const order = messages.flatMap(message =>
+          message.content.parts.flatMap(part =>
+            part.type === 'text' && ['pending A', 'idle B'].includes(part.text) ? [part.text] : [],
+          ),
+        );
+        expect(order).toEqual(['pending A', 'idle B']);
+        expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('pending A');
+        expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).not.toContain('idle B');
+        expect(JSON.stringify(model.doStreamCalls[2]?.prompt)).toContain('idle B');
+        await vi.waitFor(() => expect(pubsub.owners.get(`${scope.resourceId}\u0000${scope.threadId}`)).toBeUndefined());
+      } finally {
+        releaseFirst();
+        subscription.unsubscribe();
+        remoteSubscription.unsubscribe();
+      }
+    },
+  );
+
+  it('does not recursively retry a cancelled follow-up whose preparation also fails', async () => {
+    const scope = { resourceId: 'failed-recovery-user', threadId: 'failed-recovery-thread' };
+    const pubsub = new ControlledLeasePubSub();
+    const memory = new MockMemory();
+    const model = createTextStreamModel('recovered answer');
+    let preparing!: () => void;
+    const started = new Promise<void>(resolve => {
+      preparing = resolve;
+    });
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    let preparations = 0;
+    const agent = new Agent({
+      id: 'failed-recovery',
+      name: 'Failed recovery',
+      memory,
+      model,
+      pubsub,
+      instructions: async () => {
+        preparations++;
+        if (preparations === 1) {
+          preparing();
+          await gate;
+          throw new Error('Initial preparation failed');
+        }
+        if (preparations === 2) {
+          expect(subscription.abort()).toBe(true);
+          throw new Error('Follow-up preparation failed');
+        }
+        return 'Test';
+      },
+    });
+    const subscription = await agent.subscribeToThread(scope);
+    const first = agent.stream('first', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+    void first.catch(() => {});
+    try {
+      await started;
+      await agent.sendSignal({ type: 'user-message', contents: 'preserved A' }, scope).accepted;
+      await agent.sendSignal({ type: 'user-message', contents: 'preserved B' }, scope).accepted;
+      expect(subscription.abort()).toBe(true);
+      release();
+      await expect(first).rejects.toThrow('Initial preparation failed');
+      await vi.waitFor(() =>
+        expect(
+          pubsub.publishedData.some(
+            data => data.type === 'run-failed' && data.error.includes('Follow-up preparation failed'),
+          ),
+        ).toBe(true),
+      );
+      await vi.waitFor(() => expect(pubsub.owners.get(`${scope.resourceId}\u0000${scope.threadId}`)).toBeUndefined());
+      expect(preparations).toBe(2);
+      expect(model.doStreamCalls).toHaveLength(0);
+      const recovered = await agent.stream('natural next turn', {
+        memory: { resource: scope.resourceId, thread: scope.threadId },
+      });
+      await recovered.text;
+      await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
+      expect(preparations).toBe(3);
+      const { messages } = await memory.recall(scope);
+      const preserved = messages.flatMap(message =>
+        message.content.parts.flatMap(part =>
+          part.type === 'text' && ['preserved A', 'preserved B'].includes(part.text) ? [part.text] : [],
+        ),
+      );
+      expect(preserved).toEqual(['preserved A', 'preserved B']);
+      expect(model.doStreamCalls).toHaveLength(2);
+      expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('preserved A');
+      expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('preserved B');
+    } finally {
+      release();
+      subscription.unsubscribe();
+    }
+  });
+
+  it('executes forwarded messages once on a real winner after an aborted owner loses its lease', async () => {
+    const scope = { resourceId: 'real-winner-user', threadId: 'real-winner-thread' };
+    const key = `${scope.resourceId}\u0000${scope.threadId}`;
+    const pubsub = new ControlledLeasePubSub();
+    const owner = new AgentThreadStreamRuntime();
+    const memory = new MockMemory();
+    const model = createTextStreamModel('winner answer');
+    let preparing!: () => void;
+    const preparingWinner = new Promise<void>(resolve => {
+      preparing = resolve;
+    });
+    let releaseWinner!: () => void;
+    const winnerGate = new Promise<void>(resolve => {
+      releaseWinner = resolve;
+    });
+    const agent = new Agent({
+      id: 'real-winner',
+      name: 'Real winner',
+      model,
+      memory,
+      pubsub,
+      instructions: async () => {
+        preparing();
+        await winnerGate;
+        return 'Test';
+      },
+    });
+    const ownerSubscription = await owner.subscribeToThread(agent, scope, pubsub);
+    const winnerSubscription = await agent.subscribeToThread(scope);
+    let finishOwner!: () => void;
+    const ownerFinished = new Promise<void>(resolve => {
+      finishOwner = resolve;
+    });
+    const oldRunId = 'aborted-losing-owner';
+    const winnerRunId = 'real-winning-run';
+    const options = owner.prepareRunOptions(
+      { runId: oldRunId, memory: { resource: scope.resourceId, thread: scope.threadId } },
+      pubsub,
+    );
+    await owner.registerRun(
+      agent,
+      {
+        runId: oldRunId,
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => ownerFinished,
+      } as any,
+      options,
+      pubsub,
+    );
+    let releaseTransfer!: () => void;
+    const transferGate = new Promise<void>(resolve => {
+      releaseTransfer = resolve;
+    });
+    let transferring!: () => void;
+    const transferStarted = new Promise<void>(resolve => {
+      transferring = resolve;
+    });
+    try {
+      const pending = owner.sendSignal(agent, { type: 'user-message', contents: 'pending A' }, scope, pubsub);
+      await pending.accepted;
+      const idle = owner.queueMessage(agent, 'idle B', scope, pubsub);
+      await idle.accepted;
+      pubsub.transferLeaseWait = transferGate;
+      pubsub.onTransferLease = transferring;
+      expect(ownerSubscription.abort()).toBe(true);
+      finishOwner();
+      await transferStarted;
+      pubsub.owners.set(key, winnerRunId);
+      const winning = agent.stream('winner input', {
+        runId: winnerRunId,
+        memory: { resource: scope.resourceId, thread: scope.threadId },
+      });
+      await preparingWinner;
+      releaseTransfer();
+      await vi.waitFor(() =>
+        expect(
+          pubsub.publishedData.filter(
+            data =>
+              data.type === 'signal-enqueued' &&
+              data.runId === winnerRunId &&
+              [pending.signal.id, idle.signal.id].includes(data.signal.id),
+          ),
+        ).toHaveLength(2),
+      );
+      await pubsub.flush();
+      expect(model.doStreamCalls).toHaveLength(0);
+      releaseWinner();
+      const output = await winning;
+      await output.text;
+      await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
+      expect(model.doStreamCalls).toHaveLength(2);
+      const prompt = JSON.stringify(model.doStreamCalls[1]?.prompt);
+      expect(prompt.match(/pending A/g)).toHaveLength(1);
+      expect(prompt.match(/idle B/g)).toHaveLength(1);
+      const { messages } = await memory.recall(scope);
+      const delivered = messages.flatMap(message =>
+        message.content.parts.flatMap(part =>
+          part.type === 'text' && ['pending A', 'idle B'].includes(part.text) ? [part.text] : [],
+        ),
+      );
+      expect(delivered).toEqual(['pending A', 'idle B']);
+      expect(messages.filter(message => message.role === 'assistant')).toHaveLength(2);
+      await vi.waitFor(() => expect(pubsub.owners.get(key)).toBeUndefined());
+      const next = await agent.stream('after handoff', {
+        memory: { resource: scope.resourceId, thread: scope.threadId },
+      });
+      await next.text;
+      expect(model.doStreamCalls).toHaveLength(3);
+      await vi.waitFor(() => expect(pubsub.owners.get(key)).toBeUndefined());
+    } finally {
+      finishOwner();
+      releaseTransfer();
+      releaseWinner();
+      ownerSubscription.unsubscribe();
+      winnerSubscription.unsubscribe();
+    }
+  });
+
+  it.each(['retain', 'lose'] as const)(
+    'preserves queued input when abort %s ownership during a delayed handoff',
+    async ownership => {
+      const scope = { resourceId: 'abort-handoff-user', threadId: `abort-handoff-${ownership}` };
+      const key = `${scope.resourceId}\u0000${scope.threadId}`;
+      const pubsub = new ControlledLeasePubSub();
+      const memory = new MockMemory();
+      const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel(
+        'first response',
+        'queued response',
+      );
+      const agent = new Agent({
+        id: 'abort-handoff',
+        name: 'Abort handoff',
+        instructions: 'Test',
+        model,
+        memory,
+        pubsub,
+      });
+      const subscription = await agent.subscribeToThread(scope);
+      const winner = new AgentThreadStreamRuntime();
+      const winnerSubscription = await winner.subscribeToThread(agent, scope, pubsub);
+      const stream = await agent.stream('first', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+      let releaseTransfer!: () => void;
+      const transferGate = new Promise<void>(resolve => {
+        releaseTransfer = resolve;
+      });
+      let transferStarted!: () => void;
+      const transferring = new Promise<void>(resolve => {
+        transferStarted = resolve;
+      });
+      let finishWinner!: () => void;
+      const winnerFinished = new Promise<void>(resolve => {
+        finishWinner = resolve;
+      });
+      const winnerRunId = 'competing-abort-winner';
+      try {
+        await vi.waitFor(() => expect(getStreamCount()).toBe(1));
+        const pending = agent.sendSignal({ type: 'user-message', contents: 'pending A' }, scope);
+        await pending.accepted;
+        const idle = agent.queueMessage('idle B', scope);
+        await idle.accepted;
+        pubsub.transferLeaseWait = transferGate;
+        pubsub.onTransferLease = transferStarted;
+        expect(subscription.abort()).toBe(true);
+        releaseFirst();
+        await transferring;
+        expect(getStreamCount()).toBe(1);
+        if (ownership === 'lose') {
+          pubsub.owners.set(key, winnerRunId);
+          await winner.registerRun(
+            agent,
+            {
+              runId: winnerRunId,
+              status: 'running',
+              fullStream: (async function* () {})(),
+              _waitUntilFinished: () => winnerFinished,
+            } as any,
+            { runId: winnerRunId, memory: { resource: scope.resourceId, thread: scope.threadId } },
+            pubsub,
+          );
+        }
+        releaseTransfer();
+        if (ownership === 'lose') {
+          await vi.waitFor(() =>
+            expect(
+              pubsub.publishedData.filter(
+                data =>
+                  data.type === 'signal-enqueued' && data.runId === winnerRunId && data.signal.id === pending.signal.id,
+              ),
+            ).toHaveLength(1),
+          );
+          await vi.waitFor(() =>
+            expect(
+              pubsub.publishedData.filter(
+                data =>
+                  data.type === 'signal-enqueued' && data.runId === winnerRunId && data.signal.id === idle.signal.id,
+              ),
+            ).toHaveLength(1),
+          );
+          await pubsub.flush();
+          expect(winner.drainPendingSignals(winnerRunId, pubsub).map(signal => signal.id)).toEqual([
+            pending.signal.id,
+            idle.signal.id,
+          ]);
+          expect(winner.drainPendingSignals(winnerRunId, pubsub)).toEqual([]);
+          expect(getStreamCount()).toBe(1);
+          expect(pubsub.owners.get(key)).toBe(winnerRunId);
+          finishWinner();
+        }
+        await stream.text;
+        await vi.waitFor(() => expect(getStreamCount()).toBe(ownership === 'lose' ? 1 : 3));
+        await vi.waitFor(() => expect(pubsub.owners.get(key)).toBeUndefined());
+        const prompts = model.doStreamCalls.slice(1).map(call => JSON.stringify(call.prompt));
+        if (ownership === 'retain') {
+          expect(prompts[0]).toContain('pending A');
+          expect(prompts[0]).not.toContain('idle B');
+          expect(prompts.at(-1)).toContain('idle B');
+        }
+        await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
+      } finally {
+        releaseFirst();
+        releaseTransfer();
+        finishWinner();
+        subscription.unsubscribe();
+        winnerSubscription.unsubscribe();
+      }
+    },
+  );
+
+  describe.each(['sendSignal', 'queueMessage'] as const)('pending %s cancellation', enqueue => {
+    it.each(['none', 'thread', 'upstream'] as const)(
+      'answers the follow-up after %s cancellation',
+      async cancellation => {
+        const scope = { resourceId: 'abort-queue-user', threadId: `abort-${enqueue}-${cancellation}` };
+        const pubsub = new EventEmitterPubSub();
+        const memory = new MockMemory();
+        const upstream = new AbortController();
+        const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel(
+          'first response',
+          'follow-up response',
+        );
+        const agent = new Agent({
+          id: 'abort-queue',
+          name: 'Abort queue',
+          instructions: 'Test',
+          model,
+          memory,
+          pubsub,
+        });
+        const subscription = await agent.subscribeToThread(scope);
+        const stream = await agent.stream('first', {
+          memory: { thread: scope.threadId, resource: scope.resourceId },
+          abortSignal: upstream.signal,
+        });
+
+        try {
+          await vi.waitFor(() => expect(getStreamCount()).toBe(1));
+          const queued =
+            enqueue === 'queueMessage'
+              ? agent.queueMessage('follow-up', scope)
+              : agent.sendSignal({ type: 'user-message', contents: 'follow-up' }, scope);
+          await queued.accepted;
+          if (cancellation === 'thread') expect(subscription.abort()).toBe(true);
+          if (cancellation === 'upstream') upstream.abort();
+          releaseFirst();
+          await stream.text;
+
+          await vi.waitFor(async () => {
+            const { messages } = await memory.recall(scope);
+            const followUps = messages.filter(message =>
+              message.content.parts.some(part => part.type === 'text' && part.text === 'follow-up'),
+            );
+            expect(followUps).toHaveLength(1);
+            expect(messages.at(-1)).toMatchObject({
+              role: 'assistant',
+              content: {
+                parts: expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'follow-up response' })]),
+              },
+            });
+          });
+          expect(getStreamCount()).toBe(2);
+          await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
+        } finally {
+          releaseFirst();
+          subscription.unsubscribe();
+        }
+      },
+    );
+  });
+
+  it('preserves an explicitly supplied queued-message abort signal while allowing later queued work', async () => {
+    const scope = { resourceId: 'explicit-abort-user', threadId: 'explicit-abort-thread' };
+    const pubsub = new EventEmitterPubSub();
+    const memory = new MockMemory();
+    const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel(
+      'first response',
+      'surviving response',
+    );
+    const agent = new Agent({
+      id: 'explicit-abort',
+      name: 'Explicit abort',
+      instructions: 'Test',
+      model,
+      memory,
+      pubsub,
+    });
+    const subscription = await agent.subscribeToThread(scope);
+    const stream = await agent.stream('first', { memory: { thread: scope.threadId, resource: scope.resourceId } });
+    const queuedAbort = new AbortController();
+
+    try {
+      await vi.waitFor(() => expect(getStreamCount()).toBe(1));
+      await agent.queueMessage('cancelled follow-up', {
+        ...scope,
+        ifIdle: { streamOptions: { abortSignal: queuedAbort.signal } },
+      }).accepted;
+      await agent.queueMessage('surviving follow-up', scope).accepted;
+      queuedAbort.abort();
+      expect(subscription.abort()).toBe(true);
+      releaseFirst();
+      await stream.text;
+
+      await vi.waitFor(async () => {
+        const { messages } = await memory.recall(scope);
+        expect(messages.at(-1)).toMatchObject({
+          role: 'assistant',
+          content: { parts: [expect.objectContaining({ type: 'text', text: 'surviving response' })] },
+        });
+      });
+      expect(getStreamCount()).toBe(2);
+      const prompt = model.doStreamCalls[1]?.prompt;
+      expect(prompt?.at(-1)).toMatchObject({
+        role: 'user',
+        content: expect.arrayContaining([
+          expect.objectContaining({ type: 'text', text: expect.stringContaining('surviving follow-up') }),
+        ]),
+      });
+      await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
+    } finally {
+      releaseFirst();
+      subscription.unsubscribe();
+    }
   });
 
   it('persists external state signals with cache-key tracking', async () => {
@@ -6241,6 +6988,71 @@ describe('Agent signals', () => {
       );
 
       run.finish();
+    });
+
+    it('keeps blocking a same-agent contender during a partial resume with sibling suspensions', async () => {
+      const runtime = new AgentThreadStreamRuntime();
+      const pubsub = new EventEmitterPubSub();
+      const publish = vi.spyOn(pubsub, 'publish');
+      const agent = { id: 'same-agent-partial-resume-agent' } as Agent<any, any, any, any>;
+      const runId = 'same-agent-partial-resume-run';
+      const options = { memory: { thread: threadId, resource: resourceId } } as any;
+
+      let finishRun!: () => void;
+      const finished = new Promise<void>(resolve => {
+        finishRun = resolve;
+      });
+      let parts!: ReadableStreamDefaultController<unknown>;
+      const output = {
+        runId,
+        status: 'running',
+        fullStream: new ReadableStream({
+          start(controller) {
+            parts = controller;
+          },
+        }),
+        _waitUntilFinished: () => finished,
+      } as any;
+      await runtime.registerRun(agent, output, options, pubsub, { continuation: 'across-suspension' });
+
+      // Two sibling tool calls suspend within the same segment.
+      parts.enqueue({ type: 'tool-call-approval', runId, payload: { toolCallId: 'call-1', toolName: 'one' } });
+      parts.enqueue({ type: 'tool-call-approval', runId, payload: { toolCallId: 'call-2', toolName: 'two' } });
+      await vi.waitFor(() =>
+        expect(
+          publish.mock.calls.filter(([, event]) => (event as any).data?.part?.type === 'tool-call-approval'),
+        ).toHaveLength(2),
+      );
+      output.status = 'suspended';
+
+      // Fully suspended: a same-agent contender must not wait on human input.
+      await withTimeout(
+        runtime.waitForCrossAgentThreadRun(agent, options, pubsub),
+        'Fully suspended wait should resolve immediately',
+      );
+
+      // Resume only call-1. call-2 stays suspended, but the resumed segment is
+      // actively executing — a new same-agent run must wait for it.
+      const resumed = {
+        runId,
+        status: 'running',
+        consumeStream: async () => {},
+      } as any;
+      expect(runtime.continueRun(agent, resumed, { ...options, toolCallId: 'call-1' }, pubsub)).toBe(true);
+
+      let resolved = false;
+      const wait = runtime.waitForCrossAgentThreadRun(agent, options, pubsub).then(() => {
+        resolved = true;
+      });
+      await new Promise(resolve => setTimeout(resolve, 25));
+      expect(resolved).toBe(false);
+
+      // The resumed segment settles; the contender is released.
+      resumed.status = 'success';
+      output.status = 'success';
+      finishRun();
+      await withTimeout(wait, 'Timed out waiting for the partial-resume wait to release');
+      expect(resolved).toBe(true);
     });
 
     it('still waits on a different-agent running record', async () => {

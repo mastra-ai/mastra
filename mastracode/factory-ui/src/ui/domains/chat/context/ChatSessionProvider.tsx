@@ -188,7 +188,7 @@ export function ChatSessionBoundary({
   const messages = {
     threadId,
     isPending: Boolean(threadId) && messagesQuery.isPending,
-    error: messagesQuery.data ? undefined : messagesQuery.error,
+    error: messagesQuery.isError ? messagesQuery.error : undefined,
   };
 
   if (deferUntilMessagesReady && threadId && (messages.isPending || messages.error)) {

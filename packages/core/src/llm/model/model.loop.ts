@@ -320,6 +320,15 @@ export class MastraLLMVNext extends MastraBase {
                 sources: props?.sources,
                 text: props?.text,
                 warnings: props?.warnings,
+                // Flatten tool-call chunks so exporters (e.g. PostHog) see the same
+                // { toolCallId, toolName, args } shape as the non-loop path.
+                toolCalls: props?.toolCalls?.length
+                  ? props.toolCalls.map(tc => ({
+                      toolCallId: tc.payload.toolCallId,
+                      toolName: tc.payload.toolName,
+                      args: tc.payload.args,
+                    }))
+                  : undefined,
               },
               attributes: {
                 finishReason: props?.finishReason,

@@ -1,6 +1,7 @@
 {
   "attachment": [
     "kimi-k2.6",
+    "kimi-k3",
     "qwen3.5-flash",
     "qwen3.6-flash",
     "qwen3.7-flash",
@@ -27,6 +28,7 @@
     "glm-5",
     "glm-5.1",
     "glm-5.2",
+    "glm-5.3",
     "kimi-k2-thinking",
     "kimi-k2.5",
     "kimi-k2.6",
@@ -99,7 +101,9 @@
     "deepseek-v4-pro",
     "glm-5.1",
     "glm-5.2",
+    "glm-5.3",
     "kimi-k2-thinking",
+    "kimi-k3",
     "kimi/kimi-k2.5",
     "qwen3.5-flash",
     "qwen3.6-flash",

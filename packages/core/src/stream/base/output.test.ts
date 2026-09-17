@@ -804,6 +804,114 @@ describe('MastraModelOutput', () => {
       expect(finishPayload.content).toEqual([]);
     });
 
+    it('reports finishReason "aborted" and no tripwire when a caller abort bails through the tripwire path', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      // A caller `abortSignal` cancellation enqueues an `abort` chunk and then bails through the
+      // shared execution-bail path, which emits a `finish` chunk with `reason: 'tripwire'` and no
+      // real step tripwire. The result must be reported as a cancellation, not a processor block.
+      const stream = createChunkStream([
+        {
+          type: 'text-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { text: 'partial answer' },
+        },
+        {
+          type: 'abort',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {},
+        },
+        {
+          type: 'finish',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            id: 'finish-1',
+            output: {
+              steps: [],
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+            stepResult: {
+              reason: 'tripwire',
+              warnings: [],
+              isContinued: false,
+            },
+            metadata: {},
+            messages: { nonUser: [], all: [] },
+          },
+        },
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: '__GATEWAY_OPENAI_MODEL__', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      expect(await output.finishReason).toBe('aborted');
+      expect(output.tripwire).toBeUndefined();
+    });
+
+    it('still surfaces a real processor tripwire on the finish chunk (no abort)', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      // A genuine processor tripwire bails with `reason: 'tripwire'` and carries real tripwire data
+      // on the last step. Without a preceding abort, the tripwire must still be surfaced.
+      const stream = createChunkStream([
+        {
+          type: 'finish',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            id: 'finish-1',
+            output: {
+              steps: [
+                {
+                  tripwire: {
+                    reason: 'Blocked by moderation processor',
+                    processorId: 'moderation',
+                  },
+                },
+              ],
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+            stepResult: {
+              reason: 'tripwire',
+              warnings: [],
+              isContinued: false,
+            },
+            metadata: {},
+            messages: { nonUser: [], all: [] },
+          },
+        },
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: '__GATEWAY_OPENAI_MODEL__', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      expect(output.tripwire).toEqual({
+        reason: 'Blocked by moderation processor',
+        processorId: 'moderation',
+        retry: undefined,
+        metadata: undefined,
+      });
+    });
+
     it('should keep the latest step raw usage across multiple steps', async () => {
       const runId = 'test-run';
       const firstRaw = {

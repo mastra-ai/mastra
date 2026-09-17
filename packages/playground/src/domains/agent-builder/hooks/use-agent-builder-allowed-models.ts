@@ -18,6 +18,7 @@ export interface AgentBuilderAllowedModels {
   providers: Provider[];
   models: ModelInfo[];
   isLoading: boolean;
+  isError: boolean;
 }
 
 export const useAgentBuilderAllowedModels = ({
@@ -25,7 +26,7 @@ export const useAgentBuilderAllowedModels = ({
 }: { enabled?: boolean } = {}): AgentBuilderAllowedModels => {
   const client = useMastraClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['builder-available-models'],
     queryFn: () => client.getBuilderAvailableModels(),
     enabled,
@@ -34,5 +35,5 @@ export const useAgentBuilderAllowedModels = ({
   const providers = useMemo<Provider[]>(() => (data?.providers as Provider[]) ?? [], [data]);
   const models = useAllModels(providers);
 
-  return { providers, models, isLoading };
+  return { providers, models, isLoading, isError };
 };

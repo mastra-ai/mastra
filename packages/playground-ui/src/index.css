@@ -1,18 +1,12 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-/* Tokens (:root/html.light + @theme) live in ../theme.css so they also ship raw
-   as @mastra/playground-ui/theme.css. Edit tokens there, not here. */
 @import '../theme.css';
+@reference '../new-theme.css';
 
 @plugin '@tailwindcss/typography';
 
 @custom-variant dark (&:is(.dark *));
-
-/*
- * This package ships no font files. Declare your own `@font-face` rules and
- * override --font-display / --font-body / --font-mono in :root to apply them.
- */
 
 @utility container {
   margin-inline: auto;
@@ -76,8 +70,6 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Design-system scrollbars — thin, themed thumb on a transparent track.
-     Applies app-wide so native OS scrollbars no longer clash with DS surfaces. */
   * {
     scrollbar-width: thin;
     scrollbar-color: color-mix(in oklab, var(--neutral4) 30%, transparent) transparent;
@@ -102,8 +94,6 @@
     background: transparent;
   }
 }
-
-/* your custom layer goes AFTER Tailwind imports */
 
 @utility wrap-break-word {
   overflow-wrap: break-word;
@@ -136,7 +126,6 @@
   border: none !important;
 }
 
-/* Click ripple animation for browser view */
 @keyframes click-ripple {
   0% {
     transform: scale(0);
@@ -153,9 +142,6 @@
   animation: click-ripple 300ms ease-out forwards;
 }
 
-/* Temporary highlight for delta-arrived list rows.
-   Same color as the featured / hover state (var(--surface5)), starts fully
-   visible and immediately fades out to transparent over 2s. */
 @keyframes fade-row-highlight {
   0% {
     background-color: var(--surface5);

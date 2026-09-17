@@ -62,6 +62,7 @@ import type { ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import type { MastraVoice } from '../voice';
 import type { Workflow } from '../workflows';
+import type { ShouldPersistSnapshotFn } from '../workflows/types';
 import type { AnyWorkspace } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
@@ -180,6 +181,12 @@ export type AgentThreadPeerInfo = {
 export type AgentClaimThreadPeerOptions = {
   id?: string;
   agentId?: string;
+  label?: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type AgentUpdateThreadPeerOptions = {
   label?: string;
   title?: string;
   metadata?: Record<string, unknown>;
@@ -456,8 +463,17 @@ export type StructuredOutputOptionsBase<OUTPUT = {}> = {
   /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
   model?: MastraModelConfig;
   /**
-   * Custom instructions for the structuring agent.
-   * If not provided, will generate instructions based on the schema.
+   * Custom instructions describing the expected output. The meaning depends on the mode:
+   *
+   * - With `model` set (separate structuring pass): instructions for the structuring agent.
+   * - Without `model`, when `jsonPromptInjection` is active: these instructions are injected
+   *   into the prompt **in place of** the generated schema dump, which can cut thousands of
+   *   tokens per model call on large schemas. Adherence then rests on your wording, so keep
+   *   the field list explicit.
+   * - Without `model` and without prompt injection (native response format): no effect.
+   *
+   * If not provided, instructions are generated from the schema. Output is always validated
+   * against `schema` regardless of what this field contains.
    */
   instructions?: string;
 
@@ -593,7 +609,7 @@ export interface GoalConfig {
  *
  * - `true`  → wrap with `createDurableAgent` using defaults on Mastra registration.
  * - object  → forwarded to `createDurableAgent` (cache, pubsub, maxSteps,
- *   cleanupTimeoutMs, id, name).
+ *   cleanupTimeoutMs, shouldCache, shouldPersistSnapshot, id, name).
  *
  * See `packages/core/src/agent/durable/create-durable-agent.ts`.
  */
@@ -610,6 +626,13 @@ export type AgentDurableOption =
       cleanupTimeoutMs?: number;
       /** See createDurableAgent options: per-topic opt-out of the replay cache. */
       shouldCache?: (topic: string) => boolean;
+      /**
+       * See createDurableAgent options: overrides the snapshot-persistence
+       * policy. By default `pending | paused | suspended` are always
+       * persisted and `running` checkpoints only when the Mastra instance
+       * sets `recovery: { durableAgents: 'auto' }`.
+       */
+      shouldPersistSnapshot?: ShouldPersistSnapshotFn;
       /** Optional id override (defaults to agent.id). */
       id?: string;
       /** Optional name override (defaults to agent.name). */

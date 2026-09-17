@@ -55,6 +55,7 @@ import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
 import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
+import { normalizeMessageHistoryConfig } from '../memory/message-history-config';
 import { getMemoryRunState } from '../memory/run-state';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
 import {
@@ -138,11 +139,16 @@ import { DefaultVoice } from '../voice';
 import { createWorkflow } from '../workflows/create';
 import type { Step } from '../workflows/step';
 import type { OutputWriter, WorkflowResult, WorkflowRunState, WorkflowRunStatus } from '../workflows/types';
-import { waitForSuspendedSnapshot } from '../workflows/utils';
+import {
+  waitForSuspendedSnapshot,
+  RESUME_SNAPSHOT_POLL_INTERVAL_MS,
+  RESUME_SNAPSHOT_WAIT_STATUSES,
+} from '../workflows/utils';
 import type { AnyWorkflow } from '../workflows/workflow';
 import { createStep, createStepFromProcessor, isProcessor } from '../workflows/workflow';
 import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
+import { ThreadStateFileReadTracker } from '../workspace/filesystem/thread-state-read-tracker';
 import { createSkillTools } from '../workspace/skills';
 import type { SkillFormat } from '../workspace/skills';
 import type { Skill, SkillMetadata, WorkspaceSkills } from '../workspace/skills/types';
@@ -192,6 +198,7 @@ import { TripWire } from './trip-wire';
 import type {
   AgentClaimThreadPeerOptions,
   AgentConfig,
+  AgentUpdateThreadPeerOptions,
   AgentDurableOption,
   AgentGenerateOptions,
   AgentNotificationConfig,
@@ -262,6 +269,17 @@ interface StandaloneDurableWrapper {
   observe: (...args: any[]) => any;
   prepare: (...args: any[]) => any;
 }
+
+/**
+ * Safety ceiling for {@link Agent.#validateSuspendedToolCallTarget} when waiting for
+ * a suspend write to become durable on the parent `agentic-loop` row. The normal
+ * exit is "parent now carries the target suspension" (reached as soon as the row is
+ * durable); this bound only guards against a write that never completes so
+ * `approveToolCall()` cannot hang forever.
+ */
+const RESUME_SUSPEND_DURABILITY_TIMEOUT_MS = 30_000;
+/** Upper bound for the exponential poll backoff inside that wait. */
+const RESUME_SUSPEND_DURABILITY_MAX_POLL_INTERVAL_MS = 500;
 
 const createSubAgentInputSchema = ({ withResultRefs = false }: { withResultRefs?: boolean } = {}) =>
   z.object({
@@ -4001,9 +4019,18 @@ export class Agent<
       return convertedWorkspaceTools;
     }
 
+    // Read-before-write records persist per thread in the `threadState`
+    // storage domain (alongside task lists and goal objectives), so they
+    // survive suspend/resume, later turns, and process restarts. Without
+    // thread identity or storage, tracking falls back to per-run.
+    const threadStateStore = threadId ? await this.#mastra?.getStorage()?.getStore('threadState') : undefined;
     const workspaceTools = await createWorkspaceTools(workspace, {
       requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
       workspace,
+      readTracker:
+        threadStateStore && threadId
+          ? new ThreadStateFileReadTracker({ threadId, store: threadStateStore, logger: this.logger })
+          : undefined,
     });
 
     if (Object.keys(workspaceTools).length > 0) {
@@ -4638,17 +4665,16 @@ export class Agent<
     }
 
     const threadConfig = memory.getMergedThreadConfig(memoryConfig || {});
-    if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
+    const history = normalizeMessageHistoryConfig(threadConfig.lastMessages, threadConfig.messageHistory);
+    if (!history.enabled && !threadConfig.semanticRecall) {
       return { messages: [] };
     }
 
     return memory.recall({
       threadId,
       resourceId,
-      // When lastMessages is false (disabled), don't pass perPage so recall()
-      // can detect the disabled state from config and return empty history.
-      // When lastMessages is a number, pass it as perPage to limit results.
-      ...(typeof threadConfig.lastMessages === 'number' ? { perPage: threadConfig.lastMessages } : {}),
+      // Let recall apply the normalized count/token history configuration. In particular,
+      // token-only history must page backwards instead of mapping to `perPage: false`.
       // The agent only consumes `messages` from recall; skip the COUNT(*) work.
       includeTotal: false,
       threadConfig: memoryConfig,
@@ -5137,6 +5163,7 @@ export class Agent<
             // A hook that just threw is not in a state to handle its own
             // failure, so the failure path never re-invokes it.
             let completeHookInvoked = false;
+            let result: any;
 
             // Call onDelegationStart before resolving the sub-agent's runtime
             // config so mutations of the delegated run's context in the hook
@@ -5393,17 +5420,11 @@ export class Agent<
                 resourceId,
               });
 
-              let result: any;
-              const suspendedToolRunId = (inputData as any).suspendedToolRunId;
+              const { resumeData, suspendedToolRunId, suspend } = context?.agent ?? {};
 
-              const { resumeData, suspend } = context?.agent ?? {};
-
-              // A delegation only resumes when the suspended-tool lookup actually found a run to
-              // resume. `resumeData` alone is model-authored and is present whenever the model
-              // decides to fill the always-exposed schema field, so branching on it would send an
-              // undefined runId into resumeGenerate/resumeStream and throw
-              // AGENT_RESUME_NO_SNAPSHOT_FOUND before the sub-agent ever runs. See issue #21608.
-              const shouldResumeSubAgent = !!resumeData && !!suspendedToolRunId;
+              // Only the framework-resolved context marker can select a suspended sub-agent run.
+              // Model-authored resumeData and suspendedToolRunId arguments are not provenance.
+              const shouldResumeSubAgent = resumeData !== undefined && !!suspendedToolRunId;
 
               // Apply messageFilter callback (runs after onDelegationStart so effectivePrompt
               // reflects any hook modifications). Falls back to full context on error.
@@ -5729,15 +5750,6 @@ export class Agent<
                   }
                 }
 
-                if (requireToolApproval || suspendedPayload || resumeSchema) {
-                  return suspend?.(suspendedPayload, {
-                    resumeSchema,
-                    requireToolApproval,
-                    runId: streamResult.runId,
-                    isAgentSuspend: true,
-                  });
-                }
-
                 // Use streamResult.text (a delayed promise) which resolves to the
                 // output-processor-modified text, rather than the raw accumulated text-deltas.
                 const processedText = await streamResult.text;
@@ -5751,6 +5763,20 @@ export class Agent<
                   subAgentToolResults,
                   usage: subAgentUsage,
                 };
+
+                // Keep partial results available to the failure hook and saved transcript.
+                if (streamResult.error) {
+                  throw streamResult.error;
+                }
+
+                if (requireToolApproval || suspendedPayload || resumeSchema) {
+                  return suspend?.(suspendedPayload, {
+                    resumeSchema,
+                    requireToolApproval,
+                    runId: streamResult.runId,
+                    isAgentSuspend: true,
+                  });
+                }
               } else {
                 if (typeof resolvedAgent.streamLegacy !== 'function') {
                   throw new Error(`Sub-agent ${agent.id} returned a v1 model but does not implement streamLegacy`);
@@ -5893,7 +5919,7 @@ export class Agent<
                     primitiveId: agent.id,
                     primitiveType: 'agent',
                     prompt: effectivePrompt,
-                    result: { text: '' },
+                    result: result ?? { text: '' },
                     duration: Date.now() - startTime,
                     success: false,
                     error: err instanceof Error ? err : new Error(String(err)),
@@ -5971,6 +5997,9 @@ export class Agent<
                   details: {
                     agentName: this.name,
                     subAgentName: agent.name ?? agent.id,
+                    ...(result?.subAgentThreadId
+                      ? { subAgentThreadId: result.subAgentThreadId, subAgentResourceId: result.subAgentResourceId }
+                      : {}),
                     runId: runId || '',
                     threadId: threadId || '',
                     resourceId: resourceId || '',
@@ -6111,14 +6140,15 @@ export class Agent<
           execute: async (inputData, context) => {
             const invocationActor = getInvocationActor(context);
             const savedMastraMemory = requestContext.get('MastraMemory');
+            let runIdToUse: string | undefined;
             try {
-              const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
-              // Use a unique runId for each workflow tool call to prevent parallel calls
-              // from sharing the same cached Run instance (see #13473).
-              // For resume cases, suspendedToolRunId is injected into inputData by
-              // tool-call-step (from metadata stored during suspension).
-              // For fresh calls: generate a new unique runId.
-              const runIdToUse = suspendedToolRunId || randomUUID();
+              const { initialState, inputData: workflowInputData } = inputData as any;
+              const { resumeData, suspendedToolRunId, suspend } = context?.agent ?? {};
+              // Use a unique runId for every fresh workflow delegation. Only a run ID
+              // resolved by the framework from persisted suspension state may select an
+              // existing run; model-authored arguments never control run identity.
+              const shouldResumeWorkflow = resumeData !== undefined && !!suspendedToolRunId;
+              runIdToUse = shouldResumeWorkflow ? suspendedToolRunId : randomUUID();
               this.logger.debug('Executing workflow as tool', {
                 agent: this.name,
                 workflow: workflowName,
@@ -6130,12 +6160,11 @@ export class Agent<
               });
 
               const run = await workflow.createRun({ runId: runIdToUse, resourceId });
-              const { resumeData, suspend } = context?.agent ?? {};
 
               let result: WorkflowResult<any, any, any, any> | undefined = undefined;
 
               if (methodType === 'generate' || methodType === 'generateLegacy') {
-                if (resumeData) {
+                if (shouldResumeWorkflow) {
                   result = await run.resume({
                     resumeData,
                     requestContext,
@@ -6169,7 +6198,7 @@ export class Agent<
 
                 result = await streamResult.getWorkflowState();
               } else if (methodType === 'stream') {
-                const streamResult = resumeData
+                const streamResult = shouldResumeWorkflow
                   ? run.resumeStream({
                       resumeData,
                       requestContext,
@@ -6256,7 +6285,7 @@ export class Agent<
                   category: ErrorCategory.USER,
                   details: {
                     agentName: this.name,
-                    runId: (inputData as any).suspendedToolRunId || runId || '',
+                    runId: runIdToUse || runId || '',
                     threadId: threadId || '',
                     resourceId: resourceId || '',
                   },
@@ -7098,29 +7127,32 @@ export class Agent<
   }): Promise<WorkflowRunState> {
     if (toolCallId === undefined) return snapshot;
 
-    const isTargetSuspended = (currentSnapshot: WorkflowRunState) =>
-      this.#getSuspendedToolCalls(currentSnapshot).some(toolCall => toolCall.toolCallId === toolCallId);
+    const suspendedToolCallIds = (currentSnapshot: WorkflowRunState | null | undefined) =>
+      this.#getSuspendedToolCalls(currentSnapshot)
+        .map(toolCall => toolCall.toolCallId)
+        .filter((id): id is string => id !== undefined);
+    const isTargetSuspended = (currentSnapshot: WorkflowRunState | null | undefined) =>
+      suspendedToolCallIds(currentSnapshot).includes(toolCallId);
 
-    let resumeSnapshot = snapshot;
-    let isSuspended = isTargetSuspended(resumeSnapshot);
-    if (!isSuspended) {
-      // A resume stream can expose the next suspension just before its snapshot is
-      // persisted. Briefly poll after authorization so an immediate response to
-      // that newly surfaced tool call is not rejected based on the prior snapshot.
-      const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
-      const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
-      const deadline = Date.now() + 2000;
-      while (!isSuspended && workflowsStore && Date.now() < deadline) {
-        await new Promise(resolve => setTimeout(resolve, 25));
-        const latestSnapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: 'agentic-loop', runId });
-        if (latestSnapshot && isTargetSuspended(latestSnapshot)) {
-          resumeSnapshot = latestSnapshot;
-          isSuspended = true;
-        }
-      }
-    }
+    if (isTargetSuspended(snapshot)) return snapshot;
 
-    if (!isSuspended) {
+    // The suspension for an approval-gated tool call is written to the nested
+    // `executionWorkflow` row first and only later to the parent `agentic-loop`
+    // row that resume hydration reads. The `tool-call-approval` chunk is emitted
+    // before either row is durable, so a client can approve before the parent row
+    // exists. Snapshot write time scales with snapshot size, so a fixed deadline
+    // wrongly rejects large, genuinely-suspended runs (issue #22413).
+    //
+    // Instead of a blind fixed-duration poll of the parent, decide wait-vs-reject
+    // from observed persistence: keep waiting for the parent to carry the target
+    // suspension while the run is still progressing toward it (the nested row shows
+    // the target suspended, or either row is still running), and reject early only
+    // when the target is not suspended anywhere AND either a different tool call is
+    // suspended (a stale toolCallId, see #19377) or the run has settled.
+    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
+    const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+
+    const throwNotSuspended = (): never => {
       throw new MastraError({
         id: 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED',
         domain: ErrorDomain.AGENT,
@@ -7133,9 +7165,50 @@ export class Agent<
           toolCallId,
         },
       });
+    };
+
+    if (!workflowsStore) throwNotSuspended();
+
+    const parentWorkflowNames = ['agentic-loop', DurableStepIds.AGENTIC_LOOP];
+    const nestedWorkflowNames = ['executionWorkflow', DurableStepIds.AGENTIC_EXECUTION];
+    const loadFirstSnapshot = async (workflowNames: string[]): Promise<WorkflowRunState | null> => {
+      for (const workflowName of workflowNames) {
+        const loaded = await workflowsStore!.loadWorkflowSnapshot({ workflowName, runId });
+        if (loaded) return loaded;
+      }
+      return null;
+    };
+
+    const deadline = Date.now() + RESUME_SUSPEND_DURABILITY_TIMEOUT_MS;
+    let pollIntervalMs: number = RESUME_SNAPSHOT_POLL_INTERVAL_MS;
+    while (Date.now() < deadline) {
+      const parentSnapshot = await loadFirstSnapshot(parentWorkflowNames);
+      if (parentSnapshot && isTargetSuspended(parentSnapshot)) {
+        // Resume hydration re-runs the agentic-loop workflow, so the returned
+        // snapshot must always be the parent row.
+        return parentSnapshot;
+      }
+
+      const nestedSnapshot = await loadFirstSnapshot(nestedWorkflowNames);
+
+      const targetSuspendedNested = suspendedToolCallIds(nestedSnapshot).includes(toolCallId);
+      const runLive = [parentSnapshot, nestedSnapshot].some(s => !!s && RESUME_SNAPSHOT_WAIT_STATUSES.has(s.status));
+
+      // The nested row already carries the target suspension, or a row is still
+      // progressing toward it: keep waiting for the parent to become durable.
+      // Back off so a slow write does not turn into thousands of snapshot reads.
+      if (targetSuspendedNested || runLive) {
+        await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+        pollIntervalMs = Math.min(pollIntervalMs * 2, RESUME_SUSPEND_DURABILITY_MAX_POLL_INTERVAL_MS);
+        continue;
+      }
+
+      // A different tool call is suspended (stale target), or the run has settled
+      // without the target suspended anywhere: this is a genuine rejection.
+      throwNotSuspended();
     }
 
-    return resumeSnapshot;
+    return throwNotSuspended();
   }
 
   /**
@@ -8322,6 +8395,21 @@ export class Agent<
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
+  updateThreadPeerAdvertisement(options: {
+    resourceId: string;
+    threadId: string;
+    peer: AgentUpdateThreadPeerOptions;
+  }): boolean {
+    return agentThreadStreamRuntime.updateThreadPeerAdvertisement(
+      this as Agent<any, any, any, any>,
+      options,
+      this.getPubSub(),
+    );
+  }
+
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
   async discoverThreadPeers(options?: DiscoverAgentThreadPeersOptions): Promise<AgentThreadPeerAdvertisement[]> {
     return agentThreadStreamRuntime.discoverThreadPeers(options, this.getPubSub());
   }
@@ -8998,7 +9086,10 @@ export class Agent<
     } catch (error) {
       // Release the thread reservation taken by waitForCrossAgentThreadRun so
       // a failed setup does not block subsequent runs on this thread.
-      agentThreadStreamRuntime.releaseThreadRunReservation(mergedOptions.runId, threadStreamPubSub);
+      agentThreadStreamRuntime.releaseThreadRunReservation(mergedOptions.runId, threadStreamPubSub, {
+        agent: this,
+        streamOptions: preparedOptions,
+      });
       throw error;
     }
   }

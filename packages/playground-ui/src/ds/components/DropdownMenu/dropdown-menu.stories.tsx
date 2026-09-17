@@ -90,6 +90,24 @@ export const CustomRender: Story = {
   ),
 };
 
+export const Compact: Story = {
+  render: () => (
+    <DropdownMenu>
+      <DropdownMenu.Trigger render={<Button size="xs">Open menu</Button>} />
+      <DropdownMenu.Content size="sm" className="w-max min-w-0">
+        <DropdownMenu.Item size="sm">
+          <User />
+          Profile
+        </DropdownMenu.Item>
+        <DropdownMenu.Item size="sm">
+          <Settings />
+          Settings
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu>
+  ),
+};
+
 export const WithIcons: Story = {
   render: () => (
     <DropdownMenu>

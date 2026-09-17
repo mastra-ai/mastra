@@ -10,6 +10,7 @@ import {
   type QueryThreadsInput,
   type QueryThreadsResult,
   type TraceQueryGroupResponse,
+  type TraceQueryPaginatedTraceResponse,
   type TraceQueryPredicate,
   type TraceQueryRequest,
   type TraceQueryResponse,
@@ -17,6 +18,7 @@ import {
   type TraceQueryTraceResponse,
   type TrustedThreadPredicate,
   type TrustedThreadQueryPlan,
+  type TrustedTraceQueryKeysetTracesPlan,
   type TrustedTraceQueryPlan,
   type TrustedTraceQueryPredicate,
   type TrustedTraceQueryScalarPredicate,
@@ -2106,6 +2108,20 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
   }
 
   let traces = roots.map(toTraceQueryTrace).sort((left, right) => compareTraces(left, right, plan));
+  if (plan.paginationMode === 'page') {
+    const total = traces.length;
+    const start = plan.page * plan.perPage;
+    return {
+      traces: traces.slice(start, start + plan.perPage),
+      pagination: {
+        total,
+        page: plan.page,
+        perPage: plan.perPage,
+        hasMore: (plan.page + 1) * plan.perPage < total,
+      },
+    } satisfies TraceQueryPaginatedTraceResponse;
+  }
+
   if (plan.cursor) traces = traces.filter(trace => isTraceAfterCursor(trace, plan));
   const visible = traces.slice(0, plan.limit + 1);
   const hasNext = visible.length > plan.limit;
@@ -2204,7 +2220,7 @@ export async function collectTraceQueryPages(
     });
     const response = await execute(normalized);
     results.push(...normalizeTraceQueryResponse(response));
-    after = response.page.next;
+    after = 'page' in response ? response.page.next : undefined;
   } while (after);
   return results;
 }
@@ -2407,6 +2423,12 @@ function toTraceQueryTrace(root: RawTraceQuerySpan): TraceQueryTrace {
   return {
     traceId: root.traceId!,
     rootSpanId: root.spanId,
+    name: root.name,
+    entityId: root.entityId,
+    parentSpanId: root.parentSpanId,
+    createdAt: root.startedAt,
+    metadata: root.metadata,
+    inputPreview: null,
     threadId: root.threadId,
     resourceId: root.resourceId,
     startedAt: root.startedAt,
@@ -2428,10 +2450,7 @@ function compareTraces(
   return compareTraceQueryStrings(left.traceId, right.traceId);
 }
 
-function isTraceAfterCursor(
-  trace: TraceQueryTrace,
-  plan: Extract<TrustedTraceQueryPlan, { result: 'traces' }>,
-): boolean {
+function isTraceAfterCursor(trace: TraceQueryTrace, plan: TrustedTraceQueryKeysetTracesPlan): boolean {
   const cursor = plan.cursor!;
   const sortComparison = compareTraceQueryStrings(trace[plan.orderBy.field], cursor.sortValue);
   if (sortComparison === 0) return compareTraceQueryStrings(trace.traceId, cursor.traceId) > 0;

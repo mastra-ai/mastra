@@ -13,6 +13,7 @@ export const renamedPostgresWithMetrics: GetSystemPackagesResponse = {
   observabilityStorageCapabilities: {
     metrics: true,
     logs: true,
+    traceQueryDiscovery: false,
   },
 };
 
@@ -27,5 +28,6 @@ export const storageWithoutMetrics: GetSystemPackagesResponse = {
   observabilityStorageCapabilities: {
     metrics: false,
     logs: true,
+    traceQueryDiscovery: false,
   },
 };

@@ -6,18 +6,6 @@ import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
 /**
- * Hook to list experiments for a dataset with optional pagination.
- */
-export const useDatasetExperiments = (datasetId: string, pagination?: { page?: number; perPage?: number }) => {
-  const client = useMastraClient();
-  return useQuery({
-    queryKey: ['dataset-experiments', datasetId, pagination],
-    queryFn: () => client.listDatasetExperiments(datasetId, pagination),
-    enabled: Boolean(datasetId),
-  });
-};
-
-/**
  * Hook to fetch a single dataset experiment with polling while running
  * Polls every 2 seconds while status is 'running' or 'pending'
  */

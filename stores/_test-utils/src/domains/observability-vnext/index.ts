@@ -1,8 +1,18 @@
 export * from './trace-query';
+export * from './trace-query-discovery';
 
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
-import { parseQueryThreadsInput, parseTraceQueryRequest, planThreadQuery, planTraceQuery } from '@mastra/core/storage';
+import {
+  parseGetTraceQueryFieldsArgs,
+  parseGetTraceQueryValuesArgs,
+  parseQueryThreadsInput,
+  parseTraceQueryRequest,
+  planThreadQuery,
+  planTraceQuery,
+  planTraceQueryObservedFields,
+  planTraceQueryValues,
+} from '@mastra/core/storage';
 import type {
   CreateFeedbackRecord,
   CreateScoreRecord,
@@ -12,6 +22,7 @@ import type {
 } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { VNEXT_BASE_DATE, makeSpan } from './data';
+import { TRACE_QUERY_DISCOVERY_FIXTURE_DATA, TRACE_QUERY_DISCOVERY_TIME_RANGE } from './trace-query-discovery';
 import {
   normalizeTraceQueryResponse,
   THREAD_QUERY_CONFORMANCE_CASES,
@@ -39,6 +50,8 @@ export interface ObservabilityVNextCapabilities {
   preferredStrategy: 'event-sourced' | 'insert-only' | 'batch-with-updates';
   /** Whether this adapter implements the advanced trusted trace-query plan. */
   traceQuery?: boolean;
+  /** Whether this adapter implements bounded trace-query field and value discovery. */
+  traceQueryDiscovery?: boolean;
   /** Whether this adapter implements the trusted thread-query plan. */
   threadQuery?: boolean;
   /**
@@ -240,6 +253,131 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       expect(storage.observabilityStrategy?.preferred).toBe(capabilities.preferredStrategy);
     });
 
+    if (capabilities.traceQueryDiscovery) {
+      const observedFields = async (args: {
+        predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
+        search?: string;
+        limit?: number;
+      }) => {
+        const normalized = parseGetTraceQueryFieldsArgs({
+          timeRange: TRACE_QUERY_DISCOVERY_TIME_RANGE,
+          ...args,
+        });
+        return storage.getTraceQueryObservedFields(planTraceQueryObservedFields(normalized));
+      };
+      const values = async (args: {
+        predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
+        path: string;
+        search?: string;
+        limit?: number;
+      }) => {
+        const normalized = parseGetTraceQueryValuesArgs({
+          timeRange: TRACE_QUERY_DISCOVERY_TIME_RANGE,
+          ...args,
+        });
+        return storage.getTraceQueryValues(planTraceQueryValues(normalized));
+      };
+
+      const writeDiscoveryFixture = () =>
+        writeTraceQueryFixture(storage, TRACE_QUERY_DISCOVERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
+
+      it('discovers only executable top-level string metadata fields from current qualified roots', async () => {
+        await writeDiscoveryFixture();
+        await expect(observedFields({ predicateScope: 'trace' })).resolves.toEqual({
+          observedFields: [
+            expect.objectContaining({ path: 'metadata.customer', occurrences: 3 }),
+            expect.objectContaining({ path: 'metadata.region', occurrences: 3 }),
+            expect.objectContaining({ path: 'metadata.escapedValue', occurrences: 2 }),
+            expect.objectContaining({ path: 'metadata.literalPattern', occurrences: 2 }),
+            expect.objectContaining({ path: 'metadata.unicodeValue', occurrences: 2 }),
+            expect.objectContaining({ path: 'metadata.percent%key', occurrences: 1 }),
+            expect.objectContaining({ path: 'metadata.under_score', occurrences: 1 }),
+          ],
+          observedFieldsTruncated: false,
+        });
+        await expect(observedFields({ predicateScope: 'trace', search: 'REGION' })).resolves.toEqual({
+          observedFields: [expect.objectContaining({ path: 'metadata.region', occurrences: 3 })],
+          observedFieldsTruncated: false,
+        });
+        await expect(observedFields({ predicateScope: 'trace', search: '%' })).resolves.toEqual({
+          observedFields: [expect.objectContaining({ path: 'metadata.percent%key', occurrences: 1 })],
+          observedFieldsTruncated: false,
+        });
+        await expect(observedFields({ predicateScope: 'trace', search: '_' })).resolves.toEqual({
+          observedFields: [expect.objectContaining({ path: 'metadata.under_score', occurrences: 1 })],
+          observedFieldsTruncated: false,
+        });
+        await expect(observedFields({ predicateScope: 'trace', limit: 2 })).resolves.toEqual({
+          observedFields: [
+            expect.objectContaining({ path: 'metadata.customer', occurrences: 3 }),
+            expect.objectContaining({ path: 'metadata.region', occurrences: 3 }),
+          ],
+          observedFieldsTruncated: true,
+        });
+        await expect(observedFields({ predicateScope: 'spans' })).resolves.toEqual({
+          observedFields: [],
+          observedFieldsTruncated: false,
+        });
+      });
+
+      it('discovers deterministic string values across every predicate scope', async () => {
+        await writeDiscoveryFixture();
+        await expect(values({ predicateScope: 'trace', path: 'metadata.region' })).resolves.toEqual({
+          values: [
+            { value: 'us-west-2', count: 2 },
+            { value: 'eu-west-1', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'trace', path: 'metadata.escapedValue' })).resolves.toEqual({
+          values: [{ value: 'quote" and slash\\ with 雪', count: 2 }],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'trace', path: 'metadata.unicodeValue' })).resolves.toEqual({
+          values: [
+            { value: '大阪', count: 1 },
+            { value: '東京', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'trace', path: 'environment', limit: 1 })).resolves.toEqual({
+          values: [{ value: 'production', count: 2 }],
+          valuesTruncated: true,
+        });
+        await expect(values({ predicateScope: 'spans', path: 'model' })).resolves.toEqual({
+          values: [
+            { value: 'claude-sonnet-4-6', count: 2 },
+            { value: 'gpt-5', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'scores', path: 'scorerId' })).resolves.toEqual({
+          values: [
+            { value: 'quality', count: 2 },
+            { value: 'safety', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'feedback', path: 'feedbackType' })).resolves.toEqual({
+          values: [
+            { value: 'thumbs', count: 2 },
+            { value: 'rating', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+      });
+
+      it('treats value search wildcard characters as literal substring text', async () => {
+        await writeDiscoveryFixture();
+        await expect(
+          values({ predicateScope: 'trace', path: 'metadata.literalPattern', search: '%PROD_' }),
+        ).resolves.toEqual({
+          values: [{ value: '%prod_', count: 1 }],
+          valuesTruncated: false,
+        });
+      });
+    }
+
     if (capabilities.traceQuery) {
       it('matches the shared advanced trace-query conformance cases without merge assistance', async () => {
         await writeTraceQueryFixture(storage, TRACE_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
@@ -263,7 +401,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             }),
           );
           const response = await storage.queryTraces(pagePlan);
-          if (!('traces' in response)) throw new Error('Expected trace results');
+          if (!('traces' in response) || !('page' in response)) throw new Error('Expected keyset trace results');
           pagedTraceIds.push(...response.traces.map(trace => trace.traceId));
           after = response.page.next ?? undefined;
         } while (after);
@@ -284,6 +422,64 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             const response = await storage.queryTraces(plan);
             expect.soft(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
           }
+        });
+      });
+
+      it('matches list-compatible trace-query page boundaries and metadata', async () => {
+        await writeTraceQueryFixture(storage, TRACE_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
+        const pages = [
+          { page: 0, ids: ['trace-d', 'trace-c'], hasMore: true },
+          { page: 1, ids: ['trace-a', 'trace-b'], hasMore: false },
+          { page: 2, ids: [], hasMore: false },
+        ];
+
+        const consecutiveIds: string[] = [];
+        for (const expected of pages) {
+          const plan = planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+              pagination: { page: expected.page, perPage: 2 },
+            }),
+          );
+          const response = await storage.queryTraces(plan);
+          if (!('traces' in response) || !('pagination' in response)) throw new Error('Expected paginated traces');
+          expect(response.traces.map(trace => trace.traceId)).toEqual(expected.ids);
+          expect(response.pagination).toEqual({
+            total: 4,
+            page: expected.page,
+            perPage: 2,
+            hasMore: expected.hasMore,
+          });
+          if (expected.page < 2) consecutiveIds.push(...response.traces.map(trace => trace.traceId));
+        }
+        expect(consecutiveIds).toEqual(['trace-d', 'trace-c', 'trace-a', 'trace-b']);
+        expect(new Set(consecutiveIds).size).toBe(consecutiveIds.length);
+
+        const filteredPlan = planTraceQuery(
+          parseTraceQueryRequest({
+            timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+            where: { op: 'exists', path: 'threadId' },
+            orderBy: [{ field: 'startedAt', direction: 'asc' }],
+            pagination: { page: 0, perPage: 3 },
+          }),
+        );
+        const filtered = await storage.queryTraces(filteredPlan);
+        if (!('traces' in filtered) || !('pagination' in filtered)) throw new Error('Expected paginated traces');
+        expect(filtered.traces.map(trace => trace.traceId)).toEqual(['trace-a', 'trace-b', 'trace-c']);
+        expect(filtered.pagination).toEqual({ total: 3, page: 0, perPage: 3, hasMore: false });
+
+        const emptyPlan = planTraceQuery(
+          parseTraceQueryRequest({
+            timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+            where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'missing' } },
+            pagination: { page: 0, perPage: 10 },
+          }),
+        );
+        const empty = await storage.queryTraces(emptyPlan);
+        if (!('traces' in empty) || !('pagination' in empty)) throw new Error('Expected paginated traces');
+        expect(empty).toEqual({
+          traces: [],
+          pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
         });
       });
 
@@ -387,6 +583,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             } else {
               values.push(...response.groups.map(group => group.threadId));
             }
+            if (!('page' in response)) throw new Error('Expected keyset results');
             after = response.page.next ?? undefined;
           } while (after);
           return values;

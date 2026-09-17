@@ -427,6 +427,15 @@ export class MessageList {
     return this.filterIncompleteToolCalls ? 'prompt' : 'prompt-with-suspended';
   }
 
+  /**
+   * Whether tool calls without a result are dropped from the prompt (the default) rather than
+   * paired with a pending placeholder result. Lets prompt-shape-aware processors reason about
+   * what a trailing assistant message will look like once converted.
+   */
+  get dropsIncompleteToolCalls(): boolean {
+    return this.filterIncompleteToolCalls;
+  }
+
   private getMessagesForModelPrompt(): MastraDBMessage[] {
     return this.messages.flatMap(message => {
       if ((message.role as string) !== 'signal') {
@@ -640,9 +649,9 @@ export class MessageList {
               part.toolInvocation?.state === 'result' &&
               part.providerMetadata?.mastra &&
               typeof part.providerMetadata.mastra === 'object' &&
-              // Key off the value, not its presence: a nullish `modelOutput` means the tool's
-              // toModelOutput opted out of mapping, so the raw result must be kept. Keying off
-              // presence would blank out `output` on the tool message sent to the provider.
+              Object.hasOwn(part.providerMetadata.mastra, 'modelOutput') &&
+              // A nullish `modelOutput` means the tool's toModelOutput opted out of mapping,
+              // so the raw result must be kept.
               (part.providerMetadata.mastra as Record<string, unknown>).modelOutput != null
             ) {
               storedModelOutputs.set(

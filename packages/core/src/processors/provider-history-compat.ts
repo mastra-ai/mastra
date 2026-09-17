@@ -1,7 +1,7 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 
-import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
+import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart, MessageList } from '../agent/message-list';
 import type {
   Processor,
   ProcessAPIErrorArgs,
@@ -44,10 +44,16 @@ export interface CompatRule {
   fix?: (messages: MastraDBMessage[]) => boolean;
   /**
    * Rewrite the outbound LLM request preemptively. Receives the resolved model
-   * so rules can scope themselves to specific providers. Return a new prompt
-   * to forward, or `undefined` to leave the prompt unchanged.
+   * so rules can scope themselves to specific providers, and — when the caller
+   * has it — the message list the prompt was built from, for provenance the
+   * converted prompt no longer carries. Return a new prompt to forward, or
+   * `undefined` to leave the prompt unchanged.
    */
-  applyToPrompt?: (args: { prompt: LanguageModelV2Prompt; model: unknown }) => LanguageModelV2Prompt | undefined;
+  applyToPrompt?: (args: {
+    prompt: LanguageModelV2Prompt;
+    model: unknown;
+    messageList?: MessageList;
+  }) => LanguageModelV2Prompt | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -199,6 +205,31 @@ function matchesProviderPrefix(model: unknown, providerPrefix: string): boolean 
   return false;
 }
 
+/**
+ * Extract the exact provider id from a resolved model — the same value
+ * `buildResponseModelMetadata` stamps onto each persisted assistant turn.
+ * Returns `undefined` for unresolved string ids and dynamic functions, where
+ * no reliable provider identity exists.
+ */
+function getModelProviderId(model: unknown): string | undefined {
+  if (model == null || typeof model === 'function' || typeof model === 'string') return undefined;
+
+  if (Array.isArray(model)) {
+    for (const entry of model) {
+      const provider = getModelProviderId((entry as { model?: unknown }).model ?? entry);
+      if (provider) return provider;
+    }
+    return undefined;
+  }
+
+  if (typeof model === 'object') {
+    const provider = (model as { provider?: unknown }).provider;
+    return typeof provider === 'string' && provider.length > 0 ? provider : undefined;
+  }
+
+  return undefined;
+}
+
 export function isMaybeCerebras(
   model:
     | string
@@ -297,6 +328,15 @@ function supportsAssistantPrefill(modelId: string): boolean | undefined {
   return major < 4 || (major === 4 && minor < 6);
 }
 
+const GEMINI_VERSION_PATTERN = /gemini-(\d+)/i;
+
+function supportsTrailingModelTurn(modelId: string): boolean | undefined {
+  const match = GEMINI_VERSION_PATTERN.exec(modelId);
+  if (!match) return undefined;
+
+  return Number(match[1]) < 3;
+}
+
 /**
  * Detects Anthropic models that removed assistant-message prefill support.
  * Claude 4.6 and later reject assistant-prefill requests, while earlier
@@ -321,6 +361,36 @@ export function isMaybeAnthropicWithoutAssistantPrefill(model: unknown): boolean
 
   if (!modelId) return true;
   return supportsAssistantPrefill(modelId) !== true;
+}
+
+/**
+ * Detects Google models that reject a request ending on a model turn.
+ *
+ * Gemini 3 and later return 400 "Requests ending with a model turn are not
+ * supported"; Gemini 2.x accepted the same prompt, including under native
+ * structured output. Unknown Google model versions are matched conservatively
+ * so a new model cannot silently bypass compatibility guards.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/23320
+ */
+export function isMaybeGoogleWithoutTrailingModelTurn(model: unknown): boolean {
+  if (typeof model === 'function') return true;
+
+  if (Array.isArray(model)) {
+    return model.some(entry => isMaybeGoogleWithoutTrailingModelTurn((entry as { model?: unknown }).model ?? entry));
+  }
+
+  if (getModelProviderFamily(model) !== 'google') return false;
+
+  const modelId =
+    typeof model === 'string'
+      ? model
+      : model && typeof model === 'object' && typeof (model as { modelId?: unknown }).modelId === 'string'
+        ? (model as { modelId: string }).modelId
+        : undefined;
+
+  if (!modelId) return true;
+  return supportsTrailingModelTurn(modelId) !== true;
 }
 
 export function isMaybeAzure(
@@ -509,6 +579,87 @@ export const anthropicStripForeignReasoningContent: CompatRule = {
   },
 };
 
+/**
+ * Replays of signed `thinking`/`redacted_thinking` blocks to a provider other
+ * than the one that signed them are rejected — Anthropic returns
+ * `Invalid \`signature\` in \`thinking\` block`.
+ *
+ * Several providers are served through `@ai-sdk/anthropic` and therefore write
+ * their reasoning metadata under the same `anthropic` key — Kimi For Coding
+ * talks to `api.kimi.com` over the Anthropic wire format — so a signature's
+ * `anthropic` key alone cannot tell which provider signed it. The durable
+ * provenance is the `provider` each assistant turn was stamped with by
+ * `buildResponseModelMetadata`, which only the persisted message list carries.
+ *
+ * Reasoning parts whose signature came from a turn stamped with a provider
+ * different from the current target are dropped from the outbound prompt, so
+ * the rejection never happens. Unstamped history is left untouched — turns
+ * persisted before their provider had a distinct identity stay ambiguous and
+ * are forwarded as-is. Turns emptied of all content by the drop are removed
+ * from the prompt (Anthropic rejects empty assistant content).
+ */
+export const anthropicStripForeignSignedReasoning: CompatRule = {
+  name: 'anthropic-strip-foreign-signed-reasoning',
+  applyToPrompt({ prompt, model, messageList }) {
+    if (!messageList) return undefined;
+    const targetProvider = getModelProviderId(model);
+    if (!targetProvider) return undefined;
+
+    // Collect the signatures of every signed reasoning block whose origin
+    // turn was stamped with a provider different from this request's target.
+    const foreign = new Map<string, string>(); // signature -> origin provider
+    for (const dbMessage of messageList.get.all.db()) {
+      if (dbMessage.role !== 'assistant') continue;
+      if (dbMessage.content?.format !== 2) continue;
+      const origin = dbMessage.content.metadata?.provider;
+      if (typeof origin !== 'string' || origin === targetProvider) continue;
+      for (const part of dbMessage.content.parts ?? []) {
+        if (part.type !== 'reasoning') continue;
+        const anthropic = part.providerMetadata?.anthropic as
+          | { signature?: unknown; redactedData?: unknown }
+          | undefined;
+        for (const value of [anthropic?.signature, anthropic?.redactedData]) {
+          if (typeof value === 'string' && value && !foreign.has(value)) foreign.set(value, origin);
+        }
+      }
+    }
+    if (foreign.size === 0) return undefined;
+
+    let dropped = 0;
+    const next: LanguageModelV2Prompt = [];
+    for (const message of prompt) {
+      if (message.role !== 'assistant' || !Array.isArray(message.content)) {
+        next.push(message);
+        continue;
+      }
+      const content = message.content.filter(part => {
+        if (part.type !== 'reasoning') return true;
+        const anthropic = part.providerOptions?.anthropic as
+          | { signature?: unknown; redactedData?: unknown }
+          | undefined;
+        const signature = anthropic?.signature ?? anthropic?.redactedData;
+        if (typeof signature === 'string' && foreign.has(signature)) {
+          dropped++;
+          return false;
+        }
+        return true;
+      });
+      if (content.length === message.content.length) {
+        next.push(message);
+        continue;
+      }
+      // A turn that held only foreign signed thinking is emptied by the drop.
+      // Processors run after conversion, so the empty-content filter in
+      // MessageList no longer applies — Anthropic rejects empty assistant
+      // content, so drop the message itself (same idiom as
+      // stripForeignProviderExecutedTools).
+      if (content.length > 0) next.push({ ...message, content });
+    }
+
+    return dropped > 0 ? next : undefined;
+  },
+};
+
 const SYSTEM_REMINDER_OPEN_TAG = /<system-reminder(?=\s|\/?>)([^>]*)>/g;
 const SYSTEM_REMINDER_CLOSE_TAG = /<\/system-reminder>/g;
 
@@ -570,6 +721,7 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   cerebrasStripReasoningContent,
   anthropicStripEmptySignedReasoningContent,
   anthropicStripForeignReasoningContent,
+  anthropicStripForeignSignedReasoning,
   azureSystemReminderTransform,
 ];
 
@@ -601,6 +753,11 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  * - **anthropic-strip-foreign-reasoning-content** — strips non-Anthropic
  *   `reasoning` parts from assistant messages in the outbound prompt when the
  *   resolved model is Anthropic. Anthropic-native reasoning parts are kept.
+ * - **anthropic-strip-foreign-signed-reasoning** — drops signed thinking
+ *   blocks from the outbound prompt when their origin turn was stamped with a
+ *   provider different from the current target (preemptive). Turns emptied of
+ *   all content by the drop are removed from the prompt. Unstamped history is
+ *   left untouched.
  *
  * To add custom rules, pass them to the constructor:
  * ```ts
@@ -619,12 +776,12 @@ export class ProviderHistoryCompat implements Processor<'provider-history-compat
     this.rules = [...DEFAULT_COMPAT_RULES, ...(opts?.additionalRules ?? [])];
   }
 
-  processLLMRequest({ prompt, model }: ProcessLLMRequestArgs): ProcessLLMRequestResult {
+  processLLMRequest({ prompt, model, messageList }: ProcessLLMRequestArgs): ProcessLLMRequestResult {
     let current = prompt;
     let mutated = false;
     for (const rule of this.rules) {
       if (!rule.applyToPrompt) continue;
-      const next = rule.applyToPrompt({ prompt: current, model });
+      const next = rule.applyToPrompt({ prompt: current, model, messageList });
       if (next) {
         current = next;
         mutated = true;

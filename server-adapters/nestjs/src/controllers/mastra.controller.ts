@@ -118,8 +118,8 @@ export class MastraController {
    * Parse request body, handling multipart/form-data and JSON.
    */
   private async parseBody(req: Request, route: ServerRoute): Promise<unknown> {
-    // Only parse body for methods that typically have bodies
-    if (!['POST', 'PUT', 'PATCH'].includes(req.method)) {
+    // Only parse body for methods that support route body schemas
+    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
       return undefined;
     }
 
@@ -137,6 +137,6 @@ export class MastraController {
     }
 
     // JSON body is already parsed by JsonBodyMiddleware
-    return req.body;
+    return req.body === undefined ? {} : req.body;
   }
 }

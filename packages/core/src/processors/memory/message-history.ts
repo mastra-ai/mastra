@@ -1,7 +1,8 @@
 import type { OutputResult, Processor, ProcessorSpanPhase } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { isTransientSignalMessage } from '../../agent/signals';
-import { parseMemoryRequestContext } from '../../memory';
+import { loadMessageHistory, parseMemoryRequestContext } from '../../memory';
+import { getMemoryTokenBoundary, isAfterMemoryTokenBoundary } from '../../memory/message-history-config';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import { SpanType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
@@ -13,7 +14,9 @@ import type { MemoryStorage } from '../../storage';
  */
 export interface MessageHistoryOptions {
   storage: MemoryStorage;
-  lastMessages?: number;
+  lastMessages?: number | false;
+  tokenLimit?: { maxTokens: number; atMaxRemoveTokens: number };
+  tokenCounter?: { countMessage(message: MastraDBMessage): number | Promise<number> };
 }
 
 /**
@@ -55,11 +58,15 @@ export class MessageHistory implements Processor {
     operationType: MEMORY_PHASE_OPERATION[phase] ?? 'recall',
   });
   private storage: MemoryStorage;
-  private lastMessages?: number;
+  private lastMessages?: number | false;
+  private tokenLimit?: MessageHistoryOptions['tokenLimit'];
+  private tokenCounter?: MessageHistoryOptions['tokenCounter'];
 
   constructor(options: MessageHistoryOptions) {
     this.storage = options.storage;
     this.lastMessages = options.lastMessages;
+    this.tokenLimit = options.tokenLimit;
+    this.tokenCounter = options.tokenCounter;
   }
 
   /**
@@ -125,8 +132,30 @@ export class MessageHistory implements Processor {
 
     try {
       // 1. Fetch historical messages from storage (as DB format)
-      const cacheKey = `history:${threadId}:${resourceId ?? ''}:${this.lastMessages ?? 'all'}`;
+      const storedBoundary = getMemoryTokenBoundary(parseMemoryRequestContext(requestContext)?.thread);
+      const boundary =
+        this.tokenLimit &&
+        storedBoundary?.maxTokens === this.tokenLimit.maxTokens &&
+        storedBoundary.atMaxRemoveTokens === this.tokenLimit.atMaxRemoveTokens
+          ? storedBoundary
+          : undefined;
+      const cacheKey = `history:${threadId}:${resourceId ?? ''}:${this.lastMessages ?? 'all'}:${JSON.stringify(boundary)}`;
       const loadMessages = async () => {
+        if (this.tokenLimit) {
+          const result = await loadMessageHistory({
+            storage: this.storage,
+            threadId,
+            resourceId,
+            boundary,
+            maxMessages: typeof this.lastMessages === 'number' ? this.lastMessages : undefined,
+            maxTokens: this.tokenLimit.maxTokens,
+            atMaxRemoveTokens: this.tokenLimit.atMaxRemoveTokens,
+            tokenCounter: this.tokenCounter,
+            includeOverflow: true,
+          });
+          return [...result.overflow, ...result.messages].reverse();
+        }
+
         const result = await this.storage.listMessages({
           threadId,
           resourceId,
@@ -142,7 +171,7 @@ export class MessageHistory implements Processor {
 
       // 2. Filter out system messages (they should never be stored in DB)
       const filteredMessages = messages.filter((msg: MastraDBMessage) => {
-        return msg.role !== 'system';
+        return msg.role !== 'system' && (!boundary || isAfterMemoryTokenBoundary(msg, boundary));
       });
 
       // 3. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)

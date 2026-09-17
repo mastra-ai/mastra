@@ -882,6 +882,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'vectors/s3vectors', label: 'Amazon S3 Vector Store' },
         { type: 'doc', id: 'vectors/astra', label: 'Astra Vector Store' },
+        { type: 'doc', id: 'vectors/azure-ai-search', label: 'Azure AI Search Vector Store' },
         { type: 'doc', id: 'vectors/chroma', label: 'Chroma Vector Store' },
         { type: 'doc', id: 'vectors/vectorize', label: 'Cloudflare Vector Store' },
         { type: 'doc', id: 'vectors/convex', label: 'Convex Vector Store' },
@@ -898,6 +899,7 @@ const sidebars = {
         { type: 'doc', id: 'vectors/qdrant', label: 'Qdrant Vector Store' },
         { type: 'doc', id: 'vectors/turbopuffer', label: 'Turbopuffer Vector Store' },
         { type: 'doc', id: 'vectors/upstash', label: 'Upstash Vector Store' },
+        { type: 'doc', id: 'vectors/weaviate', label: 'Weaviate Vector Store' },
       ],
     },
     {

@@ -6,17 +6,21 @@ import { http, HttpResponse } from 'msw';
 import { createContext, useContext, useEffect, useImperativeHandle, useState } from 'react';
 import type { ReactNode, Ref } from 'react';
 import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import AgentSession from '../session';
 import AgentThread from '../thread';
+import {
+  preferenceModelProviders,
+  memoryConfig,
+  workingMemory,
+  voiceSpeakers,
+  mcpServers,
+  preferenceThread,
+} from './fixtures/thread-preferences';
 import { emptyHistory, liveChunks, staleHistory } from './fixtures/thread-recovery';
 import { AgentLayout } from '@/domains/agents/agent-layout';
-import {
-  emptyThreadTracesList,
-  threadTracesList,
-  traceASpans,
-  traceBSpans,
-} from '@/domains/traces/components/__tests__/fixtures/thread-traces';
+import { emptyThreadTracesList } from '@/domains/traces/components/__tests__/fixtures/thread-traces';
 import { agentIndexLoader, agentThreadsIndexLoader, legacyAgentChatLoader, paths } from '@/lib/app-routing';
 import { LinkComponentProvider } from '@/lib/framework';
 import { Link } from '@/lib/link';
@@ -139,6 +143,7 @@ const LocationProbe = () => {
 const buildRouter = (initialEntry: string) =>
   createMemoryRouter(
     [
+      { path: '/agents', element: <LocationProbe /> },
       {
         // Mirrors App.tsx: the thread page is a child of the agent tabs layout.
         path: '/agents/:agentId',
@@ -156,6 +161,7 @@ const buildRouter = (initialEntry: string) =>
           { path: 'chat/:threadId', loader: legacyAgentChatLoader },
           { path: 'threads', loader: agentThreadsIndexLoader },
           { path: 'threads/:threadId', element: <AgentThread /> },
+          { path: 'session/:threadId', element: <AgentSession /> },
         ],
       },
     ],
@@ -685,12 +691,11 @@ describe('Standalone thread page', () => {
     expect(onTracesRequest).not.toHaveBeenCalled();
   });
 
-  it('does not render the "Show thread traces" switch nor fetch traces on /new', async () => {
+  it('does not fetch traces on /new', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/new`);
 
     await screen.findByText('Sushi ideas');
-    expect(screen.queryByRole('switch', { name: 'Show thread traces' })).toBeNull();
     expect(screen.queryByRole('button', { name: /traces/i })).toBeNull();
     expect(onTracesRequest).not.toHaveBeenCalled();
   });
@@ -795,59 +800,122 @@ describe('Standalone thread page', () => {
     });
   });
 
-  describe('with ?variant=advanced', () => {
-    const installTraceHandlers = () => {
+  describe('when a thread has saved model preferences', () => {
+    it('retains real composer edits through the first send, navigation, and reload', async () => {
+      installHandlers();
+      const sent = vi.fn();
       server.use(
-        http.get(`${BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(threadTracesList)),
-        http.get(`${BASE_URL}/api/observability/traces`, () => HttpResponse.json(threadTracesList)),
-        http.get(`${BASE_URL}/api/observability/traces/:traceId`, ({ params }) =>
-          HttpResponse.json(params.traceId === 'trace-b' ? traceBSpans : traceASpans),
+        http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json(preferenceModelProviders)),
+        http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(memoryConfig)),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => HttpResponse.json(workingMemory)),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId`, ({ params }) =>
+          HttpResponse.json({ ...preferenceThread, id: params.threadId }),
+        ),
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, () => HttpResponse.json(voiceSpeakers)),
+        http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(mcpServers)),
+        http.post(
+          `${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`,
+          () => new HttpResponse('', { headers: { 'content-type': 'text/event-stream' } }),
         ),
       );
-    };
+      server.use(
+        http.post(`${BASE_URL}/api/agents/${AGENT_ID}/stream`, async ({ request }) => {
+          sent(await request.json());
+          return new HttpResponse('data: {"type":"finish","payload":{}}\n\n', {
+            headers: { 'content-type': 'text/event-stream' },
+          });
+        }),
+      );
+      const router = renderAt(`/agents/${AGENT_ID}/threads/new`);
+      fireEvent.click(await screen.findByText('gpt-5-mini'));
+      fireEvent.click(await screen.findByRole('option', { name: /gpt-4o-mini/ }));
+      fireEvent.click(screen.getByTestId('composer-model-settings-trigger'));
+      fireEvent.click(await screen.findByRole('radio', { name: 'Stream' }));
+      // Base UI hides slider thumbs until layout measurement, which jsdom cannot provide.
+      const temperature = screen.getAllByRole('slider', { hidden: true })[0];
+      fireEvent.change(temperature, { target: { value: '0.2' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Advanced Settings' }));
+      fireEvent.change(await screen.findByLabelText('Max Steps'), { target: { value: '8' } });
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+      fireEvent.keyDown(screen.getByTestId('composer-model-settings-trigger'), { key: 'Escape' });
+      const firstInput = await screen.findByRole('textbox');
+      fireEvent.change(firstInput, { target: { value: 'Save my preferences' } });
+      fireEvent.keyDown(firstInput, { key: 'Enter', code: 'Enter' });
+      await waitFor(() => expect(sent).toHaveBeenCalledOnce());
+      await waitFor(() => expect(router.state.location.pathname).not.toBe(`/agents/${AGENT_ID}/threads/new`));
+      const savedPath = router.state.location.pathname;
+      expect(sent).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          model: 'openai/gpt-4o-mini',
+          maxSteps: 8,
+          modelSettings: expect.objectContaining({ temperature: 0.2 }),
+        }),
+      );
+      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      await act(() => router.navigate(`/agents/${AGENT_ID}/threads/thread-2`));
+      expect(await screen.findByText('gpt-5-mini')).toBeTruthy();
+      await act(() => router.navigate(savedPath));
+      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      cleanup();
+      renderAt(savedPath);
+      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      fireEvent.click(screen.getByTestId('composer-model-settings-trigger'));
+      expect((await screen.findByRole('radio', { name: 'Stream' })).getAttribute('aria-checked')).toBe('true');
+      fireEvent.keyDown(screen.getByTestId('composer-model-settings-trigger'), { key: 'Escape' });
+      const input = await screen.findByRole('textbox');
+      fireEvent.change(input, { target: { value: 'Use my saved settings' } });
+      fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+      await waitFor(() => expect(sent).toHaveBeenCalledTimes(2));
+      expect(sent).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          model: 'openai/gpt-4o-mini',
+          maxSteps: 8,
+          modelSettings: expect.objectContaining({ temperature: 0.2 }),
+        }),
+      );
+    });
+  });
 
-    it('renders the thread as its traces instead of the chat', async () => {
-      installHandlers();
-      installTraceHandlers();
-      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}?variant=advanced`);
-
-      expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
-      expect(await screen.findByText('Chef agent run')).not.toBeNull();
-      expect(screen.queryByText('Tonight we cook carbonara.')).toBeNull();
-      expect(screen.queryByRole('button', { name: 'Traces' })).toBeNull();
+  describe('when the current agent no longer exists', () => {
+    beforeEach(() => {
+      const missingAgent = () => HttpResponse.json({ error: 'Agent not found' }, { status: 404 });
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, missingAgent),
+        http.get(`${BASE_URL}/api/memory/config`, missingAgent),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, missingAgent),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId`, missingAgent),
+        http.post(`${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`, missingAgent),
+      );
     });
 
-    it('still renders the chat for a new thread', async () => {
+    it.each(['threads', 'session'])('replaces cached %s chat data with actionable recovery', async route => {
       installHandlers();
-      installTraceHandlers();
-      renderAt(`/agents/${AGENT_ID}/threads/new?variant=advanced`);
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () =>
+          HttpResponse.json({ error: 'Agent not found' }, { status: 404 }),
+        ),
+      );
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      queryClient.setQueryData(['agent', AGENT_ID, {}], agentResponse);
+      renderAt(`/agents/${AGENT_ID}/${route}/${THREAD_ID}`, queryClient);
 
-      expect(await screen.findByText('Sushi ideas')).not.toBeNull();
-      expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
-      expect(screen.queryByRole('switch', { name: 'Show thread traces' })).toBeNull();
+      expect(await screen.findByText('Agent not found')).not.toBeNull();
+      expect(screen.getByText(/may have been renamed or removed/)).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Reload' })).not.toBeNull();
+      expect(screen.getByRole('link', { name: 'Choose agent' })).not.toBeNull();
+      expect(screen.queryByPlaceholderText('Enter your message...')).toBeNull();
     });
 
-    it('is toggled from the "Show thread traces" switch in the tab bar', async () => {
+    it('lets the user leave the dead chat and choose an agent', async () => {
       installHandlers();
-      installTraceHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () =>
+          HttpResponse.json({ error: 'Agent not found' }, { status: 404 }),
+        ),
+      );
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
-
-      const toggle = await screen.findByRole('switch', { name: 'Show thread traces' });
-      expect(toggle.getAttribute('aria-checked')).toBe('false');
-
-      fireEvent.click(toggle);
-      await waitFor(() =>
-        expect(screen.getByTestId('location-probe').textContent).toBe(
-          `/agents/${AGENT_ID}/threads/${THREAD_ID}?variant=advanced`,
-        ),
-      );
-      expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
-
-      fireEvent.click(screen.getByRole('switch', { name: 'Show thread traces' }));
-      await waitFor(() =>
-        expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/${THREAD_ID}`),
-      );
-      expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
+      fireEvent.click(await screen.findByRole('link', { name: 'Choose agent' }));
+      await waitFor(() => expect(screen.getByTestId('location-probe').textContent).toBe('/agents'));
     });
   });
 

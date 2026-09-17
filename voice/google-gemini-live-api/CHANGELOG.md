@@ -1,5 +1,45 @@
 # @mastra/voice-google-gemini-live
 
+## 0.14.11-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`5085475`](https://github.com/mastra-ai/mastra/commit/5085475c0da226e618eb3ee2676d347788c3fb00), [`6c781fd`](https://github.com/mastra-ai/mastra/commit/6c781fda62eb0b0b74d016f188ed0b2db5cfdceb)]:
+  - @mastra/schema-compat@1.3.11-alpha.1
+
+## 0.14.11-alpha.0
+
+### Patch Changes
+
+- Add `thinkingConfig` to `GeminiLiveVoice` so callers can configure the model's thinking behavior on the Gemini Live session. It is forwarded to the setup frame as `generation_config.thinking_config` (and honored by `updateSessionConfig`). On native-audio thinking models, set `thinkingConfig.includeThoughts: false` to stop the model's reasoning from being spoken as the reply, or bound it with `thinkingBudget`. Default behavior is unchanged when the field is omitted. ([#24050](https://github.com/mastra-ai/mastra/pull/24050))
+
+  ```ts
+  const voice = new GeminiLiveVoice({
+    apiKey: process.env.GOOGLE_API_KEY,
+    thinkingConfig: { includeThoughts: false },
+  });
+  ```
+
+- Fix API-key (non-Vertex) Gemini Live connections being pinned to the `v1alpha` WebSocket endpoint. `v1alpha` rejects current Live models (e.g. `gemini-2.0-flash-live-001`) during setup, so the session never reached `setupComplete` and `connect()` only failed via the 30s timeout. API-key connections now use the `v1beta` Live endpoint (matching the Vertex branch already on `v1beta1`), so current Live models connect successfully. ([#24089](https://github.com/mastra-ai/mastra/pull/24089))
+
+- Fixed a WebSocket denial-of-service advisory by updating ws to 8.21.3. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
+- Fixed a hang when connecting the Google Gemini Live voice provider with a rejected setup (for example an unknown model id). The server closes the WebSocket with an abnormal code such as 1007, which previously was only logged, so connect() waited out the full 30s timeout and reported a generic timeout instead of the real reason. connect() now rejects immediately, carrying the close code and reason. ([#24092](https://github.com/mastra-ai/mastra/pull/24092))
+
+- Updated dependencies [[`fef227a`](https://github.com/mastra-ai/mastra/commit/fef227a8b7cb0ad7f68087e26d1fd2051054a61a)]:
+  - @mastra/schema-compat@1.3.11-alpha.0
+
+## 0.14.10
+
+### Patch Changes
+
+- Fix missing usage events when Gemini Live sends usage metadata alongside response content, setup, or tool calls. Preserve content-derived modality and normal message routing while processing usage independently. ([#23835](https://github.com/mastra-ai/mastra/pull/23835))
+
+- Fixed realtime audio input to include the configured sample rate in its MIME type, so Gemini Live can interpret incoming PCM audio at the correct rate. ([#23834](https://github.com/mastra-ai/mastra/pull/23834))
+
+- Updated dependencies [[`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac), [`80608ed`](https://github.com/mastra-ai/mastra/commit/80608ede1a9e5d7d8488ac511245bf327e8987e3)]:
+  - @mastra/schema-compat@1.3.10
+
 ## 0.14.10-alpha.1
 
 ### Patch Changes

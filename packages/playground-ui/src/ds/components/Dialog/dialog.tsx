@@ -115,28 +115,24 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
             initialFocus={initialFocus ?? (intent === 'destructive' ? closeRef : true)}
             aria-busy={pending || undefined}
             className={cn(
-              'fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-sm translate-[-50%] flex-col overflow-y-auto overscroll-contain rounded-xl border border-border1/40 bg-surface2 shadow-dialog outline-hidden',
+              'fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-sm translate-[-50%] flex-col overflow-y-auto overscroll-contain rounded-xl border border-border2 bg-surface2 shadow-dialog outline-hidden',
               'data-[ending-style]:scale-0.98 data-[starting-style]:scale-0.98 transition-[opacity,scale] duration-normal ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none',
               className,
             )}
             {...props}
           >
             {children}
-            <DialogPrimitive.Close
-              ref={closeRef}
-              disabled={pending}
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="absolute top-3 right-3"
-                  aria-label="Close dialog"
-                  children={<X />}
-                />
-              }
-            >
-              <X />
-            </DialogPrimitive.Close>
+            <div className="absolute top-2.5 right-3">
+              <DialogPrimitive.Close
+                ref={closeRef}
+                disabled={pending}
+                render={
+                  <Button variant="ghost" size="icon-sm" aria-label="Close dialog">
+                    <X />
+                  </Button>
+                }
+              />
+            </div>
           </DialogPrimitive.Popup>
         </DialogPortal>
       );
@@ -213,10 +209,7 @@ const DialogBody = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
         <ScrollArea className="flex min-h-0 min-w-0 shrink flex-col" viewPortClassName="h-auto min-h-0" mask>
           <div
             ref={ref}
-            className={cn(
-              'flex flex-col gap-3 px-4 py-2 text-ui-md leading-ui-md [overflow-wrap:anywhere] text-neutral4',
-              className,
-            )}
+            className={cn('flex flex-col gap-3 px-4 py-2 text-ui-md [overflow-wrap:anywhere] text-neutral4', className)}
             {...props}
           >
             {children}
@@ -225,7 +218,7 @@ const DialogBody = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
       );
     }
     return (
-      <div ref={ref} className={cn('max-h-[50vh] overflow-y-auto px-3 py-3', className)} {...props}>
+      <div ref={ref} className={cn('max-h-[50vh] overflow-y-auto p-3', className)} {...props}>
         {children}
       </div>
     );
@@ -244,7 +237,7 @@ const DialogTitle = React.forwardRef<HTMLHeadingElement, DialogTitleProps>(({ cl
       ref={ref}
       className={cn(
         'text-header-xs font-medium',
-        variant === 'new' && 'pr-8 leading-ui-md [overflow-wrap:anywhere] text-neutral6',
+        variant === 'new' && 'pr-8 [overflow-wrap:anywhere] text-neutral6',
         className,
       )}
       {...props}
@@ -263,10 +256,7 @@ const DialogDescription = React.forwardRef<HTMLParagraphElement, DialogDescripti
     return (
       <DialogPrimitive.Description
         ref={ref}
-        className={cn(
-          variant === 'new' ? 'text-ui-md leading-ui-md [overflow-wrap:anywhere] text-neutral4' : 'sr-only',
-          className,
-        )}
+        className={cn(variant === 'new' ? 'text-ui-md [overflow-wrap:anywhere] text-neutral4' : 'sr-only', className)}
         {...props}
       />
     );

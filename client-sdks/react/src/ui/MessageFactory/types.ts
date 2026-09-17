@@ -59,6 +59,7 @@ export type DynamicToolPart = {
   state?: string;
   input?: unknown;
   output?: unknown;
+  errorText?: string;
 };
 
 /**
