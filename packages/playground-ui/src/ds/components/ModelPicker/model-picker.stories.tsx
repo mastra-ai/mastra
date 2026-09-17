@@ -3,8 +3,9 @@ import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { FactoryModelControls } from '../../../../.storybook/fixtures/model-picker/factory-model-controls';
 import { models } from '../../../../.storybook/fixtures/model-picker/models';
-import { StudioModelControls } from '../../../../.storybook/fixtures/model-picker/studio-model-controls';
+import { StudioModelExample } from '../../../../.storybook/fixtures/model-picker/studio-model-controls';
 import { ModelPicker, ModelPickerTrigger, ModelPickerContent } from './model-picker';
+import { ModelPickerWarnings } from './model-picker-group';
 import { ModelPickerModels } from './model-picker-models';
 import { ModelPickerLoading, ModelPickerUnavailable, ModelPickerReadOnly } from './model-picker-status';
 
@@ -76,5 +77,31 @@ export const NoModels: Story = { render: () => <CombinedPicker empty label="No m
 export const LongName: Story = {
   render: () => <CombinedPicker label="A provider with a very long model identifier for a narrow composer" />,
 };
-export const Segmented: Story = { render: () => <StudioModelControls state="ready" /> };
-export const Locked: Story = { render: () => <StudioModelControls state="locked" /> };
+export const Segmented: Story = { render: () => <StudioModelExample state="ready" /> };
+export const Locked: Story = { render: () => <StudioModelExample state="locked" /> };
+
+export const Warnings: Story = {
+  render: () => (
+    <>
+      <ModelPickerWarnings warning={['The model is unavailable.', 'Choose another model.']} />
+      <ModelPickerWarnings warning={[]} staleModel="openai/gpt-4.1" />
+    </>
+  ),
+  play: async ({ canvasElement }) => {
+    const alerts = within(canvasElement).getAllByRole('alert');
+    await expect(alerts[0]).toHaveTextContent('The model is unavailable. Choose another model.');
+    await expect(alerts[1]).toHaveTextContent('openai/gpt-4.1 is no longer allowed by admin policy.');
+  },
+};
+
+export const UnconfiguredProvider: Story = {
+  render: () => <StudioModelExample state="unconfigured" />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const screen = within(canvasElement.ownerDocument.body);
+    await expect(canvas.getByText('OPENAI_API_KEY')).toBeVisible();
+    await userEvent.click(canvas.getByRole('combobox', { name: 'Provider' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Anthropic' }));
+    await expect(canvas.queryByText('OPENAI_API_KEY')).not.toBeInTheDocument();
+  },
+};

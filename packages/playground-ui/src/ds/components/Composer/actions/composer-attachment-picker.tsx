@@ -1,4 +1,5 @@
 import { CloudUpload, Link } from 'lucide-react';
+import { useId } from 'react';
 import type { FormEvent } from 'react';
 import { ComposerAttachmentButton } from './composer-buttons';
 import { Button } from '@/ds/components/Button';
@@ -22,6 +23,7 @@ export function ComposerAttachmentPicker({
   onSubmitUrl,
   error,
 }: ComposerAttachmentPickerProps) {
+  const urlInputId = useId();
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     event.stopPropagation();
@@ -35,13 +37,13 @@ export function ComposerAttachmentPicker({
         {error && <p role="alert">{error}</p>}
         <form onSubmit={handleSubmit} className="flex flex-row items-end gap-2">
           <div className="w-full space-y-1">
-            <Label htmlFor="url-attachment" className="text-ui-md text-neutral3">
+            <Label htmlFor={urlInputId} className="text-ui-md text-neutral3">
               Public URL
             </Label>
             <Input
               type="text"
               name="url-attachment"
-              id="url-attachment"
+              id={urlInputId}
               className="w-full"
               placeholder="https://placehold.co/600x400/png"
             />

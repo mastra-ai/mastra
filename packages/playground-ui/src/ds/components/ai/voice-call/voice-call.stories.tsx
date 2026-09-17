@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { fn } from 'storybook/test';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import { VoiceCallButton } from './voice-call-button';
 import { VoiceCallPanel } from './voice-call-panel';
 const meta = {
@@ -10,7 +10,17 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Idle: Story = {};
-export const Unavailable: Story = { args: { available: false } };
+export const Unavailable: Story = {
+  args: { available: false },
+  play: async ({ canvasElement, args }) => {
+    const button = within(canvasElement).getByRole('button');
+    await userEvent.click(button);
+    button.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(args.onStart).not.toHaveBeenCalled();
+    await expect(button).toHaveAttribute('aria-disabled', 'true');
+  },
+};
 export const Connecting: Story = {
   args: { status: 'connecting' },
   render: args => (

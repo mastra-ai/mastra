@@ -1,7 +1,9 @@
 import { jsonLanguage } from '@codemirror/lang-json';
+import { EditorView } from '@codemirror/view';
 import CodeMirror from '@uiw/react-codemirror';
 import { Braces, CopyIcon, SaveIcon, CheckIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
+import { modelProviderOptionsSchema } from './provider-options';
 import type { ModelSettingsValues } from './types';
 import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import { Input } from '@/ds/components/Input';
@@ -22,6 +24,7 @@ export const AdvancedModelSettings = ({ canEdit = true, value, onChange }: Advan
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const fieldId = useId();
   const theme = useCodemirrorTheme();
 
   const { handleCopy } = useCopyToClipboard({ text: providerOptionsValue });
@@ -59,8 +62,12 @@ export const AdvancedModelSettings = ({ canEdit = true, value, onChange }: Advan
   const saveProviderOptions = async () => {
     try {
       setError(null);
-      const parsedContext = JSON.parse(providerOptionsValue);
-      onChange({ ...value, providerOptions: parsedContext });
+      const parsedOptions = modelProviderOptionsSchema.safeParse(JSON.parse(providerOptionsValue));
+      if (!parsedOptions.success) {
+        setError('Provider options must be an object of provider objects');
+        return;
+      }
+      onChange({ ...value, providerOptions: parsedOptions.data });
       setSaved(true);
 
       setTimeout(() => {
@@ -79,11 +86,11 @@ export const AdvancedModelSettings = ({ canEdit = true, value, onChange }: Advan
       <div className="@container/advanced">
         <div className="grid grid-cols-1 gap-2 pb-2 @xs/advanced:grid-cols-2">
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="frequency-penalty">
+            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor={`${fieldId}-frequency-penalty`}>
               Frequency Penalty
             </Txt>
             <Input
-              id="frequency-penalty"
+              id={`${fieldId}-frequency-penalty`}
               type="number"
               step="0.1"
               min="-1"
@@ -97,11 +104,11 @@ export const AdvancedModelSettings = ({ canEdit = true, value, onChange }: Advan
           </div>
 
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="presence-penalty">
+            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor={`${fieldId}-presence-penalty`}>
               Presence Penalty
             </Txt>
             <Input
-              id="presence-penalty"
+              id={`${fieldId}-presence-penalty`}
               type="number"
               step="0.1"
               min="-1"
@@ -115,66 +122,66 @@ export const AdvancedModelSettings = ({ canEdit = true, value, onChange }: Advan
           </div>
 
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="top-k">
+            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor={`${fieldId}-top-k`}>
               Top K
             </Txt>
             <Input
-              id="top-k"
+              id={`${fieldId}-top-k`}
               type="number"
               readOnly={!canEdit}
-              value={value.topK || ''}
+              value={value.topK ?? ''}
               onChange={e => onChange({ ...value, topK: e.target.value ? Number(e.target.value) : undefined })}
             />
           </div>
 
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="max-tokens">
+            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor={`${fieldId}-max-tokens`}>
               Max Tokens
             </Txt>
             <Input
-              id="max-tokens"
+              id={`${fieldId}-max-tokens`}
               type="number"
               readOnly={!canEdit}
-              value={value.maxTokens || ''}
+              value={value.maxTokens ?? ''}
               onChange={e => onChange({ ...value, maxTokens: e.target.value ? Number(e.target.value) : undefined })}
             />
           </div>
 
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="max-steps">
+            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor={`${fieldId}-max-steps`}>
               Max Steps
             </Txt>
             <Input
-              id="max-steps"
+              id={`${fieldId}-max-steps`}
               type="number"
               readOnly={!canEdit}
-              value={value.maxSteps || ''}
+              value={value.maxSteps ?? ''}
               onChange={e => onChange({ ...value, maxSteps: e.target.value ? Number(e.target.value) : undefined })}
             />
           </div>
 
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="max-retries">
+            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor={`${fieldId}-max-retries`}>
               Max Retries
             </Txt>
             <Input
-              id="max-retries"
+              id={`${fieldId}-max-retries`}
               type="number"
               readOnly={!canEdit}
-              value={value.maxRetries || ''}
+              value={value.maxRetries ?? ''}
               onChange={e => onChange({ ...value, maxRetries: e.target.value ? Number(e.target.value) : undefined })}
             />
           </div>
 
           <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="seed">
+            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor={`${fieldId}-seed`}>
               Seed
             </Txt>
             <Input
-              id="seed"
+              id={`${fieldId}-seed`}
               type="number"
               readOnly={!canEdit}
-              value={value.seed || ''}
+              value={value.seed ?? ''}
               onChange={e => onChange({ ...value, seed: e.target.value ? Number(e.target.value) : undefined })}
             />
           </div>
@@ -182,7 +189,7 @@ export const AdvancedModelSettings = ({ canEdit = true, value, onChange }: Advan
 
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="provider-options">
+            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor={`${fieldId}-provider-options`}>
               Provider Options
             </Txt>
 
@@ -243,15 +250,17 @@ export const AdvancedModelSettings = ({ canEdit = true, value, onChange }: Advan
             </div>
           </div>
           <CodeMirror
+            id={`${fieldId}-provider-options`}
+            aria-label="Provider Options"
             value={providerOptionsValue}
             onChange={setProviderOptionsValue}
             theme={theme}
-            extensions={[jsonLanguage]}
+            extensions={[jsonLanguage, EditorView.contentAttributes.of({ 'aria-label': 'Provider Options' })]}
             readOnly={!canEdit}
             className="h-dropdown-max-height overflow-scroll rounded-lg border bg-transparent p-2 shadow-sm transition-colors"
           />
           {error && (
-            <Txt variant="ui-md" className="text-accent2">
+            <Txt variant="ui-md" className="text-accent2" role="alert">
               {error}
             </Txt>
           )}

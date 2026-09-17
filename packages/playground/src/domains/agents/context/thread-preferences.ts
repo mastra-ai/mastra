@@ -1,3 +1,4 @@
+import { modelProviderOptionsSchema } from '@mastra/playground-ui/components/ModelSettings';
 import { z } from 'zod/v4';
 
 // A stored null means explicitly cleared; an absent field still inherits defaults.
@@ -17,7 +18,7 @@ const modelSettingsSchema = z.object({
   topK: clearable(z.number()),
   topP: clearable(z.number()),
   seed: clearable(z.number()),
-  providerOptions: clearable(z.record(z.string(), z.record(z.string(), z.json()))),
+  providerOptions: clearable(modelProviderOptionsSchema),
   chatWithGenerateLegacy: clearable(z.boolean()),
   chatWithGenerate: clearable(z.boolean()),
   chatWithLegacyStream: clearable(z.boolean()),

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { fn } from 'storybook/test';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import { ModelSettings } from './model-settings';
 import type { ModelSettingsProps } from './model-settings';
 
@@ -61,5 +61,31 @@ export const LegacyMethods: Story = {
       { value: 'generateLegacy', label: 'Generate (Legacy)' },
       { value: 'streamLegacy', label: 'Stream (Legacy)' },
     ],
+  },
+};
+
+export const AdvancedOptions: Story = {
+  args: { value: { seed: 0, maxRetries: 0 } },
+  play: async ({ canvasElement }) => {
+    const screen = within(canvasElement.ownerDocument.body);
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Model settings' }));
+    await expect(screen.getByRole('checkbox', { name: 'Require Tool Approval' })).toBeEnabled();
+    await expect(screen.getByRole('slider', { name: 'Temperature' })).toBeEnabled();
+    await expect(screen.getByRole('slider', { name: 'Top P' })).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Advanced Settings' }));
+    await expect(screen.getByRole('spinbutton', { name: 'Seed' })).toHaveValue(0);
+    await expect(screen.getByRole('spinbutton', { name: 'Max Retries' })).toHaveValue(0);
+    const editor = screen.getByRole('textbox', { name: 'Provider Options' });
+    const selectAll = navigator.platform.startsWith('Mac') ? '{Meta>}a{/Meta}' : '{Control>}a{/Control}';
+    await userEvent.click(editor);
+    await userEvent.keyboard(selectAll);
+    await userEvent.paste('[]');
+    await userEvent.click(screen.getByRole('button', { name: 'Save Provider Options' }));
+    await expect(screen.getByRole('alert')).toHaveTextContent('Provider options must be an object of provider objects');
+    await userEvent.click(editor);
+    await userEvent.keyboard(selectAll);
+    await userEvent.paste('{"openai":{"reasoningEffort":"low"}}');
+    await userEvent.click(screen.getByRole('button', { name: 'Save Provider Options' }));
+    await expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   },
 };

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { models } from './models';
+import { models, initialStudioModelSelection } from './models';
 import type { ModelControlState } from './models';
 import {
   ModelPickerCombobox,
@@ -25,8 +25,15 @@ const methods = [
   },
 ];
 
-export function StudioModelControls({ state }: { state: ModelControlState }) {
-  const [selection, setSelection] = useState({ provider: 'openai', model: 'gpt-4.1' });
+export function StudioModelControls({
+  state,
+  selection,
+  onSelectionChange,
+}: {
+  state: ModelControlState;
+  selection: typeof initialStudioModelSelection;
+  onSelectionChange: (selection: typeof initialStudioModelSelection) => void;
+}) {
   const [modelOpen, setModelOpen] = useState(false);
   const [method, setMethod] = useState('streamSubscription');
   const [settings, setSettings] = useState<ModelSettingsValues>({});
@@ -65,7 +72,7 @@ export function StudioModelControls({ state }: { state: ModelControlState }) {
               value={selection.provider}
               onValueChange={provider => {
                 if (provider !== selection.provider) {
-                  setSelection({ provider, model: '' });
+                  onSelectionChange({ provider, model: '' });
                   setModelOpen(true);
                 }
               }}
@@ -84,7 +91,7 @@ export function StudioModelControls({ state }: { state: ModelControlState }) {
                   label: model.id.slice(model.provider.length + 1),
                 }))}
               value={selection.model}
-              onValueChange={model => setSelection(current => ({ ...current, model }))}
+              onValueChange={model => onSelectionChange({ ...selection, model })}
               open={modelOpen}
               onOpenChange={setModelOpen}
               placeholder="Select model..."
@@ -109,7 +116,17 @@ export function StudioModelControls({ state }: { state: ModelControlState }) {
   );
 }
 
-export function StudioModelWarnings({ state }: { state: ModelControlState }) {
-  if (state !== 'unconfigured') return null;
+export function StudioModelWarnings({ state, provider }: { state: ModelControlState; provider: string }) {
+  if (state !== 'unconfigured' || provider !== 'openai') return null;
   return <ModelPickerWarnings environmentVariable="OPENAI_API_KEY" />;
+}
+
+export function StudioModelExample({ state }: { state: ModelControlState }) {
+  const [selection, setSelection] = useState(initialStudioModelSelection);
+  return (
+    <div>
+      <StudioModelWarnings state={state} provider={selection.provider} />
+      <StudioModelControls state={state} selection={selection} onSelectionChange={setSelection} />
+    </div>
+  );
 }

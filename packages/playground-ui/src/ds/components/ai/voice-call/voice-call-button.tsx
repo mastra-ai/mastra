@@ -21,7 +21,7 @@ export function VoiceCallButton({ status, available, onStart, onStop }: VoiceCal
         className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
         tooltip={available ? 'Start voice call' : 'Configure @mastra/livekit to start voice calls.'}
         data-testid="voice-call-button"
-        onClick={onStart}
+        onClick={available ? onStart : undefined}
       >
         <Phone className="text-neutral3 hover:text-neutral6 size-5" />
       </Button>

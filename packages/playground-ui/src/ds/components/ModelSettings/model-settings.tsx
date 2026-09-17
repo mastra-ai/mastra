@@ -114,6 +114,7 @@ export function ModelSettings({
               </Entry>
               <Entry label="Require Tool Approval">
                 <Checkbox
+                  aria-label="Require Tool Approval"
                   checked={value.requireToolApproval}
                   disabled={!canEdit}
                   onCheckedChange={checked => {
@@ -133,6 +134,7 @@ export function ModelSettings({
               <Entry label="Temperature">
                 <div className="flex flex-row items-center justify-between gap-2">
                   <Slider
+                    aria-label="Temperature"
                     value={[value.temperature ?? -0.1]}
                     max={1}
                     min={-0.1}
@@ -152,6 +154,7 @@ export function ModelSettings({
               <Entry label="Top P">
                 <div className="flex flex-row items-center justify-between gap-2">
                   <Slider
+                    aria-label="Top P"
                     value={[value.topP ?? -0.1]}
                     max={1}
                     min={-0.1}

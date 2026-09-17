@@ -82,12 +82,13 @@ export function ModelPickerWarnings({
   staleModel?: string;
   environmentVariable?: string;
 }) {
-  if (!warning && !staleModel && !environmentVariable) return null;
+  const warningText = Array.isArray(warning) ? warning.filter(Boolean).join(' ') : warning;
+  if (!warningText && !staleModel && !environmentVariable) return null;
   return (
     <div className="flex flex-col gap-1 px-3 pb-1.5">
-      {(warning || staleModel) && (
+      {(warningText || staleModel) && (
         <ModelPickerWarning alert>
-          {warning || (
+          {warningText || (
             <>
               <code className="bg-accent6Dark text-accent6 rounded px-1 py-0.5 break-all">{staleModel}</code> is no
               longer allowed by admin policy. Pick a different model.

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { ComposerModeStates, ComposerPreview } from '../../../../.storybook/fixtures/composer';
 
-import { StudioModelControls } from '../../../../.storybook/fixtures/model-picker/studio-model-controls';
+import { StudioModelExample } from '../../../../.storybook/fixtures/model-picker/studio-model-controls';
 import { VoiceCallButton, VoiceCallPanel } from '../ai/voice-call';
 import type { VoiceCallStatus } from '../ai/voice-call';
 import { Badge } from '../Badge/Badge';
@@ -145,7 +145,7 @@ function ComposerWithVoice() {
     <>
       <VoiceCallPanel status={status} agentState="listening" captions={[]} />
       <ComposerPreview
-        controls={<StudioModelControls state="ready" />}
+        controls={<StudioModelExample state="ready" />}
         actions={
           <>
             <ComposerDictationButton listening={listening} onClick={() => setListening(current => !current)} />

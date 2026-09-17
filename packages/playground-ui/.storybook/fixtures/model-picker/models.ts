@@ -32,3 +32,5 @@ export function packModel(packId: string, modeId: string) {
   return packId === 'review' ? 'anthropic/claude-sonnet-4-5' : 'openai/gpt-4.1';
 }
 export type ModelControlState = 'ready' | 'loading' | 'unconfigured' | 'locked';
+
+export const initialStudioModelSelection = { provider: 'openai', model: 'gpt-4.1' };
