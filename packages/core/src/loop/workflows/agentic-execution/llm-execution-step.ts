@@ -98,7 +98,7 @@ import {
   EagerToolExecutionNotRun,
   isEagerlyExecutableToolCall,
 } from './eager-tool-execution';
-import type { EagerToolExecutionCoordinator } from './eager-tool-execution';
+import type { CompletedEagerWork, EagerToolExecutionCoordinator } from './eager-tool-execution';
 import type { PendingProviderToolCall } from './provider-tool-spans';
 import { endPendingProviderToolSpan } from './provider-tool-spans';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
@@ -1299,16 +1299,32 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
        * is easy to miss: an error thrown out of the stream, and an error chunk that an
        * error processor answers with a retry.
        */
+      // Work that finished before its attempt was thrown away. Held rather than written
+      // immediately: cancelling has to happen the moment the attempt dies, but writing is
+      // only correct if a replacement attempt actually follows. An attempt that dies for
+      // good (caller abort, unretryable error, last model) must leave no trace of a turn
+      // the caller never saw streamed.
+      let discardedEagerWork: CompletedEagerWork[] = [];
+
       const discardAttemptEagerWork = () => {
         const completed = eagerCoordinator?.stop({ cancelRunning: true });
         eagerCoordinator?.beginTurn();
-        if (!completed?.length) return;
+        if (completed?.length) discardedEagerWork.push(...completed);
+      };
+
+      const commitDiscardedEagerWork = (messageId: string) => {
+        const completed = discardedEagerWork;
+        discardedEagerWork = [];
+        if (!completed.length) return;
 
         // A tool that already ran is the one thing the discard cannot undo. Committing
         // the call and its result into the conversation is what keeps eager execution
         // observably equal to the default: the replacement attempt sees the work as
         // done, so the tool runs once rather than once per attempt.
-        const generateId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId');
+        //
+        // Written under the dead attempt's own message id so the result merges into the
+        // assistant message that already carries the call, instead of adding a second
+        // message with the same tool call id.
         const messages = buildMessagesFromChunks({
           chunks: completed.flatMap(work => [
             { type: 'tool-call', payload: { toolCallId: work.toolCallId, toolName: work.toolName, args: work.args } },
@@ -1322,7 +1338,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               },
             },
           ]),
-          messageId: generateId?.() ?? crypto.randomUUID(),
+          messageId,
           // No tool set needed: it is only consulted to infer provider execution, and
           // the eligibility whitelist never dispatches a provider-executed call.
         });
@@ -1466,6 +1482,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           workspace,
         };
         const rotateResponseMessageId = () => {
+          // A rotation means a replacement attempt is starting, which is the only point
+          // where writing a dead attempt's finished tool work is correct. Committed under
+          // the outgoing id, before it is replaced.
+          commitDiscardedEagerWork(currentMessageId);
           currentMessageId = rotateLoopResponseMessageId(currentMessageId);
           currentStep.messageId = currentMessageId;
           return currentMessageId;
@@ -2493,6 +2513,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // Same discard as the thrown-error path: this attempt's tool calls are dropped
         // (the step returns `toolCalls: []`), so its eager work must not survive either.
         discardAttemptEagerWork();
+        commitDiscardedEagerWork(outputStream.messageId);
         const currentProcessorRetryCount = inputData.processorRetryCount || 0;
         const steps = inputData.output?.steps || [];
         const nextProcessorRetryCount = currentProcessorRetryCount + 1;
@@ -2791,6 +2812,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // which confuses models and often causes empty text responses.
       if (shouldRetry) {
         messageList.removeByIds([outputStream.messageId]);
+        // A processor retry throws this attempt away like the error paths do. Most retries
+        // cannot reach here with eager work in flight, because a `processOutputStep`
+        // processor switches eager dispatch off for the whole turn — but a `processToolResult`
+        // hook can raise a retrying tripwire without being one, and that hook only runs
+        // because a tool already produced a result. Cancel what is still running, and keep
+        // what finished so the retry is not charged for the same side effect twice.
+        discardAttemptEagerWork();
+        commitDiscardedEagerWork(outputStream.messageId);
       }
 
       const retryFeedbackText =

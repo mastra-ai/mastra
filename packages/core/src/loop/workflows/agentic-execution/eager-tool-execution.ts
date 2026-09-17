@@ -35,7 +35,14 @@ export type CompletedEagerWork = {
   toolCallId: string;
   toolName: string;
   args: unknown;
+  /** The tool's own output, unwrapped from the step's envelope. */
   result: unknown;
+  /**
+   * The order the model emitted this call in. Executions settle in whatever order they
+   * finish, and history is written in model-call order everywhere else, so the caller
+   * sorts by this before committing anything.
+   */
+  sequence: number;
 };
 
 type QueuedExecution = {
@@ -65,6 +72,7 @@ export class EagerToolExecutionCoordinator {
    */
   readonly #completed = new Map<string, CompletedEagerWork>();
   #running = 0;
+  #dispatchSequence = 0;
   #stopped = false;
   #stoppedPermanently = false;
 
@@ -95,6 +103,10 @@ export class EagerToolExecutionCoordinator {
   ) {
     if (this.#stopped || this.#executions.has(toolCallId)) return false;
 
+    // Dispatch happens on complete tool-call chunks as the model emits them, so the order
+    // calls arrive here is the model-call order the rest of the pipeline preserves.
+    const sequence = this.#dispatchSequence++;
+
     // Its own controller, so work started for an attempt the pipeline later discards can
     // be cancelled without touching the run's signal.
     const controller = new AbortController();
@@ -118,11 +130,31 @@ export class EagerToolExecutionCoordinator {
         void execute(controller.signal)
           .then(result => {
             // Recorded before resolving, so a discard racing the settlement still sees
-            // work that is done rather than work it is entitled to abandon. Only success
-            // counts: a failed execution left no side effect worth preserving, and the
-            // replacement attempt is free to try it again.
-            if (call && !controller.signal.aborted) {
-              this.#completed.set(toolCallId, { toolCallId, toolName: call.toolName, args: call.args, result });
+            // work that is done rather than work it is entitled to abandon.
+            //
+            // The step resolves an envelope rather than the tool's value, and it resolves
+            // rather than rejects on failure: `{ result, ...call }` when the tool returned,
+            // `{ error, ...call }` when it threw, `{ aborted: true, ...call }` when it was
+            // cancelled. Only the first is worth keeping. A failure or an abort left
+            // nothing the replacement attempt has to be told about, and committing one as
+            // though it were a result would show the next model a success that never
+            // happened. Unwrap here so the caller holds the tool's own output.
+            const envelope = result as { result?: unknown; error?: unknown; aborted?: boolean } | undefined;
+            const succeeded =
+              !!envelope &&
+              typeof envelope === 'object' &&
+              'result' in envelope &&
+              !('error' in envelope) &&
+              !envelope.aborted;
+
+            if (call && succeeded && !controller.signal.aborted) {
+              this.#completed.set(toolCallId, {
+                toolCallId,
+                toolName: call.toolName,
+                args: call.args,
+                result: envelope.result,
+                sequence,
+              });
             }
             resolve(result);
           }, reject)
@@ -194,7 +226,10 @@ export class EagerToolExecutionCoordinator {
     // Work that already finished is the one thing a discard must not throw away: the
     // tool has run, and the replacement attempt would otherwise run it again. Handed
     // back so the caller can commit it into the conversation the replacement sees.
-    const completed = [...this.#completed.values()];
+    // Sorted back into model-call order. The map is in settlement order, and a fast
+    // second call would otherwise be written into history ahead of a slow first one,
+    // which is the one thing this feature promises never to do.
+    const completed = [...this.#completed.values()].sort((a, b) => a.sequence - b.sequence);
     this.#completed.clear();
 
     {
