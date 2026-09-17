@@ -1,17 +1,26 @@
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { access, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { runTraceImport, resolveTraceImportWindow, type TraceImportActionDependencies } from './action.js';
+import {
+  runTraceImport,
+  resolveTraceImportWindow,
+  traceImportAction,
+  type TraceImportActionDependencies,
+} from './action.js';
 import type { TraceImportProvider } from './provider.js';
 import type { PreparedTraceBatch, TraceImportSpan, TraceImportTrace } from './types.js';
+import { uploadTraceImport } from './upload.js';
+import { verifyTraceImport } from './verification.js';
 
 vi.mock('../../auth/credentials.js', () => ({
   getCurrentOrgId: vi.fn(),
   getToken: vi.fn(),
 }));
+vi.mock('../../env/resolve-project.js', () => ({ resolveProject: vi.fn() }));
 
 const { getCurrentOrgId, getToken } = await import('../../auth/credentials.js');
+const { resolveProject } = await import('../../env/resolve-project.js');
 
 const NOW = new Date('2026-09-11T12:00:00.000Z');
 const temporaryDirectories: string[] = [];
@@ -104,6 +113,9 @@ async function onlyImportId(stateRoot: string): Promise<string> {
 
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map(path => rm(path, { recursive: true, force: true })));
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+  vi.clearAllMocks();
 });
 
 describe('resolveTraceImportWindow', () => {
@@ -196,6 +208,70 @@ describe('runTraceImport', () => {
     });
     expect(platform.upload).toHaveBeenCalledOnce();
     expect(platform.readTrace).toHaveBeenCalledOnce();
+  });
+
+  it('pauses after timed-out verification and keeps prepared data for resume', async () => {
+    const platform = target();
+    platform.readTrace = vi.fn(async () => ({ kind: 'pending' as const }));
+    const result = await runTraceImport(
+      { provider: 'langfuse', yes: true },
+      await dependencies({
+        createTarget: () => platform,
+        verifyImport: options =>
+          verifyTraceImport({
+            ...options,
+            limits: { maxAttempts: 2 },
+            dependencies: { sleep: async () => undefined },
+          }),
+      }),
+    );
+
+    expect(result.status).toBe('paused');
+    expect(result.report).toMatchObject({
+      phase: 'paused',
+      verification: { status: 'timed-out', queryAttempts: 2 },
+    });
+    await expect(access(join(result.report.stateDirectory, 'traces.jsonl'))).resolves.toBeUndefined();
+  });
+
+  it('reports paused verification as a command error', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'trace-import-action-home-'));
+    temporaryDirectories.push(home);
+    const stateRoot = join(home, '.mastra', 'imports');
+    const prepared = await runTraceImport(
+      { provider: 'langfuse', dryRun: true },
+      {
+        stateRoot,
+        ui: ui(),
+        environment: {},
+        resolveDestination: async () => destination(),
+        createProvider: () => provider(),
+      },
+    );
+    await uploadTraceImport({
+      directory: prepared.report.stateDirectory,
+      target: { projectId: 'target-project', upload: async () => undefined },
+    });
+
+    vi.stubEnv('HOME', home);
+    vi.stubEnv('MASTRA_API_TOKEN', '');
+    vi.mocked(getToken).mockResolvedValue('token');
+    vi.mocked(getCurrentOrgId).mockResolvedValue('org');
+    vi.mocked(resolveProject).mockResolvedValue({
+      id: 'target-project',
+      name: 'Target project',
+      slug: 'target-project',
+      organizationId: 'org',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('unauthorized', { status: 401 })),
+    );
+
+    await expect(
+      traceImportAction('langfuse', { resume: prepared.report.importId, project: 'target-project', yes: true }),
+    ).rejects.toThrow('Trace import paused because verification unavailable.');
+    await expect(access(join(prepared.report.stateDirectory, 'traces.jsonl'))).resolves.toBeUndefined();
   });
 
   it('resumes pending upload without reading the source again', async () => {

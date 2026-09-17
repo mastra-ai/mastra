@@ -56,6 +56,7 @@ export interface TraceImportActionDependencies {
   resolveDestination?: (project: string | undefined) => Promise<PlatformDestination>;
   createProvider?: (provider: string, environment: NodeJS.ProcessEnv) => TraceImportProvider;
   createTarget?: (destination: PlatformDestination) => PlatformTarget;
+  verifyImport?: typeof verifyTraceImport;
 }
 
 export type TraceImportActionResult =
@@ -261,6 +262,7 @@ export async function runTraceImport(
         accessToken: destination.accessToken,
         projectId: destination.projectId,
       }));
+  const verifyImport = dependencies.verifyImport ?? verifyTraceImport;
 
   ui.intro('Mastra trace import');
   ui.step('Resolving Mastra Platform project');
@@ -334,7 +336,7 @@ export async function runTraceImport(
   ui.step('Verifying a sample through Mastra Platform');
   let report: TraceImportReport;
   try {
-    report = await verifyTraceImport({ directory: state.directory, verifier: target, signal: options.signal });
+    report = await verifyImport({ directory: state.directory, verifier: target, signal: options.signal });
   } catch (cause) {
     throw resumableError(cause, state.manifest);
   }
