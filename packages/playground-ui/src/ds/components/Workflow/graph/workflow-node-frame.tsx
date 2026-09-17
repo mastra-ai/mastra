@@ -11,7 +11,7 @@ export function WorkflowNodeFrame({ withoutTopHandle, withoutBottomHandle, child
   return (
     <>
       {!withoutTopHandle && <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />}
-      {children}
+      <div className="nodrag pointer-events-auto">{children}</div>
       {!withoutBottomHandle && <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden' }} />}
     </>
   );

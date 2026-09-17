@@ -16,7 +16,7 @@
   "license": "Apache-2.0",
   "peerDependencies": {
     "@mastra/core": "*",
-    "vitest": "*"
+    "vitest": "catalog:"
   },
   "devDependencies": {
     "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.3",
@@ -24,6 +24,7 @@
     "@internal/ai-sdk-v5": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/libsql": "workspace:*",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "vitest": "catalog:"
   }
 }

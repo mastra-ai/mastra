@@ -1,5 +1,27 @@
 # @mastra/github-signals
 
+## 0.5.0-alpha.0
+
+### Minor Changes
+
+- Added authorization for GitHub App bot comments when the app is owned by the repository organization or by a user with authorized repository access. Explicitly ignored bots and bots whose app ownership cannot be resolved remain denied. ([#24246](https://github.com/mastra-ai/mastra/pull/24246))
+
+  ```ts
+  import { GithubSignals } from '@mastra/github-signals';
+
+  const githubSignals = new GithubSignals({
+    authorizedPermissions: ['admin', 'maintain', 'write'],
+    authorizedBots: ['coderabbitai[bot]', 'devin-ai-integration[bot]'],
+  });
+  ```
+
+  Bots not listed in `authorizedBots` can now trigger notifications when their GitHub App is owned by the repository organization or by a user with one of the configured `authorizedPermissions`.
+
+### Patch Changes
+
+- Updated dependencies [[`697fecc`](https://github.com/mastra-ai/mastra/commit/697feccaa4ad5df913c22e47bf16f493dd7956a8), [`0bf287c`](https://github.com/mastra-ai/mastra/commit/0bf287c36ec14b45f5a4fdd0d279698694f592dd), [`6249741`](https://github.com/mastra-ai/mastra/commit/6249741f8463bdc5a05ded2b35b143f92f33afbf), [`2480359`](https://github.com/mastra-ai/mastra/commit/248035940aa048c7bcd8cfe7845915dc4734b571), [`b26e528`](https://github.com/mastra-ai/mastra/commit/b26e5288891641044a3c26a498c06259985fed10), [`b2f412a`](https://github.com/mastra-ai/mastra/commit/b2f412ae77fa5379471d103ebcc1ba69b22dd353)]:
+  - @mastra/core@1.68.0-alpha.4
+
 ## 0.4.1
 
 ### Patch Changes

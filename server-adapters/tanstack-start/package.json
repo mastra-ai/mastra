@@ -1,6 +1,6 @@
 {
   "name": "@mastra/tanstack-start",
-  "version": "0.2.26-alpha.2",
+  "version": "0.2.26-alpha.4",
   "description": "Mastra TanStack Start server adapter — drop your Mastra instance into a TanStack Start app",
   "type": "module",
   "main": "dist/index.js",
@@ -43,7 +43,7 @@
   },
   "peerDependencies": {
     "@mastra/core": ">=1.50.0-0 <2.0.0-0",
-    "hono": "^4.12.8"
+    "hono": "^4.13.5"
   },
   "engines": {
     "node": ">=22.13.0"

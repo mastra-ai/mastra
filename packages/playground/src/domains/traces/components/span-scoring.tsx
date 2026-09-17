@@ -36,15 +36,20 @@ export function SpanScoring({
   const [selectedScorer, setSelectedScorer] = useState<string | null>(null);
   const { mutate: triggerScorer, isPending } = useTriggerScorer();
 
-  let scorerList = Object.entries(scorers || {})
-    .map(([key, scorer]) => ({
-      id: key,
-      name: scorer.scorer.config.name,
-      description: scorer.scorer.config.description,
-      isRegistered: scorer.isRegistered,
-      type: scorer.scorer.config.type,
-    }))
-    .filter(scorer => scorer.isRegistered);
+  let scorerList = Object.entries(scorers || {}).flatMap(([key, scorer]) =>
+    scorer
+      ? [
+          {
+            id: key,
+            name: scorer.scorer.config.name,
+            description: scorer.scorer.config.description,
+            isRegistered: scorer.isRegistered,
+            type: scorer.scorer.config.type,
+          },
+        ]
+      : [],
+  );
+  scorerList = scorerList.filter(scorer => scorer.isRegistered);
 
   // Filter out Scorers with type agent if we are not scoring on a top level agent generated span
   if (entityType !== 'Agent' || !isTopLevelSpan) {

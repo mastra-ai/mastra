@@ -40,7 +40,7 @@ export default function AgentBuilderFavoritePage() {
 
   const agentListParams = useMemo<ListStoredAgentsParams>(
     () => ({
-      favoritedOnly: true,
+      favoritedOnly: 'true',
       orderBy: { field: 'updatedAt', direction: 'DESC' },
     }),
     [],

@@ -57,7 +57,7 @@ export function FilterBarOptionList<T>({
               data-selected={selected || undefined}
               className={cn(comboboxStyles.item, 'min-w-0')}
             >
-              <span className="min-w-0 flex-1 truncate">{renderOption(option)}</span>
+              <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate">{renderOption(option)}</span>
               <span className={comboboxStyles.checkContainer}>
                 {isSelected ? (
                   selected && <CheckIcon className={comboboxStyles.checkIcon} />
