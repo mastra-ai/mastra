@@ -5347,7 +5347,23 @@ LIMIT 1`,
         });
 
         const first = new ObservabilityStorageClickhouseVNext({ client });
-        await first.init();
+        const initialCommand = client.command.bind(client);
+        const backfillCommands: Array<Parameters<typeof client.command>[0]> = [];
+        const backfillSpy = vi.spyOn(client, 'command').mockImplementation(async args => {
+          backfillCommands.push(args);
+          return initialCommand(args);
+        });
+        try {
+          await first.init();
+        } finally {
+          backfillSpy.mockRestore();
+        }
+        expect(backfillCommands).toContainEqual(
+          expect.objectContaining({
+            query: expect.stringContaining(`INSERT INTO ${TABLE_SCORE_EVENTS_CURRENT} (`),
+            clickhouse_settings: { max_bytes_ratio_before_external_sort: 0.5 },
+          }),
+        );
 
         const currentResult = await client.query({
           query: `SELECT scoreId, score FROM ${TABLE_SCORE_EVENTS_CURRENT} FINAL

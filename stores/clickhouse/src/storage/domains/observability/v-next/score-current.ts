@@ -30,6 +30,9 @@ export async function backfillCurrentScores(client: ClickHouseClient): Promise<v
               ORDER BY scoreId, writeVersion DESC, timestamp DESC, _currentScoreFingerprint DESC
               LIMIT 1 BY scoreId
             )`,
+    clickhouse_settings: {
+      max_bytes_ratio_before_external_sort: 0.5,
+    },
   });
 
   await client.command({
