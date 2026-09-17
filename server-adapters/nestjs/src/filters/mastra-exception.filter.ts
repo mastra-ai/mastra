@@ -48,7 +48,15 @@ export class MastraExceptionFilter implements ExceptionFilter {
 
     const customResponse = getCustomHTTPExceptionResponse(exception);
     if (customResponse) {
-      customResponse.headers.forEach((value, name) => response.setHeader(name, value));
+      customResponse.headers.forEach((value, name) => {
+        if (name.toLowerCase() !== 'set-cookie') {
+          response.setHeader(name, value);
+        }
+      });
+      const setCookies = customResponse.headers.getSetCookie();
+      if (setCookies.length > 0) {
+        response.setHeader('set-cookie', setCookies);
+      }
       response.status(customResponse.status).send(Buffer.from(await customResponse.arrayBuffer()));
       return;
     }
