@@ -153,7 +153,7 @@ export function FilterBarProvider({
   const registerInput = useCallback(
     (el: HTMLInputElement | HTMLButtonElement | null) => {
       inputRef.current = el;
-      animation.inputRef.current = el;
+      animation.register('input', el);
     },
     [animation],
   );

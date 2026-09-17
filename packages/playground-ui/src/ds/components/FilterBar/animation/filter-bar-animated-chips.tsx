@@ -17,7 +17,9 @@ export function FilterBarAnimatedChips() {
           className={cn('max-w-full', styles.chip)}
           style={fieldSegmentAccentStyle(getField(item.fieldId))}
           onAnimationEnd={event => {
-            if (event.target === event.currentTarget) event.currentTarget.removeAttribute('data-activated');
+            if (event.target === event.currentTarget && event.nativeEvent.pseudoElement === '::after') {
+              event.currentTarget.removeAttribute('data-activated');
+            }
           }}
         >
           <FilterBarChip item={item} />

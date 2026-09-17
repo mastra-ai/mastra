@@ -1,234 +1,211 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import type { FilterBarItem, FilterBarSegment } from '../types';
-import { measureFilterSegment } from './filter-segment-layout';
-import type { FilterSegmentLayout } from './filter-segment-layout';
-import { prefersReducedFilterMotion, useFilterAnimations } from './use-filter-animations';
+import {
+  holdFilterWidth,
+  measureFilterElement,
+  morphFilterElement,
+  moveFilterElement,
+  setFilterMotion,
+} from './filter-layout';
+import type { FilterElementLayout } from './filter-layout';
 
-type LayoutKey = 'composer' | 'clear' | `chip:${string}`;
-type ElementLayout = { element: HTMLElement; left: number; top: number; width: number; height: number };
+type LayoutKey = 'composer' | 'clear' | 'input' | `chip:${string}` | `draft:${FilterBarSegment}` | `segment:${string}`;
+type LayoutSnapshot = { elements: Map<LayoutKey, FilterElementLayout>; box: DOMRect; commitId?: string };
 
 export type FilterBarLayout = {
   rootRef: RefObject<HTMLDivElement | null>;
   exitLayerRef: RefObject<HTMLDivElement | null>;
-  inputRef: RefObject<HTMLInputElement | HTMLButtonElement | null>;
   register: (key: LayoutKey, element: HTMLElement | null) => void;
   registerDraftSegment: (key: FilterBarSegment, element: HTMLElement | null) => void;
   registerChipSegment: (itemId: string, key: FilterBarSegment | 'surface', element: HTMLElement | null) => void;
   capture: (commitId?: string) => void;
   play: () => void;
-  refresh: () => void;
   cancel: () => void;
 };
 
-function measureLayout(elements: Map<LayoutKey, HTMLElement>, root: HTMLElement) {
-  const rootBox = root.getBoundingClientRect();
-  return new Map(
-    [...elements]
-      .filter(([key, element]) => key !== 'clear' || element.offsetWidth > 0)
-      .map(([key, element]): [LayoutKey, ElementLayout] => {
-        const box = element.getBoundingClientRect();
-        const transform = getComputedStyle(element).transform;
-        const translation = transform && transform !== 'none' ? new DOMMatrixReadOnly(transform) : undefined;
-        return [
-          key,
-          {
-            element,
-            left: box.left - rootBox.left - (translation?.m41 ?? 0),
-            top: box.top - rootBox.top - (translation?.m42 ?? 0),
-            width: box.width,
-            height: box.height,
-          },
-        ];
-      }),
+function isLayoutItem(key: LayoutKey) {
+  return key === 'composer' || key === 'clear' || key.startsWith('chip:');
+}
+
+function layoutItemsUnchanged(elements: Map<LayoutKey, HTMLElement>, before: LayoutSnapshot | undefined) {
+  if (!before) return false;
+  const items = [...elements].filter(([key, element]) => isLayoutItem(key) && element.offsetWidth > 0);
+  const previousItems = [...before.elements].filter(([key]) => isLayoutItem(key));
+  return (
+    items.length === previousItems.length &&
+    items.every(([key, element]) => {
+      const previous = before.elements.get(key);
+      if (!previous) return false;
+      return (
+        Math.abs(element.offsetLeft - (previous.box.left - before.box.left)) < 1 &&
+        Math.abs(element.offsetTop - (previous.box.top - before.box.top)) < 1 &&
+        Math.abs(element.offsetWidth - previous.box.width) < 1
+      );
+    })
   );
 }
 
+function morphDraft(before: LayoutSnapshot, after: LayoutSnapshot) {
+  const input = after.elements.get('input');
+  const previousInput = before.elements.get('input');
+  const composer = after.elements.get('composer');
+  if (!(input?.element instanceof HTMLInputElement) || !previousInput || !composer) return;
+  holdFilterWidth(composer);
+  holdFilterWidth(input);
+  let addedSegment = false;
+  for (const [key, target] of after.elements) {
+    if (!key.startsWith('draft:')) continue;
+    const origin = before.elements.get(key);
+    morphFilterElement(origin ?? previousInput, target);
+    addedSegment ||= origin === undefined;
+  }
+  if (addedSegment) setFilterMotion(input.element, 'reveal');
+  const inputBox = input.element.getBoundingClientRect();
+  moveFilterElement(input.element, previousInput.box.left - inputBox.left, previousInput.box.top - inputBox.top);
+}
+
+function morphCommittedFilter(before: LayoutSnapshot, after: LayoutSnapshot) {
+  const wrapper = after.elements.get(`chip:${before.commitId}`);
+  const surface = after.elements.get(`segment:${before.commitId}:surface`);
+  const input = after.elements.get('input');
+  const previousInput = before.elements.get('input');
+  if (!wrapper || !surface || !(input?.element instanceof HTMLInputElement) || !previousInput) return;
+  const first = before.elements.get('draft:field');
+  const last = before.elements.get('draft:value') ?? previousInput;
+  holdFilterWidth(wrapper);
+  setFilterMotion(surface.element, 'width', {
+    'from-width': `${first ? last.box.right - first.box.left : wrapper.box.width}px`,
+    'to-width': `${surface.box.width}px`,
+  });
+  for (const segment of ['field', 'operator', 'value'] satisfies FilterBarSegment[]) {
+    const target = after.elements.get(`segment:${before.commitId}:${segment}`);
+    if (target) morphFilterElement(before.elements.get(`draft:${segment}`) ?? previousInput, target);
+  }
+  const remove = after.elements.get(`segment:${before.commitId}:remove`);
+  if (remove) setFilterMotion(remove.element, 'reveal');
+  if (!before.elements.has('draft:value')) setFilterMotion(input.element, 'reveal');
+}
+
 export function useFilterBarLayout(items: readonly FilterBarItem[]): FilterBarLayout {
-  const animations = useFilterAnimations();
   const rootRef = useRef<HTMLDivElement>(null);
   const exitLayerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement | HTMLButtonElement | null>(null);
   const [layout] = useState<FilterBarLayout>(() => {
     const elements = new Map<LayoutKey, HTMLElement>();
-    const draftSegments = new Map<FilterBarSegment, HTMLElement>();
-    const chipSegments = new Map<string, HTMLElement>();
-    let capturedSegments = new Map<FilterBarSegment, FilterSegmentLayout>();
-    let capturedInput: FilterSegmentLayout | undefined;
-    let previous: Map<LayoutKey, ElementLayout> | undefined;
-    let captured: Map<LayoutKey, ElementLayout> | undefined;
-    let commitId: string | undefined;
-    let inputOrigin: { left: number; top: number } | undefined;
-    let previousHeight = 0;
+    let captured: LayoutSnapshot | undefined;
+    let previous: LayoutSnapshot | undefined;
+
+    function register(key: LayoutKey, element: HTMLElement | null) {
+      if (element) elements.set(key, element);
+      else elements.delete(key);
+    }
+
+    function measure(root: HTMLElement): LayoutSnapshot {
+      return {
+        box: root.getBoundingClientRect(),
+        elements: new Map(
+          [...elements]
+            .filter(([key, element]) => key !== 'clear' || element.offsetWidth > 0)
+            .map(([key, element]) => [key, measureFilterElement(element)]),
+        ),
+      };
+    }
+
+    function clearMotion() {
+      rootRef.current?.removeAttribute('data-filter-motion');
+      const previousElements = Array.from(previous?.elements.values() ?? [], layout => layout.element);
+      for (const element of new Set([...elements.values(), ...previousElements])) {
+        element.removeAttribute('data-filter-motion');
+      }
+      exitLayerRef.current?.replaceChildren();
+    }
 
     return {
       rootRef,
       exitLayerRef,
-      inputRef,
-      register(key, element) {
-        if (element) elements.set(key, element);
-        else elements.delete(key);
-      },
-      registerDraftSegment(key, element) {
-        if (element) draftSegments.set(key, element);
-        else draftSegments.delete(key);
-      },
-      registerChipSegment(itemId, key, element) {
-        if (element) chipSegments.set(`${itemId}:${key}`, element);
-        else chipSegments.delete(`${itemId}:${key}`);
-      },
-      capture(nextCommitId) {
+      register,
+      registerDraftSegment: (key, element) => register(`draft:${key}`, element),
+      registerChipSegment: (itemId, key, element) => register(`segment:${itemId}:${key}`, element),
+      capture(commitId) {
         const root = rootRef.current;
-        if (!root) return;
-        const rootBox = root.getBoundingClientRect();
-        captured = new Map(
-          [...elements]
-            .filter(([key, element]) => key !== 'clear' || element.offsetWidth > 0)
-            .map(([key, element]) => {
-              const box = element.getBoundingClientRect();
-              return [
-                key,
-                {
-                  element,
-                  left: box.left - rootBox.left,
-                  top: box.top - rootBox.top,
-                  width: box.width,
-                  height: box.height,
-                },
-              ];
-            }),
-        );
-        previousHeight = rootBox.height;
-        commitId = nextCommitId;
-        capturedSegments = new Map([...draftSegments].map(([key, element]) => [key, measureFilterSegment(element)]));
-        const input = inputRef.current;
-        if (input) {
-          capturedInput = measureFilterSegment(input);
-          const box = input.getBoundingClientRect();
-          inputOrigin = { left: box.left - rootBox.left, top: box.top - rootBox.top };
-        }
+        if (root) captured = { ...measure(root), commitId };
       },
       play() {
         const root = rootRef.current;
         const exitLayer = exitLayerRef.current;
         if (!root || !exitLayer) return;
-        if (captured) animations.cancel();
-        const next = measureLayout(elements, root);
-        const nextHeight = root.offsetHeight;
+        const currentMotionIsUnchanged = !captured && layoutItemsUnchanged(elements, previous);
+        if (currentMotionIsUnchanged) return;
         const before = captured ?? previous;
-        const unchanged =
-          before?.size === next.size &&
-          [...next].every(([key, current]) => {
-            const old = before?.get(key);
-            return old?.left === current.left && old.top === current.top && old.width === current.width;
+        clearMotion();
+        const after = measure(root);
+        previous = after;
+        captured = undefined;
+        if (!before || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+        for (const [key, origin] of before.elements) {
+          if (!key.startsWith('chip:') || after.elements.has(key)) continue;
+          origin.element.setAttribute('inert', '');
+          origin.element.setAttribute('aria-hidden', 'true');
+          Object.assign(origin.element.style, {
+            position: 'absolute',
+            left: `${origin.box.left - before.box.left}px`,
+            top: `${origin.box.top - before.box.top}px`,
+            width: `${origin.box.width}px`,
+            height: `${origin.box.height}px`,
           });
-        if (!captured && unchanged) return;
-        animations.cancel();
-        if (before) {
-          for (const [key, old] of before) {
-            if (next.has(key) || !key.startsWith('chip:')) continue;
-            const element = old.element;
-            element.setAttribute('inert', '');
-            element.setAttribute('aria-hidden', 'true');
-            Object.assign(element.style, {
-              position: 'absolute',
-              left: `${old.left}px`,
-              top: `${old.top}px`,
-              width: `${old.width}px`,
-              height: `${old.height}px`,
-            });
-            exitLayer.append(element);
-            animations.run(element, [{ opacity: 1 }, { opacity: 0, transform: 'translateY(-2px)' }], () =>
-              element.remove(),
+          exitLayer.append(origin.element);
+          setFilterMotion(origin.element, 'exit');
+        }
+        for (const [key, target] of after.elements) {
+          if (!isLayoutItem(key)) continue;
+          const isCommittedChip = key === `chip:${before.commitId}`;
+          let origin = before.elements.get(isCommittedChip ? 'composer' : key);
+          if (key === 'composer' && before.commitId) {
+            const input = before.elements.get('input');
+            origin = input?.element instanceof HTMLInputElement ? input : undefined;
+          }
+          if (origin) {
+            moveFilterElement(
+              target.element,
+              origin.box.left - before.box.left - (target.box.left - after.box.left),
+              origin.box.top - before.box.top - (target.box.top - after.box.top),
             );
           }
-          for (const [key, current] of next) {
-            const old = key === `chip:${commitId}` ? before.get('composer') : before.get(key);
-            const isCommittedInput = key === 'composer' && commitId && inputRef.current instanceof HTMLInputElement;
-            const origin = isCommittedInput && inputOrigin ? inputOrigin : old;
-            if (key === 'composer' && commitId && !isCommittedInput) continue;
-            if (origin) {
-              const deltaX = origin.left - current.left;
-              const deltaY = origin.top - current.top;
-              if (deltaX || deltaY)
-                animations.run(current.element, [
-                  { transform: `translate(${deltaX}px, ${deltaY}px)` },
-                  { transform: 'translate(0, 0)' },
-                ]);
-            }
-            if (!before.has(key) && key.startsWith('chip:') && !prefersReducedFilterMotion()) {
-              current.element.setAttribute('data-activated', '');
-            }
-            if (key === 'clear' && !before.has(key)) {
-              animations.run(current.element, [{ opacity: 0 }, { opacity: 0, offset: 0.3 }, { opacity: 1 }]);
-            }
-          }
-          if (commitId && inputRef.current instanceof HTMLInputElement) {
-            const surface = chipSegments.get(`${commitId}:surface`);
-            const wrapper = next.get(`chip:${commitId}`);
-            if (surface && wrapper) {
-              const hasValuePreview = capturedSegments.has('value');
-              const lastSegment = capturedSegments.get('value') ?? capturedInput;
-              const firstSegment = capturedSegments.get('field');
-              const width = lastSegment && firstSegment ? lastSegment.box.right - firstSegment.box.left : wrapper.width;
-              const remove = chipSegments.get(`${commitId}:remove`);
-              const removeWidth = remove?.getBoundingClientRect().width ?? 0;
-              const targets = new Map<FilterBarSegment, FilterSegmentLayout>();
-              for (const segment of ['field', 'operator', 'value'] satisfies FilterBarSegment[]) {
-                const element = chipSegments.get(`${commitId}:${segment}`);
-                if (element) targets.set(segment, measureFilterSegment(element));
-              }
-              animations.holdWidth(wrapper.element, wrapper.width);
-              animations.run(surface, [
-                { width: `${width}px`, maxWidth: 'none' },
-                { width: `${wrapper.width}px`, maxWidth: 'none' },
-              ]);
-              for (const [segment, target] of targets) {
-                const origin = capturedSegments.get(segment) ?? capturedInput;
-                if (origin) animations.run(target.element, [origin.frame, target.frame]);
-              }
-              if (remove) animations.reveal(remove, removeWidth);
-              if (!hasValuePreview) {
-                const input = inputRef.current;
-                const inputWidth = input.getBoundingClientRect().width;
-                const composer = next.get('composer');
-                if (composer) animations.holdWidth(composer.element, composer.width);
-                animations.revealInput(input, inputWidth);
-              }
-            }
-          }
-          if (previousHeight && previousHeight !== nextHeight)
-            animations.run(root, [{ height: `${previousHeight}px` }, { height: `${nextHeight}px` }]);
+          if (key.startsWith('chip:') && !before.elements.has(key)) target.element.setAttribute('data-activated', '');
+          if (key === 'clear' && !before.elements.has(key)) setFilterMotion(target.element, 'reveal');
         }
-        previous = next;
-        previousHeight = nextHeight;
-        captured = undefined;
-        commitId = undefined;
-      },
-      refresh() {
-        if (rootRef.current) previous = measureLayout(elements, rootRef.current);
+        if (before.commitId) morphCommittedFilter(before, after);
+        else morphDraft(before, after);
+        if (before.box.height !== after.box.height) {
+          setFilterMotion(root, 'height', {
+            'from-height': `${before.box.height}px`,
+            'to-height': `${after.box.height}px`,
+          });
+        }
       },
       cancel() {
-        animations.cancel();
+        clearMotion();
         for (const element of elements.values()) element.removeAttribute('data-activated');
-        previous = undefined;
         captured = undefined;
+        previous = undefined;
       },
     };
   });
 
   useLayoutEffect(() => layout.play(), [items, layout]);
   useLayoutEffect(() => {
-    const root = rootRef.current;
-    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(() => layout.refresh());
-    if (root) observer?.observe(root);
     const media = window.matchMedia?.('(prefers-reduced-motion: reduce)');
     const cancelReducedMotion = () => {
       if (media?.matches) layout.cancel();
     };
+    const removeExitedElement = (event: AnimationEvent) => {
+      if (event.target instanceof HTMLElement && event.target.dataset.filterMotion === 'exit') event.target.remove();
+    };
+    const exitLayer = exitLayerRef.current;
+    exitLayer?.addEventListener('animationend', removeExitedElement);
     media?.addEventListener('change', cancelReducedMotion);
     return () => {
-      observer?.disconnect();
+      exitLayer?.removeEventListener('animationend', removeExitedElement);
       media?.removeEventListener('change', cancelReducedMotion);
       layout.cancel();
     };

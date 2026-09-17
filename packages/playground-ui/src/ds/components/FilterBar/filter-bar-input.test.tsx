@@ -61,6 +61,14 @@ it('previews selected values until Done while preserving the inline input and fo
   expect(document.activeElement).toBe(input);
   expect(input.value).toBe('');
   expect(input.placeholder).toBe('Filter…');
+  const chip = screen.getByRole('group', { name: 'Status in error' }).parentElement;
+  if (!chip) throw new Error('The completed filter must have an animated surface.');
+  fireEvent.animationEnd(chip);
+  expect(chip.hasAttribute('data-activated')).toBe(true);
+  const shimmerEnd = new Event('animationend', { bubbles: true });
+  Object.defineProperty(shimmerEnd, 'pseudoElement', { value: '::after' });
+  fireEvent(chip, shimmerEnd);
+  expect(chip.hasAttribute('data-activated')).toBe(false);
   fireEvent.keyDown(input, { key: 'Escape' });
   expect(await screen.findByRole('button', { name: 'Clear filters' })).toBeTruthy();
 });

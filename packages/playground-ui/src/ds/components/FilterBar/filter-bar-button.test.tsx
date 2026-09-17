@@ -169,6 +169,9 @@ describe('FilterBar button variant', () => {
     expect(screen.queryByRole('group', { name: 'Status is error' })).toBeNull();
     expect(chip.closest('[inert]')).not.toBeNull();
     expect(document.activeElement).toBe(button);
+    const exitingWrapper = chip.parentElement;
+    if (!exitingWrapper) throw new Error('The exiting filter must remain mounted until its animation ends.');
+    fireEvent.animationEnd(exitingWrapper);
     await waitFor(() => expect(chip.isConnected).toBe(false));
     await waitFor(() => expect(button.textContent).toBe('Add filter'));
   });

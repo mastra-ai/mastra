@@ -5,7 +5,6 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import styles from './animation/filter-bar-animation.module.css';
 import { FilterBarPopup } from './animation/filter-bar-popup';
-import { useFilterDraftMotion } from './animation/use-filter-draft-motion';
 import { FilterBarAddButton } from './filter-bar-add-button';
 import { FilterBarFieldLabel, formatValue } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
@@ -68,7 +67,7 @@ export function FilterBarInput({
   const isButton = ctx.variant === 'button';
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const draftMotion = useFilterDraftMotion(inputRef, ctx.animation);
+  const draftMotion = ctx.animation;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState<Draft>(INITIAL_DRAFT);
@@ -80,14 +79,11 @@ export function FilterBarInput({
   const fieldOperators = useMemo(() => (field ? ctx.getFieldOperators(field) : []), [ctx, field]);
   const visibleFields = useMemo(() => ctx.fields.filter(f => !f.hidden), [ctx.fields]);
 
-  const reset = useCallback(
-    (transition: 'edit' | 'commit' = 'edit') => {
-      draftMotion.capture(transition);
-      setDraft(INITIAL_DRAFT);
-      setQuery('');
-    },
-    [draftMotion],
-  );
+  const reset = useCallback(() => {
+    draftMotion.capture();
+    setDraft(INITIAL_DRAFT);
+    setQuery('');
+  }, [draftMotion]);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -97,7 +93,7 @@ export function FilterBarInput({
   const commit = useCallback(
     (fieldId: string, operatorId: string, value: FilterBarValue) => {
       if (isButton) setOpen(false);
-      else reset('commit');
+      else reset();
       ctx.addItem({ fieldId, operatorId, value });
       (isButton ? buttonRef : inputRef).current?.focus();
     },
