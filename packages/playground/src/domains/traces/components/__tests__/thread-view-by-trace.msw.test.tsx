@@ -6,6 +6,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { feedbackRecord, listFeedbackResponse } from '../../hooks/__tests__/fixtures/trace-feedback';
 import { ThreadViewByTrace } from '../thread-view-by-trace';
 import {
+  queryPageFromList,
   THREAD_ID,
   emptyThreadTracesList,
   spanADetail,
@@ -15,6 +16,7 @@ import {
 } from './fixtures/thread-traces';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
+import { emptyMcpServers } from '@/lib/ai-ui/__tests__/fixtures/agent';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -31,6 +33,9 @@ const newestFirstList = { ...threadTracesList, spans: [threadTracesList.spans[1]
 
 const installHandlers = ({ list = newestFirstList }: { list?: typeof threadTracesList } = {}) => {
   server.use(
+    http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(emptyMcpServers)),
+    http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(listFeedbackResponse([]))),
+    http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () => HttpResponse.json(queryPageFromList(list))),
     http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(list)),
     http.get(`${TEST_BASE_URL}/api/observability/traces`, () => HttpResponse.json(list)),
     http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/spans/:spanId`, () => HttpResponse.json(spanADetail)),
@@ -97,7 +102,49 @@ const renderView = ({ search = '' }: { search?: string } = {}) =>
 
 describe('ThreadViewByTrace', () => {
   describe('when the thread contains historical traces', () => {
-    afterEach(() => focusManager.setFocused(undefined));
+    afterEach(() => {
+      focusManager.setFocused(undefined);
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    });
+
+    it('preserves paginated turns across refresh intervals and window focus', async () => {
+      const { intersect } = stubIntersectionObserver();
+      installHandlers();
+      const requested = vi.fn();
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          const body = await request.json();
+          requested(body);
+          const next = requested.mock.calls.length === 2;
+          return HttpResponse.json({
+            ...queryPageFromList({
+              ...threadTracesList,
+              spans: [threadTracesList.spans[next ? 1 : 0]],
+            }),
+            page: { next: next ? null : 'thread-next' },
+          });
+        }),
+      );
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+      const { queryClient } = renderView();
+      await screen.findByText('Chef agent run');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      const list = screen.getByTestId('thread-view-by-trace');
+      act(() => intersect(list.querySelector('[data-trace-id]')!.nextElementSibling!));
+      await screen.findByText('Chef agent follow-up');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(requested.mock.calls[1]![0]).toMatchObject({ page: { after: 'thread-next' } });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+        await new Promise(resolve => setTimeout(resolve, 100));
+      });
+      expect(requested).toHaveBeenCalledTimes(2);
+      expect(screen.getByText('Chef agent run')).toBeTruthy();
+      expect(screen.getByText('Chef agent follow-up')).toBeTruthy();
+    });
 
     it('refreshes only the selected trace on focus and stops after its detail closes', async () => {
       installHandlers();
@@ -240,29 +287,43 @@ describe('ThreadViewByTrace', () => {
 
     it('does not scroll to the row when it only arrives on a later page', async () => {
       const { intersect } = stubIntersectionObserver();
-      // Page 0 has trace-b only; scrolling to the sentinel loads page 1 with trace-a.
+      // Query pages append newer turns in ascending order.
       const pages = [
-        { spans: [newestFirstList.spans[0]], pagination: { total: 2, page: 0, perPage: 1, hasMore: true } },
-        { spans: [newestFirstList.spans[1]], pagination: { total: 2, page: 1, perPage: 1, hasMore: false } },
+        { spans: [threadTracesList.spans[0]], pagination: { total: 2, page: 0, perPage: 1, hasMore: true } },
+        { spans: [threadTracesList.spans[1]], pagination: { total: 2, page: 1, perPage: 1, hasMore: false } },
       ];
+      const requested = vi.fn();
       installHandlers();
       server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/traces/light`, ({ request }) =>
-          HttpResponse.json(pages[Number(new URL(request.url).searchParams.get('page') ?? 0)]),
-        ),
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          const body = await request.json();
+          expect(body).toMatchObject({ orderBy: [{ field: 'startedAt', direction: 'asc' }] });
+          requested(body);
+          const next = requested.mock.calls.length === 2;
+          expect(body).toMatchObject({ page: next ? { after: 'thread-next' } : { limit: 25 } });
+          return HttpResponse.json({
+            ...queryPageFromList(pages[next ? 1 : 0]),
+            page: { next: next ? null : 'thread-next' },
+          });
+        }),
       );
-      const { queryClient } = renderView({ search: '?traceId=trace-a' });
+      const { queryClient } = renderView({ search: '?traceId=trace-b' });
 
-      await screen.findByText('Chef agent follow-up');
+      await screen.findByText('Chef agent run');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.queryByText('Chef agent run')).toBeNull();
+      expect(screen.queryByText('Chef agent follow-up')).toBeNull();
 
       const list = screen.getByTestId('thread-view-by-trace');
-      const sentinel = list.querySelector('[data-trace-id]')!.previousElementSibling!;
+      const sentinel = list.querySelector('[data-trace-id]')!.nextElementSibling!;
       act(() => intersect(sentinel));
 
-      expect(await screen.findByText('Chef agent run')).not.toBeNull();
+      expect(await screen.findByText('Chef agent follow-up')).not.toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(requested).toHaveBeenCalledTimes(2);
+      expect([...list.querySelectorAll('[data-trace-id]')].map(row => row.getAttribute('data-trace-id'))).toEqual([
+        'trace-a',
+        'trace-b',
+      ]);
       expect(scrollIntoView).not.toHaveBeenCalled();
       expect(screen.queryByRole('button', { name: 'Show less' })).toBeNull();
       vi.unstubAllGlobals();
@@ -300,7 +361,7 @@ describe('ThreadViewByTrace', () => {
 
       fireEvent.click(within(toolBadge).getAllByRole('button')[0]!);
 
-      expect(spanLabel('Recipe lookup').className).not.toContain('bg-surface4');
+      expect(spanLabel('Recipe lookup').getAttribute('aria-selected')).toBe('false');
       expect(screen.queryByRole('button', { name: /close/i })).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
@@ -325,8 +386,8 @@ describe('ThreadViewByTrace', () => {
       // Highlighting is a timeline-only affordance: no span is selected and the panel stays closed,
       // so opening a span remains the user's own click.
       expect(screen.queryByRole('button', { name: /close/i })).toBeNull();
-      expect(spanLabel('Recipe lookup').className).not.toContain('bg-surface4');
-      expect(spanLabel('Chef agent run').className).not.toContain('bg-surface4');
+      expect(spanLabel('Recipe lookup').getAttribute('aria-selected')).toBe('false');
+      expect(spanLabel('Chef agent run').getAttribute('aria-selected')).toBe('false');
       // The most specific span behind the message (last id, deepest in the tree) is brought into
       // view, since it is the one most likely to sit below the fold — not the root.
       expect(scrollIntoView).toHaveBeenCalledTimes(1);
@@ -380,7 +441,7 @@ describe('ThreadViewByTrace', () => {
       expect(spanLabel('Recipe lookup').className).toContain('opacity-30');
 
       // Highlighting does not open the panel, so open a span by hand and then close it.
-      fireEvent.click(within(spanLabel('Recipe lookup')).getByRole('button', { name: 'Recipe lookup' }));
+      fireEvent.click(spanLabel('Recipe lookup'));
       fireEvent.click(await screen.findByRole('button', { name: /close/i }));
       await waitFor(() => expect(spanLabel('Recipe lookup').className).not.toContain('opacity-30'));
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));

@@ -16,7 +16,6 @@ export type {
   MastraAuthConfig,
   A2AAgentCardSigningConfig,
   A2AConfig,
-  A2AProtocolVersion,
   ContextWithMastra,
   CorsOptions,
   ApiRoute,

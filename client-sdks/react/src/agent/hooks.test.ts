@@ -353,7 +353,7 @@ describe('useChat forwards clientTools', () => {
       const metadata = lastMessage?.content?.metadata as MastraDBMessageMetadata | undefined;
       expect(metadata?.mode).toBe('stream');
       if (metadata?.mode !== 'stream') throw new Error('expected stream metadata');
-      expect(metadata.requireApprovalMetadata?.weatherTool).toEqual({
+      expect(metadata.requireApprovalMetadata?.['tool-call-approval-1']).toEqual({
         toolCallId: 'tool-call-approval-1',
         toolName: 'weatherTool',
         args: { city: 'London' },
@@ -458,7 +458,7 @@ describe('useChat forwards clientTools', () => {
       const metadata = lastMessage?.content?.metadata as MastraDBMessageMetadata | undefined;
       expect(metadata?.mode).toBe('stream');
       if (metadata?.mode !== 'stream') throw new Error('expected stream metadata');
-      expect(metadata.requireApprovalMetadata?.weatherTool).toBeDefined();
+      expect(metadata.requireApprovalMetadata?.['tool-call-approval-1']).toBeDefined();
     });
 
     await act(async () => {

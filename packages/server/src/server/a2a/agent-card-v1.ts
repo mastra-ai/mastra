@@ -5,13 +5,13 @@ import { agentCardV1ResponseSchema } from '../schemas/a2a';
 
 export type AgentCardV1 = z.infer<typeof agentCardV1ResponseSchema>;
 
-export function createV1AgentCard(legacyCard: AgentCard, protocolVersions: ('0.3' | '1.0')[]): AgentCardV1 {
+export function createV1AgentCard(legacyCard: AgentCard): AgentCardV1 {
   const card = AgentCardCodec.fromJSON({
     name: legacyCard.name,
     description: legacyCard.description,
     provider: legacyCard.provider,
     version: legacyCard.version,
-    supportedInterfaces: protocolVersions.map(protocolVersion => ({
+    supportedInterfaces: ['0.3', '1.0'].map(protocolVersion => ({
       url: legacyCard.url,
       protocolBinding: 'JSONRPC',
       protocolVersion,

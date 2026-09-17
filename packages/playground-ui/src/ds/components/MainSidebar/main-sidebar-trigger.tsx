@@ -8,8 +8,6 @@ import { cn } from '@/lib/utils';
 export type MainSidebarTriggerProps = ComponentPropsWithoutRef<'button'>;
 
 export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebarTriggerProps) {
-  // Use desktopState so the icon reflects the persisted desktop state
-  // even on mobile (where `state` is forced to 'default' for the drawer).
   const { desktopState, toggleSidebar } = useMainSidebar();
   const isCollapsed = desktopState === 'collapsed';
 
@@ -27,13 +25,13 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
               if (!event.defaultPrevented) toggleSidebar();
             }}
             className={cn(
-              'flex items-center justify-center rounded-md text-neutral3',
+              'flex items-center justify-center rounded-md text-muted-foreground',
               'size-7',
               isCollapsed ? 'mx-auto' : 'ml-auto',
-              'hover:bg-sidebar-nav-hover hover:text-neutral6',
+              'hover:bg-sidebar-accent hover:text-foreground',
               'transition-all duration-normal ease-out-custom',
               'focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
-              '[&_svg]:size-4 [&_svg]:text-neutral3 [&_svg]:transition-transform [&_svg]:duration-normal [&:hover_svg]:text-neutral5',
+              '[&_svg]:size-4 [&_svg]:text-muted-foreground [&_svg]:transition-transform [&_svg]:duration-normal [&:hover_svg]:text-foreground',
               className,
             )}
           >
@@ -46,10 +44,12 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
         }
       />
 
-      <TooltipContent>
+      <TooltipContent className="new-theme border-border bg-popover text-foreground">
         <span className="inline-flex items-center gap-1.5">
           Toggle Sidebar
-          <Kbd size="xs">[</Kbd>
+          <Kbd size="xs" className="border-border bg-muted text-muted-foreground">
+            [
+          </Kbd>
         </span>
       </TooltipContent>
     </Tooltip>

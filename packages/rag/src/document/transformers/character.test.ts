@@ -58,6 +58,46 @@ describe('CharacterTransformer', () => {
 
     expect(transformer.splitText({ text: '😀😀' })).toEqual(['😀', '😀']);
   });
+
+  it('keeps chunks within maxSize when overlap is large relative to it', () => {
+    const transformer = new RecursiveCharacterTransformer({
+      maxSize: 12,
+      overlap: 8,
+      separators: [' '],
+      stripWhitespace: false,
+    });
+
+    const chunks = transformer.splitText({ text: 'aaaa bbbb cccc dddd eeee' });
+
+    expect(chunks).toEqual(['aaaa bbbb', 'bbbb cccc', 'cccc dddd', 'dddd eeee']);
+    expect(chunks.every(chunk => chunk.length <= 12)).toBe(true);
+  });
+
+  it('keeps chunks within maxSize for a near-maximal overlap', () => {
+    const transformer = new RecursiveCharacterTransformer({
+      maxSize: 10,
+      overlap: 9,
+      separators: [' '],
+      stripWhitespace: false,
+    });
+
+    const chunks = transformer.splitText({ text: 'aaaa bbbb cccc dddd eeee' });
+
+    expect(chunks.every(chunk => chunk.length <= 10)).toBe(true);
+  });
+
+  it('still emits an indivisible split that exceeds maxSize as a whole chunk', () => {
+    const transformer = new RecursiveCharacterTransformer({
+      maxSize: 5,
+      overlap: 3,
+      separators: [' '],
+      stripWhitespace: false,
+    });
+
+    const chunks = transformer.splitText({ text: 'aa superlongtoken bb' });
+
+    expect(chunks).toContain('superlongtoken');
+  });
 });
 
 describe('separatorPosition: start', () => {

@@ -3881,15 +3881,15 @@ describe('A2A Handler', () => {
     });
   });
 
-  describe('protocol exposure', () => {
+  describe('protocol discovery', () => {
     let agent: MockAgent;
     let mastra: Mastra;
 
     beforeEach(() => {
       agent = new MockAgent({
         id: 'canonical-agent',
-        name: 'Exposure agent',
-        instructions: 'Test exposure',
+        name: 'Discovery agent',
+        instructions: 'Test discovery',
         model: openai('gpt-4o'),
       });
       mastra = createMockMastra({ registeredAgent: agent });
@@ -3922,102 +3922,6 @@ describe('A2A Handler', () => {
         expect(v1).not.toHaveProperty(field);
       }
     });
-
-    it('replaces global exposure with registration-key overrides and gives canonical ID precedence', async () => {
-      mastra.setServer({
-        a2a: { protocolVersions: ['0.3'], agents: { registeredAgent: { protocolVersions: ['1.0'] } } },
-      });
-      const options = { mastra, agentId: agent.id, requestContext: new RequestContext() };
-      const card = await getAgentCardByIdHandler({ ...options, protocolVersion: '1.0' });
-      expect(card.supportedInterfaces.map(item => item.protocolVersion)).toEqual(['1.0']);
-      await expect(getAgentCardByIdHandler(options)).rejects.toThrow('Version not supported: 0.3');
-
-      mastra.setServer({
-        a2a: {
-          agents: {
-            registeredAgent: { protocolVersions: ['1.0'] },
-            'canonical-agent': { protocolVersions: ['0.3'] },
-          },
-        },
-      });
-      expect(await getAgentCardByIdHandler(options)).toHaveProperty('protocolVersion', '0.3.0');
-      await expect(getAgentCardByIdHandler({ ...options, protocolVersion: '1.0' })).rejects.toThrow(
-        'Version not supported: 1.0',
-      );
-    });
-
-    it('rejects disabled discovery before reading instructions or tools', async () => {
-      mastra.setServer({ a2a: { protocolVersions: [] } });
-      const instructions = vi.spyOn(agent, 'getInstructions');
-      const tools = vi.spyOn(agent, 'listTools');
-      for (const protocolVersion of ['0.3', '1.0'] as const) {
-        await expect(
-          getAgentCardByIdHandler({ mastra, agentId: agent.id, requestContext: new RequestContext(), protocolVersion }),
-        ).rejects.toThrow('Version not supported: ' + protocolVersion);
-      }
-      expect(instructions).not.toHaveBeenCalled();
-      expect(tools).not.toHaveBeenCalled();
-    });
-
-    it.each([undefined, '', '0.3', '1.0', '2.0'])('negotiates discovery with A2A-Version %s', async version => {
-      mastra.setServer({ a2a: { agents: { registeredAgent: { protocolVersions: ['1.0'] } } } });
-      const response = await GET_AGENT_CARD_ROUTE.handler({
-        mastra,
-        agentId: agent.id,
-        requestContext: new RequestContext(),
-        abortSignal: new AbortController().signal,
-        request: new Request('https://example.com/.well-known/canonical-agent/agent-card.json', {
-          headers: version === undefined ? {} : { 'A2A-Version': version },
-        }),
-      });
-      expect(response.headers.get('Vary')).toBe('A2A-Version');
-      expect(response.headers.get('Content-Type')).toContain('application/json');
-      const payload = await response.json();
-      if (version === '1.0') {
-        expect(response.status).toBe(200);
-        expect(payload.supportedInterfaces).toEqual([
-          { url: 'https://example.com/a2a/canonical-agent', protocolBinding: 'JSONRPC', protocolVersion: '1.0' },
-        ]);
-      } else {
-        expect(response.status).toBe(400);
-        expect(payload).toMatchObject({ error: { code: -32009, data: { version: version || '0.3' } } });
-      }
-    });
-
-    it.each(['message/send', 'message/stream', 'tasks/resubscribe'] as const)(
-      'rejects disabled %s as JSON before side effects, preserving request ID zero',
-      async method => {
-        mastra.setServer({ a2a: { agents: { registeredAgent: { protocolVersions: ['1.0'] } } } });
-        const taskStore = new InMemoryTaskStore();
-        const save = vi.spyOn(taskStore, 'save');
-        const response = await AGENT_EXECUTION_ROUTE.handler({
-          mastra,
-          agentId: agent.id,
-          requestContext: new RequestContext(),
-          taskStore,
-          abortSignal: new AbortController().signal,
-          id: 0,
-          method,
-          params: {
-            message: {
-              kind: 'message',
-              role: 'user',
-              messageId: 'denied-message',
-              parts: [{ kind: 'text', text: 'Hello' }],
-            },
-          },
-        });
-        expect(response.headers.get('Content-Type')).toContain('application/json');
-        expect(await response.json()).toEqual({
-          jsonrpc: '2.0',
-          id: 0,
-          error: { code: -32009, message: 'Version not supported: 0.3', data: { version: '0.3' } },
-        });
-        expect(agent.generate).not.toHaveBeenCalled();
-        expect(agent.stream).not.toHaveBeenCalled();
-        expect(save).not.toHaveBeenCalled();
-      },
-    );
   });
 
   describe('AGENT_EXECUTION_ROUTE', () => {

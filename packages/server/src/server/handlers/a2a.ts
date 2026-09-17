@@ -21,7 +21,6 @@ import { z } from 'zod/v4';
 import { signAgentCard } from '../a2a/agent-card-signing';
 import { createV1AgentCard, type AgentCardV1 } from '../a2a/agent-card-v1';
 import { convertToCoreMessage, normalizeError, createSuccessResponse } from '../a2a/protocol';
-import { assertA2AProtocolVersion, resolveA2AProtocolVersions } from '../a2a/protocol-versions';
 import { DefaultPushNotificationSender } from '../a2a/push-notification-sender';
 import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
 import { TaskStoreVersionConflictError, type InMemoryTaskStore } from '../a2a/store';
@@ -29,6 +28,7 @@ import { isInterruptedTaskState, isTerminalTaskState } from '../a2a/task-state';
 import { applyUpdateToTask, loadOrCreateTask, resolveTaskMemory } from '../a2a/tasks';
 import {
   a2aAgentIdPathParams,
+  a2aV1MethodMap,
   agentExecutionBodySchema,
   agentCardResponseSchema,
   agentExecutionResponseSchema,
@@ -336,8 +336,6 @@ export async function getAgentCardByIdHandler({
   protocolVersion = '0.3',
 }: AgentCardOptions): Promise<AgentCard | AgentCardV1> {
   const agent = await getAgentFromSystem({ mastra, agentId });
-  assertA2AProtocolVersion(mastra, agent.id, protocolVersion);
-  const protocolVersions = resolveA2AProtocolVersions(mastra, agent.id);
 
   const [instructions, tools]: [
     Awaited<ReturnType<typeof agent.getInstructions>>,
@@ -362,7 +360,7 @@ export async function getAgentCardByIdHandler({
     })),
   };
 
-  const card = protocolVersion === '1.0' ? createV1AgentCard(agentCard, protocolVersions) : agentCard;
+  const card = protocolVersion === '1.0' ? createV1AgentCard(agentCard) : agentCard;
   const signing = mastra.getServer?.()?.a2a?.agentCardSigning;
   if (!signing) {
     return card;
@@ -2195,11 +2193,6 @@ export async function getAgentExecutionHandler({
   protocolVersion?: A2AProtocolVersion;
 }): Promise<any> {
   const agent = await getAgentFromSystem({ mastra, agentId });
-  try {
-    assertA2AProtocolVersion(mastra, agent.id, protocolVersion);
-  } catch (error) {
-    return normalizeError(error, requestId);
-  }
   const protocolParams = protocolVersion === '1.0' ? normalizeV1Params(params) : params;
   const {
     pushNotificationStore: resolvedPushNotificationStore,
@@ -2392,6 +2385,10 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
   },
 });
 
+function isV1Method(method: string): method is keyof typeof a2aV1MethodMap {
+  return Object.hasOwn(a2aV1MethodMap, method);
+}
+
 export const AGENT_EXECUTION_ROUTE = createRoute({
   method: 'POST',
   path: '/a2a/:agentId',
@@ -2404,12 +2401,19 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
   tags: ['Agent-to-Agent'],
   requiresAuth: true,
   handler: async ({ mastra, agentId, requestContext, taskStore, abortSignal, request, ...bodyParams }) => {
-    const { id: requestId, method } = bodyParams;
+    const { id: requestId } = bodyParams;
+    let { method } = bodyParams;
     const params = 'params' in bodyParams ? bodyParams.params : undefined;
 
     let protocolVersion: A2AProtocolVersion;
     try {
       protocolVersion = resolveA2AProtocolVersion(request);
+      if (isV1Method(method)) {
+        if (protocolVersion !== '1.0') {
+          throw MastraA2AError.methodNotFound(method);
+        }
+        method = a2aV1MethodMap[method];
+      }
     } catch (error) {
       return createA2AJsonResponse(normalizeError(error, requestId));
     }
@@ -2426,7 +2430,7 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
       protocolVersion,
     });
 
-    if ((method === 'message/stream' || method === 'tasks/resubscribe') && !('error' in result)) {
+    if (method === 'message/stream' || method === 'tasks/resubscribe') {
       return createA2ASSEResponse(result);
     }
 

@@ -3,6 +3,8 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { ReasoningPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/reasoning-part-renderer';
+import { UserFilePartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/user-file-part-renderer';
 import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
 
@@ -16,7 +18,6 @@ import { ToolCard } from './tool/ToolCard';
 import { ToolGroup } from './tool/ToolGroup';
 import { ToolFactory } from './ToolFactory';
 import { collectToolGroups, draws, messageText, renderableParts, toolFromInvocationPart } from './transcript-parts';
-import { resultBlock, stringify } from './transcript-shared';
 import {
   isSkillNotificationSignal,
   notificationMetadata,
@@ -132,16 +133,9 @@ export function MessageBubble({
         </MarkdownRenderer>
       );
     },
-    Reasoning: (part: ReasoningPart) => {
-      if (!part.reasoning.trim()) return null;
-      return (
-        <div className="border-border1 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
-          <MarkdownRenderer className="text-ui-sm text-icon3" streaming={entry.streaming}>
-            {part.reasoning}
-          </MarkdownRenderer>
-        </div>
-      );
-    },
+    Reasoning: (part: ReasoningPart) => (
+      <ReasoningPartRenderer part={{ ...part, state: part.state ?? (entry.streaming ? 'streaming' : 'done') }} />
+    ),
     ToolInvocation: (part: ToolInvocationPart) => {
       const toolCallId = part.toolInvocation.toolCallId;
       const group = toolGroups.byFirstKey.get(toolCallId);
@@ -179,7 +173,7 @@ export function MessageBubble({
         </Arriving>
       );
     },
-    File: (part: FilePart) => <FileAttachment part={part} />,
+    File: (part: FilePart) => <UserFilePartRenderer part={part} />,
   };
 
   const skillActivation =
@@ -237,16 +231,6 @@ export function MessageBubble({
   if (!hasRenderablePart) return null;
 
   return <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />;
-}
-
-function FileAttachment({ part }: { part: FilePart }) {
-  if (part.mimeType?.startsWith('image/')) {
-    const src = part.data.startsWith('data:') ? part.data : `data:${part.mimeType};base64,${part.data}`;
-    return (
-      <img src={src} alt="Attached image" className="border-border1 my-1.5 max-h-80 max-w-full rounded-md border" />
-    );
-  }
-  return <pre className={resultBlock}>{stringify(part)}</pre>;
 }
 
 interface StatusMetadata {

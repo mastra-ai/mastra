@@ -30,14 +30,10 @@ const legacyCard: AgentCard = {
 };
 
 describe('createV1AgentCard', () => {
-  it.each<{ protocolVersions: ('0.3' | '1.0')[] }>([
-    { protocolVersions: ['1.0'] },
-    { protocolVersions: ['0.3', '1.0'] },
-    { protocolVersions: ['1.0', '0.3'] },
-  ])('advertises precisely the enabled interfaces ($protocolVersions)', ({ protocolVersions }) => {
-    const card = createV1AgentCard(legacyCard, protocolVersions);
+  it('advertises both supported interfaces', () => {
+    const card = createV1AgentCard(legacyCard);
     expect(card.supportedInterfaces).toEqual(
-      protocolVersions.map(protocolVersion => ({
+      ['0.3', '1.0'].map(protocolVersion => ({
         url: legacyCard.url,
         protocolBinding: 'JSONRPC',
         protocolVersion,
@@ -62,17 +58,17 @@ describe('createV1AgentCard', () => {
   });
 
   it('handles empty instructions and tools without reintroducing protobuf defaults', () => {
-    const card = createV1AgentCard({ ...legacyCard, description: '', skills: [] }, ['1.0']);
+    const card = createV1AgentCard({ ...legacyCard, description: '', skills: [] });
     expect(card).not.toHaveProperty('description');
     expect(card).not.toHaveProperty('skills');
     expect(AgentCardCodec.toJSON(AgentCardCodec.fromJSON(card))).toEqual(card);
   });
 
   it('does not reuse a signature of the legacy payload', () => {
-    const card = createV1AgentCard(
-      { ...legacyCard, signatures: [{ protected: 'header', signature: 'old-signature' }] },
-      ['1.0'],
-    );
+    const card = createV1AgentCard({
+      ...legacyCard,
+      signatures: [{ protected: 'header', signature: 'old-signature' }],
+    });
     expect(card).not.toHaveProperty('signatures');
   });
 
@@ -82,7 +78,7 @@ describe('createV1AgentCard', () => {
 
   it.each(['legacy', 'v1'] as const)('signs the final %s wire representation', async version => {
     const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
-    const card = version === 'v1' ? createV1AgentCard(legacyCard, ['0.3', '1.0']) : legacyCard;
+    const card = version === 'v1' ? createV1AgentCard(legacyCard) : legacyCard;
     const signed = await signAgentCard({
       agentCard: card,
       signing: {

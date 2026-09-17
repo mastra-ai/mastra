@@ -7,7 +7,7 @@ description: "Browse Cortecs model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/cortecs.svg" alt="Cortecs logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cortecs
 
-Access 107 Cortecs models through Mastra's model router. Authentication is handled automatically using the `CORTECS_API_KEY` environment variable.
+Access 106 Cortecs models through Mastra's model router. Authentication is handled automatically using the `CORTECS_API_KEY` environment variable.
 
 Learn more in the [Cortecs documentation](https://cortecs.ai).
 
@@ -222,8 +222,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 1048576,
-    "inputCost": 0.09,
-    "outputCost": 0.17
+    "inputCost": 0.055,
+    "outputCost": 0.174
   },
   {
     "model": "cortecs/deepseek-v4-pro",
@@ -462,8 +462,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 1000000,
-    "inputCost": 1.2,
-    "outputCost": 4.2
+    "inputCost": 1.1,
+    "outputCost": 2.99
   },
   {
     "model": "cortecs/glm-5.3",
@@ -726,8 +726,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.773,
-    "outputCost": 3.38
+    "inputCost": 0.516,
+    "outputCost": 2.869
   },
   {
     "model": "cortecs/kimi-k2.7-code",
@@ -738,8 +738,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.75,
-    "outputCost": 3.5
+    "inputCost": 0.706,
+    "outputCost": 3.208
   },
   {
     "model": "cortecs/kimi-k3",
@@ -752,18 +752,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1048576,
     "inputCost": 3,
     "outputCost": 14.999
-  },
-  {
-    "model": "cortecs/llama-3.1-405b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 128000,
-    "inputCost": 1.95,
-    "outputCost": 1.95
   },
   {
     "model": "cortecs/llama-3.1-8b-instruct",

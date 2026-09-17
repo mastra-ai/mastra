@@ -1,8 +1,10 @@
-import type { BuilderModelPolicy, Provider } from '@mastra/client-js';
+import type { BuilderSettingsResponse, Provider } from '@mastra/client-js';
 import { useMemo } from 'react';
 import type { ModelInfo } from '../../llm/hooks/use-filtered-models';
 import { useAgentBuilderAllowedModels } from './use-agent-builder-allowed-models';
 import { cleanProviderId } from '@/domains/llm';
+
+type BuilderModelPolicy = NonNullable<BuilderSettingsResponse['modelPolicy']>;
 
 /**
  * Build a `Set` of `provider:model` keys that the active builder policy allows.

@@ -33,8 +33,6 @@ describe('A2A discovery over Hono HTTP', () => {
       agents: {
         shared: agent('shared'),
         modern: agent('modern'),
-        legacy: agent('legacy'),
-        disabled: agent('disabled'),
       },
       server: { a2a },
     });
@@ -70,15 +68,6 @@ describe('A2A discovery over Hono HTTP', () => {
         .split(/\s*,\s*/),
     ).toContain('a2a-version');
   }
-
-  const mixedConfig: A2AConfig = {
-    protocolVersions: ['0.3', '1.0'],
-    agents: {
-      modern: { protocolVersions: ['1.0'] },
-      legacy: { protocolVersions: ['0.3'] },
-      disabled: { protocolVersions: [] },
-    },
-  };
 
   it.each([undefined, '', '   ', '0.3'])(
     'defaults to a legacy card for header %j without configuration',
@@ -118,7 +107,7 @@ describe('A2A discovery over Hono HTTP', () => {
   });
 
   it('supports v1 A2AAgent discovery against the hosted card', async () => {
-    const { origin } = await startServer(mixedConfig);
+    const { origin } = await startServer();
     const remote = new A2AAgent({
       url: `${origin}/api/.well-known/modern/agent-card.json`,
       protocolVersion: '1.0',
@@ -130,7 +119,7 @@ describe('A2A discovery over Hono HTTP', () => {
   });
 
   it('negotiates both versions for the same agent without leaking the previous response format', async () => {
-    const { discover } = await startServer(mixedConfig);
+    const { discover } = await startServer();
     for (const version of ['1.0', '0.3', '1.0']) {
       const response = await discover('shared', version);
       expectJson(response);
@@ -148,58 +137,16 @@ describe('A2A discovery over Hono HTTP', () => {
     }
   });
 
-  it('advertises only v1 for a v1-only agent alongside a dual-version agent', async () => {
-    const { discover, origin } = await startServer(mixedConfig);
-    const response = await discover('modern', '1.0');
-    expectJson(response);
-    const card = await response.json();
-    expect(AgentCardV1.fromJSON(card).supportedInterfaces).toEqual([
-      expect.objectContaining({ url: `${origin}/api/a2a/modern`, protocolBinding: 'JSONRPC', protocolVersion: '1.0' }),
-    ]);
-    const shared = await discover('shared', '0.3');
-    expectJson(shared);
-    expect((await shared.json()).protocolVersion).toBe('0.3.0');
-  });
-
-  it.each([undefined, '', '0.3'])('does not silently upgrade a v1-only agent for header %j', async version => {
-    const { discover } = await startServer(mixedConfig);
-    const response = await discover('modern', version);
+  it('rejects an unsupported discovery version', async () => {
+    const { discover } = await startServer();
+    const response = await discover('shared', '2.0');
     expectJson(response, 400);
     expect(await response.json()).toMatchObject({ error: { code: -32009 } });
-  });
-
-  it.each<[string, string | undefined]>([
-    ['legacy', '1.0'],
-    ['disabled', undefined],
-    ['disabled', '0.3'],
-    ['disabled', '1.0'],
-    ['shared', '2.0'],
-  ])('rejects disabled or unsupported discovery for %s with header %j', async (agentId, version) => {
-    const { discover } = await startServer(mixedConfig);
-    const response = await discover(agentId, version);
-    expectJson(response, 400);
-    const body = await response.json();
-    expect(body).toMatchObject({ error: { code: -32009 } });
-    expect(body).not.toHaveProperty('supportedInterfaces');
-    expect(body).not.toHaveProperty('result');
-  });
-
-  it('lets an agent override replace a restrictive global policy', async () => {
-    const { discover } = await startServer({
-      protocolVersions: ['0.3'],
-      agents: { modern: { protocolVersions: ['1.0'] } },
-    });
-    const modern = await discover('modern', '1.0');
-    expectJson(modern);
-    expect((await modern.json()).supportedInterfaces).toEqual([expect.objectContaining({ protocolVersion: '1.0' })]);
-    const inherited = await discover('shared', '1.0');
-    expectJson(inherited, 400);
   });
 
   it.each(['0.3', '1.0'])('preserves configured signing in the %s HTTP response', async version => {
     const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
     const { discover } = await startServer({
-      ...mixedConfig,
       agentCardSigning: {
         privateKey: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
         protectedHeader: { alg: 'ES256', kid: 'discovery-test-key' },
@@ -223,7 +170,7 @@ describe('A2A discovery over Hono HTTP', () => {
   });
 
   it.each(['0.3', '1.0'])('uses the actual origin and custom route prefix in the %s card', async version => {
-    const { discover, origin } = await startServer(mixedConfig, '/custom/v2');
+    const { discover, origin } = await startServer(undefined, '/custom/v2');
     const response = await discover('shared', version);
     expectJson(response);
     const card = await response.json();
