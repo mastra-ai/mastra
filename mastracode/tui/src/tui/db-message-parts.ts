@@ -2,6 +2,8 @@ import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { mastraDBMessageToSignal } from '@mastra/core/signals';
 import type { CreatedAgentSignal } from '@mastra/core/signals';
 
+import { getBackgroundToolMetadata } from './background-tool-result.js';
+
 /**
  * DB-native accessors for `MastraDBMessage`.
  *
@@ -32,6 +34,7 @@ export interface ToolRenderPart {
   result: unknown;
   hasResult: boolean;
   isError: boolean;
+  backgroundTask?: ReturnType<typeof getBackgroundToolMetadata>;
 }
 
 export interface OmRenderPart {
@@ -87,7 +90,9 @@ export function getAssistantRenderParts(message: MastraDBMessage): AssistantRend
       case 'tool-invocation': {
         const inv = (part as { toolInvocation: Record<string, unknown> }).toolInvocation;
         const hasResult = inv.state === 'result' && inv.result !== undefined;
+        const backgroundTask = getBackgroundToolMetadata((part as { providerMetadata?: unknown }).providerMetadata);
         out.push({
+          ...(backgroundTask ? { backgroundTask } : {}),
           kind: 'tool',
           toolCallId: String(inv.toolCallId ?? ''),
           toolName: String(inv.toolName ?? ''),
@@ -108,7 +113,9 @@ export function getAssistantRenderParts(message: MastraDBMessage): AssistantRend
         const legacyPart = part as { toolCallId?: string; toolName?: string; result?: unknown; isError?: boolean };
         const toolCallId = String(legacyPart.toolCallId ?? '');
         const call = toolCalls.get(toolCallId);
+        const backgroundTask = getBackgroundToolMetadata((part as { providerMetadata?: unknown }).providerMetadata);
         out.push({
+          ...(backgroundTask ? { backgroundTask } : {}),
           kind: 'tool',
           toolCallId,
           toolName: String(legacyPart.toolName ?? call?.toolName ?? ''),
