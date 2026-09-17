@@ -1,3 +1,4 @@
+import { ListFilterIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { FilterBarChip } from './filter-bar-chip';
 import { FilterBarClear } from './filter-bar-clear';
@@ -14,11 +15,21 @@ export type FilterBarProps = {
   value: FilterBarItem[];
   onValueChange: (items: FilterBarItem[]) => void;
   'aria-label'?: string;
+  /** Accessible label of the trailing "remove every filter" button. */
+  clearLabel?: string;
   className?: string;
   children: ReactNode;
 };
 
-function FilterBarSurface({ className, children }: { className?: string; children: ReactNode }) {
+function FilterBarSurface({
+  className,
+  clearLabel,
+  children,
+}: {
+  className?: string;
+  clearLabel: string;
+  children: ReactNode;
+}) {
   const ctx = useFilterBarContext();
   return (
     <div
@@ -26,10 +37,10 @@ function FilterBarSurface({ className, children }: { className?: string; childre
       aria-label={ctx.ariaLabel}
       data-slot="filter-bar"
       className={cn(
-        // Same surface/hover/focus recipe as InputGroup (wrapper whose focus lives on the nested input),
-        // Concentric corners: chips are 24px pills (12px radius) inset by p-1 (4px), so the
-        // surface radius is 12 + 4 = 16px (rounded-2xl). Keep padding uniform for this to hold.
-        'flex min-h-form-md w-full flex-wrap items-center gap-1 rounded-2xl border border-border1 bg-surface-overlay-soft p-1',
+        // Same surface/hover/focus recipe as InputGroup (wrapper whose focus lives on the nested input).
+        // Layout: leading icon | wrapping chip list | Clear. Icon and Clear stay pinned to the
+        // first line; only the list wraps.
+        'flex w-full items-start gap-0.5 rounded-2xl border border-border1 bg-surface-overlay-soft p-0.5',
         'cursor-text transition-all duration-normal ease-out-custom',
         'hover:bg-surface-overlay-strong',
         inputHoverBorderWithin,
@@ -39,7 +50,15 @@ function FilterBarSurface({ className, children }: { className?: string; childre
       )}
       onClick={ctx.focusInput}
     >
-      {children}
+      <span className="flex shrink-0 items-center py-1 pr-1 pl-1.5">
+        <ListFilterIcon aria-hidden className="text-neutral3 size-3" />
+      </span>
+      <div data-slot="filter-bar-list" className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
+        {children}
+      </div>
+      <span className="flex shrink-0 items-center empty:hidden">
+        <FilterBarClear label={clearLabel} />
+      </span>
       <VisuallyHidden aria-live="polite">{ctx.announcement}</VisuallyHidden>
     </div>
   );
@@ -54,7 +73,6 @@ function FilterBarSurface({ className, children }: { className?: string; childre
  * <FilterBar value={items} onValueChange={setItems} fields={fields} operators={DEFAULT_FILTER_OPERATORS}>
  *   <FilterBar.Chips />
  *   <FilterBar.Input />
- *   <FilterBar.Clear />
  * </FilterBar>
  */
 export function FilterBar({
@@ -63,6 +81,7 @@ export function FilterBar({
   value,
   onValueChange,
   'aria-label': ariaLabel = 'Filters',
+  clearLabel = 'Clear filters',
   className,
   children,
 }: FilterBarProps) {
@@ -74,7 +93,9 @@ export function FilterBar({
       onValueChange={onValueChange}
       ariaLabel={ariaLabel}
     >
-      <FilterBarSurface className={className}>{children}</FilterBarSurface>
+      <FilterBarSurface className={className} clearLabel={clearLabel}>
+        {children}
+      </FilterBarSurface>
     </FilterBarProvider>
   );
 }
@@ -94,4 +115,3 @@ export function FilterBarChips() {
 FilterBar.Chips = FilterBarChips;
 FilterBar.Chip = FilterBarChip;
 FilterBar.Input = FilterBarInput;
-FilterBar.Clear = FilterBarClear;

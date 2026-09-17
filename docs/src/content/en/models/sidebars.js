@@ -151,6 +151,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/ai21',
+          label: 'AI21 Labs',
+        },
+        {
+          type: 'doc',
           id: 'providers/aihubmix',
           label: 'AIHubMix',
         },
@@ -316,6 +321,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/wandb',
+          label: 'CoreWeave',
+        },
+        {
+          type: 'doc',
           id: 'providers/cortecs',
           label: 'Cortecs',
         },
@@ -473,6 +483,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/inceptron',
           label: 'Inceptron',
+        },
+        {
+          type: 'doc',
+          id: 'providers/inco',
+          label: 'Inco',
         },
         {
           type: 'doc',
@@ -713,6 +728,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/nvidia',
           label: 'Nvidia',
+        },
+        {
+          type: 'doc',
+          id: 'providers/oci',
+          label: 'OCI Generative AI',
         },
         {
           type: 'doc',
@@ -1033,11 +1053,6 @@ const sidebars = {
           type: 'doc',
           id: 'providers/wallaby',
           label: 'Wallaby',
-        },
-        {
-          type: 'doc',
-          id: 'providers/wandb',
-          label: 'Weights & Biases',
         },
         {
           type: 'doc',

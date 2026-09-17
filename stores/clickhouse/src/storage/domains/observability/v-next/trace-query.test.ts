@@ -1,17 +1,27 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import {
   encodeTraceQueryCursor,
+  parseGetTraceQueryFieldsArgs,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
   planThreadQuery,
   planTraceQuery,
+  planTraceQueryObservedFields,
   TraceQueryExecutionError,
+  TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
 import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SCORE_EVENTS_DDL, SPAN_EVENTS_DDL, TRACE_BRANCHES_DDL, TRACE_ROOTS_DDL } from './ddl';
-import { compileClickHouseThreadQuery, compileClickHouseTraceQuery, queryThreads, queryTraces } from './trace-query';
+import {
+  compileClickHouseThreadQuery,
+  compileClickHouseTraceQuery,
+  compileClickHouseTraceQueryObservedFields,
+  queryThreads,
+  queryTraces,
+  runWithClickHouseTraceQueryTimeout,
+} from './trace-query';
 import { ObservabilityStorageClickhouseVNext } from '.';
 
 const TIME_RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' };
@@ -30,9 +40,131 @@ describe('ClickHouse advanced trace query', () => {
       () =>
         new ObservabilityStorageClickhouseVNext({
           client: {} as ClickHouseClient,
-          traceQueryTimeoutMs: 0,
+          traceQuery: { timeoutMs: 0 },
         }),
     ).toThrow('traceQueryTimeoutMs must be an integer between');
+  });
+
+  it('rejects invalid discovery execution budget configuration at construction', () => {
+    expect(
+      () =>
+        new ObservabilityStorageClickhouseVNext({
+          client: {} as ClickHouseClient,
+          traceQuery: { discovery: { timeoutMs: 0 } },
+        }),
+    ).toThrow('traceQueryTimeoutMs must be an integer between');
+    expect(
+      () =>
+        new ObservabilityStorageClickhouseVNext({
+          client: {} as ClickHouseClient,
+          traceQuery: { discovery: { memoryLimitBytes: 0 } },
+        }),
+    ).toThrow('traceQuery.discovery.memoryLimitBytes must be a positive safe integer');
+  });
+
+  it('uses conservative discovery defaults and supports nested and legacy configuration', async () => {
+    const query = vi.fn().mockResolvedValue({ json: async () => [] });
+    const client = { query } as unknown as ClickHouseClient;
+    const discoveryPlan = planTraceQueryObservedFields(
+      parseGetTraceQueryFieldsArgs({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    );
+
+    const defaultStorage = new ObservabilityStorageClickhouseVNext({ client });
+    await defaultStorage.getTraceQueryObservedFields(discoveryPlan);
+    expect(query).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clickhouse_settings: expect.objectContaining({
+          max_execution_time: 5,
+          max_memory_usage: String(256 * 1024 * 1024),
+        }),
+      }),
+    );
+
+    const configuredStorage = new ObservabilityStorageClickhouseVNext({
+      client,
+      traceQuery: {
+        timeoutMs: 3_000,
+        discovery: { timeoutMs: 1_000, memoryLimitBytes: 128 * 1024 * 1024 },
+      },
+    });
+    await configuredStorage.queryTraces(plan());
+    expect(query).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clickhouse_settings: expect.objectContaining({ max_execution_time: 3 }),
+      }),
+    );
+    await configuredStorage.getTraceQueryObservedFields(discoveryPlan);
+    expect(query).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clickhouse_settings: expect.objectContaining({
+          max_execution_time: 1,
+          max_memory_usage: String(128 * 1024 * 1024),
+        }),
+      }),
+    );
+
+    const legacyStorage = new ObservabilityStorageClickhouseVNext({ client, traceQueryTimeoutMs: 2_500 });
+    await legacyStorage.getTraceQueryObservedFields(discoveryPlan);
+    expect(query).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clickhouse_settings: expect.objectContaining({
+          max_execution_time: 2.5,
+          max_memory_usage: String(256 * 1024 * 1024),
+        }),
+      }),
+    );
+  });
+
+  it('applies discovery execution budgets and normalizes memory exhaustion', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ json: async () => [] })
+      .mockRejectedValueOnce({ code: '241', type: 'MEMORY_LIMIT_EXCEEDED' });
+    const client = { query } as unknown as ClickHouseClient;
+    const compiled = { query: 'SELECT 1', query_params: {} };
+
+    await expect(
+      runWithClickHouseTraceQueryTimeout(client, { timeoutMs: 5_000, memoryLimitBytes: 256 * 1024 * 1024 }, compiled),
+    ).resolves.toEqual([]);
+    expect(query).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clickhouse_settings: expect.objectContaining({
+          max_execution_time: 5,
+          max_memory_usage: String(256 * 1024 * 1024),
+        }),
+      }),
+    );
+
+    await expect(
+      runWithClickHouseTraceQueryTimeout(client, { timeoutMs: 5_000, memoryLimitBytes: 1 }, compiled),
+    ).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
+  });
+
+  it('preserves resource-limit errors through public trace and thread queries', async () => {
+    const query = vi.fn().mockRejectedValue({ code: '241', type: 'MEMORY_LIMIT_EXCEEDED' });
+    const storage = new ObservabilityStorageClickhouseVNext({
+      client: { query } as unknown as ClickHouseClient,
+    });
+
+    await expect(storage.queryTraces(plan())).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
+    await expect(storage.queryThreads(threadPlan())).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
+  });
+
+  it('decodes each observed metadata value from the expanded JSON entry', () => {
+    const compiled = compileClickHouseTraceQueryObservedFields(
+      planTraceQueryObservedFields(
+        parseGetTraceQueryFieldsArgs({
+          timeRange: TIME_RANGE,
+          predicateScope: 'trace',
+        }),
+      ),
+    );
+
+    expect(compiled.query).toContain('JSONExtractString(entry.2) AS value');
+    expect(compiled.query).toContain("JSONType(rawValue) = 'String'");
+    expect(compiled.query).toContain("trim(value) != ''");
+    expect(compiled.query).toContain('length(value) <= 4096');
+    expect(compiled.query).not.toContain('JSONExtractString(r.metadataRaw, entry.1)');
   });
 
   it('uses named parameters and one correlated existence check per collection clause', () => {
@@ -429,7 +561,37 @@ describe('ClickHouse advanced trace query', () => {
       traces: [{ traceId: 'trace-a', rootSpanId: 'root-trace-a', status: 'success' }],
       page: { next: expect.any(String) },
     });
-    expect(Object.keys(response.traces[0]!)).toHaveLength(10);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(16);
+    expect(response.traces[0]).toMatchObject({
+      name: 'Agent run',
+      entityId: 'agent-1',
+      parentSpanId: null,
+      createdAt: '2026-01-01T12:00:00.000Z',
+      metadata: { customer: { id: 'customer-1' }, count: 2 },
+      inputPreview: 'Help with my order',
+    });
+    expect(response.traces[0]).not.toHaveProperty('input');
+  });
+
+  it('returns null for absent optional root span details', async () => {
+    const row = {
+      ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
+      entityId: null,
+      metadata: null,
+      input: null,
+    };
+    const json = vi.fn().mockResolvedValue([row]);
+    const query = vi.fn().mockResolvedValue({ json });
+    const response = await queryTraces({ query } as unknown as ClickHouseClient, plan(), 15_000);
+
+    expect(response.traces[0]).toMatchObject({
+      name: 'Agent run',
+      entityId: null,
+      parentSpanId: null,
+      metadata: null,
+      inputPreview: null,
+    });
+    expect(response.page.next).toBeNull();
   });
 
   it('reuses the execution timeout and returns fixed thread identities with a next cursor', async () => {
@@ -475,6 +637,11 @@ function traceRow(traceId: string, startedAt: string) {
   return {
     traceId,
     rootSpanId: `root-${traceId}`,
+    name: 'Agent run',
+    entityId: 'agent-1',
+    parentSpanId: null,
+    metadata: JSON.stringify({ customer: { id: 'customer-1' }, count: 2 }),
+    input: JSON.stringify({ messages: [{ role: 'user', content: 'Help with my order' }] }),
     threadId: null,
     resourceId: null,
     startedAt,

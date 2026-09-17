@@ -42,6 +42,7 @@ async function waitFor(assertion: () => boolean, timeout = 500): Promise<void> {
 describe('Fastify Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Fastify Adapter Integration Tests',
+    supportsPostQueryRequestContext: true,
 
     setupAdapter: async (context: AdapterTestContext, options?: AdapterSetupOptions) => {
       // Create Fastify app

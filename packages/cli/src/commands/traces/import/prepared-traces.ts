@@ -122,6 +122,13 @@ export async function prepareTraceImport(options: PrepareTraceImportOptions): Pr
     acknowledgedSpans: 0,
     warnings: [],
     skippedTraceSamples: [],
+    verification: {
+      status: 'not-performed',
+      sampledTraces: 0,
+      verifiedTraces: 0,
+      queryAttempts: 0,
+      differences: [],
+    },
   };
   manifest = await writeTraceImportManifest(options.directory, manifest);
 
@@ -280,7 +287,7 @@ export async function* readPendingTraceBatches(
   if (traces.length) yield { firstTraceIndex, traces, spanCount, payloadBytes };
 }
 
-/** Remove prepared trace data only after every trace has been acknowledged. */
+/** Remove prepared trace data only after upload and read-back verification succeed. */
 export async function completeTraceImport(directory: string): Promise<TraceImportManifest> {
   const manifest = await readTraceImportManifest(directory);
   if (manifest.phase === 'preparing') {
@@ -291,6 +298,9 @@ export async function completeTraceImport(directory: string): Promise<TraceImpor
     manifest.acknowledgedSpans !== manifest.counts.preparedSpans
   ) {
     throw new Error('Cannot complete an import while prepared traces remain unacknowledged.');
+  }
+  if (manifest.verification.status !== 'verified') {
+    throw new Error('Cannot complete an import before read-back verification succeeds.');
   }
 
   const completed =
