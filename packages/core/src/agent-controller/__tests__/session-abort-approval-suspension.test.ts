@@ -18,6 +18,7 @@ import { InMemoryStore } from '../../storage';
 import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { AgentController } from '../agent-controller';
+import { SUSPENDED_RUN_MEMORY_KEY } from '../session';
 import { createMockWorkspace } from '../test-utils';
 import type { AgentControllerEvent } from '../types';
 
@@ -379,5 +380,94 @@ describe('session.abort() during approval / suspension (#20592)', () => {
     expect(ds.isRunning).toBe(false);
     expect(session.suspensions.hasPending()).toBe(false);
     expect(controller.listActiveThreadRuns()).toHaveLength(0);
+  });
+
+  it('Given a suspension whose run scope carries its own memory, When abort() settles it, Then settlement writes through the stashed memory', async () => {
+    const { controller, session, events } = await createHarness('abort-stashed-memory');
+
+    const threadId = session.thread.requireId();
+    const resourceId = session.identity.getResourceId();
+
+    // The suspended invocation lives in a memory the session agent does NOT
+    // resolve to — as with a dynamic `memory: ({ requestContext }) => ...`
+    // config, only the memory captured at suspension time can reach it.
+    const stashedMemory = new MockMemory({ storage: new InMemoryStore() });
+    const suspendedMessage = {
+      id: 'suspended-message-stashed',
+      role: 'assistant' as const,
+      createdAt: new Date(),
+      threadId,
+      resourceId,
+      content: {
+        format: 2 as const,
+        parts: [
+          {
+            type: 'tool-invocation' as const,
+            toolInvocation: {
+              state: 'call' as const,
+              toolCallId: 'call-2',
+              toolName: 'confirmAccess',
+              args: { resource: 'profile' },
+            },
+          },
+        ],
+      },
+    };
+    await stashedMemory.saveMessages({ messages: [suspendedMessage as any] });
+
+    const mastra = controller.getMastra();
+    if (!mastra) throw new Error('Expected the controller to own a Mastra instance');
+    const runScope = mastra.__createRunScope('stashed-memory-run');
+    runScope.set(SUSPENDED_RUN_MEMORY_KEY, stashedMemory);
+    session.suspensions.register({
+      toolCallId: 'call-2',
+      runId: 'stashed-memory-run',
+      toolName: 'confirmAccess',
+      threadId,
+      resourceId,
+    });
+
+    try {
+      const ended = waitForAgentEnd(session, events);
+      session.subscribe((event: AgentControllerEvent) => {
+        if (event.type === 'tool_approval_required') session.abort();
+      });
+      void session.sendMessage({ content: 'find dero' }).catch(() => {});
+      await ended;
+
+      expect(events.filter(event => event.type === 'error')).toEqual([]);
+      expect(events.some(event => event.type === 'tool_end' && event.toolCallId === 'call-2' && event.denied)).toBe(
+        true,
+      );
+
+      // Settlement read and wrote the stashed memory: the invocation it holds
+      // is denied in place. A fallback to the session agent's memory would
+      // have found nothing and left this in state 'call'.
+      await vi.waitFor(async () => {
+        const { messages } = await stashedMemory.recall({ threadId, resourceId });
+        const parts = messages
+          .flatMap(message => message.content.parts)
+          .filter(part => part.type === 'tool-invocation');
+        expect(parts).toHaveLength(1);
+        expect(parts[0]?.toolInvocation).toMatchObject({
+          toolCallId: 'call-2',
+          state: 'output-denied',
+          approval: { approved: false, reason: 'Aborted by the user' },
+        });
+      });
+
+      // The session agent's own memory was never written for call-2.
+      const sessionMessages = await session.thread.listMessages({ threadId });
+      const sessionParts = sessionMessages
+        .flatMap(message => message.content.parts)
+        .filter(part => part.type === 'tool-invocation');
+      expect(sessionParts.map(part => part.toolInvocation.toolCallId)).toEqual(['call-1']);
+      expect(sessionMessages.some(message => message.id === 'suspended-message-stashed')).toBe(false);
+
+      expect(session.suspensions.hasPending()).toBe(false);
+      expect(session.displayState.get().pendingSuspensions.size).toBe(0);
+    } finally {
+      mastra.__releaseRunScope('stashed-memory-run');
+    }
   });
 });

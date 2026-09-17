@@ -24,6 +24,7 @@ import type { MastraModelConfig } from '../llm/model/shared.types';
 import { createRunScopeKey } from '../mastra/run-scope';
 import type { RunScope } from '../mastra/run-scope';
 import { TITLE_PINNED_THREAD_METADATA_KEY } from '../memory';
+import type { MastraMemory } from '../memory/memory';
 import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
 import type { RequestContext } from '../request-context';
@@ -55,6 +56,15 @@ import type {
 } from './types';
 
 export const SUSPENDED_RUN_AGENT_KEY = createRunScopeKey<Agent>('agent-controller.suspendedRunAgent');
+
+/**
+ * Memory the suspended run persisted its messages under, resolved with the
+ * run's own RequestContext while the stream was live. Abort settlement cannot
+ * rebuild that context later (dynamic `memory: ({ requestContext }) => …`
+ * configs would resolve differently against an empty context), so the resolved
+ * instance is retained beside the owning agent for the life of the run scope.
+ */
+export const SUSPENDED_RUN_MEMORY_KEY = createRunScopeKey<MastraMemory>('agent-controller.suspendedRunMemory');
 
 /**
  * Minimal persistence surface the Session uses to read and write per-thread

@@ -13,7 +13,7 @@ import type { RequestContext } from '../request-context';
 import type { GoalEvaluationPayload } from '../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
 import type { Session, SessionMachinery } from './session';
-import { ABORTED_BY_USER_REASON, SUSPENDED_RUN_AGENT_KEY } from './session';
+import { ABORTED_BY_USER_REASON, SUSPENDED_RUN_AGENT_KEY, SUSPENDED_RUN_MEMORY_KEY } from './session';
 import {
   addOptionalUsageField,
   describeNonSuccessFinishReason,
@@ -819,6 +819,19 @@ export class SessionRunEngine {
           if (!runScope?.get(SUSPENDED_RUN_AGENT_KEY)) {
             runScope?.set(SUSPENDED_RUN_AGENT_KEY, agent);
           }
+          // Resolve the run's memory with its own RequestContext while the
+          // stream is still live: abort settlement runs after the context is
+          // gone, and a dynamic memory config would resolve differently (or
+          // not at all) against an empty context. A resolution failure is not
+          // fatal — settlement falls back to a bare getMemory().
+          if (runScope && !runScope.get(SUSPENDED_RUN_MEMORY_KEY)) {
+            try {
+              const suspMemory = await agent.getMemory({ requestContext });
+              if (suspMemory) runScope.set(SUSPENDED_RUN_MEMORY_KEY, suspMemory);
+            } catch {
+              // Leave the key unset; settlement uses its fallback path.
+            }
+          }
           if (suspThreadId) {
             // Record the thread/resource the stream is bound to right now: if
             // the session is later rebound while this run stays suspended,
@@ -1278,9 +1291,12 @@ export class SessionRunEngine {
 
     for (const suspension of suspensions) {
       try {
-        const agent =
-          this.#machinery.getRunScope(suspension.runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? this.#machinery.getAgent();
-        const memory = await agent.getMemory();
+        const runScope = this.#machinery.getRunScope(suspension.runId);
+        const agent = runScope?.get(SUSPENDED_RUN_AGENT_KEY) ?? this.#machinery.getAgent();
+        // Prefer the memory resolved with the run's own RequestContext at
+        // suspension time; a bare getMemory() cannot see context-dependent
+        // (dynamic or inherited) memory configs.
+        const memory = runScope?.get(SUSPENDED_RUN_MEMORY_KEY) ?? (await agent.getMemory());
         const persistedMessages = memory
           ? (await memory.recall({ threadId: suspension.threadId, resourceId: suspension.resourceId })).messages
           : [];
