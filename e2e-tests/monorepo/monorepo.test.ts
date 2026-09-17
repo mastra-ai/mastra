@@ -569,7 +569,7 @@ export const environmentRoute = registerApiRoute('/environment', {
 
     it('should preserve workspace externals as runtime dependencies instead of bundling them', async () => {
       const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
-      const outputFiles = await readdir(outputDir);
+      const outputFiles = await readdir(outputDir, { recursive: true });
       const output = (
         await Promise.all(
           outputFiles.filter(file => file.endsWith('.mjs')).map(file => readFile(join(outputDir, file), 'utf-8')),
@@ -579,6 +579,7 @@ export const environmentRoute = registerApiRoute('/environment', {
 
       expect(packageJson.dependencies?.['@inner/subpath-only']).toBeTruthy();
       expect(output).toMatch(/from ["']@inner\/subpath-only["']/);
+      expect(output).toMatch(/from ["']@inner\/subpath-only\/value["']/);
     });
 
     it('should emit a worker runtime entry with a readiness endpoint', async () => {
