@@ -2,4 +2,6 @@
 '@mastra/core': patch
 ---
 
-Fixed replay of OpenAI-hosted `tool_search` across turns. Completed hosted searches no longer produce duplicate item references, orphaned outputs, or missing arguments in the Responses API. When replay metadata is missing, Mastra drops the hosted search so the model can rediscover the tool.
+Fixed replay of OpenAI-hosted `tool_search` across turns. The Responses API gives a hosted search's call and its output distinct item ids (`tsc_…` / `tso_…`); Mastra now keeps both on the stored tool part and splits them back apart when building a prompt, so each side replays as its own `item_reference` instead of the same one twice. Hosted searches are also kept provider-executed through a round trip, so their result is no longer re-serialized as a client-mode `tool_search_output`.
+
+Conversations recorded before this fix kept only one of the two ids, and that history cannot be replayed at all — the single id would be referenced twice. Such a completed hosted search is now omitted when building a prompt (the model rediscovers the tool on the next turn); it is still retained in response messages, so nothing is deleted from stored history. In-flight searches, which legitimately carry only a call id, and client-executed tools named `tool_search` are unaffected.

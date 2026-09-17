@@ -152,6 +152,119 @@ describe('aiV5UIMessagesToAIV5ModelMessages — hosted tool_search replay', () =
     expect(result.some(m => m.role === 'user')).toBe(true);
   });
 
+  it('should drop a completed hosted tool_search that carries only ONE item id (legacy stored history)', () => {
+    // History persisted before call/result ids were kept apart holds a single
+    // item id — whichever half wrote last, typically the result's (`tso_…`).
+    // Prompt conversion copies that one id onto BOTH model parts and the split
+    // is a no-op without `resultItemId`, so the request carries the same
+    // `item_reference` twice ("Duplicate item found"). Unreplayable: drop it.
+    const msg = makeMessage([
+      {
+        type: 'tool-tool_search',
+        toolCallId: 'tsc_1',
+        state: 'output-available',
+        input: { queries: ['cache'], call_id: null },
+        output: { tools: ['get_block'] },
+        providerExecuted: true,
+        callProviderMetadata: { openai: { itemId: 'tso_1' } },
+      } as ToolUIPartLike,
+    ]);
+
+    const result = aiV5UIMessagesToAIV5ModelMessages([msg], [], 'prompt');
+
+    const allParts = result.flatMap(m => (typeof m.content === 'string' ? [] : m.content));
+    const toolParts = allParts.filter(p => p.type === 'tool-call' || p.type === 'tool-result');
+    expect(toolParts).toHaveLength(0);
+
+    const itemIds = collectOpenAIItemMetadata(result).map(e => e.openai.itemId);
+    expect(new Set(itemIds).size).toBe(itemIds.length);
+  });
+
+  it('should drop a single-id completed hosted tool_search in the azure namespace too', () => {
+    const msg = makeMessage([
+      {
+        type: 'tool-tool_search',
+        toolCallId: 'tsc_az',
+        state: 'output-available',
+        input: { queries: ['cache'], call_id: null },
+        output: { tools: ['get_block'] },
+        providerExecuted: true,
+        callProviderMetadata: { azure: { itemId: 'tso_az' } },
+      } as ToolUIPartLike,
+    ]);
+
+    const result = aiV5UIMessagesToAIV5ModelMessages([msg], [], 'prompt');
+
+    const allParts = result.flatMap(m => (typeof m.content === 'string' ? [] : m.content));
+    expect(allParts.filter(p => p.type === 'tool-call' || p.type === 'tool-result')).toHaveLength(0);
+  });
+
+  it('should keep a single-id completed hosted tool_search in response mode', () => {
+    // Dropping is a prompt-building concern only. Response messages are what
+    // gets persisted, so removing the part there would delete real history.
+    const msg = makeMessage([
+      {
+        type: 'tool-tool_search',
+        toolCallId: 'tsc_1',
+        state: 'output-available',
+        input: { queries: ['cache'], call_id: null },
+        output: { tools: ['get_block'] },
+        providerExecuted: true,
+        callProviderMetadata: { openai: { itemId: 'tso_1' } },
+      } as ToolUIPartLike,
+    ]);
+
+    const result = aiV5UIMessagesToAIV5ModelMessages([msg], [], 'response');
+
+    const allParts = result.flatMap(m => (typeof m.content === 'string' ? [] : m.content));
+    expect(allParts.some(p => p.type === 'tool-call')).toBe(true);
+  });
+
+  it('should keep an in-flight hosted tool_search that has only its call item id', () => {
+    // A call still awaiting its provider result legitimately has one id — the
+    // call's. It has no result to reference yet, so it is not unreplayable.
+    const messages: AIV5Type.UIMessage[] = [
+      makeMessage(
+        [
+          {
+            type: 'tool-tool_search',
+            toolCallId: 'tsc_1',
+            state: 'input-available',
+            input: { queries: ['cache'], call_id: null },
+            providerExecuted: true,
+            callProviderMetadata: { openai: { itemId: 'tsc_1' } },
+          } as ToolUIPartLike,
+        ],
+        'msg-1',
+      ),
+    ];
+
+    const result = aiV5UIMessagesToAIV5ModelMessages(messages, [], 'prompt');
+
+    const allParts = result.flatMap(m => (typeof m.content === 'string' ? [] : m.content));
+    expect(allParts.some(p => p.type === 'tool-call')).toBe(true);
+  });
+
+  it('should keep a completed client-executed tool_search that carries a single item id', () => {
+    // call_id present ⇒ ordinary function call; item ids are irrelevant to it.
+    const msg = makeMessage([
+      {
+        type: 'tool-tool_search',
+        toolCallId: 'call_abc',
+        state: 'output-available',
+        input: { queries: ['cache'], call_id: 'call_abc' },
+        output: { tools: ['get_block'] },
+        callProviderMetadata: { openai: { itemId: 'msg_1' } },
+      } as ToolUIPartLike,
+    ]);
+
+    const result = aiV5UIMessagesToAIV5ModelMessages([msg], [], 'prompt');
+
+    const allParts = result.flatMap(m => (typeof m.content === 'string' ? [] : m.content));
+    expect(allParts.some(p => p.type === 'tool-call')).toBe(true);
+    expect(allParts.some(p => p.type === 'tool-result')).toBe(true);
+  });
+
   it('should keep a client-executed tool_search part (non-null call_id) even without provider item ids', () => {
     const msg = makeMessage([
       {
@@ -260,8 +373,7 @@ describe('aiV5UIMessagesToAIV5ModelMessages — hosted tool_search replay', () =
     const dbMessage = AIV5Adapter.fromModelMessage(modelMessage, 'input');
 
     const part = dbMessage.content.parts.find(p => p.type === 'tool-invocation') as
-      | { providerMetadata?: Record<string, unknown>; providerExecuted?: boolean }
-      | undefined;
+      { providerMetadata?: Record<string, unknown>; providerExecuted?: boolean } | undefined;
     expect(part?.providerMetadata).toEqual({ openai: { itemId: 'tsc_1', resultItemId: 'tso_1' } });
     // Provider-executed must survive the round-trip, or the replayed result is
     // moved to a `tool` role message and re-serialized as a broken client-mode

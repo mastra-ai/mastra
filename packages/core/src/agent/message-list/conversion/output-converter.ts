@@ -17,6 +17,7 @@ import {
 import {
   getResponseProviderItemId,
   getResponseProviderItemKey,
+  getResponseResultProviderMetadata,
   RESPONSE_ITEM_ID_PROVIDERS,
   RESPONSE_RESULT_ITEM_ID_KEY,
 } from '../utils/response-item-metadata';
@@ -102,6 +103,13 @@ function mergeTextPartsWithDuplicateItemIds<T extends { type: string }>(parts: T
  * orphaned `function_call_output` — both rejected by the API. Such parts are
  * dropped from prompts; the model re-discovers tools on the next turn.
  *
+ * A COMPLETED hosted search needs both ids — the call's and the output's. History
+ * persisted before the two were kept apart carries only one (whichever half wrote
+ * last), which conversion then copies onto both model parts, producing the same
+ * `item_reference` twice ("Duplicate item found"). One id is therefore as
+ * unreplayable as none. An in-flight call has no output yet, so its call id alone
+ * is complete.
+ *
  * Client-executed `tool_search` (non-null `call_id` in the input) replays as
  * a plain function call and is never dropped here.
  */
@@ -115,7 +123,9 @@ function isUnreplayableHostedToolSearchPart(part: AIV5Type.ToolUIPart): boolean 
 
   const callProviderMetadata =
     'callProviderMetadata' in part ? (part.callProviderMetadata as Record<string, unknown> | undefined) : undefined;
-  if (getResponseProviderItemId(callProviderMetadata)) return false;
+  if (getResponseProviderItemId(callProviderMetadata)) {
+    if (part.state !== 'output-available' || getResponseResultProviderMetadata(callProviderMetadata)) return false;
+  }
 
   const input = part.input;
   if (input && typeof input === 'object' && typeof (input as Record<string, unknown>).call_id === 'string') {
