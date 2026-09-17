@@ -984,7 +984,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
     if (!emitted) return null;
 
     const emittedPart = (state._piiRegexTailPart as typeof textPart | undefined) ?? textPart;
-    state._piiRegexTailPart = textPart;
+    state._piiRegexTailPart = emitEnd >= previousLength ? textPart : emittedPart;
     if (this.hasLLMOnlyTypes) {
       if (!state._piiFirstPayloadId) {
         state._piiFirstPayloadId = emittedPart.payload.id;
