@@ -13,7 +13,7 @@ import {
 import { completeTraceImport, prepareTraceImport } from './prepared-traces.js';
 import type { TraceImportProvider } from './provider.js';
 import { LangfuseTraceImportProvider } from './providers/langfuse/adapter.js';
-import { createTraceImportReport, writeTraceImportReport } from './report.js';
+import { writeTraceImportReport } from './report.js';
 import type { TraceImportTarget } from './target.js';
 import { MastraPlatformTraceTarget } from './targets/mastra-platform.js';
 import type { TraceImportManifest, TraceImportReport, TraceImportWindow } from './types.js';
@@ -321,7 +321,7 @@ export async function runTraceImport(
 
   if (state.manifest.phase === 'complete') {
     state.manifest = await completeTraceImport(state.directory);
-    const report = createTraceImportReport(state.directory, state.manifest);
+    const report = await writeTraceImportReport(state.directory, state.manifest);
     ui.outro('This trace import is already complete.');
     return { status: 'complete', report };
   }

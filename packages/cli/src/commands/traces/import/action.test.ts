@@ -327,7 +327,9 @@ describe('runTraceImport', () => {
     const deps = await dependencies({ createTarget: () => platform });
     const completed = await runTraceImport({ provider: 'langfuse', yes: true }, deps);
     const preparedFile = join(completed.report.stateDirectory, 'traces.jsonl');
+    const reportFile = join(completed.report.stateDirectory, 'report.json');
     await writeFile(preparedFile, 'leftover prepared data');
+    await rm(reportFile);
 
     const createProvider = vi.fn(() => {
       throw new Error('source should not be read');
@@ -342,6 +344,7 @@ describe('runTraceImport', () => {
 
     expect(resumed).toEqual(completed);
     await expect(access(preparedFile)).rejects.toThrow();
+    await expect(access(reportFile)).resolves.toBeUndefined();
     expect(createProvider).not.toHaveBeenCalled();
     expect(createTarget).not.toHaveBeenCalled();
   });
