@@ -1109,9 +1109,16 @@ export class AgentController<TState = {}> {
             perPage: limit ?? false,
             page: 0,
             orderBy: { field: 'createdAt', direction: limit === undefined ? 'ASC' : 'DESC' },
+            // This is a raw UI/storage read, not an LLM prompt: the controller
+            // thread history must surface persisted signal messages (goal judge,
+            // notification inbox) exactly like the raw storage path did.
+            hideSignals: false,
           });
+          // `recall()` runs results through MessageList, which canonicalizes to
+          // chronological (oldest-first) order regardless of the query direction
+          // above — already the contract this store must return. Do not re-reverse.
           const messages = result.messages.map(message => this.convertToControllerMessage(message));
-          return { ...result, messages: limit === undefined ? messages : messages.reverse() };
+          return { ...result, messages };
         }
         if (limit !== undefined) {
           const result = await this.queryThreadMessages({

@@ -374,6 +374,15 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // observational memory routes require OM-enabled agent configuration
       '/memory/observational-memory',
       '/memory/observational-memory/buffer-status',
+      // Thread-branching routes require a branching-capable MastraMemory
+      // (supportsThreadBranching); the generic suite's mock memory is
+      // non-branching, so handlers correctly fail closed with 501
+      // BRANCHING_UNSUPPORTED. Branch behavior is covered by
+      // packages/server/src/server/handlers/thread-branching.test.ts.
+      '/memory/threads/:threadId/branch',
+      '/memory/threads/:threadId/parent',
+      '/memory/threads/:threadId/branches',
+      '/memory/threads/:threadId/branch-history',
       // skill publish requires blob storage not available in InMemoryStore
       '/stored/skills/:storedSkillId/publish',
       // POST /stored/agents requires a builder-resolved model policy and a

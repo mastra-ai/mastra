@@ -1609,6 +1609,61 @@ describe('Memory Handlers', () => {
       });
     });
 
+    it('returns the empty observational-memory record for a not-yet-persisted thread', async () => {
+      enableBranching();
+      const getRecord = vi.fn().mockResolvedValue(null);
+      const getHistory = vi.fn().mockResolvedValue([]);
+      vi.spyOn(mockAgent, 'resolveProcessorById').mockResolvedValue({
+        config: { scope: 'thread' },
+        getRecord,
+        getHistory,
+      } as any);
+      const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+
+      await expect(
+        GET_OBSERVATIONAL_MEMORY_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'test-agent',
+          resourceId: 'test-resource',
+          threadId: 'unsaved-thread',
+          from: undefined,
+          to: undefined,
+          offset: undefined,
+          limit: undefined,
+        }),
+      ).resolves.toEqual({ record: null, history: undefined });
+      expect(getRecord).toHaveBeenCalledWith('unsaved-thread', 'test-resource');
+    });
+
+    it('hides observational-memory status for a pending branch', async () => {
+      enableBranching();
+      vi.mocked((mockMemory as any).__mastraInspectThreadBranchState).mockResolvedValue({
+        state: 'pending',
+        hasReadyDescendants: false,
+      });
+      const getRecord = vi.fn().mockResolvedValue({ id: 'record' });
+      vi.spyOn(mockAgent, 'resolveProcessorById').mockResolvedValue({
+        config: { scope: 'thread' },
+        getRecord,
+        getHistory: vi.fn().mockResolvedValue([]),
+      } as any);
+      const mastra = new Mastra({ logger: false, agents: { 'test-agent': mockAgent } });
+
+      await expect(
+        GET_OBSERVATIONAL_MEMORY_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'test-agent',
+          resourceId: 'test-resource',
+          threadId: child.id,
+          from: undefined,
+          to: undefined,
+          offset: undefined,
+          limit: undefined,
+        }),
+      ).rejects.toMatchObject({ status: 404 });
+      expect(getRecord).not.toHaveBeenCalled();
+    });
+
     it('denies ordinary message reads when an intermediate ancestor becomes inaccessible', async () => {
       enableBranching();
       const recall = vi.spyOn(mockMemory, 'recall');

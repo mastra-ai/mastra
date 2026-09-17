@@ -898,6 +898,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
           {
             id: 'test-message-1',
             threadId: 'test-thread',
+            resourceId: 'test-resource',
             role: 'user',
             content: {
               format: 2,
