@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { Loader2, StopCircle } from 'lucide-react';
+import { Loader2, Square } from 'lucide-react';
 
 export interface WorkflowCancelButtonProps {
   status?: string;
@@ -23,24 +22,18 @@ export function WorkflowCancelButton({
     return null;
   }
 
+  const label = isCancelling ? 'Cancelling run…' : cancelMessage || 'Cancel workflow run';
+
   return (
     <Button
       type="button"
-      variant="default"
-      className="w-full"
+      variant="ghost"
+      size="icon-md"
+      tooltip={label}
       onClick={onCancel}
       disabled={disabled || !!cancelMessage || isCancelling}
     >
-      {isCancelling ? (
-        <Icon>
-          <Loader2 className="animate-spin" />
-        </Icon>
-      ) : (
-        <Icon>
-          <StopCircle />
-        </Icon>
-      )}
-      {cancelMessage || 'Cancel Workflow Run'}
+      {isCancelling ? <Loader2 className="motion-safe:animate-spin" /> : <Square />}
     </Button>
   );
 }

@@ -1,9 +1,10 @@
 ---
 title: "Observability | Mastra platform"
-description: "Collect and query hosted traces, logs, metrics, scores, and feedback from Mastra applications with Mastra Platform Observability and local fallback storage."
+description: "Collect, import, and query hosted traces, logs, metrics, scores, and feedback from Mastra applications with Mastra Platform Observability and local fallback storage."
 packages:
   - "@mastra/core"
   - "@mastra/observability"
+  - "mastra"
 ---
 
 # Observability on Mastra platform
@@ -115,6 +116,190 @@ npx mastra api trace list
 The CLI can infer platform credentials from your project environment. See the [`mastra api` CLI reference](/reference/cli/mastra#mastra-api) for available commands, filtering, pagination, credential resolution, and `curl` examples.
 
 You can query exported feedback over HTTP. See the [observability feedback query API](/docs/mastra-platform/api#observability-feedback-query-api) for its current status, regional endpoints, authentication, and project scoping.
+
+## Import existing traces
+
+Use `mastra traces import` to move existing trace history from a supported observability provider into an existing Mastra Platform project. The command reads and validates complete traces at the source, converts them into Mastra spans, then uses a shared workflow for preparation, upload, resume, and verification.
+
+The import command currently supports Langfuse. Additional providers can use the same command workflow when their adapters are added.
+
+| Provider | Command argument | Source requirement |
+| - | - | - |
+| Langfuse | `langfuse` | Langfuse Cloud or self-hosted Langfuse v4 or later |
+
+### Prerequisites
+
+Before starting an import, you need:
+
+- A Mastra Platform project.
+- Mastra Platform authentication through `mastra auth login`, or a `MASTRA_API_TOKEN` and `MASTRA_ORG_ID` for a headless environment.
+- `MASTRA_PLATFORM_ACCESS_TOKEN` for upload and read-back when using an interactive login. A dry run doesn't require this token.
+- Credentials for a supported source provider.
+- Enough local disk space to temporarily store the prepared traces.
+
+### Configure the destination
+
+For an interactive import, sign in and select the organization that owns the destination project:
+
+```bash
+npx mastra auth login
+npx mastra auth orgs switch
+```
+
+Interactive login authorizes project discovery. Set the Platform access token used by the destination project before uploading or verifying traces:
+
+```bash title=".env"
+MASTRA_PLATFORM_ACCESS_TOKEN=<mastra-platform-access-token>
+```
+
+If `mastra init` configured observability for the project, use the token it wrote to `.env`. Otherwise, create an access token in [Mastra Platform](https://projects.mastra.ai).
+
+You can run `--dry-run` without this token because a dry run doesn't contact the collector or query API.
+
+Specify the destination with `--project`, or set `MASTRA_PROJECT_ID`. You can use a project name, slug, or ID with `--project`:
+
+```bash
+npx mastra traces import langfuse --project my-project --dry-run
+```
+
+If `MASTRA_PROJECT_ID` is set, it takes precedence over `--project`. Without either value, the CLI uses the project linked in `.mastra-project.json`.
+
+For a headless environment, set the API token and organization ID. The command uses `MASTRA_API_TOKEN` for project discovery, upload, and read-back. Set the project ID or pass `--project`:
+
+```bash title=".env"
+MASTRA_API_TOKEN=<mastra-api-token>
+MASTRA_ORG_ID=<organization-id>
+MASTRA_PROJECT_ID=<project-id>
+```
+
+### Configure Langfuse
+
+Create [project API keys in Langfuse](https://langfuse.com/docs/api-and-data-platform/features/public-api), then add them to `.env` or `.env.local` in the directory where you run the command:
+
+```bash title=".env"
+LANGFUSE_PUBLIC_KEY=<langfuse-public-key>
+LANGFUSE_SECRET_KEY=<langfuse-secret-key>
+```
+
+Langfuse Cloud defaults to the EU region at `https://cloud.langfuse.com`. Set `LANGFUSE_BASE_URL` to the [regional host](https://langfuse.com/security/data-regions) for US, Japan, or HIPAA Cloud, or to the origin of a self-hosted instance:
+
+```bash title=".env"
+LANGFUSE_BASE_URL=https://us.cloud.langfuse.com
+```
+
+### Preview the import
+
+Run a dry run before uploading:
+
+```bash
+npx mastra traces import langfuse --project my-project --dry-run
+```
+
+The dry run reads the source, prepares valid Mastra traces locally, and reports:
+
+- The source and destination projects.
+- The fixed import window.
+- Prepared and skipped trace and span counts.
+- The size of the prepared local data.
+- Provider warnings and skip reasons in `report.json`.
+
+It doesn't upload traces. The command prints a `--resume` command that uploads the prepared data later without reading the source again.
+
+### Choose the import window
+
+By default, the command selects the last 30 days, ending when the import starts. Use `--from` and `--to` to choose a smaller window:
+
+```bash
+npx mastra traces import langfuse \
+  --project my-project \
+  --from "$FROM" \
+  --to "$TO" \
+  --dry-run
+```
+
+Set `FROM` and `TO` to ISO 8601 dates or timestamps. The following rules apply:
+
+- `--to` can't be in the future or outside the current 30-day Platform retention period.
+- `--from` must be earlier than `--to` and inside the current retention period.
+- The selected window can't exceed 30 days.
+- If only `--to` is set, the default start is the later of 30 days before `--to` and the current retention boundary.
+
+Trace eligibility is based on the root observation's start time. The Langfuse adapter discovers roots in the selected window and then reads all currently available observations for each selected trace. It skips the complete trace if the available parent-child tree or timestamps are invalid.
+
+### Upload and verify
+
+Run the command without `--dry-run` to upload the prepared traces:
+
+```bash
+npx mastra traces import langfuse --project my-project
+```
+
+The CLI displays the preparation summary and asks for confirmation before upload. Pass `--yes` to skip this prompt in an automated environment:
+
+```bash
+npx mastra traces import langfuse --project my-project --yes
+```
+
+The importer keeps every trace in one upload request and checkpoints progress only after Mastra Platform acknowledges the batch. Temporary source and destination failures use bounded retries.
+
+After every prepared trace is acknowledged, the importer reads back a deterministic sample of up to 10 traces. It verifies span IDs, parent links, names, span types, event flags, timestamps, and whether an error is present. It doesn't read back or compare input, output, attributes, metadata, or tags.
+
+If read-back isn't available yet or a sampled trace differs, the import pauses and keeps its prepared data. Resume the import to retry verification without uploading acknowledged traces again.
+
+### Resume an import
+
+Use the exact command printed by the CLI when a dry run, cancellation, interruption, upload failure, or paused verification leaves an import unfinished:
+
+```bash
+npx mastra traces import langfuse \
+  --resume 00000000-0000-0000-0000-000000000000 \
+  --project my-project
+```
+
+A resumed import must use the original provider and destination project. Its saved date window can't be changed, so `--from`, `--to`, and `--dry-run` can't be combined with `--resume`.
+
+Resume behavior depends on where the command stopped:
+
+- An interrupted preparation reads and prepares the source again.
+- An interrupted upload starts with the first unacknowledged trace.
+- Paused verification retries read-back without re-uploading acknowledged traces.
+- A completed import reports that it's already complete and retries any remaining local cleanup.
+
+### Local files and cleanup
+
+Import state is stored under:
+
+```text
+~/.mastra/imports/traces/<target-project-id>/<import-id>/
+```
+
+| File | Purpose | Lifecycle |
+| - | - | - |
+| `manifest.json` | Stores the source identity, date window, counts, and acknowledged progress. | Retained after completion. |
+| `traces.jsonl` | Stores one complete normalized trace per line. | Retained for dry runs and unfinished imports, then removed after successful verification. |
+| `report.json` | Stores counts, warnings, skip samples, and verification results. | Retained after it's written. |
+
+These files can contain trace content. Mastra creates the import directory and files with permissions restricted to the local user. Protect the machine and account that run the import.
+
+### Imported data and limits
+
+For Langfuse imports:
+
+- Observations become Mastra spans with their parent-child relationships and timestamps.
+- Supported fields such as names, input, output, errors, model details, usage, cost, tags, and source context are mapped when present.
+- Destination trace and span IDs are deterministic. Original Langfuse IDs remain in span metadata for correlation.
+- Unknown Langfuse observation types become generic spans and produce a warning instead of being silently discarded.
+- Only trace observations are imported. Scores, feedback, datasets, attachments, and logs aren't imported.
+
+The shared importer also applies these limits:
+
+- Prepared local trace data is limited to 5 GiB per import. Use a smaller date window if an import reaches this limit.
+- A complete trace must fit within the importer's 4 MiB upload payload limit. A larger trace is skipped and recorded with the `trace_too_large` reason.
+- A trace is never split between upload requests.
+
+Review `report.json` after a dry run or completed import to see exactly what was prepared, skipped, acknowledged, and verified.
+
+See the [`mastra traces import` CLI reference](/reference/cli/mastra#mastra-traces-import) for the complete option and environment-variable reference.
 
 ## Next steps
 
