@@ -314,6 +314,11 @@ export class DockerProcessManager extends SandboxProcessManager {
       .filter((entry): entry is [string, string] => entry[1] !== undefined)
       .map(([k, v]) => `${k}=${v}`);
 
+    // `stdinMode: 'ignore'` leaves stdin unattached so the command sees EOF. A
+    // command that reads stdin (a bare `rg`/`grep`/`cat` with no path argument)
+    // blocks forever when stdin is attached but nothing ever writes to it.
+    const attachStdin = options.stdinMode !== 'ignore';
+
     // Create exec instance. The command is wrapped so it runs in its own process
     // group (via setsid) and records its PGID; args travel positionally so the
     // wrapper text stays a static constant.
@@ -321,17 +326,19 @@ export class DockerProcessManager extends SandboxProcessManager {
       Cmd: ['sh', '-c', SPAWN_WRAPPER, 'sh', pgidFile, command],
       AttachStdout: true,
       AttachStderr: true,
-      AttachStdin: true,
+      AttachStdin: attachStdin,
       Tty: false,
       Env: envArray.length > 0 ? envArray : undefined,
       WorkingDir: options.cwd,
     });
 
     // Start exec and get the multiplexed stream
-    const stream = await exec.start({ hijack: true, stdin: true });
+    const stream = await exec.start({ hijack: true, stdin: attachStdin });
 
     const startTime = Date.now();
-    const handle = new DockerProcessHandle(exec, container, startTime, stream, pgidFile, options);
+    // A null stdin stream makes sendStdin/closeStdin report the process was not
+    // started with stdin support, matching `stdinMode: 'ignore'`.
+    const handle = new DockerProcessHandle(exec, container, startTime, attachStdin ? stream : null, pgidFile, options);
     handle._setExecStream(stream);
 
     // Create the wait promise that resolves when the stream ends

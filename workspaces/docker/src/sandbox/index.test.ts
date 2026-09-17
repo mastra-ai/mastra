@@ -1150,6 +1150,21 @@ describe('DockerSandbox', () => {
       expect(mockExec.start).toHaveBeenCalledWith({ hijack: true, stdin: true });
     });
 
+    it('should not attach stdin when stdinMode is ignore', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('cat', { stdinMode: 'ignore' });
+
+      // A command that reads stdin must see EOF, not an attached pipe nothing
+      // writes to — otherwise it blocks until the timeout.
+      expect(mockContainer.exec).toHaveBeenCalledWith(expect.objectContaining({ AttachStdin: false }));
+      expect(mockExec.start).toHaveBeenCalledWith({ hijack: true, stdin: false });
+
+      // With no stdin stream, driving stdin must report it is unsupported.
+      await expect(handle.sendStdin('data')).rejects.toThrow(/stdin/i);
+    });
+
     it('should close the writable side of the exec stream to signal EOF', async () => {
       const sandbox = new DockerSandbox();
       await sandbox._start();

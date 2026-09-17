@@ -182,6 +182,10 @@ async function executeCommand(input: Record<string, any>, context: any) {
       cwd: cwd ?? undefined,
       timeout: timeout ?? undefined,
       abortSignal: bgAbortSignal,
+      // A background process collects output rather than being driven over stdin,
+      // so close stdin at spawn. Otherwise `rg`/`grep`/`cat` with no path argument
+      // reads stdin and never exits.
+      stdinMode: 'ignore',
       onStdout: bgConfig?.onStdout
         ? (data: string) => bgConfig.onStdout!(data, { pid: handle.pid, toolCallId })
         : undefined,

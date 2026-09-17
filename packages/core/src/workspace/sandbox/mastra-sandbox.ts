@@ -328,6 +328,10 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
             ...opts,
             ...(args?.length ? { originalInvocation: { command, args: [...args] } } : {}),
             maxRetainedBytes: opts?.maxRetainedBytes ?? Infinity,
+            // executeCommand runs to completion and collects output; nothing can
+            // feed the process's stdin, so close it at spawn. Otherwise a command
+            // that reads stdin (e.g. `rg` with no path argument) blocks forever.
+            stdinMode: 'ignore',
           });
           try {
             const result = await handle.wait();

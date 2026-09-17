@@ -129,7 +129,11 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
 
       const e2bHandle = await e2b.commands.run(command, {
         background: true,
-        stdin: true,
+        // `stdinMode: 'ignore'` closes stdin at spawn so a command that reads it
+        // (a bare `rg`/`grep`/`cat` with no path argument) sees EOF and exits
+        // instead of blocking forever. Callers that drive stdin (`spawn` for an
+        // LSP server) keep the default attached stdin.
+        stdin: options.stdinMode !== 'ignore',
         cwd: options.cwd ?? this.sandbox.workingDirectory,
         envs,
         timeoutMs: options.timeout,
