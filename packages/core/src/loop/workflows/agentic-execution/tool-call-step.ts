@@ -816,7 +816,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           });
 
           if (resolvedSuspensionIdentity) {
-            args.suspendedToolRunId = resolvedSuspensionIdentity.runId;
+            // Agentic execution disables input validation, so a resumed call can carry
+            // `args: null`; guard the mutation so the invalid-arguments check below still runs.
+            if (args && typeof args === 'object') {
+              args.suspendedToolRunId = resolvedSuspensionIdentity.runId;
+            }
             toolOptions.suspendedToolRunId = resolvedSuspensionIdentity.runId;
           }
         }
