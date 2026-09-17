@@ -1,13 +1,20 @@
 import { ListFilterIcon } from 'lucide-react';
+import { AnimatePresence, LayoutGroup, LazyMotion, MotionConfig } from 'motion/react';
+import * as m from 'motion/react-m';
 import type { ReactNode } from 'react';
 import { FilterBarChip } from './filter-bar-chip';
 import { FilterBarClear } from './filter-bar-clear';
 import { FilterBarProvider, useFilterBarContext } from './filter-bar-context';
 import { FilterBarInput } from './filter-bar-input';
+import { FilterBarAnimatedChip } from './motion/filter-bar-animated-chip';
+import styles from './motion/filter-bar-motion.module.css';
+import { filterTransition } from './motion/transitions';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from './types';
 import { inputFocusBorderWithin, inputHoverBorderWithin } from '@/ds/primitives/form-element';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
+
+const loadFilterMotion = () => import('./motion/features').then(module => module.default);
 
 export type FilterBarProps = {
   fields: FilterBarField[];
@@ -15,8 +22,8 @@ export type FilterBarProps = {
   value: FilterBarItem[];
   onValueChange: (items: FilterBarItem[]) => void;
   'aria-label'?: string;
-  /** Accessible label of the trailing "remove every filter" button. */
   clearLabel?: string;
+  variant?: 'input' | 'button';
   className?: string;
   children: ReactNode;
 };
@@ -31,50 +38,51 @@ function FilterBarSurface({
   children: ReactNode;
 }) {
   const ctx = useFilterBarContext();
+  const isButton = ctx.variant === 'button';
   return (
-    <div
+    <m.div
+      layout={isButton ? 'size' : false}
       role="group"
       aria-label={ctx.ariaLabel}
       data-slot="filter-bar"
+      data-variant={ctx.variant}
       className={cn(
-        // Same surface/hover/focus recipe as InputGroup (wrapper whose focus lives on the nested input).
-        // Layout: leading icon | wrapping chip list | Clear. Icon and Clear stay pinned to the
-        // first line; only the list wraps.
-        'flex w-full items-start gap-0.5 rounded-2xl border border-border1 bg-surface-overlay-soft p-0.5',
-        'cursor-text transition-all duration-normal ease-out-custom',
-        'hover:bg-surface-overlay-strong',
-        inputHoverBorderWithin,
-        'outline-hidden focus-within:bg-surface-overlay-strong focus-within:outline-hidden',
-        inputFocusBorderWithin,
+        isButton
+          ? 'relative flex w-full flex-wrap items-center gap-1 [&_[data-slot=filter-bar-chip]]:h-form-md'
+          : cn(
+              'flex w-full items-start gap-0.5 rounded-2xl border border-border1 bg-surface-overlay-soft p-0.5',
+              'cursor-text transition-all duration-normal ease-out-custom',
+              'hover:bg-surface-overlay-strong',
+              inputHoverBorderWithin,
+              'outline-hidden focus-within:bg-surface-overlay-strong focus-within:outline-hidden',
+              inputFocusBorderWithin,
+            ),
+        isButton && styles.surface,
         className,
       )}
-      onClick={ctx.focusInput}
+      onClick={isButton ? undefined : ctx.focusInput}
     >
-      <span className="flex shrink-0 items-center py-1 pr-1 pl-1.5">
-        <ListFilterIcon aria-hidden className="text-neutral3 size-3" />
-      </span>
-      <div data-slot="filter-bar-list" className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
+      {!isButton && (
+        <span className="flex shrink-0 items-center py-1 pr-1 pl-1.5">
+          <ListFilterIcon aria-hidden className="text-neutral3 size-3" />
+        </span>
+      )}
+      <div
+        data-slot="filter-bar-list"
+        className={isButton ? 'contents' : 'flex min-w-0 flex-1 flex-wrap items-center gap-0.5'}
+      >
         {children}
       </div>
-      <span className="flex shrink-0 items-center empty:hidden">
-        <FilterBarClear label={clearLabel} />
-      </span>
+      {!isButton && (
+        <span className="flex shrink-0 items-center empty:hidden">
+          <FilterBarClear label={clearLabel} />
+        </span>
+      )}
       <VisuallyHidden aria-live="polite">{ctx.announcement}</VisuallyHidden>
-    </div>
+    </m.div>
   );
 }
 
-/**
- * Braintrust-style filter bar: `field → operator → value` filters built from a
- * single typeahead input, rendered as inline editable chips. Domain-agnostic —
- * fields, operators and values are plain strings supplied by the consumer.
- *
- * @example
- * <FilterBar value={items} onValueChange={setItems} fields={fields} operators={DEFAULT_FILTER_OPERATORS}>
- *   <FilterBar.Chips />
- *   <FilterBar.Input />
- * </FilterBar>
- */
 export function FilterBar({
   fields,
   operators,
@@ -82,9 +90,15 @@ export function FilterBar({
   onValueChange,
   'aria-label': ariaLabel = 'Filters',
   clearLabel = 'Clear filters',
+  variant = 'input',
   className,
   children,
 }: FilterBarProps) {
+  const surface = (
+    <FilterBarSurface className={className} clearLabel={clearLabel}>
+      {children}
+    </FilterBarSurface>
+  );
   return (
     <FilterBarProvider
       fields={fields}
@@ -92,17 +106,32 @@ export function FilterBar({
       value={value}
       onValueChange={onValueChange}
       ariaLabel={ariaLabel}
+      variant={variant}
     >
-      <FilterBarSurface className={className} clearLabel={clearLabel}>
-        {children}
-      </FilterBarSurface>
+      {variant === 'button' ? (
+        <LazyMotion features={loadFilterMotion} strict>
+          <MotionConfig reducedMotion="user" transition={filterTransition}>
+            <LayoutGroup>{surface}</LayoutGroup>
+          </MotionConfig>
+        </LazyMotion>
+      ) : (
+        surface
+      )}
     </FilterBarProvider>
   );
 }
 
-/** Default layout: one editable chip per item, in order. */
 export function FilterBarChips() {
   const ctx = useFilterBarContext();
+  if (ctx.variant === 'button') {
+    return (
+      <AnimatePresence initial={false} mode="popLayout">
+        {ctx.items.map(item => (
+          <FilterBarAnimatedChip key={item.id} item={item} />
+        ))}
+      </AnimatePresence>
+    );
+  }
   return (
     <>
       {ctx.items.map(item => (

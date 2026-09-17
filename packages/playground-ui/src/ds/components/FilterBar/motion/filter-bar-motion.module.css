@@ -1,0 +1,89 @@
+.surface :is([data-slot='filter-bar-add-segment'], [data-slot='filter-bar-chip']) {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--color-neutral6) 5%, transparent), transparent 60%),
+    color-mix(in srgb, var(--color-surface5) 86%, transparent);
+  backdrop-filter: blur(12px) saturate(1.15);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-neutral6) 8%, transparent),
+    0 2px 5px color-mix(in srgb, var(--color-surface1) 20%, transparent);
+}
+
+.segment {
+  border-radius: var(--radius-lg);
+}
+
+.segment + .segment {
+  margin-left: 7px;
+}
+
+.segment[data-joined] {
+  margin-left: -1px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.segment:has(+ .segment[data-joined]) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .segment {
+    animation: segment-appear 120ms ease-out backwards;
+    transition:
+      margin-left 180ms cubic-bezier(0.22, 1, 0.36, 1),
+      border-radius 160ms ease-out,
+      background-color 100ms ease-out;
+  }
+
+  .popup [role='option'] {
+    animation: option-appear 120ms ease-out both;
+    animation-delay: 60ms;
+  }
+
+  .popup [role='option']:nth-child(1) {
+    animation-delay: 0ms;
+  }
+
+  .popup [role='option']:nth-child(2) {
+    animation-delay: 12ms;
+  }
+
+  .popup [role='option']:nth-child(3) {
+    animation-delay: 24ms;
+  }
+
+  .popup [role='option']:nth-child(4) {
+    animation-delay: 36ms;
+  }
+
+  .popup [role='option']:nth-child(5) {
+    animation-delay: 48ms;
+  }
+}
+
+@keyframes segment-appear {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes option-appear {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.popup {
+  background: color-mix(in srgb, var(--color-surface3) 90%, transparent);
+  backdrop-filter: blur(20px) saturate(1.15);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-neutral6) 8%, transparent),
+    var(--shadow-dialog);
+}

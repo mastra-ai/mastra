@@ -182,6 +182,7 @@
     "date-fns": "catalog:",
     "mdast-util-gfm": "^3.1.0",
     "mdast-util-to-markdown": "^2.1.2",
+    "motion": "^13.4.0",
     "prettier": "^3.9.5",
     "prism-react-renderer": "^2.4.1",
     "react-day-picker": "^8.10.1",

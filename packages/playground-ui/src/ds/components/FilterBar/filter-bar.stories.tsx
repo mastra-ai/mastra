@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { userEvent, within } from 'storybook/test';
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
 import { FilterBar } from './filter-bar';
+import type { FilterBarProps } from './filter-bar';
 import type { FilterBarField, FilterBarItem } from './types';
 import { Txt } from '@/ds/components/Txt';
 import { themedHueColor } from '@/lib/colors';
@@ -88,27 +89,62 @@ type Story = StoryObj;
 function Demo({
   fields = FIELDS,
   initial = [],
+  variant = 'input',
   children,
 }: {
   fields?: FilterBarField[];
   initial?: FilterBarItem[];
+  variant?: FilterBarProps['variant'];
   children?: (items: FilterBarItem[]) => React.ReactNode;
 }) {
   const [items, setItems] = useState<FilterBarItem[]>(initial);
   return (
     <div className="grid w-full max-w-3xl gap-3">
-      <FilterBar fields={fields} operators={DEFAULT_FILTER_OPERATORS} value={items} onValueChange={setItems}>
+      <FilterBar
+        fields={fields}
+        operators={DEFAULT_FILTER_OPERATORS}
+        value={items}
+        onValueChange={setItems}
+        variant={variant}
+      >
         <FilterBar.Chips />
         <FilterBar.Input placeholder="Filter traces…" />
       </FilterBar>
       {children?.(items)}
-      <pre className="bg-surface3 text-ui-xs text-neutral4 rounded-lg p-3">{JSON.stringify(items, null, 2)}</pre>
+      {variant === 'input' && (
+        <pre className="bg-surface3 text-ui-xs text-neutral4 rounded-lg p-3">{JSON.stringify(items, null, 2)}</pre>
+      )}
     </div>
   );
 }
 
 export const Default: Story = {
   render: () => <Demo />,
+};
+
+export const Button: Story = {
+  render: () => <Demo variant="button" />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Set `variant="button"` on `FilterBar` to use an **Add filter +** button. Keep the same `FilterBar.Chips` and `FilterBar.Input` children: search moves into the popover. Picking a field and operator advances automatically, revealing each segment. Applying a value returns focus to a compact ghost **+**. Filters are removed individually. Escape steps back; dismissing discards the draft. Quick spring transitions and staggered options respect reduced motion.',
+      },
+    },
+  },
+};
+
+export const ButtonWithFilters: Story = {
+  render: () => (
+    <Demo
+      variant="button"
+      initial={[
+        { id: '1', fieldId: 'status', operatorId: 'is', value: 'error' },
+        { id: '2', fieldId: 'tags', operatorId: 'in', value: ['production', 'canary'] },
+        { id: '3', fieldId: 'duration', operatorId: 'gt', value: '1500' },
+      ]}
+    />
+  ),
 };
 
 export const WithPrefilledFilters: Story = {
@@ -232,22 +268,18 @@ export const KeyboardOnly: Story = {
   name: 'Keyboard-only walkthrough (play)',
   render: () => <Demo />,
   play: async ({ canvasElement }) => {
-    // Small delay between keystrokes so popover steps have re-rendered before the next key.
     const user = userEvent.setup({ delay: 80 });
     const input = within(canvasElement).getByRole('combobox', { name: 'Add filter' });
     await user.click(input);
-    // Status › is not › Error
     await user.type(input, 'stat');
     await user.keyboard('{Enter}');
     await user.keyboard('{ArrowDown}{Enter}');
     await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
-    // Trace ID › contains › abc
     await user.type(input, 'trace');
     await user.keyboard('{Enter}');
     await user.keyboard('{ArrowDown}{Enter}');
     await user.type(input, 'abc');
     await user.keyboard('{Enter}');
-    // Walk back into the chips (remove button, then value), open the last value editor, close it, then remove that chip.
     await user.keyboard('{ArrowLeft}');
     await user.keyboard('{ArrowLeft}');
     await user.keyboard('{Enter}');
