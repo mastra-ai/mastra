@@ -155,6 +155,18 @@ describe('ObservationalMemoryProcessor ended-turn reuse (#19740)', () => {
     };
   }
 
+  function buildOutputResultArgs(messageList: MessageList, state: Record<string, unknown>) {
+    return {
+      messageList,
+      messages: messageList.get.response.db(),
+      requestContext: createRequestContext(threadId, resourceId),
+      state,
+      abort: createAbort(),
+      result: {} as any,
+      retryCount: 0,
+    };
+  }
+
   describe('when the active turn was ended but the message list is unchanged', () => {
     it('begins a fresh turn instead of throwing "Turn already ended"', async () => {
       const state: Record<string, unknown> = {};
@@ -181,6 +193,40 @@ describe('ObservationalMemoryProcessor ended-turn reuse (#19740)', () => {
       expect(nextTurn).toBeDefined();
       expect(nextTurn).not.toBe(sealedTurn);
       expect(nextTurn!.ended).toBe(false);
+    });
+  });
+
+  describe('when finalization meets an already-ended turn', () => {
+    it('resolves and persists the response instead of throwing "Turn already ended"', async () => {
+      const state: Record<string, unknown> = {};
+      const messageList = new MessageList({ threadId, resourceId });
+      messageList.add(createTestMessage('Hello there', 'user', 'msg-1'), 'input');
+      messageList.add(createTestMessage('Hi, how can I help?', 'assistant', 'msg-2'), 'response');
+
+      // Step 0 installs the turn into the shared processor state.
+      await processor.processInputStep(buildInputStepArgs(messageList, state, 0));
+
+      const sealedTurn = state.__omTurn as LiveTurn | undefined;
+      expect(sealedTurn).toBeDefined();
+
+      // Seal the turn before the loop finalizes — the shared state still points
+      // at the ended turn. A final step has no next input step to recover it, so
+      // this used to reach `await turn.end()` a second time and throw.
+      await sealedTurn!.end();
+
+      const persistSpy = vi.spyOn(om, 'persistMessages');
+
+      await expect(processor.processOutputResult(buildOutputResultArgs(messageList, state) as any)).resolves.toBe(
+        messageList,
+      );
+
+      // Finalization clears the ended turn from the shared state instead of
+      // leaving it behind for the next run to trip over.
+      expect(state.__omTurn).toBeUndefined();
+
+      // The response is persisted directly rather than lost to the throw.
+      const persisted = persistSpy.mock.calls.flatMap(call => call[0] as MastraDBMessage[]);
+      expect(persisted.some(message => message.id === 'msg-2')).toBe(true);
     });
   });
 });
