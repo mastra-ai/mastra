@@ -18,16 +18,15 @@ type StoredToolInvocation = ToolInvocations[number];
 export const SKILL_TOOL_NAMES = ['skill', 'skill_search', 'skill_read'] as const;
 
 /**
- * A `beforeObservation` filter: a hook that only transforms messages. It
- * receives the messages about to be sent to the Observer and returns
- * `{ messages }` to replace them, or `undefined` to pass the payload through
- * unchanged.
+ * A `beforeObservation` transform hook: it only rewrites messages. It receives
+ * the messages about to be sent to the Observer and returns `{ messages }` to
+ * replace them, or `undefined` to pass the payload through unchanged.
  */
-export type ObserverMessageFilter = (
+export type ObserverMessageTransform = (
   ...args: Parameters<BeforeObservationHook>
 ) => { messages: MastraDBMessage[] } | undefined;
 
-export interface SkillResultFilterOptions {
+export interface SkillResultRedactorOptions {
   /**
    * Tool names whose results are redacted. Defaults to
    * {@link SKILL_TOOL_NAMES}.
@@ -121,9 +120,9 @@ function redactToolResult(part: ToolInvocationPart): ToolInvocationPart {
  * Observer payload.
  *
  * The `skill` tool returns a skill's instructions verbatim as its result, and
- * `skill_read` / `skill_search` return skill file contents, so without a filter
+ * `skill_read` / `skill_search` return skill file contents, so without redaction
  * the Observer re-observes the full skill text every time a skill is used.
- * `skillResultFilter()` replaces the result payload with a placeholder and
+ * `skillResultRedactor()` replaces the result payload with a placeholder and
  * leaves the tool call in place, so the Observer still records which skill was
  * used without the skill text.
  *
@@ -132,18 +131,18 @@ function redactToolResult(part: ToolInvocationPart): ToolInvocationPart {
  *   options: {
  *     observationalMemory: {
  *       model: 'google/gemini-2.5-flash',
- *       hooks: { beforeObservation: skillResultFilter() },
+ *       hooks: { beforeObservation: skillResultRedactor() },
  *     },
  *   },
  * });
  * ```
  *
  * Because a hook is a function over the messages, this composes with your own
- * filtering by chaining the outputs. Await each chained filter so an async one
+ * transforms by chaining the outputs. Await each chained hook so an async one
  * doesn't resolve to a promise that gets discarded:
  *
  * ```typescript
- * const dropSkillResults = skillResultFilter();
+ * const dropSkillResults = skillResultRedactor();
  *
  * hooks: {
  *   beforeObservation: async input => {
@@ -153,13 +152,13 @@ function redactToolResult(part: ToolInvocationPart): ToolInvocationPart {
  * }
  * ```
  */
-export function skillResultFilter(options?: SkillResultFilterOptions): ObserverMessageFilter {
+export function skillResultRedactor(options?: SkillResultRedactorOptions): ObserverMessageTransform {
   const toolNames = new Set<string>(options?.toolNames ?? SKILL_TOOL_NAMES);
 
   return ({ messages }) => {
     let changed = false;
 
-    const filtered = messages.map(message => {
+    const transformed = messages.map(message => {
       const parts = message.content?.parts;
 
       let messageChanged = false;
@@ -188,6 +187,6 @@ export function skillResultFilter(options?: SkillResultFilterOptions): ObserverM
     });
 
     // `undefined` means "pass through unchanged", so leave untouched payloads alone.
-    return changed ? { messages: filtered } : undefined;
+    return changed ? { messages: transformed } : undefined;
   };
 }

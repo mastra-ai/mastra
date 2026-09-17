@@ -1461,20 +1461,20 @@ const selector = new ModelByInputTokens({
 ]}
 />
 
-### skillResultFilter
+### skillResultRedactor
 
-`skillResultFilter` builds a `beforeObservation` transform hook that redacts the results of the built-in Agent Skills tools (`skill`, `skill_search`, and `skill_read`) before the Observer model sees them. Each result is replaced with a placeholder while the tool call is kept, so the Observer still records which skill was used and what it was called with, without the skill text.
+`skillResultRedactor` builds a `beforeObservation` transform hook that redacts the results of the built-in Agent Skills tools (`skill`, `skill_search`, and `skill_read`) before the Observer model sees them. Each result is replaced with a placeholder while the tool call is kept, so the Observer still records which skill was used and what it was called with, without the skill text.
 
 ```typescript
 import { Memory } from '@mastra/memory'
-import { skillResultFilter } from '@mastra/memory/filters'
+import { skillResultRedactor } from '@mastra/memory/hooks'
 
 const memory = new Memory({
   options: {
     observationalMemory: {
       model: '__GATEWAY_GOOGLE_MODEL_FLASH__',
       hooks: {
-        beforeObservation: skillResultFilter(),
+        beforeObservation: skillResultRedactor(),
       },
     },
   },

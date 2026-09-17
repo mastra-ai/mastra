@@ -20,7 +20,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { BufferingCoordinator } from '../buffering-coordinator';
 import { Extractor } from '../extractor';
-import { skillResultFilter } from '../filters';
+import { skillResultRedactor } from '../hooks';
 import { ModelByInputTokens } from '../model-by-input-tokens';
 import { ObservationalMemory } from '../observational-memory';
 import { ObserverRunner } from '../observer-runner';
@@ -900,10 +900,10 @@ name: Tyler
       expect(record?.observedMessageIds).toContain(messages[0]!.id);
     });
 
-    it('skillResultFilter keeps skill results out of the observer prompt end-to-end', async () => {
+    it('skillResultRedactor keeps skill results out of the observer prompt end-to-end', async () => {
       const observerModel = createMockObserverModel();
       const prompts = capturePrompts(observerModel);
-      const transformOm = createOM(storage, { observerModel, hooks: { beforeObservation: skillResultFilter() } });
+      const transformOm = createOM(storage, { observerModel, hooks: { beforeObservation: skillResultRedactor() } });
       const messages = createBulkMessages(10, threadId);
       // Build the skill message the way the pipeline persists it: the call
       // streams first, the result then merges into it, leaving a single

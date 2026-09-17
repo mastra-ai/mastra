@@ -1,16 +1,17 @@
 /**
- * Unit tests for the prebuilt `beforeObservation` filters exported from
- * `@mastra/memory/filters`.
+ * Unit tests for the prebuilt `beforeObservation` transform hooks exported
+ * from `@mastra/memory/hooks`.
  *
- * `skillResultFilter` is a pure function over the Observer's message payload, so
- * these tests exercise it directly and then prove the effect end-to-end through
- * `formatMessagesForObserver` (the exact formatter the Observer model sees).
+ * `skillResultRedactor` is a pure function over the Observer's message payload,
+ * so these tests exercise it directly and then prove the effect end-to-end
+ * through `formatMessagesForObserver` (the exact formatter the Observer model
+ * sees).
  */
 
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { describe, it, expect } from 'vitest';
 
-import { skillResultFilter, SKILL_TOOL_NAMES } from '../filters';
+import { skillResultRedactor, SKILL_TOOL_NAMES } from '../hooks';
 import { formatMessagesForObserver } from '../observer-agent';
 import type { ObserveTransformHooks } from '../types';
 
@@ -45,12 +46,12 @@ function skillResult(toolName: string, result: string, toolCallId = toolName): T
 
 const resultOf = (part: MessagePart): unknown => (part as ToolInvocationPart).toolInvocation.result;
 
-describe('skillResultFilter', () => {
+describe('skillResultRedactor', () => {
   it('redacts the results of every built-in skill tool', async () => {
     const messages = [createMessage(SKILL_TOOL_NAMES.map(name => skillResult(name, `${name} secret instructions`)))];
     const parts = messages[0]!.content.parts;
 
-    const result = await skillResultFilter()({ messages });
+    const result = await skillResultRedactor()({ messages });
 
     const redacted = result?.messages[0]!.content.parts as ToolInvocationPart[];
     expect(redacted).toHaveLength(SKILL_TOOL_NAMES.length);
@@ -71,7 +72,7 @@ describe('skillResultFilter', () => {
     const textPart = { type: 'text', text: 'hello' } as const;
     const messages = [createMessage([textPart, weather, skillResult('skill', 'secret')])];
 
-    const result = await skillResultFilter()({ messages });
+    const result = await skillResultRedactor()({ messages });
 
     expect(result?.messages[0]!.content.parts[0]).toBe(textPart);
     expect(result?.messages[0]!.content.parts[1]).toBe(weather);
@@ -81,7 +82,7 @@ describe('skillResultFilter', () => {
   it('passes through unchanged (returns undefined) when nothing matched', async () => {
     const messages = [createMessage([skillResult('getWeather', 'sunny')])];
 
-    const result = await skillResultFilter()({ messages });
+    const result = await skillResultRedactor()({ messages });
 
     expect(result).toBeUndefined();
   });
@@ -90,7 +91,7 @@ describe('skillResultFilter', () => {
     const messages = [createMessage([skillResult('skill', 'secret')])];
     const snapshot = structuredClone(messages);
 
-    await skillResultFilter()({ messages });
+    await skillResultRedactor()({ messages });
 
     expect(messages).toEqual(snapshot);
   });
@@ -102,7 +103,7 @@ describe('skillResultFilter', () => {
     };
     const messages = [createMessage([callPart])];
 
-    const result = await skillResultFilter()({ messages });
+    const result = await skillResultRedactor()({ messages });
 
     expect(result).toBeUndefined();
   });
@@ -113,7 +114,7 @@ describe('skillResultFilter', () => {
       toolInvocation: { state: 'result', toolCallId: 'c1', toolName: 'skill', args: { name: 'pdf' } },
     };
 
-    const result = await skillResultFilter()({ messages: [createMessage([empty])] });
+    const result = await skillResultRedactor()({ messages: [createMessage([empty])] });
 
     expect(result).toBeUndefined();
   });
@@ -134,7 +135,7 @@ describe('skillResultFilter', () => {
     };
     const messages = [createMessage([part])];
 
-    const result = await skillResultFilter()({ messages });
+    const result = await skillResultRedactor()({ messages });
     const filtered = result!.messages[0]!.content.parts[0] as ToolInvocationPart;
 
     expect(formatMessagesForObserver([messages[0]!])).toContain('SECRET_SKILL_INSTRUCTIONS');
@@ -147,7 +148,7 @@ describe('skillResultFilter', () => {
   it('honors a custom toolNames list', async () => {
     const messages = [createMessage([skillResult('skill', 'secret'), skillResult('internal_lookup', 'sensitive')])];
 
-    const result = await skillResultFilter({ toolNames: ['internal_lookup'] })({ messages });
+    const result = await skillResultRedactor({ toolNames: ['internal_lookup'] })({ messages });
 
     const parts = result?.messages[0]!.content.parts as ToolInvocationPart[];
     expect(resultOf(parts[0]!)).toBe('secret');
@@ -159,7 +160,7 @@ describe('skillResultFilter', () => {
     const other = createMessage([skillResult('skill', 'secret')], 'assistant', 'msg-3');
     const messages = [createMessage([skillResult('skill_search', 'hits')]), untouched, other];
 
-    const result = await skillResultFilter()({ messages });
+    const result = await skillResultRedactor()({ messages });
 
     expect(result?.messages).toHaveLength(3);
     expect(result?.messages[0]).not.toBe(messages[0]);
@@ -172,7 +173,7 @@ describe('skillResultFilter', () => {
 
     expect(formatMessagesForObserver(messages)).toContain('SECRET_SKILL_INSTRUCTIONS');
 
-    const filtered = skillResultFilter()({ messages })?.messages ?? messages;
+    const filtered = skillResultRedactor()({ messages })?.messages ?? messages;
     const rendered = formatMessagesForObserver(filtered);
 
     expect(rendered).not.toContain('SECRET_SKILL_INSTRUCTIONS');
@@ -187,7 +188,7 @@ describe('skillResultFilter', () => {
     const messages = [createMessage([skillResult('skill', 'SECRET_SKILL_INSTRUCTIONS')])];
     expect(messages[0]!.content.parts).toHaveLength(1);
 
-    const filtered = skillResultFilter()({ messages })?.messages ?? messages;
+    const filtered = skillResultRedactor()({ messages })?.messages ?? messages;
     const rendered = formatMessagesForObserver(filtered);
 
     expect(rendered).toContain('Tool Call skill');
@@ -195,12 +196,12 @@ describe('skillResultFilter', () => {
     expect(rendered).not.toContain('SECRET_SKILL_INSTRUCTIONS');
   });
 
-  it('composes with other filtering using the documented chaining pattern', async () => {
-    // This mirrors the chaining example in the docs and `skillResultFilter`'s
+  it('composes with other transforms using the documented chaining pattern', async () => {
+    // This mirrors the chaining example in the docs and `skillResultRedactor`'s
     // JSDoc. It is a compile-time guard too: `beforeObservation` accepts a
-    // promise, and awaiting each chained filter keeps an async one from being
+    // promise, and awaiting each chained hook keeps an async one from being
     // silently discarded.
-    const dropSkillResults = skillResultFilter();
+    const dropSkillResults = skillResultRedactor();
     const signalMessage = createMessage([{ type: 'text', text: 'signal' }], 'signal', 'msg-signal');
 
     const hooks: ObserveTransformHooks = {
@@ -232,7 +233,7 @@ describe('skillResultFilter', () => {
       },
     ] as MastraMessageContentV2['toolInvocations'];
 
-    const filtered = skillResultFilter()({ messages: [message] })?.messages ?? [message];
+    const filtered = skillResultRedactor()({ messages: [message] })?.messages ?? [message];
 
     expect(filtered[0]!.content.toolInvocations).toEqual([
       expect.objectContaining({ toolName: 'skill', result: '[tool result omitted]' }),
@@ -262,7 +263,7 @@ describe('skillResultFilter', () => {
       } as MastraMessageContentV2,
     };
 
-    const filtered = skillResultFilter()({ messages: [message] })?.messages;
+    const filtered = skillResultRedactor()({ messages: [message] })?.messages;
 
     expect(filtered).toBeDefined();
     expect(JSON.stringify(filtered![0]!.content)).not.toContain('SECRET_SKILL_INSTRUCTIONS');
@@ -275,7 +276,7 @@ describe('skillResultFilter', () => {
       { state: 'result', toolCallId: 'other', toolName: 'other', args: {}, result: 'keep me' },
     ] as MastraMessageContentV2['toolInvocations'];
 
-    const filtered = skillResultFilter()({ messages: [message] })?.messages ?? [message];
+    const filtered = skillResultRedactor()({ messages: [message] })?.messages ?? [message];
 
     // Untouched legacy array keeps its identity; the redaction only rebuilt parts.
     expect(filtered[0]!.content.toolInvocations).toBe(message.content.toolInvocations);

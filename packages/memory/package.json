@@ -29,14 +29,14 @@
         "default": "./dist/processors/index.cjs"
       }
     },
-    "./filters": {
+    "./hooks": {
       "import": {
-        "types": "./dist/filters.d.ts",
-        "default": "./dist/filters.js"
+        "types": "./dist/hooks.d.ts",
+        "default": "./dist/hooks.js"
       },
       "require": {
-        "types": "./dist/filters.d.ts",
-        "default": "./dist/filters.cjs"
+        "types": "./dist/hooks.d.ts",
+        "default": "./dist/hooks.cjs"
       }
     },
     "./package.json": "./package.json"
