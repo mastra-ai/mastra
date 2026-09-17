@@ -125,6 +125,8 @@ function toWhereClause(filter: FilterResult): string {
 
 export function currentScoresRelation(sourcePredicate?: string): string {
   const whereClause = sourcePredicate ? `WHERE ${sourcePredicate}` : '';
+  // FINAL resolves exact sorting-key duplicates before this projection runs.
+  // The fingerprint only stabilizes ties between physically distinct rows that survive FINAL.
   return `(
     SELECT *, cityHash64(tuple(*)) AS _currentScoreFingerprint
     FROM ${TABLE_SCORE_EVENTS} FINAL

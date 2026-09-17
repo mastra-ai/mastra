@@ -920,6 +920,11 @@ export const TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA: TraceQueryFixtureData =
   feedback: [],
 };
 
+/**
+ * Malformed/equal fixture cursors use an evaluator-only deterministic fallback.
+ * Storage adapters may resolve rows without distinct durable recency according
+ * to their physical engine; supported sequential writes must not tie.
+ */
 export const TRACE_QUERY_SCORE_TIE_FIXTURE_DATA: TraceQueryFixtureData = {
   spans: [scoreReplacementRoot('score-tie')],
   scores: [
@@ -1348,7 +1353,7 @@ export const TRACE_QUERY_SCORE_REPLACEMENT_CASES: TraceQueryConformanceCase[] = 
 ];
 
 export const TRACE_QUERY_SCORE_TIE_CASE: TraceQueryConformanceCase = {
-  name: 'breaks equal score cursors deterministically',
+  name: 'breaks malformed equal score cursors deterministically in the evaluator',
   request: scoreReplacementRequest('score-tie', 'some', scoreAboveHalf),
   expected: [{ traceId: 'score-tie' }],
 };

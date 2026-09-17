@@ -2065,7 +2065,7 @@ LIMIT 1`,
         }
       });
 
-      it('selects equal-version legacy score rows independently of insertion order', async () => {
+      it('selects physically distinct equal-version legacy score rows independently of insertion order', async () => {
         const client = createClient({
           url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
           username: process.env.CLICKHOUSE_USERNAME || 'default',
@@ -2102,6 +2102,40 @@ LIMIT 1`,
 
           expect(reverseWinner).toEqual(forwardWinner);
           expect([0.2, 0.8]).toContain(forwardWinner?.score);
+        } finally {
+          await client.close();
+        }
+      });
+
+      it('uses engine last-insert semantics for exact-key legacy ties before and after merges', async () => {
+        const client = createClient({
+          url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+          username: process.env.CLICKHOUSE_USERNAME || 'default',
+          password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        });
+        const first = scoreRecordToRow({
+          scoreId: 'score-exact-key-write-version',
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'trace-exact-key',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.2,
+          reason: null,
+          metadata: null,
+        });
+        const second = { ...first, score: 0.8 };
+
+        try {
+          await client.insert({ table: TABLE_SCORE_EVENTS, values: [first, second], format: 'JSONEachRow' });
+          expect(await storage.getScoreById('score-exact-key-write-version')).toMatchObject({ score: 0.8 });
+          await client.command({ query: `OPTIMIZE TABLE ${TABLE_SCORE_EVENTS} FINAL` });
+          expect(await storage.getScoreById('score-exact-key-write-version')).toMatchObject({ score: 0.8 });
+
+          await storage.dangerouslyClearAll();
+          await client.insert({ table: TABLE_SCORE_EVENTS, values: [second, first], format: 'JSONEachRow' });
+          expect(await storage.getScoreById('score-exact-key-write-version')).toMatchObject({ score: 0.2 });
+          await client.command({ query: `OPTIMIZE TABLE ${TABLE_SCORE_EVENTS} FINAL` });
+          expect(await storage.getScoreById('score-exact-key-write-version')).toMatchObject({ score: 0.2 });
         } finally {
           await client.close();
         }
