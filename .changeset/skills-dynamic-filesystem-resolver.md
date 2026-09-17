@@ -2,9 +2,11 @@
 '@mastra/core': patch
 ---
 
-Fix skill discovery ignoring a dynamic `filesystem` resolver on `Workspace`. When `filesystem` was a `({ requestContext }) => WorkspaceFilesystem` function and `skills` was set without an explicit `skillSource`, skills were silently read from the server's local disk via `LocalSkillSource` instead of the resolved filesystem. This could surface host-local skills to every tenant and never discover the tenant's own skills.
+Fixed skill discovery for `Workspace` instances that use a dynamic `filesystem` resolver.
 
-Skills are now resolved per request against the filesystem returned by the resolver, with discovery and search state cached per resolved filesystem and isolated between them. Static filesystems, explicit `skillSource`, and the no-filesystem `LocalSkillSource` fallback are unchanged.
+When `skills` is configured without `skillSource`, discovery now uses the filesystem resolved for the request. It no longer reads skills from the server's local disk, so host-local skills cannot appear for other tenants and each tenant's own skills are found.
+
+Skill discovery and search state are isolated per resolved filesystem. Unscoped `workspace.search()` no longer returns request-scoped skill documents. Static filesystems, explicit `skillSource`, and the no-filesystem fallback are unchanged.
 
 ```ts
 const workspace = new Workspace({

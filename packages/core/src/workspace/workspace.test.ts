@@ -880,6 +880,33 @@ Line 3 conclusion`;
         expect(await workspace.skills!.has('leaked-from-local-disk')).toBe(false);
       });
 
+      it('keeps resolved skill documents out of unscoped workspace.search()', async () => {
+        const tenantBDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-tenant-b-'));
+        await fs.mkdir(path.join(tenantBDir, 'skills', 'secret'), { recursive: true });
+        await fs.writeFile(
+          path.join(tenantBDir, 'skills', 'secret', 'SKILL.md'),
+          `---\nname: secret\ndescription: tenant b only\n---\n\nTenant B exclusive zebra content\n`,
+        );
+        try {
+          const fsA = new LocalFilesystem({ basePath: remoteDir });
+          const fsB = new LocalFilesystem({ basePath: tenantBDir });
+          const workspace = new Workspace({
+            filesystem: ({ requestContext }) => (requestContext.get('tenant') === 'b' ? fsB : fsA),
+            skills: ['skills'],
+            bm25: true,
+          });
+
+          const skillsB = await workspace.skills!.getScoped!({ requestContext: new RequestContext([['tenant', 'b']]) });
+          await skillsB.list();
+          expect((await skillsB.search('zebra')).map(r => r.skillName)).toEqual(['secret']);
+
+          // Unscoped workspace search must not surface tenant B's skill content
+          expect(await workspace.search('zebra')).toEqual([]);
+        } finally {
+          await fs.rm(tenantBDir, { recursive: true, force: true });
+        }
+      });
+
       it('shares one search namespace when fresh filesystems carry a stable id', async () => {
         const searchEngine = new SearchEngine({ bm25: true });
         const indexSpy = vi.spyOn(searchEngine, 'index');

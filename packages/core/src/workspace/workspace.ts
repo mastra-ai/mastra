@@ -1085,7 +1085,12 @@ export class Workspace<
       throw new SearchNotAvailableError();
     }
     this.lastAccessedAt = new Date();
-    return this._searchEngine.search(query, options);
+    const results = await this._searchEngine.search(query, options);
+    // Documents tagged with `skillScope` belong to request-scoped skill views
+    // (dynamic paths or resolver-backed filesystems). They are only meaningful
+    // through `skills.getScoped(...).search()`; exposing them here would leak
+    // one request's skills into another's unscoped workspace search.
+    return results.filter(result => result.metadata?.skillScope === undefined);
   }
 
   /**
