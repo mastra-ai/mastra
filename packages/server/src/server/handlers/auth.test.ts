@@ -12,6 +12,7 @@ import type { MastraAuthProvider, MastraServerConfig } from '@mastra/core/server
 import { describe, it, expect, vi } from 'vitest';
 
 import { MASTRA_USER_PERMISSIONS_KEY } from '../constants';
+import { ssoCallbackQuerySchema } from '../schemas/auth';
 import {
   GET_AUTH_CAPABILITIES_ROUTE,
   GET_PERMISSION_PATTERNS_ROUTE,
@@ -241,6 +242,47 @@ describe('GET /auth/sso/login — public host behind a rewriting gateway', () =>
 // =============================================================================
 // Issue #4: SSO callback rejects cross-origin post-login redirects
 // =============================================================================
+
+describe('GET /auth/sso/callback — provider errors', () => {
+  it('returns the provider error without exchanging a code or creating a session', async () => {
+    const auth = createMockSSOProvider();
+    const mastra = createMastraWithAuth(auth);
+    const query = ssoCallbackQuerySchema.parse({
+      error: 'invalid_request',
+      error_description: 'PKCE is required for this client.',
+      state: 'untrusted|https%3A%2F%2Fevil.com',
+    });
+    const response = (await GET_SSO_CALLBACK_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      request: new Request('http://localhost:4111/api/auth/sso/callback'),
+      ...query,
+    })) as Response;
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: 'invalid_request',
+      error_description: 'PKCE is required for this client.',
+    });
+    expect(response.headers.get('Content-Type')).toContain('application/json');
+    expect(response.headers.get('Location')).toBeNull();
+    expect(response.headers.get('Set-Cookie')).toBeNull();
+    expect(auth.handleCallback).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {},
+    { code: '' },
+    { error: '' },
+    { code: 'code', error: 'access_denied' },
+    { error: 'x'.repeat(65) },
+    { error: 'access_denied', error_description: 'x'.repeat(257) },
+  ])('rejects malformed callback parameters %j', query => {
+    expect(ssoCallbackQuerySchema.safeParse(query).success).toBe(false);
+  });
+
+  it('accepts a provider error without state or description', () => {
+    expect(ssoCallbackQuerySchema.safeParse({ error: 'access_denied' }).success).toBe(true);
+  });
+});
 
 describe('GET /auth/sso/callback — cross-origin redirect', () => {
   it('should allow cross-origin redirect when Studio runs on a different port', async () => {
