@@ -1320,10 +1320,6 @@ type InputShared_Type_56 = {
   model?: string | undefined;
   /** Custom instructions for title generation */
   instructions?: string | undefined;
-  /** Minimum number of thread messages required before a title is generated */
-  minMessages?: number | undefined;
-  /** Emit the generated title as a data-thread-title chunk on the run stream */
-  emitEvent?: boolean | undefined;
 };
 
 type InputShared_Type_57 = {
@@ -2663,10 +2659,6 @@ type Shared_Type_24 = {
   model?: string | undefined;
   /** Custom instructions for title generation */
   instructions?: string | undefined;
-  /** Minimum number of thread messages required before a title is generated */
-  minMessages?: number | undefined;
-  /** Emit the generated title as a data-thread-title chunk on the run stream */
-  emitEvent?: boolean | undefined;
 };
 
 type Shared_Type_25 = {
@@ -9581,13 +9573,167 @@ export interface PostMemoryThreadsThreadIdClone_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /memory/threads/:threadId/branch
+// ============================================================================
+export type PostMemoryThreadsThreadIdBranch_PathParams = GetMemoryThreadsThreadId_PathParams;
+
+export type PostMemoryThreadsThreadIdBranch_QueryParams = {
+  agentId?: string | undefined;
+};
+
+export type PostMemoryThreadsThreadIdBranch_Body = {
+  branchPointMessageId: string;
+  title?: string | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+export type PostMemoryThreadsThreadIdBranch_Response = Shared_Type_53;
+
+export type PostMemoryThreadsThreadIdBranch_Request = Simplify<
+  (PostMemoryThreadsThreadIdBranch_PathParams extends never
+    ? {}
+    : { params: PostMemoryThreadsThreadIdBranch_PathParams }) &
+    (PostMemoryThreadsThreadIdBranch_QueryParams extends never
+      ? {}
+      : {} extends PostMemoryThreadsThreadIdBranch_QueryParams
+        ? { query?: PostMemoryThreadsThreadIdBranch_QueryParams }
+        : { query: PostMemoryThreadsThreadIdBranch_QueryParams }) &
+    (PostMemoryThreadsThreadIdBranch_Body extends never
+      ? {}
+      : {} extends PostMemoryThreadsThreadIdBranch_Body
+        ? { body?: PostMemoryThreadsThreadIdBranch_Body }
+        : { body: PostMemoryThreadsThreadIdBranch_Body })
+>;
+
+export interface PostMemoryThreadsThreadIdBranch_RouteContract {
+  pathParams: PostMemoryThreadsThreadIdBranch_PathParams;
+  queryParams: PostMemoryThreadsThreadIdBranch_QueryParams;
+  body: PostMemoryThreadsThreadIdBranch_Body;
+  request: PostMemoryThreadsThreadIdBranch_Request;
+  response: PostMemoryThreadsThreadIdBranch_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /memory/threads/:threadId/parent
+// ============================================================================
+export type GetMemoryThreadsThreadIdParent_PathParams = GetMemoryThreadsThreadId_PathParams;
+
+export type GetMemoryThreadsThreadIdParent_QueryParams = PostMemoryThreadsThreadIdBranch_QueryParams;
+
+export type GetMemoryThreadsThreadIdParent_Response = Shared_Type_50 | null;
+
+export type GetMemoryThreadsThreadIdParent_Request = Simplify<
+  (GetMemoryThreadsThreadIdParent_PathParams extends never
+    ? {}
+    : { params: GetMemoryThreadsThreadIdParent_PathParams }) &
+    (GetMemoryThreadsThreadIdParent_QueryParams extends never
+      ? {}
+      : {} extends GetMemoryThreadsThreadIdParent_QueryParams
+        ? { query?: GetMemoryThreadsThreadIdParent_QueryParams }
+        : { query: GetMemoryThreadsThreadIdParent_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetMemoryThreadsThreadIdParent_RouteContract {
+  pathParams: GetMemoryThreadsThreadIdParent_PathParams;
+  queryParams: GetMemoryThreadsThreadIdParent_QueryParams;
+  body: never;
+  request: GetMemoryThreadsThreadIdParent_Request;
+  response: GetMemoryThreadsThreadIdParent_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /memory/threads/:threadId/branches
+// ============================================================================
+export type GetMemoryThreadsThreadIdBranches_PathParams = GetMemoryThreadsThreadId_PathParams;
+
+export type GetMemoryThreadsThreadIdBranches_QueryParams = {
+  agentId?: string | undefined;
+  page?: number | undefined;
+  perPage?: (false | number) | undefined;
+};
+
+export type GetMemoryThreadsThreadIdBranches_Response = {
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+  branches: Shared_Type_53[];
+};
+
+export type GetMemoryThreadsThreadIdBranches_Request = Simplify<
+  (GetMemoryThreadsThreadIdBranches_PathParams extends never
+    ? {}
+    : { params: GetMemoryThreadsThreadIdBranches_PathParams }) &
+    (GetMemoryThreadsThreadIdBranches_QueryParams extends never
+      ? {}
+      : {} extends GetMemoryThreadsThreadIdBranches_QueryParams
+        ? { query?: GetMemoryThreadsThreadIdBranches_QueryParams }
+        : { query: GetMemoryThreadsThreadIdBranches_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetMemoryThreadsThreadIdBranches_RouteContract {
+  pathParams: GetMemoryThreadsThreadIdBranches_PathParams;
+  queryParams: GetMemoryThreadsThreadIdBranches_QueryParams;
+  body: never;
+  request: GetMemoryThreadsThreadIdBranches_Request;
+  response: GetMemoryThreadsThreadIdBranches_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /memory/threads/:threadId/branch-history
+// ============================================================================
+export type GetMemoryThreadsThreadIdBranchHistory_PathParams = GetMemoryThreadsThreadId_PathParams;
+
+export type GetMemoryThreadsThreadIdBranchHistory_QueryParams = PostMemoryThreadsThreadIdBranch_QueryParams;
+
+export type GetMemoryThreadsThreadIdBranchHistory_Response = {
+  history: {
+    thread: Shared_Type_50;
+    branch: {
+      parentThreadId: string;
+      branchPointMessageId: string;
+      branchPointCreatedAt: Date;
+      branchCreatedAt: Date;
+    } | null;
+  }[];
+};
+
+export type GetMemoryThreadsThreadIdBranchHistory_Request = Simplify<
+  (GetMemoryThreadsThreadIdBranchHistory_PathParams extends never
+    ? {}
+    : { params: GetMemoryThreadsThreadIdBranchHistory_PathParams }) &
+    (GetMemoryThreadsThreadIdBranchHistory_QueryParams extends never
+      ? {}
+      : {} extends GetMemoryThreadsThreadIdBranchHistory_QueryParams
+        ? { query?: GetMemoryThreadsThreadIdBranchHistory_QueryParams }
+        : { query: GetMemoryThreadsThreadIdBranchHistory_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetMemoryThreadsThreadIdBranchHistory_RouteContract {
+  pathParams: GetMemoryThreadsThreadIdBranchHistory_PathParams;
+  queryParams: GetMemoryThreadsThreadIdBranchHistory_QueryParams;
+  body: never;
+  request: GetMemoryThreadsThreadIdBranchHistory_Request;
+  response: GetMemoryThreadsThreadIdBranchHistory_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /memory/threads/:threadId/transfer
 // ============================================================================
 export type PostMemoryThreadsThreadIdTransfer_PathParams = GetMemoryThreadsThreadId_PathParams;
 
-export type PostMemoryThreadsThreadIdTransfer_QueryParams = {
-  agentId?: string | undefined;
-};
+export type PostMemoryThreadsThreadIdTransfer_QueryParams = PostMemoryThreadsThreadIdBranch_QueryParams;
 
 export type PostMemoryThreadsThreadIdTransfer_Body = {
   resourceId: string;
@@ -11178,219 +11324,7 @@ export interface PostObservabilityThreadsQuery_RouteContract {
 
 // ============================================================================
 // Route: POST /observability/spans/query
-// ============================================================================
-export type PostObservabilitySpansQuery_Body = {
-  timeRange: {
-    from: string;
-    to: string;
-  };
-  where?: InputShared_Auxiliary_236 | undefined;
-  orderBy?: {
-    field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs' | 'durationMs' | 'model' | 'provider';
-    direction: 'asc' | 'desc';
-  }[];
-  page?: {
-    limit?: number;
-    after?: string | undefined;
-  };
-};
-
-export type PostObservabilitySpansQuery_Response = {
-  spans: {
-    organizationId: string | null;
-    resourceId: string | null;
-    traceId: string;
-    spanId: string;
-    parentSpanId: string | null;
-    name: string;
-    spanType: string;
-    status: 'success' | 'error';
-    startedAt: string;
-    endedAt: string;
-    durationMs: number;
-    entityType: string | null;
-    entityId: string | null;
-    entityName: string | null;
-    entityVersionId: string | null;
-    parentEntityType: string | null;
-    parentEntityId: string | null;
-    parentEntityName: string | null;
-    parentEntityVersionId: string | null;
-    rootEntityType: string | null;
-    rootEntityId: string | null;
-    rootEntityName: string | null;
-    rootEntityVersionId: string | null;
-    threadId: string | null;
-    runId: string | null;
-    sessionId: string | null;
-    userId: string | null;
-    requestId: string | null;
-    serviceName: string | null;
-    experimentId: string | null;
-    environment: string | null;
-    executionSource: string | null;
-    model: string | null;
-    provider: string | null;
-    inputPreview: string | null;
-    outputPreview: string | null;
-    errorPreview: string | null;
-    timeToFirstChunkMs?: (number | null) | undefined;
-    timeToFirstTokenMs?: (number | null) | undefined;
-    outcome?: (string | null) | undefined;
-    stopReason?: (string | null) | undefined;
-    stopReasonContext?:
-      | ({
-          [key: string]: unknown;
-        } | null)
-      | undefined;
-  }[];
-  page: {
-    next: string | null;
-  };
-};
-
-export type PostObservabilitySpansQuery_Request = Simplify<
-  (never extends never ? {} : { params: never }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostObservabilitySpansQuery_Body extends never
-      ? {}
-      : {} extends PostObservabilitySpansQuery_Body
-        ? { body?: PostObservabilitySpansQuery_Body }
-        : { body: PostObservabilitySpansQuery_Body })
->;
-
-export interface PostObservabilitySpansQuery_RouteContract {
-  pathParams: never;
-  queryParams: never;
-  body: PostObservabilitySpansQuery_Body;
-  request: PostObservabilitySpansQuery_Request;
-  response: PostObservabilitySpansQuery_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: POST /observability/traces/query/fields
-// ============================================================================
-export type PostObservabilityTracesQueryFields_Body = {
-  timeRange: {
-    from: string;
-    to: string;
-  };
-  predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
-  search?: string | undefined;
-  limit?: number;
-};
-
-export type PostObservabilityTracesQueryFields_Response = {
-  canonicalFields: {
-    path: string;
-    valueKind: 'string' | 'number' | 'stringOrNumber' | 'timestamp' | 'presence' | 'array';
-    operators: (
-      | 'eq'
-      | 'ne'
-      | 'lt'
-      | 'lte'
-      | 'gt'
-      | 'gte'
-      | 'in'
-      | 'notIn'
-      | 'exists'
-      | 'notExists'
-      | 'includes'
-      | 'notIncludes'
-      | 'matches'
-      | 'notMatches'
-    )[];
-    valueSuggestions: boolean;
-  }[];
-  observedFields: {
-    path: string;
-    valueKind: 'string';
-    operators: ('eq' | 'ne' | 'in' | 'notIn' | 'exists' | 'notExists')[];
-    valueSuggestions: true;
-    occurrences: number;
-  }[];
-  observedFieldsTruncated: boolean;
-  /** What `aggregateTraces()` accepts. Present only for `predicateScope: "trace"` when the store supports aggregation. Every observed field is also a groupable dimension, and `countDistinct.<field>` accepts any dimension or `traceId`. */
-  aggregate?:
-    | {
-        dimensions: {
-          path: string;
-          valueKind: 'string';
-        }[];
-        measures: {
-          name: string;
-          kind: 'count' | 'duration' | 'error' | 'tokens' | 'cost' | 'timeToFirstToken' | 'timeToFirstChunk';
-          statistic?: ('avg' | 'min' | 'max' | 'p50' | 'p90' | 'p95' | 'p99' | 'sum' | 'count') | undefined;
-          unit: 'count' | 'milliseconds' | 'ratio' | 'tokens' | 'currency';
-          approximate: boolean;
-        }[];
-      }
-    | undefined;
-};
-
-export type PostObservabilityTracesQueryFields_Request = Simplify<
-  (never extends never ? {} : { params: never }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostObservabilityTracesQueryFields_Body extends never
-      ? {}
-      : {} extends PostObservabilityTracesQueryFields_Body
-        ? { body?: PostObservabilityTracesQueryFields_Body }
-        : { body: PostObservabilityTracesQueryFields_Body })
->;
-
-export interface PostObservabilityTracesQueryFields_RouteContract {
-  pathParams: never;
-  queryParams: never;
-  body: PostObservabilityTracesQueryFields_Body;
-  request: PostObservabilityTracesQueryFields_Request;
-  response: PostObservabilityTracesQueryFields_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: POST /observability/traces/query/values
-// ============================================================================
-export type PostObservabilityTracesQueryValues_Body = {
-  timeRange: {
-    from: string;
-    to: string;
-  };
-  predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
-  path: string;
-  search?: string | undefined;
-  limit?: number;
-};
-
-export type PostObservabilityTracesQueryValues_Response = {
-  values: {
-    value: string;
-    count: number;
-  }[];
-  valuesTruncated: boolean;
-};
-
-export type PostObservabilityTracesQueryValues_Request = Simplify<
-  (never extends never ? {} : { params: never }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostObservabilityTracesQueryValues_Body extends never
-      ? {}
-      : {} extends PostObservabilityTracesQueryValues_Body
-        ? { body?: PostObservabilityTracesQueryValues_Body }
-        : { body: PostObservabilityTracesQueryValues_Body })
->;
-
-export interface PostObservabilityTracesQueryValues_RouteContract {
-  pathParams: never;
-  queryParams: never;
-  body: PostObservabilityTracesQueryValues_Body;
-  request: PostObservabilityTracesQueryValues_Request;
-  response: PostObservabilityTracesQueryValues_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: GET /observability/metrics
+// =====================================================================// Route: GET /observability/metrics
 // ============================================================================
 export type GetObservabilityMetrics_QueryParams = {
   timestamp?: ((InputShared_Type_13 | undefined) | undefined) | string;
@@ -13807,108 +13741,56 @@ export interface GetKnowledgeKnowledgeKeyEvents_RouteContract {
 // ============================================================================
 export type GetWellKnownAgentIdAgentCardJson_PathParams = GetAgentsAgentId_PathParams;
 
-export type GetWellKnownAgentIdAgentCardJson_Response =
-  | {
-      additionalInterfaces?: unknown[] | undefined;
-      name: string;
-      description: string;
-      url: string;
-      protocolVersion: string;
-      provider?:
-        | {
-            organization: string;
-            url: string;
-          }
-        | undefined;
-      security?:
-        | {
-            [key: string]: string[];
-          }[]
-        | undefined;
-      securitySchemes?:
-        | {
-            [key: string]: unknown;
-          }
-        | undefined;
-      version: string;
-      capabilities: {
-        extensions?: unknown[] | undefined;
-        streaming?: boolean | undefined;
-        pushNotifications?: boolean | undefined;
-        stateTransitionHistory?: boolean | undefined;
-      };
-      defaultInputModes: string[];
-      defaultOutputModes: string[];
-      supportsAuthenticatedExtendedCard?: boolean | undefined;
-      signatures?:
-        | {
-            protected: string;
-            signature: string;
-            header?:
-              | {
-                  [key: string]: unknown;
-                }
-              | undefined;
-          }[]
-        | undefined;
-      skills: {
-        id: string;
-        name: string;
-        description: string;
-        tags?: string[] | undefined;
-      }[];
-    }
-  | {
-      name: string;
-      description?: string | undefined;
-      provider?:
-        | {
-            organization: string;
-            url: string;
-          }
-        | undefined;
-      securitySchemes?:
-        | {
-            [key: string]: unknown;
-          }
-        | undefined;
-      version: string;
-      capabilities: {
-        streaming?: boolean | undefined;
-        pushNotifications?: boolean | undefined;
-        extendedAgentCard?: boolean | undefined;
-        extensions?: unknown[] | undefined;
-      };
-      defaultInputModes?: string[] | undefined;
-      defaultOutputModes?: string[] | undefined;
-      signatures?:
-        | {
-            protected: string;
-            signature: string;
-            header?:
-              | {
-                  [key: string]: unknown;
-                }
-              | undefined;
-          }[]
-        | undefined;
-      skills?:
-        | {
-            id: string;
-            name: string;
-            description?: string | undefined;
-            tags?: string[] | undefined;
-            examples?: string[] | undefined;
-            inputModes?: string[] | undefined;
-            outputModes?: string[] | undefined;
-          }[]
-        | undefined;
-      supportedInterfaces: {
+export type GetWellKnownAgentIdAgentCardJson_Response = {
+  additionalInterfaces?: unknown[] | undefined;
+  name: string;
+  description: string;
+  url: string;
+  protocolVersion: string;
+  provider?:
+    | {
+        organization: string;
         url: string;
-        protocolBinding: 'JSONRPC';
-        protocolVersion: '0.3' | '1.0';
-      }[];
-    };
+      }
+    | undefined;
+  security?:
+    | {
+        [key: string]: string[];
+      }[]
+    | undefined;
+  securitySchemes?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  version: string;
+  capabilities: {
+    extensions?: unknown[] | undefined;
+    streaming?: boolean | undefined;
+    pushNotifications?: boolean | undefined;
+    stateTransitionHistory?: boolean | undefined;
+  };
+  defaultInputModes: string[];
+  defaultOutputModes: string[];
+  supportsAuthenticatedExtendedCard?: boolean | undefined;
+  signatures?:
+    | {
+        protected: string;
+        signature: string;
+        header?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      }[]
+    | undefined;
+  skills: {
+    id: string;
+    name: string;
+    description: string;
+    tags?: string[] | undefined;
+  }[];
+};
 
 export type GetWellKnownAgentIdAgentCardJson_Request = Simplify<
   (GetWellKnownAgentIdAgentCardJson_PathParams extends never
@@ -13924,7 +13806,7 @@ export interface GetWellKnownAgentIdAgentCardJson_RouteContract {
   body: never;
   request: GetWellKnownAgentIdAgentCardJson_Request;
   response: GetWellKnownAgentIdAgentCardJson_Response;
-  responseType: 'datastream-response';
+  responseType: 'json';
 }
 
 // ============================================================================
@@ -13948,7 +13830,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/get' | 'GetTask';
+      method: 'tasks/get';
       params: {
         /** Task id */
         id: string;
@@ -13964,7 +13846,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/list' | 'ListTasks';
+      method: 'tasks/list';
       params: {
         tenant?: string | undefined;
         contextId?: string | undefined;
@@ -13979,7 +13861,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/cancel' | 'CancelTask';
+      method: 'tasks/cancel';
       params: {
         /** Task id */
         id: string;
@@ -13993,7 +13875,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'tasks/resubscribe' | 'SubscribeToTask';
+      method: 'tasks/resubscribe';
       params: {
         /** Task id */
         id: string;
@@ -14050,16 +13932,6 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'GetTaskPushNotificationConfig';
-      params: {
-        tenant?: string | undefined;
-        taskId: string;
-        id: string;
-      };
-    }
-  | {
-      jsonrpc: '2.0';
-      id: string | number;
       method: 'tasks/pushNotificationConfig/list';
       params: {
         /** Task id */
@@ -14069,17 +13941,6 @@ export type PostA2aAgentId_Body =
               [key: string]: unknown;
             }
           | undefined;
-      };
-    }
-  | {
-      jsonrpc: '2.0';
-      id: string | number;
-      method: 'ListTaskPushNotificationConfigs';
-      params: {
-        tenant?: string | undefined;
-        taskId: string;
-        pageSize?: number | undefined;
-        pageToken?: string | undefined;
       };
     }
   | {
@@ -14101,17 +13962,7 @@ export type PostA2aAgentId_Body =
   | {
       jsonrpc: '2.0';
       id: string | number;
-      method: 'DeleteTaskPushNotificationConfig';
-      params: {
-        tenant?: string | undefined;
-        taskId: string;
-        id: string;
-      };
-    }
-  | {
-      jsonrpc: '2.0';
-      id: string | number;
-      method: 'agent/getAuthenticatedExtendedCard' | 'GetExtendedAgentCard';
+      method: 'agent/getAuthenticatedExtendedCard';
     };
 
 export type PostA2aAgentId_Response = PostAgentsAgentIdGenerate_Response;
@@ -21966,12 +21817,6 @@ export type PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Response 
     score: number | null;
     reason: string | null;
     error: string | null;
-    notScorable?:
-      | {
-          step: string;
-          reason?: string | undefined;
-        }
-      | undefined;
     failedStep?: string | undefined;
     completedSteps?: string[] | undefined;
     targetScope?: ('span' | 'trajectory') | undefined;
@@ -25711,6 +25556,10 @@ export interface RouteTypes {
   'PATCH /memory/threads/:threadId': PatchMemoryThreadsThreadId_RouteContract;
   'DELETE /memory/threads/:threadId': DeleteMemoryThreadsThreadId_RouteContract;
   'POST /memory/threads/:threadId/clone': PostMemoryThreadsThreadIdClone_RouteContract;
+  'POST /memory/threads/:threadId/branch': PostMemoryThreadsThreadIdBranch_RouteContract;
+  'GET /memory/threads/:threadId/parent': GetMemoryThreadsThreadIdParent_RouteContract;
+  'GET /memory/threads/:threadId/branches': GetMemoryThreadsThreadIdBranches_RouteContract;
+  'GET /memory/threads/:threadId/branch-history': GetMemoryThreadsThreadIdBranchHistory_RouteContract;
   'POST /memory/threads/:threadId/transfer': PostMemoryThreadsThreadIdTransfer_RouteContract;
   'POST /memory/threads/:threadId/working-memory': PostMemoryThreadsThreadIdWorkingMemory_RouteContract;
   'POST /memory/messages/delete': PostMemoryMessagesDelete_RouteContract;
@@ -26680,11 +26529,23 @@ export interface Client {
     GET: GetMemoryThreadsThreadId_RouteContract;
     PATCH: PatchMemoryThreadsThreadId_RouteContract;
   };
+  '/memory/threads/:threadId/branch': {
+    POST: PostMemoryThreadsThreadIdBranch_RouteContract;
+  };
+  '/memory/threads/:threadId/branch-history': {
+    GET: GetMemoryThreadsThreadIdBranchHistory_RouteContract;
+  };
+  '/memory/threads/:threadId/branches': {
+    GET: GetMemoryThreadsThreadIdBranches_RouteContract;
+  };
   '/memory/threads/:threadId/clone': {
     POST: PostMemoryThreadsThreadIdClone_RouteContract;
   };
   '/memory/threads/:threadId/messages': {
     GET: GetMemoryThreadsThreadIdMessages_RouteContract;
+  };
+  '/memory/threads/:threadId/parent': {
+    GET: GetMemoryThreadsThreadIdParent_RouteContract;
   };
   '/memory/threads/:threadId/transfer': {
     POST: PostMemoryThreadsThreadIdTransfer_RouteContract;
@@ -26829,12 +26690,6 @@ export interface Client {
   };
   '/observability/traces/query': {
     POST: PostObservabilityTracesQuery_RouteContract;
-  };
-  '/observability/traces/query/fields': {
-    POST: PostObservabilityTracesQueryFields_RouteContract;
-  };
-  '/observability/traces/query/values': {
-    POST: PostObservabilityTracesQueryValues_RouteContract;
   };
   '/observability/traces/score': {
     POST: PostObservabilityTracesScore_RouteContract;
