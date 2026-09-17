@@ -27,6 +27,23 @@ afterEach(cleanup);
 
 const slot = (name: string) => document.querySelector(`[data-slot="${name}"]`);
 
+describe('Span metadata JSON sections', () => {
+  it.each([SpanDataPanelView, SpanDetailsView])('uses the standard JSON renderer without a preview toggle', View => {
+    const span = { ...emptySpan, metadata: { origin: 'metadata-value' }, attributes: { custom: 'attribute-value' } };
+    render(<View span={span} spanId={span.spanId} traceId={span.traceId} onClose={() => {}} />);
+
+    for (const title of ['Metadata', 'Attributes']) {
+      const section = screen.getByText(title).closest('[data-slot="span-payload-section"]');
+      expect(section?.querySelector('[data-slot="span-payload-json"]')).not.toBeNull();
+      expect(section?.querySelector('[data-slot="span-payload-view-toggle"]')).toBeNull();
+      expect(section?.querySelector('button')).not.toBeNull();
+    }
+    expect(document.querySelector('.cm-editor')).toBeNull();
+    expect(document.body.textContent).toContain('metadata-value');
+    expect(document.body.textContent).toContain('attribute-value');
+  });
+});
+
 describe('SpanInputRenderer', () => {
   it('renders AGENT_RUN messages as a message list with tool parts', () => {
     render(<SpanInputRenderer span={agentRunMessagesSpan} />);

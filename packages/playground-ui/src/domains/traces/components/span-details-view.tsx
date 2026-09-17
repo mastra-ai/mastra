@@ -74,16 +74,24 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
           >
             <SpanOutputRenderer span={span} />
           </SpanPayloadSection>
-          <DataDetailsPanel.CodeSection
+          <SpanPayloadSection
             title="Metadata"
             icon={<BracesIcon />}
-            codeStr={JSON.stringify(span.metadata ?? null, null, 2)}
-          />
-          <DataDetailsPanel.CodeSection
+            raw={span.metadata}
+            hasPreview={false}
+            layout="details"
+          >
+            {null}
+          </SpanPayloadSection>
+          <SpanPayloadSection
             title="Attributes"
             icon={<BracesIcon />}
-            codeStr={JSON.stringify(span.attributes ?? null, null, 2)}
-          />
+            raw={span.attributes}
+            hasPreview={false}
+            layout="details"
+          >
+            {null}
+          </SpanPayloadSection>
         </DataDetailsPanel.Content>
       )}
     </DataDetailsPanel>

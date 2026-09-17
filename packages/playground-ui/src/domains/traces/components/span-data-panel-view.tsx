@@ -17,23 +17,6 @@ import { cn } from '@/lib/utils';
 
 const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto p-3';
 
-function buildDialogTitle(sectionTitle: string, icon: ReactNode, span: { spanId: string; traceId: string }) {
-  return (
-    <>
-      <span className="text-neutral2 flex items-center gap-1.5 tracking-widest uppercase [&>svg]:size-3.5">
-        {icon}
-        {sectionTitle}
-      </span>
-      <span>
-        › Span <b className="text-neutral3">{span.spanId}</b>
-      </span>
-      <span>
-        › Trace <b className="text-neutral3">{span.traceId}</b>
-      </span>
-    </>
-  );
-}
-
 export interface SpanDataPanelViewProps {
   traceId: string;
   spanId: string;
@@ -224,7 +207,7 @@ function SpanDataPanelContent({
         )}
       </DataKeysAndValues>
 
-      <div className="mt-3 grid gap-3">
+      <div className="mt-4 grid gap-4">
         <SpanPayloadSection
           title="Input"
           icon={<FileInputIcon />}
@@ -241,18 +224,12 @@ function SpanDataPanelContent({
         >
           <SpanOutputRenderer span={span} />
         </SpanPayloadSection>
-        <DataPanel.CodeSection
-          title="Metadata"
-          dialogTitle={buildDialogTitle('Metadata', <BracesIcon />, { spanId, traceId })}
-          icon={<BracesIcon />}
-          codeStr={JSON.stringify(span.metadata ?? null, null, 2)}
-        />
-        <DataPanel.CodeSection
-          title="Attributes"
-          dialogTitle={buildDialogTitle('Attributes', <BracesIcon />, { spanId, traceId })}
-          icon={<BracesIcon />}
-          codeStr={JSON.stringify(span.attributes ?? null, null, 2)}
-        />
+        <SpanPayloadSection title="Metadata" icon={<BracesIcon />} raw={span.metadata} hasPreview={false}>
+          {null}
+        </SpanPayloadSection>
+        <SpanPayloadSection title="Attributes" icon={<BracesIcon />} raw={span.attributes} hasPreview={false}>
+          {null}
+        </SpanPayloadSection>
       </div>
     </>
   );
