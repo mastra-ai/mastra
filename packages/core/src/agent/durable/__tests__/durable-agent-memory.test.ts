@@ -881,8 +881,10 @@ describe('DurableAgent memory edge cases', () => {
       for await (const _chunk of result.fullStream as AsyncIterable<any>) {
       }
 
-      const thread = await mockMemory.getThreadById({ threadId: 'thread-title' });
-      expect(thread?.title).toBe('Generated Thread Title');
+      await vi.waitFor(async () => {
+        const thread = await mockMemory.getThreadById({ threadId: 'thread-title' });
+        expect(thread?.title).toBe('Generated Thread Title');
+      });
       result.cleanup();
     });
 

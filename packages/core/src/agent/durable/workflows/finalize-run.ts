@@ -215,9 +215,10 @@ export async function runDurableFinishSideEffects({
       tracingContext,
     };
 
-    try {
-      if (registryEntry?.generateThreadTitle) {
-        await registryEntry.generateThreadTitle(titleArgs);
+    const generateThreadTitle = registryEntry?.generateThreadTitle;
+    const titlePromise = (async () => {
+      if (generateThreadTitle) {
+        await generateThreadTitle(titleArgs);
       } else if (mastra) {
         const agent = mastra.getAgentById(initData.agentId);
         const titleMemory = memory ?? (await agent.getMemory({ requestContext: effectiveRequestContext }));
@@ -225,9 +226,10 @@ export async function runDurableFinishSideEffects({
           await generateDurableThreadTitle({ agent, memory: titleMemory, ...titleArgs });
         }
       }
-    } catch (error) {
+    })().catch(error => {
       effectiveLogger.warn('[DurableAgent] Error generating thread title', { runId, error });
-    }
+    });
+    void titlePromise;
   }
 
   return {
