@@ -291,6 +291,70 @@ describe('Mock OM Agent Integration', () => {
     expect(lastStep?.text).toContain('I understand your request');
   });
 
+  it('preserves current step content and tool results after OM relocates earlier responses', async () => {
+    let callCount = 0;
+    const multiToolModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'tool-calls' as const,
+          usage: { inputTokens: 50, outputTokens: 20, totalTokens: 70 },
+          text: '',
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: `send-${callCount}`,
+              toolName: 'sendMessage',
+              input: JSON.stringify({ message: `message-${callCount}` }),
+            },
+            {
+              type: 'tool-call' as const,
+              toolCallId: `end-${callCount}`,
+              toolName: 'endTurn',
+              input: JSON.stringify({}),
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+    const sendMessage = createTool({
+      id: 'sendMessage',
+      description: 'Send a message',
+      inputSchema: z.object({ message: z.string() }),
+      execute: async ({ message }) => ({ message }),
+    });
+    const endTurn = createTool({
+      id: 'endTurn',
+      description: 'End the current turn',
+      inputSchema: z.object({}),
+      execute: async () => ({ status: 'stopped' }),
+    });
+    const multiToolAgent = new Agent({
+      id: 'test-om-multi-tool-agent',
+      name: 'Multi-tool OM Agent',
+      instructions: 'Call both tools in order.',
+      model: multiToolModel as any,
+      tools: { sendMessage, endTurn },
+      memory,
+    });
+
+    const stopWhen = vi.fn(({ steps }) => steps.length === 2);
+    const result = await multiToolAgent.generate('Run two tool steps.', {
+      memory: { thread: 'test-thread-step-results', resource: 'test-resource' },
+      stopWhen,
+    });
+
+    expect(result.steps).toHaveLength(2);
+    expect(stopWhen).toHaveBeenCalledTimes(2);
+    for (const step of result.steps) {
+      expect(step.content).toHaveLength(2);
+      expect(step.toolCalls).toHaveLength(2);
+      expect(step.toolResults).toHaveLength(2);
+    }
+  });
+
   it('should trigger OM observation after multi-step execution', async () => {
     const result = await agent.generate('Hello, I need help with something important.', {
       memory: {
