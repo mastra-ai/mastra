@@ -166,6 +166,36 @@ function LinearIntakeSection({
   );
 }
 
+function GitLabConnectionsSection() {
+  const connectionsQuery = usePlatformConnectionsQuery('gitlab');
+  if (connectionsQuery.isPending || connectionsQuery.isError) return null;
+
+  const connections = connectionsQuery.data ?? [];
+  const reconnectTarget = connections.find(connection => connection.status === 'needs_reauth');
+  const action = reconnectTarget ? (
+    <ProviderConnectControl provider="gitlab" reconnectConnectionId={reconnectTarget.id} label="Reconnect GitLab" />
+  ) : (
+    <ProviderConnectControl
+      provider="gitlab"
+      label={connections.length > 0 ? 'Connect another account' : 'Connect GitLab'}
+      variant={connections.length > 0 ? 'ghost' : 'default'}
+    />
+  );
+
+  return (
+    <SettingsSubsection
+      scope="org"
+      title="GitLab"
+      description="Connect GitLab accounts directly from Factory. OAuth opens GitLab's consent screen without leaving settings."
+      action={action}
+    >
+      <SettingsContainer>
+        <ProviderConnectionsList provider="gitlab" connections={connections} />
+      </SettingsContainer>
+    </SettingsSubsection>
+  );
+}
+
 function JiraIntakeSection({
   config,
   busy,
@@ -449,6 +479,7 @@ export function IntakeSection() {
           </SettingsContainer>
         </SettingsSubsection>
       )}
+      <GitLabConnectionsSection />
       <PlatformProviderIntakeSection
         provider="incident-io"
         description="Incidents and follow-ups from connected incident.io accounts feed every member's board."
