@@ -2631,6 +2631,13 @@ export class AgentThreadStreamRuntime {
           return;
         }
         await activeRecord.output._waitUntilFinished().catch(() => {});
+        // Some synthetic runs resolve their completion promise before timer-based cleanup
+        // removes the active record. Yield to the timers queue before re-checking, otherwise
+        // an already-resolved promise can create an unbounded microtask loop that prevents
+        // its own cleanup from ever running.
+        if (state.activeThreadRunIds.get(key) === activeRunId) {
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
         continue;
       }
 
