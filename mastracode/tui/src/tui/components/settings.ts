@@ -509,7 +509,7 @@ export class SettingsComponent extends Box implements Focusable {
       },
       {
         id: 'backgroundToolsEnabled',
-        label: 'Background tools',
+        label: 'Experimental background tools',
         description: 'Allow eligible tools to run in the background (restart required).',
         currentValue: config.backgroundToolsEnabled ? 'On' : 'Off',
         submenu: (_currentValue, done) =>

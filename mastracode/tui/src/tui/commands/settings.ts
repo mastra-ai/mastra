@@ -291,7 +291,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         const current = loadSettings();
         current.backgroundTools = { ...current.backgroundTools, enabled };
         saveSettings(current);
-        ctx.showInfo(`Background tools: ${enabled ? 'on' : 'off'} (restart required)`);
+        ctx.showInfo(`Experimental background tools: ${enabled ? 'on' : 'off'} (restart required)`);
       },
       onWebSearchProviderChange: provider => {
         const current = loadSettings();

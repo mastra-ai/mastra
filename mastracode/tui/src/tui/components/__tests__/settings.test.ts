@@ -211,6 +211,7 @@ describe('SettingsComponent background tools submenu', () => {
     const item = mocks.lastSettingsList.items.find(
       (setting: { id: string }) => setting.id === 'backgroundToolsEnabled',
     );
+    expect(item.label).toBe('Experimental background tools');
     expect(item.currentValue).toBe(enabled ? 'On' : 'Off');
     expect(item.description).toContain('restart required');
     const done = vi.fn();

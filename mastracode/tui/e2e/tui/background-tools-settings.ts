@@ -33,31 +33,31 @@ export const backgroundToolsSettingsScenario: McE2eScenario = {
     if (before.backgroundTools?.enabled === true) throw new Error('Background tools must default off');
 
     terminal.submit('/settings');
-    await runtime.waitForScreenText(/Background tools\s+Off/i, terminal);
+    await runtime.waitForScreenText(/Experimental background tools\s+Off/i, terminal);
     terminal.write('\x1b[B'.repeat(8));
     terminal.write('\r');
     await runtime.waitForScreenText(/Enable background tools and the activity center/i, terminal);
     terminal.write('\x1b[A');
     terminal.write('\r');
-    await runtime.waitForScreenText(/Background tools\s+On/i, terminal);
+    await runtime.waitForScreenText(/Experimental background tools\s+On/i, terminal);
     if (readSettings().backgroundTools?.enabled !== true) throw new Error('Background tools were not saved as enabled');
     terminal.write('\x1b');
-    await runtime.waitForScreenText(/Background tools: on \(restart required\)/i, terminal);
+    await runtime.waitForScreenText(/Experimental background tools: on \(restart required\)/i, terminal);
 
     terminal.submit('/settings');
-    await runtime.waitForScreenText(/Background tools\s+On/i, terminal);
+    await runtime.waitForScreenText(/Experimental background tools\s+On/i, terminal);
     terminal.write('\x1b[B'.repeat(8));
     terminal.write('\r');
     await runtime.waitForScreenText(/Enable background tools and the activity center/i, terminal);
     terminal.write('\x1b[B');
     terminal.write('\r');
-    await runtime.waitForScreenText(/Background tools\s+Off/i, terminal);
+    await runtime.waitForScreenText(/Experimental background tools\s+Off/i, terminal);
     const after = readSettings();
     if (after.backgroundTools?.enabled !== false) throw new Error('Background tools were not saved as disabled');
     if (JSON.stringify(after.signals) !== JSON.stringify(before.signals)) {
       throw new Error('Changing background tools modified signal settings');
     }
     terminal.write('\x1b');
-    await runtime.waitForScreenText(/Background tools: off \(restart required\)/i, terminal);
+    await runtime.waitForScreenText(/Experimental background tools: off \(restart required\)/i, terminal);
   },
 };
