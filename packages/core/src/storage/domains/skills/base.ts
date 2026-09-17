@@ -75,6 +75,7 @@ export abstract class SkillsStorage extends VersionedStorageDomain<
   StorageListSkillsResolvedOutput
 > {
   protected readonly listKey = 'skills';
+  protected readonly versionParentIdField = 'skillId';
   protected readonly versionMetadataFields = [
     'id',
     'skillId',

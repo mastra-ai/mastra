@@ -113,6 +113,8 @@ import type { RunScope } from './run-scope';
 import { createRunScope } from './run-scope';
 import type { VersionOverrides, VersionSelector } from './types';
 
+export type { VersionOverrides, VersionSelector } from './types';
+
 /**
  * Creates an error for when a null/undefined value is passed to an add* method.
  * This commonly occurs when config is spread ({ ...config }) and the original
@@ -2413,11 +2415,11 @@ export class Mastra<
   public getAgent<TAgentName extends keyof TAgents>(name: TAgentName): TAgents[TAgentName];
   public getAgent<TAgentName extends keyof TAgents>(
     name: TAgentName,
-    version: { versionId: string } | { status?: 'draft' | 'published' },
+    version: VersionSelector | { status?: 'draft' | 'published' },
   ): Promise<TAgents[TAgentName]>;
   public getAgent<TAgentName extends keyof TAgents>(
     name: TAgentName,
-    version?: { versionId: string } | { status?: 'draft' | 'published' },
+    version?: VersionSelector | { status?: 'draft' | 'published' },
   ): TAgents[TAgentName] | Promise<TAgents[TAgentName]> {
     const agent = this.#agents?.[name];
     if (!agent) {
@@ -2511,11 +2513,11 @@ export class Mastra<
   public getAgentById<TAgentName extends keyof TAgents>(id: TAgents[TAgentName]['id']): TAgents[TAgentName];
   public getAgentById<TAgentName extends keyof TAgents>(
     id: TAgents[TAgentName]['id'],
-    version: { versionId: string } | { status?: 'draft' | 'published' },
+    version: VersionSelector | { status?: 'draft' | 'published' },
   ): Promise<TAgents[TAgentName]>;
   public getAgentById<TAgentName extends keyof TAgents>(
     id: TAgents[TAgentName]['id'],
-    version?: { versionId: string } | { status?: 'draft' | 'published' },
+    version?: VersionSelector | { status?: 'draft' | 'published' },
   ): TAgents[TAgentName] | Promise<TAgents[TAgentName]> {
     let agent = Object.values(this.#agents).find(a => a.id === id);
 
@@ -2553,7 +2555,7 @@ export class Mastra<
   /**
    * Resolve a versioned variant of an agent by applying stored overrides from the editor.
    *
-   * Looking up a specific `versionId` requires the editor package to be
+   * Looking up a specific `versionId` or `label` requires the editor package to be
    * configured — throws `MASTRA_EDITOR_REQUIRED_FOR_VERSIONED_AGENT_LOOKUP` if
    * it is not. A `status` selector is a default rather than a request for a
    * specific stored version (the server stamps one on every agent request), so
@@ -2561,7 +2563,7 @@ export class Mastra<
    * is returned as-is.
    *
    * @param agent - The code-defined agent to resolve a version for.
-   * @param version - Selects a version by ID or publication status.
+   * @param version - Selects a version by ID, label, or publication status.
    * @returns The code-defined agent for a status selector without an editor, otherwise a forked
    *   agent instance with the stored overrides applied.
    */
@@ -2571,7 +2573,7 @@ export class Mastra<
   ): Promise<TAgent> {
     const editor = this.getEditor();
 
-    if (!editor && !('versionId' in version)) {
+    if (!editor && !('versionId' in version) && !('label' in version)) {
       return agent;
     }
 
@@ -2585,6 +2587,7 @@ export class Mastra<
           status: 400,
           agentId: agent.id,
           ...(version && 'versionId' in version ? { versionId: version.versionId } : {}),
+          ...(version && 'label' in version ? { versionLabel: version.label } : {}),
           ...(version && 'status' in version && version.status ? { versionStatus: version.status } : {}),
         },
       });
@@ -2594,7 +2597,7 @@ export class Mastra<
 
     const resolved = (await editor.agent.applyStoredOverrides(
       agent,
-      'versionId' in version ? version : { status: version.status ?? 'published' },
+      'versionId' in version ? version : 'label' in version ? version : { status: version.status ?? 'published' },
     )) as TAgent;
 
     // Mark forks so Agent#execute doesn't try to re-resolve the version and recurse

@@ -39,6 +39,7 @@ import type { MessageList } from '../../../message-list';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
 import { TripWire } from '../../../trip-wire';
+import type { AgentVersionPins } from '../../../version-pins';
 import { DurableStepIds } from '../../constants';
 import { globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
@@ -381,6 +382,7 @@ export function createDurableToolCallStep() {
           threadExists?: boolean;
         };
         requestContextEntries?: Record<string, unknown>;
+        agentVersionPins?: AgentVersionPins;
         agentSpanData?: unknown;
         modelSpanData?: unknown;
       }>();
@@ -512,6 +514,7 @@ export function createDurableToolCallStep() {
           state: state as any,
           options: agentOptions,
           requestContextEntries: initData.requestContextEntries,
+          agentVersionPins: initData.agentVersionPins,
           requestContext,
           logger,
         });

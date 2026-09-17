@@ -76,6 +76,7 @@ export abstract class ScorerDefinitionsStorage extends VersionedStorageDomain<
   StorageListScorerDefinitionsResolvedOutput
 > {
   protected readonly listKey = 'scorerDefinitions';
+  protected readonly versionParentIdField = 'scorerDefinitionId';
   protected readonly versionMetadataFields = [
     'id',
     'scorerDefinitionId',
