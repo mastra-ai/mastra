@@ -189,15 +189,14 @@ describe('buildLayout startup header', () => {
     subscribeToAgentController(state, handleEvent);
     const first = listener?.({ type: 'message_update' });
     const second = listener?.({ type: 'agent_end' });
-    const drained = state.waitForAgentControllerEvents?.();
     await Promise.resolve();
 
+    expect(state.waitForAgentControllerEvents).toBeUndefined();
     expect(order).toEqual(['start:message_update']);
 
     releaseFirst.resolve();
     await first;
     await second;
-    await drained;
 
     expect(order).toEqual(['start:message_update', 'end:message_update', 'start:agent_end', 'end:agent_end']);
   });
@@ -227,6 +226,7 @@ describe('buildLayout startup header', () => {
     const prompt = listener?.({ type: 'tool_suspended' });
     const threadChange = listener?.({ type: 'thread_changed' });
     const drained = state.waitForAgentControllerEvents?.();
+    expect(drained).toBeDefined();
     await drained;
 
     expect(order).toEqual(['start:tool_suspended', 'start:thread_changed', 'end:thread_changed']);
@@ -268,15 +268,14 @@ describe('buildLayout startup header', () => {
     subscribeToAgentController(state, handleEvent);
     const prompt = listener?.({ type: 'tool_suspended' });
     const threadChange = listener?.({ type: 'thread_changed' });
-    const drained = state.waitForAgentControllerEvents?.();
     await Promise.resolve();
 
+    expect(state.waitForAgentControllerEvents).toBeUndefined();
     expect(order).toEqual(['start:tool_suspended']);
 
     answerPrompt.resolve();
     await prompt;
     await threadChange;
-    await drained;
 
     expect(order).toEqual(['start:tool_suspended', 'end:tool_suspended', 'start:thread_changed', 'end:thread_changed']);
   });

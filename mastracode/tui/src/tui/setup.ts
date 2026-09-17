@@ -699,7 +699,7 @@ export function subscribeToAgentController(state: TUIState, handleEvent: (event:
     });
     return eventQueue;
   };
-  state.waitForAgentControllerEvents = () => eventQueue;
+  state.waitForAgentControllerEvents = state.options.backgroundToolsEnabled ? () => eventQueue : undefined;
   state.unsubscribe = state.session.subscribe(listener);
 }
 

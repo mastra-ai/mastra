@@ -65,6 +65,7 @@ function createContext(threads: AgentControllerThread[]) {
     assistantRenderRegistry,
     assistantSegment,
     pendingNewThread: false,
+    options: { backgroundToolsEnabled: false },
     projectInfo: { rootPath: '/repo', gitBranch: 'main' },
     threadPreviewCache: new Map<string, { preview: string; updatedAt: number }>(),
     attemptedThreadPreviewIds: new Set<string>(),
@@ -193,10 +194,11 @@ describe('handleThreadsCommand thread listing', () => {
     await commandPromise;
   });
 
-  it('waits for thread-change rendering and disposes assistant render ownership when switching threads', async () => {
+  it('waits for thread-change rendering when background tools are enabled', async () => {
     const threads = [createThread('thread-1', '2026-03-17T15:10:00.000Z')];
     const { ctx, state, showOverlay } = createContext(threads);
     const rendered = vi.fn();
+    state.options.backgroundToolsEnabled = true;
     state.waitForAgentControllerEvents = vi.fn(async () => rendered());
 
     const commandPromise = handleThreadsCommand(ctx);
@@ -212,6 +214,23 @@ describe('handleThreadsCommand thread listing', () => {
     expect(state.assistantRenderRegistry.size).toBe(0);
     expect(state.assistantSegment.component.disposeRenderState).toHaveBeenCalledOnce();
     expect(state.chatContainer.clear).toHaveBeenCalledOnce();
+    expect(ctx.renderExistingMessages).toHaveBeenCalledOnce();
+  });
+
+  it('does not wait for PR-added event draining when background tools are disabled', async () => {
+    const threads = [createThread('thread-1', '2026-03-17T15:10:00.000Z')];
+    const { ctx, state, showOverlay } = createContext(threads);
+    state.waitForAgentControllerEvents = vi.fn(async () => {});
+
+    const commandPromise = handleThreadsCommand(ctx);
+    await Promise.resolve();
+    expect(showOverlay).toHaveBeenCalledTimes(1);
+
+    await selectorInstances[0].options.onSelect(threads[0]);
+    await commandPromise;
+
+    expect(state.session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-1' });
+    expect(state.waitForAgentControllerEvents).not.toHaveBeenCalled();
     expect(ctx.renderExistingMessages).toHaveBeenCalledOnce();
   });
 
