@@ -16,7 +16,7 @@ import type {
   OutputProcessorOrWorkflow,
 } from '../processors';
 import { isProcessorWorkflow, TokenLimiterProcessor } from '../processors';
-import { MessageHistory, WorkingMemory, SemanticRecall } from '../processors/memory';
+import { MemoryInputFilter, MessageHistory, WorkingMemory, SemanticRecall } from '../processors/memory';
 import type { RequestContext } from '../request-context';
 import type {
   MastraCompositeStore,
@@ -758,6 +758,10 @@ https://mastra.ai/en/docs/memory/overview`,
   ): Promise<InputProcessor[]> {
     const memoryStore = await this.storage.getStore('memory');
     const processors: InputProcessor[] = [];
+
+    if (memoryStore) {
+      processors.push(new MemoryInputFilter({ storage: memoryStore }));
+    }
 
     // Extract runtime memoryConfig from context if available
     const memoryContext = context?.get('MastraMemory') as MemoryRequestContext | undefined;

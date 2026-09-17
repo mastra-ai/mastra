@@ -1,6 +1,5 @@
 import type { OutputResult, Processor, ProcessorSpanPhase } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
-import { reconcileEchoedAssistantMessage } from '../../agent/message-list/utils/reconcile-echoed-assistant-message';
 import { isTransientSignalMessage } from '../../agent/signals';
 import { loadMessageHistory, parseMemoryRequestContext } from '../../memory';
 import { getMemoryTokenBoundary, isAfterMemoryTokenBoundary } from '../../memory/message-history-config';
@@ -175,49 +174,11 @@ export class MessageHistory implements Processor {
         return msg.role !== 'system' && (!boundary || isAfterMemoryTokenBoundary(msg, boundary));
       });
 
-      // 3. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)
-      // This includes messages added by previous processors like SemanticRecall
-      const existingMessages = messageList.get.all.db();
-      const messageIds = new Set(existingMessages.map((m: MastraDBMessage) => m.id).filter(Boolean));
-      const uniqueHistoricalMessages = filteredMessages.filter((m: MastraDBMessage) => !m.id || !messageIds.has(m.id));
+      // 3. Add stored history in chronological order. MessageList layers any matching
+      // input copy onto the stored message so memory remains the authoritative base.
+      const chronologicalMessages = filteredMessages.reverse();
 
-      // 3b. A client (e.g. useChat) may resend an assistant message we already persisted.
-      // That echo is lossy (no reasoning parts, often no provider metadata). If it wins,
-      // the reasoning is missing from the prompt and the lossy copy gets re-persisted over
-      // the stored one. Reconcile so the stored copy is authoritative for what the echo lost.
-      const echoedAssistantById = new Map<string, MastraDBMessage>();
-      for (const msg of messageList.get.input.db()) {
-        if (msg.role === 'assistant' && msg.id) echoedAssistantById.set(msg.id, msg);
-      }
-      const reconciledMessages: MastraDBMessage[] = [];
-      for (const stored of filteredMessages) {
-        const echoed = stored.id ? echoedAssistantById.get(stored.id) : undefined;
-        if (!echoed) continue;
-        const reconciled = reconcileEchoedAssistantMessage(stored, echoed);
-        if (reconciled) reconciledMessages.push(reconciled);
-      }
-
-      // Reverse to chronological order (oldest first) since we fetched DESC
-      const chronologicalMessages = uniqueHistoricalMessages.reverse();
-
-      if (chronologicalMessages.length === 0 && reconciledMessages.length === 0) {
-        span?.update({ attributes: { messageCount: 0 } });
-        return messageList;
-      }
-
-      // Add historical messages with source: 'memory'
       for (const msg of chronologicalMessages) {
-        if (msg.role === 'system') {
-          continue; // memory should not store system messages
-        } else {
-          messageList.add(msg, 'memory');
-        }
-      }
-
-      // Replace lossy client echoes with the reconciled stored copy. Adding by the same id
-      // with source 'memory' replaces the input message in place and drops it from the
-      // input set, so it is not re-persisted.
-      for (const msg of reconciledMessages) {
         messageList.add(msg, 'memory');
       }
 
