@@ -1,9 +1,10 @@
 import type { ObjectWrapperProps } from '@autoform/react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Braces, ChevronRight } from 'lucide-react';
+import { ROOT_FIELD_KEY } from '../field-context';
 
 export function ObjectWrapper({ label, children }: ObjectWrapperProps) {
-  if (label === '\u200B' || label === '') return <div className="flex flex-col gap-2">{children}</div>;
+  if (label === ROOT_FIELD_KEY || label === '') return <div className="flex flex-col gap-2">{children}</div>;
 
   return (
     <Collapsible className="motion-reduce:[&_[data-slot=collapsible-content]]:transition-none motion-reduce:[&_svg]:transition-none">

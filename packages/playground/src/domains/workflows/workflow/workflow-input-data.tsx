@@ -8,7 +8,8 @@ import type { ReactNode } from 'react';
 import { useRef, useState } from 'react';
 import type { ZodSchema } from 'zod';
 
-import { createProcessorInput, processorDraftSchema } from './input/processor-input';
+import { createProcessorInput, parseProcessorDraft } from './input/processor-input';
+import type { ProcessorDraft } from './input/processor-input';
 import { WorkflowJsonInput } from './input/workflow-json-input';
 import { WorkflowProcessorInput } from './input/workflow-processor-input';
 import { WorkflowInputTypeToggle } from './workflow-input-type-toggle';
@@ -20,7 +21,7 @@ import { inferFieldType } from '@/lib/form/zod-provider/field-type-inference';
 
 export interface WorkflowInputDataProps {
   schema: ZodSchema;
-  defaultValues?: any;
+  defaultValues?: unknown;
   isSubmitLoading: boolean;
   submitButtonLabel: string;
   onSubmit: (data: any) => void;
@@ -44,6 +45,43 @@ export interface WorkflowInputDataProps {
   hideHeading?: boolean;
 }
 
+type InputDraft =
+  | { type: 'json'; value: string }
+  | { type: 'form'; value: unknown }
+  | { type: 'simple'; value: ProcessorDraft };
+
+type DraftValue = { ok: true; value: unknown } | { ok: false; error: string };
+
+const defaultSubmitIcon = (
+  <Icon>
+    <Play />
+  </Icon>
+);
+
+function createInitialDraft(defaultValues: unknown, isProcessorWorkflow: boolean | undefined): InputDraft {
+  if (!isProcessorWorkflow) return { type: 'form', value: defaultValues };
+  const input = defaultValues ?? createProcessorInput();
+  const draft = parseProcessorDraft(input);
+  return draft ? { type: 'simple', value: draft } : { type: 'json', value: JSON.stringify(input, null, 2) };
+}
+
+function parseJsonDraft(text: string): DraftValue {
+  try {
+    return { ok: true, value: JSON.parse(text) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? `Invalid JSON: ${error.message}` : 'Invalid JSON' };
+  }
+}
+
+function getFormShapeError(schema: ZodSchema, value: unknown) {
+  const fieldType = inferFieldType(getBaseSchema(schema));
+  if (fieldType === 'object' && !isPlainObject(value))
+    return 'Form input requires a JSON object. Correct the JSON first.';
+  if (fieldType === 'array' && !Array.isArray(value))
+    return 'Form input requires a JSON array. Correct the JSON first.';
+  return undefined;
+}
+
 export const WorkflowInputData = ({
   schema,
   defaultValues,
@@ -62,37 +100,26 @@ export const WorkflowInputData = ({
   submitButtonClassName,
   headingSlot,
   collapsible = true,
-  submitButtonIcon,
-  submitButtonVariant,
+  submitButtonIcon = defaultSubmitIcon,
+  submitButtonVariant = 'primary',
   submitButtonFullWidth,
   hideInputTypeLabel,
   inputTypeLabel = 'Run input',
   hideHeading,
 }: WorkflowInputDataProps) => {
-  const [draft, setDraft] = useState<
-    { type: 'json'; value: string } | { type: 'form'; value: unknown } | { type: 'simple'; value: unknown }
-  >(() =>
-    isProcessorWorkflow
-      ? { type: 'simple', value: defaultValues ?? createProcessorInput() }
-      : { type: 'form', value: defaultValues },
-  );
+  const [draft, setDraft] = useState(() => createInitialDraft(defaultValues, isProcessorWorkflow));
   // The Form view is uncontrolled: state here would only re-render this tree on every keystroke.
   const formValues = useRef<unknown>(defaultValues);
   const [errors, setErrors] = useState<string[]>([]);
 
-  function parseJsonDraft(text: string) {
-    try {
-      const value: unknown = JSON.parse(text);
-      return { success: true, value } as const;
-    } catch (error) {
-      setErrors([error instanceof Error ? `Invalid JSON: ${error.message}` : 'Invalid JSON']);
-      return { success: false } as const;
-    }
+  function readDraftValue(): DraftValue {
+    if (draft.type === 'json') return parseJsonDraft(draft.value);
+    return { ok: true, value: draft.type === 'form' ? formValues.current : draft.value };
   }
 
   function submitJsonDraft(text: string) {
     const json = parseJsonDraft(text);
-    if (!json.success) return;
+    if (!json.ok) return setErrors([json.error]);
     const result = schema.safeParse(json.value);
     if (result.success) onSubmit(result.data);
     else setErrors(result.error.issues.map(issue => `${issue.path.join('.') || 'Input'}: ${issue.message}`));
@@ -101,42 +128,21 @@ export const WorkflowInputData = ({
   function changeInputType(type: WorkflowInputType) {
     if (type === draft.type) return;
     setErrors([]);
-    const value = draft.type === 'form' ? formValues.current : draft.value;
+    const current = readDraftValue();
+    if (!current.ok) return setErrors([current.error]);
     if (type === 'json') {
-      setDraft({ type, value: JSON.stringify(value === undefined ? {} : value, null, 2) });
-      return;
+      return setDraft({ type, value: JSON.stringify(current.value === undefined ? {} : current.value, null, 2) });
     }
-    if (draft.type === 'json') {
-      const json = parseJsonDraft(draft.value);
-      if (!json.success) return;
-      if (type === 'simple' && !processorDraftSchema.safeParse(json.value).success) {
-        setErrors([
-          'Simple input requires a messages array with text parts and a string phase. Correct the JSON first.',
-        ]);
-        return;
-      }
-      if (type === 'form') {
-        const fieldType = inferFieldType(getBaseSchema(schema));
-        if (fieldType === 'object' && !isPlainObject(json.value)) {
-          setErrors(['Form input requires a JSON object. Correct the JSON first.']);
-          return;
-        }
-        if (fieldType === 'array' && !Array.isArray(json.value)) {
-          setErrors(['Form input requires a JSON array. Correct the JSON first.']);
-          return;
-        }
-      }
-      setDraft({ type, value: json.value });
-      return;
+    if (type === 'simple') {
+      const processorDraft = parseProcessorDraft(current.value);
+      if (processorDraft) return setDraft({ type, value: processorDraft });
+      return setErrors([
+        'Simple input requires a messages array with text parts and a string phase. Correct the JSON first.',
+      ]);
     }
-    setDraft({ type, value });
+    const formShapeError = getFormShapeError(schema, current.value);
+    return formShapeError ? setErrors([formShapeError]) : setDraft({ type, value: current.value });
   }
-
-  const workflowSubmitIcon = submitButtonIcon ?? (
-    <Icon>
-      <Play />
-    </Icon>
-  );
 
   const defaultHeading = (
     <Txt as="span" variant="ui-md" className={cn('text-neutral5 font-semibold', headingClassName)}>
@@ -186,8 +192,8 @@ export const WorkflowInputData = ({
               isReadOnly={isReadOnly}
               disableSubmit={disableSubmit}
               submitButtonClassName={submitButtonClassName}
-              submitButtonIcon={workflowSubmitIcon}
-              submitButtonVariant={submitButtonVariant ?? 'primary'}
+              submitButtonIcon={submitButtonIcon}
+              submitButtonVariant={submitButtonVariant}
               submitButtonFullWidth={submitButtonFullWidth}
               onSubmit={() => submitJsonDraft(draft.value)}
               submitActions={submitActions}
@@ -198,16 +204,16 @@ export const WorkflowInputData = ({
           ) : draft.type === 'simple' && isProcessorWorkflow ? (
             <WorkflowProcessorInput
               schema={schema}
-              onValuesChange={value => setDraft({ type: 'simple', value })}
-              defaultValues={draft.value}
+              value={draft.value}
+              onChange={value => setDraft({ type: 'simple', value })}
               isSubmitLoading={isSubmitLoading}
               submitButtonLabel={submitButtonLabel}
               withoutSubmit={withoutSubmit}
               isReadOnly={isReadOnly}
               disableSubmit={disableSubmit}
               submitButtonClassName={submitButtonClassName}
-              submitButtonIcon={workflowSubmitIcon}
-              submitButtonVariant={submitButtonVariant ?? 'primary'}
+              submitButtonIcon={submitButtonIcon}
+              submitButtonVariant={submitButtonVariant}
               submitButtonFullWidth={submitButtonFullWidth}
               onSubmit={onSubmit}
               submitActions={submitActions}

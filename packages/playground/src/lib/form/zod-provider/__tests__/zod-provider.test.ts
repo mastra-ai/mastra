@@ -117,6 +117,47 @@ describe('CustomZodProvider.validateSchema', () => {
       expect(provider.validateSchema(input)).toEqual({ success: true, data: input });
     });
   });
+  describe('when a union option has a blank optional field', () => {
+    it('normalizes that field before the union picks an option', () => {
+      const provider = new CustomZodProvider(
+        z.object({
+          target: z.union([z.object({ limit: z.number().optional() }), z.object({ name: z.string().min(1) })]),
+        }),
+      );
+
+      expect(provider.validateSchema({ target: { limit: '', name: '' } })).toEqual({
+        success: true,
+        data: { target: {} },
+      });
+    });
+  });
+
+  describe('when an optional union group is left blank', () => {
+    it('omits the group', () => {
+      const provider = new CustomZodProvider(
+        z.object({
+          target: z.union([z.object({ a: z.string().min(1) }), z.object({ b: z.string().min(1) })]).optional(),
+        }),
+      );
+
+      expect(provider.validateSchema({ target: { a: '', b: '' } })).toEqual({ success: true, data: {} });
+    });
+  });
+
+  describe('when an intersection side has a blank optional field', () => {
+    it('normalizes both sides before validating', () => {
+      const provider = new CustomZodProvider(
+        z.object({
+          target: z.intersection(z.object({ id: z.string() }), z.object({ limit: z.number().optional() })),
+        }),
+      );
+
+      expect(provider.validateSchema({ target: { id: 'a', limit: '' } })).toEqual({
+        success: true,
+        data: { target: { id: 'a' } },
+      });
+    });
+  });
 });
 
 describe('parseSchema v4Type fallback — array fields', () => {

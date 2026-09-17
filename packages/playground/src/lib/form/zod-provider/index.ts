@@ -152,21 +152,40 @@ export function parseSchema(schema: AnySchema): ParsedSchema {
   return { fields };
 }
 
+function getMemberSchemas(baseSchema: AnySchema): AnySchema[] | undefined {
+  const intersection = getIntersection(baseSchema);
+  return intersection ? [intersection.left, intersection.right] : getUnionOptions(baseSchema);
+}
+
+function normalizeObjectFields(value: Record<string, unknown>, shape: Record<string, AnySchema>) {
+  const normalized: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    const fieldValue = shape[key] ? normalizeFormValues(child, shape[key]) : child;
+    if (fieldValue !== undefined) normalized[key] = fieldValue;
+  }
+  return normalized;
+}
+
+function omitsBlankGroup(schema: AnySchema, group: Record<string, unknown>) {
+  const isBlankGroup = Object.values(group).every(child => child === '' || child === undefined);
+  if (!isBlankGroup || schema.safeParse(group).success) return false;
+  const omitted = schema.safeParse(undefined);
+  return omitted.success && omitted.data === undefined;
+}
+
 function normalizeFormValues(value: unknown, schema: AnySchema): unknown {
   const baseSchema = getBaseSchema(schema);
+  const members = getMemberSchemas(baseSchema);
+  if (members) {
+    // Union options and intersection sides all render at one path, so each member normalizes its own keys.
+    const group = members.reduce<unknown>((current, member) => normalizeFormValues(current, member), value);
+    return isPlainObject(group) && omitsBlankGroup(schema, group) ? undefined : group;
+  }
+
   const shape = getShape(baseSchema);
-  if (isPlainObject(value) && shape) {
-    const normalized: Record<string, unknown> = {};
-    for (const [key, child] of Object.entries(value)) {
-      const fieldValue = shape[key] ? normalizeFormValues(child, shape[key]) : child;
-      if (fieldValue !== undefined) normalized[key] = fieldValue;
-    }
-    const isBlankGroup = Object.values(normalized).every(child => child === '' || child === undefined);
-    if (isBlankGroup && !schema.safeParse(normalized).success) {
-      const omitted = schema.safeParse(undefined);
-      if (omitted.success && omitted.data === undefined) return undefined;
-    }
-    return normalized;
+  if (shape && isPlainObject(value)) {
+    const group = normalizeObjectFields(value, shape);
+    return omitsBlankGroup(schema, group) ? undefined : group;
   }
 
   if (Array.isArray(value)) {
