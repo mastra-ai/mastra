@@ -47,8 +47,8 @@ describe('ToolApprovalButtons', () => {
     ] as const)('routes both decisions through the %s callbacks', (_mode, props, approve, decline, expected) => {
       const callbacks = renderApproval(props);
 
-      fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Approve write_file' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Decline write_file' }));
 
       expect(callbacks[approve]).toHaveBeenCalledExactlyOnceWith(...expected);
       expect(callbacks[decline]).toHaveBeenCalledExactlyOnceWith(...expected);
@@ -84,7 +84,7 @@ describe('ToolApprovalButtons', () => {
         },
       );
 
-      fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Approve write_file' }));
 
       expect(callbacks.approveNetworkToolcall).toHaveBeenCalledExactlyOnceWith('write_file', 'run-1');
     });

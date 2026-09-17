@@ -55,7 +55,7 @@ export const Pending: Story = {};
 
 export const StreamingApproval: Story = {
   play: async ({ canvasElement, args }) => {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Approve' }));
+    await userEvent.click(within(canvasElement).getByRole('button', { name: `Approve ${args.toolName}` }));
     await expect(args.contextValue.approveToolcall).toHaveBeenCalledWith(args.toolCallId);
   },
 };
@@ -63,7 +63,7 @@ export const StreamingApproval: Story = {
 export const GenerateApproval: Story = {
   args: { isGenerateMode: true },
   play: async ({ canvasElement, args }) => {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Approve' }));
+    await userEvent.click(within(canvasElement).getByRole('button', { name: `Approve ${args.toolName}` }));
     await expect(args.contextValue.approveToolcallGenerate).toHaveBeenCalledWith(args.toolCallId);
   },
 };
@@ -71,17 +71,17 @@ export const GenerateApproval: Story = {
 export const NetworkDecline: Story = {
   args: { isNetwork: true },
   play: async ({ canvasElement, args }) => {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Decline' }));
+    await userEvent.click(within(canvasElement).getByRole('button', { name: `Decline ${args.toolName}` }));
     await expect(args.contextValue.declineNetworkToolcall).toHaveBeenCalledWith(args.toolName, 'run-1');
   },
 };
 
 export const Running: Story = {
   args: { contextValue: { ...contextValue, isRunning: true } },
-  play: async ({ canvasElement }) => {
+  play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('button', { name: 'Approve' })).toBeDisabled();
-    await expect(canvas.getByRole('button', { name: 'Decline' })).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: `Approve ${args.toolName}` })).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: `Decline ${args.toolName}` })).toBeDisabled();
   },
 };
 

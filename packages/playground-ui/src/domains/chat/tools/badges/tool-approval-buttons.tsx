@@ -72,6 +72,7 @@ export const ToolApprovalButtons = ({
           onDecline={handleDecline}
           disabled={isRunning}
           status={toolCallApprovalStatus}
+          toolName={toolName}
         />
       </div>
     );
