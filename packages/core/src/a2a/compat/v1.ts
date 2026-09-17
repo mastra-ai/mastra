@@ -179,11 +179,13 @@ function createSendMessageParams({ prompt, data, contextId, taskId }: SendMessag
   return SendMessageRequestCodec.toJSON(request) as Record<string, unknown>;
 }
 
-function fromAgentCard(card: AgentCardV1): AgentCard {
-  const jsonRpcInterface = card.supportedInterfaces.find(
+export function fromAgentCard(
+  card: AgentCardV1,
+  jsonRpcInterface: { url: string; protocolVersion: string } | undefined = card.supportedInterfaces.find(
     agentInterface =>
       agentInterface.protocolBinding.toUpperCase() === 'JSONRPC' && agentInterface.protocolVersion === '1.0',
-  );
+  ),
+): AgentCard {
   if (!jsonRpcInterface) {
     throw MastraA2AError.invalidAgentResponse('Remote A2A v1.0 agent card does not advertise a JSON-RPC interface.');
   }

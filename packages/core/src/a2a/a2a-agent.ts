@@ -10,6 +10,7 @@ import type { MastraMemory } from '../memory/memory';
 import { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream/types';
 import type { DynamicArgument } from '../types';
+import { negotiateAgentCard } from './compat/negotiate';
 import type { A2AProtocolCompat, A2AStreamEventData } from './compat/types';
 import { v0_3Compat } from './compat/v0_3';
 import { v1Compat } from './compat/v1';
@@ -35,6 +36,8 @@ type JSONRPCRequestBody = {
 };
 
 type RequestOptions = {
+  compat: A2AProtocolCompat;
+  allowVersionRejection?: boolean;
   method?: string;
   headers?: Record<string, string>;
   body?: unknown;
@@ -44,6 +47,7 @@ type RequestOptions = {
 };
 
 type AgentBootstrap = {
+  compat: A2AProtocolCompat;
   card: AgentCard;
   cardUrl: string;
   executionUrl: string;
@@ -518,7 +522,7 @@ export class A2AAgent implements SubAgent {
   readonly name: string;
 
   readonly #url: string;
-  readonly #compat: A2AProtocolCompat;
+  readonly #protocolVersion: NonNullable<A2AAgentOptions['protocolVersion']>;
   readonly #description: string;
   readonly #headers: Record<string, string>;
   readonly #fetch: FetchLike;
@@ -531,13 +535,14 @@ export class A2AAgent implements SubAgent {
   readonly #verifyAgentCard?: A2AAgentOptions['verifyAgentCard'];
 
   #cachedBootstrap?: AgentBootstrap;
-  readonly #runState = new Map<string, A2AAgentRunState>();
+  #bootstrapGeneration = 0;
+  readonly #runState = new Map<string, A2AAgentRunState & { bootstrap: AgentBootstrap }>();
   #memory?: DynamicArgument<MastraMemory>;
   #mastra?: Mastra;
 
   constructor(options: A2AAgentOptions) {
     this.#url = options.url.replace(/\/$/, '');
-    this.#compat = options.protocolVersion === '1.0' ? v1Compat : v0_3Compat;
+    this.#protocolVersion = options.protocolVersion ?? '0.3';
     this.#description = options.description ?? `Remote A2A agent at ${this.#url}`;
     this.#headers = options.headers ?? {};
     this.#fetch = options.fetch ?? fetch;
@@ -624,7 +629,7 @@ export class A2AAgent implements SubAgent {
       throw MastraA2AError.invalidParams(`No resumable A2A run state found for runId "${runId}".`);
     }
 
-    const bootstrap = await this.#getBootstrap();
+    const bootstrap = state.bootstrap;
     const memoryInfo = resolveMemoryInfo(options);
 
     if (state.waitingForInput) {
@@ -670,7 +675,13 @@ export class A2AAgent implements SubAgent {
     const memoryInfo = resolveMemoryInfo(options);
 
     if (!bootstrap.streamingSupported) {
-      const result = await this.generate(messages, { ...options, runId });
+      const result = await this.#sendAndResolve({
+        bootstrap,
+        runId,
+        prompt,
+        signal: options?.abortSignal,
+        ...memoryInfo,
+      });
       return this.#createBufferedStreamResult({ runId, result, emitStart: true, ...memoryInfo });
     }
 
@@ -695,7 +706,7 @@ export class A2AAgent implements SubAgent {
       throw MastraA2AError.invalidParams(`No resumable A2A run state found for runId "${runId}".`);
     }
 
-    const bootstrap = await this.#getBootstrap();
+    const bootstrap = state.bootstrap;
     const memoryInfo = resolveMemoryInfo(options);
 
     if (state.waitingForInput) {
@@ -744,14 +755,31 @@ export class A2AAgent implements SubAgent {
       return this.#cachedBootstrap;
     }
 
+    const generation = ++this.#bootstrapGeneration;
     const cardUrl = this.#resolveCardUrl();
-    const response = await this.#request(cardUrl, {
+    const auto = this.#protocolVersion === 'auto';
+    let compat = this.#protocolVersion === '0.3' ? v0_3Compat : v1Compat;
+    let response = await this.#request(cardUrl, {
+      compat,
+      allowVersionRejection: auto,
       method: 'GET',
       signal: this.#abortSignal,
     });
-
-    const cardJson = await response.json();
-    const card = this.#compat.decodeAgentCard(cardJson);
+    let cardJson: unknown = response.status === 406 && auto ? undefined : await response.json();
+    if (auto && (response.status === 406 || isVersionRejection(cardJson))) {
+      response = await this.#request(cardUrl, {
+        compat: v0_3Compat,
+        method: 'GET',
+        signal: this.#abortSignal,
+      });
+      cardJson = await response.json();
+    }
+    let card: AgentCard;
+    if (auto) {
+      ({ card, compat } = negotiateAgentCard(cardJson));
+    } else {
+      card = compat.decodeAgentCard(cardJson);
+    }
     const fetchedAt = new Date();
 
     if (this.#verifyAgentCard) {
@@ -760,13 +788,16 @@ export class A2AAgent implements SubAgent {
     }
 
     const bootstrap: AgentBootstrap = {
+      compat,
       card,
       cardUrl,
       executionUrl: card.url,
       streamingSupported: card.capabilities?.streaming ?? false,
     };
 
-    this.#cachedBootstrap = bootstrap;
+    if (generation === this.#bootstrapGeneration) {
+      this.#cachedBootstrap = bootstrap;
+    }
     return bootstrap;
   }
 
@@ -790,18 +821,19 @@ export class A2AAgent implements SubAgent {
     taskId?: string;
   }): Promise<Message | Task> {
     const response = await this.#request(bootstrap.executionUrl, {
+      compat: bootstrap.compat,
       method: 'POST',
       signal,
       body: {
         jsonrpc: '2.0',
         id: randomUUID(),
-        method: this.#compat.methods.sendMessage,
-        params: this.#compat.createSendMessageParams({ prompt, data, contextId, taskId }),
+        method: bootstrap.compat.methods.sendMessage,
+        params: bootstrap.compat.createSendMessageParams({ prompt, data, contextId, taskId }),
       } satisfies JSONRPCRequestBody,
     });
 
     const json = await response.json();
-    return this.#compat.decodeSendMessageResult(unwrapA2AResult(json));
+    return bootstrap.compat.decodeSendMessageResult(unwrapA2AResult(json));
   }
 
   async #sendAndResolve({
@@ -865,18 +897,19 @@ export class A2AAgent implements SubAgent {
     signal?: AbortSignal;
   }): Promise<Task> {
     const response = await this.#request(bootstrap.executionUrl, {
+      compat: bootstrap.compat,
       method: 'POST',
       signal,
       body: {
         jsonrpc: '2.0',
         id: randomUUID(),
-        method: this.#compat.methods.getTask,
-        params: this.#compat.createGetTaskParams(taskId),
+        method: bootstrap.compat.methods.getTask,
+        params: bootstrap.compat.createGetTaskParams(taskId),
       } satisfies JSONRPCRequestBody,
     });
 
     const json = await response.json();
-    return this.#compat.decodeGetTaskResult(unwrapA2AResult(json));
+    return bootstrap.compat.decodeGetTaskResult(unwrapA2AResult(json));
   }
 
   async #resolveTaskToGenerateResult({
@@ -916,6 +949,7 @@ export class A2AAgent implements SubAgent {
       }
 
       this.#runState.set(runId, {
+        bootstrap,
         runId,
         contextId: evaluation.task.contextId,
         taskId: evaluation.task.id,
@@ -1015,21 +1049,22 @@ export class A2AAgent implements SubAgent {
     emitStart: boolean;
   }): Promise<A2AAgentStreamResult> {
     const response = await this.#request(bootstrap.executionUrl, {
+      compat: bootstrap.compat,
       method: 'POST',
       signal,
       stream: true,
       body: {
         jsonrpc: '2.0',
         id: randomUUID(),
-        method: this.#compat.methods.streamMessage,
-        params: this.#compat.createSendMessageParams({ prompt, data, contextId, taskId }),
+        method: bootstrap.compat.methods.streamMessage,
+        params: bootstrap.compat.createSendMessageParams({ prompt, data, contextId, taskId }),
       } satisfies JSONRPCRequestBody,
     });
 
     return this.#consumeA2AStream({
       bootstrap,
       runId,
-      stream: await requireResponseBody(response, this.#compat.methods.streamMessage),
+      stream: await requireResponseBody(response, bootstrap.compat.methods.streamMessage),
       threadId,
       resourceId,
       emitStart,
@@ -1054,14 +1089,15 @@ export class A2AAgent implements SubAgent {
     resourceId?: string;
   }): Promise<A2AAgentStreamResult> {
     const response = await this.#request(bootstrap.executionUrl, {
+      compat: bootstrap.compat,
       method: 'POST',
       signal,
       stream: true,
       body: {
         jsonrpc: '2.0',
         id: randomUUID(),
-        method: this.#compat.methods.resubscribeTask,
-        params: this.#compat.createResubscribeParams(taskId),
+        method: bootstrap.compat.methods.resubscribeTask,
+        params: bootstrap.compat.createResubscribeParams(taskId),
       } satisfies JSONRPCRequestBody,
     });
 
@@ -1069,7 +1105,7 @@ export class A2AAgent implements SubAgent {
       bootstrap,
       runId,
       initialTask,
-      stream: await requireResponseBody(response, this.#compat.methods.resubscribeTask),
+      stream: await requireResponseBody(response, bootstrap.compat.methods.resubscribeTask),
       threadId,
       resourceId,
       // Resubscribing continues an existing run; `start` is only emitted for fresh runs,
@@ -1111,6 +1147,7 @@ export class A2AAgent implements SubAgent {
       .then(consumed => {
         if (consumed.task && consumed.suspended) {
           this.#runState.set(runId, {
+            bootstrap,
             runId,
             contextId: consumed.task.contextId,
             taskId: consumed.task.id,
@@ -1211,7 +1248,7 @@ export class A2AAgent implements SubAgent {
 
       let next = splitNextEvent(buffer);
       while (next.eventBlock !== undefined) {
-        const parsed = parseEventBlock(next.eventBlock, this.#compat);
+        const parsed = parseEventBlock(next.eventBlock, bootstrap.compat);
         if ('done' in parsed && parsed.done) {
           receivedDone = true;
           buffer = next.rest;
@@ -1350,7 +1387,7 @@ export class A2AAgent implements SubAgent {
 
       let next = splitNextEvent(buffer);
       while (next.eventBlock !== undefined) {
-        const parsed = parseEventBlock(next.eventBlock, this.#compat);
+        const parsed = parseEventBlock(next.eventBlock, bootstrap.compat);
         if ('done' in parsed && parsed.done) {
           break;
         }
@@ -1537,7 +1574,16 @@ export class A2AAgent implements SubAgent {
 
   async #request(
     url: string,
-    { method = 'POST', headers = {}, body, stream = false, credentials, signal }: RequestOptions = {},
+    {
+      compat,
+      allowVersionRejection = false,
+      method = 'POST',
+      headers = {},
+      body,
+      stream = false,
+      credentials,
+      signal,
+    }: RequestOptions,
   ): Promise<Response> {
     let attempts = 0;
     let lastError: unknown;
@@ -1547,7 +1593,10 @@ export class A2AAgent implements SubAgent {
       ...this.#headers,
       ...headers,
     });
-    for (const [name, value] of Object.entries(this.#compat.headers)) {
+    if (this.#protocolVersion === 'auto') {
+      finalHeaders.delete('A2A-Version');
+    }
+    for (const [name, value] of Object.entries(compat.headers)) {
       finalHeaders.set(name, value);
     }
     if (body) {
@@ -1566,6 +1615,19 @@ export class A2AAgent implements SubAgent {
         });
 
         if (!response.ok) {
+          if (
+            allowVersionRejection &&
+            (response.status === 406 ||
+              (response.status === 400 &&
+                isVersionRejection(
+                  await response
+                    .clone()
+                    .json()
+                    .catch(() => undefined),
+                )))
+          ) {
+            return response;
+          }
           throw MastraA2AError.invalidAgentResponse(`Remote A2A request failed with status ${response.status}.`, {
             status: response.status,
             url,
@@ -1615,6 +1677,18 @@ export class A2AAgent implements SubAgent {
 
     return signals.length === 1 ? signals[0] : AbortSignal.any(signals);
   }
+}
+
+function isVersionRejection(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'error' in value &&
+    typeof value.error === 'object' &&
+    value.error !== null &&
+    'code' in value.error &&
+    value.error.code === -32009
+  );
 }
 
 function shouldRetryRequest(error: unknown): boolean {

@@ -76,6 +76,29 @@ Mastra supports A2A Protocol v0.3 and v1.0 on the same agent card and execution 
 
 Import v1.0 protocol types and codecs from `@mastra/core/a2a/v1`. The existing `@mastra/core/a2a/client` export remains on v0.3.
 
+### Select the protocol automatically
+
+Set `protocolVersion: 'auto'` to select a compatible protocol from the remote agent card instead of configuring each remote separately:
+
+```typescript title="src/mastra/agents/remote-agent.ts"
+import { A2AAgent } from '@mastra/core/a2a'
+
+const remoteAgent = new A2AAgent({
+  url: 'https://agent.example.com/api/.well-known/weather-agent/agent-card.json',
+  protocolVersion: 'auto',
+})
+```
+
+Automatic selection is opt-in. Omitting `protocolVersion` still uses v0.3. Set `'0.3'` or `'1.0'` explicitly to pin the protocol.
+
+When the card includes `supportedInterfaces`, `A2AAgent` selects a JSON-RPC interface with an HTTP(S) execution URL, preferring v1.0 over v0.3 regardless of the order in the card. Other bindings and protocol versions aren't selected. If no compatible interface exists, discovery fails before sending an execution request.
+
+For legacy cards without `supportedInterfaces`, automatic selection uses the top-level `url` with v0.3. An empty or incompatible interface list doesn't fall back to that URL. The card's application `version` doesn't determine the protocol.
+
+Discovery first requests the card with `A2A-Version: 1.0`. It retries without that header only when the server returns HTTP 406 or a structured `VersionNotSupported` error (`-32009`). Authentication failures, network errors, and invalid cards don't trigger a protocol fallback. Execution requests aren't retried under a different protocol.
+
+The selected protocol and endpoint are cached with the card. Call `getAgentCard({ forceRefresh: true })` to discover changes for new runs. Active and resumable runs keep their original protocol and endpoint.
+
 ## Get started
 
 A2A has two common paths in Mastra:
@@ -87,7 +110,7 @@ Use `A2AAgent` when another Mastra agent should delegate work to a remote agent.
 
 ## Consume A2A agents as subagents
 
-Use `A2AAgent` to wrap a remote A2A agent, then add it to a parent agent with the [supervisor agents](/docs/subagents) pattern. Pass an explicit agent card URL when the remote server hosts multiple agents or uses a custom well-known path. Set `protocolVersion: '1.0'` when the remote agent requires A2A v1.0. Omit it to use v0.3.
+Use `A2AAgent` to wrap a remote A2A agent, then add it to a parent agent with the [supervisor agents](/docs/subagents) pattern. Pass an explicit agent card URL when the remote server hosts multiple agents or uses a custom well-known path. Set `protocolVersion: '1.0'` when the remote agent requires A2A v1.0, or use `'auto'` to select from its card. Omit it to use v0.3.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'

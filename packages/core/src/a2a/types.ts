@@ -156,8 +156,8 @@ export interface A2AAgentVerificationOptions {
 
 export interface A2AAgentOptions {
   url: string;
-  /** A2A wire protocol used for agent-card discovery and execution. Defaults to `0.3`. */
-  protocolVersion?: '0.3' | '1.0';
+  /** A2A wire protocol. Use `auto` to negotiate from the remote card. Defaults to `0.3`. */
+  protocolVersion?: '0.3' | '1.0' | 'auto';
   id?: string;
   name?: string;
   description?: string;
