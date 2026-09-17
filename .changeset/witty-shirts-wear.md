@@ -1,5 +1,5 @@
 ---
-'@mastra/react': major
+'@mastra/react': minor
 '@mastra/playground-ui': patch
 ---
 
