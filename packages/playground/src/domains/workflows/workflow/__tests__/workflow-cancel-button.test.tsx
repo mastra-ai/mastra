@@ -12,25 +12,10 @@ describe('WorkflowCancelButton', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('renders an enabled cancel button while running', () => {
-    render(<WorkflowCancelButton status="running" cancelMessage={null} isCancelling={false} onCancel={() => {}} />);
+  it.each(['running', 'suspended', 'paused'])('renders an enabled cancel button while %s', status => {
+    render(<WorkflowCancelButton status={status} cancelMessage={null} isCancelling={false} onCancel={() => {}} />);
 
-    const button = screen.getByRole('button', { name: /cancel workflow run/i });
-    expect(button).not.toBeNull();
-    expect((button as HTMLButtonElement).disabled).toBe(false);
-  });
-
-  it('renders an enabled cancel button while paused', () => {
-    render(<WorkflowCancelButton status="paused" cancelMessage={null} isCancelling={false} onCancel={() => {}} />);
-
-    const button = screen.getByRole('button', { name: /cancel workflow run/i });
-    expect(button).not.toBeNull();
-    expect((button as HTMLButtonElement).disabled).toBe(false);
-  });
-
-  it('does not render while suspended', () => {
-    render(<WorkflowCancelButton status="suspended" cancelMessage={null} isCancelling={false} onCancel={() => {}} />);
-
-    expect(screen.queryByRole('button')).toBeNull();
+    const button = screen.getByRole<HTMLButtonElement>('button', { name: /cancel workflow run/i });
+    expect(button.disabled).toBe(false);
   });
 });

@@ -115,12 +115,11 @@ export function WorkflowTrigger({
 
   const handleCancelWorkflowRun = async () => {
     if (!activeRunId) return;
-    const pausedResult = result?.status === 'paused' ? result : undefined;
+    const resultWithoutStream = result?.status === 'paused' || result?.status === 'suspended' ? result : undefined;
     try {
       const response = await cancelWorkflowRun({ workflowId, runId: activeRunId });
       setCancelResponse({ ...response, runId: activeRunId });
-      // Paused runs have no active stream to publish cancellation.
-      if (pausedResult) setResult({ ...pausedResult, status: 'canceled' });
+      if (resultWithoutStream) setResult({ ...resultWithoutStream, status: 'canceled' });
     } catch {
       toast.error('Error cancelling workflow run');
     }
@@ -149,7 +148,7 @@ export function WorkflowTrigger({
   if (!workflow) return null;
 
   const isSuspendedSteps = suspendedSteps.length > 0;
-  const showsCancelButton = streamResultToUse?.status === 'running';
+  const showsCancelButton = streamResultToUse?.status === 'running' || streamResultToUse?.status === 'suspended';
 
   const isViewingRun = !!activeRunId;
   const runStatus = streamResultToUse?.status ?? paramsRunStatus ?? (isStreamingWorkflow ? 'running' : 'pending');

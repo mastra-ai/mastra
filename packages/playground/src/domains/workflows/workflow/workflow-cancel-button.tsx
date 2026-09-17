@@ -9,7 +9,7 @@ export interface WorkflowCancelButtonProps {
   disabled?: boolean;
 }
 
-const VISIBLE_STATUSES = ['running', 'paused'];
+const VISIBLE_STATUSES = ['running', 'suspended', 'paused'];
 
 export function WorkflowCancelButton({
   status,
