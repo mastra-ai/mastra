@@ -79,24 +79,24 @@ export class TrailingAssistantGuard implements Processor<'trailing-assistant-gua
     const lastCreatedAt = new Date(lastMessage.createdAt).getTime();
     const createdAt = new Date(Math.max(Date.now(), (Number.isNaN(lastCreatedAt) ? 0 : lastCreatedAt) + 1));
 
-    return {
-      messages: [
-        ...messages,
-        {
-          id: randomUUID(),
-          role: 'user' as const,
-          content: {
-            format: 2 as const,
-            parts: [
-              {
-                type: 'text' as const,
-                text: willUseResponseFormat ? 'Generate the structured response.' : 'Continue.',
-              },
-            ],
-          },
-          createdAt,
-        },
-      ],
+    const continuation: MastraDBMessage = {
+      id: randomUUID(),
+      role: 'user',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: willUseResponseFormat ? 'Generate the structured response.' : 'Continue.' }],
+      },
+      createdAt,
     };
+
+    // The synthetic turn exists only to satisfy the provider on this request. Adding it as
+    // `context` keeps it in the prompt but out of the messages memory persists, so threads
+    // do not accumulate "Continue." turns that were never said by the user.
+    if (messageList) {
+      messageList.add(continuation, 'context');
+      return { messageList };
+    }
+
+    return { messages: [...messages, continuation] };
   }
 }

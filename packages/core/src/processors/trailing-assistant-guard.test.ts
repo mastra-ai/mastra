@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 
+import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage } from '../agent/message-list';
 import { TrailingAssistantGuard } from './trailing-assistant-guard';
 import type { ProcessInputStepArgs } from './index';
@@ -281,6 +282,27 @@ describe('TrailingAssistantGuard', () => {
         ).toBeUndefined();
       });
     });
+  });
+
+  it('adds the continuation to the message list as context so it is never persisted', () => {
+    const guard = new TrailingAssistantGuard();
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    messageList.add(createMessage('user', 'question'), 'input');
+    messageList.add(createMessage('assistant', 'draft'), 'input');
+
+    const result = guard.processInputStep(
+      makeArgs({ messages: messageList.get.all.db(), messageList, structuredOutput: undefined, model: gemini3 }),
+    );
+
+    expect(result).toEqual({ messageList });
+    expect(messageList.get.all.db().at(-1)).toMatchObject({
+      role: 'user',
+      content: { parts: [{ type: 'text', text: 'Continue.' }] },
+    });
+    expect(messageList.drainUnsavedMessages().map(message => message.content.parts)).toMatchObject([
+      [{ type: 'text', text: 'question' }],
+      [{ type: 'text', text: 'draft' }],
+    ]);
   });
 
   it('does not append a message when the last message is not from the assistant', () => {

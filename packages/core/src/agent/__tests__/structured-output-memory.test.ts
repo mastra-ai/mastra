@@ -150,6 +150,10 @@ describe('Structured output with memory - assistant message in final position (#
 
     const lastMessage = nonSystemMessages[nonSystemMessages.length - 1];
     expect(lastMessage.role).toBe('user');
+
+    // The synthetic turn is request-only: it must not be written to the thread.
+    const { messages: persisted } = await mockMemory.recall({ threadId, resourceId });
+    expect(JSON.stringify(persisted)).not.toContain('Generate the structured response.');
   });
 
   it('guards Claude 5 assistant-role input without configured input processors or memory', async () => {
