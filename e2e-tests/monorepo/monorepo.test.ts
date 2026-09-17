@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
-import { join, relative } from 'path';
+import { dirname, join, relative } from 'path';
 import { setupMonorepo } from './prepare';
 import { mkdtemp, mkdir, readdir, readFile, readlink, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -8,6 +8,35 @@ import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
 
 const timeout = 5 * 60 * 1000;
+
+function getPnpmImporterDependencies(lockfile: string, importer: string): Map<string, string> {
+  const lines = lockfile.split(/\r?\n/);
+  const importerStart = lines.findIndex(line => line === `  ${importer}:`);
+  if (importerStart === -1) {
+    throw new Error(`Missing pnpm lockfile importer: ${importer}`);
+  }
+
+  const dependencies = new Map<string, string>();
+  let dependencyName: string | undefined;
+  for (let index = importerStart + 1; index < lines.length; index++) {
+    const line = lines[index]!;
+    if (/^  \S/.test(line)) break;
+
+    const dependencyMatch = /^      ([^\s].*):$/.exec(line);
+    if (dependencyMatch?.[1]) {
+      dependencyName = dependencyMatch[1].replace(/^['"]|['"]$/g, '');
+      continue;
+    }
+
+    const versionMatch = /^        version: (.+)$/.exec(line);
+    if (dependencyName && versionMatch?.[1]) {
+      dependencies.set(dependencyName, versionMatch[1].replace(/^['"]|['"]$/g, ''));
+      dependencyName = undefined;
+    }
+  }
+
+  return dependencies;
+}
 
 /**
  * Killing the `npm run dev` wrapper orphans the `mastra dev` grandchild, which
@@ -480,9 +509,39 @@ export const environmentRoute = registerApiRoute('/environment', {
     let proc: ReturnType<typeof execa> | undefined;
     const controller = new AbortController();
     const cancelSignal = controller.signal;
+    const sourcePinnedUnicornMagicVersion = '0.2.0';
 
     beforeAll(async () => {
-      await runBuild(fixturePath);
+      const packageJsonPaths = [join(fixturePath, 'package.json'), join(fixturePath, 'apps', 'custom', 'package.json')];
+      const originalPackageJsons = await Promise.all(packageJsonPaths.map(path => readFile(path, 'utf-8')));
+      const sourceLockfilePath = join(fixturePath, 'pnpm-lock.yaml');
+      const sourceLockfile = await readFile(sourceLockfilePath, 'utf-8');
+
+      try {
+        for (const [index, packageJsonPath] of packageJsonPaths.entries()) {
+          const packageJson = JSON.parse(originalPackageJsons[index]!);
+          packageJson.dependencies['unicorn-magic'] = '>=0.2.0';
+          await writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
+        }
+
+        const updatedSourceLockfile = sourceLockfile
+          .replace(
+            `      unicorn-magic:\n        specifier: 0.2.0\n        version: 0.2.0`,
+            `      unicorn-magic:\n        specifier: '>=0.2.0'\n        version: ${sourcePinnedUnicornMagicVersion}`,
+          )
+          .replace(
+            `      unicorn-magic:\n        specifier: 0.4.0\n        version: 0.4.0`,
+            `      unicorn-magic:\n        specifier: '>=0.2.0'\n        version: ${sourcePinnedUnicornMagicVersion}`,
+          );
+        if (updatedSourceLockfile === sourceLockfile) {
+          throw new Error('Failed to pin the source unicorn-magic resolution for lockfile reuse coverage');
+        }
+        await writeFile(sourceLockfilePath, updatedSourceLockfile);
+        await runBuild(fixturePath);
+      } finally {
+        await Promise.all(packageJsonPaths.map((path, index) => writeFile(path, originalPackageJsons[index]!)));
+        await writeFile(sourceLockfilePath, sourceLockfile);
+      }
 
       const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
       proc = execaNode('index.mjs', {
@@ -554,17 +613,50 @@ export const environmentRoute = registerApiRoute('/environment', {
     });
 
     // This stays in the monorepo E2E suite because it builds the generated fixture and validates its output manifest.
-    it('should keep default and user-configured externals in the output manifest', async () => {
+    it('should keep global and user-configured externals in the output manifest', async () => {
       const packageJsonPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'package.json');
       const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
 
       expect(packageJson.dependencies).toEqual(
         expect.objectContaining({
-          '@mastra/core': expect.any(String),
           bcrypt: expect.any(String),
           typescript: expect.any(String),
         }),
       );
+      expect(packageJson.dependencies?.['date-fns']).toBeUndefined();
+    });
+
+    it('should preserve workspace externals as runtime dependencies instead of bundling them', async () => {
+      const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      const outputFiles = await readdir(outputDir, { recursive: true });
+      const output = (
+        await Promise.all(
+          outputFiles.filter(file => file.endsWith('.mjs')).map(file => readFile(join(outputDir, file), 'utf-8')),
+        )
+      ).join('\n');
+      const packageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
+
+      expect(packageJson.dependencies?.['@inner/subpath-only']).toBeTruthy();
+      expect(output).toMatch(/from ["']@inner\/subpath-only["']/);
+      expect(output).toMatch(/from ["']@inner\/subpath-only\/value["']/);
+    });
+
+    it('should update the source pnpm lockfile while installing output dependencies', async () => {
+      const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      const outputFiles = await readdir(outputDir);
+      expect(outputFiles).toContain('pnpm-lock.yaml');
+      expect(outputFiles).not.toContain('package-lock.json');
+
+      const packageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
+      const sourceLockfile = await readFile(join(fixturePath, 'pnpm-lock.yaml'), 'utf-8');
+      const outputLockfile = await readFile(join(outputDir, 'pnpm-lock.yaml'), 'utf-8');
+      const sourceDependencies = getPnpmImporterDependencies(sourceLockfile, '.');
+      const outputDependencies = getPnpmImporterDependencies(outputLockfile, '.');
+
+      expect(packageJson.dependencies['unicorn-magic']).toBe('>=0.2.0');
+      expect(sourceDependencies.get('unicorn-magic')).toBe(sourcePinnedUnicornMagicVersion);
+      expect(outputDependencies.get('unicorn-magic')).toBe(sourcePinnedUnicornMagicVersion);
+      expect([...outputDependencies.keys()]).toEqual(expect.arrayContaining(Object.keys(packageJson.dependencies)));
     });
 
     it('should emit a worker runtime entry with a readiness endpoint', async () => {
@@ -961,7 +1053,18 @@ export const mastra = new Mastra({
         try {
           await writeFile(mastraConfigPath, originalMastraConfig.replace(/externals:\s*\[[^\]]*\]/, 'externals: true'));
 
-          await runBuild(isolatedFixturePath);
+          const buildResult = await execa(pkgManager, ['build'], {
+            cwd: join(isolatedFixturePath, 'apps', 'custom'),
+            reject: false,
+            env: process.env,
+          });
+          expect(buildResult.exitCode).toBe(0);
+
+          const bundledEntry = await readFile(
+            join(isolatedFixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs'),
+            'utf-8',
+          );
+          expect(bundledEntry).not.toContain('@inner/subpath-only/value');
 
           proc = execaNode('index.mjs', {
             cwd: join(isolatedFixturePath, 'apps', 'custom', '.mastra', 'output'),
@@ -1010,6 +1113,44 @@ export const mastra = new Mastra({
           }
 
           await writeFile(mastraConfigPath, originalMastraConfig);
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+
+    it(
+      'should exit non-zero when a workspace subpath import cannot be resolved',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-missing-dep-test-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          const corePath = join(isolatedFixturePath, 'apps', 'custom', 'node_modules', '@mastra', 'core', 'dist');
+          await mkdir(join(corePath, 'runtime-context'), { recursive: true });
+          await writeFile(
+            join(corePath, 'runtime-context', 'index.js'),
+            `export { RequestContext as RuntimeContext } from '../request-context/index.js';`,
+          );
+
+          const transitiveDependencyPath = join(isolatedFixturePath, 'packages', 'transitive-c', 'src', 'index.js');
+          const transitiveDependencySource = await readFile(transitiveDependencyPath, 'utf-8');
+          await writeFile(
+            transitiveDependencyPath,
+            transitiveDependencySource.replace('@inner/subpath-only/value', '@inner/subpath-only/missing'),
+          );
+
+          const buildResult = await execa(pkgManager, ['build'], {
+            cwd: join(isolatedFixturePath, 'apps', 'custom'),
+            reject: false,
+            env: process.env,
+          });
+          const output = `${buildResult.stdout}\n${buildResult.stderr}`;
+
+          expect(buildResult.exitCode, output).toBe(1);
+          expect(output).toContain('Missing "./missing" specifier in "@inner/subpath-only" package');
+          expect(output).toContain('@inner/subpath-only/missing');
+        } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }
       },
@@ -1137,18 +1278,17 @@ export const mastra = new Mastra({
     );
   });
 
-  describe.sequential('reproducible tool bundles', () => {
+  describe.sequential('reproducible bundles', () => {
     it(
-      'produces identical tool bundles when invoked from the app and monorepo roots',
+      'produces identical bundles when invoked from the app and monorepo roots',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-reproducible-test-${pkgManager}-`));
         try {
           await setupMonorepo(isolatedFixturePath, pkgManager);
 
           const appDir = join(isolatedFixturePath, 'apps', 'custom');
-          const outputRoot = join(appDir, '.mastra', 'output');
-          const build = async (cwd: string, args: string[], cliPath?: string) => {
-            await rm(join(appDir, '.mastra'), { recursive: true, force: true });
+          const build = async (cwd: string, args: string[], outputRoot: string, cliPath?: string) => {
+            await rm(dirname(outputRoot), { recursive: true, force: true });
             const options = {
               cwd,
               env: { ...process.env, MASTRA_BUILD_SKIP_INSTALL: 'true' },
@@ -1157,17 +1297,14 @@ export const mastra = new Mastra({
             const result = cliPath ? await execaNode(cliPath, args, options) : await execa(pkgManager, args, options);
             expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
             const outputDigests = await getDirectoryDigests(outputRoot);
-            return Object.fromEntries(
-              Object.entries(outputDigests).filter(
-                ([path]) => path === 'tools.mjs' || (path.startsWith('tools/') && path.endsWith('.mjs')),
-              ),
-            );
+            return Object.fromEntries(Object.entries(outputDigests).filter(([path]) => path.endsWith('.mjs')));
           };
 
-          const first = await build(appDir, ['build']);
+          const first = await build(appDir, ['build'], join(appDir, '.mastra', 'output'));
           const second = await build(
             isolatedFixturePath,
-            ['build', '--root', 'apps/custom'],
+            ['build', '--root', '.', '--dir', 'apps/custom/src/mastra'],
+            join(isolatedFixturePath, '.mastra', 'output'),
             join(appDir, 'node_modules', 'mastra', 'dist', 'index.js'),
           );
 

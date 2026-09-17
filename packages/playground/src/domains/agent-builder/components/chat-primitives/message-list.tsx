@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
-import type { MessageFactoryPart } from '@mastra/react';
+import type { MessageFactoryPart } from '@mastra/react/ui';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { MessageRow, MessagesSkeleton } from './messages';
