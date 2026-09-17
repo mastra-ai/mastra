@@ -8,6 +8,7 @@ import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
+import type { MastraOnFinishCallbackContext } from '../../../stream/types';
 import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { MessageList } from '../../message-list';
@@ -17,7 +18,6 @@ import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
 import { applyClientToolModelOutput, fireClientToolOutputHooks } from './client-tool-output-hooks';
 import type { PrepareStreamRunScope } from './run-scope';
-import type { MastraOnFinishCallbackContext } from '../../../stream/types';
 import {
   CONVERTED_TOOLS_KEY,
   INITIAL_SIGNAL_ECHOES_KEY,
