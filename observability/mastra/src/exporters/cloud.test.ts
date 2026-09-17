@@ -7,10 +7,11 @@ import type {
   ScoreEvent,
   FeedbackEvent,
 } from '@mastra/core/observability';
-import { EntityType, SpanType, TracingEventType } from '@mastra/core/observability';
+import { EntityType, SamplingStrategyType, SpanType, TracingEventType } from '@mastra/core/observability';
 
 import { fetchWithRetry } from '@mastra/core/utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { DefaultObservabilityInstance } from '../instances';
 import { CloudExporter } from './cloud';
 
 // Mock fetchWithRetry
@@ -372,6 +373,30 @@ describe('CloudExporter', () => {
       expectOptionalProperty(spanRecord, 'errorInfo', mockSpan.errorInfo);
       expect(spanRecord.parentSpanId).toBeUndefined();
       expect(spanRecord.createdAt).toBeInstanceOf(Date);
+    });
+
+    it('should buffer event spans with a non-null endedAt equal to startedAt', async () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [exporter],
+      });
+
+      const root = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent', attributes: { agentId: 'a' } });
+      // MODEL_CHUNK is filtered out by the default cloud span filter, so use a GENERIC event.
+      const event = root.createEventSpan({ type: SpanType.GENERIC, name: 'point-in-time event' });
+      root.end();
+      // Event spans are emitted at creation; let the async export settle.
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      const buffer = (exporter as any).buffer;
+      const eventRecord = buffer.spans.find((s: any) => s.spanId === event.id);
+
+      expect(eventRecord.isEvent).toBe(true);
+      expect(eventRecord.startedAt).toBeInstanceOf(Date);
+      expect(eventRecord.endedAt).toBeInstanceOf(Date);
+      expect(eventRecord.endedAt).toEqual(eventRecord.startedAt);
     });
 
     it('should reset buffer correctly', () => {

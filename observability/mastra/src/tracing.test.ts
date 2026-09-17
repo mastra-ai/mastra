@@ -844,7 +844,7 @@ describe('Tracing', () => {
       rootSpan.end();
     });
 
-    it('should have endTime undefined for event spans', () => {
+    it('should have endTime equal to startTime for event spans', () => {
       const rootSpan = observability.startSpan({
         type: SpanType.AGENT_RUN,
         name: 'test-agent',
@@ -862,9 +862,9 @@ describe('Tracing', () => {
         },
       });
 
-      // Event spans should not have endTime (event occurs at startTime)
-      expect(eventSpan.endTime).toBeUndefined();
+      // Event spans are point-in-time: endTime equals startTime (zero duration)
       expect(eventSpan.startTime).toBeDefined();
+      expect(eventSpan.endTime).toEqual(eventSpan.startTime);
 
       rootSpan.end();
     });
@@ -1087,7 +1087,7 @@ describe('Tracing', () => {
       expect(exportedSpan.name).toBe('exported event span');
       expect(exportedSpan.output).toEqual({ text: 'Hello', chunkSize: 5 });
       expect(exportedSpan.input).toBeUndefined();
-      expect(exportedSpan.endTime).toBeUndefined();
+      expect(exportedSpan.endTime).toEqual(exportedSpan.startTime);
       expect(exportedSpan.attributes?.chunkType).toBe('text-delta');
       expect(exportedSpan.attributes?.sequenceNumber).toBe(42);
       expect(exportedSpan.metadata?.model).toBe('gpt-4');
