@@ -1,20 +1,16 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import {
   Composer,
   ComposerActions,
-  ComposerSendButton as SendButton,
-  ComposerStopButton,
   ComposerAttachments,
   ComposerBox,
   ComposerInput,
   ComposerRing,
 } from '@mastra/playground-ui/components/Composer';
 import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
-import { ModelPickerGroup } from '@mastra/playground-ui/components/ModelPicker';
 import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
 import {
   buildThreadRailTurns,
@@ -33,6 +29,7 @@ import { ComposerAttachments as ChatComposerAttachments } from './attachments/at
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
 import { useReadAloud } from './chat/use-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
+import { ComposerActionRow } from './composer-action-row';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { MessageRow } from './messages/message-row';
 import { SuggestedPromptList } from './suggested-prompt-list';
@@ -338,7 +335,7 @@ const AgentComposer = ({
             />
             {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
             <ComposerActions>
-              <ComposerActionRow
+              <ThreadComposerActions
                 canExecute={canExecuteAgent}
                 agentId={agentId}
                 runOptionsSlot={runOptionsSlot}
@@ -372,7 +369,7 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
   return <DictationButton listening={isListening} onClick={() => (isListening ? stop() : start())} />;
 };
 
-interface ComposerActionRowProps {
+interface ThreadComposerActionsProps {
   canExecute?: boolean;
   agentId?: string;
   showModelSwitcher?: boolean;
@@ -385,7 +382,7 @@ interface ComposerActionRowProps {
   voiceCall?: VoiceCallControls;
 }
 
-const ComposerActionRow = ({
+const ThreadComposerActions = ({
   canExecute = true,
   agentId,
   showModelSwitcher,
@@ -396,65 +393,33 @@ const ComposerActionRow = ({
   onCancel,
   onSetText,
   voiceCall,
-}: ComposerActionRowProps) => {
+}: ThreadComposerActionsProps) => {
   return (
-    <>
-      {((showModelSwitcher && agentId) || runOptionsSlot) && (
-        <div className="flex max-w-full shrink-0 items-center gap-1.5">
-          {showModelSwitcher && agentId && (
-            <>
-              <ModelPickerGroup>
-                <ComposerModelSwitcher />
-              </ModelPickerGroup>
-              <ComposerModelSettings agentId={agentId} />
-            </>
-          )}
-          {runOptionsSlot}
-        </div>
-      )}
-
-      <div className="flex shrink-0 items-center gap-1.5">
-        <ButtonsGroup spacing="close">
-          {canExecute && <AttachFilePopover />}
-          {canExecute && <SpeechInput agentId={agentId} onTranscript={onSetText} />}
-          {canExecute && agentId && voiceCall && <VoiceCallButton voiceCall={voiceCall} />}
-        </ButtonsGroup>
-        <ComposerSendButton
-          canExecute={canExecute}
-          isEmpty={isEmpty}
-          isRunning={isRunning}
-          canSendWhileStreaming={canSendWhileStreaming}
-          onCancel={onCancel}
-        />
-      </div>
-    </>
-  );
-};
-
-interface ComposerSendButtonProps {
-  canExecute?: boolean;
-  isEmpty: boolean;
-  isRunning: boolean;
-  canSendWhileStreaming: boolean;
-  onCancel: () => void;
-}
-
-const ComposerSendButton = ({
-  canExecute = true,
-  isEmpty,
-  isRunning,
-  canSendWhileStreaming,
-  onCancel,
-}: ComposerSendButtonProps) => {
-  // While streaming and not allowed to send mid-stream, the only action is cancel.
-  if (isRunning && !canSendWhileStreaming) {
-    return <ComposerStopButton tooltip="Cancel" onClick={onCancel} />;
-  }
-
-  return (
-    <>
-      <SendButton tooltip={canExecute ? 'Send' : 'No permission to execute'} disabled={!canExecute || isEmpty} />
-      {isRunning && <ComposerStopButton tooltip="Cancel" onClick={onCancel} />}
-    </>
+    <ComposerActionRow
+      controls={
+        ((showModelSwitcher && agentId) || runOptionsSlot) && (
+          <>
+            {showModelSwitcher && agentId && (
+              <>
+                <div className="bg-surface3 border-border1 duration-normal focus-within:border-border2 rounded-full border transition-colors">
+                  <ComposerModelSwitcher />
+                </div>
+                <ComposerModelSettings agentId={agentId} />
+              </>
+            )}
+            {runOptionsSlot}
+          </>
+        )
+      }
+      canExecute={canExecute}
+      isEmpty={isEmpty}
+      isRunning={isRunning}
+      canSendWhileStreaming={canSendWhileStreaming}
+      onCancel={onCancel}
+    >
+      <AttachFilePopover />
+      <SpeechInput agentId={agentId} onTranscript={onSetText} />
+      {agentId && voiceCall && <VoiceCallButton voiceCall={voiceCall} />}
+    </ComposerActionRow>
   );
 };

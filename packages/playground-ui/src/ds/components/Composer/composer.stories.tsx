@@ -5,7 +5,6 @@ import { ComposerModeStates, ComposerPreview } from '../../../../.storybook/fixt
 
 import { Badge } from '../Badge/Badge';
 import { Button } from '../Button';
-import { ComposerSendButton } from './actions/composer-buttons';
 import { Composer, ComposerActions, ComposerAttachments, ComposerBox, ComposerInput, ComposerRing } from './composer';
 
 const meta: Meta<typeof Composer> = {
@@ -134,6 +133,10 @@ export const WithModeControls: Story = {
   },
 };
 
+export const WithModelAndVoiceControls: Story = {
+  render: () => <ComposerPreview controls="model" />,
+};
+
 export const TallDraft: Story = {
   render: () => <ComposerPreview variant="textarea" mode="plan" />,
 };
@@ -144,19 +147,4 @@ export const Disabled: Story = {
 
 export const CustomMode: Story = {
   render: () => <ComposerPreview mode="review" />,
-};
-
-export const CustomActionLayout: Story = {
-  render: () => (
-    <ComposerActions>
-      <span className="text-ui-sm text-neutral3">Custom controls</span>
-      <ComposerSendButton type="button" className="ml-auto" aria-label="Send message" />
-    </ComposerActions>
-  ),
-  play: async ({ canvasElement }) => {
-    const button = within(canvasElement).getByRole('button', { name: 'Send message' });
-    await expect(Number.parseFloat(getComputedStyle(button).borderRadius)).toBeGreaterThanOrEqual(
-      button.getBoundingClientRect().width / 2,
-    );
-  },
 };

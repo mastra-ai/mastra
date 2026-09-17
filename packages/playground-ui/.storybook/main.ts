@@ -40,6 +40,10 @@ const config: StorybookConfig = {
             find: /^@mastra\/playground-ui\/utils\/(.+)$/,
             replacement: fileURLToPath(new URL('../src/utils/$1', import.meta.url)),
           },
+          {
+            find: /^@mastra\/playground-ui\/hooks\/(.+)$/,
+            replacement: fileURLToPath(new URL('../src/hooks/$1', import.meta.url)),
+          },
           { find: 'storybook/test', replacement: fileURLToPath(import.meta.resolve('storybook/test')) },
           {
             find: /^@mastra\/react$/,

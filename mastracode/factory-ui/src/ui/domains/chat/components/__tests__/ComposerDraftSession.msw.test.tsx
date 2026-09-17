@@ -83,7 +83,7 @@ describe('Composer on a lazy user-session draft', () => {
     const user = userEvent.setup();
     const { client } = renderDraft();
 
-    const modelPicker = await screen.findByLabelText(/^Session model/);
+    const modelPicker = await screen.findByLabelText('Session model');
     await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('Balanced')));
     await user.click(modelPicker);
     await user.click(await screen.findByRole('option', { name: /Model pack Mine/ }));
@@ -100,6 +100,8 @@ describe('Composer on a lazy user-session draft', () => {
     preparation.finishWorkspace();
     await waitForMutationsIdle(client);
     await waitFor(() => expect(preparation.delivered).toEqual(['use my pack']));
+    // Activation applies the pack's models server-side, so no separate model
+    // switch is sent for the pack-derived model.
     expect(preparation.operations).toEqual(['mode:build', 'pack:mine', 'message']);
   });
 
@@ -116,7 +118,7 @@ describe('Composer on a lazy user-session draft', () => {
     const user = userEvent.setup();
     const { client } = renderDraft();
 
-    const modelPicker = await screen.findByLabelText(/^Session model/);
+    const modelPicker = await screen.findByLabelText('Session model');
     await user.click(modelPicker);
     await user.click(await screen.findByRole('option', { name: /Model pack Mine/ }));
     const message = screen.getByRole('textbox', { name: 'Message' });
@@ -129,7 +131,10 @@ describe('Composer on a lazy user-session draft', () => {
     preparation.finishWorkspace();
     await waitForMutationsIdle(client);
     await waitFor(() => expect(preparation.delivered).toEqual(['keep my prompt']));
+    // The user must learn the pack was not applied.
     expect(await screen.findByText('Pack unavailable')).toBeInTheDocument();
+    // The pack failed, so its build model must not be half-applied either —
+    // the session keeps its own defaults.
     expect(preparation.operations).toEqual(['mode:build', 'message']);
   });
 

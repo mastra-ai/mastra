@@ -1,5 +1,5 @@
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption, ComboboxProps } from '@mastra/playground-ui/components/Combobox';
-import { ModelPickerCombobox, ModelProviderIcon } from '@mastra/playground-ui/components/ModelPicker';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Info } from 'lucide-react';
@@ -17,7 +17,6 @@ export interface LLMProvidersProps {
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
   className?: string;
-  segment?: 'provider';
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
@@ -30,7 +29,6 @@ export const LLMProviders = ({
   variant,
   size = 'md',
   className,
-  segment,
   open,
   onOpenChange,
   container,
@@ -39,18 +37,27 @@ export const LLMProviders = ({
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
   const allProviders = dataProviders?.providers || [];
 
+  // Apply admin model policy first (drops disallowed providers entirely),
+  // then sort: connected -> popular -> alphabetical
   const policy = useBuilderModelPolicy();
   const providers = useBuilderFilteredProviders(allProviders, policy);
   const sortedProviders = useFilteredProviders(providers, '', false);
 
+  // Create provider options with icons
   const providerOptions: ComboboxOption[] = useMemo(() => {
     return sortedProviders.map(provider => ({
       label: provider.name,
       value: provider.id,
       start: (
-        <ModelProviderIcon connected={provider.connected}>
+        <div className="relative shrink-0">
           <ProviderLogo providerId={provider.id} size={16} />
-        </ModelProviderIcon>
+          <div
+            className={`absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full ${
+              provider.connected ? 'bg-accent1' : 'bg-accent2'
+            }`}
+            title={provider.connected ? 'Connected' : 'Not connected'}
+          />
+        </div>
       ),
       end: provider.docUrl ? (
         <Info
@@ -77,12 +84,13 @@ export const LLMProviders = ({
     return <Skeleton className="h-8 w-full" />;
   }
 
+  // Find the matching provider, handling gateway prefix fallback
+  // (e.g., value='custom' should match provider with id='acme/custom')
   const matchedProvider = findProviderById(providers, value);
   const currentModelProvider = matchedProvider?.id || cleanProviderId(value);
 
   return (
-    <ModelPickerCombobox
-      segment={segment}
+    <Combobox
       options={providerOptions}
       value={currentModelProvider}
       onValueChange={handleValueChange}

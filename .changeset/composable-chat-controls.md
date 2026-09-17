@@ -2,15 +2,13 @@
 '@mastra/playground-ui': minor
 ---
 
-Added composable model selection, model settings, and composer actions. Model selection supports a combined searchable menu with optional packs, or separate provider and model comboboxes. Model settings and composer action areas accept custom controls as children, and warning containers accept custom content.
+Added Send, Stop, attachment and model-settings buttons that can be composed inside `ComposerActions`. Send, Stop and attachment buttons support round and outline appearances, with disabled states and callbacks supplied by the caller.
 
 ```tsx
-import { ModelPicker, ModelPickerTrigger, ModelPickerContent, ModelPickerModels } from '@mastra/playground-ui/components/ModelPicker';
+import { ComposerActions, ComposerSendButton, ComposerStopButton } from '@mastra/playground-ui/components/Composer';
 
-<ModelPicker>
-  <ModelPickerTrigger label={modelLabel} />
-  <ModelPickerContent>
-    <ModelPickerModels value={modelId} options={availableModels} onValueChange={setModelId} />
-  </ModelPickerContent>
-</ModelPicker>
+<ComposerActions>
+  <ComposerSendButton aria-label="Send message" disabled={sendDisabled} />
+  {onStop && <ComposerStopButton aria-label="Stop response" onClick={onStop} />}
+</ComposerActions>
 ```

@@ -1,68 +1,50 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Loader2, Phone, PhoneOff } from 'lucide-react';
+import type { VoiceCallControls } from '../types';
 
-import type { VoiceCallControls, VoiceCallStatus } from '../types';
-export interface VoiceCallButtonViewProps {
-  status: VoiceCallStatus;
-  available: boolean;
-  onStart: () => void;
-  onStop: () => void;
+export interface VoiceCallButtonProps {
+  voiceCall: VoiceCallControls;
 }
 
-export function VoiceCallButtonView({ status, available, onStart, onStop }: VoiceCallButtonViewProps) {
-  if (status === 'idle')
+export const VoiceCallButton = ({ voiceCall }: VoiceCallButtonProps) => {
+  const { isLiveKitAvailable } = voiceCall;
+
+  if (voiceCall.status === 'idle') {
     return (
       <Button
         variant="default"
         size="icon-md"
         type="button"
         aria-label="Start voice call"
-        aria-disabled={!available || undefined}
+        aria-disabled={!isLiveKitAvailable || undefined}
         className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-        tooltip={available ? 'Speak with this agent' : 'Configure @mastra/livekit to start voice calls.'}
+        tooltip={isLiveKitAvailable ? 'Start voice call' : 'Configure @mastra/livekit to start voice calls.'}
         data-testid="voice-call-button"
-        onClick={available ? onStart : undefined}
+        onClick={() => voiceCall.start()}
       >
-        <Phone className="text-neutral3 hover:text-neutral6 size-5" />
+        <Phone className="text-neutral3 hover:text-neutral6 h-5 w-5" />
       </Button>
     );
-  if (status === 'connecting')
+  }
+
+  if (voiceCall.status === 'connecting') {
     return (
-      <Button
-        variant="default"
-        size="icon-md"
-        type="button"
-        aria-label="Connecting"
-        tooltip="Voice call connection in progress"
-        data-testid="voice-call-button"
-      >
-        <Loader2 className="text-neutral3 size-5 motion-safe:animate-spin" />
+      <Button variant="default" size="icon-md" type="button" tooltip="Connecting…" data-testid="voice-call-button">
+        <Loader2 className="text-neutral3 h-5 w-5 animate-spin" />
       </Button>
     );
+  }
+
   return (
     <Button
       variant="default"
       size="icon-md"
       type="button"
-      aria-label="End voice call"
-      tooltip="Stop the current voice call"
+      tooltip="End voice call"
       data-testid="voice-call-button"
-      onClick={onStop}
+      onClick={() => voiceCall.stop()}
     >
-      <PhoneOff className="text-accent2 size-5" />
+      <PhoneOff className="h-5 w-5 text-red-500" />
     </Button>
   );
-}
-
-export interface VoiceCallButtonProps {
-  voiceCall: VoiceCallControls;
-}
-
-export const VoiceCallButton = ({ voiceCall }: VoiceCallButtonProps) => (
-  <VoiceCallButtonView
-    status={voiceCall.status}
-    available={voiceCall.isLiveKitAvailable}
-    onStart={voiceCall.start}
-    onStop={voiceCall.stop}
-  />
-);
+};

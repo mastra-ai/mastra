@@ -1,4 +1,3 @@
-import { ComposerStatusLine } from '@mastra/playground-ui/components/Composer';
 import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../../hooks/useFactories';
@@ -35,7 +34,10 @@ export function StatusLine() {
   const workItemsPending = Boolean(factoryProjectKey) && workItems.isPending;
 
   return (
-    <ComposerStatusLine>
+    <div
+      aria-label="Session status line"
+      className="text-ui-sm text-icon3 flex h-fit shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1"
+    >
       <ModesSelection />
       <ModelPicker />
       <OperationalMemoryStatus />
@@ -46,6 +48,6 @@ export function StatusLine() {
       {!workItemsPending && currentItem?.source !== 'github-pr' ? (
         <PullRequestLinks repository={repository} threadId={threadId} />
       ) : null}
-    </ComposerStatusLine>
+    </div>
   );
 }
