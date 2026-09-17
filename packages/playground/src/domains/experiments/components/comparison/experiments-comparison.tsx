@@ -131,17 +131,17 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
           <div role="columnheader" aria-label="Baseline" className={cell}>
             <ComparisonSideHeader
               side="baseline"
-              experiment={baselineExperiment}
+              experiment={baselineExperiment ?? undefined}
               summary={summaries.baseline}
-              versionMismatch={versionMismatch}
+              versionMismatch={versionMismatch ?? undefined}
             />
           </div>
           <div role="columnheader" aria-label="Contender" className={cell}>
             <ComparisonSideHeader
               side="contender"
-              experiment={contenderExperiment}
+              experiment={contenderExperiment ?? undefined}
               summary={summaries.contender}
-              versionMismatch={versionMismatch}
+              versionMismatch={versionMismatch ?? undefined}
               showDeltas
             />
           </div>

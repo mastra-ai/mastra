@@ -527,7 +527,7 @@ describe('ToolCard dispatch', () => {
         { wrapper: Providers },
       );
       expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('true');
-      expect(screen.getByRole('button', { name: 'Approve' })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Approve agent-head' })).not.toBeNull();
     });
   });
 
@@ -564,7 +564,7 @@ describe('ToolCard dispatch', () => {
         { wrapper: Providers },
       );
       expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('true');
-      expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Approve agent-head' })).toBeNull();
     });
   });
 

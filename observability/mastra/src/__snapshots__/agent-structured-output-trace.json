@@ -6,7 +6,8 @@
     "│       └── model_inference: \"inference: 0\"",
     "│           ├── model_chunk: \"chunk: 'text'\"",
     "│           └── model_chunk: \"chunk: 'object'\"",
-    "└── processor_run: \"output stream processor: Structured Output\""
+    "├── processor_run: \"output stream processor: Structured Output\"",
+    "└── processor_run: \"output step processor: structured-output\""
   ],
   "spans": [
     {
@@ -277,7 +278,6 @@
             "attributes": {
               "processorExecutor": "legacy",
               "processorIndex": 0,
-              "hookDurationMs": { "__any__": "number" },
               "internalUsage": {
                 "inputTokens": 15,
                 "outputTokens": 25,
@@ -287,6 +287,9 @@
                 "outputDetails": {
                   "text": 25
                 }
+              },
+              "hookDurationMs": {
+                "__any__": "number"
               }
             },
             "metadata": {
@@ -301,6 +304,82 @@
               "totalChunks": 4,
               "accumulatedText": "Mock V2 stream response"
             }
+          }
+        },
+        {
+          "span": {
+            "id": "<span-8>",
+            "traceId": "<trace-1>",
+            "name": "output step processor: structured-output",
+            "type": "processor_run",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "output_step_processor",
+            "entityId": "structured-output",
+            "attributes": {
+              "processorExecutor": "legacy",
+              "processorIndex": 0
+            },
+            "metadata": {
+              "runId": "<runId-1>",
+              "environment": "test"
+            },
+            "input": {
+              "messages": [
+                {
+                  "id": "<id-1>",
+                  "role": "user",
+                  "createdAt": "<date>",
+                  "content": {
+                    "format": 2,
+                    "parts": [
+                      {
+                        "type": "text",
+                        "text": "Return a list of items separated by commas",
+                        "createdAt": "<date>"
+                      }
+                    ],
+                    "content": "Return a list of items separated by commas"
+                  }
+                },
+                {
+                  "id": "<id-2>",
+                  "role": "assistant",
+                  "content": {
+                    "format": 2,
+                    "parts": [
+                      {
+                        "type": "text",
+                        "text": "Mock V2 stream response",
+                        "createdAt": "<date>"
+                      }
+                    ],
+                    "content": "Mock V2 stream response",
+                    "metadata": {
+                      "modelId": "mock-model-id",
+                      "provider": "mock-provider",
+                      "traceId": "<trace-1>",
+                      "structuredOutput": {
+                        "items": "test structured output"
+                      }
+                    }
+                  },
+                  "createdAt": "<date>"
+                }
+              ],
+              "systemMessages": [
+                {
+                  "role": "system",
+                  "content": "Return a simple response"
+                }
+              ],
+              "stepNumber": 0,
+              "finishReason": "stop",
+              "text": "Mock V2 stream response"
+            },
+            "output": {}
           }
         }
       ]

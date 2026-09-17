@@ -113,7 +113,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
     <div className="flex flex-col gap-4">
       {appHtml && (
         <div className="border-border1 border-b p-4">
-          <McpAppViewer html={appHtml} toolName={tool.name ?? tool.id} onToolCall={handleToolCall} />
+          <McpAppViewer html={appHtml} toolName={tool.name} onToolCall={handleToolCall} />
         </div>
       )}
       <ToolExecutor
@@ -122,7 +122,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
         zodInputSchema={zodInputSchema}
         handleExecuteTool={handleExecuteTool}
         toolDescription={tool.description || ''}
-        toolId={tool.id}
+        toolId={tool.name}
       />
     </div>
   );

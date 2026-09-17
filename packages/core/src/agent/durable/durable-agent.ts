@@ -2035,24 +2035,39 @@ export class DurableAgent<
     // Track cleanup state to avoid double cleanup
     let cleanedUp = false;
     let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+    // Assigned once the stream is created below. Declared here so the shared
+    // performCleanup() closure can unsubscribe the pubsub reader (via
+    // streamCleanup) from both the auto-cleanup timer and the explicit
+    // cleanup() path — mirroring observe().
+    let streamCleanup: (() => void) | undefined;
+
+    // Single cleanup path for both the auto-cleanup timer and the explicit
+    // cleanup(). Unsubscribes the pubsub reader FIRST, then tears down the
+    // registry entries and pubsub topic. Idempotent via `cleanedUp`.
+    const performCleanup = () => {
+      if (autoCleanupTimer) {
+        clearTimeout(autoCleanupTimer);
+        autoCleanupTimer = null;
+      }
+      if (cleanedUp) return;
+
+      streamCleanup?.();
+      this.#runRegistry.cleanup(runId);
+      globalRunRegistry.delete(runId);
+      this.#clearPubsubTopic(runId);
+      cleanedUp = true;
+    };
 
     // Schedule automatic registry cleanup after stream ends
     const scheduleAutoCleanup = () => {
       if (autoCleanupTimer || cleanedUp || this.#cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(() => {
-        if (!cleanedUp) {
-          this.#runRegistry.cleanup(runId);
-          globalRunRegistry.delete(runId);
-          this.#clearPubsubTopic(runId);
-          cleanedUp = true;
-        }
-      }, this.#cleanupTimeoutMs);
+      autoCleanupTimer = setTimeout(performCleanup, this.#cleanupTimeoutMs);
     };
 
     // 3. Create the durable agent stream (subscribes to pubsub)
     const {
       output,
-      cleanup: streamCleanup,
+      cleanup: createdStreamCleanup,
       ready,
     } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
@@ -2095,6 +2110,7 @@ export class DurableAgent<
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
       messageList,
     });
+    streamCleanup = createdStreamCleanup;
 
     // 4. Wait for subscription to be ready, then execute workflow
     // This prevents race conditions where events are published before subscription
@@ -2142,20 +2158,10 @@ export class DurableAgent<
       this.getPubSub(),
     );
 
-    // 5. Create cleanup function (cancels auto-cleanup timer if called)
-    const cleanup = () => {
-      if (autoCleanupTimer) {
-        clearTimeout(autoCleanupTimer);
-        autoCleanupTimer = null;
-      }
-      if (!cleanedUp) {
-        streamCleanup();
-        this.#runRegistry.cleanup(runId);
-        globalRunRegistry.delete(runId);
-        this.#clearPubsubTopic(runId);
-        cleanedUp = true;
-      }
-    };
+    // 5. Cleanup function — routes through the shared performCleanup() so the
+    // explicit call and the auto-cleanup timer release the same resources
+    // (including the pubsub subscription via streamCleanup).
+    const cleanup = performCleanup;
 
     const abort = async (reason?: unknown) => {
       if (!abortController.signal.aborted) {
@@ -2362,17 +2368,31 @@ export class DurableAgent<
     // Track cleanup state to avoid double cleanup
     let cleanedUp = false;
     let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+    // Assigned once the stream is created below so the shared performCleanup()
+    // closure can unsubscribe the pubsub reader (via streamCleanup) from both
+    // the auto-cleanup timer and the explicit cleanup() path — mirroring observe().
+    let streamCleanup: (() => void) | undefined;
+
+    // Single cleanup path for both the auto-cleanup timer and the explicit
+    // cleanup(). Unsubscribes the pubsub reader FIRST, then tears down the
+    // registry entries and pubsub topic. Idempotent via `cleanedUp`.
+    const performCleanup = () => {
+      if (autoCleanupTimer) {
+        clearTimeout(autoCleanupTimer);
+        autoCleanupTimer = null;
+      }
+      if (cleanedUp) return;
+
+      streamCleanup?.();
+      this.#runRegistry.cleanup(runId);
+      globalRunRegistry.delete(runId);
+      this.#clearPubsubTopic(runId);
+      cleanedUp = true;
+    };
 
     const scheduleAutoCleanup = () => {
       if (autoCleanupTimer || cleanedUp || this.#cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(() => {
-        if (!cleanedUp) {
-          this.#runRegistry.cleanup(runId);
-          globalRunRegistry.delete(runId);
-          this.#clearPubsubTopic(runId);
-          cleanedUp = true;
-        }
-      }, this.#cleanupTimeoutMs);
+      autoCleanupTimer = setTimeout(performCleanup, this.#cleanupTimeoutMs);
     };
 
     const globalEntry = globalRunRegistry.get(runId);
@@ -2438,7 +2458,7 @@ export class DurableAgent<
 
     const {
       output,
-      cleanup: streamCleanup,
+      cleanup: createdStreamCleanup,
       ready,
     } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
@@ -2474,6 +2494,7 @@ export class DurableAgent<
       tracingContext: resumeSegmentSpan ? { currentSpan: resumeSegmentSpan } : undefined,
       messageList: globalEntry?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
+    streamCleanup = createdStreamCleanup;
 
     // Wait for subscription to be ready, then resume workflow
     const workflow = this.getWorkflow();
@@ -2554,19 +2575,10 @@ export class DurableAgent<
       this.getPubSub(),
     );
 
-    const cleanup = () => {
-      if (autoCleanupTimer) {
-        clearTimeout(autoCleanupTimer);
-        autoCleanupTimer = null;
-      }
-      if (!cleanedUp) {
-        streamCleanup();
-        this.#runRegistry.cleanup(runId);
-        globalRunRegistry.delete(runId);
-        this.#clearPubsubTopic(runId);
-        cleanedUp = true;
-      }
-    };
+    // Route the explicit cleanup through the shared performCleanup() so it and
+    // the auto-cleanup timer release the same resources (including the pubsub
+    // subscription via streamCleanup).
+    const cleanup = performCleanup;
 
     const abort = async (reason?: unknown) => {
       if (!abortController.signal.aborted) {
@@ -2689,6 +2701,11 @@ export class DurableAgent<
     // 3. Cleanup plumbing (mirrors stream()/resume()).
     let cleanedUp = false;
     let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+    // Assigned once the recovered stream is created below so the shared
+    // performCleanup() closure can unsubscribe the pubsub reader (via
+    // streamCleanup) from both the auto-cleanup timer and the explicit
+    // cleanup() path — mirroring observe().
+    let streamCleanup: (() => void) | undefined;
     const cleanupOwnedRegistryState = () => {
       if (this.#runRegistry.get(runId) === registryEntry) {
         this.#runRegistry.cleanup(runId);
@@ -2699,13 +2716,21 @@ export class DurableAgent<
       }
       cleanedUp = true;
     };
+    // Single cleanup path for the auto-cleanup timer, the explicit cleanup(),
+    // and the recovery error paths. Unsubscribes the pubsub reader FIRST, then
+    // tears down the owned registry entries. Idempotent via `cleanedUp`.
+    const performCleanup = () => {
+      if (autoCleanupTimer) {
+        clearTimeout(autoCleanupTimer);
+        autoCleanupTimer = null;
+      }
+      if (cleanedUp) return;
+      streamCleanup?.();
+      cleanupOwnedRegistryState();
+    };
     const scheduleAutoCleanup = () => {
       if (autoCleanupTimer || cleanedUp || this.#cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(() => {
-        if (!cleanedUp) {
-          cleanupOwnedRegistryState();
-        }
-      }, this.#cleanupTimeoutMs);
+      autoCleanupTimer = setTimeout(performCleanup, this.#cleanupTimeoutMs);
     };
 
     let workflow: ReturnType<DurableAgent<TAgentId, TTools, TOutput>['getWorkflow']>;
@@ -2731,7 +2756,8 @@ export class DurableAgent<
       scheduleAutoCleanup,
       recoveryLease,
     });
-    const { output, cleanup: streamCleanup, ready } = stream;
+    const { output, cleanup: createdStreamCleanup, ready } = stream;
+    streamCleanup = createdStreamCleanup;
     const recoveryPubsub = this.#createRecoveryFencedPubSub(recoveryLease);
 
     // 5. Re-drive the workflow from the persisted snapshot in the background
@@ -2771,15 +2797,13 @@ export class DurableAgent<
         const leaseLossError = recoveryLease.getLossError();
         if (leaseLossError) {
           await threadRegistration?.rollback({ releaseLease: false });
-          streamCleanup();
-          cleanupOwnedRegistryState();
+          performCleanup();
         }
         const recoveryError = leaseLossError ?? error;
         const reported = await this.#reportRecoveryFailure(runId, recoveryError);
         if (!reported && !leaseLossError) {
           await threadRegistration?.rollback();
-          streamCleanup();
-          cleanupOwnedRegistryState();
+          performCleanup();
         }
         throw recoveryError;
       })
@@ -2794,16 +2818,10 @@ export class DurableAgent<
     // the stream's `onError` callback.
     workflowExecution.catch(() => {});
 
-    const cleanup = () => {
-      if (autoCleanupTimer) {
-        clearTimeout(autoCleanupTimer);
-        autoCleanupTimer = null;
-      }
-      if (!cleanedUp) {
-        streamCleanup();
-        cleanupOwnedRegistryState();
-      }
-    };
+    // Route the explicit cleanup through the shared performCleanup() so it, the
+    // auto-cleanup timer, and the recovery error paths release the same
+    // resources (including the pubsub subscription via streamCleanup).
+    const cleanup = performCleanup;
 
     const abort = async (reason?: unknown) => {
       if (!abortController.signal.aborted) {

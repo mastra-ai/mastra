@@ -697,6 +697,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   pluginManager?.setRuntime({
     getController: () => pluginRuntimeController,
     getActiveSession: () => activeSession,
+    getStorage: () => ({ storage, storageBackend: storageResult.backend, vector }),
   });
   const loadedPlugins = pluginManager ? await pluginManager.reload() : [];
   const pluginTools = pluginManager?.getPluginTools() ?? {};
@@ -1229,17 +1230,30 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   if (useCrossAgentSignals) {
     controller.onSessionCreated(
       async session => {
-        const threadOwnership = createThreadOwnershipManager(threadId =>
-          controller.getCurrentAgent(session).claimThreadOwnership({
+        const latestObservedTitles = new Map<string, { revision: number; title: string | undefined }>();
+        const threadOwnership = createThreadOwnershipManager(async threadId => {
+          const revisionAtStart = latestObservedTitles.get(threadId)?.revision ?? 0;
+          const thread = await session.thread.getById({ threadId });
+          const agent = controller.getCurrentAgent(session);
+          const claim = await agent.claimThreadOwnership({
             threadId,
             resourceId: session.identity.getResourceId(),
             streamOptions: () => session.machinery.buildStreamOptions({}),
             peer: {
-              label: `${project.name} (${threadId})`,
-              title: project.name,
+              label: project.name,
+              ...(thread?.title ? { title: thread.title } : {}),
             },
-          }),
-        );
+          });
+          const observedTitle = latestObservedTitles.get(threadId);
+          if (claim.claimed && observedTitle && observedTitle.revision !== revisionAtStart) {
+            agent.updateThreadPeerAdvertisement({
+              resourceId: session.identity.getResourceId(),
+              threadId,
+              peer: { title: observedTitle.title },
+            });
+          }
+          return claim;
+        });
 
         const claimThreadOwnership = async (threadId: string) => {
           try {
@@ -1251,6 +1265,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         const unsubscribeSession = session.subscribe(event => {
           if (event.type === 'thread_changed') void claimThreadOwnership(event.threadId);
           else if (event.type === 'thread_created') void claimThreadOwnership(event.thread.id);
+          else if (event.type === 'thread_title_updated' || event.type === 'om_thread_title_updated') {
+            const title = event.type === 'thread_title_updated' ? event.title : event.newTitle;
+            const revision = (latestObservedTitles.get(event.threadId)?.revision ?? 0) + 1;
+            latestObservedTitles.set(event.threadId, { revision, title });
+            controller.getCurrentAgent(session).updateThreadPeerAdvertisement({
+              resourceId: session.identity.getResourceId(),
+              threadId: event.threadId,
+              peer: { title },
+            });
+          }
         });
         sessionPeerCleanup.set(session, () => {
           unsubscribeSession();

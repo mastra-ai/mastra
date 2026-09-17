@@ -625,6 +625,9 @@ export class InngestRun<
     const runOutput = await this.getRunOutput(eventId);
     const result = runOutput?.output?.result;
     this.hydrateFailedResult(result);
+    if (result.status !== 'suspended') {
+      this.cleanup?.();
+    }
     return result;
   }
 
