@@ -2,7 +2,7 @@
 import type { BaseUIEvent } from '@base-ui/react/types';
 import { LockIcon, PencilIcon, SearchIcon, XIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps, KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { emptyValueFor, useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionList } from './filter-bar-option-list';
@@ -102,6 +102,13 @@ export function FilterBarChip({ item, readOnly = false, removable = true, classN
   const operator = ctx.getOperator(item.operatorId);
   const index = ctx.items.findIndex(i => i.id === item.id);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  const pinned = readOnly || !removable;
+  const { registerNonRemovable } = ctx;
+  useEffect(() => {
+    registerNonRemovable(item.id, pinned);
+    return () => registerNonRemovable(item.id, false);
+  }, [registerNonRemovable, item.id, pinned]);
 
   const operatorImplied = field ? ctx.getFieldOperators(field).length === 1 : false;
   const label = [

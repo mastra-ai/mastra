@@ -549,6 +549,18 @@ describe('FilterBar', () => {
         expect(getChips()).toHaveLength(INITIAL.length);
       });
 
+      it('Clear keeps it and removes the others', () => {
+        const onChange = vi.fn();
+        render(<Harness initial={INITIAL} nonRemovableIds={['b']} onChange={onChange} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+        expect(onChange).toHaveBeenCalledWith([INITIAL[1]]);
+      });
+
+      it('hides Clear when no other chip is removable', () => {
+        render(<Harness initial={INITIAL.slice(1)} nonRemovableIds={['b']} />);
+        expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
+      });
+
       it('ArrowLeft from the next chip lands on its value segment', () => {
         render(<Harness initial={INITIAL} nonRemovableIds={['a']} />);
         const field = screen.getByRole('combobox', { name: 'Field: Trace ID' });

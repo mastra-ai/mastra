@@ -167,7 +167,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // The time-range chip is a synthetic, always-present item so it takes part in keyboard
   // navigation; it never round-trips to filter tokens (its state lives in the date params).
   const filterBarValue = useMemo(() => [TRACE_TIME_RANGE_ITEM, ...filterBarItems], [filterBarItems]);
-  // Re-inject the hidden scope items so the FilterBar clear button (which emits `[]`) and any other
+  // Re-inject the hidden scope items so the FilterBar clear button (which drops every removable item) and any other
   // edit can never drop the scope from the URL.
   const handleFilterBarChange = useCallback(
     (items: FilterBarItem[]) => {
