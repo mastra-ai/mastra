@@ -535,15 +535,15 @@ describe('CoreToolBuilder background override injection', () => {
       expect(tool.inputSchema).toBe(before);
     });
 
-    // The injected `suspendedToolRunId` key must still survive through to the
-    // sub-agent tool's own execute() now that the spliced schema lives on the
-    // builder instead of being written back onto the tool.
-    it('still delivers suspendedToolRunId to agent- tool execute (zod v4)', async () => {
+    it.each([
+      ['zod v4', z4.object({ message: z4.string() })],
+      ['zod v3 fallback', z3.object({ message: z3.string() })],
+    ])('strips model-authored suspendedToolRunId before agent- tool execution (%s)', async (_label, inputSchema) => {
       const execute = vi.fn().mockResolvedValue({ done: true });
       const tool = createTool({
         id: 'agent-child',
         description: 'Sub-agent as a tool',
-        inputSchema: z4.object({ message: z4.string() }),
+        inputSchema,
         execute,
       });
 
@@ -552,39 +552,43 @@ describe('CoreToolBuilder background override injection', () => {
         options: { ...baseOptions(), name: 'agent-child', backgroundConfig: undefined },
       }).build();
 
-      await built.execute!({ message: 'hi', suspendedToolRunId: 'run_123' } as any, {
+      await built.execute!({ message: 'hi', suspendedToolRunId: 'model-authored-run' } as any, {
         toolCallId: 'call-1',
         messages: [],
       });
 
       expect(execute).toHaveBeenCalledWith(
-        expect.objectContaining({ suspendedToolRunId: 'run_123' }),
-        expect.anything(),
+        { message: 'hi' },
+        expect.objectContaining({ agent: expect.objectContaining({ suspendedToolRunId: undefined }) }),
       );
     });
 
-    it('still delivers suspendedToolRunId to agent- tool execute (zod v3 fallback)', async () => {
+    it.each([
+      ['zod v4', z4.object({ message: z4.string() })],
+      ['zod v3 fallback', z3.object({ message: z3.string() })],
+    ])('delivers only the trusted suspendedToolRunId to agent- tool execution (%s)', async (_label, inputSchema) => {
       const execute = vi.fn().mockResolvedValue({ done: true });
       const tool = createTool({
-        id: 'agent-child-v3',
+        id: 'agent-child',
         description: 'Sub-agent as a tool',
-        inputSchema: z3.object({ message: z3.string() }),
+        inputSchema,
         execute,
       });
 
       const built = new CoreToolBuilder({
         originalTool: tool,
-        options: { ...baseOptions(), name: 'agent-child-v3', backgroundConfig: undefined },
+        options: { ...baseOptions(), name: 'agent-child', backgroundConfig: undefined },
       }).build();
 
-      await built.execute!({ message: 'hi', suspendedToolRunId: 'run_123' } as any, {
+      await built.execute!({ message: 'hi', suspendedToolRunId: 'model-authored-run' } as any, {
         toolCallId: 'call-1',
         messages: [],
+        suspendedToolRunId: 'framework-run',
       });
 
       expect(execute).toHaveBeenCalledWith(
-        expect.objectContaining({ suspendedToolRunId: 'run_123' }),
-        expect.anything(),
+        { message: 'hi', suspendedToolRunId: 'framework-run' },
+        expect.objectContaining({ agent: expect.objectContaining({ suspendedToolRunId: 'framework-run' }) }),
       );
     });
   });

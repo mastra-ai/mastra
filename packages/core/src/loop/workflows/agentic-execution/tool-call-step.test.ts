@@ -42,6 +42,38 @@ const makeBaseExecuteParams = (suspend: Mock, overrides: any = {}) => ({
   ...overrides,
 });
 
+describe('createToolCallStep delegated run identity provenance', () => {
+  it('does not forward an unverified model-authored run id without persisted suspension state', async () => {
+    const execute = vi.fn(async () => ({ ok: true }));
+    const toolCallStep = createToolCallStep({
+      tools: { 'workflow-test': { execute } },
+      messageList: createMessageList(),
+      controller: { enqueue: vi.fn() },
+      runId: 'outer-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: {
+          toolCallId: 'fresh-call',
+          toolName: 'workflow-test',
+          args: {
+            inputData: { value: 'fresh' },
+            resumeData: { approved: true },
+            suspendedToolRunId: 'hallucinated-run-id',
+          },
+        },
+      }),
+    );
+
+    expect(execute).toHaveBeenCalledWith(
+      expect.not.objectContaining({ suspendedToolRunId: expect.anything() }),
+      expect.not.objectContaining({ suspendedToolRunId: expect.anything() }),
+    );
+  });
+});
+
 describe('createToolCallStep background task resume with falsy payload', () => {
   afterEach(() => {
     vi.clearAllMocks();

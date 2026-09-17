@@ -4,7 +4,6 @@ import { z } from 'zod/v4';
 import { normalizeModelOutput } from '../../../agent/durable/workflows/steps/normalize-model-output';
 import { stopGoalActivity } from '../../../agent/goal';
 import { resolveDeclineReason } from '../../../agent/tool-approval';
-import { resolveSuspendedToolRunId } from '../../../agent/utils';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
@@ -47,6 +46,7 @@ import {
   THREAD_ID_KEY,
   TOOL_PAYLOAD_TRANSFORM_KEY,
 } from '../../run-scope-keys';
+import { resolveFrameworkSuspendedToolRunId } from '../../shared/suspended-tool-run-id';
 import type { OuterLLMRun } from '../../types';
 import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
@@ -855,81 +855,27 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             : {}),
         };
 
-        //if resuming a subAgent or workflow tool, we want to find the runId from when it got suspended.
-        // Also look up the runId when the LLM provided resumeData in args (isResumeToolCall)
-        // but omitted suspendedToolRunId — without it, workflow tools start a fresh run and re-suspend.
-        // Nullish, not truthy, for the same reason as the cleanup gate below: a delegated tool can
-        // be resumed with `false` / `0` / `''`, and skipping the lookup there would start a fresh
-        // sub-run (and the cleanup below would drop the entry that could still recover the id).
+        const modelSuppliedSuspendedToolRunId = args?.suspendedToolRunId;
+        if (args && typeof args === 'object') {
+          delete args.suspendedToolRunId;
+        }
+
+        // Delegated identity is trusted only after it is tied to framework-persisted
+        // suspension state. Nullish, not truthy: false / 0 / '' are valid resume payloads.
         const needsRunIdLookup = resumeDataToPassToToolOptions != null && (isAgentTool || isWorkflowTool);
         if (needsRunIdLookup) {
-          // Primary source: the per-iteration workflow suspend payload, which carries the
-          // suspended run id partitioned per tool call (resumeLabel = toolCallId). This is
-          // collision-free for parallel delegations to the same sub-agent, where the shared,
-          // toolName-keyed per-message pendingToolApprovals metadata is overwritten by a sibling
-          // branch — so the message lookup below would return the wrong (surviving) run id and
-          // resume the wrong call (or fail with AGENT_RESUME_NO_SNAPSHOT_FOUND). The message
-          // metadata / data parts remain as a fallback for page-refresh resumes where the
-          // workflow snapshot is unavailable.
-          let suspendedToolRunId = (suspendData as any)?.suspendedToolRunId || '';
-          // The model authors the optional `suspendedToolRunId` schema field, and some models
-          // emit sentinel strings like "null" for it (#23739). Resolve it into a local — without
-          // mutating the model-authored args, which are persisted and echoed back verbatim in
-          // auto-resume prompts — so junk doesn't suppress the parts fallback below. Junk that
-          // survives in args when the lookups find nothing is harmless: every execute-side
-          // consumer (workflow/agent delegation seams) sanitizes the field independently.
-          const modelSuppliedSuspendedToolRunId = resolveSuspendedToolRunId(args?.suspendedToolRunId);
-          const shouldUsePartsFallback = !isResumeToolCall || !modelSuppliedSuspendedToolRunId;
-          const messages = messageList.get.all.db();
-          const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
-          for (const message of assistantMessages) {
-            if (suspendedToolRunId) break;
-            const pendingOrSuspendedTools = (message.content.metadata?.suspendedTools ||
-              message.content.metadata?.pendingToolApprovals) as Record<string, any>;
-            if (pendingOrSuspendedTools) {
-              // Entries are now keyed by toolCallId so parallel calls to the SAME tool each keep
-              // their own suspension. Resolution order:
-              //   1. Exact toolCallId match (key, then entry value) — used by approveToolCall-style
-              //      resume where the resumed call id equals the suspended one.
-              //   2. toolName match — used by autoResumeSuspendedTools, where resume happens via a
-              //      fresh stream() turn so inputData.toolCallId differs from the suspended call.
-              //      Also covers legacy metadata that was keyed by toolName.
-              const entry =
-                pendingOrSuspendedTools[inputData.toolCallId] ??
-                Object.values(pendingOrSuspendedTools).find((e: any) => e?.toolCallId === inputData.toolCallId) ??
-                pendingOrSuspendedTools[inputData.toolName] ??
-                Object.values(pendingOrSuspendedTools).find((e: any) => e?.toolName === inputData.toolName);
-              if (entry) {
-                // Prefer the inner delegated run id — that's the run the sub-agent/workflow tool
-                // must resume. `entry.runId` is the outer resumable run; older persisted entries
-                // stored the inner run there, so it remains the fallback.
-                suspendedToolRunId = entry.delegatedRunId ?? entry.runId;
-                break;
-              }
-            }
-
-            if (shouldUsePartsFallback) {
-              const dataToolSuspendedParts = message.content.parts?.filter(
-                part =>
-                  (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
-                  !(part.data as any).resumed,
-              );
-              if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
-                // Prefer the part for this exact tool call; fall back to toolName for older parts
-                // that may not carry a toolCallId.
-                const foundTool =
-                  dataToolSuspendedParts.find((part: any) => part.data.toolCallId === inputData.toolCallId) ??
-                  dataToolSuspendedParts.find((part: any) => part.data.toolName === inputData.toolName);
-                if (foundTool) {
-                  suspendedToolRunId = (foundTool as any).data.delegatedRunId ?? (foundTool as any).data.runId;
-                  break;
-                }
-              }
-            }
-          }
+          const suspendedToolRunId = resolveFrameworkSuspendedToolRunId({
+            toolCallId: inputData.toolCallId,
+            toolName: inputData.toolName,
+            resumeSource: isResumeToolCall ? 'model' : 'framework',
+            modelSuppliedSuspendedToolRunId,
+            suspendData,
+            messages: messageList.get.all.db(),
+          });
 
           if (suspendedToolRunId) {
             args.suspendedToolRunId = suspendedToolRunId;
+            toolOptions.suspendedToolRunId = suspendedToolRunId;
           }
         }
 
@@ -1039,6 +985,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       onProgress?: (chunk: BackgroundTaskProgressChunk) => Promise<void>;
                       suspend?: (data?: unknown, options?: SuspendOptions) => Promise<void>;
                       resumeData?: unknown;
+                      suspendedToolRunId?: string;
                     },
                   ) => {
                     // Override the agent loop's `suspend`/`resumeData` (which
@@ -1056,6 +1003,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                         disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
                       },
                       ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
+                      suspendedToolRunId: opts?.suspendedToolRunId,
                       suspend: async (data?: unknown, options?: SuspendOptions) => {
                         await toolOptions.suspend?.(data, options);
                         return opts?.suspend?.(data, options);

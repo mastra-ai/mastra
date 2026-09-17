@@ -3,6 +3,7 @@ import { createBackgroundTask } from '../../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../../background-tasks/resolve-config';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
+import { resolveFrameworkSuspendedToolRunId } from '../../../../loop/shared/suspended-tool-run-id';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
@@ -20,7 +21,6 @@ import { stopGoalActivity } from '../../../goal';
 import type { MessageList } from '../../../message-list';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
-import { resolveSuspendedToolRunId } from '../../../utils';
 import { DurableStepIds } from '../../constants';
 import { globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
@@ -825,36 +825,29 @@ export function createDurableToolCallStep() {
         cleanedArgs.resourceId = state?.resourceId;
       }
 
-      // The model authors the optional `suspendedToolRunId` arg, and some models emit
-      // sentinel strings like "null" for it. Drop sentinels so the back-fill below can
-      // restore the framework-persisted id from the suspend payload (#23739). The
-      // suspendData-side value is framework-written and stays unfiltered.
-      const resolvedArgsSuspendedToolRunId = resolveSuspendedToolRunId(cleanedArgs.suspendedToolRunId);
-      if (resolvedArgsSuspendedToolRunId === undefined) {
-        delete cleanedArgs.suspendedToolRunId;
-      } else {
-        cleanedArgs.suspendedToolRunId = resolvedArgsSuspendedToolRunId;
-      }
+      const modelSuppliedSuspendedToolRunId = cleanedArgs.suspendedToolRunId;
+      delete cleanedArgs.suspendedToolRunId;
 
-      // When resuming a delegated sub-agent/workflow tool, recover the inner
-      // suspended run id from this tool call's workflow suspend payload. The
-      // payload is partitioned by resumeLabel, so parallel calls to the same
-      // delegate cannot select each other's run. Auto-resume calls already pass
-      // suspendedToolRunId in their arguments and keep that value unchanged.
+      // Delegated identity is trusted only after it is tied to framework-persisted
+      // suspension state. The suspend payload remains the primary per-tool-call source.
       const isResumableTool = toolName?.startsWith('agent-') || toolName?.startsWith('workflow-');
-      const suspendedToolRunId = (suspendData as { suspendedToolRunId?: unknown } | undefined)?.suspendedToolRunId;
+      const needsRunIdLookup = isResumableTool && (resumeData !== undefined || !!approvalGrant);
+      const suspendedToolRunId = needsRunIdLookup
+        ? resolveFrameworkSuspendedToolRunId({
+            toolCallId,
+            toolName,
+            resumeSource: resumeDataFromArgs !== undefined ? 'model' : 'framework',
+            modelSuppliedSuspendedToolRunId,
+            suspendData,
+            messages: messageList?.get.all.db() ?? [],
+          })
+        : undefined;
       // When the delegation tool is itself approval-gated, an `{ approved: true }`
       // resume is ambiguous: it can answer this step's pre-execution gate (execute
-      // fresh) or a delegated approval raised mid-execution by the sub-agent. The
-      // suspend payload disambiguates — only the delegated approval persists an
-      // inner suspended run id, so its decision must resume that inner run.
-      const isDelegatedApprovalResume = !!approvalGrant && isResumableTool && typeof suspendedToolRunId === 'string';
-      if (
-        (isResumingFromSuspension || isDelegatedApprovalResume) &&
-        isResumableTool &&
-        !cleanedArgs.suspendedToolRunId &&
-        typeof suspendedToolRunId === 'string'
-      ) {
+      // fresh) or a delegated approval raised mid-execution by the sub-agent. A
+      // framework-resolved inner run id disambiguates the delegated approval.
+      const isDelegatedApprovalResume = !!approvalGrant && !!suspendedToolRunId;
+      if ((isResumingFromSuspension || isDelegatedApprovalResume) && suspendedToolRunId) {
         cleanedArgs.suspendedToolRunId = suspendedToolRunId;
       }
 
@@ -911,6 +904,7 @@ export function createDurableToolCallStep() {
         // Delegated approval decisions must also flow to the wrapper tool: it only
         // resumes the inner suspended run when resumeData is present.
         resumeData: isResumingFromSuspension || isDelegatedApprovalResume ? resumeData : undefined,
+        suspendedToolRunId,
         // The payload this tool call suspended with (see `toolCallSuspended` below), so a
         // resumed tool can continue from its own state — mirrors the non-durable step.
         ...(isResumingFromSuspension &&
@@ -1097,6 +1091,7 @@ export function createDurableToolCallStep() {
                     return tool.execute!(taskArgs, {
                       ...toolOptions,
                       ...(taskContext?.resumeData !== undefined ? { resumeData: taskContext.resumeData } : {}),
+                      suspendedToolRunId: taskContext?.suspendedToolRunId,
                       suspend: async (data?: unknown, options?: SuspendOptions) => {
                         await toolOptions.suspend?.(data, options);
                         return taskContext?.suspend?.(data, options);
