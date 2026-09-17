@@ -269,6 +269,11 @@ export type McE2eScenario = {
   inProcessApp?: (context: McE2eInProcessAppContext) => Promise<McE2eInProcessApp> | McE2eInProcessApp;
   terminalBackend?: 'subprocess';
   prepare?: (context: McE2ePrepareContext) => Promise<void> | void;
-  run: (context: { terminal: McE2eTerminal; runtime: McE2eScenarioRuntime; dbPath: string }) => Promise<void>;
+  run: (context: {
+    terminal: McE2eTerminal;
+    runtime: McE2eScenarioRuntime;
+    dbPath: string;
+    readGlobalSettings: () => Record<string, unknown>;
+  }) => Promise<void>;
   verifyAimockRequests?: (requests: unknown[]) => void;
 };

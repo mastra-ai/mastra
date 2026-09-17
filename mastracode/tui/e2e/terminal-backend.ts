@@ -23,6 +23,7 @@ export type TerminalRunConfig = {
   env: Record<string, string | null>;
   cwd: string;
   context: McE2ePrepareContext;
+  readGlobalSettings: () => Record<string, unknown>;
 };
 
 const XtermTerminal = xterm.Terminal;
@@ -480,7 +481,12 @@ export async function runTerminalScenario(
       };
 
       await withTerminalProcessOutput(terminal, () =>
-        scenario.run({ terminal: scenarioTerminal, runtime, dbPath: runConfig.context.dbPath }),
+        scenario.run({
+          terminal: scenarioTerminal,
+          runtime,
+          dbPath: runConfig.context.dbPath,
+          readGlobalSettings: runConfig.readGlobalSettings,
+        }),
       );
       return 0;
     } finally {

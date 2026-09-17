@@ -48,7 +48,7 @@ export const onboardingOmFollowsLoginScenario = {
       CEREBRAS_API_KEY: '',
     };
   },
-  async run({ terminal, runtime }) {
+  async run({ terminal, runtime, readGlobalSettings }) {
     runtime.startLiveOutput(terminal);
 
     await runtime.waitForScreenText(/Welcome to Mastra Code/i, terminal);
@@ -79,10 +79,12 @@ export const onboardingOmFollowsLoginScenario = {
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
-    terminal.submit(
-      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s={...JSON.parse(fs.readFileSync(app+"/config.json","utf8")),...JSON.parse(fs.readFileSync(app+"/state.json","utf8"))}; console.log("ONBOARDING_OM_PACK="+s.onboarding.omPackId+":"+s.models.activeOmPackId);'`,
-    );
-    await runtime.waitForScreenText(/ONBOARDING_OM_PACK=anthropic:anthropic/i, terminal, 8_000);
+    const settings = readGlobalSettings();
+    const onboarding = settings.onboarding as Record<string, unknown>;
+    const models = settings.models as Record<string, unknown>;
+    if (onboarding.omPackId !== 'anthropic' || models.activeOmPackId !== 'anthropic') {
+      throw new Error('Expected onboarding and model settings to use the Anthropic pack');
+    }
 
     terminal.keyCtrlC();
   },

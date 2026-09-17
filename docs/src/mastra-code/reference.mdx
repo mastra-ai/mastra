@@ -68,7 +68,7 @@ const {
 | `disabledTools` | `string[]` | `[]` | Tools removed from the dynamic tool set before exposure to the model |
 | `storage` | `StorageConfig` | Local LibSQL | Custom storage config instead of auto-detected default |
 | `omScope` | `'thread' \| 'resource'` | Auto-detected | Observational Memory scope |
-| `settingsPath` | `string` | Global settings | Path to a custom `settings.json` file |
+| `settingsPath` | `string` | Global `config.json` and `state.json` | Path to a custom combined settings file |
 | `initialState` | `Partial<MastraCodeState>` | Default state | Initial state overrides (yolo, thinkingLevel, etc.) |
 | `idGenerator` | `() => string` | Default | Override id generation for threads/messages (useful for deterministic tests) |
 | `intervalHandlers` | `IntervalHandler[]` | gateway-sync | Override interval (background task) handlers |

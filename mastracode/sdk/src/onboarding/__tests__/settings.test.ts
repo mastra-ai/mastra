@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -347,6 +347,140 @@ describe('default config and state storage', () => {
       expect(settings.preferences.theme).toBe('dark');
       expect(settings.onboarding.completedAt).toBeNull();
     });
+  });
+
+  it('leaves an unreadable config file untouched', () => {
+    withTempDefaultSettings(() => {
+      writeFileSync(getSettingsPath(), '{invalid', 'utf-8');
+      writeFileSync(
+        getLegacySettingsPath(),
+        JSON.stringify({ preferences: { theme: 'dark' }, onboarding: { completedAt: 'legacy' } }),
+        'utf-8',
+      );
+
+      loadSettings();
+
+      expect(readFileSync(getSettingsPath(), 'utf-8')).toBe('{invalid');
+    });
+  });
+
+  it('fills a missing state store from legacy settings without replacing config', () => {
+    withTempDefaultSettings(() => {
+      writeFileSync(getSettingsPath(), JSON.stringify({ preferences: { theme: 'light' } }), 'utf-8');
+      writeFileSync(
+        getLegacySettingsPath(),
+        JSON.stringify({
+          preferences: { theme: 'dark' },
+          onboarding: { completedAt: 'legacy', quietModePreferenceSelected: true },
+          modelUseCounts: { 'openai/gpt-5.5': 3 },
+        }),
+        'utf-8',
+      );
+
+      const settings = loadSettings();
+
+      expect(settings.preferences.theme).toBe('light');
+      expect(settings.onboarding.completedAt).toBe('legacy');
+      expect(settings.modelUseCounts).toEqual({ 'openai/gpt-5.5': 3 });
+    });
+  });
+
+  it('mirrors split settings for older instances and imports their edits', () => {
+    withTempDefaultSettings(() => {
+      const settings = loadSettings();
+      settings.preferences.theme = 'light';
+      saveSettings(settings);
+
+      const legacyPath = getLegacySettingsPath();
+      const legacy = JSON.parse(readFileSync(legacyPath, 'utf-8'));
+      expect(legacy.onboarding).toEqual(settings.onboarding);
+      expect(legacy.modelUseCounts).toEqual(settings.modelUseCounts);
+      legacy.preferences.theme = 'dark';
+      writeFileSync(legacyPath, JSON.stringify(legacy), 'utf-8');
+
+      expect(loadSettings().preferences.theme).toBe('dark');
+      expect(JSON.parse(readFileSync(getSettingsPath(), 'utf-8')).preferences.theme).toBe('dark');
+    });
+  });
+
+  it('keeps old-instance edits made before a new-instance save', () => {
+    withTempDefaultSettings(() => {
+      const settings = loadSettings();
+      const legacy = JSON.parse(readFileSync(getLegacySettingsPath(), 'utf-8'));
+      legacy.preferences.quietMode = true;
+      writeFileSync(getLegacySettingsPath(), JSON.stringify(legacy), 'utf-8');
+
+      settings.preferences.theme = 'dark';
+      saveSettings(settings);
+
+      const merged = loadSettings();
+      expect(merged.preferences.theme).toBe('dark');
+      expect(merged.preferences.quietMode).toBe(true);
+    });
+  });
+
+  it('merges old-instance edits without reverting newer split settings', () => {
+    withTempDefaultSettings(() => {
+      const initial = loadSettings();
+      saveSettings(initial);
+      const staleLegacy = JSON.parse(readFileSync(getLegacySettingsPath(), 'utf-8'));
+
+      const current = loadSettings();
+      current.models.activeModelPackId = 'openai';
+      saveSettings(current);
+
+      staleLegacy.preferences.quietMode = true;
+      writeFileSync(getLegacySettingsPath(), JSON.stringify(staleLegacy), 'utf-8');
+
+      const merged = loadSettings();
+      expect(merged.models.activeModelPackId).toBe('openai');
+      expect(merged.preferences.quietMode).toBe(true);
+    });
+  });
+
+  it('merges saves from settings objects loaded before either write', () => {
+    withTempDefaultSettings(() => {
+      const first = loadSettings();
+      const second = loadSettings();
+
+      first.preferences.theme = 'dark';
+      saveSettings(first);
+      second.preferences.quietMode = true;
+      second.modelUseCounts['openai/gpt-5.5'] = 1;
+      saveSettings(second);
+
+      const merged = loadSettings();
+      expect(merged.preferences.theme).toBe('dark');
+      expect(merged.preferences.quietMode).toBe(true);
+      expect(merged.modelUseCounts).toEqual({ 'openai/gpt-5.5': 1 });
+    });
+  });
+
+  it('migrates auth model ranks into the state store', () => {
+    withTempDefaultSettings(() => {
+      writeFileSync(getSettingsPath(), JSON.stringify({ preferences: { theme: 'dark' } }), 'utf-8');
+      writeFileSync(
+        getStatePath(),
+        JSON.stringify({ onboarding: {}, modelUseCounts: {}, updateDismissedVersion: null }),
+        'utf-8',
+      );
+      writeFileSync(
+        join(dirname(getLegacySettingsPath()), 'auth.json'),
+        JSON.stringify({ _modelRanks: { 'my/prov': 9 } }),
+      );
+
+      const settings = loadSettings();
+      const state = JSON.parse(readFileSync(getStatePath(), 'utf-8'));
+      const auth = JSON.parse(readFileSync(join(dirname(getLegacySettingsPath()), 'auth.json'), 'utf-8'));
+
+      expect(settings.modelUseCounts).toEqual({ 'my/prov': 9 });
+      expect(state.modelUseCounts).toEqual({ 'my/prov': 9 });
+      expect(auth).not.toHaveProperty('_modelRanks');
+    });
+  });
+
+  it('uses the configured global directory for config files', () => {
+    expect(getSettingsPath('.mastracode-test')).toBe(join(homedir(), '.mastracode-test', 'config.json'));
   });
 
   it('keeps explicit settings paths as combined files', () => {

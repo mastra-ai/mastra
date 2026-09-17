@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readdirSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LLMock } from '@copilotkit/aimock';
@@ -73,6 +73,19 @@ function getAppDataDirForHome(homeDir: string): string {
   if (process.platform === 'darwin') return join(homeDir, 'Library', 'Application Support', 'mastracode');
   if (process.platform === 'win32') return join(homeDir, 'AppData', 'Roaming', 'mastracode');
   return join(homeDir, '.local', 'share', 'mastracode');
+}
+
+export function readGlobalSettings(appDataDir: string): Record<string, unknown> {
+  const configPath = join(appDataDir, 'config.json');
+  const statePath = join(appDataDir, 'state.json');
+  const legacyPath = join(appDataDir, 'settings.json');
+  const config = existsSync(configPath)
+    ? (JSON.parse(readFileSync(configPath, 'utf8')) as Record<string, unknown>)
+    : existsSync(legacyPath)
+      ? (JSON.parse(readFileSync(legacyPath, 'utf8')) as Record<string, unknown>)
+      : {};
+  const state = existsSync(statePath) ? (JSON.parse(readFileSync(statePath, 'utf8')) as Record<string, unknown>) : {};
+  return { ...config, ...state };
 }
 
 function seedSettings(homeDir: string, useOpenAIModel: boolean, openAiApiKey = 'mc-e2e-openai-key'): void {
@@ -190,6 +203,14 @@ async function prepareTerminalRun(
     projectDir,
   };
   await scenario.prepare?.(scenarioContext);
+  if (scenario.name === 'models-pack-activation-persistence') {
+    writeFileSync(
+      join(isolatedAppDataDir, 'settings.json'),
+      JSON.stringify(readGlobalSettings(isolatedAppDataDir), null, 2),
+    );
+    rmSync(join(isolatedAppDataDir, 'config.json'), { force: true });
+    rmSync(join(isolatedAppDataDir, 'state.json'), { force: true });
+  }
 
   const launchCwd = projectDir;
 
@@ -232,6 +253,7 @@ async function prepareTerminalRun(
       liveOutput: false,
       cwd: launchCwd,
       context: scenarioContext,
+      readGlobalSettings: () => readGlobalSettings(isolatedAppDataDir),
       env,
     },
   };

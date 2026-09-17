@@ -449,7 +449,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   // Auth storage (shared with Claude Max / OpenAI providers and AgentController)
   const authStorage = createAuthStorage();
-  const globalSettings = loadSettings(config?.settingsPath);
+  const globalSettings = loadSettings(config?.settingsPath, configDir);
   const backgroundToolsEnabled = globalSettings.backgroundTools?.enabled ?? false;
   const storedGatewayKey = authStorage.getStoredApiKey(MASTRA_GATEWAY_PROVIDER);
   const storedGatewayUrl = globalSettings.memoryGateway?.baseUrl;
