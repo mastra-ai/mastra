@@ -25,6 +25,8 @@ export interface JiraStatus {
     status: 'active' | 'needs_reauth';
     accountLabel: string | null;
   }>;
+  /** Mastra Platform organization settings page for connecting or reauthorizing Jira. */
+  manageUrl?: string;
   reason?: JiraStatusReason;
 }
 

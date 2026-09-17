@@ -55,6 +55,8 @@ export interface MountJiraRoutesOptions {
   intake?: IntakeStorage;
   /** Whether the host configured the application database backing intake state. */
   appDbConfigured: boolean;
+  /** Browser-facing Mastra Platform origin used for Jira connection management. */
+  platformDashboardUrl: string;
 }
 
 /**
@@ -188,6 +190,7 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
           });
         }
 
+        const manageUrl = `${options.platformDashboardUrl}/orgs/${encodeURIComponent(tenant.orgId)}/settings/general`;
         try {
           const connections = await jira.listConnections();
           const active = connections.filter(connection => connection.status === 'active');
@@ -199,6 +202,7 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
             site: sites.length === 1 ? sites[0] : null,
             sites,
             connections,
+            manageUrl,
             reason: active.length > 0 ? 'ready' : 'not_connected',
             diagnostics: diagnostics(),
           });

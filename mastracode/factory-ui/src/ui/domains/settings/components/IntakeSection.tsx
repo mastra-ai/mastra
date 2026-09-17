@@ -200,11 +200,23 @@ function JiraIntakeSection({
   } else if (platformManaged) {
     connectionLabel = 'Connected through Mastra Platform';
   }
-  const action = configured ? (
-    <Txt as="span" variant="ui-sm" className="text-icon3">
-      {connectionLabel}
-    </Txt>
+  const needsReconnect = reauthRequired || authError;
+  const manageUrl = platformManaged ? status?.manageUrl : undefined;
+  const manageButton = manageUrl ? (
+    <Button as="a" href={manageUrl} size={configured ? 'xs' : 'sm'} variant={configured ? 'ghost' : 'default'}>
+      {needsReconnect ? 'Reconnect Jira' : configured ? 'Manage Jira' : 'Connect Jira'}
+    </Button>
   ) : undefined;
+  const action = configured ? (
+    <span className="flex items-center gap-2">
+      <Txt as="span" variant="ui-sm" className="text-icon3">
+        {connectionLabel}
+      </Txt>
+      {manageButton}
+    </span>
+  ) : (
+    manageButton
+  );
 
   return (
     <SettingsSubsection scope="org" title="Jira issues" description={description} action={action}>

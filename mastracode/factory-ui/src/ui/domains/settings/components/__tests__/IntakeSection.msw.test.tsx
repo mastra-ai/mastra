@@ -18,6 +18,7 @@ const LINEAR_PROJECTS_URL = `${TEST_BASE_URL}/web/linear/projects`;
 const LINEAR_TEAMS_URL = `${TEST_BASE_URL}/web/linear/teams`;
 const JIRA_STATUS_URL = `${TEST_BASE_URL}/web/jira/status`;
 const JIRA_PROJECTS_URL = `${TEST_BASE_URL}/web/jira/projects`;
+const JIRA_MANAGE_URL = 'https://platform.mastra.ai/orgs/org-1/settings/general';
 
 const FACTORY_A = '11111111-1111-4111-8111-111111111111';
 const FACTORY_B = '22222222-2222-4222-8222-222222222222';
@@ -119,6 +120,7 @@ const jiraReadyStatus: JiraStatus = {
       accountLabel: 'beta.atlassian.net',
     },
   ],
+  manageUrl: JIRA_MANAGE_URL,
   reason: 'ready',
 };
 
@@ -510,6 +512,7 @@ describe('IntakeSection', () => {
             site: null,
             sites: [],
             connections: [],
+            manageUrl: JIRA_MANAGE_URL,
             reason: 'not_connected',
           } satisfies JiraStatus),
         ),
@@ -522,7 +525,38 @@ describe('IntakeSection', () => {
       ).toBeInTheDocument();
       expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).toBeDisabled();
       expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).not.toBeChecked();
-      expect(screen.queryByRole('button', { name: /Connect Jira/ })).not.toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Connect Jira' })).toHaveAttribute('href', JIRA_MANAGE_URL);
+    });
+
+    it('links directly to Platform settings when Jira needs reauthorization', async () => {
+      useIntakeHandlers();
+      server.use(
+        http.get(JIRA_STATUS_URL, () =>
+          HttpResponse.json({
+            enabled: true,
+            configured: false,
+            mode: 'platform',
+            site: null,
+            sites: [],
+            connections: [
+              {
+                id: 'a1b_acme',
+                integrationId: 'factory-jira',
+                status: 'needs_reauth',
+                accountLabel: 'acme.atlassian.net',
+              },
+            ],
+            manageUrl: JIRA_MANAGE_URL,
+            reason: 'not_connected',
+          } satisfies JiraStatus),
+        ),
+      );
+
+      renderIntakeSection();
+
+      expect(await screen.findByText('A Jira account needs to be reconnected in Mastra Platform.')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Reconnect Jira' })).toHaveAttribute('href', JIRA_MANAGE_URL);
+      expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).toBeDisabled();
     });
   });
 
@@ -644,6 +678,7 @@ describe('IntakeSection', () => {
       expect(
         await screen.findByText('Jira rejected a connected account. Reconnect it in Mastra Platform.'),
       ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Reconnect Jira' })).toHaveAttribute('href', JIRA_MANAGE_URL);
       expect(screen.queryByRole('group', { name: 'Jira projects' })).not.toBeInTheDocument();
     });
   });

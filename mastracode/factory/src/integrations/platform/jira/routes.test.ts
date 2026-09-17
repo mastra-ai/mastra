@@ -59,11 +59,13 @@ function buildApp(
       auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
       intake: (options.withIntake ?? true) ? seed.intake : undefined,
       appDbConfigured: options.appDbConfigured ?? true,
+      platformDashboardUrl: PLATFORM_DASHBOARD_URL,
     }),
   );
   return app;
 }
 
+const PLATFORM_DASHBOARD_URL = 'https://platform.example.com';
 const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
 
 beforeEach(async () => {
@@ -95,6 +97,7 @@ describe('status route', () => {
       auth: fakeRouteAuth({ enabled: false }),
       intake: seed.intake,
       appDbConfigured: true,
+      platformDashboardUrl: PLATFORM_DASHBOARD_URL,
     });
     expect(routes).toHaveLength(1);
     const app = buildApp(org1(), { authEnabled: false });
@@ -139,6 +142,7 @@ describe('status route', () => {
           accountLabel: 'acme.atlassian.net',
         },
       ],
+      manageUrl: 'https://platform.example.com/orgs/org1/settings/general',
       reason: 'ready',
       diagnostics: { jiraConfigured: true, factoryAuthEnabled: true, appDbConfigured: true },
     });
@@ -152,6 +156,7 @@ describe('status route', () => {
       configured: false,
       mode: 'platform',
       connections: [],
+      manageUrl: 'https://platform.example.com/orgs/org1/settings/general',
       reason: 'not_connected',
     });
   });

@@ -71,6 +71,16 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const JIRA_CONNECTION_TOKEN_PREFIX = 'jira-connection:';
 const JIRA_ISSUE_REF_PREFIX = 'jira-issue:';
 const JIRA_SOURCE_PREFIX = 'jira-project:';
+const DEFAULT_PLATFORM_DASHBOARD_URL = 'https://platform.mastra.ai';
+
+function resolvePlatformDashboardUrl(configuredUrl?: string): string {
+  const url =
+    configuredUrl?.trim() ||
+    process.env.MASTRA_PLATFORM_DASHBOARD_URL?.trim() ||
+    process.env.MASTRA_SHARED_API_URL?.trim() ||
+    DEFAULT_PLATFORM_DASHBOARD_URL;
+  return url.replace(/\/+$/, '').replace(/\/v1$/, '');
+}
 
 const STATE_TYPE_TO_CATEGORY: Record<'unstarted' | 'started' | 'completed', string> = {
   unstarted: 'new',
@@ -93,6 +103,7 @@ function stateTypeFromCategory(key: string | undefined): string | null {
 
 export interface PlatformJiraIntegrationConfig {
   clientConfig?: PlatformApiClientConfig;
+  platformDashboardUrl?: string;
 }
 
 export class PlatformJiraIntegration implements FactoryIntegration {
@@ -100,6 +111,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   readonly #clientConfig: PlatformApiClientConfig;
   readonly #platformClient: PlatformApiClient;
   readonly #endpointHost: string;
+  readonly #platformDashboardUrl: string;
   readonly #cloudIdByConnectionId = new Map<string, string>();
   readonly #siteUrlByConnectionId = new Map<string, string>();
   #projects: FactoryProjectsStorage | undefined;
@@ -110,6 +122,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
     this.#clientConfig = config.clientConfig ?? platformApiClientConfigFromEnv();
     this.#platformClient = new PlatformApiClient(this.#clientConfig);
     this.#endpointHost = new URL(this.#clientConfig.baseUrl).host;
+    this.#platformDashboardUrl = resolvePlatformDashboardUrl(config.platformDashboardUrl);
   }
 
   initialize({ projects, auth }: { projects: FactoryProjectsStorage; auth: RouteAuth }): void {
@@ -478,6 +491,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
       auth: ctx.auth,
       intake: ctx.storage.intake,
       appDbConfigured: Boolean(ctx.factoryStorage),
+      platformDashboardUrl: this.#platformDashboardUrl,
     });
   }
 
