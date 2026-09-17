@@ -1597,6 +1597,7 @@ Queries completed observability traces with recursive predicates over trace and 
 ```bash
 mastra api trace query <input>
 mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"}}'
+mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"pagination":{"page":0,"perPage":25}}'
 ```
 
 Inspect the target server's exact request contract before constructing a query:
@@ -1605,7 +1606,7 @@ Inspect the target server's exact request contract before constructing a query:
 mastra api trace query --schema
 ```
 
-The response remains nested under `data` to preserve cursor pagination:
+The response remains nested under `data`. Keyset mode returns cursor metadata:
 
 ```json
 {
@@ -1616,7 +1617,23 @@ The response remains nested under `data` to preserve cursor pagination:
 }
 ```
 
-Pass a non-null `page.next` value back as `page.after` in the next query. See [Advanced trace queries](/reference/observability/tracing/trace-query) for supported fields and operators, recursive predicates, limits, pagination, and errors.
+Pass a non-null `data.page.next` value back as `page.after` in the next query. List-compatible page mode returns numeric pagination metadata instead:
+
+```json
+{
+  "data": {
+    "traces": [],
+    "pagination": {
+      "total": 42,
+      "page": 0,
+      "perPage": 25,
+      "hasMore": true
+    }
+  }
+}
+```
+
+`data.page.next` is only present in keyset mode. Page mode returns `data.pagination`. See [Advanced trace queries](/reference/observability/tracing/trace-query) for supported fields and operators, recursive predicates, limits, pagination modes, and errors.
 
 #### `mastra api trace get`
 

@@ -259,8 +259,11 @@ export class Observability extends BaseResource {
   /**
    * Queries completed logical traces using recursive trace and related-record predicates.
    *
-   * @param params - Advanced trace query, including its required time range
-   * @returns Matching lightweight traces
+   * Use `page: { limit, after }` for keyset pagination or `pagination: { page, perPage }` for zero-based
+   * list pagination. The two inputs are mutually exclusive.
+   *
+   * @param params - Advanced trace query, including its required time range and pagination mode
+   * @returns Matching lightweight traces with either `page.next` or `pagination` metadata
    */
   queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse> {
     return this.request('/observability/traces/query', { method: 'POST', body: params });

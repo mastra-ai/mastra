@@ -1,6 +1,6 @@
 ---
 title: 'Advanced trace queries'
-description: 'Query completed traces and thread identities with recursive predicates, related records, ordering, and cursor pagination.'
+description: 'Query completed traces and thread identities with recursive predicates, related records, ordering, and keyset or page pagination.'
 packages:
   - '@mastra/client-js'
   - '@mastra/server'
@@ -42,6 +42,38 @@ const result = await mastraClient.queryTraces({
 A `some` clause matches when one related record satisfies its complete nested predicate. In this example, `scorerId`, `scorerVersion`, and `score` must match on the same score record. A `none` clause uses anti-existence semantics: it matches when no related record satisfies its complete nested predicate. A trace with no related scores therefore matches `scores.none`.
 
 Span clauses examine the current root span and current child spans. The root `timeRange` applies only to the selected current root's `startedAt`. Related spans, scores, and feedback can participate even when their own timestamps are outside that range. Related records correlate only through a matching non-null `traceId`.
+
+## Migrate from `listTraces()`
+
+Use `pagination` to keep the same zero-based page state and response metadata while moving a list view to recursive trace queries:
+
+```typescript
+const pagination = { page: 0, perPage: 25 }
+
+const result = await mastraClient.queryTraces({
+  timeRange: {
+    from: '2026-08-01T00:00:00.000Z',
+    to: '2026-08-08T00:00:00.000Z',
+  },
+  where: {
+    op: 'eq',
+    left: { path: 'environment' },
+    right: { literal: 'production' },
+  },
+  pagination,
+})
+
+if ('pagination' in result) {
+  console.log(result.pagination)
+  // { total, page, perPage, hasMore }
+}
+```
+
+`pagination.page` defaults to `0`. `pagination.perPage` defaults to `10` and accepts values from `1` through `100`. An out-of-range page returns an empty `traces` array with the full `total` and the requested `page` and `perPage` values.
+
+Use keyset pagination with `page: { limit, after }` when you want deterministic traversal without numeric page controls. Don't send `page` and `pagination` together. If both are omitted, the query uses keyset mode with a default limit of `100`.
+
+Page mode applies only to trace results. `queryTraceThreads()` remains keyset-only. The deprecated direct-route `group` compatibility option also rejects `pagination`. Use `queryTraceThreads()` for thread identities.
 
 ## Query threads across traces
 
@@ -245,7 +277,10 @@ Both routes require `observability:read` and use the configured observability st
 | `timeRange` | Yes | Trace start-time boundary. `from` is inclusive and `to` is exclusive. Both values must be ISO timestamps, `from` must be earlier than `to`, and the range can't exceed 31 days. |
 | `where` | No | Recursive trace predicate. Supports scalar conditions and `spans`, `scores`, and `feedback` `some` or `none` clauses. |
 | `orderBy` | No | One item ordering results by `startedAt` or `endedAt`, in `asc` or `desc` order. Defaults to `startedAt desc`. |
-| `page` | No | `{ limit, after }`. `limit` defaults to 100 and has a maximum of 1000. Pass the opaque `page.next` value as `after`. |
+| `page` | No | Keyset mode: `{ limit, after }`. `limit` defaults to 100 and accepts values from 1 through 1000. Pass the opaque `page.next` value as `after`. |
+| `pagination` | No | List-compatible page mode: `{ page, perPage }`. `page` is zero-based and defaults to 0. `perPage` defaults to 10 and accepts values from 1 through 100. |
+
+`page` and `pagination` are mutually exclusive. Omitting both selects keyset mode with its default limit.
 
 ### Thread queries
 
@@ -255,7 +290,7 @@ Both routes require `observability:read` and use the configured observability st
 | `where` | No | Recursive thread predicate composed with boolean operators and `traces.some` or `traces.none`. Each quantifier contains a complete trace predicate. |
 | `page` | No | `{ limit, after }`. Thread identities always use fixed ordinal `threadId` ascending order. Pass the opaque `page.next` value as `after`. |
 
-Unknown fields are rejected. Requests can't select a projection, declare joins, request counts or measures, or control authorization. Request bodies are limited to 256 KiB.
+Unknown fields are rejected. Requests can't select a projection, declare joins, request custom counts or measures, or control authorization. Page-mode responses include the total number of matching traces as pagination metadata. Request bodies are limited to 256 KiB.
 
 ## Query limits
 
@@ -272,6 +307,7 @@ The planner rejects a query before storage execution when it exceeds any of thes
 | String literal | 4,096 UTF-8 bytes |
 | Raw predicate path | 128 UTF-8 bytes |
 | `page.limit` | 1,000 |
+| `pagination.perPage` | 100 |
 | HTTP request body | 256 KiB |
 
 Each comparison literal counts as one literal. Each member of an `in` or `notIn` set also counts as one literal, even when the set is within its per-set limit.
@@ -516,6 +552,22 @@ An ungrouped query returns only lightweight completed traces:
 }
 ```
 
+A trace query with `pagination` returns list-compatible metadata instead of `page`:
+
+```json
+{
+  "traces": [],
+  "pagination": {
+    "total": 42,
+    "page": 1,
+    "perPage": 25,
+    "hasMore": false
+  }
+}
+```
+
+A trace response contains exactly one pagination shape: `page` for keyset mode or `pagination` for page mode. An out-of-range page preserves `total` and the requested `page` and `perPage` while returning an empty `traces` array.
+
 A thread query returns distinct non-null thread IDs in ordinal ascending order:
 
 ```json
@@ -529,11 +581,11 @@ Related evidence isn't embedded in either response. Use the trace-detail and bra
 
 ## Pagination and errors
 
-Ordering is deterministic. Trace ordering appends `traceId` ascending as a tie-breaker. Thread queries always use raw ordinal `threadId` ascending order. Callers can't override it.
+Ordering is deterministic. Trace ordering appends `traceId` ascending as a tie-breaker. Thread queries always use raw ordinal `threadId` ascending order. Callers can't override it. Page mode calculates `hasMore` as `(page + 1) * perPage < total`.
 
 Cursors are bound to the operation, accepted normalized query, authorization state, and ordering. Reusing a cursor after changing the trace selection, predicates, or ordering returns `409`. Trace and thread cursors aren't interchangeable. A malformed cursor returns `400`.
 
-Cursor pagination is deterministic, but it isn't a database snapshot. Traces or replacement signals written between page requests can change later pages.
+Each page-mode request reads its rows and count coherently. Neither pagination mode is a database snapshot across requests: traces or replacement signals written between requests can change later results and page totals. Keyset mode avoids offset shifts and is the better choice for deterministic traversal. Page mode retains numeric list controls.
 
 PostgreSQL and ClickHouse stop advanced trace and thread queries after 15 seconds by default and return `504` when the database timeout is exceeded. Set `traceQueryTimeoutMs` in the store's vNext observability configuration to an integer from 1 through 300,000 milliseconds to change the timeout. DuckDB doesn't currently provide query-scoped timeout or cancellation through its driver wrapper, so this `504` guarantee doesn't apply to DuckDB.
 
@@ -549,7 +601,7 @@ PostgreSQL and ClickHouse stop advanced trace and thread queries after 15 second
 
 ## Limitations
 
-Both operations consider completed traces only. They don't support running traces, custom projections, embedded evidence, summaries, aggregations, counts, measures, or custom grouping.
+Both operations consider completed traces only. They don't support running traces, custom projections, embedded evidence, summaries, custom aggregations, count-only queries, measures, or custom grouping. Page-mode responses still include the total matching trace count in their pagination metadata.
 
 ## Related
 
