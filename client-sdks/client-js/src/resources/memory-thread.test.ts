@@ -474,6 +474,137 @@ describe('MemoryThread', () => {
     });
   });
 
+  describe('shared-history branches', () => {
+    const publicBranch = {
+      parentThreadId: threadId,
+      branchPointMessageId: 'fork-message',
+      branchPointCreatedAt: '2026-01-01T00:00:00.000Z',
+      branchCreatedAt: '2026-01-01T00:01:00.000Z',
+    };
+    const child = {
+      id: 'child-thread',
+      resourceId: 'resource-1',
+      title: 'Child',
+      metadata: { visible: true },
+      createdAt: '2026-01-01T00:01:00.000Z',
+      updatedAt: '2026-01-01T00:01:00.000Z',
+    };
+
+    it('branches with constructor agentId and only public body fields', async () => {
+      const response = { thread: child, branch: publicBranch };
+      mockFetchResponse(response);
+
+      const result = await thread.branch({
+        branchPointMessageId: 'fork-message',
+        title: 'Child',
+        metadata: { visible: true },
+        requestContext: { tenant: 'one' },
+      });
+
+      const [url, options] = (global.fetch as any).mock.calls[0];
+      const parsed = new URL(url);
+      expect(parsed.pathname).toBe(`/api/memory/threads/${threadId}/branch`);
+      expect(parsed.searchParams.get('agentId')).toBe(agentId);
+      expect(parsed.searchParams.get('requestContext')).toBeTruthy();
+      expect(options).toEqual(
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            branchPointMessageId: 'fork-message',
+            title: 'Child',
+            metadata: { visible: true },
+          }),
+        }),
+      );
+      expect(result).toEqual(response);
+      expect(result.thread.metadata).not.toHaveProperty('__mastra_thread_branch');
+      expect(result.branch).toEqual(publicBranch);
+    });
+
+    it('uses a per-call agentId and rejects a missing write agentId', async () => {
+      const threadWithoutAgent = new MemoryThread(clientOptions, threadId);
+      expect(() => threadWithoutAgent.branch({ branchPointMessageId: 'fork-message' })).toThrow(
+        /MemoryThread\.branch\(\) requires an agentId/,
+      );
+      expect(global.fetch).not.toHaveBeenCalled();
+
+      mockFetchResponse({ thread: child, branch: publicBranch });
+      await threadWithoutAgent.branch({ branchPointMessageId: 'fork-message', agentId: 'per-call-agent' });
+      expect((global.fetch as any).mock.calls[0][0]).toBe(
+        `http://localhost:4111/api/memory/threads/${threadId}/branch?agentId=per-call-agent`,
+      );
+    });
+
+    it('returns a direct parent and root null', async () => {
+      mockFetchResponse(child);
+      await expect(thread.getParent()).resolves.toEqual(child);
+      expect((global.fetch as any).mock.calls[0][0]).toBe(
+        `http://localhost:4111/api/memory/threads/${threadId}/parent?agentId=${agentId}`,
+      );
+
+      mockFetchResponse(null);
+      const root = new MemoryThread(clientOptions, 'root-thread');
+      await expect(root.getParent()).resolves.toBeNull();
+      expect((global.fetch as any).mock.calls[1][0]).toBe(
+        'http://localhost:4111/api/memory/threads/root-thread/parent',
+      );
+    });
+
+    it('lists direct branches with numeric pagination and request context', async () => {
+      const response = {
+        branches: [{ thread: child, branch: publicBranch }],
+        total: 1,
+        page: 2,
+        perPage: 5,
+        hasMore: false,
+      };
+      mockFetchResponse(response);
+
+      const result = await thread.listBranches({ page: 2, perPage: 5, requestContext: { tenant: 'one' } });
+      const parsed = new URL((global.fetch as any).mock.calls[0][0]);
+      expect(parsed.pathname).toBe(`/api/memory/threads/${threadId}/branches`);
+      expect(Object.fromEntries([...parsed.searchParams].filter(([key]) => key !== 'requestContext'))).toEqual({
+        agentId,
+        page: '2',
+        perPage: '5',
+      });
+      expect(parsed.searchParams.get('requestContext')).toBeTruthy();
+      expect(result).toEqual(response);
+    });
+
+    it('serializes perPage false and omits unspecified pagination', async () => {
+      mockFetchResponse({ branches: [], total: 0, page: 0, perPage: false, hasMore: false });
+      await thread.listBranches({ perPage: false, agentId: 'override-agent' });
+      expect((global.fetch as any).mock.calls[0][0]).toBe(
+        `http://localhost:4111/api/memory/threads/${threadId}/branches?agentId=override-agent&perPage=false`,
+      );
+
+      mockFetchResponse({ branches: [], total: 0, page: 0, perPage: 100, hasMore: false });
+      await new MemoryThread(clientOptions, threadId).listBranches();
+      expect((global.fetch as any).mock.calls[1][0]).toBe(
+        `http://localhost:4111/api/memory/threads/${threadId}/branches`,
+      );
+    });
+
+    it('returns inclusive root-to-current branch history', async () => {
+      const response = {
+        history: [
+          { thread: { ...child, id: 'root-thread' }, branch: null },
+          { thread: child, branch: publicBranch },
+        ],
+      };
+      mockFetchResponse(response);
+
+      const result = await thread.getBranchHistory({ requestContext: { tenant: 'one' } });
+      const parsed = new URL((global.fetch as any).mock.calls[0][0]);
+      expect(parsed.pathname).toBe(`/api/memory/threads/${threadId}/branch-history`);
+      expect(parsed.searchParams.get('agentId')).toBe(agentId);
+      expect(parsed.searchParams.get('requestContext')).toBeTruthy();
+      expect(result).toEqual(response);
+      expect(result.history[0]?.branch).toBeNull();
+    });
+  });
+
   describe('transfer', () => {
     it('should POST to the transfer endpoint with the target resourceId', async () => {
       const mockThread = {

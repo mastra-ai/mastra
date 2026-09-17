@@ -1,6 +1,7 @@
 import type { ISessionProvider } from '@mastra/core/auth';
-import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
+import type { IFGAProvider, IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
+import type { RequestContext } from '@mastra/core/request-context';
 import { CompositeAuth } from '@mastra/core/server';
 import type { ApiRoute, IMastraAuthProvider, MastraAuthConfig, MastraAuthRequest } from '@mastra/core/server';
 
@@ -18,6 +19,14 @@ import { parse } from './path-pattern';
 // Re-export request-context key constants so custom middleware can read namespaced
 // auth state without importing internal paths.
 export { MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY, MASTRA_USER_ROLES_KEY } from '../constants';
+
+export function getFGAProvider(mastra: any, requestContext?: RequestContext): IFGAProvider | undefined {
+  const authMode = requestContext?.get(MASTRA_AUTH_MODE_KEY);
+  if (authMode === 'studio') {
+    return mastra?.getStudio?.()?.fga ?? mastra?.getServer?.()?.fga;
+  }
+  return mastra?.getServer?.()?.fga;
+}
 
 /**
  * Check if a route is a registered custom route that requires authentication.
