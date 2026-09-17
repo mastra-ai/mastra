@@ -1792,6 +1792,43 @@ export class MessageList {
     const latestMessageIndex = this.messages.length - 1;
     const latestMessageIsAfterSealedBoundary = latestSealedIndex === -1 || latestMessageIndex > latestSealedIndex;
 
+    const replacementTarget = exists && id ? this.messages.find(m => m.id === id) : undefined;
+
+    if (
+      messageSource === 'memory' &&
+      replacementTarget &&
+      this.stateManager.isUserMessage(replacementTarget) &&
+      !MessageMerger.isSealed(messageV2)
+    ) {
+      const replacementIndex = this.messages.indexOf(replacementTarget);
+      if (messageV2.role === 'user' && replacementTarget.role === 'user') {
+        messageV2.content = {
+          ...messageV2.content,
+          ...replacementTarget.content,
+          metadata: {
+            ...(messageV2.content.metadata ?? {}),
+            ...(replacementTarget.content.metadata ?? {}),
+          },
+        };
+      } else {
+        for (const incomingPart of replacementTarget.content.parts) {
+          if (incomingPart.type !== 'text') continue;
+          const storedPart = messageV2.content.parts.find(
+            part => part.type === 'text' && part.text.trim() === incomingPart.text.trim(),
+          );
+          if (storedPart?.type === 'text') storedPart.text = incomingPart.text;
+        }
+        MessageMerger.merge(messageV2, replacementTarget);
+      }
+      this.stateManager.removeMessage(replacementTarget);
+      this.messages[replacementIndex] = messageV2;
+      this.pushMessageToSource(messageV2, 'memory');
+      this.pushMessageToSource(messageV2, 'input');
+      this.updateLastCreatedAt(messageV2);
+      this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      return this;
+    }
+
     if (messageSource === `memory`) {
       for (const existingMessage of this.messages) {
         // don't double store any messages
@@ -1801,7 +1838,6 @@ export class MessageList {
       }
     }
 
-    const replacementTarget = exists && id ? this.messages.find(m => m.id === id) : undefined;
     const hasSealedReplacementTarget = !!replacementTarget && MessageMerger.isSealed(replacementTarget);
 
     // Keep this replacement-target guard here instead of MessageMerger.shouldMerge().
