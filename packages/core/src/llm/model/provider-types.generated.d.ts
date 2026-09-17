@@ -4225,7 +4225,6 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/kimi-k3',
     'accounts/fireworks/models/minimax-m2p7',
     'accounts/fireworks/models/minimax-m3',
-    'accounts/fireworks/models/mistral-large-3-fp8',
     'accounts/fireworks/models/muse-glimmer-30b',
     'accounts/fireworks/models/nemotron-3-ultra-nvfp4',
     'accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b',
@@ -4441,8 +4440,7 @@ export type ProviderModelsMap = {
     'umans-deepseek-v4-flash-0731',
     'umans-deepseek-v4-pro-0813',
     'umans-flash',
-    'umans-glm-5.2',
-    'umans-kimi-k2.7',
+    'umans-glm-5.3-flash',
     'umans-kimi-k3',
     'umans-qwen3.6-35b-a3b',
   ];
@@ -4502,8 +4500,7 @@ export type ProviderModelsMap = {
     'umans-deepseek-v4-flash-0731',
     'umans-deepseek-v4-pro-0813',
     'umans-flash',
-    'umans-glm-5.2',
-    'umans-kimi-k2.7',
+    'umans-glm-5.3-flash',
     'umans-kimi-k3',
   ];
   readonly sakana: readonly ['fugu', 'fugu-ultra', 'fugu-ultra-20260615', 'sakana-namazu'];
@@ -6429,6 +6426,15 @@ export type ProviderModelsMap = {
     'qwen3.8-max',
   ];
   readonly upstage: readonly ['solar-mini', 'solar-pro2', 'solar-pro3', 'solar-pro4'];
+  readonly inco: readonly [
+    'deepseek-v4.1-flash:fast',
+    'glm-5.3',
+    'glm-5.3-flash:fast',
+    'glm-5.3:fast',
+    'kimi-k3:fast',
+    'minimax-m3',
+    'minimax-m3:fast',
+  ];
   readonly sarvam: readonly ['sarvam-105b', 'sarvam-30b'];
   readonly xai: readonly [
     'grok-4.20-0309-non-reasoning',
@@ -7176,6 +7182,7 @@ export type ProviderModelsMap = {
     'moonshot/kimi-k3',
     'nebius/deepseek-ai/DeepSeek-V4-Flash-0731',
     'nebius/deepseek-ai/DeepSeek-V4-Pro-0813',
+    'nebius/deepseek-ai/DeepSeek-V4.1-Flash',
     'nebius/google/gemma-3-27b-it',
     'nebius/meta-llama/Llama-3.3-70B-Instruct',
     'nebius/nvidia/Nemotron-3-Ultra-550b-a55b',
