@@ -1,7 +1,9 @@
 import type { GetSystemPackagesResponse } from '@mastra/client-js';
+import { EntityType } from '@mastra/core/observability';
 import { serializeTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { useLocation } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TracesPage from '..';
 import { traceQueryPage } from './fixtures/trace-query';
@@ -9,6 +11,7 @@ import {
   branchList,
   emptyEntityNames,
   emptyEnvironments,
+  environmentsWithProd,
   emptyFeedback,
   emptyScorers,
   emptyServiceNames,
@@ -72,17 +75,34 @@ const setTracePageHandlers = (systemPackages: GetSystemPackagesResponse) => {
   );
 };
 
-const renderPage = (initialEntry = '/traces') =>
+const LocationProbe = () => {
+  const location = useLocation();
+  return <div data-testid="location">{location.search}</div>;
+};
+
+const renderPage = (initialEntry = '/traces', props: React.ComponentProps<typeof TracesPage> = {}) =>
   renderWithProviders(
     <TestLinkProvider>
-      <TracesPage />
+      <TracesPage {...props} />
+      <LocationProbe />
     </TestLinkProvider>,
     { router: { initialEntries: [initialEntry] } },
   );
 
+const getFilterChips = () => document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-chip"]');
+const getFilterInput = () => screen.getByRole('combobox', { name: 'Add filter' });
+const focusFilterInput = () => act(() => getFilterInput().focus());
+const typeInFilter = (text: string) => fireEvent.change(getFilterInput(), { target: { value: text } });
+const pressInFilter = (key: string) => fireEvent.keyDown(getFilterInput(), { key });
+
 beforeEach(() => {
   // jsdom has no scrollIntoView; the timeline reveals the selected span row on mount.
   if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
+  // jsdom ships no PointerEvent, and Base UI constructs one on press.
+  if (typeof window.PointerEvent === 'undefined') {
+    class PointerEventStub extends MouseEvent {}
+    window.PointerEvent = PointerEventStub as unknown as typeof PointerEvent;
+  }
   Object.defineProperty(window, 'localStorage', {
     configurable: true,
     value: createMemoryStorage(),
@@ -447,6 +467,184 @@ describe('Traces side panel Scores tab', () => {
 
       expect(await screen.findByText(/no scores/i)).not.toBeNull();
       expect(screen.queryByText('0.60')).toBeNull();
+    });
+  });
+});
+
+describe('Traces page filter bar', () => {
+  describe('when the page loads without any filter', () => {
+    it('renders a non-removable Time chip defaulting to Last 7 days', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+
+      const { queryClient } = renderPage();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      const chips = [...getFilterChips()];
+      expect(chips).toHaveLength(1);
+      expect(chips[0]?.textContent).toContain('Time');
+      expect(within(chips[0]!).getByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
+      expect(within(chips[0]!).queryByRole('button', { name: /remove/i })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
+    });
+  });
+
+  describe('when the user picks Last 24 hours from the Time chip', () => {
+    it('writes the preset to the URL', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+
+      const { queryClient } = renderPage();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Value: Last 7 days' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Last 24 hours' }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('datePreset=last-24h'));
+      expect(screen.getByRole('button', { name: 'Value: Last 24 hours' })).toBeTruthy();
+    });
+  });
+
+  describe('when the URL carries filterTraceId and filterEnvironment', () => {
+    it('renders the Time chip then one chip per filter in URL order', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+
+      const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterEnvironment=prod');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      const chips = getFilterChips();
+      expect(chips).toHaveLength(3);
+      expect(chips[0]?.textContent).toContain('Time');
+      expect(chips[1]?.textContent).toContain('Trace ID');
+      expect(chips[1]?.textContent).toContain('trace-a');
+      expect(chips[2]?.textContent).toContain('Environment');
+      expect(chips[2]?.textContent).toContain('prod');
+    });
+
+    it('keeps the Time chip after Clear filters', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+
+      const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterEnvironment=prod');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+
+      await waitFor(() => expect(getFilterChips()).toHaveLength(1));
+      expect(getFilterChips()[0]?.textContent).toContain('Time');
+      expect(screen.getByTestId('location').textContent).not.toContain('filterTraceId');
+    });
+  });
+
+  describe('when the URL carries filterTraceId, filterEnvironment and a legacy filterTags', () => {
+    it('renders one chip per query-supported filter in URL order, ignoring tags', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+
+      const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterTags=alpha&filterEnvironment=prod');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      // Tags cannot be filtered by the trace query API, so no chip advertises them.
+      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([
+        'Trace IDtrace-a',
+        'Environmentprod',
+      ]);
+    });
+  });
+
+  describe('when the user changes the field of an existing chip', () => {
+    it('keeps the chip with an empty value on the new field', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+
+      const { queryClient } = renderPage('/traces?status=error');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      fireEvent.click(screen.getByRole('combobox', { name: 'Field: Status' }));
+      fireEvent.click(await screen.findByRole('option', { name: 'Environment' }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('filterEnvironment='));
+      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual(['Environment…']);
+      expect(screen.getByTestId('location').textContent).not.toContain('status=');
+    });
+  });
+
+  describe('when the user commits Environment is prod through the input', () => {
+    const commitEnvironmentFilter = async () => {
+      const onQuery = vi.fn<(body: unknown) => void>();
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/discovery/environments`, () =>
+          HttpResponse.json(environmentsWithProd),
+        ),
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onQuery(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+
+      const { queryClient } = renderPage();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      focusFilterInput();
+      typeInFilter('Environment');
+      await screen.findByRole('option', { name: 'Environment' });
+      // Every trace field has a single operator, so the operator step is skipped.
+      pressInFilter('Enter');
+      await screen.findByRole('option', { name: 'prod' });
+      pressInFilter('Enter');
+
+      return { onQuery, queryClient };
+    };
+
+    it('writes filterEnvironment=prod to the URL', async () => {
+      await commitEnvironmentFilter();
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('filterEnvironment=prod'));
+    });
+
+    it('sends an eq predicate on environment in the trace query request', async () => {
+      const { onQuery, queryClient } = await commitEnvironmentFilter();
+
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      const lastBody = onQuery.mock.calls.at(-1)?.[0];
+      expect(JSON.stringify(lastBody)).toContain(
+        JSON.stringify({ op: 'eq', left: { path: 'environment' }, right: { literal: 'prod' } }),
+      );
+    });
+  });
+
+  describe('when the page is scoped to an agent', () => {
+    const renderScoped = async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      const result = renderPage('/traces?filterTraceId=trace-a', {
+        scopedEntityId: 'weather-agent',
+        scopedEntityType: EntityType.AGENT,
+      });
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('filterEntityId=weather-agent'));
+      await waitFor(() => expect(result.queryClient.isFetching()).toBe(0));
+      return result;
+    };
+
+    it('does not render chips for the scope fields', async () => {
+      await renderScoped();
+
+      expect([...getFilterChips()].slice(1).map(chip => chip.textContent)).toEqual(['Trace IDtrace-a']);
+    });
+
+    it('keeps the scope in the URL after Clear filters', async () => {
+      await renderScoped();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).not.toContain('filterTraceId'));
+      expect(screen.getByTestId('location').textContent).toContain('filterEntityId=weather-agent');
+      expect(screen.getByTestId('location').textContent).toContain('rootEntityType=agent');
+    });
+
+    it('does not offer Primitive Name in the field step', async () => {
+      await renderScoped();
+
+      focusFilterInput();
+      await screen.findByRole('option', { name: 'Trace ID' });
+      expect(screen.queryByRole('option', { name: 'Primitive Name' })).toBeNull();
+      expect(screen.queryByRole('option', { name: 'Primitive Type' })).toBeNull();
+      expect(screen.queryByRole('option', { name: 'Primitive ID' })).toBeNull();
     });
   });
 });
