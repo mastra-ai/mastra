@@ -543,6 +543,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'observability/tracing/import-traces',
+              label: 'Import traces',
+            },
+            {
+              type: 'doc',
               id: 'observability/logging',
               label: 'Logging',
             },
