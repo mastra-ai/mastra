@@ -361,6 +361,8 @@ describe('registerRun thread lease', () => {
     const threadId = 'strict-ack-thread';
     const resourceId = 'strict-ack-resource';
     const subscription = await observer.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    await pubsub.flush();
+    const publishedBeforeRegister = pubsub.publishedTypes.length;
     pubsub.failPublishAfterDelivery = true;
 
     try {
@@ -380,7 +382,7 @@ describe('registerRun thread lease', () => {
       ).rejects.toThrow('publish acknowledgement failed');
       await pubsub.flush();
       await waitForCondition(() => observer.getThreadState({ threadId, resourceId }, pubsub) === 'idle');
-      expect(pubsub.publishedTypes).toEqual(['run-registered', 'run-discarded']);
+      expect(pubsub.publishedTypes.slice(publishedBeforeRegister)).toEqual(['run-registered', 'run-discarded']);
     } finally {
       subscription.unsubscribe();
     }

@@ -9816,22 +9816,13 @@ export class Agent<
     }
 
     let runId = this.getActiveThreadRunId({ threadId, resourceId });
-    // Tracks whether runId was recovered from storage (not the in-memory active-run
-    // map). This path resumes directly because the snapshot has already been
-    // discovered here, avoiding a second storage lookup in sendStreamResume().
     let resolvedFromStorage = false;
 
     if (!runId) {
-      // The in-memory active-run map only knows about runs started by this process.
-      // After a server restart (or on another instance) fall back to storage-backed
-      // suspended-run discovery so approvals stay durable.
       let suspendedRuns: AgentRun[] = [];
       try {
         ({ runs: suspendedRuns } = await this.listSuspendedRuns({ threadId, resourceId }));
       } catch (error) {
-        // Only swallow the expected no-storage case — storage outages and
-        // store-driver errors must surface instead of masquerading as
-        // "no suspended run exists".
         if (!(error instanceof MastraError) || error.id !== 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
           throw error;
         }

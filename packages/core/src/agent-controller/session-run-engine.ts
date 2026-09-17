@@ -1329,6 +1329,16 @@ export class SessionRunEngine {
     this.#session.run.reset();
   }
 
+  private async isResolvedToolGate(
+    chunk: StreamPayloadChunk<'tool-call-approval' | 'tool-call-suspended'>,
+    subscription: AgentThreadSubscription<StreamChunk>,
+  ): Promise<boolean> {
+    if (!subscription.__isCurrentToolGatePending) return false;
+
+    const toolCallId = getString(getPayload(chunk).toolCallId) ?? '';
+    return !(await subscription.__isCurrentToolGatePending(toolCallId));
+  }
+
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk>): Promise<void> {
     const agent = this.#session.stream.getAgent({ subscription }) ?? this.#machinery.getAgent();
     let currentRun: StreamState | undefined;
@@ -1363,7 +1373,11 @@ export class SessionRunEngine {
         }
 
         try {
-          const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext, agent);
+          const isToolGate = chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended';
+          const streamResult =
+            isToolGate && (await this.isResolvedToolGate(chunk, subscription))
+              ? this.finishStreamState(currentRun)
+              : await this.processStreamChunk(currentRun, chunk, requestContext, agent);
           if (
             streamResult ||
             chunk.type === 'finish' ||
@@ -1371,10 +1385,7 @@ export class SessionRunEngine {
             chunk.type === 'abort' ||
             chunk.type === 'tool-call-suspended'
           ) {
-            const suspended =
-              chunk.type === 'tool-call-suspended' ||
-              (streamResult ?? this.finishStreamState(currentRun)).suspended ||
-              undefined;
+            const { suspended } = streamResult ?? this.finishStreamState(currentRun);
             const aborted = chunk.type === 'abort';
             // A non-success terminal finish reason (e.g. a `claude-fable-5`
             // content-filter refusal) becomes an explicit error so the
