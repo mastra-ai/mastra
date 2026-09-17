@@ -281,8 +281,8 @@ export const accountRotationScenario: McE2eScenario = {
     }
 
     // Restart the app on the same app data and reload the thread: the persisted
-    // notice must render from history.
-    await runtime.stopApp?.();
+    // notice must render from history. `restartApp` stops the running app
+    // itself, so no explicit stop is needed here.
     await restartApp?.();
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal, 30_000);
 

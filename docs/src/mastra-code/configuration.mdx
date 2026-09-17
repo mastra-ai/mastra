@@ -111,7 +111,7 @@ The account manager lists every registered account with its label and marks the 
 - **Re-authenticate…** — picks an account and refreshes its credentials by signing in again.
 - **Remove…** — deletes an account (after confirmation).
 
-Exactly one account per provider is active at a time; the others stay registered so you can switch to them or remove them. After a successful sign-in you can name the account — ChatGPT and xAI accounts pre-fill the account's email and GitHub Copilot accounts pre-fill the GitHub login when available. `/logout` still signs out of the provider entirely, removing every registered account.
+Exactly one account per provider is active at a time; when a request fails over, the provider's other accounts are tried in the order you added them. After a successful sign-in you can name the account — ChatGPT and xAI accounts pre-fill the account's email and GitHub Copilot accounts pre-fill the GitHub login when available. `/logout` still signs out of the provider entirely, removing every registered account.
 
 #### Automatic account rotation
 
