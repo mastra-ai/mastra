@@ -1019,7 +1019,12 @@ Line 3 conclusion`;
         const skillsPerSource = (await views[0]!.list()).length;
 
         for (let round = 0; round < 3; round++) {
-          await Promise.all(views.map(view => view.search('zebra')));
+          const results = await Promise.all(views.map(view => view.search('zebra')));
+          expect(results.map(result => result.map(item => item.skillName).sort())).toEqual([
+            ['alpha', 'beta', 'gamma'],
+            ['alpha', 'beta', 'gamma'],
+            ['alpha', 'beta', 'gamma'],
+          ]);
         }
 
         // Only one source may hold documents once everything settles
