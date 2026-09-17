@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { FilterBarAnimatedChips } from './animation/filter-bar-animated-chips';
 import styles from './animation/filter-bar-animation.module.css';
@@ -32,14 +33,19 @@ function FilterBarSurface({
 }) {
   const ctx = useFilterBarContext();
   const isButton = ctx.variant === 'button';
+  const registerClear = useCallback(
+    (element: HTMLSpanElement | null) => ctx.animation.register('clear', element),
+    [ctx.animation],
+  );
   return (
     <div
+      ref={ctx.animation.rootRef}
       role="group"
       aria-label={ctx.ariaLabel}
       data-slot="filter-bar"
       data-variant={ctx.variant}
       className={cn(
-        'relative flex w-full flex-wrap items-center gap-1 [&_[data-slot=filter-bar-chip]]:h-form-md',
+        'relative flex w-full flex-wrap content-start items-center gap-1 overflow-x-clip [&_[data-slot=filter-bar-chip]]:h-form-md',
         styles.surface,
         className,
       )}
@@ -48,10 +54,16 @@ function FilterBarSurface({
         {children}
       </div>
       {!isButton && (
-        <span className="h-form-md flex shrink-0 items-center empty:hidden">
+        <span ref={registerClear} className="h-form-md flex shrink-0 items-center empty:hidden">
           <FilterBarClear label={clearLabel} />
         </span>
       )}
+      <div
+        ref={ctx.animation.exitLayerRef}
+        inert
+        aria-hidden
+        className={cn('pointer-events-none absolute inset-0', styles.exitLayer)}
+      />
       <VisuallyHidden aria-live="polite">{ctx.announcement}</VisuallyHidden>
     </div>
   );

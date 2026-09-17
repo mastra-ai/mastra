@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties, ReactNode, Ref } from 'react';
 import { segmentClass } from '../filter-bar-chip';
 import styles from './filter-bar-animation.module.css';
 import { cn } from '@/lib/utils';
@@ -8,14 +8,17 @@ export function FilterBarDraftSegment({
   className,
   style,
   joined = false,
+  ref,
 }: {
   children: ReactNode;
   className?: string;
   style?: CSSProperties;
   joined?: boolean;
+  ref?: Ref<HTMLSpanElement>;
 }) {
   return (
     <span
+      ref={ref}
       data-slot="filter-bar-draft-segment"
       data-joined={joined || undefined}
       className={cn(

@@ -72,7 +72,7 @@ const meta: Meta = {
     docs: {
       description: {
         component: [
-          'Type in the compact rounded input to pick a **field → operator → value**, or use `variant="button"` to start from **Add filter +**. The input stands alone when empty and sits beside the filters as they are added, without an enclosing bar. Both variants keep pending segments separate, join them after selection, preview checked values, and finish with one accent-colored shimmer. Each committed filter becomes an inline chip whose segments open their own editor on click or Enter. All animations respect reduced motion.',
+          'Type in the compact rounded input to pick a **field → operator → value**, or use `variant="button"` to start from **Add filter +**. The input stands alone when empty and sits beside the filters as they are added, without an enclosing bar. Each choice morphs the input capsule into the selected tag while revealing the next input; suggestions stay anchored to the filter row. Both variants keep pending segments separate, join them after selection, preview checked values, and finish with one accent-colored shimmer. Each committed filter becomes an inline chip whose segments open their own editor on click or Enter. Removal and wrapped rows move together. All animations respect reduced motion.',
           '',
           '**Keyboard**: `↑/↓` move the highlight, `Enter`/`Tab` pick, `Esc`/`Backspace` step back. Empty input: `←` focuses the last chip, `Backspace` removes it. On a chip: `←/→` move across segments and chips, `Enter` edits, `Delete` removes. Multi-value (`in`): `Enter` toggles, `Ctrl/⌘+Enter` or **Done** commits.',
           '',

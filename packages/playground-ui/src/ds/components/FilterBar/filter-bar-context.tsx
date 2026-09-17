@@ -1,6 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { useFilterBarLayout } from './animation/use-filter-bar-layout';
+import type { FilterBarLayout } from './animation/use-filter-bar-layout';
 import type { FilterBarProps } from './filter-bar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator, FilterBarSegment } from './types';
 
@@ -10,6 +12,7 @@ const SEGMENTS_LEFT_TO_RIGHT: FilterBarSegment[] = ['field', 'operator', 'value'
 const SEGMENTS_RIGHT_TO_LEFT: FilterBarSegment[] = [...SEGMENTS_LEFT_TO_RIGHT].reverse();
 
 export type FilterBarContextValue = {
+  animation: FilterBarLayout;
   fields: FilterBarField[];
   operators: FilterBarOperator[];
   items: FilterBarItem[];
@@ -71,6 +74,7 @@ export function FilterBarProvider({
   variant,
   children,
 }: FilterBarProviderProps) {
+  const animation = useFilterBarLayout(value);
   const segments = useRef(new Map<SegmentKey, HTMLElement>());
   const inputRef = useRef<HTMLInputElement | HTMLButtonElement | null>(null);
   const itemsRef = useRef(value);
@@ -93,31 +97,36 @@ export function FilterBarProvider({
 
   const addItem = useCallback(
     (item: Omit<FilterBarItem, 'id'>) => {
-      onValueChange([...itemsRef.current, { ...item, id: createFilterId() }]);
+      const id = createFilterId();
+      animation.capture(id);
+      onValueChange([...itemsRef.current, { ...item, id }]);
       announce('Filter added');
     },
-    [onValueChange, announce],
+    [onValueChange, announce, animation],
   );
 
   const updateItem = useCallback(
     (id: string, patch: Partial<Omit<FilterBarItem, 'id'>>) => {
+      animation.capture();
       onValueChange(itemsRef.current.map(item => (item.id === id ? { ...item, ...patch } : item)));
     },
-    [onValueChange],
+    [onValueChange, animation],
   );
 
   const removeItem = useCallback(
     (id: string) => {
+      animation.capture();
       onValueChange(itemsRef.current.filter(item => item.id !== id));
       announce('Filter removed');
     },
-    [onValueChange, announce],
+    [onValueChange, announce, animation],
   );
 
   const clear = useCallback(() => {
+    animation.capture();
     onValueChange(itemsRef.current.filter(item => nonRemovableIds.has(item.id)));
     announce('All filters removed');
-  }, [onValueChange, announce, nonRemovableIds]);
+  }, [onValueChange, announce, nonRemovableIds, animation]);
 
   const hasRemovableItems = value.some(item => !nonRemovableIds.has(item.id));
 
@@ -131,15 +140,23 @@ export function FilterBarProvider({
     });
   }, []);
 
-  const registerSegment = useCallback((itemId: string, segment: FilterBarSegment, el: HTMLElement | null) => {
-    const key: SegmentKey = `${itemId}:${segment}`;
-    if (el) segments.current.set(key, el);
-    else segments.current.delete(key);
-  }, []);
+  const registerSegment = useCallback(
+    (itemId: string, segment: FilterBarSegment, el: HTMLElement | null) => {
+      animation.registerChipSegment(itemId, segment, el);
+      const key: SegmentKey = `${itemId}:${segment}`;
+      if (el) segments.current.set(key, el);
+      else segments.current.delete(key);
+    },
+    [animation],
+  );
 
-  const registerInput = useCallback((el: HTMLInputElement | HTMLButtonElement | null) => {
-    inputRef.current = el;
-  }, []);
+  const registerInput = useCallback(
+    (el: HTMLInputElement | HTMLButtonElement | null) => {
+      inputRef.current = el;
+      animation.inputRef.current = el;
+    },
+    [animation],
+  );
 
   const focusInput = useCallback(() => {
     inputRef.current?.focus();
@@ -179,6 +196,7 @@ export function FilterBarProvider({
 
   const ctx = useMemo<FilterBarContextValue>(
     () => ({
+      animation,
       fields,
       operators,
       items: value,
@@ -202,6 +220,7 @@ export function FilterBarProvider({
       variant,
     }),
     [
+      animation,
       fields,
       operators,
       value,

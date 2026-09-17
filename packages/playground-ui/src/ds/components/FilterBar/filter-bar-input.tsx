@@ -5,6 +5,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import styles from './animation/filter-bar-animation.module.css';
 import { FilterBarPopup } from './animation/filter-bar-popup';
+import { useFilterDraftMotion } from './animation/use-filter-draft-motion';
 import { FilterBarAddButton } from './filter-bar-add-button';
 import { FilterBarFieldLabel, formatValue } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
@@ -66,6 +67,7 @@ export function FilterBarInput({
   const isButton = ctx.variant === 'button';
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const draftMotion = useFilterDraftMotion(inputRef, ctx.animation);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState<Draft>(INITIAL_DRAFT);
@@ -77,10 +79,14 @@ export function FilterBarInput({
   const fieldOperators = useMemo(() => (field ? ctx.getFieldOperators(field) : []), [ctx, field]);
   const visibleFields = useMemo(() => ctx.fields.filter(f => !f.hidden), [ctx.fields]);
 
-  const reset = useCallback(() => {
-    setDraft(INITIAL_DRAFT);
-    setQuery('');
-  }, []);
+  const reset = useCallback(
+    (transition: 'edit' | 'commit' = 'edit') => {
+      draftMotion.capture(transition);
+      setDraft(INITIAL_DRAFT);
+      setQuery('');
+    },
+    [draftMotion],
+  );
 
   const close = useCallback(() => {
     setOpen(false);
@@ -89,9 +95,9 @@ export function FilterBarInput({
 
   const commit = useCallback(
     (fieldId: string, operatorId: string, value: FilterBarValue) => {
-      ctx.addItem({ fieldId, operatorId, value });
       if (isButton) setOpen(false);
-      else reset();
+      else reset('commit');
+      ctx.addItem({ fieldId, operatorId, value });
       (isButton ? buttonRef : inputRef).current?.focus();
     },
     [ctx, reset, isButton],
@@ -99,6 +105,7 @@ export function FilterBarInput({
 
   const selectOperator = useCallback(
     (fieldId: string, next: FilterBarOperator) => {
+      draftMotion.capture();
       if (next.arity === 'none') {
         commit(fieldId, next.id, '');
         return;
@@ -106,11 +113,12 @@ export function FilterBarInput({
       setDraft({ step: 'value', fieldId, operatorId: next.id });
       setQuery('');
     },
-    [commit],
+    [commit, draftMotion],
   );
 
   const selectField = useCallback(
     (next: FilterBarField) => {
+      draftMotion.capture();
       const [only, ...rest] = ctx.getFieldOperators(next);
       if (only && rest.length === 0) {
         selectOperator(next.id, only);
@@ -119,7 +127,7 @@ export function FilterBarInput({
       setDraft({ step: 'operator', fieldId: next.id });
       setQuery('');
     },
-    [ctx, selectOperator],
+    [ctx, selectOperator, draftMotion],
   );
 
   const valueStep = useValueStep({
@@ -133,15 +141,17 @@ export function FilterBarInput({
   });
 
   const stepBack = useCallback(() => {
+    draftMotion.capture();
     if (draft.step === 'value') {
       const skipOperator = field ? fieldOperators.length === 1 : false;
       setDraft(skipOperator ? INITIAL_DRAFT : { step: 'operator', fieldId: draft.fieldId });
     } else if (draft.step === 'operator') setDraft(INITIAL_DRAFT);
     else setOpen(false);
     setQuery('');
-  }, [draft, field, fieldOperators]);
+  }, [draft, field, fieldOperators, draftMotion]);
   const handleSelect = (item: Item) => {
     if ('value' in item) {
+      draftMotion.capture();
       if (draft.step === 'value') valueStep.handleSelect(item);
       return;
     }
@@ -287,6 +297,7 @@ export function FilterBarInput({
             ref={element => {
               buttonRef.current = element;
               ctx.registerInput(element);
+              ctx.animation.register('composer', element);
             }}
             field={open ? field : undefined}
             operator={open ? operator : undefined}
@@ -296,6 +307,7 @@ export function FilterBarInput({
           />
         ) : (
           <FilterBarDraftChip
+            motion={draftMotion}
             field={field}
             operator={fieldOperators.length === 1 ? undefined : operator}
             selectedValueLabel={selectedValueLabel}

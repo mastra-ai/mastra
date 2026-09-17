@@ -168,7 +168,10 @@ export function FilterBarChip({ item, readOnly = false, removable = true, classN
   return (
     <ChipContext.Provider value={chipValue}>
       <div
-        ref={rootRef}
+        ref={element => {
+          rootRef.current = element;
+          ctx.animation.registerChipSegment(item.id, 'surface', element);
+        }}
         role="group"
         aria-label={label}
         data-slot="filter-bar-chip"
