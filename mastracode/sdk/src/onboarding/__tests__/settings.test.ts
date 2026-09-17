@@ -1,12 +1,15 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { applyOMDefaultIfUnconfigured, hasExplicitOMConfiguration } from '../om-settings.js';
 import {
   createBrowserFromSettings,
   getCustomProviderId,
+  getLegacySettingsPath,
+  getSettingsPath,
+  getStatePath,
   loadSettings,
   migrateLegacyVariedPack,
   parseCustomProviders,
@@ -216,6 +219,115 @@ function withTempSettingsFile(run: (filePath: string) => void): void {
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+function withTempDefaultSettings(run: () => void): void {
+  const dir = mkdtempSync(join(tmpdir(), 'mastracode-default-settings-'));
+  const previous = process.env.MASTRA_APP_DATA_DIR;
+  process.env.MASTRA_APP_DATA_DIR = dir;
+  try {
+    run();
+  } finally {
+    if (previous === undefined) delete process.env.MASTRA_APP_DATA_DIR;
+    else process.env.MASTRA_APP_DATA_DIR = previous;
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+describe('default config and state storage', () => {
+  it('migrates the legacy settings file into separate config and state files', () => {
+    withTempDefaultSettings(() => {
+      writeFileSync(
+        getLegacySettingsPath(),
+        JSON.stringify({
+          onboarding: {
+            completedAt: '2026-09-17T00:00:00.000Z',
+            version: 3,
+            modePackId: 'anthropic',
+            quietModePreferenceSelected: true,
+          },
+          preferences: { theme: 'dark', quietMode: true },
+          models: { activeModelPackId: 'anthropic' },
+          modelUseCounts: { 'anthropic/claude-sonnet-4-5': 4 },
+          updateDismissedVersion: '1.7.0',
+        }),
+        'utf-8',
+      );
+
+      const settings = loadSettings();
+      const config = JSON.parse(readFileSync(getSettingsPath(), 'utf-8'));
+      const state = JSON.parse(readFileSync(getStatePath(), 'utf-8'));
+
+      expect(settings.preferences.theme).toBe('dark');
+      expect(settings.onboarding.completedAt).toBe('2026-09-17T00:00:00.000Z');
+      expect(config.preferences.theme).toBe('dark');
+      expect(config.models.activeModelPackId).toBe('anthropic');
+      expect(config).not.toHaveProperty('onboarding');
+      expect(config).not.toHaveProperty('modelUseCounts');
+      expect(config).not.toHaveProperty('updateDismissedVersion');
+      expect(state).toEqual({
+        onboarding: settings.onboarding,
+        modelUseCounts: { 'anthropic/claude-sonnet-4-5': 4 },
+        updateDismissedVersion: '1.7.0',
+      });
+      expect(existsSync(getLegacySettingsPath())).toBe(true);
+    });
+  });
+
+  it('loads the split stores without falling back to stale legacy values', () => {
+    withTempDefaultSettings(() => {
+      writeFileSync(
+        getLegacySettingsPath(),
+        JSON.stringify({
+          onboarding: { completedAt: 'legacy', quietModePreferenceSelected: true },
+          preferences: { theme: 'dark' },
+        }),
+        'utf-8',
+      );
+      writeFileSync(getSettingsPath(), JSON.stringify({ preferences: { theme: 'light' } }), 'utf-8');
+      writeFileSync(
+        getStatePath(),
+        JSON.stringify({
+          onboarding: { completedAt: 'current', quietModePreferenceSelected: true },
+          modelUseCounts: { 'openai/gpt-5.5': 2 },
+          updateDismissedVersion: null,
+        }),
+        'utf-8',
+      );
+
+      const settings = loadSettings();
+
+      expect(settings.preferences.theme).toBe('light');
+      expect(settings.onboarding.completedAt).toBe('current');
+      expect(settings.modelUseCounts).toEqual({ 'openai/gpt-5.5': 2 });
+    });
+  });
+
+  it('starts with defaults when the legacy settings path is unreadable', () => {
+    withTempDefaultSettings(() => {
+      mkdirSync(getLegacySettingsPath());
+
+      const settings = loadSettings();
+
+      expect(settings.preferences.quietMode).toBe(true);
+      expect(settings.onboarding.completedAt).toBeNull();
+    });
+  });
+
+  it('keeps explicit settings paths as combined files', () => {
+    withTempSettingsFile(filePath => {
+      const settings = createSettings();
+      settings.onboarding.completedAt = '2026-09-17T00:00:00.000Z';
+      settings.preferences.theme = 'dark';
+
+      saveSettings(settings, filePath);
+
+      const stored = JSON.parse(readFileSync(filePath, 'utf-8'));
+      expect(stored.preferences.theme).toBe('dark');
+      expect(stored.onboarding.completedAt).toBe('2026-09-17T00:00:00.000Z');
+      expect(existsSync(join(dirname(filePath), 'state.json'))).toBe(false);
+    });
+  });
+});
 
 describe('MCP discovery settings parsing', () => {
   it('defaults external MCP discovery to disabled', () => {
