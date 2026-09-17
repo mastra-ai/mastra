@@ -78,7 +78,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
     }
   };
 
-  const actualRuns = runs || [];
+  const runList = runs || [];
 
   return (
     <>
@@ -88,7 +88,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
           <span>Recent runs</span>
           {!isLoading && !error && (
             <span className="text-ui-xs text-neutral3">
-              {actualRuns.length}
+              {runList.length}
               {hasNextPage ? '+' : ''}
             </span>
           )}
@@ -101,7 +101,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
               </div>
             ) : (
               <ThreadList aria-label="Workflow runs" embedded>
-                {actualRuns.length === 0 ? (
+                {runList.length === 0 ? (
                   <ThreadListEmpty>
                     {error
                       ? 'Unable to load workflow runs.'
@@ -109,7 +109,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                   </ThreadListEmpty>
                 ) : (
                   <ThreadListItems>
-                    {actualRuns.map(run => {
+                    {runList.map(run => {
                       const isActiveRun = run.runId === runId;
                       const runInput = isActiveRun ? formatRunInput(run.snapshot) : null;
                       const runTimestamp =
@@ -191,7 +191,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
 
 interface DeleteRunDialogProps {
   open: boolean;
-  onOpenChange: (n: boolean) => void;
+  onOpenChange: (open: boolean) => void;
   onDelete: () => void;
 }
 const DeleteRunDialog = ({ open, onOpenChange, onDelete }: DeleteRunDialogProps) => {

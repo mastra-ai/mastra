@@ -22,10 +22,7 @@ import { WorkflowTimeTravelForm } from './workflow-time-travel-form';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 
 export interface WorkflowStepActionBarProps {
-  input?: any;
   resumeData?: any;
-  output?: any;
-  suspendOutput?: any;
   error?: any;
   tripwire?: TripwireData;
   stepName: string;
@@ -38,10 +35,7 @@ export interface WorkflowStepActionBarProps {
 }
 
 export const WorkflowStepActionBar = ({
-  input: _input,
   resumeData,
-  output: _output,
-  suspendOutput: _suspendOutput,
   error,
   tripwire,
   mapConfig,

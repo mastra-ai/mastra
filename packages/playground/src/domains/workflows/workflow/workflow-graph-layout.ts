@@ -12,27 +12,27 @@ const getNodeSize = (node: WorkflowGraphNode): { width: number; height: number }
 
   return {
     width: node.measured?.width ?? 274,
-    height: node.measured?.height ?? (node?.data?.isLarge ? 260 : 100),
+    height: node.measured?.height ?? (node.data.isLarge ? 260 : 100),
   };
 };
 
 export const getLayoutedElements = (nodes: WorkflowGraphNode[], edges: WorkflowGraphEdge[]) => {
-  const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: 'TB', ranksep: 84, nodesep: 64 });
+  const dagreGraph = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+  dagreGraph.setGraph({ rankdir: 'TB', ranksep: 84, nodesep: 64 });
 
-  edges.forEach(edge => g.setEdge(edge.source, edge.target));
+  edges.forEach(edge => dagreGraph.setEdge(edge.source, edge.target));
   nodes.forEach(node =>
-    g.setNode(node.id, {
+    dagreGraph.setNode(node.id, {
       ...node,
       ...getNodeSize(node),
     }),
   );
 
-  Dagre.layout(g);
+  Dagre.layout(dagreGraph);
 
   return {
     nodes: nodes.map(node => {
-      const position = g.node(node.id);
+      const position = dagreGraph.node(node.id);
       const { width, height } = getNodeSize(node);
       const positionX = position.x - width / 2;
       const positionY = position.y - height / 2;

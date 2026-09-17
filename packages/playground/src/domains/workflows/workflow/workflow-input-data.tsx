@@ -137,13 +137,15 @@ export const WorkflowInputData = ({
       Trigger a run
     </Txt>
   );
+  const toggleSitsInLabelRow = !collapsible && !hideHeading;
+  const toggleSitsAboveInput = collapsible || hideHeading || hideInputTypeLabel;
   const inputTypeToggle = (
     <WorkflowInputTypeToggle
       value={draft.type}
       onChange={changeInputType}
       disabled={isSubmitLoading}
       includeSimple={isProcessorWorkflow}
-      compact={!collapsible && !hideHeading}
+      compact={toggleSitsInLabelRow}
     />
   );
 
@@ -154,12 +156,12 @@ export const WorkflowInputData = ({
           <Txt as="p" variant="ui-sm" className="text-neutral3">
             {inputTypeLabel}
           </Txt>
-          {!collapsible && !hideHeading && <div className="shrink-0">{inputTypeToggle}</div>}
+          {toggleSitsInLabelRow && <div className="shrink-0">{inputTypeToggle}</div>}
         </div>
       )}
 
       <div className="px-5">
-        {(collapsible || hideHeading || hideInputTypeLabel) && <div className="pb-4">{inputTypeToggle}</div>}
+        {toggleSitsAboveInput && <div className="pb-4">{inputTypeToggle}</div>}
 
         <div
           className={cn('pb-4', {

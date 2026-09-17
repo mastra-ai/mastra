@@ -24,7 +24,6 @@ export type WorkflowGraphNode = WorkflowStepNode | WorkflowBoundaryNode;
 export type WorkflowGraphEdge = WorkflowDataEdgeModel;
 
 const formatMappingLabel = (stepId: string, prevStepIds: string[], nextStepIds: string[]): string => {
-  // If not a mapping node, return original ID
   if (!stepId.startsWith('mapping_')) {
     return stepId;
   }
@@ -37,7 +36,6 @@ const formatMappingLabel = (stepId: string, prevStepIds: string[], nextStepIds: 
   };
 
   const formatStepName = (id: string) => {
-    // Remove common prefixes and clean up
     const cleaned = id.replace(/Step$/, '').replace(/[-_]/g, ' ').trim();
     return capitalizeWords(cleaned);
   };
@@ -71,17 +69,6 @@ const conditionWorkflowStep = (condition: { id: string; fn: string }) =>
     serializedConditions: [condition],
   });
 
-export type WStep = {
-  [key: string]: {
-    id: string;
-    description: string;
-    workflowId?: string;
-    stepGraph?: any;
-    stepSubscriberGraph?: any;
-  };
-};
-
-/** Resolves the id of a single step-like serialized entry (step / agent / tool / mapping). */
 const getSingleStepFlowId = (flow: SerializedStepFlowEntry): string => {
   // Container entries also carry an optional `id` now, so guard for presence,
   // not just for the key existing on the variant.

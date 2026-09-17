@@ -18,6 +18,8 @@ import { WorkflowInputData } from './workflow-input-data';
 
 import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
+const suspendedWickStyle: CSSProperties & { '--belt-hue': string } = { '--belt-hue': 'var(--warning1)' };
+
 export interface ResumeStepParams {
   stepId: string | string[];
   runId: string;
@@ -97,12 +99,7 @@ export function WorkflowSuspendedSteps({
           );
         })}
       </div>
-      <ActivityWick
-        status="ready"
-        label="Needs input"
-        className="before:hidden"
-        style={{ '--belt-hue': 'var(--warning1)' } as CSSProperties}
-      />
+      <ActivityWick status="ready" label="Needs input" className="before:hidden" style={suspendedWickStyle} />
     </section>
   );
 }

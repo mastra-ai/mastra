@@ -9,7 +9,7 @@ export interface TimelineRow {
   isNestedEntry: boolean;
 }
 
-export const isNestedTimelineEntry = (stepId: string) => stepId.includes('.');
+const isNestedTimelineEntry = (stepId: string) => stepId.includes('.');
 
 const isInputKey = (key: string) => key === 'input' || key.endsWith('.input');
 const MIN_WIDTH_PCT = 1;

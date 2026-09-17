@@ -59,10 +59,12 @@ function getRunSpan(result: WorkflowRunStreamResult | null, status?: WorkflowRun
 }
 
 function RunDuration({ span }: { span: RunSpan }) {
+  const elapsedMs = useTimeDiff(span);
+
   return (
     <span className="text-ui-xs text-neutral4 flex items-center gap-1.5 tabular-nums" title="Run duration">
       <Timer aria-hidden className="size-3.5" />
-      {formatRunDuration(useTimeDiff(span))}
+      {formatRunDuration(elapsedMs)}
     </span>
   );
 }

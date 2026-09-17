@@ -14,8 +14,6 @@ export type StepDetailData =
       nestedGraph: { label: string; stepGraph: SerializedStepFlowEntry[]; fullStep: string };
     };
 
-export type StepDetailType = StepDetailData['type'];
-
 export type WorkflowStepDetailContextType = {
   stepDetail: StepDetailData | null;
   showMapConfig: (params: { stepName: string; stepId?: string; mapConfig: string }) => void;

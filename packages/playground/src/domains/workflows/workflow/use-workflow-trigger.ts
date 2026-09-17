@@ -98,15 +98,6 @@ export function useWaitingStepKey(): string | undefined {
   );
 }
 
-export function useSuspendedStepKey(): string | undefined {
-  const { result } = useContext(WorkflowRunContext);
-
-  return useMemo(() => {
-    const entry = Object.entries(result?.steps || {}).find(([_, { status }]) => status === 'suspended');
-    return entry?.[0];
-  }, [result?.steps]);
-}
-
 export function useNextPerStep() {
   const { result, runId, workflowId, workflow, payload, setDebugMode, timeTravelWorkflowStream } =
     useContext(WorkflowRunContext);
