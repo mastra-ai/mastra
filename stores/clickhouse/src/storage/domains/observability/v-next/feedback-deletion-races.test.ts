@@ -11,6 +11,7 @@ import {
   FEEDBACK_EVENTS_DDL,
   TABLE_DELETION_REQUESTS,
   TABLE_FEEDBACK_EVENTS,
+  TABLE_FEEDBACK_EVENTS_DELTA,
 } from './ddl';
 import { recordDeletionRequest } from './deletion-requests';
 import { createFeedback, deleteFeedback, listFeedback, updateFeedbackReviewStatus } from './feedback';
@@ -204,6 +205,96 @@ describe('feedback deletion with lagging replicas', () => {
     },
     60_000,
   );
+
+  it('recovers from a real DELETE permission failure while keeping pending feedback editable', async () => {
+    const writer = clients[0]!;
+    const database = databases[0]!;
+    const username = `receipt_test_${randomUUID().replaceAll('-', '')}`;
+    await writer.command({ query: `CREATE USER ${username} IDENTIFIED WITH plaintext_password BY 'password'` });
+    const limited = createClient({ ...config, database, username, password: 'password' });
+    try {
+      await writer.command({ query: `GRANT SELECT, INSERT, ALTER UPDATE ON ${database}.* TO ${username}` });
+      await createFeedback(writer, {
+        feedback: {
+          feedbackId: 'real-delete-failure',
+          timestamp: new Date(),
+          traceId: 'trace-failure',
+          feedbackSource: 'user',
+          feedbackType: 'rating',
+          value: 1,
+        },
+      });
+      for (const client of clients) await client.command({ query: `SYSTEM SYNC REPLICA ${TABLE_FEEDBACK_EVENTS}` });
+      const requestStates = async () =>
+        (
+          await writer.query({
+            query: `SELECT lastAppliedAt > toDateTime64(0, 3) AS applied FROM ${TABLE_DELETION_REQUESTS} FINAL ORDER BY applied`,
+            format: 'JSONEachRow',
+          })
+        ).json();
+      await expect(deleteFeedback(limited, { feedbackIds: ['real-delete-failure'] }, {})).rejects.toMatchObject({
+        code: '497',
+      });
+      expect(await requestStates()).toEqual([{ applied: 0 }]);
+      expect(await visibleFeedback(writer)).toHaveLength(1);
+      await expect(
+        updateFeedbackReviewStatus(limited, { feedbackId: 'real-delete-failure', reviewStatus: 'reviewed' }, {}),
+      ).resolves.toMatchObject({ reviewStatus: 'reviewed' });
+      await writer.command({ query: `GRANT ALTER DELETE ON ${database}.* TO ${username}` });
+      await deleteFeedback(limited, { feedbackIds: ['real-delete-failure'] }, {});
+      expect(await requestStates()).toEqual([{ applied: 0 }, { applied: 1 }]);
+      for (const client of clients) expect(await visibleFeedback(client)).toEqual([]);
+      await expect(
+        updateFeedbackReviewStatus(limited, { feedbackId: 'real-delete-failure', reviewStatus: 'reviewed' }, {}),
+      ).rejects.toThrow('Feedback record not found');
+    } finally {
+      await limited.close();
+      await writer.command({ query: `DROP USER IF EXISTS ${username}` });
+    }
+  }, 60_000);
+
+  it('reports missing update permission and recovers a delta insert failure on retry', async () => {
+    const writer = clients[0]!;
+    const database = databases[0]!;
+    const username = `update_test_${randomUUID().replaceAll('-', '')}`;
+    await writer.command({ query: buildFeedbackEventsDeltaDDL() });
+    await writer.command({ query: buildFeedbackEventsDeltaMvDDL('fallback') });
+    await createFeedback(writer, {
+      feedback: {
+        feedbackId: 'delta-failure',
+        timestamp: new Date(),
+        traceId: null,
+        feedbackSource: 'user',
+        feedbackType: 'rating',
+        value: 1,
+      },
+    });
+    const enabled = coreFeatures.has('observability-delta-polling');
+    coreFeatures.add('observability-delta-polling');
+    await writer.command({ query: `CREATE USER ${username} IDENTIFIED WITH plaintext_password BY 'password'` });
+    const limited = createClient({ ...config, database, username, password: 'password' });
+    try {
+      await writer.command({ query: `GRANT SELECT ON ${database}.* TO ${username}` });
+      const cursor = (await listFeedback(writer, { mode: 'delta' }, 'fallback')).deltaCursor!;
+      const update = () =>
+        updateFeedbackReviewStatus(limited, { feedbackId: 'delta-failure', reviewStatus: 'reviewed' }, {}, 'fallback');
+      await expect(update()).rejects.toMatchObject({ code: '497' });
+      expect(await visibleFeedback(writer)).toEqual([{ feedbackId: 'delta-failure', reviewStatus: 'needs-review' }]);
+      await writer.command({ query: `GRANT ALTER UPDATE ON ${database}.${TABLE_FEEDBACK_EVENTS} TO ${username}` });
+      await expect(update()).rejects.toMatchObject({ code: '497' });
+      expect(await visibleFeedback(writer)).toEqual([{ feedbackId: 'delta-failure', reviewStatus: 'reviewed' }]);
+      expect((await listFeedback(writer, { mode: 'delta', after: cursor }, 'fallback')).feedback).toEqual([]);
+      await writer.command({ query: `GRANT INSERT ON ${database}.${TABLE_FEEDBACK_EVENTS_DELTA} TO ${username}` });
+      await expect(update()).resolves.toMatchObject({ reviewStatus: 'reviewed' });
+      expect((await listFeedback(writer, { mode: 'delta', after: cursor }, 'fallback')).feedback).toMatchObject([
+        { feedbackId: 'delta-failure', reviewStatus: 'reviewed' },
+      ]);
+    } finally {
+      if (!enabled) coreFeatures.delete('observability-delta-polling');
+      await limited.close();
+      await writer.command({ query: `DROP USER IF EXISTS ${username}` });
+    }
+  }, 60_000);
 
   it('waits out another serialized quorum insert instead of rejecting a concurrent deletion request', async () => {
     const [writer, second, third] = clients as [ClickHouseClient, ClickHouseClient, ClickHouseClient];
