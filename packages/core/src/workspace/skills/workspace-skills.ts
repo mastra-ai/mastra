@@ -1665,6 +1665,7 @@ export interface ResolvedSourceWorkspaceSkillsConfig extends Omit<
 }
 
 const DEFAULT_MAX_CACHED_SOURCES = 16;
+let nextResolvedSkillsOwnerId = 0;
 
 /**
  * WorkspaceSkills backed by a per-request skill source.
@@ -1692,6 +1693,7 @@ export class ResolvedSourceWorkspaceSkills implements WorkspaceSkills {
   readonly #resolver: SkillSourceResolver;
   readonly #config: Omit<ResolvedSourceWorkspaceSkillsConfig, 'source' | 'maxCachedSources'>;
   readonly #maxCachedSources: number;
+  readonly #ownerId = nextResolvedSkillsOwnerId++;
   readonly #sharedSearchState: SharedSearchState = { documentIds: new Set() };
 
   readonly #scopedByRequest = new WeakMap<object, Promise<WorkspaceSkills>>();
@@ -1739,7 +1741,7 @@ export class ResolvedSourceWorkspaceSkills implements WorkspaceSkills {
       impl = new WorkspaceSkillsImpl({
         ...this.#config,
         source,
-        searchNamespace: `source-${this.#nextSourceId++}`,
+        searchNamespace: `owner-${this.#ownerId}/source-${this.#nextSourceId++}`,
         sharedSearchState: this.#sharedSearchState,
         // A view evicted from the LRU may still be held by a caller (or by a
         // request-context cache). When it next needs its search documents it
