@@ -325,4 +325,24 @@ describe('resolveFrameworkSuspendedToolIdentity', () => {
       type: 'suspension',
     });
   });
+
+  it('infers legacy delegated approval suspend data from the approval marker', () => {
+    expect(
+      resolveFrameworkSuspendedToolIdentity({
+        toolCallId: 'approval-call',
+        toolName: 'agent-researcher',
+        resumeSource: 'framework',
+        suspendData: {
+          requireToolApproval: { toolCallId: 'approval-call' },
+          suspendedToolRunId: 'inner-run',
+        },
+        messages: [],
+      }),
+    ).toEqual({
+      toolCallId: 'approval-call',
+      toolName: 'agent-researcher',
+      runId: 'inner-run',
+      type: 'approval',
+    });
+  });
 });

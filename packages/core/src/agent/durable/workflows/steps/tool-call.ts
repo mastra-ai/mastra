@@ -835,15 +835,15 @@ export function createDurableToolCallStep() {
       // suspension state. The suspend payload remains the primary per-tool-call source.
       const isResumableTool = toolName?.startsWith('agent-') || toolName?.startsWith('workflow-');
       const needsRunIdLookup = isResumableTool && (resumeData !== undefined || !!approvalGrant);
+      // Nullish model data follows the framework resume path; false, 0, and empty strings remain valid model payloads.
+      const hasModelResumeData = resumeDataFromArgs != null;
       const resolvedSuspensionIdentity: ResolvedSuspendedToolIdentity | undefined = needsRunIdLookup
         ? resolveFrameworkSuspendedToolIdentity({
             toolCallId,
             toolName,
-            resumeSource: resumeDataFromArgs !== undefined ? 'model' : 'framework',
-            modelSuppliedSuspendedToolCallId:
-              resumeDataFromArgs !== undefined ? modelSuppliedSuspendedToolCallId : undefined,
-            modelSuppliedSuspendedToolRunId:
-              resumeDataFromArgs !== undefined ? modelSuppliedSuspendedToolRunId : undefined,
+            resumeSource: hasModelResumeData ? 'model' : 'framework',
+            modelSuppliedSuspendedToolCallId: hasModelResumeData ? modelSuppliedSuspendedToolCallId : undefined,
+            modelSuppliedSuspendedToolRunId: hasModelResumeData ? modelSuppliedSuspendedToolRunId : undefined,
             suspendData,
             messages: messageList?.get.all.db() ?? [],
           })

@@ -415,7 +415,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         const resumeData = resumeDataFromArgs ?? workflowResumeData;
 
-        const isResumeToolCall = resumeDataFromArgs !== undefined;
+        // Match the nullish fallback above: null/undefined use framework identity, while other falsy values are valid model payloads.
+        const isResumeToolCall = resumeDataFromArgs != null;
 
         // Check if approval is required.
         //
@@ -711,6 +712,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
               return suspend(
                 {
+                  type: 'approval',
                   requireToolApproval: {
                     toolCallId: inputData.toolCallId,
                     toolName: approvalToolName,

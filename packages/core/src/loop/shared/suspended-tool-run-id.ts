@@ -128,14 +128,14 @@ export function resolveFrameworkSuspendedToolIdentity({
       : undefined,
   );
   if (resumeSource === 'framework' && suspendPayloadRunId) {
+    const suspendPayload = suspendData as { type?: unknown; requireToolApproval?: unknown };
+    // Legacy delegated approvals omitted `type`, but their framework-owned approval marker was persisted.
+    const type = suspendPayload.type === 'approval' || suspendPayload.requireToolApproval ? 'approval' : 'suspension';
     return {
       toolCallId,
       toolName,
       runId: suspendPayloadRunId,
-      type:
-        suspendData && typeof suspendData === 'object' && (suspendData as { type?: unknown }).type === 'approval'
-          ? 'approval'
-          : 'suspension',
+      type,
     };
   }
 

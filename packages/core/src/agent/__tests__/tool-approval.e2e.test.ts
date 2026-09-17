@@ -42,7 +42,7 @@ beforeEach(async c => {
       // use stable 8-char hash from c.task.name
       createHash('sha256').update(c.task.name).digest('hex').slice(0, 8),
     )}`,
-    exactMatch: false,
+    exactMatch: true,
     transformRequest: req => canonicalizeRequestJsonSchema(normalizeDynamicRunIds(req)),
     recordingsDir: join(getLLMRecordingsDir(c.task.file.filepath), defaultNameGenerator(c.task.file.filepath)),
   });
