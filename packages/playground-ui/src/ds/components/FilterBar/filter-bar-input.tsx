@@ -1,6 +1,7 @@
 import type { BaseUIEvent } from '@base-ui/react/types';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
+import { FilterBarFieldLabel } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
 import { FilterBarDraftChip } from './filter-bar-draft-chip';
 import { FilterBarOptionList } from './filter-bar-option-list';
@@ -272,7 +273,7 @@ export function FilterBarInput({
                 <FilterBarOptionList<FilterBarField>
                   aria-label="Fields"
                   getKey={f => f.id}
-                  renderOption={f => f.label}
+                  renderOption={f => <FilterBarFieldLabel field={f} />}
                   emptyText="No matching field."
                 />
               )}

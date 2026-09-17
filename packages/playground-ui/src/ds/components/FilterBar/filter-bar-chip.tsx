@@ -30,7 +30,7 @@ import { cn } from '@/lib/utils';
 
 export const segmentClass = cn(
   'flex max-w-48 min-w-0 items-center gap-1 px-2 text-ui-sm leading-ui-sm whitespace-nowrap outline-none',
-  'first:rounded-l-md last:rounded-r-md',
+  'first:rounded-l-lg last:rounded-r-lg',
 );
 
 export const editableSegmentClass = cn(
@@ -38,6 +38,21 @@ export const editableSegmentClass = cn(
   'cursor-pointer transition-colors hover:bg-neutral6/5 hover:text-neutral6',
   'focus-visible:bg-neutral6/10 focus-visible:text-neutral6 data-[popup-open]:bg-neutral6/10 data-[popup-open]:text-neutral6',
 );
+
+/** Field label with its optional leading icon — used by chips, the draft chip and field option lists. */
+export function FilterBarFieldLabel({ field, label }: { field: FilterBarField | undefined; label?: string }) {
+  const Icon = field?.icon;
+  return (
+    <>
+      {Icon && <Icon className="size-[1.1em] shrink-0" aria-hidden />}
+      <span className="truncate">{label ?? field?.label}</span>
+    </>
+  );
+}
+
+/** Inline style carrying a field's accent onto its field segment (text + icon). */
+export const fieldSegmentAccentStyle = (field: FilterBarField | undefined) =>
+  field?.color ? { color: field.color } : undefined;
 
 export const formatValue = (value: FilterBarValue, field: FilterBarField | undefined): string => {
   const suggestions = getFieldSuggestions(field);
@@ -152,7 +167,7 @@ export function FilterBarChip({ item, readOnly = false, removable = true, classN
         data-slot="filter-bar-chip"
         data-readonly={readOnly || undefined}
         className={cn(
-          'flex h-form-sm max-w-full items-stretch divide-x divide-border1 rounded-md border border-border1 bg-surface5 text-neutral5',
+          'flex max-w-full items-stretch divide-x divide-border1 rounded-lg border border-border1 bg-surface5 text-neutral5',
           className,
         )}
         onKeyDown={handleKeyDown}
@@ -244,10 +259,21 @@ function SegmentCombobox<T>({
   const open = chip.openSegment === segment;
   const [highlighted, setHighlighted] = useState<T | null>(null);
 
+  const isField = segment === 'field';
+  const content = isField ? (
+    <FilterBarFieldLabel field={chip.field} label={label} />
+  ) : (
+    <span className="truncate">{label}</span>
+  );
+
   if (chip.readOnly) {
     return (
-      <span className={cn(segmentClass, segment === 'field' && 'text-neutral6')} title={label}>
-        <span className="truncate">{label}</span>
+      <span
+        className={cn(segmentClass, isField && 'text-neutral6')}
+        style={isField ? fieldSegmentAccentStyle(chip.field) : undefined}
+        title={label}
+      >
+        {content}
       </span>
     );
   }
@@ -287,11 +313,12 @@ function SegmentCombobox<T>({
             tabIndex={segment === 'value' ? 0 : -1}
             aria-label={`${ariaLabel}: ${label}`}
             title={label}
-            className={cn(editableSegmentClass, segment === 'field' && 'text-neutral6')}
+            className={cn(editableSegmentClass, isField && 'text-neutral6')}
+            style={isField ? fieldSegmentAccentStyle(chip.field) : undefined}
           />
         }
       >
-        <span className="truncate">{label}</span>
+        {content}
       </ComboboxPrimitive.Trigger>
       <ComboboxPrimitive.Portal container={container}>
         <ComboboxPrimitive.Positioner
@@ -350,7 +377,7 @@ function FieldEditor() {
       <FilterBarOptionList<FilterBarField>
         aria-label="Fields"
         getKey={f => f.id}
-        renderOption={f => f.label}
+        renderOption={f => <FilterBarFieldLabel field={f} />}
         emptyText="No matching field."
       />
     </SegmentCombobox>

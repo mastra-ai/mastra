@@ -548,6 +548,22 @@ describe('Traces page filter bar', () => {
     });
   });
 
+  describe('when the user changes the field of an existing chip', () => {
+    it('keeps the chip with an empty value on the new field', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+
+      const { queryClient } = renderPage('/traces?status=error');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      fireEvent.click(screen.getByRole('combobox', { name: 'Field: Status' }));
+      fireEvent.click(await screen.findByRole('option', { name: 'Environment' }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('filterEnvironment='));
+      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual(['Environment…']);
+      expect(screen.getByTestId('location').textContent).not.toContain('status=');
+    });
+  });
+
   describe('when the user commits Environment is prod through the input', () => {
     const commitEnvironmentFilter = async () => {
       const onQuery = vi.fn<(body: unknown) => void>();

@@ -100,14 +100,18 @@ describe('traceTokensToFilterBarItems', () => {
     ]);
   });
 
-  it('drops legacy empty sentinels', () => {
+  it('keeps empty values as pending chips and maps the legacy Any sentinel to empty', () => {
     expect(
       traceTokensToFilterBarItems([
         { fieldId: 'traceId', value: '' },
         { fieldId: 'status', value: 'Any' },
         { fieldId: 'tags', value: [] },
       ]),
-    ).toEqual([]);
+    ).toEqual([
+      { id: 'traceId', fieldId: 'traceId', operatorId: 'is', value: '' },
+      { id: 'status', fieldId: 'status', operatorId: 'is', value: '' },
+      { id: 'tags', fieldId: 'tags', operatorId: 'in', value: [] },
+    ]);
   });
 });
 

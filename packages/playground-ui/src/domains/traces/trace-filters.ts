@@ -1,9 +1,30 @@
 import type { EntityType } from '@mastra/core/observability';
 import type { ListTracesArgs } from '@mastra/core/storage';
+import {
+  ActivityIcon,
+  BoxIcon,
+  BuildingIcon,
+  ClockIcon,
+  FingerprintIcon,
+  FlaskConicalIcon,
+  GlobeIcon,
+  HashIcon,
+  LayersIcon,
+  MessageSquareIcon,
+  PlayIcon,
+  RadioIcon,
+  ServerIcon,
+  TagIcon,
+  TagsIcon,
+  UserIcon,
+  WaypointsIcon,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS } from './trace-query-filters';
 import type { TraceDatePreset } from './types';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@/ds/components/FilterBar/types';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+import { stringToThemedColor, themedHueColor } from '@/lib/colors';
 
 type EntityTypeValue = `${EntityType}`;
 
@@ -179,6 +200,43 @@ const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
   experimentId: 'Experiment ID',
 };
 
+/** Icon and hue for each known trace filter key. Hues are spread by hand — hashing
+ *  the ids clusters them (e.g. `environment`/`entityName`/`timeRange` all land on green). */
+const TRACE_FILTER_BAR_FIELD_META: Record<string, { icon: LucideIcon; hue: number }> = {
+  timeRange: { icon: ClockIcon, hue: 30 },
+  rootEntityType: { icon: BoxIcon, hue: 265 },
+  entityName: { icon: TagIcon, hue: 290 },
+  entityId: { icon: FingerprintIcon, hue: 315 },
+  status: { icon: ActivityIcon, hue: 0 },
+  tags: { icon: TagsIcon, hue: 340 },
+  serviceName: { icon: ServerIcon, hue: 175 },
+  environment: { icon: GlobeIcon, hue: 145 },
+  traceId: { icon: WaypointsIcon, hue: 215 },
+  runId: { icon: PlayIcon, hue: 195 },
+  threadId: { icon: MessageSquareIcon, hue: 235 },
+  sessionId: { icon: LayersIcon, hue: 100 },
+  requestId: { icon: RadioIcon, hue: 55 },
+  resourceId: { icon: HashIcon, hue: 80 },
+  userId: { icon: UserIcon, hue: 20 },
+  organizationId: { icon: BuildingIcon, hue: 120 },
+  experimentId: { icon: FlaskConicalIcon, hue: 160 },
+};
+
+export const traceFilterFieldIcon = (fieldId: string) => TRACE_FILTER_BAR_FIELD_META[fieldId]?.icon;
+
+/** Stable per-field accent; known keys use a curated hue, others fall back to a hashed one. */
+export const traceFilterFieldColor = (fieldId: string) => {
+  const hue = TRACE_FILTER_BAR_FIELD_META[fieldId]?.hue;
+  return hue === undefined ? stringToThemedColor(fieldId) : themedHueColor(hue);
+};
+
+const traceFieldBase = (id: string) => ({
+  id,
+  label: TRACE_FILTER_BAR_LABELS[id] ?? id,
+  icon: traceFilterFieldIcon(id),
+  color: traceFilterFieldColor(id),
+});
+
 const TRACE_FILTER_BAR_TEXT_FIELD_IDS = [
   'entityId',
   'traceId',
@@ -207,13 +265,12 @@ export function createTraceFilterBarFields({
   hiddenFieldIds?: readonly string[];
 }): FilterBarField[] {
   const pick = (id: string, suggestions: { value: string; label?: string }[]): FilterBarField => ({
-    id,
-    label: TRACE_FILTER_BAR_LABELS[id] ?? id,
+    ...traceFieldBase(id),
     operators: ['is'],
     strict: true,
     suggestions,
   });
-  const text = (id: string): FilterBarField => ({ id, label: TRACE_FILTER_BAR_LABELS[id] ?? id, operators: ['is'] });
+  const text = (id: string): FilterBarField => ({ ...traceFieldBase(id), operators: ['is'] });
 
   const pickFields: FilterBarField[] = [
     pick(
@@ -242,21 +299,17 @@ export function createTraceFilterBarFields({
     .map(field => (hidden.has(field.id) ? { ...field, hidden: true } : field));
 }
 
-const isEmptyTokenValue = (value: PropertyFilterToken['value']) =>
-  Array.isArray(value) ? value.length === 0 : value.trim() === '' || value === 'Any';
-
 /** One FilterBar item per token, keyed by field id so chip order == URL order.
- *  Legacy empty sentinels ('' / 'Any' / []) from old URLs or localStorage are
- *  dropped — FilterBar chips always carry a value. */
+ *  Empty values ('' / []) are kept: that's a pending chip whose field was just
+ *  changed and whose value hasn't been picked yet (the query builder skips it).
+ *  Only the legacy 'Any' sentinel is mapped back to an empty value. */
 export function traceTokensToFilterBarItems(tokens: PropertyFilterToken[]): FilterBarItem[] {
-  return tokens
-    .filter(token => !isEmptyTokenValue(token.value))
-    .map(token => ({
-      id: token.fieldId,
-      fieldId: token.fieldId,
-      operatorId: token.fieldId === 'tags' ? 'in' : 'is',
-      value: token.value,
-    }));
+  return tokens.map(token => ({
+    id: token.fieldId,
+    fieldId: token.fieldId,
+    operatorId: token.fieldId === 'tags' ? 'in' : 'is',
+    value: token.value === 'Any' ? '' : token.value,
+  }));
 }
 
 export function filterBarItemsToTraceTokens(items: FilterBarItem[]): PropertyFilterToken[] {

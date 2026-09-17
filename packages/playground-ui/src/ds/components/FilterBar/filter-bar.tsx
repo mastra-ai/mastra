@@ -30,7 +30,7 @@ function FilterBarSurface({ className, children }: { className?: string; childre
         // Same surface/hover/focus recipe as InputGroup (wrapper whose focus lives on the nested input).
         // Single-line height matches a md control (28px): 24px chips/input + 1px padding + 1px
         // border. Uniform p-px keeps chips concentric; rounded-2xl clamps to a pill on one line.
-        'flex min-h-form-md w-full flex-wrap items-center gap-px rounded-2xl border border-border1 bg-surface-overlay-soft p-px',
+        'flex min-h-form-md w-full flex-wrap items-center gap-0.5 rounded-2xl border border-border1 bg-surface-overlay-soft p-px',
         'cursor-text transition-all duration-normal ease-out-custom',
         'hover:bg-surface-overlay-strong',
         inputHoverBorderWithin,
@@ -40,7 +40,7 @@ function FilterBarSurface({ className, children }: { className?: string; childre
       )}
       onClick={ctx.focusInput}
     >
-      <ListFilterIcon aria-hidden className="text-neutral3 mx-1.5 size-3 shrink-0" />
+      <ListFilterIcon aria-hidden className="text-neutral3 mr-1 ml-1.5 size-3 shrink-0" />
       {children}
       <VisuallyHidden aria-live="polite">{ctx.announcement}</VisuallyHidden>
     </div>

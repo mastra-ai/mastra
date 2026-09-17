@@ -1,8 +1,15 @@
 /* eslint-disable react-refresh/only-export-components */
 import type { KeyboardEvent } from 'react';
+import { traceFilterFieldColor, traceFilterFieldIcon } from '../trace-filters';
 import type { DateTimeRangePickerProps } from '@/ds/components/DateTimeRangePicker';
 import { DateTimeRangePicker } from '@/ds/components/DateTimeRangePicker';
-import { FilterBarChip, editableSegmentClass, segmentClass } from '@/ds/components/FilterBar/filter-bar-chip';
+import {
+  FilterBarChip,
+  FilterBarFieldLabel,
+  editableSegmentClass,
+  fieldSegmentAccentStyle,
+  segmentClass,
+} from '@/ds/components/FilterBar/filter-bar-chip';
 import { useFilterBarContext } from '@/ds/components/FilterBar/filter-bar-context';
 import type { FilterBarField, FilterBarItem } from '@/ds/components/FilterBar/types';
 import { cn } from '@/lib/utils';
@@ -17,6 +24,8 @@ export const TRACE_TIME_RANGE_FIELD_ID = 'timeRange';
 export const TRACE_TIME_RANGE_FIELD: FilterBarField = {
   id: TRACE_TIME_RANGE_FIELD_ID,
   label: 'Time',
+  icon: traceFilterFieldIcon(TRACE_TIME_RANGE_FIELD_ID),
+  color: traceFilterFieldColor(TRACE_TIME_RANGE_FIELD_ID),
   type: 'text',
   operators: ['is'],
   hidden: true,
@@ -46,7 +55,12 @@ export function TraceTimeRangeChip(props: TraceTimeRangeChipProps) {
   const ctx = useFilterBarContext();
   return (
     <FilterBarChip item={TRACE_TIME_RANGE_ITEM} removable={false}>
-      <span className={cn(segmentClass, 'text-neutral6 last:rounded-r-none')}>Time</span>
+      <span
+        className={cn(segmentClass, 'text-neutral6 last:rounded-r-none')}
+        style={fieldSegmentAccentStyle(TRACE_TIME_RANGE_FIELD)}
+      >
+        <FilterBarFieldLabel field={TRACE_TIME_RANGE_FIELD} />
+      </span>
       {/* The picker popup is portaled but bubbles React events through here — keep its
           keystrokes from reaching the chip's arrow-key navigation. */}
       <div
