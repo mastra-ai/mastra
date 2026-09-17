@@ -3326,6 +3326,114 @@ describe('A2A Handler', () => {
       });
     });
 
+    it('translates native v1 push notification configs and paginates list responses', async () => {
+      const pushNotificationStore = new InMemoryPushNotificationStore();
+
+      await mockTaskStore.save({
+        agentId: 'test-agent',
+        data: {
+          id: 'task-1',
+          contextId: 'context-1',
+          status: { state: 'working', timestamp: '2025-05-08T11:47:38.458Z' },
+          artifacts: [],
+          kind: 'task',
+        },
+      });
+
+      for (const id of ['push-1', 'push-2', 'push-3']) {
+        const result = await getAgentExecutionHandler({
+          requestId: `create-${id}`,
+          mastra: mockMastra,
+          agentId: 'test-agent',
+          requestContext: new RequestContext(),
+          method: 'tasks/pushNotificationConfig/set',
+          params: { taskId: 'task-1', id, url: `https://example.com/${id}` },
+          taskStore: mockTaskStore,
+          pushNotificationStore,
+          protocolVersion: '1.0',
+        });
+
+        expect(result).toEqual({
+          id: `create-${id}`,
+          jsonrpc: '2.0',
+          result: { taskId: 'task-1', id, url: `https://example.com/${id}` },
+        });
+      }
+
+      const getResult = await getAgentExecutionHandler({
+        requestId: 'get-push-2',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/get',
+        params: { taskId: 'task-1', id: 'push-2' },
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+        protocolVersion: '1.0',
+      });
+      expect(getResult).toEqual({
+        id: 'get-push-2',
+        jsonrpc: '2.0',
+        result: { taskId: 'task-1', id: 'push-2', url: 'https://example.com/push-2' },
+      });
+
+      const firstPage = await getAgentExecutionHandler({
+        requestId: 'list-page-1',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/list',
+        params: { taskId: 'task-1', pageSize: 2 },
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+        protocolVersion: '1.0',
+      });
+      expect(firstPage).toEqual({
+        id: 'list-page-1',
+        jsonrpc: '2.0',
+        result: {
+          configs: [
+            { taskId: 'task-1', id: 'push-1', url: 'https://example.com/push-1' },
+            { taskId: 'task-1', id: 'push-2', url: 'https://example.com/push-2' },
+          ],
+          nextPageToken: '2',
+        },
+      });
+
+      const secondPage = await getAgentExecutionHandler({
+        requestId: 'list-page-2',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/list',
+        params: { taskId: 'task-1', pageSize: 2, pageToken: '2' },
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+        protocolVersion: '1.0',
+      });
+      expect(secondPage).toEqual({
+        id: 'list-page-2',
+        jsonrpc: '2.0',
+        result: {
+          configs: [{ taskId: 'task-1', id: 'push-3', url: 'https://example.com/push-3' }],
+          nextPageToken: '',
+        },
+      });
+
+      const deleteResult = await getAgentExecutionHandler({
+        requestId: 'delete-push-2',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/delete',
+        params: { taskId: 'task-1', id: 'push-2' },
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+        protocolVersion: '1.0',
+      });
+      expect(deleteResult).toEqual({ id: 'delete-push-2', jsonrpc: '2.0', result: null });
+    });
+
     it('returns task not found when configuring push notifications for an unknown task', async () => {
       const result = await getAgentExecutionHandler({
         requestId: 'test-request-id',

@@ -412,6 +412,8 @@ html.light {
   --max-height-avatar-lg: 40px;
   --max-height-dropdown-max-height: 300px;
 
+  --min-height-header-default: 40px;
+
   --width-icon-default: 16px;
   --width-icon-lg: 20px;
   --width-icon-sm: 12px;

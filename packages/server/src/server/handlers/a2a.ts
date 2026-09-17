@@ -146,8 +146,28 @@ function normalizeV1Part(part: Record<string, unknown>) {
   return { kind: 'data', data: part.data, metadata: part.metadata };
 }
 
-function normalizeV1Params(params: Record<string, any> | undefined): Record<string, any> | undefined {
-  if (!params?.message) {
+function normalizeV1Params(method: string, params: Record<string, any> | undefined): Record<string, any> | undefined {
+  if (!params) {
+    return params;
+  }
+
+  if (method === 'tasks/pushNotificationConfig/set' && !params.pushNotificationConfig) {
+    const { taskId, tenant: _tenant, ...pushNotificationConfig } = params;
+    return { taskId, pushNotificationConfig };
+  }
+
+  if (
+    (method === 'tasks/pushNotificationConfig/get' || method === 'tasks/pushNotificationConfig/delete') &&
+    params.taskId
+  ) {
+    return { id: params.taskId, pushNotificationConfigId: params.id };
+  }
+
+  if (method === 'tasks/pushNotificationConfig/list' && params.taskId) {
+    return { id: params.taskId, pageSize: params.pageSize, pageToken: params.pageToken };
+  }
+
+  if (!params.message) {
     return params;
   }
 
@@ -264,6 +284,40 @@ function toV1Result(result: any, method: string) {
     return toV1Task(result);
   }
   return result;
+}
+
+function toV1PushNotificationConfig(config: TaskPushNotificationConfig) {
+  return {
+    taskId: config.taskId,
+    ...config.pushNotificationConfig,
+  };
+}
+
+function convertV1PushNotificationResponse(response: any, method: string, params: Record<string, any> | undefined) {
+  if (!response || !('result' in response)) return response;
+
+  if (method === 'tasks/pushNotificationConfig/list') {
+    const configs = (response.result as TaskPushNotificationConfig[]).map(toV1PushNotificationConfig);
+    const requestedPageSize = params?.pageSize ?? 50;
+    const offset = params?.pageToken ? Number.parseInt(params.pageToken, 10) : 0;
+    const start = Number.isFinite(offset) && offset >= 0 ? offset : 0;
+    const page = configs.slice(start, start + requestedPageSize);
+    const nextOffset = start + page.length;
+
+    return {
+      ...response,
+      result: {
+        configs: page,
+        nextPageToken: nextOffset < configs.length ? String(nextOffset) : '',
+      },
+    };
+  }
+
+  if (method === 'tasks/pushNotificationConfig/delete') {
+    return response;
+  }
+
+  return { ...response, result: toV1PushNotificationConfig(response.result) };
 }
 
 function convertV1Response(response: any, method: string) {
@@ -2193,7 +2247,7 @@ export async function getAgentExecutionHandler({
   protocolVersion?: A2AProtocolVersion;
 }): Promise<any> {
   const agent = await getAgentFromSystem({ mastra, agentId });
-  const protocolParams = protocolVersion === '1.0' ? normalizeV1Params(params) : params;
+  const protocolParams = protocolVersion === '1.0' ? normalizeV1Params(method, params) : params;
   const {
     pushNotificationStore: resolvedPushNotificationStore,
     pushNotificationSender: resolvedPushNotificationSender,
@@ -2282,38 +2336,46 @@ export async function getAgentExecutionHandler({
         });
         return protocolVersion === '1.0' ? convertV1Stream(result, method) : result;
       }
-      case 'tasks/pushNotificationConfig/set':
-        return await handleSetTaskPushNotificationConfig({
+      case 'tasks/pushNotificationConfig/set': {
+        const result = await handleSetTaskPushNotificationConfig({
           requestId,
           taskStore,
           pushNotificationStore: resolvedPushNotificationStore,
           agentId,
-          params: params as unknown as TaskPushNotificationConfig,
+          params: protocolParams as unknown as TaskPushNotificationConfig,
         });
-      case 'tasks/pushNotificationConfig/get':
-        return await handleGetTaskPushNotificationConfig({
+        return protocolVersion === '1.0' ? convertV1PushNotificationResponse(result, method, protocolParams) : result;
+      }
+      case 'tasks/pushNotificationConfig/get': {
+        const result = await handleGetTaskPushNotificationConfig({
           requestId,
           taskStore,
           pushNotificationStore: resolvedPushNotificationStore,
           agentId,
-          params: params as GetTaskPushNotificationConfigParams,
+          params: protocolParams as GetTaskPushNotificationConfigParams,
         });
-      case 'tasks/pushNotificationConfig/list':
-        return await handleListTaskPushNotificationConfig({
+        return protocolVersion === '1.0' ? convertV1PushNotificationResponse(result, method, protocolParams) : result;
+      }
+      case 'tasks/pushNotificationConfig/list': {
+        const result = await handleListTaskPushNotificationConfig({
           requestId,
           taskStore,
           pushNotificationStore: resolvedPushNotificationStore,
           agentId,
-          params: params as ListTaskPushNotificationConfigParams,
+          params: protocolParams as ListTaskPushNotificationConfigParams,
         });
-      case 'tasks/pushNotificationConfig/delete':
-        return await handleDeleteTaskPushNotificationConfig({
+        return protocolVersion === '1.0' ? convertV1PushNotificationResponse(result, method, protocolParams) : result;
+      }
+      case 'tasks/pushNotificationConfig/delete': {
+        const result = await handleDeleteTaskPushNotificationConfig({
           requestId,
           taskStore,
           pushNotificationStore: resolvedPushNotificationStore,
           agentId,
-          params: params as DeleteTaskPushNotificationConfigParams,
+          params: protocolParams as DeleteTaskPushNotificationConfigParams,
         });
+        return protocolVersion === '1.0' ? convertV1PushNotificationResponse(result, method, protocolParams) : result;
+      }
       case 'agent/getAuthenticatedExtendedCard':
         throw MastraA2AError.extendedAgentCardNotConfigured();
       default:

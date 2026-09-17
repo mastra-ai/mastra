@@ -12,21 +12,22 @@ export interface TraceThreadPanelProps {
   onClose: () => void;
   /** Accessible drawer name; defaults to the thread id. */
   title?: string;
-  className?: string;
 }
 
 /** The trace drawer swapped for the full thread: every turn as traces, anchored on the URL's `traceId`. */
-export function TraceThreadPanel({ threadId, onBack, onClose, title, className }: TraceThreadPanelProps) {
+export function TraceThreadPanel({ threadId, onBack, onClose, title }: TraceThreadPanelProps) {
   return (
-    <DataPanel open onClose={onClose} title={title ?? `Thread ${threadId}`} size="full" className={className}>
+    <DataPanel open onClose={onClose} title={title ?? `Thread ${threadId}`} size="full">
       <DataPanel.Header>
-        <Button size="md" variant="ghost" onClick={onBack} aria-label="Back to trace" tooltip="Back to trace">
+        <Button size="sm" variant="ghost" onClick={onBack} aria-label="Back to trace" tooltip="Back to trace">
           <ArrowLeftIcon />
         </Button>
-        <DataPanel.Heading className="min-w-0 items-center">
+        <DataPanel.Heading>
           Thread <b className="truncate">{threadId}</b>
         </DataPanel.Heading>
-        <DataPanel.CloseButton onClick={onClose} className="ml-auto shrink-0" />
+        <DataPanel.HeaderActions>
+          <DataPanel.CloseButton onClick={onClose} />
+        </DataPanel.HeaderActions>
       </DataPanel.Header>
       {/* Inside the framed panel the turns' details columns read as one strip: no top rounding, no horizontal borders. */}
       <div className="min-h-0 flex-1 [&_[data-slot=thread-trace-details]]:rounded-t-none [&_[data-slot=thread-trace-details]]:border-y-0">
