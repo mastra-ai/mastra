@@ -35,7 +35,7 @@ export const ZoomSlider = forwardRef<
       </Button>
       {!compact && (
         <Slider
-          className="w-35"
+          className="w-[140px]"
           aria-label="Canvas zoom"
           value={[zoom]}
           min={minZoom}

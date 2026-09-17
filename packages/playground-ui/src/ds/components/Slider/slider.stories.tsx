@@ -94,7 +94,7 @@ export const WithLabel: Story = {
   render: () => {
     const [value, setValue] = useState<number[]>([50]);
     return (
-      <div className="flex w-70 flex-col gap-2">
+      <div className="flex w-[280px] flex-col gap-2">
         <div className="flex justify-between">
           <span id="volume-label" className="text-ui-md text-neutral5">
             Volume
@@ -121,7 +121,7 @@ export const PriceRange: Story = {
   render: () => {
     const [value, setValue] = useState<number[]>([200, 800]);
     return (
-      <div className="flex w-70 flex-col gap-2">
+      <div className="flex w-[280px] flex-col gap-2">
         <div className="flex justify-between">
           <span className="text-ui-md text-neutral5">Price range</span>
           <span className="text-ui-md text-neutral3 tabular-nums">
@@ -153,7 +153,7 @@ export const Vertical: Story = {
 
 export const States: Story = {
   render: () => (
-    <div className="flex w-70 flex-col gap-6">
+    <div className="flex w-[280px] flex-col gap-6">
       <div className="flex flex-col gap-2">
         <span className="text-ui-md text-neutral5">Default</span>
         <Slider defaultValue={[40]} max={100} step={1} />

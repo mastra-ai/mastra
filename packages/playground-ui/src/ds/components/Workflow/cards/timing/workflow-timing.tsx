@@ -24,7 +24,7 @@ function TimingReading({
   dial: ReactNode;
 }) {
   return (
-    <span className="text-neutral6 mt-1 flex min-h-27 items-center justify-between gap-1">
+    <span className="text-neutral6 mt-1 flex min-h-[108px] items-center justify-between gap-1">
       <span className="z-10 flex min-w-0 flex-col gap-2">
         <span className="text-header-xl flex items-baseline gap-1 leading-none font-normal tracking-tighter whitespace-nowrap tabular-nums">
           {value}

@@ -38,7 +38,7 @@ function DialHand({ angle, length }: { angle: number; length: number }) {
       y1={DIAL_CENTER}
       x2={tip.x}
       y2={tip.y}
-      className="stroke-1.5 stroke-neutral4"
+      className="stroke-neutral4 stroke-[1.5]"
       strokeLinecap="round"
     />
   );
