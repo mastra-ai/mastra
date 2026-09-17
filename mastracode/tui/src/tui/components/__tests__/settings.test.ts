@@ -107,6 +107,7 @@ function createConfig(overrides: Partial<SettingsConfig> = {}): SettingsConfig {
     libsqlUrl: '',
     experimentalGithubSignals: false,
     experimentalCrossAgentSignals: false,
+    backgroundToolsEnabled: false,
     webSearchProvider: 'auto',
     tavilyKeyAvailable: false,
     parallelKeyAvailable: false,
@@ -125,6 +126,7 @@ function createCallbacks(overrides: Partial<SettingsCallbacks> = {}): SettingsCa
     onStorageBackendChange: vi.fn(),
     onExperimentalGithubSignalsChange: vi.fn(),
     onExperimentalCrossAgentSignalsChange: vi.fn(),
+    onBackgroundToolsChange: vi.fn(),
     onWebSearchProviderChange: vi.fn(),
     onClose: vi.fn(),
     ...overrides,
@@ -197,6 +199,40 @@ describe('SettingsComponent storage backend submenu', () => {
     expect(callbacks.onStorageBackendChange).not.toHaveBeenCalled();
     expect(config.storageBackend).toBe('libsql');
     expect(config.pgConnectionString).toBe('');
+    expect(done).toHaveBeenCalledWith();
+  });
+});
+
+describe('SettingsComponent background tools submenu', () => {
+  it.each([false, true])('displays and changes the saved setting from %s', async enabled => {
+    const config = createConfig({ backgroundToolsEnabled: enabled });
+    const callbacks = createCallbacks();
+    new SettingsComponent(config, callbacks);
+    const item = mocks.lastSettingsList.items.find(
+      (setting: { id: string }) => setting.id === 'backgroundToolsEnabled',
+    );
+    expect(item.currentValue).toBe(enabled ? 'On' : 'Off');
+    expect(item.description).toContain('restart required');
+    const done = vi.fn();
+    item.submenu('', done);
+    const select = mocks.selectLists.at(-1);
+    expect(select.selectedIndex).toBe(enabled ? 0 : 1);
+    await select.onSelect({ value: enabled ? 'off' : 'on' });
+    expect(callbacks.onBackgroundToolsChange).toHaveBeenCalledWith(!enabled);
+    expect(config.backgroundToolsEnabled).toBe(!enabled);
+    expect(done).toHaveBeenCalledWith(enabled ? 'Off' : 'On');
+  });
+
+  it('does not change the setting when the submenu is cancelled', () => {
+    const callbacks = createCallbacks();
+    new SettingsComponent(createConfig(), callbacks);
+    const item = mocks.lastSettingsList.items.find(
+      (setting: { id: string }) => setting.id === 'backgroundToolsEnabled',
+    );
+    const done = vi.fn();
+    item.submenu('', done);
+    mocks.selectLists.at(-1).onCancel();
+    expect(callbacks.onBackgroundToolsChange).not.toHaveBeenCalled();
     expect(done).toHaveBeenCalledWith();
   });
 });

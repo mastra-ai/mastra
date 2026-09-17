@@ -22,6 +22,7 @@ export type ScenarioName =
   | 'automated-chat'
   | 'automated-chat-unix-pubsub'
   | 'background-subagents'
+  | 'background-tools-settings'
   | 'browser-active-pending-status'
   | 'browser-model-picker'
   | 'browser-viewport'
