@@ -385,7 +385,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // modelSpanData is threaded through the iteration state (seeded in preparation.ts);
             // after a resume the registry override points steps at the resumed generation.
             const inputModelSpanData = (globalRunRegistry.get(runId)?.resumeModelSpanData ??
-              (inputData as any).modelSpanData) as ExportedSpan<SpanType.MODEL_GENERATION> | undefined;
+              inputData.modelSpanData) as ExportedSpan<SpanType.MODEL_GENERATION> | undefined;
             const modelSpan = inputModelSpanData
               ? (observability?.rebuildSpan(inputModelSpanData) as AIModelGenerationSpan | undefined)
               : undefined;
@@ -395,7 +395,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // Set the step index for continuation (step: 0, 1, 2, ...)
             // This ensures step numbering continues across agentic loop iterations
-            const stepIndex = (inputData as any).stepIndex ?? 0;
+            const stepIndex = inputData.stepIndex ?? 0;
             modelSpanTracker?.setStepIndex(stepIndex);
 
             // Build structured output for AI SDK if configured. Held in a `let`
@@ -440,7 +440,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 const processInputStepResult = await runner.runProcessInputStep({
                   messageList,
                   stepNumber: stepIndex,
-                  steps: (inputData as any).accumulatedSteps ?? [],
+                  steps: inputData.accumulatedSteps ?? [],
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                   requestContext,
                   memory: registryEntry?.memory,
@@ -706,8 +706,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   prompt: inputMessages,
                   model: currentModel,
                   messageList,
-                  stepNumber: (inputData as any).stepIndex ?? 0,
-                  steps: (inputData as any).accumulatedSteps ?? [],
+                  stepNumber: inputData.stepIndex ?? 0,
+                  steps: inputData.accumulatedSteps ?? [],
                   retryCount: (inputData as any).processorRetryCount ?? 0,
                   requestContext,
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
@@ -1518,8 +1518,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     messageList,
                     messageId: currentMessageId,
                     rotateResponseMessageId,
-                    stepNumber: (inputData as any).stepIndex ?? 0,
-                    steps: (inputData as any).accumulatedSteps ?? [],
+                    stepNumber: inputData.stepIndex ?? 0,
+                    steps: inputData.accumulatedSteps ?? [],
                     retryCount: processorRetryCount,
                     requestContext,
                   });
@@ -1589,8 +1589,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 await requestStepRunner.runProcessLLMResponse({
                   chunks: collectedChunks,
                   model: currentModel,
-                  stepNumber: (inputData as any).stepIndex ?? 0,
-                  steps: (inputData as any).accumulatedSteps ?? [],
+                  stepNumber: inputData.stepIndex ?? 0,
+                  steps: inputData.accumulatedSteps ?? [],
                   warnings,
                   request,
                   rawResponse,
@@ -1675,10 +1675,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
               try {
                 await outputStepRunner.runProcessOutputStep({
-                  steps: (inputData as any).accumulatedSteps ?? [],
+                  steps: inputData.accumulatedSteps ?? [],
                   messages: messageList.get.all.db(),
                   messageList,
-                  stepNumber: (inputData as any).stepIndex ?? 0,
+                  stepNumber: inputData.stepIndex ?? 0,
                   finishReason,
                   providerMetadata: responseMetadata,
                   toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
@@ -1897,8 +1897,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   messageList,
                   messageId: currentMessageId,
                   rotateResponseMessageId,
-                  stepNumber: (inputData as any).stepIndex ?? 0,
-                  steps: (inputData as any).accumulatedSteps ?? [],
+                  stepNumber: inputData.stepIndex ?? 0,
+                  steps: inputData.accumulatedSteps ?? [],
                   retryCount: processorRetryCount,
                   requestContext,
                   tracingContext,
