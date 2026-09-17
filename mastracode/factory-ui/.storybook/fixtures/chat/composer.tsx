@@ -1,13 +1,14 @@
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { useState } from 'react';
-import { FactoryModelControls } from '../../model-picker/factory-model-controls';
-import { modes } from '../../model-picker/models';
-import type { ModelControlState } from '../../model-picker/models';
-import { reviewCommands } from '../commands';
-import type { ChatFile, Phase } from '../data';
-import { DraftAttachments } from './attachments';
-import { ConversationComposerStatus } from './status';
-import { useConversationDraft } from './use-conversation-draft';
-import type { ComposerTone } from '@/ds/components/Composer';
+import { FactoryModelControls } from '../factory-model-controls';
+import { modes } from '../../../../../packages/playground-ui/.storybook/fixtures/model-picker/models';
+import type { ModelControlState } from '../../../../../packages/playground-ui/.storybook/fixtures/model-picker/models';
+import { reviewCommands } from '../../../../../packages/playground-ui/.storybook/fixtures/chat/commands';
+import type { StoryComposerControls } from '../../../../../packages/playground-ui/.storybook/fixtures/chat/conversation';
+import { DraftAttachments } from '../../../../../packages/playground-ui/.storybook/fixtures/chat/composer/attachments';
+import { ConversationComposerStatus } from '../../../../../packages/playground-ui/.storybook/fixtures/chat/composer/status';
+import { useStoryComposerDraft } from '../../../../../packages/playground-ui/.storybook/fixtures/chat/composer/use-story-composer-draft';
+import type { ComposerTone } from '@mastra/playground-ui/components/Composer';
 import {
   Composer,
   ComposerActions,
@@ -19,7 +20,7 @@ import {
   ComposerRing,
   ComposerSuggestions,
   useComposerCommands,
-} from '@/ds/components/Composer';
+} from '@mastra/playground-ui/components/Composer';
 
 export function FactoryConversationComposer({
   phase,
@@ -29,18 +30,14 @@ export function FactoryConversationComposer({
   modelState,
   onSend,
   onStop,
-}: {
-  phase?: Phase;
-  busy: boolean;
+}: StoryComposerControls & {
   personal: boolean;
   tone: ComposerTone;
   modelState: ModelControlState;
-  onSend: (text: string, files: ChatFile[]) => void;
-  onStop: () => void;
 }) {
   const streaming = phase === 'streaming';
   const sendBlocked = busy && !streaming;
-  const draft = useConversationDraft({ disabled: sendBlocked, onSend });
+  const draft = useStoryComposerDraft({ disabled: sendBlocked, onSend });
   const [mode, setMode] = useState('build');
   const commands = useComposerCommands({
     commands: reviewCommands,
@@ -72,7 +69,7 @@ export function FactoryConversationComposer({
           />
           <ComposerActions>
             <FactoryModelControls personal={personal} mode={mode} onModeChange={setMode} state={modelState} />
-            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            <ButtonsGroup className="ml-auto" spacing="close">
               <ComposerAttachmentButton
                 appearance="outline"
                 aria-label="Add attachments"
@@ -89,7 +86,7 @@ export function FactoryConversationComposer({
                 />
               )}
               <ComposerSendButton appearance="outline" aria-label="Send message" disabled={!draft.canSend} />
-            </div>
+            </ButtonsGroup>
             <ConversationComposerStatus phase={phase} reading={draft.reading} />
           </ComposerActions>
         </ComposerBox>

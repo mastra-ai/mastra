@@ -1,5 +1,5 @@
 import type { Ref } from 'react';
-import type { DraftFile } from './use-conversation-draft';
+import type { DraftFile } from './use-story-composer-draft';
 import { ComposerAttachment } from '@/domains/chat/attachments/composer-attachment';
 import { ComposerAttachmentList } from '@/domains/chat/attachments/composer-attachment-list';
 import { UserFilePartRenderer } from '@/domains/chat/messages/renderers/user-file-part-renderer';

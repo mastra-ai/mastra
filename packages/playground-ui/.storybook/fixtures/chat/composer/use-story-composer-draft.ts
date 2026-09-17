@@ -8,7 +8,7 @@ export interface DraftFile {
   error?: string;
 }
 
-export function useConversationDraft({
+export function useStoryComposerDraft({
   disabled,
   onSend,
 }: {

@@ -1,25 +1,26 @@
-import { useState } from 'react';
-import { initialStudioModelSelection } from '../../model-picker/models';
-import type { ModelControlState } from '../../model-picker/models';
-import { StudioModelControls, StudioModelWarnings } from '../../model-picker/studio-model-controls';
-import type { ChatFile, Phase } from '../data';
-import { DraftAttachments } from './attachments';
-import { ConversationComposerStatus } from './status';
-import { useConversationDraft } from './use-conversation-draft';
-import { VoiceCallButton, VoiceCallPanel } from '@/ds/components/ai/voice-call';
-import type { VoiceCallStatus } from '@/ds/components/ai/voice-call';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
   Composer,
   ComposerActions,
   ComposerSendButton,
   ComposerStopButton,
   ComposerAttachmentPicker,
-  ComposerDictationButton,
   ComposerBox,
   ComposerInput,
   ComposerRing,
-} from '@/ds/components/Composer';
+} from '@mastra/playground-ui/components/Composer';
+import { useState } from 'react';
+import { DraftAttachments } from '../../../../playground-ui/.storybook/fixtures/chat/composer/attachments';
+import { ConversationComposerStatus } from '../../../../playground-ui/.storybook/fixtures/chat/composer/status';
+import { useStoryComposerDraft } from '../../../../playground-ui/.storybook/fixtures/chat/composer/use-story-composer-draft';
+import type { StoryComposerControls } from '../../../../playground-ui/.storybook/fixtures/chat/conversation';
+import type { ModelControlState } from '../../../../playground-ui/.storybook/fixtures/model-picker/models';
+import { initialStudioModelSelection } from '../../../../playground-ui/.storybook/fixtures/model-picker/models';
+import { DictationButton } from '../../../src/domains/voice/components/dictation-button';
+import { VoiceCallButtonView as VoiceCallButton } from '../../../src/domains/voice/components/voice-call-button';
+import { VoiceCallPanelView as VoiceCallPanel } from '../../../src/domains/voice/components/voice-call-panel';
+import type { VoiceCallStatus } from '../../../src/domains/voice/types';
+import { StudioModelControls, StudioModelWarnings } from '../studio-model-controls';
 
 export function StudioConversationComposer({
   phase,
@@ -28,16 +29,12 @@ export function StudioConversationComposer({
   canInterject,
   onSend,
   onStop,
-}: {
-  phase?: Phase;
-  busy: boolean;
+}: StoryComposerControls & {
   modelState: ModelControlState;
   canInterject: boolean;
-  onSend: (text: string, files: ChatFile[]) => void;
-  onStop: () => void;
 }) {
   const streaming = phase === 'streaming';
-  const draft = useConversationDraft({ disabled: busy && !(streaming && canInterject), onSend });
+  const draft = useStoryComposerDraft({ disabled: busy && !(streaming && canInterject), onSend });
   const [selection, setSelection] = useState(initialStudioModelSelection);
   const [attachmentOpen, setAttachmentOpen] = useState(false);
   const [listening, setListening] = useState(false);
@@ -69,7 +66,7 @@ export function StudioConversationComposer({
                       setAttachmentOpen(false);
                     }}
                   />
-                  <ComposerDictationButton
+                  <DictationButton
                     listening={listening}
                     onClick={() => {
                       setListening(current => !current);

@@ -1,10 +1,38 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { ChatConversation } from '../../../../.storybook/fixtures/chat/conversation';
+
+import { FactoryChatConversation } from '../../../../mastracode/factory-ui/.storybook/fixtures/chat/conversation';
+import { StudioChatConversation } from '../../../playground/.storybook/fixtures/chat/conversation';
+import type { ComposerTone } from '../../src/ds/components/Composer';
+import type { ChatPresentation, Scenario } from '../fixtures/chat/data';
+import type { ModelControlState } from '../fixtures/model-picker/models';
+
+interface ChatStoryArgs {
+  scenario: Scenario;
+  presentation: ChatPresentation;
+  tone: ComposerTone;
+  factorySession: 'work-item' | 'personal';
+  modelState: ModelControlState;
+  canSendWhileStreaming: boolean;
+}
 
 const meta = {
   title: 'AI/Chat',
-  component: ChatConversation,
+  render: ({ scenario, presentation, tone, factorySession, modelState, canSendWhileStreaming }) =>
+    presentation === 'factory' ? (
+      <FactoryChatConversation
+        scenario={scenario}
+        tone={tone}
+        personal={factorySession === 'personal'}
+        modelState={modelState}
+      />
+    ) : (
+      <StudioChatConversation
+        scenario={scenario}
+        modelState={modelState}
+        canSendWhileStreaming={canSendWhileStreaming}
+      />
+    ),
   args: {
     scenario: 'complete',
     presentation: 'studio',
@@ -48,11 +76,11 @@ const meta = {
     docs: {
       description: {
         component:
-          'A design workbench using the same playground-ui components as Studio and Factory. Choose the presentation and scenario in Controls. Both include the production Message envelope, attachments, reasoning, grouped tools, edits, plan, question, approvals, tasks, timeline and composer. Studio shows signal cards and notification metadata; Factory shows lane-change notifications, phase signals, skill activation, reminders, time gaps and GitHub links. Factory tool rows include timestamps and command lines; Studio keeps argument data. Approvals use the corresponding inline or standalone presentation. Sending, stopping, retrying, answering and approving run locally against deterministic fixtures. The composer uses the production model picker presentations, settings including advanced fields, attachment menu, dictation and voice controls. Factory personal sessions also expose modes and model packs. Selection and voice state are local fixtures; no model request, microphone capture, audio connection or settings navigation is performed. Dataset actions, browser sessions, request-context/tracing controls and Factory runtime status indicators are not yet included; see the coverage document beside this story. Component stories cover additional states. Streaming snapshots stay running for design review; sending a message or approving an edit plays incoming chunks. Reset restores the selected scenario.',
+          'A design workbench composing playground-ui primitives with application-owned presentation. The Controls below select story presets, not a published chat component API. Choose the presentation and scenario in Controls. Both include the production Message envelope, attachments, reasoning, grouped tools, edits, plan, question, approvals, tasks, timeline and composer. Studio shows signal cards and notification metadata; Factory shows lane-change notifications, phase signals, skill activation, reminders, time gaps and GitHub links. Factory tool rows include timestamps and command lines; Studio keeps argument data. Approvals use the corresponding inline or standalone presentation. Sending, stopping, retrying, answering and approving run locally against deterministic fixtures. The composer uses the shared model picker parts, settings fields and attachment menu, with Studio-owned execution settings, warnings, dictation and voice controls. Factory composes its own pack actions and mode icons. Factory personal sessions also expose modes and model packs. Selection and voice state are local fixtures; no model request, microphone capture, audio connection or settings navigation is performed. Dataset actions, browser sessions, request-context/tracing controls and Factory runtime status indicators are not yet included; see the coverage document beside this story. Component stories cover additional states. Streaming snapshots stay running for design review; sending a message or approving an edit plays incoming chunks. Reset restores the selected scenario.',
       },
     },
   },
-} satisfies Meta<typeof ChatConversation>;
+} satisfies Meta<ChatStoryArgs>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

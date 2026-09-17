@@ -1,9 +1,7 @@
 import { MessageSquare, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
-import type { ModelControlState } from '../model-picker/models';
-import { FactoryConversationComposer } from './composer/factory-composer';
-import { StudioConversationComposer } from './composer/studio-composer';
-import type { ChatPresentation, Scenario } from './data';
+import type { ReactNode } from 'react';
+import type { ChatPresentation, Scenario, ChatFile, Phase } from './data';
 import { ConversationContext } from './presentation/events';
 import { ConversationResponse } from './presentation/response';
 import { useStoryConversation } from './use-conversation';
@@ -13,7 +11,6 @@ import type { TaskListItem } from '@/ds/components/ai/task-list';
 import { TaskList } from '@/ds/components/ai/task-list';
 import { Button } from '@/ds/components/Button';
 import { ChatShell } from '@/ds/components/ChatShell';
-import type { ComposerTone } from '@/ds/components/Composer';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Message, MessageActions, MessageCopyButton, MessageTimestamp } from '@/ds/components/Message';
 import { MessageScrollerItem } from '@/ds/components/MessageScroller';
@@ -21,25 +18,27 @@ import { ThreadRail } from '@/ds/components/ThreadRail';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 
+export interface StoryComposerControls {
+  phase?: Phase;
+  busy: boolean;
+  onSend: (text: string, files: ChatFile[]) => void;
+  onStop: () => void;
+}
+
 interface ChatConversationProps {
   scenario: Scenario;
-  presentation?: ChatPresentation;
-  tone?: ComposerTone;
-  factorySession?: 'work-item' | 'personal';
-  modelState?: ModelControlState;
-  canSendWhileStreaming?: boolean;
+  presentation: ChatPresentation;
+  canInterject?: boolean;
+  children: (controls: StoryComposerControls) => ReactNode;
 }
 
 function Conversation({
   scenario,
-  presentation = 'studio',
-  tone = 'green',
-  factorySession = 'work-item',
-  modelState = 'ready',
-  canSendWhileStreaming = false,
+  presentation,
+  canInterject = false,
+  children,
   onReset,
 }: ChatConversationProps & { onReset: () => void }) {
-  const canInterject = presentation === 'factory' || canSendWhileStreaming;
   const { turns, phase, busy, sendMessage, transitionTurn } = useStoryConversation(
     scenario,
     presentation,
@@ -138,26 +137,7 @@ function Conversation({
                     ]}
                   />
                 )}
-                {presentation === 'factory' ? (
-                  <FactoryConversationComposer
-                    phase={phase}
-                    busy={busy}
-                    personal={factorySession === 'personal'}
-                    tone={tone}
-                    modelState={modelState}
-                    onSend={sendMessage}
-                    onStop={stopResponse}
-                  />
-                ) : (
-                  <StudioConversationComposer
-                    phase={phase}
-                    busy={busy}
-                    modelState={modelState}
-                    canInterject={canSendWhileStreaming}
-                    onSend={sendMessage}
-                    onStop={stopResponse}
-                  />
-                )}
+                {children({ phase, busy, onSend: sendMessage, onStop: stopResponse })}
               </ChatShell.Column>
             </ChatShell.Dock>
           </ChatShell.Viewport>
@@ -177,24 +157,12 @@ function Conversation({
   );
 }
 
-export function ChatConversation({
-  scenario,
-  presentation,
-  tone,
-  factorySession,
-  modelState,
-  canSendWhileStreaming,
-}: ChatConversationProps) {
+export function ChatConversation(props: ChatConversationProps) {
   const [revision, setRevision] = useState(0);
   return (
     <Conversation
-      key={`${scenario}-${presentation}-${factorySession}-${modelState}-${revision}`}
-      scenario={scenario}
-      presentation={presentation}
-      tone={tone}
-      factorySession={factorySession}
-      modelState={modelState}
-      canSendWhileStreaming={canSendWhileStreaming}
+      {...props}
+      key={`${props.scenario}-${props.presentation}-${revision}`}
       onReset={() => setRevision(current => current + 1)}
     />
   );
