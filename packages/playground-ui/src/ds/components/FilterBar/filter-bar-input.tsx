@@ -209,6 +209,7 @@ export function FilterBarInput({
     field?.type,
     valueStep.hasSuggestions && valueStep.allowFreeText,
   );
+  const selectedValueLabel = valueStep.selected.length > 0 ? formatValue(valueStep.selected, field) : undefined;
 
   const inputControl = (
     <ComboboxPrimitive.Input
@@ -229,7 +230,7 @@ export function FilterBarInput({
               unstyledFormElementStyle,
               'flex-1 px-1 text-ui-smd leading-ui-sm text-neutral6',
               'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
-              draft.step === 'field' ? 'min-w-32' : 'min-w-24 pl-0',
+              'w-full min-w-0',
               className,
             )
       }
@@ -240,7 +241,6 @@ export function FilterBarInput({
 
   return (
     <>
-      {!isButton && <FilterBarDraftChip field={field} operator={fieldOperators.length === 1 ? undefined : operator} />}
       <ComboboxPrimitive.Root<Item>
         items={itemsByStep[draft.step]}
         itemToStringLabel={getItemLabel}
@@ -289,12 +289,18 @@ export function FilterBarInput({
             }}
             field={open ? field : undefined}
             operator={open ? operator : undefined}
-            selectedValueLabel={valueStep.selected.length > 0 ? formatValue(valueStep.selected, field) : undefined}
+            selectedValueLabel={selectedValueLabel}
             label={ariaLabel}
             className={className}
           />
         ) : (
-          inputControl
+          <FilterBarDraftChip
+            field={field}
+            operator={fieldOperators.length === 1 ? undefined : operator}
+            selectedValueLabel={selectedValueLabel}
+          >
+            {inputControl}
+          </FilterBarDraftChip>
         )}
         <FilterBarPopup inputRef={inputRef} buttonRef={buttonRef}>
           {isButton && (

@@ -32,8 +32,8 @@ export function FilterBarPopup({
           className={cn(
             comboboxStyles.popup,
             'max-w-[calc(100vw-2rem)] min-w-44',
-            isButton && 'data-[closed]:animate-none data-[open]:animate-none',
-            isButton && styles.popup,
+            'data-[closed]:animate-none data-[open]:animate-none',
+            styles.popup,
           )}
           data-slot="filter-bar-editor"
           initialFocus={isButton ? inputRef : undefined}

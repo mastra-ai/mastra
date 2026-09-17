@@ -1,8 +1,9 @@
 import { Combobox as ComboboxPrimitive } from '@base-ui/react/combobox';
 import { PlusIcon } from 'lucide-react';
-import type { CSSProperties, ReactNode, Ref } from 'react';
+import type { Ref } from 'react';
 import styles from './animation/filter-bar-animation.module.css';
-import { FilterBarFieldLabel, fieldSegmentAccentStyle, segmentClass } from './filter-bar-chip';
+import { FilterBarDraftSegment } from './animation/filter-bar-draft-segment';
+import { FilterBarFieldLabel, fieldSegmentAccentStyle } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
 import type { FilterBarField, FilterBarOperator } from './types';
 import { buttonVariants } from '@/ds/components/Button/Button';
@@ -36,7 +37,7 @@ export function FilterBarAddButton({
       data-slot="filter-bar-add-button"
       data-compact={isCompact || undefined}
       className={cn(
-        'relative inline-flex h-form-md max-w-full shrink-0 cursor-pointer rounded-lg outline-hidden [&:focus-visible_[data-slot=filter-bar-add-segment]]:border-neutral5/50 [&:focus-visible>span]:border-neutral5/50',
+        'relative inline-flex h-form-md max-w-full shrink-0 cursor-pointer rounded-lg outline-hidden [&:focus-visible_[data-slot=filter-bar-draft-segment]]:border-neutral5/50 [&:focus-visible>span]:border-neutral5/50',
         className,
       )}
       onKeyDown={event => {
@@ -78,7 +79,7 @@ function FilterBarAddSegments({
 
   return (
     <span className="h-form-md relative flex max-w-full items-stretch">
-      <FilterBarAddSegment key="field" style={fieldSegmentAccentStyle(field)}>
+      <FilterBarDraftSegment key="field" style={fieldSegmentAccentStyle(field)}>
         {field ? (
           <FilterBarFieldLabel field={field} />
         ) : (
@@ -87,53 +88,25 @@ function FilterBarAddSegments({
             <PlusIcon aria-hidden className="ml-1 size-3 shrink-0" />
           </>
         )}
-      </FilterBarAddSegment>
+      </FilterBarDraftSegment>
       {field && !operatorImplied && (
-        <FilterBarAddSegment
+        <FilterBarDraftSegment
           key="operator"
           joined={operator !== undefined}
           className={!operator ? 'text-neutral3' : undefined}
         >
           <span className="truncate">{operator?.label ?? 'Operator…'}</span>
-        </FilterBarAddSegment>
+        </FilterBarDraftSegment>
       )}
       {operator && (
-        <FilterBarAddSegment
+        <FilterBarDraftSegment
           key="value"
           joined={selectedValueLabel !== undefined}
           className={selectedValueLabel === undefined ? 'text-neutral3' : undefined}
         >
           <span className="truncate">{selectedValueLabel ?? 'Value…'}</span>
-        </FilterBarAddSegment>
+        </FilterBarDraftSegment>
       )}
-    </span>
-  );
-}
-
-function FilterBarAddSegment({
-  children,
-  className,
-  style,
-  joined = false,
-}: {
-  children: ReactNode;
-  className?: string;
-  style?: CSSProperties;
-  joined?: boolean;
-}) {
-  return (
-    <span
-      data-slot="filter-bar-add-segment"
-      data-joined={joined || undefined}
-      className={cn(
-        segmentClass,
-        styles.segment,
-        'h-form-md border border-border1 bg-surface5 py-1 text-neutral5 hover:bg-surface6 hover:text-neutral6',
-        className,
-      )}
-      style={style}
-    >
-      {children}
     </span>
   );
 }

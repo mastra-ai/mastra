@@ -41,8 +41,9 @@ function FilterBarSurface({
       data-slot="filter-bar"
       data-variant={ctx.variant}
       className={cn(
+        'relative [&_[data-slot=filter-bar-chip]]:h-form-md',
         isButton
-          ? 'relative flex w-full flex-wrap items-center gap-1 [&_[data-slot=filter-bar-chip]]:h-form-md'
+          ? 'flex w-full flex-wrap items-center gap-1'
           : cn(
               'flex w-full items-start gap-0.5 rounded-2xl border border-border1 bg-surface-overlay-soft p-0.5',
               'cursor-text transition-all duration-normal ease-out-custom',
@@ -51,13 +52,13 @@ function FilterBarSurface({
               'outline-hidden focus-within:bg-surface-overlay-strong focus-within:outline-hidden',
               inputFocusBorderWithin,
             ),
-        isButton && styles.surface,
+        styles.surface,
         className,
       )}
       onClick={isButton ? undefined : ctx.focusInput}
     >
       {!isButton && (
-        <span className="flex shrink-0 items-center py-1 pr-1 pl-1.5">
+        <span className="h-form-md flex shrink-0 items-center pr-1 pl-1.5">
           <ListFilterIcon aria-hidden className="text-neutral3 size-3" />
         </span>
       )}
@@ -68,7 +69,7 @@ function FilterBarSurface({
         {children}
       </div>
       {!isButton && (
-        <span className="flex shrink-0 items-center empty:hidden">
+        <span className="h-form-md flex shrink-0 items-center empty:hidden">
           <FilterBarClear label={clearLabel} />
         </span>
       )}
@@ -105,17 +106,7 @@ export function FilterBar({
 }
 
 export function FilterBarChips() {
-  const ctx = useFilterBarContext();
-  if (ctx.variant === 'button') {
-    return <FilterBarAnimatedChips />;
-  }
-  return (
-    <>
-      {ctx.items.map(item => (
-        <FilterBarChip key={item.id} item={item} />
-      ))}
-    </>
-  );
+  return <FilterBarAnimatedChips />;
 }
 
 FilterBar.Chips = FilterBarChips;
