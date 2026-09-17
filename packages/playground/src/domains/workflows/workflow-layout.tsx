@@ -55,10 +55,7 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
             <WorkflowSelectedStepProvider>
               <div className="flex h-full min-h-0 flex-col">
                 <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} />
-                <WorkflowLayoutUI
-                  workflowId={workflowId}
-                  leftSlot={<WorkflowInformation workflowId={workflowId} initialRunId={runId} />}
-                >
+                <WorkflowLayoutUI leftSlot={<WorkflowInformation workflowId={workflowId} initialRunId={runId} />}>
                   {children}
                 </WorkflowLayoutUI>
               </div>

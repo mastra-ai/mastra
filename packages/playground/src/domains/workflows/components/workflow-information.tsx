@@ -2,6 +2,7 @@ import type { GetWorkflowResponse } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { ChevronRight, Plus } from 'lucide-react';
 import type { ContextType, ReactNode } from 'react';
@@ -13,6 +14,7 @@ import { WorkflowRunDetail } from '../runs/workflow-run-details';
 import { WorkflowRecentRuns } from '../runs/workflow-run-list';
 import { WorkflowRunStatusBadge } from '../workflow/workflow-run-header';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
+import { WorkflowPanelResizeHandle } from './workflow-layout';
 
 import { useWorkflow } from '@/hooks/use-workflows';
 import { useLinkComponent } from '@/lib/framework';
@@ -42,6 +44,18 @@ type RunWorkflowSidebarProps = InitialWorkflowSidebarProps & {
   runId: string;
   observeWorkflowStream?: ContextType<typeof WorkflowRunContext>['observeWorkflowStream'];
 };
+
+const FLOATING_PANEL_SURFACE =
+  'rounded-studio-panel border-border1/50 bg-surface3 shadow-panel pointer-events-auto border';
+
+function FloatingPanel({ className, children }: { className: string; children: ReactNode }) {
+  return (
+    <div className={cn('relative flex min-h-0 min-w-0 flex-col', className)}>
+      {children}
+      <WorkflowPanelResizeHandle />
+    </div>
+  );
+}
 
 function NewWorkflowRunButton({ workflowId, onClick }: { workflowId: string; onClick: () => void }) {
   const { Link, paths } = useLinkComponent();
@@ -74,40 +88,42 @@ function WorkflowInformationTopSection({
   const { result } = useContext(WorkflowRunContext);
   const [isOpen, setIsOpen] = useState(true);
   return (
-    <Collapsible
-      render={<section />}
-      open={isOpen}
-      onOpenChange={setIsOpen}
-      data-testid="workflow-information-top-section"
-      className="rounded-studio-panel border-border1/50 bg-surface3 shadow-panel pointer-events-auto flex max-h-[75%] min-h-0 min-w-0 flex-initial flex-col overflow-hidden border"
-    >
-      <div className="flex shrink-0 items-center gap-1 pr-2">
-        <CollapsibleTrigger className="text-ui-sm text-neutral4 flex min-w-0 flex-1 items-center gap-2 px-4 py-3 font-medium">
-          <ChevronRight aria-hidden className="text-neutral3 size-4 shrink-0 motion-reduce:transition-none" />
-          <span>Workflow run</span>
-          {!isOpen && result?.status && <WorkflowRunStatusBadge status={result.status} />}
-        </CollapsibleTrigger>
-        {showNewRunButton && (
-          <NewWorkflowRunButton
-            workflowId={workflowId}
-            onClick={() => {
-              setIsOpen(true);
-              onNewRun();
-            }}
-          />
-        )}
-      </div>
-      <CollapsibleContent keepMounted className="flex h-full min-h-0 flex-col">
-        <ScrollArea
-          data-testid="workflow-information-top-scroll-area"
-          className="border-border1/50 min-h-0 flex-1 border-t"
-          viewPortClassName="h-full"
-          mask={{ top: false, bottom: false }}
-        >
-          {children}
-        </ScrollArea>
-      </CollapsibleContent>
-    </Collapsible>
+    <FloatingPanel className="max-h-[75%] flex-initial">
+      <Collapsible
+        render={<section />}
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        data-testid="workflow-information-top-section"
+        className={cn(FLOATING_PANEL_SURFACE, 'flex min-h-0 min-w-0 flex-col overflow-hidden')}
+      >
+        <div className="flex shrink-0 items-center gap-1 pr-2">
+          <CollapsibleTrigger className="text-ui-sm text-neutral4 flex min-w-0 flex-1 items-center gap-2 px-4 py-3 font-medium">
+            <ChevronRight aria-hidden className="text-neutral3 size-4 shrink-0 motion-reduce:transition-none" />
+            <span>Workflow run</span>
+            {!isOpen && result?.status && <WorkflowRunStatusBadge status={result.status} />}
+          </CollapsibleTrigger>
+          {showNewRunButton && (
+            <NewWorkflowRunButton
+              workflowId={workflowId}
+              onClick={() => {
+                setIsOpen(true);
+                onNewRun();
+              }}
+            />
+          )}
+        </div>
+        <CollapsibleContent keepMounted fill className="flex min-h-0 flex-col">
+          <ScrollArea
+            data-testid="workflow-information-top-scroll-area"
+            className="border-border1/50 min-h-0 flex-1 border-t"
+            viewPortClassName="h-full"
+            mask={{ top: false, bottom: false }}
+          >
+            {children}
+          </ScrollArea>
+        </CollapsibleContent>
+      </Collapsible>
+    </FloatingPanel>
   );
 }
 
@@ -121,9 +137,11 @@ function RunWorkflowSidebar({ runId, observeWorkflowStream, ...props }: RunWorkf
 
 function RecentWorkflowRunsSection({ workflowId, activeRunId }: { workflowId: string; activeRunId?: string }) {
   return (
-    <section className="rounded-studio-panel border-border1/50 bg-surface3 shadow-panel pointer-events-auto mt-auto flex max-h-[min(35%,280px)] min-h-0 min-w-0 shrink-0 flex-col overflow-hidden border">
-      <WorkflowRecentRuns workflowId={workflowId} runId={activeRunId} />
-    </section>
+    <FloatingPanel className="mt-auto max-h-[min(35%,280px)] shrink-0">
+      <section className={cn(FLOATING_PANEL_SURFACE, 'flex min-h-0 min-w-0 flex-col overflow-hidden')}>
+        <WorkflowRecentRuns workflowId={workflowId} runId={activeRunId} />
+      </section>
+    </FloatingPanel>
   );
 }
 

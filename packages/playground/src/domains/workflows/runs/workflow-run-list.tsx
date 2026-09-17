@@ -93,7 +93,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
             </span>
           )}
         </CollapsibleTrigger>
-        <CollapsibleContent keepMounted className="flex h-full min-h-0 flex-col">
+        <CollapsibleContent keepMounted fill className="flex min-h-0 flex-col">
           <ScrollArea className="min-h-0 w-full flex-1" mask={{ top: false }}>
             {isLoading ? (
               <div className="p-4">

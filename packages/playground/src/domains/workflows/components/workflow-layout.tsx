@@ -1,53 +1,94 @@
 import { WorkflowCanvasInsetContext } from '@mastra/playground-ui/components/Workflow';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
-import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel';
-import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
-import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
-import { useLayoutEffect, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
-import { Panel, useDefaultLayout } from 'react-resizable-panels';
+import { useLocalStorageState } from '@mastra/playground-ui/hooks/use-local-storage-state';
+import { ResizeHandleIndicator } from '@mastra/playground-ui/primitives/resize-handle-indicator';
+import { createContext, useContext, useLayoutEffect, useRef, useState } from 'react';
+import type { CSSProperties, KeyboardEvent, PointerEvent } from 'react';
+import { z } from 'zod/v4';
 import './workflow-layout.css';
 
 export interface WorkflowLayoutProps {
-  workflowId: string;
   children: React.ReactNode;
   leftSlot?: React.ReactNode;
 }
 
 const LEFT_PANEL_MIN_WIDTH = 380;
-const LEFT_PANEL_DEFAULT_WIDTH = LEFT_PANEL_MIN_WIDTH;
+const LEFT_PANEL_WIDTH_STORAGE_KEY = 'workflow-canvas-left-panel-width';
 const PANEL_GUTTER = 8;
+const KEYBOARD_RESIZE_STEP = 16;
 
 interface WorkflowLayoutStyle extends CSSProperties {
   '--workflow-left-panel-width': string;
 }
 
-export const WorkflowLayout = ({ workflowId, children, leftSlot }: WorkflowLayoutProps) => {
+interface PanelResize {
+  width: number;
+  resizeTo: (clientX: number) => void;
+  resizeBy: (delta: number) => void;
+}
+
+const WorkflowPanelResizeContext = createContext<PanelResize | undefined>(undefined);
+
+function clampPanelWidth(candidate: number, maxWidth: number) {
+  return Math.max(LEFT_PANEL_MIN_WIDTH, Math.min(candidate, maxWidth));
+}
+
+export function WorkflowPanelResizeHandle() {
+  const resize = useContext(WorkflowPanelResizeContext);
+  if (!resize) return null;
+
+  const beginResize = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const followPointer = (event: PointerEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    resize.resizeTo(event.clientX);
+  };
+  const nudgeWithArrows = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    resize.resizeBy(event.key === 'ArrowRight' ? KEYBOARD_RESIZE_STEP : -KEYBOARD_RESIZE_STEP);
+  };
+
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize panel"
+      aria-valuenow={resize.width}
+      aria-valuemin={LEFT_PANEL_MIN_WIDTH}
+      tabIndex={0}
+      className="group/resize pointer-events-auto absolute inset-y-0 left-full flex w-2 cursor-col-resize touch-none items-center justify-center outline-hidden"
+      onPointerDown={beginResize}
+      onPointerMove={followPointer}
+      onKeyDown={nudgeWithArrows}
+    >
+      <ResizeHandleIndicator className="group-focus-visible/resize:via-accent1 group-active/resize:via-neutral6/45 group-hover/resize:opacity-100 group-focus-visible/resize:opacity-100 group-active/resize:opacity-100" />
+    </div>
+  );
+}
+
+export const WorkflowLayout = ({ children, leftSlot }: WorkflowLayoutProps) => {
   const isDocked = useIsMobile();
-  const hasLeftSlot = Boolean(leftSlot);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const [leftPanelWidth, setLeftPanelWidth] = useState(0);
-  const { defaultLayout, onLayoutChange } = useDefaultLayout({
-    id: `workflow-canvas-panels-${workflowId}`,
-    storage: localStorage,
+  const [storedWidth, setStoredWidth] = useLocalStorageState({
+    initialKey: LEFT_PANEL_WIDTH_STORAGE_KEY,
+    defaultValue: LEFT_PANEL_MIN_WIDTH,
+    schema: z.number(),
   });
+  const [maxWidth, setMaxWidth] = useState(Number.POSITIVE_INFINITY);
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
-    const panel = panelRef.current;
-    if (!canvas || !panel) return;
-    const measurePanelInset = () => {
-      const canvasBounds = canvas.getBoundingClientRect();
-      const panelBounds = panel.getBoundingClientRect();
-      setLeftPanelWidth(Math.max(0, panelBounds.right - canvasBounds.left - PANEL_GUTTER));
-    };
-    measurePanelInset();
-    const observer = new ResizeObserver(measurePanelInset);
+    if (!canvas) return;
+    const measureHalfCanvas = () => setMaxWidth(Math.floor(canvas.getBoundingClientRect().width / 2));
+    measureHalfCanvas();
+    const observer = new ResizeObserver(measureHalfCanvas);
     observer.observe(canvas);
-    observer.observe(panel);
     return () => observer.disconnect();
-  }, [isDocked, hasLeftSlot]);
+  }, [isDocked]);
 
   if (isDocked) {
     return (
@@ -58,7 +99,15 @@ export const WorkflowLayout = ({ workflowId, children, leftSlot }: WorkflowLayou
     );
   }
 
-  const canvasInset = leftSlot ? leftPanelWidth : 0;
+  const width = clampPanelWidth(storedWidth, maxWidth);
+  const resizeTo = (clientX: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    setStoredWidth(clampPanelWidth(clientX - canvas.getBoundingClientRect().left, maxWidth));
+  };
+  const resizeBy = (delta: number) => setStoredWidth(clampPanelWidth(width + delta, maxWidth));
+
+  const canvasInset = leftSlot ? width - PANEL_GUTTER : 0;
   const style: WorkflowLayoutStyle = { '--workflow-left-panel-width': `${canvasInset}px` };
 
   return (
@@ -70,28 +119,11 @@ export const WorkflowLayout = ({ workflowId, children, leftSlot }: WorkflowLayou
       </WorkflowCanvasInsetContext>
 
       {leftSlot && (
-        <PanelGroup
-          className="pointer-events-none absolute inset-0 z-10 h-full min-h-0 w-full min-w-0"
-          defaultLayout={defaultLayout}
-          onLayoutChange={onLayoutChange}
-        >
-          <CollapsiblePanel
-            direction="left"
-            id="left-slot"
-            minSize={LEFT_PANEL_MIN_WIDTH}
-            maxSize={'50%'}
-            defaultSize={LEFT_PANEL_DEFAULT_WIDTH}
-            collapsedSize={0}
-            collapsible={true}
-            className="pointer-events-none min-w-0 bg-transparent [&>button]:pointer-events-auto"
-          >
-            <div ref={panelRef} className="h-full min-w-0">
-              {leftSlot}
-            </div>
-          </CollapsiblePanel>
-          <PanelSeparator className="pointer-events-auto" />
-          <Panel id="left-overlay-filler" className="pointer-events-none min-w-0 bg-transparent" />
-        </PanelGroup>
+        <WorkflowPanelResizeContext value={{ width, resizeTo, resizeBy }}>
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 min-w-0" style={{ width }}>
+            {leftSlot}
+          </div>
+        </WorkflowPanelResizeContext>
       )}
     </div>
   );
