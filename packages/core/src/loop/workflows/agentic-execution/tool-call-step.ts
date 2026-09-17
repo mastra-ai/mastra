@@ -21,6 +21,7 @@ import {
   withToolPayloadTransformProviderMetadata,
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
+import { getToolTitle } from '../../../tools/tool-title';
 import { getNeedsApprovalFn } from '../../../tools/toolchecks';
 import type { MastraToolInvocationOptions, ToolApprovalContext } from '../../../tools/types';
 import { ensureSerializable } from '../../../utils';
@@ -1013,6 +1014,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                                 args: inputData.args,
                                 providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
                                 providerExecuted: inputData.providerExecuted,
+                                title: getToolTitle(tool),
                               },
                             },
                             'input-available',

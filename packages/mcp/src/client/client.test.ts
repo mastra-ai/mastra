@@ -3760,6 +3760,40 @@ describe('MastraMCPClient - requireToolApproval', () => {
     expect(greetTool.mcp?.annotations).toBeUndefined();
   });
 
+  it('should expose the MCP tool title and fall back to annotations.title', async () => {
+    testServer = await setupTestServer(false);
+    testServer.mcpServer.registerTool(
+      'titled_tool',
+      {
+        title: 'Titled Tool',
+        description: 'Has a title and an annotation title',
+        inputSchema: z.object({}),
+        annotations: { title: 'Annotation Title' },
+      },
+      async (): Promise<CallToolResult> => ({ content: [{ type: 'text', text: 'ok' }] }),
+    );
+    testServer.mcpServer.registerTool(
+      'annotated_only',
+      {
+        description: 'Has only an annotation title',
+        inputSchema: z.object({}),
+        annotations: { title: 'Annotation Only' },
+      },
+      async (): Promise<CallToolResult> => ({ content: [{ type: 'text', text: 'ok' }] }),
+    );
+
+    client = new InternalMastraMCPClient({
+      name: 'title-precedence-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+    const tools = await client.tools();
+
+    expect(tools.titled_tool.title).toBe('Titled Tool');
+    expect(tools.annotated_only.title).toBe('Annotation Only');
+    expect(tools.greet.title).toBeUndefined();
+  });
+
   it('should support async approval functions', async () => {
     testServer = await setupTestServer(false);
     const approvalFn = vi.fn().mockImplementation(async ({ toolName }) => {

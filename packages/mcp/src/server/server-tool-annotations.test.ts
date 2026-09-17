@@ -51,11 +51,24 @@ describe('MCPServer Tool Annotations (Issue #9859)', () => {
       },
     });
 
+    const titledTool = createTool({
+      id: 'titled-tool',
+      title: 'Weather Lookup',
+      description: 'A tool with a display title',
+      inputSchema: z.object({
+        city: z.string(),
+      }),
+      execute: async ({ city }) => {
+        return { city };
+      },
+    });
+
     server = new MCPServer({
       name: 'AnnotationsTestServer',
       version: '1.0.0',
       tools: {
         annotatedTool,
+        titledTool,
       },
     });
 
@@ -101,6 +114,16 @@ describe('MCPServer Tool Annotations (Issue #9859)', () => {
 
     // Verify that annotations.title is properly exposed via MCP
     expect(annotatedTool!.annotations?.title).toBe('Annotated Query Tool');
+  });
+
+  it('should expose the tool title in MCP listTools response', async () => {
+    const { tools } = await rawMcpClient.listTools({});
+
+    expect(tools.find(t => t.name === 'titledTool')?.title).toBe('Weather Lookup');
+
+    const annotatedTool = tools.find(t => t.name === 'annotatedTool');
+    expect(annotatedTool?.title).toBeUndefined();
+    expect(annotatedTool?.annotations?.title).toBe('Annotated Query Tool');
   });
 
   it('should expose tool annotations hints in MCP listTools response', async () => {

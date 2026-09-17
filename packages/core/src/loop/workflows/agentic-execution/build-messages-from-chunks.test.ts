@@ -281,6 +281,28 @@ describe('buildMessagesFromChunks', () => {
     });
   });
 
+  it('should copy the tool title from the tools map onto a call part', () => {
+    const result = parts(
+      [{ type: 'tool-call', payload: { toolCallId: 'tc1', toolName: 'search', args: { q: 'test' } } }],
+      { search: { title: 'Search the web' } },
+    );
+    expect(result[0]).toMatchObject({ type: 'tool-invocation', title: 'Search the web' });
+  });
+
+  it('should keep the tool title on a merged call + result part', () => {
+    const result = parts(
+      [
+        { type: 'tool-call', payload: { toolCallId: 'tc1', toolName: 'search', args: { q: 'test' } } },
+        {
+          type: 'tool-result',
+          payload: { toolCallId: 'tc1', toolName: 'search', args: { q: 'test' }, result: { hits: 1 } },
+        },
+      ],
+      { search: { title: 'Search the web' } },
+    );
+    expect(result[0]).toMatchObject({ title: 'Search the web', toolInvocation: { state: 'result' } });
+  });
+
   it('should merge tool-call + tool-error into a single output-error part', () => {
     const result = parts([
       {

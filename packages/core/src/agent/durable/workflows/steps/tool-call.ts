@@ -16,6 +16,7 @@ import type { ChunkType } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
 import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
 import { ToolStream } from '../../../../tools/stream';
+import { getToolTitle } from '../../../../tools/tool-title';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
 import { createStep } from '../../../../workflows/workflow';
@@ -1138,6 +1139,7 @@ export function createDurableToolCallStep() {
                           toolCallId: chunk.payload.toolCallId,
                           toolName: chunk.payload.toolName,
                           args: cleanedArgs,
+                          title: getToolTitle(tool),
                         },
                       });
                     }

@@ -205,6 +205,9 @@ export class Tool<
   /** Unique identifier for the tool */
   id: TId;
 
+  /** Display name for UIs and MCP clients. Never sent to the model. */
+  title?: string;
+
   /** Description of what the tool does */
   description: string;
 
@@ -398,6 +401,7 @@ export class Tool<
   ) {
     (this as any)[MASTRA_TOOL_MARKER] = true;
     this.id = opts.id;
+    this.title = opts.title;
     this.description = opts.description;
     this.inputSchema = opts.inputSchema ? toStandardSchema(opts.inputSchema) : undefined;
     this.outputSchema = opts.outputSchema ? toStandardSchema(opts.outputSchema) : undefined;

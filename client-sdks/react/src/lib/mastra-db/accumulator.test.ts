@@ -118,20 +118,25 @@ const redactedReasoningChunk = (data: string, providerMetadata?: Record<string, 
     payload: { data, ...(providerMetadata ? { providerMetadata } : {}) },
   }) as unknown as ChunkType;
 
-const toolCallChunk = (toolCallId: string, toolName: string, args: Record<string, unknown>): ChunkType =>
+const toolCallChunk = (
+  toolCallId: string,
+  toolName: string,
+  args: Record<string, unknown>,
+  title?: string,
+): ChunkType =>
   ({
     type: 'tool-call',
     runId: RUN_ID,
     from: 'AGENT',
-    payload: { toolCallId, toolName, args },
+    payload: { toolCallId, toolName, args, title },
   }) as unknown as ChunkType;
 
-const toolCallInputStreamingStartChunk = (toolCallId: string, toolName: string): ChunkType =>
+const toolCallInputStreamingStartChunk = (toolCallId: string, toolName: string, title?: string): ChunkType =>
   ({
     type: 'tool-call-input-streaming-start',
     runId: RUN_ID,
     from: 'AGENT',
-    payload: { toolCallId, toolName },
+    payload: { toolCallId, toolName, title },
   }) as unknown as ChunkType;
 
 const toolCallDeltaChunk = (toolCallId: string, argsTextDelta: string): ChunkType =>
@@ -860,6 +865,27 @@ describe('accumulateChunk - tool calls', () => {
       toolName: 'search',
       args: { query: 'mastra' },
     });
+  });
+
+  it('copies the tool title onto the part from both tool-call and streaming-start', () => {
+    const direct = reduce([startChunk(), toolCallChunk('tc-1', 'search', { q: 'x' }, 'Search the web')]);
+    expect(direct[0].content.parts[0]).toMatchObject({ type: 'tool-invocation', title: 'Search the web' });
+
+    const streamed = reduce([
+      startChunk(),
+      toolCallInputStreamingStartChunk('tc-2', 'search', 'Search the web'),
+      toolCallDeltaChunk('tc-2', '{"q":"x"}'),
+      toolCallInputStreamingEndChunk('tc-2'),
+      toolCallChunk('tc-2', 'search', { q: 'x' }),
+    ]);
+    expect(streamed[0].content.parts[0]).toMatchObject({
+      type: 'tool-invocation',
+      title: 'Search the web',
+      toolInvocation: { state: 'call', args: { q: 'x' } },
+    });
+
+    const untitled = reduce([startChunk(), toolCallChunk('tc-3', 'plain', {})]);
+    expect((untitled[0].content.parts[0] as MastraToolInvocationPart).title).toBeUndefined();
   });
 
   it('tool-call without prior assistant creates one', () => {

@@ -995,6 +995,9 @@ export class MCPServer extends MCPServerBase {
             description: tool.description,
             inputSchema: this.convertInputSchema(tool.parameters),
           };
+          if (tool.title) {
+            toolSpec.title = tool.title;
+          }
           if (tool.outputSchema) {
             toolSpec.outputSchema = this.convertSchema(tool.outputSchema);
           }
