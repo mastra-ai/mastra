@@ -76,6 +76,20 @@ describe('a2a schemas', () => {
     },
   );
 
+  it.each(['2junk', '-1', '01', String(Number.MAX_SAFE_INTEGER + 1)])(
+    'rejects invalid v1 push notification page token %s',
+    pageToken => {
+      expect(
+        agentExecutionBodySchema.safeParse({
+          jsonrpc: '2.0',
+          id: 'req-1',
+          method: 'ListTaskPushNotificationConfigs',
+          params: { taskId: 'task-1', pageToken },
+        }).success,
+      ).toBe(false);
+    },
+  );
+
   it.each(methodCases)('rejects incorrect casing for $alias', ({ alias, params }) => {
     expect(
       agentExecutionBodySchema.safeParse({ jsonrpc: '2.0', id: 'req-1', method: alias.toLowerCase(), params }).success,

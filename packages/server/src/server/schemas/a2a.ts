@@ -159,7 +159,11 @@ const v1ListPushNotificationConfigParamsSchema = z.object({
   tenant: z.string().optional(),
   taskId: z.string(),
   pageSize: z.number().int().min(1).max(100).optional(),
-  pageToken: z.string().optional(),
+  pageToken: z
+    .string()
+    .regex(/^(0|[1-9]\d*)$/)
+    .refine(token => Number.isSafeInteger(Number(token)), 'Page token must be a safe integer')
+    .optional(),
 });
 
 // Legacy schema for backwards compatibility
