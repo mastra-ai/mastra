@@ -8,7 +8,8 @@ const meta = {
   parameters: {
     docs: {
       description: {
-        component: 'Studio signal presentation. Factory owns separate signal rows and notification cards.',
+        component:
+          'Studio signal adapter using the shared ChatSignal and ChatNotification components. AI/Chat events documents their row and card variants; AI/Chat assembles the full Studio and Factory conversations.',
       },
     },
   },
