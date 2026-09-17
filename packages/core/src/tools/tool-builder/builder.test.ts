@@ -198,6 +198,80 @@ describe('CoreToolBuilder FGA', () => {
       }),
     );
   });
+
+  it('uses the standalone tool resource identity', async () => {
+    const execute = vi.fn().mockResolvedValue({ result: 'ok' });
+    const requestContext = new RequestContext([['user', { id: 'user-1' }]]);
+    const fgaProvider = { require: vi.fn().mockResolvedValue(undefined) };
+    const testTool = createTool({
+      id: 'search',
+      description: 'Search',
+      inputSchema: z.object({ query: z.string() }),
+      execute,
+    });
+    const builtTool = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'search',
+        logger: noopLogger,
+        requestContext,
+        mastra: { getServer: () => ({ fga: fgaProvider }) } as any,
+      },
+    }).build();
+
+    await builtTool.execute!({ query: 'docs' }, { toolCallId: 'call-1', messages: [] });
+
+    expect(fgaProvider.require).toHaveBeenCalledWith(
+      { id: 'user-1' },
+      expect.objectContaining({
+        resource: { type: 'tool', id: 'search' },
+        permission: 'tools:execute',
+      }),
+    );
+    expect(execute).toHaveBeenCalled();
+  });
+
+  it('uses the MCP server and tool resource identity before agent identity', async () => {
+    const execute = vi.fn().mockResolvedValue({ files: [] });
+    const requestContext = new RequestContext([['user', { id: 'user-1' }]]);
+    const fgaProvider = { require: vi.fn().mockResolvedValue(undefined) };
+    const testTool = createTool({
+      id: 'list-files',
+      description: 'List files',
+      inputSchema: z.object({ path: z.string() }),
+      mcpMetadata: { serverName: 'filesystem' },
+      execute,
+    });
+    const builtTool = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'list-files',
+        agentId: 'agent-1',
+        resourceId: 'tenant-1',
+        logger: noopLogger,
+        requestContext,
+        mastra: { getServer: () => ({ fga: fgaProvider }) } as any,
+      },
+    }).build();
+
+    await builtTool.execute!({ path: '/tmp' }, { toolCallId: 'call-1', messages: [] });
+
+    expect(fgaProvider.require).toHaveBeenCalledWith(
+      { id: 'user-1' },
+      expect.objectContaining({
+        resource: { type: 'tool', id: JSON.stringify(['filesystem', 'list-files']) },
+        permission: 'tools:execute',
+        context: expect.objectContaining({
+          resourceId: 'tenant-1',
+          metadata: expect.objectContaining({
+            agentId: 'agent-1',
+            mcpMetadata: { serverName: 'filesystem' },
+          }),
+        }),
+      }),
+    );
+    expect(execute).toHaveBeenCalled();
+  });
 });
 
 describe('MCP Tool Tracing', () => {

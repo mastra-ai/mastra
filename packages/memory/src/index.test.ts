@@ -10,11 +10,13 @@ import { filterSystemReminderMessages } from '@mastra/core/memory';
 import type { MemoryConfig } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
+import { createCodeModeInstructions } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { updateWorkingMemoryTool } from './tools/working-memory';
 import { Memory } from './index';
+import type { MemoryRecallCodeModeTransport } from './index';
 
 // Expose protected methods for testing
 class TestableMemoryWithWorkingMemory extends Memory {
@@ -131,6 +133,156 @@ describe('Memory', () => {
       });
 
       expect(memory.listTools()).toHaveProperty('recall');
+    });
+
+    it('registers recall-only Code Mode alongside direct recall', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          observationalMemory: { retrieval: { codeMode: true }, observation: { archive: {} } },
+        },
+      });
+
+      const tools = memory.listTools();
+      expect(Object.keys(tools)).toEqual(['recall', 'execute_memory_recall']);
+      expect(tools.execute_memory_recall?.id).toBe('execute_memory_recall');
+      expect(tools.recall).toBeDefined();
+
+      const context = await memory.getContext({ threadId: 'code-mode-instructions' });
+      expect(context.systemMessage).toContain(
+        createCodeModeInstructions({ tools: { recall: tools.recall! }, id: 'execute_memory_recall' }),
+      );
+      expect(context.systemMessage).toContain('You have access to the `execute_memory_recall` tool');
+      expect(context.systemMessage).toContain('declare function external_recall(');
+      expect(context.systemMessage).toContain('"observations"');
+      expect(context.systemMessage).not.toContain('external_updateWorkingMemory');
+      expect(context.systemMessage?.match(/declare function external_recall/g)).toHaveLength(1);
+    });
+
+    it('keeps Code Mode disabled unless explicitly configured', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { observationalMemory: { retrieval: true } },
+      });
+
+      expect(memory.listTools()).toHaveProperty('recall');
+      expect(memory.listTools()).not.toHaveProperty('execute_memory_recall');
+      expect((await memory.getContext({ threadId: 'direct-recall-only' })).systemMessage ?? '').not.toContain(
+        'external_recall',
+      );
+    });
+
+    it('delegates lazily to standard Code Mode with only the bound recall tool', async () => {
+      const abortController = new AbortController();
+      const span = vi.fn(async (_name: string, fn: () => Promise<unknown>) => fn());
+      const run = vi.fn<MemoryRecallCodeModeTransport['run']>(async options => {
+        expect(options.toolIds).toEqual(['recall']);
+        expect(options.timeout).toBe(4321);
+        expect(options.sandbox).toBeUndefined();
+        expect(options.abortSignal).toBe(abortController.signal);
+        return {
+          success: true,
+          result: await options.dispatch('recall', { mode: 'threads', limit: 1 }),
+        };
+      });
+      const transport: MemoryRecallCodeModeTransport = { requiresSandbox: false, run };
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          observationalMemory: { retrieval: { codeMode: { transport, timeout: 4321 } } },
+        },
+      });
+      await memory.createThread({ threadId: 'code-mode-thread', resourceId: 'code-mode-resource' });
+
+      const tool = memory.listTools().execute_memory_recall!;
+      expect(run).not.toHaveBeenCalled();
+      const result = await tool.execute!({ code: 'return await external_recall({ mode: "threads", limit: 1 })' }, {
+        memory,
+        agent: {
+          threadId: 'code-mode-thread',
+          resourceId: 'code-mode-resource',
+        },
+        abortSignal: abortController.signal,
+        observe: {
+          span,
+          log: vi.fn(),
+        },
+      } as any);
+
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(span).toHaveBeenCalledWith('code-mode:execute_memory_recall', expect.any(Function));
+      expect(result).toMatchObject({
+        success: true,
+        result: { count: 1, hasMore: false },
+      });
+      expect((result as any).result.threads).toContain('code-mode-thread');
+    });
+
+    it('isolates Code Mode configuration between Memory instances', async () => {
+      const seenTimeouts: number[] = [];
+      const createMemory = (timeout: number) => {
+        const transport: MemoryRecallCodeModeTransport = {
+          requiresSandbox: false,
+          run: async options => {
+            seenTimeouts.push(options.timeout);
+            return { success: true, result: options.timeout };
+          },
+        };
+        return new Memory({
+          storage: new InMemoryStore(),
+          options: { observationalMemory: { retrieval: { codeMode: { transport, timeout } } } },
+        });
+      };
+      const first = createMemory(1111);
+      const second = createMemory(2222);
+      const context = {
+        observe: { span: async (_name: string, fn: () => Promise<unknown>) => fn(), log: vi.fn() },
+      } as any;
+
+      await first.listTools().execute_memory_recall!.execute!({ code: 'return 1' }, context);
+      await second.listTools().execute_memory_recall!.execute!({ code: 'return 2' }, context);
+
+      expect(seenTimeouts).toEqual([1111, 2222]);
+    });
+
+    it('preserves standard missing-sandbox behavior without host fallback', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { observationalMemory: { retrieval: { codeMode: true } } },
+      });
+      const tool = memory.listTools().execute_memory_recall!;
+
+      await expect(
+        tool.execute!({ code: 'return 1' }, { agent: { threadId: 'thread', resourceId: 'resource', memory } } as any),
+      ).rejects.toThrow('Code Mode requires a sandbox');
+    });
+
+    it('does not allow callers to replace the managed Code Mode id or tool allow-list', () => {
+      const acceptConfig = (_config: ConstructorParameters<typeof Memory>[0]) => undefined;
+
+      acceptConfig({
+        storage: new InMemoryStore(),
+        options: {
+          observationalMemory: {
+            retrieval: {
+              // @ts-expect-error Memory-managed Code Mode owns the tool id.
+              codeMode: { id: 'custom' },
+            },
+          },
+        },
+      });
+      acceptConfig({
+        storage: new InMemoryStore(),
+        options: {
+          observationalMemory: {
+            retrieval: {
+              // @ts-expect-error Memory-managed Code Mode exposes only recall.
+              codeMode: { tools: {} },
+            },
+          },
+        },
+      });
+      expect(true).toBe(true);
     });
 
     it('rejects archive plus explicit reflection in the Memory constructor type', () => {

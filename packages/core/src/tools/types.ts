@@ -208,8 +208,13 @@ export interface AgentToolExecutionContext<TSuspend, TResume> {
   // Always present when called from agent context
   agentId: string;
   toolCallId: string;
-  messages: any[];
-  suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
+  /**
+   * Present on full agent dispatch paths only. Code Mode's nested tool
+   * dispatch builds a minimal agent context (`agentId`/`threadId`/`resourceId`)
+   * without messages or suspension, so read these with optional chaining.
+   */
+  messages?: any[];
+  suspend?: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
 
   // Optional - memory identifiers
   threadId?: string;

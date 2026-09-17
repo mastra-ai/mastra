@@ -20,7 +20,7 @@ const confirm = createTool({
     const host = context.agent ?? context.workflow;
     if (host) {
       if (!host.resumeData) {
-        await host.suspend({ phase: 'confirm', amount });
+        await host.suspend?.({ phase: 'confirm', amount });
         return;
       }
       const previous: number | undefined = host.suspendPayload?.amount;

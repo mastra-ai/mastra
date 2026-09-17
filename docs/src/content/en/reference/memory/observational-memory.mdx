@@ -98,11 +98,75 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
   },
   {
     name: 'retrieval',
-    type: "boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string }",
+    type: "boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string; codeMode?: true | MemoryRecallCodeModeConfig }",
     description:
-      "Let the agent look up the raw message history behind its observations. Observation groups keep durable pointers to the original messages, and a `recall` tool is registered so the agent can browse them. `true` enables cross-thread browsing by default. `{ vector: true }` also enables semantic search using Memory's vector store and embedder. `{ scope: 'thread' }` restricts the recall tool to the current thread only. Default scope is `'resource'`. `{ instructions: '...' }` appends application-specific recall guidance after Mastra's built-in retrieval instructions. Archive mode registers direct recall automatically when this option is omitted; its default recall scope then matches the OM scope.",
+      'Let the agent look up the raw message history behind its observations. Observation groups keep durable pointers to the original messages, and a `recall` tool is registered so the agent can browse them. `true` enables cross-thread browsing by default. Archive mode registers direct recall automatically when this option is omitted; its default recall scope then matches the OM scope.',
     isOptional: true,
     defaultValue: 'false',
+    properties: [
+      {
+        type: 'ObservationalMemoryRetrievalConfig',
+        parameters: [
+          {
+            name: 'vector',
+            type: 'boolean',
+            description: "Enable semantic `search` mode by using Memory's configured vector store and embedder.",
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
+            name: 'scope',
+            type: "'thread' | 'resource'",
+            description:
+              "Limit recall to the current thread, or allow recall across threads owned by the current resource. Archive mode defaults to the OM scope when `retrieval` is omitted; an explicit retrieval object defaults to `'resource'`.",
+            isOptional: true,
+            defaultValue: "'resource'",
+          },
+          {
+            name: 'instructions',
+            type: 'string',
+            description: "Append application-specific recall guidance after Mastra's built-in retrieval instructions.",
+            isOptional: true,
+          },
+          {
+            name: 'codeMode',
+            type: 'true | MemoryRecallCodeModeConfig',
+            description:
+              'Register the fixed `execute_memory_recall` tool and generated instructions. The code tool exposes only the bound recall tool as `external_recall`; direct `recall` remains registered. Pass `true` to use the agent workspace sandbox, or pass a config object for an explicit sandbox, timeout, or transport.',
+            isOptional: true,
+            defaultValue: 'false',
+            properties: [
+              {
+                type: 'MemoryRecallCodeModeConfig',
+                parameters: [
+                  {
+                    name: 'sandbox',
+                    type: 'MemoryRecallCodeModeSandbox',
+                    description:
+                      'Explicit sandbox for model-authored TypeScript. When omitted, Code Mode uses the current agent workspace sandbox. There is no implicit host fallback.',
+                    isOptional: true,
+                  },
+                  {
+                    name: 'timeout',
+                    type: 'number',
+                    description: 'Execution timeout in milliseconds.',
+                    isOptional: true,
+                    defaultValue: '30000',
+                  },
+                  {
+                    name: 'transport',
+                    type: 'MemoryRecallCodeModeTransport',
+                    description:
+                      'Code Mode transport. A transport with `requiresSandbox: false` owns its isolation boundary and can run without a sandbox.',
+                    isOptional: true,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   },
   {
     name: 'hooks',
@@ -1224,6 +1288,35 @@ When `retrieval` is truthy, Mastra registers a `recall` tool that pages through 
 Mastra omits unavailable modes and their mode-specific fields from the tool schema. For example, `search` is present only with vector retrieval, and `observations` is present only with archive mode. Stale calls to an unavailable mode return configuration guidance instead of reading data.
 
 Mastra also injects scope-aware usage instructions into the agent's context. For resource scope with `vector: true`, these cover routing between `search`, `threads`, and `messages`, including fallback to thread discovery when search results are unsuitable. Archive instructions direct the agent to retrieve retired observation text first, then use returned message cursors for raw-message drill-down. Use `retrieval: { instructions: '...' }` to append application-specific guidance after the built-in instructions.
+
+### Memory-managed Code Mode
+
+Set `retrieval.codeMode` to register both direct `recall` and a fixed `execute_memory_recall` Code Mode tool. Its generated TypeScript environment declares one external function, `external_recall`. The function schema matches the direct tool's enabled capabilities, including optional `search` and `observations` modes. Callers can't change the generated tool ID or expose additional tools.
+
+```typescript title="src/mastra/agents/agent.ts"
+import { LocalSandbox } from '@mastra/core/workspace'
+import { Memory } from '@mastra/memory'
+
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      retrieval: {
+        codeMode: { sandbox: new LocalSandbox(), timeout: 30_000 },
+      },
+    },
+  },
+})
+```
+
+Code Mode resolves its execution boundary in this order:
+
+1. `retrieval.codeMode.sandbox`
+1. The current agent workspace sandbox
+1. No sandbox only when `retrieval.codeMode.transport.requiresSandbox` is `false`
+
+Invocation fails with the standard missing-sandbox error when none of these conditions is met. Mastra doesn't create a local or host fallback. Each `external_recall` call runs the real recall tool on the host and preserves its input validation, scope checks, function-level authorization (FGA), request context, trusted actor, cancellation, and tracing.
+
+Memory-managed Code Mode requires a Core version that exports `createCodeMode`, first available in `@mastra/core@1.68.0-alpha.0`. The import occurs on the first `execute_memory_recall` invocation, so this option doesn't add a construction-time dependency or narrow Memory's existing Core compatibility when Code Mode is disabled. If an installed Core version otherwise supports the configured Memory features but lacks that export, Memory construction, `listTools()`, and direct recall don't load it. The first Code Mode invocation reports the installed Core version and directs you to upgrade and align `@mastra/core` with `@mastra/memory`.
 
 ### Parameters
 

@@ -71,6 +71,64 @@ export type ObservationalMemoryModel = Exclude<AgentConfig['model'], undefined> 
  */
 export type WidenedObservationalMemoryModel = WidenModelId<ObservationalMemoryModel>;
 
+export interface MemoryRecallCodeModeProcessHandle {
+  sendStdin(data: string): Promise<void>;
+  wait(): Promise<unknown>;
+  kill(): Promise<unknown>;
+}
+
+export interface MemoryRecallCodeModeProcessManager {
+  spawn(
+    command: string,
+    options?: {
+      cwd?: string;
+      abortSignal?: AbortSignal;
+      onStdout?: (chunk: string) => void;
+      onStderr?: (chunk: string) => void;
+    },
+  ): Promise<MemoryRecallCodeModeProcessHandle>;
+}
+
+/** Structural sandbox contract used by Memory-managed Code Mode. */
+export interface MemoryRecallCodeModeSandbox {
+  readonly id: string;
+  readonly name: string;
+  readonly provider: string;
+  readonly processes?: MemoryRecallCodeModeProcessManager;
+  snapshot(): Promise<unknown>;
+}
+
+export interface MemoryRecallCodeModeToolResult {
+  success: boolean;
+  result?: unknown;
+  logs?: string[];
+  error?: {
+    message: string;
+    name?: string;
+    line?: number;
+  };
+}
+
+export interface MemoryRecallCodeModeTransport {
+  readonly requiresSandbox?: boolean;
+  run(options: {
+    sandbox?: MemoryRecallCodeModeSandbox;
+    program: string;
+    toolIds: string[];
+    dispatch: (tool: string, args: unknown) => Promise<unknown>;
+    timeout: number;
+    abortSignal?: AbortSignal;
+    onExternalCall?: (tool: string, args: unknown) => void;
+    onExternalResult?: (tool: string, durationMs: number, error?: unknown) => void;
+  }): Promise<MemoryRecallCodeModeToolResult>;
+}
+
+export interface MemoryRecallCodeModeConfig {
+  sandbox?: MemoryRecallCodeModeSandbox;
+  timeout?: number;
+  transport?: MemoryRecallCodeModeTransport;
+}
+
 /**
  * Controls which continuation-hint sections OM asks the Observer and Reflector to emit.
  *
@@ -989,7 +1047,18 @@ interface ObservationalMemoryConfigBase {
    *
    * @default false
    */
-  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string };
+  retrieval?:
+    | boolean
+    | {
+        vector?: boolean;
+        scope?: 'thread' | 'resource';
+        instructions?: string;
+        /**
+         * Register a recall-only Code Mode tool alongside direct recall.
+         * The generated tool is always `execute_memory_recall` and exposes only `external_recall`.
+         */
+        codeMode?: true | MemoryRecallCodeModeConfig;
+      };
 
   /**
    * Optional callback used to index emitted observation groups for semantic retrieval.
