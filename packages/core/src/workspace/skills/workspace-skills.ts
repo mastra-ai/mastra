@@ -41,6 +41,10 @@ interface SkillSearchEngine {
   clear(): void;
 }
 
+interface RemovableSkillSearchEngine extends SkillSearchEngine {
+  remove(id: string): Promise<void>;
+}
+
 interface InternalSkill extends Skill {
   /** Content for BM25 indexing (instructions + all references) */
   indexableContent: string;
@@ -1646,10 +1650,12 @@ export type SkillSourceResolver = (context: SkillsContext) => Promise<SkillSourc
 
 export interface ResolvedSourceWorkspaceSkillsConfig extends Omit<
   WorkspaceSkillsImplConfig,
-  'source' | 'searchNamespace' | 'sharedSearchState'
+  'source' | 'searchEngine' | 'searchNamespace' | 'sharedSearchState'
 > {
   /** Resolves the skill source for a request. */
   source: SkillSourceResolver;
+  /** Search engine whose documents can be removed when a resolved source is evicted. */
+  searchEngine?: RemovableSkillSearchEngine;
   /**
    * Maximum number of resolved sources to keep discovery caches and search
    * documents for. Least-recently-used sources beyond this are evicted and
@@ -1697,6 +1703,9 @@ export class ResolvedSourceWorkspaceSkills implements WorkspaceSkills {
     const { source, maxCachedSources, ...rest } = config;
     this.#resolver = source;
     this.#config = rest;
+    if (rest.searchEngine && typeof rest.searchEngine.remove !== 'function') {
+      throw new TypeError('ResolvedSourceWorkspaceSkills searchEngine must implement remove()');
+    }
     if (maxCachedSources !== undefined && (!Number.isSafeInteger(maxCachedSources) || maxCachedSources < 1)) {
       throw new RangeError(`maxCachedSources must be a positive integer, received ${String(maxCachedSources)}`);
     }

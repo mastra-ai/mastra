@@ -1031,6 +1031,23 @@ Line 3 conclusion`;
         expect(searchEngine.countByPrefix('skill-scope:')).toBe(skillsPerSource);
       });
 
+      it('rejects a search engine that cannot remove evicted documents', () => {
+        const searchEngine = {
+          index: vi.fn(),
+          search: vi.fn(),
+          clear: vi.fn(),
+        } as unknown as SearchEngine;
+
+        expect(
+          () =>
+            new ResolvedSourceWorkspaceSkills({
+              source: () => new LocalFilesystem({ basePath: remoteDir }),
+              skills: ['skills'],
+              searchEngine,
+            }),
+        ).toThrow('searchEngine must implement remove()');
+      });
+
       it('rejects invalid maxCachedSources', () => {
         for (const maxCachedSources of [Number.NaN, Number.POSITIVE_INFINITY, 0, -3, 1.5]) {
           expect(
